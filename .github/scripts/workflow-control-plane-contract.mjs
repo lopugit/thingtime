@@ -406,6 +406,21 @@ function assertAdminModelRouting(resolver, rebase) {
     /uses:\s*openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
     "the single Lopu action pins Codex's executable implementation",
   );
+  assert.match(
+    lopuAgent,
+    /classify-claude-credential-failure\.mjs/u,
+    "the single Lopu action classifies primary account-capacity failures before failover",
+  );
+  assert.match(
+    lopuAgent,
+    /steps\.claude_primary_failure\.outputs\.retryable == 'true'/u,
+    "fallback Claude execution is limited to classified credential or account-capacity failures",
+  );
+  assert.match(
+    lopuAgent,
+    /lopu-claude-credential-slot/u,
+    "the single Lopu action records the successful credential slot for exact-session continuation",
+  );
   for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     assert.doesNotMatch(
@@ -420,7 +435,11 @@ function assertAdminModelRouting(resolver, rebase) {
     return count +
       (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
   }, 0);
-  assert.equal(claudeActionCount, 1, "only the single Lopu action directly invokes Claude");
+  assert.equal(
+    claudeActionCount,
+    2,
+    "only the single Lopu action owns the ordered primary and fallback Claude invocations",
+  );
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({

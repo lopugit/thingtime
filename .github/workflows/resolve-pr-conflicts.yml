@@ -60,6 +60,10 @@
 #   powers the Claude resolution agent (OAuth token via `/install-github-app`
 #   in the claude CLI) and can power LLM semantic extraction in the post-merge
 #   Graphify refresh.
+# - ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK (optional):
+#   a second account used only after the primary reports an account-capacity,
+#   rate-limit, credit, or credential failure. Max-turn exhaustion continues
+#   the exact selected session instead of restarting under another account.
 # - OPENAI_API_KEY (required when Lopu's review backend is Codex): powers the
 #   pinned Codex Action and the same post-merge Graphify semantic refresh. The
 #   configured review backend chooses which available provider Graphify tries
@@ -2287,14 +2291,14 @@ jobs:
         if: steps.prepare.outputs.any == 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
             claude)
               [ "$HAS_CLAUDE_CREDENTIAL" = true ] \
-                || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude review backend."; exit 1; }
+                || { echo "::error::Add a primary or fallback Anthropic/Claude Code credential to enable Lopu's configured Claude review backend."; exit 1; }
               ;;
             codex)
               [ "$HAS_OPENAI_CREDENTIAL" = true ] \
@@ -2315,6 +2319,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -2442,12 +2448,29 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           GH_TOKEN: ${{ github.token }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -3241,6 +3264,8 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
@@ -3782,6 +3807,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
           LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
@@ -4110,6 +4137,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
@@ -4158,12 +4187,29 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -4263,6 +4309,8 @@ jobs:
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
@@ -4277,7 +4325,9 @@ jobs:
           fi
           needles="$RUNNER_TEMP/analysis-needles"
           : >"$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+            "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+            "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
             [[ -n "$secret" ]] || continue
             printf '%s\n' "$secret" >>"$needles"
             printf '%s' "$secret" | base64 | tr -d '\n' >>"$needles"; printf '\n' >>"$needles"
@@ -4786,6 +4836,24 @@ jobs:
           # annotation even though conflict resolution succeeded.
           set-safe-directory: false
 
+      - name: Check out the fixed trusted github-actions control plane
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          path: trusted
+          set-safe-directory: false
+
+      - name: Keep the trusted control plane outside PR publication
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+        run: printf 'trusted/\n' >>.git/info/exclude
+
       - name: Clear deliberately retried rebase ownership pauses
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
@@ -4974,12 +5042,12 @@ jobs:
           && steps.merge.outputs.conflicted == 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
-            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."; exit 1; } ;;
+            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs a primary or fallback Anthropic/Claude Code credential."; exit 1; } ;;
             codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
             *) echo "::error::Unknown Lopu agent backend: $AGENT_BACKEND"; exit 1 ;;
           esac
@@ -4996,6 +5064,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
@@ -5088,11 +5158,28 @@ jobs:
           && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -5194,7 +5281,9 @@ jobs:
           # process might nevertheless have exported, then execute pnpm under
           # env -i so AI, GitHub, npm, and repository-write credentials cannot
           # reach package resolution.
-          unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN GH_TOKEN GITHUB_TOKEN
+          unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
+          unset ANTHROPIC_API_KEY_FALLBACK CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+          unset GH_TOKEN GITHUB_TOKEN
           unset ACTIONS_TOKEN NODE_AUTH_TOKEN NPM_TOKEN NODE_OPTIONS
 
           if [ ! -f .git/MERGE_HEAD ]; then
@@ -5384,6 +5473,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
@@ -5518,7 +5609,9 @@ jobs:
           # not a boundary (see header).
           keyfile="$RUNNER_TEMP/scan-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+            "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+            "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -5583,8 +5676,10 @@ jobs:
           # header). Same secrets the resolve step runs on, so no NEW
           # principals see them beyond the pinned graphifyy package and the
           # claude CLI it shells out to.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
@@ -5593,6 +5688,18 @@ jobs:
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."; unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN ;;
+          esac
           # An empty env var and an unset one look the same to `[ -n ]` but
           # not necessarily to child processes (the claude CLI); normalize.
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
@@ -5766,7 +5873,9 @@ jobs:
           # them. Best-effort backstop, not a boundary (see header).
           keyfile="$RUNNER_TEMP/graphify-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
+          for secret in "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
+            "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \
+            "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"

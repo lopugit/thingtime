@@ -117,6 +117,25 @@ not accept an OpenAI account username/password or browser session. A Codex run
 uses the OpenAI Platform project associated with `OPENAI_API_KEY`; it does not
 consume a ChatGPT Pro weekly allowance.
 
+Lopu also supports one ordered secondary Claude account:
+
+```text
+Primary Actions secret:   ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
+Fallback Actions secret:  ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+```
+
+The protected Lopu action retries the same task with the fallback slot only
+when the primary result reports a plan/weekly limit, API rate or credit limit,
+or rejected credential. It does not treat `error_max_turns` as failover: that
+continues the exact session with whichever slot started it. Both slots are
+included in every generated-output credential scan.
+
+Use `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK` for another Claude subscription's
+included Claude Code allowance (generate it with `claude setup-token` while
+signed into that account). `ANTHROPIC_API_KEY_FALLBACK` instead uses the Claude
+Platform organization's separate pay-as-you-go API credits; a Claude Pro/Max
+subscription does not include Console API usage.
+
 ## The bare-tree invariant
 
 `.github/scripts/workflow-control-plane-contract.mjs` asserts that no path

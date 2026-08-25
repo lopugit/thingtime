@@ -42,7 +42,9 @@
 # trigger no workflows, and Vercel still builds `all` because its GitHub App
 # watches branch pushes regardless of the pushing token. ANTHROPIC_API_KEY or
 # CLAUDE_CODE_OAUTH_TOKEN (the resolver's credential) enables the doctor;
-# without one the union is pushed unhealed, exactly as before.
+# ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK supplies the
+# optional second account. Without any Claude/Codex credential the union is
+# pushed unhealed, exactly as before.
 
 name: Lopu all-branch integration
 
@@ -149,7 +151,7 @@ jobs:
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
         env:
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         shell: bash
         run: |
@@ -260,6 +262,8 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -324,6 +328,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 1
@@ -345,6 +351,8 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -385,6 +393,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 2
@@ -408,6 +418,8 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -448,6 +460,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 3

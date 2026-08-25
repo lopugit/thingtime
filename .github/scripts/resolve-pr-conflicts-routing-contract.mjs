@@ -458,7 +458,14 @@ function assertWorkflowSource() {
     );
   }
 
-  assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
+  assertAdminModelRouting(
+    source,
+    rebaseSource,
+    rebaseActionSource,
+    lopuActionSource,
+    modelBlock,
+    resolveBlock,
+  );
 }
 
 function aiRuntimeSourceFiles(directory) {
@@ -481,7 +488,14 @@ function assertAdminLoader(block, label) {
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
 }
 
-function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock) {
+function assertAdminModelRouting(
+  source,
+  rebaseSource,
+  rebaseActionSource,
+  lopuActionSource,
+  modelBlock,
+  resolveBlock,
+) {
   const rebaseModelBlock = rebaseSource.slice(
     rebaseSource.indexOf("      - name: Load the conflict-resolver model waterfall"),
     rebaseSource.indexOf("      - name: Isolate the real rebasing repository outside model workspace"),
@@ -532,6 +546,26 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     /round_number <= 500/,
     "the composite independently enforces the 500-round ceiling",
   );
+  assert.match(
+    lopuActionSource,
+    /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
+    "the protected Lopu action exposes an ordered secondary Anthropic account slot",
+  );
+  assert.match(
+    lopuActionSource,
+    /classify-claude-credential-failure\.mjs[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
+    "the protected Lopu action falls back only after classified account-capacity or credential failures",
+  );
+  assert.match(
+    rebaseActionSource,
+    /lopu-claude-credential-slot/u,
+    "rebase continuations stay on the Claude credential slot that owns the exact session",
+  );
+  assert.match(
+    resolveBlock,
+    /name: Check out the fixed trusted github-actions control plane[\s\S]*ref: github-actions[\s\S]*path: trusted/u,
+    "the conflict worker materializes the protected Lopu action after checking out the PR head",
+  );
 
   const aiRuntimePattern =
     /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
@@ -561,7 +595,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
   assert.match(
     promotionGraphify,
-    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$\{ANTHROPIC_API_KEY:-\}" "\$\{CLAUDE_CODE_OAUTH_TOKEN:-\}"/u,
+    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
     "promotion Graphify scans every provider credential before committing derived output",
   );
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
@@ -587,6 +621,24 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
       /GRAPHIFY_CLAUDE_CLI_MODEL\s*[:=]\s*["']?(?:sonnet|haiku|opus|claude-)/,
       `${path}: Graphify model must come from the Admin handoff`,
     );
+
+    const lines = runtime.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+        continue;
+      }
+      const call = lines.slice(index, index + 32).join("\n");
+      assert.match(
+        call,
+        /anthropic-api-key-fallback:/u,
+        `${path}:${index + 1}: every Lopu call receives the secondary API-key slot`,
+      );
+      assert.match(
+        call,
+        /claude-code-oauth-token-fallback:/u,
+        `${path}:${index + 1}: every Lopu call receives the secondary subscription slot`,
+      );
+    }
   }
 }
 

@@ -840,7 +840,14 @@ function doctorCommitMode(round) {
   // House rule: a committed fixup must never contain any credential this job
   // could see, raw or base64. On a hit, discard the entire round.
   const staged = tryGit("diff", "--cached").stdout || "";
-  const leaked = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].some((name) => {
+  const leaked = [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY_FALLBACK",
+    "CLAUDE_CODE_OAUTH_TOKEN_FALLBACK",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+  ].some((name) => {
     const value = process.env[name];
     if (!value) return false;
     return staged.includes(value) || staged.includes(Buffer.from(value, "utf8").toString("base64"));
