@@ -11,6 +11,10 @@ Thingtime has long-lived feature and stack branches that do not.
 
 - The normal `pull_request` path remains the owner when the target already
   carries the listener, preserving its branch-protection job contexts.
+- Normal analysis and the privileged metadata handoff call two separate
+  protected reusable workflows. GitHub caps ordinary PR events at
+  `actions: read`, so the metadata bridge's `actions: write` requirement
+  cannot invalidate an otherwise unprivileged analysis run.
 - The copy on the default branch also receives `pull_request_target` lifecycle
   events for every PR target.
 - That privileged run never checks out or analyzes repository code and receives
@@ -29,8 +33,8 @@ Thingtime has long-lived feature and stack branches that do not.
 
 ## Activation order
 
-1. Merge the protected worker/queue PR #396.
-2. Merge this listener promotion.
+1. Merge the protected handoff/queue follow-up into `github-actions`.
+2. Merge the listener follow-up into `main`.
 3. Set `CODEQL_CENTRAL_PR_ENABLED=true`.
 4. Disable GitHub CodeQL default setup.
 5. Set `CODEQL_ADVANCED_ENABLED=true` and verify a normal target plus an older
@@ -41,8 +45,8 @@ Thingtime has long-lived feature and stack branches that do not.
 The executable contract must prove that the target-context block is
 metadata-only and that checkout/CodeQL steps are excluded from that event. The
 product caller contract must prove that all target lifecycle events reach the
-single protected reusable implementation and that only the two bounded inputs
-are forwarded.
+correct one of the two protected reusable implementations and that only the two
+bounded analysis inputs are forwarded.
 
 ## Default-branch listener compiler fix
 
@@ -85,3 +89,16 @@ had a caller-level `cancel-in-progress: true` group around the all-branch
 reusable call. That outer group can cancel the call before the protected
 implementation's durable queue starts. This PR removes it and locks the absence
 in the caller contract, matching the already-correct `develop` listener.
+
+## Post-merge activation audit
+
+The first live run after #397 merged exposed another reusable-workflow
+permission ceiling that static YAML parsing cannot simulate:
+`codeql-analysis.yml` mixed an `actions: write` metadata handoff into the same
+called workflow as the ordinary read-capped `pull_request` analysis. GitHub
+rejected that PR run before creating a job. The follow-up keeps one public
+CodeQL listener but gives its two event classes separate protected calls:
+`codeql-pr-handoff.yml` is selected only for `pull_request_target`, and the
+normal analyzer is selected for every other event. This preserves both
+all-target coverage and the PR-associated Analyze contexts required by branch
+protection.
