@@ -172,9 +172,9 @@ https://www.gofundme.com/f/thingtime
 Thingtime has one public **Lopu PR manager** Action. It owns repository review,
 failed-check and CodeQL repair, stale-branch merges, conflict resolution,
 rebases and stack cascades, promotions, main/develop synchronization, release
-analysis, and post-merge Graphify refresh. Deterministic implementations remain
-protected reusable components; they have no competing push, schedule, or
-manual triggers of their own.
+analysis, wildcard `all`-branch repair, and post-merge Graphify refresh.
+Deterministic implementations remain protected reusable components; they have
+no competing push, schedule, or manual triggers of their own.
 
 Lopu listens to pushes on `"**"`, every PR-head lifecycle update, PR and inline
 review comments, failed check completions, and bounded maintenance schedules.
@@ -1115,10 +1115,10 @@ Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
 
 `all` is a generated everything-branch: `develop` + `main` + every open PR
 (stacked branch → branch PRs included) merged together, so all in-progress
-work can be tried in one place. **Build all branch**
-(`.github/workflows/all-branch.yml`) rebuilds it from scratch and force-pushes
-the result on every push to `develop`/`main`, on every open-PR change, and
-hourly:
+work can be tried in one place. The one public **Lopu PR manager** calls its
+protected internal all-branch implementation to rebuild it from scratch and
+force-push the result after pushes to `develop`/`main`, every open-PR lifecycle
+change, and the hourly backstop. There is no second product-branch workflow:
 
 - Rebuilds start from `develop`, merge `main`, then merge open PR heads in
   stack order (parents before children, ascending PR number within a layer)

@@ -8,12 +8,10 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
-  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
   'web-ci.yml',
-  'rebase-pr-stacks.yml',
   'resolve-pr-conflicts.yml'
 ];
 
@@ -29,8 +27,10 @@ for (const filename of callers) {
 }
 
 for (const retired of [
+  'all-branch.yml',
   'promote-develop-to-main.yml',
   'promote-features-to-main.yml',
+  'rebase-pr-stacks.yml',
   'sync-main-into-develop.yml'
 ]) {
   assert.equal(
@@ -39,18 +39,6 @@ for (const retired of [
     `${retired} must stay retired; Lopu PR manager owns its former public triggers`
   );
 }
-
-const rebaseCaller = readFileSync(
-  resolve(workflowsRoot, 'rebase-pr-stacks.yml'),
-  'utf8'
-);
-assert.match(rebaseCaller, /^name: Lopu PR manager \(internal rebase handoff\)$/m, 'rebase remains an internal Lopu component');
-assert.match(rebaseCaller, /^  repository_dispatch:\n    types: \[rebase-pr-stack-ai\]$/m, 'the internal rebase handoff must retain its exact trusted dispatch');
-assert.doesNotMatch(
-  rebaseCaller.slice(0, rebaseCaller.indexOf('\npermissions:\n')),
-  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch):/m,
-  'the internal rebase component must not recreate a separate public automation'
-);
 
 const codeqlCaller = readFileSync(
   resolve(workflowsRoot, 'codeql-analysis.yml'),
@@ -113,8 +101,13 @@ assert.match(
 );
 assert.match(
   resolverCaller,
-  /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
+  /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]$/m,
   'Lopu must receive every PR-head lifecycle update even when the PR branch has an old or missing push listener'
+);
+assert.match(
+  resolverCaller,
+  /^  repository_dispatch:\n(?:    #.*\n)*    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
+  'merge cascades and rebase-stack workers must enter through the one public Lopu listener'
 );
 for (const trigger of ['issue_comment', 'pull_request_review_comment', 'check_run']) {
   assert.match(
@@ -154,25 +147,15 @@ assert.match(
   /^  actions: write$/m,
   'Lopu PR manager must grant its protected maintenance lanes permission to dispatch trusted workers'
 );
-
-const allBranchCaller = readFileSync(
-  resolve(workflowsRoot, 'all-branch.yml'),
-  'utf8'
-);
-const allBranchPermissionsStart = allBranchCaller.indexOf('\npermissions:\n');
-const allBranchJobsStart = allBranchCaller.indexOf('\njobs:\n');
-assert.ok(
-  allBranchPermissionsStart >= 0 && allBranchJobsStart > allBranchPermissionsStart,
-  'all-branch.yml must retain a top-level permissions block'
-);
-const allBranchPermissions = allBranchCaller.slice(
-  allBranchPermissionsStart,
-  allBranchJobsStart
+assert.match(
+  resolverCaller,
+  /^    - cron: "53 \* \* \* \*"$/m,
+  'the one public Lopu manager must retain the hourly wildcard-all backstop'
 );
 assert.match(
-  allBranchPermissions,
-  /^  actions: write$/m,
-  'all-branch.yml must let the protected push handoff dispatch its supported-event worker'
+  resolverCaller,
+  /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all\]/m,
+  'manual wildcard-all recovery must be a Lopu maintenance choice'
 );
 
 const electronPrReleaseCaller = readFileSync(

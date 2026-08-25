@@ -10,7 +10,7 @@ on:
     # This default-branch signal is independent of whether an old PR head or
     # non-default target already carries a current push listener. The protected
     # controller deduplicates exact snapshots before queueing model work.
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
   # GitHub evaluates these event workflows from the default branch. Keep the
   # public file metadata-only and forward each signal to the protected Lopu
   # controller pinned below.
@@ -23,6 +23,7 @@ on:
   schedule:
     - cron: "2,32 * * * *"
     - cron: "43 */6 * * *"
+    - cron: "53 * * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -40,7 +41,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update repository state"
         required: false
@@ -82,7 +83,9 @@ on:
         default: "0"
         type: string
   repository_dispatch:
-    types: [resolve-conflicts-cascade]
+    # Both internal stack events enter through the same public Lopu listener;
+    # the protected controller assigns exactly one merge or rebase owner.
+    types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
 permissions:
   actions: write

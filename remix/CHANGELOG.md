@@ -37,11 +37,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The wildcard `all`-branch workflow is folded into the one public Lopu
+  manager**: product branches no longer retain a separate all-branch listener.
+  Develop/main pushes, the full PR lifecycle including draft and close, the
+  hourly backstop, and manual `build-all` recovery all route through **Lopu PR
+  manager** to the protected reusable doctor. — Codex (AI), 2026-08-25
 - **The last duplicate public PR-maintenance Actions are retired on develop**:
-  promotion and main/develop synchronization are Lopu jobs, while rebase/stack
-  handling retains only its trusted internal repository-dispatch handoff. Push,
-  PR, schedule, and manual entry now belong to the one visible Lopu PR manager,
-  preventing duplicate detection and cancellation races. — Codex (AI), 2026-08-25
+  promotion, main/develop synchronization, merge cascades, and rebase-stack
+  repository events all enter through the one visible Lopu PR manager. The
+  protected rebase engine remains implementation-only on `github-actions`;
+  develop no longer carries a second rebase listener that could duplicate
+  detection or cancellation ownership. — Codex (AI), 2026-08-25
 - **Lopu CodeQL target events now use the metadata-only handoff they describe**:
   the default-branch listener sends PR number and exact head SHA through the
   protected handoff, while only the separate unprivileged dispatch invokes the
