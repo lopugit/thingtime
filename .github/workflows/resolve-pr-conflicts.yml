@@ -807,6 +807,7 @@ jobs:
                       isCrossRepository
                       isDraft
                       mergeable
+                      mergeStateStatus
                       labels(first: 100) { nodes { name } }
                     }
                     pageInfo { hasNextPage endCursor }
@@ -815,7 +816,8 @@ jobs:
               }' \
               | jq -c '[.[].data.repository.pullRequests.nodes[]
                   | {number, headRefName, baseRefName, isCrossRepository,
-                     isDraft, mergeable, labels:(.labels.nodes // [])}]'
+                     isDraft, mergeable, mergeStateStatus,
+                     labels:(.labels.nodes // [])}]'
           }
 
           query() {
@@ -839,8 +841,10 @@ jobs:
               ' <<<"$open"
           }
 
-          # GitHub computes mergeability lazily after a base push; poll until
-          # every PR has a verdict (querying is itself what triggers compute).
+          # GitHub computes mergeability and merge-state status lazily after a
+          # base push; poll until every PR has both verdicts (querying is itself
+          # what triggers compute). BEHIND is actionable even when mergeable is
+          # MERGEABLE: Lopu merges the target into the PR head before review.
           # Verdicts routinely take minutes to settle after a busy base push —
           # the old fixed eight-attempt/80-second loop gave up too early
           # (observed on PR #190) — so the wait is a time budget that exits
@@ -868,7 +872,7 @@ jobs:
           poll_started="$SECONDS"
           attempt=0
           while :; do
-            unknown="$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<<"$prs")"
+            unknown="$(jq '[.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")] | length' <<<"$prs")"
             [ "$unknown" -eq 0 ] && break
             elapsed="$(( SECONDS - poll_started ))"
             if [ "$elapsed" -ge "$MERGEABLE_POLL_SECONDS" ]; then
@@ -876,7 +880,7 @@ jobs:
               break
             fi
             attempt="$(( attempt + 1 ))"
-            echo "attempt $attempt (${elapsed}s elapsed): $unknown PR(s) still computing mergeability; retrying in ${MERGEABLE_POLL_INTERVAL}s..."
+            echo "attempt $attempt (${elapsed}s elapsed): $unknown PR(s) still computing mergeability or merge-state status; retrying in ${MERGEABLE_POLL_INTERVAL}s..."
             sleep "$MERGEABLE_POLL_INTERVAL"
             prs="$(query)"
           done
@@ -890,7 +894,7 @@ jobs:
           else
             echo "Open PRs based on $TARGET:"
           fi
-          jq -r '.[] | "  #\(.number) \(.headRefName) draft=\(.isDraft) mergeable=\(.mergeable) fork=\(.isCrossRepository)"' <<<"$prs"
+          jq -r '.[] | "  #\(.number) \(.headRefName) draft=\(.isDraft) mergeable=\(.mergeable) state=\(.mergeStateStatus) fork=\(.isCrossRepository)"' <<<"$prs"
 
           # Resolver ownership must not depend on which detector wins a race.
           # Build the full open same-repo PR graph so stack members go to the
@@ -924,26 +928,26 @@ jobs:
           # `no-ai-merge` declines automatic conflict resolution outright, so
           # these PRs are dropped before any comment, dispatch, or AI spend —
           # including in the repository-wide sweeps.
-          opted_out="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("no-ai-merge") != null) | .number] | join(", ")' <<<"$prs")"
-          [ -n "$opted_out" ] && echo "::notice::Skipping PR(s) #$opted_out — labelled no-ai-merge; this PR is opted out of automatic conflict resolution."
+          opted_out="$(jq -r '[.[] | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | select([.labels[].name] | index("no-ai-merge") != null) | .number] | join(", ")' <<<"$prs")"
+          [ -n "$opted_out" ] && echo "::notice::Skipping PR(s) #$opted_out — labelled no-ai-merge; this PR is opted out of automatic branch merges."
           # Retained for the manual-selector summary below, which must still
           # report "matched, nothing to do" rather than falling silent when the
           # only match is opted out.
           matched_open="$(jq 'length' <<<"$prs")"
           prs="$(jq -c '[.[] | select([.labels[].name] | index("no-ai-merge") == null)]' <<<"$prs")"
 
-          skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
-          [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
+          skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | .number] | join(", ")' <<<"$prs")"
+          [ -n "$skipped" ] && echo "::warning::Skipping fork PR(s) #$skipped that need a base merge — cannot push to fork branches."
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
             fork_pr="$(base64 --decode <<<"$encoded")"
             fork_number="$(jq -r '.number' <<<"$fork_pr")"
             fork_base="$(jq -r '.baseRefName' <<<"$fork_pr")"
             upsert_detect_comment "$fork_number" \
-              "🤖 **Conflict seen — cannot auto-resolve a fork PR.** This PR conflicts with \`$fork_base\`, and the resolver cannot push to branches in a fork. Please resolve the conflicts manually (merge \`$fork_base\` into your branch, or rebase onto it)." \
+              "🤖 **Base merge needed — cannot update a fork PR.** This branch needs \`$fork_base\` merged into it, and Lopu cannot push to branches in a fork. Please merge \`$fork_base\` into your branch (resolving any conflicts), or rebase onto it." \
               || echo "::warning::Could not post the detect-status comment on #$fork_number."
-          done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | @base64' <<<"$prs")
-          rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
+          done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | @base64' <<<"$prs")
+          rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
           stacked_owned="$(jq -r --argjson all "$all_open" --arg default_ref "$default_ref" '
             [.[] as $pr
@@ -963,14 +967,14 @@ jobs:
             | join(", ")
           ' <<<"$prs")"
           [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI PR/stack rebase workflow owns stack history."
-          still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
+          still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked by the next event or scheduled sweep."
           while IFS= read -r unknown_number; do
             [ -n "$unknown_number" ] || continue
             upsert_detect_comment "$unknown_number" \
-              "🤖 **Mergeability still computing.** The base branch moved, and GitHub had not finished recomputing whether this PR conflicts after the detector waited ${MERGEABLE_POLL_SECONDS}s — so no resolution was started this round. The next push or the twice-hourly scheduled sweep (minutes :02/:32) re-checks automatically; if a conflict is found then, resolution starts and announces itself here." \
+              "🤖 **Branch status still computing.** The base branch moved, and GitHub had not finished recomputing whether this PR conflicts or is behind after the detector waited ${MERGEABLE_POLL_SECONDS}s — so no branch update was started this round. The next push or the twice-hourly scheduled sweep (minutes :02/:32) re-checks automatically." \
               || echo "::warning::Could not post the detect-status comment on #$unknown_number."
-          done < <(jq -r '.[] | select(.mergeable == "UNKNOWN") | .number' <<<"$prs")
+          done < <(jq -r '.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN") | .number' <<<"$prs")
 
           # On a pull_request_target event, scan ONLY the triggering PR — the
           # other PRs sharing this base are not this event's business and are
@@ -979,8 +983,10 @@ jobs:
           # job never re-derives it from event context — deriving branch names
           # from event refs is how "<N>/merge"-style ref spoofing and wrong-ref
           # merges happen; the PR record is the single source of truth.
-          # Stack membership makes initial ownership disjoint before labels
-          # exist. The labels remain the second boundary during a live cascade.
+          # Conflicting stack members remain rebase-owned before labels exist.
+          # A clean BEHIND branch is deliberately merge-owned even in a stack:
+          # Lopu merges its exact target into its head, then cascades the new
+          # head to children. Labels remain the live-cascade mutex.
           # `no-ai-rebase` opts only out of history rewriting, so a stack member
           # carrying it may still use this merge-based resolver.
           conflicting="$(jq -c \
@@ -991,12 +997,14 @@ jobs:
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
-              | select(.mergeable == "CONFLICTING")
+              | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND")
+              | select(.mergeable != "UNKNOWN" and .mergeStateStatus != "UNKNOWN")
               | select([.labels[].name]
                   | all(. != "ai-rebase-in-progress"))
               | select([.labels[].name] | index("ai-merge-paused") == null)
               | select(
-                  ([.labels[].name] | index("no-ai-rebase") != null)
+                  (.mergeStateStatus == "BEHIND")
+                  or ([.labels[].name] | index("no-ai-rebase") != null)
                   or (any($all[];
                       .number != $pr.number
                       and (.isCrossRepository | not)
@@ -1007,6 +1015,7 @@ jobs:
                                and $pr.headRefName != $default_ref))) | not))
               | select($only == "" or (.number | tostring) == $only)
               | {number: .number, head: .headRefName, base: .baseRefName,
+                  mode: (if .mergeable == "CONFLICTING" then "conflict" else "outdated" end),
                   manual_retry: $manual_retry,
                   recover_rebase_pause:
                     ([.labels[].name] | index("ai-rebase-paused") != null)}]
@@ -1060,13 +1069,13 @@ jobs:
              && [ "${matched_open:-0}" -gt 0 ] \
              && [ "$(jq 'length' <<<"$conflicting")" -eq 0 ]; then
             matched="$matched_open"
-            echo "::warning::The manual selector matched $matched open PR(s), but none is currently eligible for merge-conflict resolution."
+            echo "::warning::The manual selector matched $matched open PR(s), but none currently needs an eligible base-into-head merge."
             {
               echo "## Manual selector matched, but no merge worker is needed"
               echo
-              echo "$matched open PR(s) matched. None is currently eligible for this merge resolver."
+              echo "$matched open PR(s) matched. None currently needs an eligible base-into-head merge."
               echo
-              echo "Mergeable/UNKNOWN PRs, no-ai-merge opt-outs, fork or protected/default heads, paused snapshots, and stack/rebase-owned PRs are intentionally excluded."
+              echo "Current/UNKNOWN PRs, no-ai-merge opt-outs, fork or protected/default heads, paused snapshots, and stack/rebase-owned PRs are intentionally excluded."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
@@ -1515,7 +1524,7 @@ jobs:
           fi
 
           open="$(gh pr list --repo "$REPO" --state open --limit 500 \
-            --json number,headRefName,baseRefName,headRefOid,isCrossRepository,isDraft,mergeable,labels)"
+            --json number,headRefName,baseRefName,headRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
           default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
           if [ -n "$SELECTED_PR" ]; then
             candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
@@ -1532,6 +1541,8 @@ jobs:
               | select(.isDraft | not)
               | select(.headRefName != $default_ref)
               | select(.mergeable != "CONFLICTING")
+              | select(.mergeable != "UNKNOWN")
+              | select(.mergeStateStatus != "BEHIND" and .mergeStateStatus != "UNKNOWN")
               | select([.labels[].name] | index("no-lopu-review") == null)
               | select([.labels[].name] | index("promotion") == null)
               | select([.labels[].name] | index("ai-rebase-in-progress") == null)
@@ -1923,7 +1934,7 @@ jobs:
           printf '[]\n' >"$manifest"
 
           open="$(gh pr list --repo "$REPO" --state open --limit 500 \
-            --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,labels)"
+            --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
           default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
           if [ -n "$SELECTED_PR" ]; then
             candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
@@ -1938,6 +1949,8 @@ jobs:
               | select(.isDraft | not)
               | select(.headRefName != $default_ref)
               | select(.mergeable != "CONFLICTING")
+              | select(.mergeable != "UNKNOWN")
+              | select(.mergeStateStatus != "BEHIND" and .mergeStateStatus != "UNKNOWN")
               | select([.labels[].name] | index("no-lopu-review") == null)
               | select([.labels[].name] | index("promotion") == null)
               | select([.labels[].name] | index("ai-rebase-in-progress") == null)
@@ -4053,6 +4066,7 @@ jobs:
       HEAD_REF: ${{ matrix.pr.head }}
       EXPECTED_BASE_SHA: ${{ matrix.pr.base_sha }}
       EXPECTED_HEAD_SHA: ${{ matrix.pr.head_sha }}
+      UPDATE_MODE: ${{ matrix.pr.mode }}
       RECOVER_REBASE_PAUSE: ${{ matrix.pr.recover_rebase_pause }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -4112,9 +4126,13 @@ jobs:
             eta="$(date -u -d '+8 minutes' '+%H:%M UTC')"
             body="$RUNNER_TEMP/resolve-start-comment.md"
             {
-              printf '🤖 **Lopu is resolving this PR** — work started at %s.\n\n' "$started"
-              printf 'Expected to finish around **%s** (most resolutions still land in 3-8 minutes; the hosted-runner ceiling is 360). ' "$eta"
-              printf 'On success a merge commit resolving the conflicts is pushed to this branch and this status comment updates with the result — no manual action is needed meanwhile.\n\n'
+              if [ "$UPDATE_MODE" = outdated ]; then
+                printf '🤖 **Lopu is updating this out-of-date PR** — work started at %s.\n\n' "$started"
+              else
+                printf '🤖 **Lopu is resolving this PR** — work started at %s.\n\n' "$started"
+              fi
+              printf 'Expected to finish around **%s** (most updates still land in 3-8 minutes; the hosted-runner ceiling is 360). ' "$eta"
+              printf 'On success the target branch is merged into this PR branch, Graphify is rebuilt, and this status comment updates with the result — no manual action is needed meanwhile.\n\n'
               printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$RUN_STATUS_MARKER"
             } > "$body"
             comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
@@ -4215,7 +4233,10 @@ jobs:
             ' <<<"$all_open")"
           merge_owned=false
           topology=standalone
-          if [ "$(jq -r '.mergeable' <<<"$pr")" = false ]; then
+          if [ "$(jq -r '.mergeable_state' <<<"$pr")" = behind ]; then
+            merge_owned=true
+            [ "$stack_member" != true ] || topology=outdated-stack
+          elif [ "$(jq -r '.mergeable' <<<"$pr")" = false ]; then
             if [ "$stack_member" != true ]; then
               merge_owned=true
             elif jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
@@ -4888,15 +4909,14 @@ jobs:
             -m "Resolved by the resolve-pr-conflicts workflow: $RUN_URL" \
             -m "Co-Authored-By: Claude <noreply@anthropic.com>"
 
-      # Runs ONLY after the resolution has been verified and committed, so the
-      # verify step's "staged graphify-out subtree == base side" assertion is
-      # evaluated against the untouched base tree (refreshing before it would
-      # make that check fail by design). The tree is reset to the commit first,
-      # so a stray model edit left unstaged can never end up indexed here, and
-      # the model has no influence over this step at all.
-      - name: Refresh graphify outputs (LLM semantic when a credential exists)
+      # Runs ONLY after the base-into-head merge has completed (and any conflict
+      # resolution has been verified and committed). Structural extraction is
+      # always first; optional LLM semantics run only on that committed merged
+      # tree. The tree is reset to the commit first, so a stray model edit left
+      # unstaged can never end up indexed here.
+      - name: Rebuild Graphify structure, then LLM semantics
         id: graphify
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.graphify_reset == 'true'
+        if: steps.user_merge_pause.outputs.paused != 'true'
         # This refresh is a nicety, never worth losing a verified resolution:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
@@ -4959,7 +4979,8 @@ jobs:
 
           if ! (pipx install "graphifyy==$GRAPHIFY_VERSION" >/dev/null 2>&1 \
                 || pip install --user "graphifyy==$GRAPHIFY_VERSION" >/dev/null 2>&1); then
-            echo "::warning::graphify $GRAPHIFY_VERSION could not be installed in CI — keeping the base branch's graph as-is."
+            echo "::warning::graphify $GRAPHIFY_VERSION could not be installed in CI — keeping the merged commit's existing graph as-is."
+            echo "semantic=unavailable" >> "$GITHUB_OUTPUT"
             echo "refreshed=failed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4984,35 +5005,54 @@ jobs:
             fi
           fi
 
-          # Semantic path: `extract` is manifest-incremental (only files the
-          # merge changed are re-extracted; unchanged docs are served from the
-          # tracked cache — zero LLM calls when nothing semantic changed), then
-          # `cluster-only` regenerates GRAPH_REPORT.md. --no-label matches the
-          # repo's current placeholder community names without spending LLM
-          # calls on naming; --api-timeout bounds each request so one
-          # pathological doc can't eat the step timeout. NEVER add
-          # --no-cluster to the extract: it writes ONLY the newly-extracted
-          # nodes and destroys the rest of the graph.
-
-          # Mechanical guard for that whole failure class: refuse a semantic
-          # result whose node count halved. `graphify update` has a built-in
-          # fewer-nodes guard, `graphify extract` does not — without this, a
-          # collapsed graph would be committed to the PR branch. A legitimate
-          # >50% shrink (mass code deletion) lands on the AST fallback, whose
-          # own guard then decides; resolve that rare case locally with
-          # `graphify update --force`.
+          # Mechanical guard for graph collapse. `graphify update` has its own
+          # fewer-nodes guard, while `graphify extract` does not; keep the same
+          # explicit check after each phase before its output can be committed.
           graph_not_collapsed() {
             old_n="$(git show HEAD:graphify-out/graph.json 2>/dev/null | jq '.nodes | length' 2>/dev/null || echo 0)"
             new_n="$(jq '.nodes | length' graphify-out/graph.json 2>/dev/null || echo 0)"
             case "$old_n" in ''|*[!0-9]*) old_n=0 ;; esac
             case "$new_n" in ''|*[!0-9]*) new_n=0 ;; esac
             if [ "$old_n" -gt 0 ] && [ "$new_n" -lt $(( old_n / 2 )) ]; then
-              echo "::warning::Semantic refresh shrank the graph ($old_n -> $new_n nodes) — refusing it."
+              echo "::warning::Graphify refresh shrank the graph ($old_n -> $new_n nodes) — refusing it."
               return 1
             fi
             return 0
           }
 
+          # Stage only the repository's portable Graphify contract. Staging the
+          # structural result before semantics also gives us a trusted rollback
+          # point: a half-written semantic run can be discarded without losing
+          # the completed structural rebuild.
+          stage_graphify_outputs() {
+            for f in graph.json GRAPH_REPORT.md manifest.json cost.json; do
+              p="graphify-out/$f"
+              if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
+                git add -A -- "$p"
+              fi
+            done
+            if [ -d graphify-out/cache/semantic ] \
+               || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
+              git add -A -- graphify-out/cache/semantic/
+            fi
+          }
+
+          # Phase 1 is unconditional after every completed base-into-head
+          # merge. This is the source-of-truth code graph build and uses no LLM.
+          if ! graphify update . || ! graph_not_collapsed; then
+            echo "::warning::Structural \`graphify update\` failed in CI — keeping the merged commit's existing graph as-is."
+            echo "semantic=unavailable" >> "$GITHUB_OUTPUT"
+            echo "refreshed=failed" >> "$GITHUB_OUTPUT"
+            git reset -q --hard HEAD
+            exit 0
+          fi
+          stage_graphify_outputs
+
+          # Phase 2 is manifest-incremental LLM semantic extraction. Code files
+          # already have current AST hashes from phase 1; semantic/doc changes
+          # are extracted next, then clustering regenerates the report. If this
+          # phase fails, restore the staged structural result and still publish
+          # that valid graph rather than reverting to the pre-merge graph.
           semantic="none"
           if [ -n "$backend" ]; then
             conc=4
@@ -5022,44 +5062,15 @@ jobs:
                && graphify cluster-only . --no-viz --no-label \
                && graph_not_collapsed; then
               semantic="$backend"
+              stage_graphify_outputs
             else
               semantic="failed"
-              echo "::warning::Semantic \`graphify extract\` via $backend failed — falling back to the AST-only refresh."
-              # The failed run may have half-written outputs (including a
-              # dated backup dir); restore the committed state before the
-              # fallback so it starts from the same tree the extract did.
-              git checkout -q HEAD -- graphify-out/ 2>/dev/null || true
+              echo "::warning::Semantic \`graphify extract\` via $backend failed — preserving the completed structural refresh."
+              git checkout -q -- graphify-out/ 2>/dev/null || true
               git clean -qffdx -- graphify-out/
             fi
           fi
           echo "semantic=$semantic" >> "$GITHUB_OUTPUT"
-
-          # AST/text-only fallback (and the no-credential path): no LLM.
-          if [ "$semantic" = "none" ] || [ "$semantic" = "failed" ]; then
-            if ! graphify update .; then
-              echo "::warning::\`graphify update\` failed in CI — keeping the base branch's graph as-is."
-              echo "refreshed=failed" >> "$GITHUB_OUTPUT"
-              git reset -q --hard HEAD
-              exit 0
-            fi
-          fi
-
-          # Stage ONLY the portable outputs the repo tracks — never the whole
-          # subtree, which would sweep in graphify's leftovers (.graph.tmp.json,
-          # needs_update, dated backup dirs) and the untracked derived viz.
-          for f in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-            p="graphify-out/$f"
-            if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
-              git add -A -- "$p"
-            fi
-          done
-          # The content-addressed semantic cache is tracked by repo policy:
-          # blobs paid for in CI must be committed so no local run ever
-          # re-pays the same extraction.
-          if [ -d graphify-out/cache/semantic ] \
-             || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-            git add -A -- graphify-out/cache/semantic/
-          fi
 
           # Anything changed outside graphify-out/ means the CLI touched source.
           if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
@@ -5106,12 +5117,14 @@ jobs:
           else
             case "$semantic" in
               claude|claude-cli)
-                detail="\`graphify extract\` with LLM semantic extraction (graphify $GRAPHIFY_VERSION, $semantic backend); unchanged content served from the tracked semantic cache." ;;
+                detail="Structural \`graphify update\` followed by LLM semantic \`graphify extract\` (graphify $GRAPHIFY_VERSION, $semantic backend); unchanged content served from the tracked semantic cache." ;;
+              failed)
+                detail="Structural \`graphify update\` completed (graphify $GRAPHIFY_VERSION); LLM semantic extraction failed, so the verified structural graph was preserved." ;;
               *)
-                detail="AST/text-only \`graphify update\` (graphify $GRAPHIFY_VERSION, no semantic extraction); run graphify locally with an LLM backend if semantic data is needed." ;;
+                detail="Structural \`graphify update\` completed (graphify $GRAPHIFY_VERSION, no semantic credential available)." ;;
             esac
             git commit -q \
-              -m "chore: refresh graphify outputs after conflict merge" \
+              -m "chore: refresh graphify outputs after PR branch merge" \
               -m "$detail" \
               -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL"
             echo "refreshed=true" >> "$GITHUB_OUTPUT"
@@ -5299,7 +5312,11 @@ jobs:
           }
           body="$RUNNER_TEMP/comment.md"
           {
-            echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` — conflicts auto-resolved by the [resolve-pr-conflicts workflow]($RUN_URL)."
+            if [ "$UPDATE_MODE" = outdated ]; then
+              echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` to bring this PR up to date via [Lopu's PR manager]($RUN_URL)."
+            else
+              echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` — conflicts auto-resolved by [Lopu's PR manager]($RUN_URL)."
+            fi
             echo
             # conflicted-derived.txt is written by the verify step AFTER the
             # model finished (recomputed from git), so it is the trustworthy
@@ -5313,20 +5330,26 @@ jobs:
             if [ "$GRAPHIFY_RESET" = "true" ]; then
               echo
               echo "> graphify-out/ was reset wholesale to the \`$BASE_REF\` side (repo rule: one side, never mixed — the graph merge driver is unavailable in CI)."
-              case "$GRAPHIFY_REFRESHED" in
-                true)
-                  case "$GRAPHIFY_SEMANTIC" in
-                    claude|claude-cli)
-                      echo "> Then re-ran graphify on the merged code WITH LLM semantic extraction (\`graphify extract\`, $GRAPHIFY_SEMANTIC backend) and committed the result — content new to this merge is semantically indexed; unchanged content came from the tracked cache." ;;
-                    failed)
-                      echo "> Then re-ran \`graphify update\` (AST/text-only — the semantic extraction attempt failed this run; see the workflow log) and committed the result. Run graphify locally with an LLM backend if fresh semantic data is needed." ;;
-                    *)
-                      echo "> Then re-ran \`graphify update\` (AST/text-only — no Claude credential available to the refresh step for semantic extraction) and committed the result." ;;
-                  esac ;;
-                nochange) echo "> Re-ran the graphify refresh; the graph was already current." ;;
-                *)        echo "> ⚠️ The in-CI graphify refresh did not run successfully, so the graph is the base branch's — please run \`graphify update .\` locally." ;;
-              esac
             fi
+            echo
+            case "$GRAPHIFY_REFRESHED" in
+              true)
+                case "$GRAPHIFY_SEMANTIC" in
+                  claude|claude-cli)
+                    echo "> Rebuilt the merged code graph first with \`graphify update .\`, then ran LLM semantic extraction (\`graphify extract .\`, $GRAPHIFY_SEMANTIC backend) and committed the result." ;;
+                  failed)
+                    echo "> Rebuilt and committed the merged code graph with \`graphify update .\`. LLM semantic extraction was attempted afterward but failed; the valid structural result was preserved (see the workflow log)." ;;
+                  *)
+                    echo "> Rebuilt and committed the merged code graph with \`graphify update .\`; no LLM semantic credential was available for the second phase." ;;
+                esac ;;
+              nochange)
+                case "$GRAPHIFY_SEMANTIC" in
+                  claude|claude-cli) echo "> Rebuilt the code graph, then ran LLM semantic extraction; the tracked Graphify output was already current." ;;
+                  failed) echo "> Rebuilt the code graph; semantic extraction failed afterward, but the tracked structural output was already current." ;;
+                  *) echo "> Rebuilt the code graph; the tracked Graphify output was already current." ;;
+                esac ;;
+              *) echo "> ⚠️ The post-merge Graphify rebuild did not complete successfully; please run \`graphify update .\` followed by the configured semantic \`graphify extract .\` locally." ;;
+            esac
             if [ "$HAS_WORKFLOW_PUSH" != "true" ]; then
               echo
               echo "> Note: this push used \`GITHUB_TOKEN\`, so GitHub Actions checks did not re-run on the merge commit (Vercel and other app-based checks did)."
