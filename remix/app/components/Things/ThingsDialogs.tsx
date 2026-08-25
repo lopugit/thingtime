@@ -19,6 +19,7 @@ import {
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { RenderThing } from '~/components/Kinds';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
@@ -557,7 +558,18 @@ export const PreviewModal = ({
               ))}
             </Flex>
             <Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" overflow="hidden" padding={3}>
-              <ThingView compact thing={thing.crystal} />
+              {thing.thingtime.includes('component') ? (
+                // the interactive surface for component instances: the kind
+                // renderer resolves the template AND its ttAction wrapper
+                // handles clicks (grid previews stay pointerEvents:none)
+                <RenderThing
+                  context={{ size: 'full' }}
+                  fallback={<ThingView compact thing={thing.crystal} />}
+                  thing={thing as unknown as Record<string, unknown>}
+                />
+              ) : (
+                <ThingView compact thing={thing.crystal} />
+              )}
             </Box>
           </Flex>
         </ModalBody>

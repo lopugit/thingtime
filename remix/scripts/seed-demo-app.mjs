@@ -50,7 +50,18 @@ const findOwned = async (cookie, thingtime, keyField, keyValue) => {
 
 const ensureThing = async (cookie, { thingtime, keyField, keyValue, payload }) => {
 	const existing = await findOwned(cookie, thingtime, keyField, keyValue);
-	if (existing) return { thing: existing, created: false };
+	if (existing) {
+		// self-heal drift: PATCH the crystal when the seed definition changed
+		if (JSON.stringify(existing.crystal) !== JSON.stringify(payload.crystal)) {
+			const patched = await api('/api/v1/things/update', {
+				cookie,
+				method: 'PATCH',
+				body: { id: existing.id, crystal: payload.crystal }
+			});
+			if (patched.status === 200 && patched.body?.thing) return { thing: patched.body.thing, created: false, refreshed: true };
+		}
+		return { thing: existing, created: false };
+	}
 	const created = await api('/api/v1/things', { cookie, method: 'POST', body: payload });
 	if (created.status !== 200 || !created.body?.thing) {
 		throw new Error(`Creating ${thingtime} ${keyValue} failed: ${JSON.stringify(created.body).slice(0, 300)}`);
@@ -178,7 +189,8 @@ const run = async () => {
 				args: [
 					{ name: 'label', type: 'string', label: 'Label', default: 'Invoice #0001', maxLength: 80 },
 					{ name: 'amount', type: 'number', label: 'Amount', default: 250, min: 0, max: 100000 },
-					{ name: 'status', type: 'enum', label: 'Status', values: ['draft', 'sent'], default: 'draft' }
+					{ name: 'status', type: 'enum', label: 'Status', values: ['draft', 'sent'], default: 'draft' },
+					{ name: 'invoiceId', type: 'string', label: 'Invoice thing id', default: '', maxLength: 128 }
 				],
 				render: {
 					tag: 'div',
@@ -204,9 +216,15 @@ const run = async () => {
 								then: { tag: 'div', props: { style: { fontSize: '12px', color: '#2f9e63', fontWeight: '600' } }, children: ['✓ sent'] },
 								else: {
 									tag: 'div',
+									// the ttAction closure: clicking this pill on a trusted
+									// surface runs send-invoice AS the viewer with the card's
+									// invoiceId arg — 🧩 component → ⚡ action → 📦 data
+									ttAction: 'send-invoice',
+									ttActionInputs: { invoiceId: '{invoiceId}' },
 									props: {
 										style: {
 											alignSelf: 'flex-start',
+											cursor: 'pointer',
 											fontSize: '12px',
 											fontWeight: '600',
 											color: '#ffffff',

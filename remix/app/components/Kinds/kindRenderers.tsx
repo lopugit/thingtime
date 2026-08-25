@@ -9,6 +9,7 @@ import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '~/components/ComponentsLibrary/componentTemplate';
+import { useTtActionClicks } from '~/components/Actions/useTtActionClicks';
 import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
@@ -756,10 +757,13 @@ const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRe
 
 type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
 
-const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: KindRenderContext }) => {
+const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; context: KindRenderContext }) => {
 	const resolved = resolveTemplate(value.render, value.values);
+	// ttAction controls only fire on trusted surfaces (your own /things, the
+	// component tester) — never in untrusted feed/search renders
+	const onTtAction = useTtActionClicks();
 	return (
-		<Box width="100%">
+		<Box onClickCapture={context.untrusted ? undefined : onTtAction} width="100%">
 			{isChakraThingNode(resolved) ? (
 				<ChakraThingRenderer node={resolved as ChakraThingNode} />
 			) : (

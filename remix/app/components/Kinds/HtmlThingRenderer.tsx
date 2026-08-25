@@ -108,7 +108,13 @@ const ALLOWED_PROPS = new Set([
 	'rx',
 	'ry',
 	'points',
-	'xmlns'
+	'xmlns',
+	// the ONLY data-* attributes allowed through: the component ttAction
+	// binding (componentTemplate.ts) — inert markup that a trusted-surface
+	// click wrapper reads to run an action AS the viewer. Values are plain
+	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
+	'data-tt-action',
+	'data-tt-action-inputs'
 ]);
 
 const VOID_TAGS = new Set(['img', 'input', 'br', 'hr']);
