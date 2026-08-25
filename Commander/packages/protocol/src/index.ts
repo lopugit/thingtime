@@ -1105,6 +1105,7 @@ export interface NativeRequest<T = unknown> {
     | 'launcher.openNewWindow'
     | 'launcher.commandReady'
     | 'application.quit'
+    | 'application.control'
     | 'window.beginDrag'
     | 'filesystem.beginDrag'
     | 'filesystem.icon'
@@ -1166,6 +1167,7 @@ export interface SystemMetrics {
       availableBytes: number;
       purgeableBytes: number;
     };
+    notRespondingApplications: SystemUnresponsiveApplication[];
     processes: SystemProcessMetric[];
     gpu: {
       name: string;
@@ -1189,6 +1191,11 @@ export interface SystemProcessMetric {
   // attributable to one process.
   networkBytesPerSecond?: number;
   gpuPercent?: number;
+}
+
+export interface SystemUnresponsiveApplication {
+  pid: number;
+  name: string;
 }
 
 export interface ThingtimeNetworkProbe {

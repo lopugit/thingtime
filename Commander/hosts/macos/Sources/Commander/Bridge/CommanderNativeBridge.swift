@@ -24,6 +24,14 @@ private enum JSONValue: Decodable {
 
   var string: String? { if case .string(let value) = self { value } else { nil } }
   var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
+  var pid: pid_t? {
+    guard case .number(let value) = self,
+          value.isFinite,
+          value.rounded() == value,
+          value > 1,
+          value <= Double(Int32.max) else { return nil }
+    return pid_t(value)
+  }
   var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
   var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
 }
@@ -74,7 +82,9 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let updateWindowMode: (String) throws -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   private let metrics: SystemMetricsService
+  private let applicationResponsiveness: ApplicationResponsivenessService
   private let applicationOpener: CommanderApplicationOpener
+  private let unresponsiveApplicationController: UnresponsiveApplicationController
   private let fileIconRequests = CommanderFileIconRequestQueue()
   weak var webView: WKWebView?
 
@@ -123,7 +133,16 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.updateWindowMode = updateWindowMode
     self.updateWindowPinning = updateWindowPinning
     self.applicationOpener = applicationOpener
-    self.metrics = SystemMetricsService(daemonPID: ready.pid)
+    let applicationResponsiveness = ApplicationResponsivenessService()
+    self.applicationResponsiveness = applicationResponsiveness
+    self.metrics = SystemMetricsService(
+      daemonPID: ready.pid,
+      applicationResponsiveness: applicationResponsiveness
+    )
+    self.unresponsiveApplicationController = UnresponsiveApplicationController(
+      responsiveness: applicationResponsiveness,
+      submitLaunch: { applicationOpener.submit($0) }
+    )
     super.init()
   }
 
@@ -225,6 +244,13 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         guard let url = URL(string: raw), url.scheme != nil || raw.hasPrefix("/") else { throw BridgeError.invalidURL }
         applicationOpener.submit(url.scheme != nil ? url : URL(fileURLWithPath: raw))
         result = ["submitted": true]
+      case "application.control":
+        guard let pid = request.params?["pid"]?.pid,
+              let actionName = request.params?["action"]?.string,
+              let action = ApplicationControlAction(rawValue: actionName) else {
+          throw BridgeError.invalidApplicationControl
+        }
+        result = try unresponsiveApplicationController.perform(pid: pid, action: action)
       case "application.pasteTarget":
         result = pasteTargetName().map { ["name": $0] } ?? [:]
       case "filesystem.reveal":
@@ -544,7 +570,7 @@ final class CommanderFileIconRequestQueue {
 }
 
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, invalidNotification, notificationsDenied, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, invalidNotification, invalidApplicationControl, notificationsDenied, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
@@ -552,6 +578,7 @@ private enum BridgeError: LocalizedError {
     case .invalidSettingsTab(let tab): "Unsupported Commander settings tab: \(tab)"
     case .invalidCommandShortcuts: "The command shortcut map is invalid."
     case .invalidNotification: "The notification details are invalid."
+    case .invalidApplicationControl: "The application control request is invalid."
     case .notificationsDenied: "Commander notifications are disabled in macOS Settings."
     case .unknownMethod(let method): "Unknown native method: \(method)"
     case .credentialMissing: "No saved credential exists for this account."
