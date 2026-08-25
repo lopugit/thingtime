@@ -43,9 +43,10 @@ explicitly allowed Thingtime origins and the focused Things operation list.
 OpenAI currently makes custom MCP apps web-only: they cannot be invoked in
 iOS ChatGPT chats. Full write/modify MCP access is currently available only in
 the Business and Enterprise/Edu beta; Pro users are limited to read/fetch MCP
-use. After publishing, ChatGPT freezes the scanned tool definitions, so an
-admin must review and publish a tool refresh before a later server change is
-enabled.
+use. After publishing, ChatGPT freezes the scanned tool definitions. An
+Enterprise/Edu admin must review and enable a tool refresh before a later
+server change is available; a Business workspace currently must recreate and
+republish the app to change tools or metadata.
 
 Use the ChatGPT connection manager to reconnect; do not paste any Thingtime
 token into a chat message. See [SUBMISSION.md](./SUBMISSION.md) before public

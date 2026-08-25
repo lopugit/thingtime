@@ -26,8 +26,10 @@ Plugins Directory submission.
 
 Custom MCP apps are web-only. Full write/modify support is currently a
 Business/Enterprise/Edu beta; Pro can use only read/fetch MCP connections.
-ChatGPT freezes scanned tool definitions at approval, so future server tool
-changes must be refreshed and republished by an admin.
+ChatGPT freezes scanned tool definitions at approval. Enterprise/Edu admins
+must refresh and enable future server tool changes before they are available;
+Business workspaces currently must recreate and republish an app to change
+tools or metadata.
 
 ## Required owner-provided materials
 

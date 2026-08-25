@@ -447,8 +447,10 @@ new chat, then have an admin/owner publish it from Workspace Settings → Apps.
 Full write/modify MCP access is currently a Business/Enterprise/Edu beta;
 Pro-only connections are limited to read/fetch. ChatGPT custom MCP apps are
 currently web-only, so iOS ChatGPT chats cannot invoke this connector. After
-approval, tool definitions are a frozen snapshot: an admin must review and
-publish a refresh before changes are enabled. Public Plugins Directory
+approval, tool definitions are a frozen snapshot. Enterprise/Edu admins must
+review and enable a refresh before action changes are available; Business
+workspaces currently need to recreate and republish the app to change its
+tools or metadata. Public Plugins Directory
 distribution remains a separate process requiring a fixed production origin,
 verified publisher identity, legal URLs, test cases, and OpenAI review; see
 the package's `SUBMISSION.md`.

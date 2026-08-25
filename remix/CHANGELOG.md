@@ -22,8 +22,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
   app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
   tool scanning, draft testing from the tools menu/@mentions, publication,
-  frozen tool snapshots, role/action controls, and the current web-only plus
-  plan-level write limits. — Codex (AI), 2026-08-26
+  frozen tool snapshots, Enterprise/Edu refresh controls, Business
+  recreate-and-republish release requirements, role/action controls, and the
+  current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
 
 ### Added
 
