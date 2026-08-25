@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { deriveActionEffects } from '../../schemas/registry.ts';
 
-import { actionCannotAccess, coerceValueText, componentBindsAction, deriveRequiredCapabilities } from './actionInspect.ts';
+import { actionCannotAccess, coerceValueText, componentBindsAction, deriveRequiredCapabilities, runInputDescriptorsOf } from './actionInspect.ts';
 
 // The builder's consent surface: deriveRequiredCapabilities promises that a
 // UI-authored action cannot declare less than it does, and coerceValueText
@@ -135,4 +135,33 @@ test('componentBindsAction never false-positives on substrings', () => {
 	const render = { tag: 'div', ttAction: 'send-invoice-v2' };
 	assert.equal(componentBindsAction(render, { id: 'x', actionKey: 'send-invoice' }), false);
 	assert.equal(componentBindsAction(null, { id: 'x', actionKey: 'send-invoice' }), false);
+});
+
+// A parameterless action is a first-class shape: `inputs` is optional in the
+// grammar, the registry writes the key ONLY when non-empty, and the builder
+// advertises "No inputs — the action runs parameterless." The run form derives
+// its defaults from this list inside a memo and syncs them into state, so the
+// empty case has to be reference-stable or the inspector re-renders forever.
+test('a parameterless action yields a STABLE empty descriptor list', () => {
+	const parameterless = { name: 'Nightly digest', steps: [{ op: 'things.search', schema: 'invoice' }] };
+	const first = runInputDescriptorsOf(parameterless);
+	const second = runInputDescriptorsOf(parameterless);
+	assert.deepEqual(first, []);
+	// same identity across calls AND across distinct crystals — anything else
+	// re-fires the run panel's defaults effect on every render
+	assert.equal(first, second);
+	assert.equal(first, runInputDescriptorsOf({ name: 'Another', steps: [] }));
+	assert.equal(first, runInputDescriptorsOf(null));
+	assert.equal(first, runInputDescriptorsOf(undefined));
+	assert.equal(first, runInputDescriptorsOf({ inputs: undefined }));
+	// a non-array `inputs` is malformed, not a descriptor list
+	assert.equal(first, runInputDescriptorsOf({ inputs: 'nope' } as never));
+});
+
+test('a declared input list passes through by reference', () => {
+	const inputs = [{ name: 'amount', type: 'number' }];
+	const crystal = { name: 'Charge', inputs };
+	assert.equal(runInputDescriptorsOf(crystal), inputs);
+	// stable across calls too, so the memo below it never re-derives
+	assert.equal(runInputDescriptorsOf(crystal), runInputDescriptorsOf(crystal));
 });

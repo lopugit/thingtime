@@ -29,6 +29,7 @@ import {
 	describeActionStep,
 	displayRef,
 	isActionThing,
+	runInputDescriptorsOf,
 	type ActionThing
 } from './actionInspect';
 
@@ -81,7 +82,11 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
 	lopuRef.current = lopu;
-	const descriptors = Array.isArray(action.crystal.inputs) ? action.crystal.inputs : [];
+	// Keeps ONE descriptors identity across renders (runInputDescriptorsOf
+	// returns a shared list for parameterless actions): `defaults` derives
+	// from it and the effect below pushes that object into state, so a fresh
+	// [] per render would re-fire setValues forever.
+	const descriptors = React.useMemo(() => runInputDescriptorsOf(action.crystal), [action.crystal]);
 	const defaults = React.useMemo(() => {
 		const initial: Record<string, string | boolean> = {};
 		for (const descriptor of descriptors) {

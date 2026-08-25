@@ -40,6 +40,18 @@ export const isActionThing = (thing: { thingtime?: unknown } | null | undefined)
 export const actionEffectsOf = (crystal: ActionCrystal | null | undefined): ActionEffects =>
 	deriveActionEffects(crystal?.steps);
 
+// The typed inputs the run form renders. `crystal.inputs` is OMITTED (not [])
+// when an action declares none — registry.ts writes the key only when it is
+// non-empty, and the builder advertises "the action runs parameterless" — so
+// the empty case MUST hand back one shared reference. Callers feed this list
+// straight into hook dependencies to derive the form defaults; a fresh []
+// per render gives those defaults a new identity every time, and the effect
+// that syncs them into state re-fires forever (React's Object.is bail-out
+// never matches a fresh object).
+const NO_INPUT_DESCRIPTORS: Record<string, unknown>[] = [];
+export const runInputDescriptorsOf = (crystal: ActionCrystal | null | undefined): Record<string, unknown>[] =>
+	Array.isArray(crystal?.inputs) ? crystal.inputs : NO_INPUT_DESCRIPTORS;
+
 // The merged envelope an invocation actually runs under: author overrides
 // clamped by the server ceilings, defaults elsewhere.
 export const actionLimitsOf = (crystal: ActionCrystal | null | undefined): Record<string, number> => {
