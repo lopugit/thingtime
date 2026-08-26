@@ -1,16 +1,16 @@
-# Graph Report - lopu-codeql-missing-merge-ref  (2026-08-26)
+# Graph Report - lopu-418-controller-review  (2026-08-26)
 
 ## Corpus Check
-- 23 files · ~138,396 words
+- 23 files · ~138,718 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 577 nodes · 1234 edges · 59 communities (30 shown, 29 thin omitted)
+- 577 nodes · 1235 edges · 59 communities (30 shown, 29 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `504ef398`
+- Built from commit: `ac6f0abf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -31,7 +31,7 @@
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
 - [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
 - [[_COMMUNITY_promotion-worker-routing-contract.mjs|promotion-worker-routing-contract.mjs]]
-- [[_COMMUNITY_Lopu Internal Feature Promotion Workflow|Lopu Internal Feature Promotion Workflow]]
+- [[_COMMUNITY_Graphify Semantic Refresh|Graphify Semantic Refresh]]
 - [[_COMMUNITY_Run Lopu with Primary Claude Credential|Run Lopu with Primary Claude Credential]]
 - [[_COMMUNITY_Publish or reconcile develop S3 preview job|Publish or reconcile develop S3 preview job]]
 - [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
@@ -143,7 +143,7 @@ Cohesion: 0.15
 Nodes (28): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers(), failureDetail() (+20 more)
 
 ### Community 7 - "workflow-control-plane-contract.mjs"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (26): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+18 more)
 
 ### Community 8 - "refresh-promotion-graphify.sh"
@@ -230,12 +230,12 @@ Nodes (3): gh workflow run codeql-analysis.yml, Lopu Queues Unprivileged PR Scan
 Cohesion: 0.67
 Nodes (3): no-ai-rebase label, REBASE_OWNER_JQ, STACK_MEMBER_JQ
 
-### Community 52 - "Thingtime AI instructions"
+### Community 51 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
 ## Knowledge Gaps
-- **157 isolated node(s):** `here`, `githubRoot`, `workflows`, `actions`, `scripts` (+152 more)
+- **157 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES` (+152 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -248,7 +248,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `queueTrustedPromotionWorker`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **What connects `here`, `githubRoot`, `workflows` to the rest of the system?**
+- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS` to the rest of the system?**
   _157 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
