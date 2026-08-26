@@ -191,13 +191,24 @@ https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
 
-Thingtime has one automatic principal repository workflow: **Lopu PR
-manager**. It reviews failing checks and CodeQL findings, merges stale bases
-into PR heads, resolves merge conflicts, and owns rebases plus stack cascades
-for every same-repository PR regardless of its target branch. Push, PR,
-conversation, failed-check, and scheduled signals all enter through that one
-manager; a branch push never starts a second standalone rebase, promotion, or
-branch-synchronization workflow.
+Thingtime has one automatic principal repository workflow: the public **Lopu PR
+manager** Action. It owns repository review, failed-check and CodeQL repair,
+stale-branch merges into PR heads, conflict resolution, rebases and stack
+cascades, promotions, main/develop synchronization, release analysis, wildcard
+`all`-branch repair, and post-merge Graphify refresh — for every
+same-repository PR regardless of its target branch. Push, PR, conversation,
+failed-check, and scheduled signals all enter through that one manager; a
+branch push never starts a second standalone rebase, promotion, or
+branch-synchronization workflow. Deterministic implementations remain protected
+reusable components; they have no competing push, schedule, or manual triggers
+of their own.
+
+Lopu listens to pushes on `"**"`, every PR-head lifecycle update, PR and inline
+review comments, failed check completions, and bounded maintenance schedules.
+It checks open PRs both targeting and originating from the changed branch. All
+signals revalidate immutable PR snapshots and enter one repository-wide
+model-worker queue with `cancel-in-progress: false`, so a burst can neither
+spawn parallel Lopu sessions nor discard in-flight work.
 
 Inside Lopu, merge and rebase ownership remains deliberately disjoint.
 Standalone merge conflicts and clean-but-behind branches go to the base-merge
@@ -208,20 +219,23 @@ exact `repository_dispatch` worker handoff through **Lopu PR manager**. It is a
 `workflow_call`-only implementation; no product branch contains or exposes a
 second rebase workflow.
 
-The rebase lane covers the case GitHub reports as `mergeable: true` but
-`rebaseable: false`: a plain merge needs no help, yet replaying stacked commits
-onto their base may stop at a conflict. A detected stack is rebased
+Lopu's rebase/stack lane covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
+commits onto its base stops at a conflict. A detected stack is rebased
 root-to-leaf, so each child is replayed onto the rewritten parent rather than
-onto the parent's old SHA.
+onto the parent's old SHA. The merge lane owns standalone merge conflicts;
+stack members and explicit history-rewrite cases stay with the rebase lane.
 
 For manual recovery, open **Actions → Lopu PR manager → Run workflow** on the
-default branch. Enter an exact PR number, a base/head branch selector, or leave
-both blank for a repository scan. The same entry point deliberately retries a
-reviewed paused merge/rebase snapshot; the internal rebase handoff is not a
-second user-facing workflow. The `maintenance_operation` choice also exposes
-the standing develop promotion, per-feature promotion (including dry-run and
-reverse-lane options), and main→develop synchronization without restoring
-separate Actions entries.
+default branch. Enter an exact PR number, a base/head branch selector, or one
+of the explicit promotion and main/develop maintenance operations; leave the
+selectors blank to scan every open eligible PR. The same entry point
+deliberately retries a reviewed paused merge/rebase snapshot — failed immutable
+snapshots stay auditable and are retried without reviving a separate public
+Action, and the internal rebase handoff is not a second user-facing workflow.
+The `maintenance_operation` choice also exposes the standing develop promotion,
+per-feature promotion (including dry-run and reverse-lane options), and
+main→develop synchronization without restoring separate Actions entries.
 
 Broad scans are API-only detectors; they hand off one trusted
 default-branch run per conflicted base, so unrelated bases do not share one AI
@@ -231,7 +245,7 @@ The hold is bound to the exact owner, refs, SHAs, and topology recorded in a
 bot-only hidden marker: a changed snapshot is eligible again automatically,
 while the same snapshot requires review and a named-base manual retry.
 
-The merge workflow also snapshots the exact live head and base SHAs, repeats
+Lopu's merge lane also snapshots the exact live head and base SHAs, repeats
 its PR/ref/label/stack/protection checks immediately before publication, and
 uses an exact head lease. If either branch moves while Claude is working, the
 resolved merge is discarded rather than overwriting the newer work.
@@ -246,18 +260,16 @@ comment on the PR saying exactly that, so a silent PR means "nothing needed
 doing", never "nobody looked". Conflicts that are handed off announce
 themselves through the resolve job's "Auto-resolve running" comment.
 
-**Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
+Lopu's rebase/stack lane rewrites PR history, so its force push has
 stricter boundaries:
 
 - It operates only on branches in this repository. Fork PRs, the repository's
   default branch, and protected branches are refused.
-- Claude receives only regular copies of the exact files stopped in conflict,
-  inside a repo-less scratch directory. It never sees the real checkout, Git
-  metadata, action implementation, or push credentials, and it has only
-  read/edit/write file tools—no shell, Git, search, or network tools. Code
-  loaded from the exact trusted default-branch commit
-  independently validates the scratch files, conflict set, index, and completed
-  rebase before any push.
+- Lopu receives the repository context and its configured development tools so
+  it can act as the principal codebase manager. Publication credentials are
+  injected only into the final fenced push step; deterministic trusted code
+  independently validates the conflict set, index, completed operation, and
+  exact branch lease before anything is published.
 - Nothing is pushed until the complete rebase succeeds. The final update uses
   an exact `--force-with-lease` against the head SHA inspected at the start, so
   a concurrent human or bot push makes the run fail instead of being erased.
@@ -283,6 +295,11 @@ Actions secrets:
 
 - `ANTHROPIC_API_KEY`, or
 - `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+Optional ordered fallback credentials are `ANTHROPIC_API_KEY_FALLBACK` or
+`CLAUDE_CODE_OAUTH_TOKEN_FALLBACK`. Lopu changes slots only for provider
+capacity, quota, credit, or authentication failures; a max-turn continuation
+stays on the selected account and session.
 
 `CONFLICT_RESOLVER_PAT` is optional. Add it only if the resolver must rewrite a
 branch whose rebase changes files under `.github/workflows/`; the token needs
@@ -1111,11 +1128,12 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Branch automation: develop → main promotion
 
-`develop` is the integration branch; `main` is the release branch. One public
-**Lopu PR manager** workflow owns the branch events and invokes three protected
-non-cancelling components, giving two complementary ways to ship:
+`develop` is the integration branch; `main` is the release branch. The one
+public **Lopu PR manager** owns the branch events and invokes the following
+protected, non-cancelling maintenance lanes, giving two complementary ways to
+ship:
 
-- **Lopu's per-feature promotion component** (protected implementation
+- **Per-feature promotion** (protected implementation
   `github-actions:.github/workflows/promote-features-to-main.yml`)
   scans PRs merged into `develop` and opens one promotion PR per feature
   against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
@@ -1126,7 +1144,7 @@ non-cancelling components, giving two complementary ways to ship:
   review and merge bottom-up, deleting each branch on merge. Label a develop
   PR `no-promote` to keep it out of the train; close a promotion PR to reject
   that change for `main` permanently.
-- **Lopu's standing develop promotion component** (protected implementation
+- **Standing develop-to-main promotion** (protected implementation
   `github-actions:.github/workflows/promote-develop-to-main.yml`)
   keeps one standing all-or-nothing PR open (head `develop`, base `main`).
   When everything on `develop` is deemed mergeable, merge it instead of
@@ -1134,12 +1152,14 @@ non-cancelling components, giving two complementary ways to ship:
   omnibus merge the per-feature workflow sees the content already on `main`,
   skips it, and automatically closes any open promotion PRs whose diff has
   become empty.
-- **Lopu's main→develop synchronization component** back-merges `main` after
-  promotions land.
+- **Safe main-to-develop synchronization** back-merges `main` after promotions
+  land, publishing any conflicted candidate through the automation-owned
+  `sync/main-into-develop` head. Lopu resolves that branch and never mutates
+  protected `main` as a PR head.
 - Lopu's conflict/rebase lanes keep promotion PRs and stacks mergeable.
 
-A `develop` push starts both promotion components inside its single Lopu run;
-a `main` push starts synchronization there; and the six-hour maintenance
+A `develop` push starts both promotion lanes inside its single Lopu run; a
+`main` push starts synchronization there; and the six-hour maintenance
 schedule enters through Lopu too. The old product-branch promotion/sync
 workflow files are removed, so none can compete with or cancel Lopu. Use the
 manager's `maintenance_operation` input for explicit recovery.
@@ -1155,10 +1175,10 @@ Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
 
 `all` is a generated everything-branch: `develop` + `main` + every open PR
 (stacked branch → branch PRs included) merged together, so all in-progress
-work can be tried in one place. **Build all branch**
-(`.github/workflows/all-branch.yml`) rebuilds it from scratch and force-pushes
-the result on every push to `develop`/`main`, on every open-PR change, and
-hourly:
+work can be tried in one place. The one public **Lopu PR manager** calls its
+protected internal all-branch implementation to rebuild it from scratch and
+force-push the result after pushes to `develop`/`main`, every open-PR lifecycle
+change, and the hourly backstop. There is no second product-branch workflow:
 
 - Rebuilds start from `develop`, merge `main`, then merge open PR heads in
   stack order (parents before children, ascending PR number within a layer)

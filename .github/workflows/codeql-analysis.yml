@@ -4,9 +4,12 @@ name: Lopu CodeQL all branches
 # protected github-actions branch.
 on:
   pull_request:
-  # This default-branch listener exists independently of the PR's base branch.
-  # Its protected handoff workflow receives only metadata, then a separate
-  # workflow_dispatch run analyzes the exact immutable PR head without secrets.
+  # The target-context lane executes only the protected metadata handoff. It
+  # never analyzes the base branch or checks out untrusted PR content with the
+  # target event's write-capable token. This default-branch listener exists
+  # independently of the PR's base branch: its handoff workflow receives only
+  # metadata, then a separate workflow_dispatch run analyzes the exact
+  # immutable PR head without secrets.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
