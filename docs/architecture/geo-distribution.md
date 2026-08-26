@@ -2,6 +2,13 @@
 
 *Research + architecture notes, 2026-08-08. Status: proposal for review — nothing here is built yet.*
 
+*Re-verified against `develop` on 2026-08-26: every code seam this doc leans on
+still exists and still behaves as described. Two things moved since drafting —
+the Vercel region pin now lives in the **root** `vercel.json` (`remix/vercel.json`
+is gone), and Fluid Compute is **enabled**, so Phase 3 has one fewer prerequisite.
+Both are corrected inline. The vendor pricing and plan-gating figures in §7 are
+still as of 2026-08-08 and should be re-checked before any purchase.*
+
 The ask: users in Australia **and** America (and everywhere else) get region-local
 server + database latency, while `thingtime.com` stays the one URL and the data
 stays a single logical source of truth — just spread out.
@@ -15,9 +22,10 @@ right next move, and a staged migration plan with costs and verification steps.
 ## 1. Where we are today (post PR #157/#159/#161, measured 2026-08-08)
 
 Everything currently lives in **Sydney**: Vercel functions pinned to `syd1`
-([remix/vercel.json](../../remix/vercel.json)), Atlas cluster in AWS Sydney
-(M0 free tier). Measured from AU: warm feed **~430ms**, function→DB ping
-**2ms**, anonymous feed/search served from the edge cache at **~65ms**.
+(the root [vercel.json](../../vercel.json) — the region pin used to live in
+`remix/vercel.json`, which `develop` has since removed), Atlas cluster in AWS
+Sydney (M0 free tier). Measured from AU: warm feed **~430ms**, function→DB
+ping **2ms**, anonymous feed/search served from the edge cache at **~65ms**.
 
 What a US-East user experiences today, per API call:
 
@@ -182,15 +190,19 @@ Two mitigations, both cheap:
   fail-open already exists as a mode); (b) keep Mongo-backed limits only on
   failClosed routes (they're rare and admin-ish); (c) a regional KV
   (Upstash/Vercel KV) later if we want strict global limits again.
-- Vercel: add the second region to `regions` in vercel.json — **plan gating
-  applies, see §7 table** — and enable Fluid Compute.
+- Vercel: add the second region to `regions` in the root `vercel.json` —
+  **plan gating applies, see §7 table**. (Fluid Compute was still a to-do when
+  this was written; it has since been enabled — `"fluid": true` is in the root
+  `vercel.json` as of 2026-08-08.)
 - Nothing changes in the data model. This option is a *topology* change, not
   a *schema* change. Rollback = remove the read nodes + revert to one region.
 
 **When A is not enough:** US *writes* still cross the ocean (~200ms + write
-round trips). After the Phase-3 round-trip diets (react currently ~17-19
-sequential RTs — see the perf audit), a US react ≈ 200ms + a handful of
-primary round trips ≈ 600ms-1s. Fine for v1 of geo; §5.2 fixes it properly.
+round trips). After the round-trip diets in the performance backlog
+([performance/TODO.md](../../performance/TODO.md) — the react write path is
+spread across its N+1, index-coverage and unbounded-scan sections), a US react
+≈ 200ms + a handful of primary round trips ≈ 600ms-1s. Fine for v1 of geo;
+§5.2 fixes it properly.
 
 ### 5.2 Option B — A + write forwarding (single-hop remote writes)
 
@@ -231,8 +243,9 @@ Output — the natural home for emitting the split.
 
 B is an optimization *layer* on A — adopt it per-endpoint, starting with the
 chattiest writes (react, comment), only if A's measured US write latency
-annoys real users. It also pairs beautifully with the Phase-3 round-trip
-diets: fewer RTs shrinks the gap A leaves, possibly making B unnecessary.
+annoys real users. It also pairs beautifully with the round-trip diets in the
+performance backlog: fewer RTs shrinks the gap A leaves, possibly making B
+unnecessary.
 
 ### 5.3 Option C — Zone-sharded Global Cluster ("true" sharding)
 
@@ -299,10 +312,10 @@ verify with live measurements — same curl methodology as PRs #157/#161).
 
 | Phase | What | Prereqs | Effect |
 |---|---|---|---|
-| **0. Round-trip diets** | The Phase-3 items from the perf audit (react 17-19→~6 RTs, auth parallelization, limiter single-RT) | none | Shrinks every gap A leaves; makes B likely unnecessary for years |
+| **0. Round-trip diets** | The open round-trip items in [performance/TODO.md](../../performance/TODO.md) — chiefly its "Database — N+1 and per-item round trips" and "connection lifecycle" sections, and the single-RT rate limiter | none | Shrinks every gap A leaves; makes B likely unnecessary for years |
 | **1. Paid tier + topology dry run** | M0 → M10 (Sydney, 3 electable). Add one us-east read-only node. Functions stay syd1-only. | budget: **~$112/mo** (§7) | No user-visible change; validates replication, lag metrics, backup story. Rollback: remove node. |
 | **2. Read-preference plumbing** | `nearest` + `maxStalenessSeconds` for data-plane reads; explicit `primary` for auth-critical + transactions; regional rate-limit strategy | Phase 1 | Still no user change (one region) — but code is now region-ready and dev-parity is proven |
-| **3. Second function region** | `regions: ["syd1", "iad1"]` + Fluid Compute | **Vercel Pro plan** (multi-region isn't on Hobby, §7); Fluid can/should be enabled earlier — it's a free win on any plan | 🎉 US users: reads drop ~200ms → ~5ms. Measure from a US probe before/after (curl from a US VPS or Vercel cron in iad1). |
+| **3. Second function region** | `regions: ["syd1", "iad1"]` in the root `vercel.json` | **Vercel Pro plan** (multi-region isn't on Hobby, §7). Fluid Compute was the other prereq here and is already done (`"fluid": true`, enabled 2026-08-08) | 🎉 US users: reads drop ~200ms → ~5ms. Measure from a US probe before/after (curl from a US VPS or Vercel cron in iad1). |
 | **4. Write forwarding (optional)** | Dispatcher-level forward of mutating routes to primary region | Phase 3 + real US-user write-latency data | US writes ≈ single hop |
 | **5. EU node/region (repeat 1+3)** | fra1/lhr1 + eu read node | traffic justifies | EU joins the party |
 | **6. Zone sharding (C)** | homeRegion stamping, identity-reservation collection, M30+ Global Cluster, regional feed strategy | genuine regional write scale | Region-local writes; the full "spread out but single truth" end-state |
@@ -336,9 +349,11 @@ measurement of a multi-region change.
   Build Output `config.json` support `methods` matching → the §5.2
   read/write split-plane needs no middleware and no second project.
 - **Fluid Compute** ([docs](https://vercel.com/docs/fluid-compute)): available
-  on all plans, default for new projects since 2025-04-23 — Thingtime predates
-  that and still needs the toggle (Settings → Functions) + redeploy, or
-  `"fluid": true` in vercel.json. What it buys us: in-function concurrency
+  on all plans, default for new projects since 2025-04-23. Thingtime predates
+  that and needed an explicit opt-in; **that has since happened** — the root
+  `vercel.json` carries `"fluid": true` (enabled 2026-08-08), so this is a
+  prerequisite already met rather than an outstanding one. What it buys us:
+  in-function concurrency
   (many requests share one instance → far fewer Mongo connection pools),
   **scale-to-one** (≥1 instance kept warm up to 14 days on Pro production,
   explicitly including multi-region functions — [blog
