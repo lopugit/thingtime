@@ -923,10 +923,46 @@ export function assertControlPlaneContract() {
   );
   assert.match(omnibus, /ref: github-actions/);
   assert.match(omnibus, /workflow-control\/\.github\/scripts\/promotion-pr-changelog\.mjs/);
-  assert.match(
+  const standingPromotion = workflowBlock(
     omnibus,
-    /promotion-pr:[\s\S]*timeout-minutes: 30[\s\S]*name: Check out develop with full history[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/u,
-    "standing promotion keeps complete history without downloading every historical blob or retaining checkout credentials",
+    "  promotion-pr:\n",
+    "      - name: Check out trusted automation support\n",
+    "promote-develop-to-main.yml standing promotion job",
+  );
+  assert.match(
+    standingPromotion,
+    /^    timeout-minutes: 30$/mu,
+    "standing promotion cannot hang indefinitely on a slow checkout",
+  );
+  // Scope the checkout claims to the develop checkout itself. An unscoped
+  // `[\s\S]*` chain over the whole file is satisfied by the later
+  // workflow-control checkout, so it would keep passing after
+  // `persist-credentials: false` is dropped from the step it is meant to pin.
+  const developCheckout = workflowBlock(
+    standingPromotion,
+    "      - name: Check out develop with full history\n",
+    "\n\n",
+    "promote-develop-to-main.yml develop checkout",
+  );
+  assert.match(
+    developCheckout,
+    /^        uses: actions\/checkout@[0-9a-f]{40} #/mu,
+    "the develop checkout pins its action by commit",
+  );
+  assert.match(
+    developCheckout,
+    /^          fetch-depth: 0$/mu,
+    "standing promotion keeps complete commit history",
+  );
+  assert.match(
+    developCheckout,
+    /^          filter: blob:none$/mu,
+    "standing promotion does not download every historical blob",
+  );
+  assert.match(
+    developCheckout,
+    /^          persist-credentials: false$/mu,
+    "standing promotion retains no checkout credential",
   );
 
   const mainDevelopSync = readWorkflow("sync-main-into-develop.yml");
