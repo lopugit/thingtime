@@ -55,8 +55,13 @@ From [FUNDAMENTALS.md](../../FUNDAMENTALS.md) and
    is not.
 2. **Everything-is-a-thing.** One `things` collection (physically
    `things_v2`) holds posts, comments, reactions, users-as-things, app-data,
-   messenger spaces… distinguished by `kind`. Any sharding story has to work
-   for *this* shape, not an idealized per-domain schema.
+   messenger spaces… distinguished by `thingtime`, a **multikey array** of
+   type tags (`['post']`, `['post','comment']`, …); the scalar `kind` field is
+   the retired v1 name, still read only through an era-compatibility `$or`.
+   Any sharding story has to work for *this* shape, not an idealized
+   per-domain schema — and the multikey discriminator matters: **a multikey
+   field cannot be part of a shard key**, so `thingtime` is unavailable as a
+   shard-key component in §5.3 no matter how convenient it looks.
 3. **Unique indexes are load-bearing.** Usernames, emails, `uniqueKeys`,
    per-(target, owner, emoji) reaction uniqueness, per-(owner, app, key)
    app-data uniqueness, messenger `crystal.*Key`s. §5.3 explains why this is
