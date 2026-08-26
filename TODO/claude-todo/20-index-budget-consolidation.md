@@ -13,9 +13,17 @@ urgent; production has headroom. This is the plan for spending it wisely.
 
 | Count | What |
 | - | - |
-| **49** | indexes on `things` defined by current `develop` code (+ `_id_` = 50) |
-| **~14** | slots of headroom before the 64 cap |
+| **48** | indexes on `things` defined by current `develop` code (+ `_id_` = 49) |
+| **15** | slots of headroom before the 64 cap |
 | 63 | what a long-lived local dev database showed — **inflated, see below** |
+
+Breakdown of the 48: **47** from `createThingsDataIndexes()` (the shared
+data-plane set, which also lands on user-supplied custom Mongo endpoints) plus
+**1** home-only TTL, `migration_diagnostic_expires_at`, created beside the
+spread in `ensureIndexes()`. Counted by driving `createThingsDataIndexes()`
+with a stub collection and de-duplicating the names it asks for — that also
+captures the indexes created indirectly through `createIndexReplacing()`, which
+a `grep` for `name:` misses.
 
 **A dev machine is not a fair reading.** Every worktree runs its own branch's
 `ensureIndexes` against the *same* local `thingtime` mongod, so a laptop
@@ -30,8 +38,22 @@ Audit recipe:
 ```sh
 # what the DB has
 mongosh "<uri>" --eval 'db.things_v2.getIndexes().forEach(i => print(i.name))'
-# what the code defines (named ones)
+# what the code defines (named ones) — undercounts: misses every auto-named
+# index and everything created through createIndexReplacing()
 grep -oE "name: '[a-z_0-9]+'" remix/app/api/utils/mongodb/collections.ts | sort -u
+```
+
+For the authoritative code-side number, drive the builder with a stub instead
+of grepping — it reports exactly what the code asks Mongo for:
+
+```js
+// node --import tsx, from remix/
+const created = [];
+const stub = { createIndex: async (keys, o = {}) => created.push(o.name ||
+  Object.entries(keys).map(([f, d]) => `${f}_${d}`).join('_')),
+  dropIndex: async () => {}, updateMany: async () => ({ modifiedCount: 0 }) };
+await Promise.all(createThingsDataIndexes({ collection: () => stub }));
+new Set(created).size; // 47 on develop; +1 home-only TTL, +1 _id_ = 49
 ```
 
 Anything named `things_*` in the DB but absent from the code is residue.
@@ -58,31 +80,62 @@ not exceeded.
 
 ## 3. Reclamation candidates
 
-### 3a. Dead legacy indexes — strongest lead (~5 slots)
+### 3a. Legacy-era indexes — best lead, but blocked on the v1 read path (~5 slots)
 
-`kind` and `visibility` are the pre-`thingtime`/`acl` field names. They appear
-in `collections.ts` **only inside index definitions** — no reader, no writer
-anywhere in the app — and locally **0 of 6,831** things carry either field:
+`kind` and `visibility` are the pre-`thingtime`/`acl` field names. **They are
+not dead.** No current code *writes* them (the v2 migration unsets `kind`), but
+`kind` still has live *readers*: an explicit v1/v2 era-compatibility layer that
+`$or`s the old field alongside `thingtime` so posts written before the
+migration keep showing up.
 
-| Index | Key |
+| Reader | Query fragment |
 | - | - |
-| `kind_1_visibility_1_createdAt_-1_shareId_1` | both fields dead |
-| `kind_1_ownerId_1_createdAt_-1_shareId_1` | |
-| `kind_1_createdAt_-1_shareId_1` | |
-| `kind_1_parentId_1_createdAt_1` | |
-| `parentId_1_ownerId_1_token_1` | `partialFilterExpression: { kind: 'reaction' }` → matches nothing; superseded by `things_reaction_unique` |
+| `things/things.ts` `postMatch()` | `{ $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } }` |
+| `things/things.ts` `postThingMatch()` | `{ $or: [{ thingtime: 'post' }, { kind: 'post' }] }` |
+| `things/things.ts` `thingtimeInClause()` | adds `{ kind: 'post' }` whenever `'post'` is in the filter |
+| `things/search.ts` | `$match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } }` |
+| `things/views.ts` | projects `visibility` and `kind` |
 
-**Before dropping:** count these fields in *production* (older user data may
-predate the migration that removed them) and confirm no query planner still
-picks them:
+`postMatch()` alone has eight call sites in `things.ts` — the feed, profile
+lists, the public post count, and the share-original lookups. `visibility` is
+also still accepted as *input*: `schemas/registry.ts` `aclFromVisibility()`
+maps the legacy names onto acls, and `hooks/useApi.tsx` still sends the field.
 
-```js
-db.things_v2.countDocuments({ kind: { $exists: true } })
-db.things_v2.countDocuments({ visibility: { $exists: true } })
-```
+| Index | Status |
+| - | - |
+| `kind_1_createdAt_-1_shareId_1` | backs the `{ kind: 'post' }` branch of `postMatch()` |
+| `kind_1_ownerId_1_createdAt_-1_shareId_1` | backs the owner-scoped profile variants |
+| `kind_1_parentId_1_createdAt_1` | backs the `search.ts` comment/reaction rollup |
+| `kind_1_visibility_1_createdAt_-1_shareId_1` | plausibly superseded by the `acl_1_*` index — verify |
+| `parentId_1_ownerId_1_token_1` | `partialFilterExpression: { kind: 'reaction' }` → matches nothing new; superseded by `things_reaction_unique` |
 
-If production also reports 0, these five are pure overhead: they cost write
-amplification on every insert while serving no read.
+**Why a zero count in production is not sufficient to drop them.** For an
+`$or`, MongoDB uses an index-union plan *only when every branch is indexed*; if
+one branch has no usable index the whole query degrades to a `COLLSCAN` over
+`things_v2`. So dropping `kind_1_createdAt_-1_shareId_1` while `postMatch()`
+still names `kind` would collection-scan the feed and every profile list —
+**even if zero documents carry `kind`**, because the planner cannot know that.
+
+Correct order of operations:
+
+1. Count the fields in *production*:
+
+   ```js
+   db.things_v2.countDocuments({ kind: { $exists: true } })
+   db.things_v2.countDocuments({ visibility: { $exists: true } })
+   ```
+
+2. Only if production is also 0 (and stays 0 after any pending backfill),
+   **retire the era-compat read path first** — drop the `{ kind: … }` branches
+   from `postMatch()`, `postThingMatch()`, `thingtimeInClause()`, and the
+   `search.ts` rollup, keeping the `things.ts` era comment as the record of why
+   they existed.
+3. **Then** drop the four `kind_*` indexes, and confirm with `explain()` that
+   the feed/profile/search plans still use `thingtime_1_*` / `acl_1_*`.
+
+`parentId_1_ownerId_1_token_1` is the one entry that is genuinely inert today
+(its partial filter selects `kind: 'reaction'`, which nothing writes any more)
+and can be retired independently of steps 2–3.
 
 ### 3b. Prefix redundancy — one candidate, probably intentional
 
@@ -99,7 +152,8 @@ Grouped by leading field, the consolidation surface is:
 - **`thingtime` × 8** — the biggest family. `thingtime` is multikey, which
   constrains what can be compounded onto it; a review should ask which of the
   8 earn their keep against real query shapes.
-- **`kind` × 4** — see 3a, likely all dead.
+- **`kind` × 4** — see 3a; write-dead but still read through the v1 era-compat
+  `$or`, so they come out only after that read path does.
 - **`crystal.quotaKind` × 4** — subscription/quota plane; probably consolidatable
   now that the shapes have settled.
 - **`targetId` × 3**, **`ownerId` × 3**, **`appId` × 2**.
@@ -108,22 +162,34 @@ Grouped by leading field, the consolidation surface is:
 
 1. **Measure production** — index count + the `kind`/`visibility` census above.
    Record the real headroom.
-2. **Drop the dead five** (3a) behind the usual boot-time ensure, using
-   `dropIndexRetrying` (idempotent, absent = fine) rather than a migration.
-3. **Explain-plan the `thingtime` and `quotaKind` families** against the actual
+2. **Retire `parentId_1_ownerId_1_token_1`** now — it is inert regardless of the
+   census — using `dropIndexRetrying` (idempotent, absent = fine) behind the
+   usual boot-time ensure rather than a migration.
+3. **Retire the v1 era-compat read path**, then drop the four `kind_*` indexes
+   (3a, steps 2–3). Order matters: indexes last, or the feed collection-scans.
+4. **Explain-plan the `thingtime` and `quotaKind` families** against the actual
    hot queries (feed, profile, comments, admin lists) and merge what the
    planner proves redundant.
-4. **Add a budget guard**: a unit test asserting the code-defined index count
+5. **Add a budget guard**: a unit test asserting the code-defined index count
    for `things` stays under an agreed ceiling (say 56), so the next feature
    that adds one has to think about it, and the cap can never be hit silently
-   in production.
-5. Consider a `graphify`-style note in `FUNDAMENTALS.md` §3 so the rule
+   in production. **Partly done elsewhere:** the
+   `codex/thingtime-mcp-desktop-connectors` lineage (PR #68, and #373 on top of
+   it) already carries `remix/app/api/utils/mongodb/indexBudget.test.ts`, which
+   drives `createThingsDataIndexes()` with a stub and asserts four free slots
+   below 64 plus "no retired name is re-created". Adopt that file rather than
+   writing a second guard, and reconcile the ceiling (it currently encodes
+   headroom-of-4, not a fixed 56).
+6. Consider a `graphify`-style note in `FUNDAMENTALS.md` §3 so the rule
    ("`things` has an index budget; adding one is a decision") is discoverable.
 
 ## 5. Definition of done
 
 - [ ] Production index count for `things` recorded, with headroom stated.
-- [ ] Dead legacy indexes dropped (or documented as still needed, with why).
+- [ ] `kind`/`visibility` census run in production and recorded here.
+- [ ] v1 era-compat `$or` branches retired (or documented as still needed).
+- [ ] Legacy indexes dropped **after** their readers, with `explain()` evidence
+      that no feed/profile/search plan regressed to a `COLLSCAN`.
 - [ ] Remaining families reviewed against explain plans; redundant ones merged.
 - [ ] A test fails when the `things` index count crosses the agreed ceiling.
 - [ ] `TESTING.md` gains a line for re-running the audit after index changes.
