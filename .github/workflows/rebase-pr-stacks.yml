@@ -1300,10 +1300,17 @@ jobs:
             IFS=':' read -r -a segments <<<"$id"
             base="${segments[0]}"
             effort=""
+            # `fast` has no headless Claude Code flag, so it is dropped here —
+            # but it is still counted, so a repeated segment fails the mapping
+            # closed exactly as the resolver's copy of this grammar does.
+            fast=0
             segments_ok=1
             for segment in "${segments[@]:1}"; do
               case "$segment" in
-                fast) : ;;
+                fast)
+                  [ "$fast" -eq 0 ] || segments_ok=0
+                  fast=1
+                  ;;
                 none|minimal|low|medium|high|xhigh|max|ultra)
                   [ -z "$effort" ] || segments_ok=0
                   effort="$segment"
