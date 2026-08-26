@@ -17,6 +17,44 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
+### Changed
+
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work. The README documents the ordered
+  default-setup-to-advanced-setup activation and its two repository variables.
+  — Codex (AI), 2026-08-25
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
@@ -41,6 +79,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
+- **Build all branch listener can dispatch its control-plane worker**: the
+  reusable workflow's push handoff requires `actions: write`; the main listener
+  now grants that inherited permission instead of failing at workflow startup.
+  — Codex (AI), 2026-08-24
 - **PR #299 Messenger membership durability**: unordered batched member writes
   now treat duplicate-key failures as benign only when the Mongo driver reports
   no accompanying write-concern failure. The check covers the current driver's
