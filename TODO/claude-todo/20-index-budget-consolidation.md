@@ -44,7 +44,9 @@ grep -oE "name: '[a-z_0-9]+'" remix/app/api/utils/mongodb/collections.ts | sort 
 ```
 
 For the authoritative code-side number, drive the builder with a stub instead
-of grepping — it reports exactly what the code asks Mongo for:
+of grepping — it reports exactly what the code asks Mongo for. Note that
+`createThingsDataIndexes` is module-private on `develop`, so this recipe needs
+a temporary `export` (or a scratch copy of the function) to run:
 
 ```js
 // node --import tsx, from remix/
@@ -96,7 +98,7 @@ migration keep showing up.
 | `things/search.ts` | `$match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } }` |
 | `things/views.ts` | projects `visibility` and `kind` |
 
-`postMatch()` alone has eight call sites in `things.ts` — the feed, profile
+`postMatch()` alone has seven call sites in `things.ts` — the feed, profile
 lists, the public post count, and the share-original lookups. `visibility` is
 also still accepted as *input*: `schemas/registry.ts` `aclFromVisibility()`
 maps the legacy names onto acls, and `hooks/useApi.tsx` still sends the field.
@@ -149,9 +151,9 @@ record the reasoning either way.
 
 Grouped by leading field, the consolidation surface is:
 
-- **`thingtime` × 8** — the biggest family. `thingtime` is multikey, which
+- **`thingtime` × 7** — the biggest family. `thingtime` is multikey, which
   constrains what can be compounded onto it; a review should ask which of the
-  8 earn their keep against real query shapes.
+  7 earn their keep against real query shapes.
 - **`kind` × 4** — see 3a; write-dead but still read through the v1 era-compat
   `$or`, so they come out only after that read path does.
 - **`crystal.quotaKind` × 4** — subscription/quota plane; probably consolidatable
@@ -174,12 +176,18 @@ Grouped by leading field, the consolidation surface is:
    for `things` stays under an agreed ceiling (say 56), so the next feature
    that adds one has to think about it, and the cap can never be hit silently
    in production. **Partly done elsewhere:** the
-   `codex/thingtime-mcp-desktop-connectors` lineage (PR #68, and #373 on top of
-   it) already carries `remix/app/api/utils/mongodb/indexBudget.test.ts`, which
-   drives `createThingsDataIndexes()` with a stub and asserts four free slots
-   below 64 plus "no retired name is re-created". Adopt that file rather than
-   writing a second guard, and reconcile the ceiling (it currently encodes
-   headroom-of-4, not a fixed 56).
+   `codex/thingtime-mcp-desktop-connectors` lineage (PR #68, and #373 stacked
+   on it) already carries `remix/app/api/utils/mongodb/indexBudget.test.ts`,
+   which drives `createThingsDataIndexes()` with a stub and asserts four free
+   slots below 64 plus "no retired name is re-created". Adopt that file rather
+   than writing a second guard, and reconcile the ceiling (it currently
+   encodes headroom-of-4, not a fixed 56). It does not port standalone: it
+   imports `createThingsDataIndexes`, `RETIRED_THINGS_INDEXES`, and
+   `pruneRetiredHomeThingsIndexes` from `collections.ts`, and `develop` exports
+   none of those three — the retired-index registry and its home-layout pruner
+   are part of the same #68 change. Either take that pair with the test, or
+   port only the headroom assertion behind a new `createThingsDataIndexes`
+   export.
 6. Consider a `graphify`-style note in `FUNDAMENTALS.md` §3 so the rule
    ("`things` has an index budget; adding one is a decision") is discoverable.
 
