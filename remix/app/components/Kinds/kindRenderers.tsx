@@ -757,7 +757,15 @@ const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRe
 type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
 
 const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: KindRenderContext }) => {
-	const resolved = resolveTemplate(value.render, value.values);
+	// Memoised like the /components preview: resolution walks the whole template
+	// under the MAX_RESOLVED_VALUES budget, so a feed or search page listing
+	// several component things would redo that work on every parent render.
+	// adapt() rebuilds `values` on every RenderThing pass, so the memo keys on
+	// its content — a bounded scalar map (≤ MAX_COMPONENT_SAVED_ARGS entries) —
+	// rather than its identity, which would never hit.
+	const valuesKey = JSON.stringify(value.values);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values
+	const resolved = React.useMemo(() => resolveTemplate(value.render, value.values), [value.render, valuesKey]);
 	return (
 		<Box width="100%">
 			{isChakraThingNode(resolved) ? (

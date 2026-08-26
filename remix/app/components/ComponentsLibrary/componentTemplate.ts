@@ -47,9 +47,16 @@ export type ComponentArgValues = Record<string, ComponentArgScalar | undefined>;
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	!!value && typeof value === 'object' && !Array.isArray(value);
 
+// Scope is a plain object literal, so a bare `scope[name]` also reaches
+// Object.prototype: an arg name of `constructor`/`toString`/`valueOf` resolved
+// to a native function instead of "undeclared arg". Own-property only, the
+// same guard ttMap already applies to its `values` table.
+const argValue = (scope: ComponentArgValues, name: string): ComponentArgScalar | undefined =>
+	Object.prototype.hasOwnProperty.call(scope, name) ? scope[name] : undefined;
+
 const substitute = (template: string, scope: ComponentArgValues): string =>
 	template.replace(TOKEN_PATTERN, (_match, name: string) => {
-		const value = scope[name];
+		const value = argValue(scope, name);
 		if (value === undefined || value === null) return '';
 		return String(value);
 	});
@@ -85,18 +92,18 @@ export const resolveTemplate = (
 	if (!isPlainObject(template)) return template;
 
 	if ('ttArg' in template) {
-		return scope[String(template.ttArg)];
+		return argValue(scope, String(template.ttArg));
 	}
 	if ('ttMap' in template) {
 		const spec = isPlainObject(template.ttMap) ? template.ttMap : {};
-		const key = String(scope[String(spec.arg)]);
+		const key = String(argValue(scope, String(spec.arg)));
 		const values = isPlainObject(spec.values) ? spec.values : {};
 		const picked = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : spec.default;
 		return resolveTemplate(picked, scope, budget);
 	}
 	if ('ttIf' in template) {
 		const spec = isPlainObject(template.ttIf) ? template.ttIf : {};
-		const value = scope[String(spec.arg)];
+		const value = argValue(scope, String(spec.arg));
 		const hit = spec.equals !== undefined ? String(value) === String(spec.equals) : truthy(value);
 		const branch = hit ? spec.then : spec.else;
 		return branch === undefined ? undefined : resolveTemplate(branch, scope, budget);
@@ -113,7 +120,7 @@ export const resolveTemplate = (
 	}
 	if ('ttRepeat' in template) {
 		const spec = isPlainObject(template.ttRepeat) ? template.ttRepeat : {};
-		const raw = spec.arg !== undefined ? scope[String(spec.arg)] : spec.count;
+		const raw = spec.arg !== undefined ? argValue(scope, String(spec.arg)) : spec.count;
 		const max = Math.min(Number(spec.max) || 0, REPEAT_HARD_CAP) || REPEAT_HARD_CAP;
 		const n = Math.max(0, Math.min(Math.round(Number(raw) || 0), max));
 		const out: unknown[] = [];

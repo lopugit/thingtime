@@ -91,6 +91,20 @@ test('missing tokens resolve to empty rather than the literal token', () => {
 	assert.equal(resolveTemplate('a{nope}b', {}), 'ab');
 });
 
+test('arg lookups never reach Object.prototype', () => {
+	// scope is a plain object literal, so an unguarded scope[name] resolved
+	// `constructor`/`toString` to a native function — which then rode into the
+	// node tree (props/children) and rendered as "function Object() {…}" text.
+	for (const inherited of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+		assert.equal(resolveTemplate({ ttArg: inherited }, { label: 'hi' }), undefined, `ttArg ${inherited}`);
+		assert.equal(resolveTemplate(`x{${inherited}}y`, { label: 'hi' }), 'xy', `token {${inherited}}`);
+	}
+	assert.equal(resolveTemplate({ ttIf: { arg: 'constructor', then: 'yes', else: 'no' } }, {}), 'no');
+	assert.deepEqual(resolveTemplate({ ttRepeat: { arg: 'constructor', node: 'x' } }, {}), []);
+	// a declared arg of the same name still resolves normally
+	assert.equal(resolveTemplate({ ttArg: 'constructor' }, { constructor: 'mine' } as any), 'mine');
+});
+
 test('sanitizeArgSpecs and defaultsFromArgs survive junk input', () => {
 	assert.deepEqual(sanitizeArgSpecs(null), []);
 	assert.deepEqual(sanitizeArgSpecs([{ name: 'a' }, 3, null, { type: 'string' }]), []);
