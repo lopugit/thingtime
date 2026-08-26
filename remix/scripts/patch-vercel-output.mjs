@@ -12,6 +12,10 @@ const filesystemRoute = routes.find((route) => route.handle === 'filesystem');
 const apiRootDataRoute = routes.find((route) => route.src === '/api/root-data');
 const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
+const chatGptDiscoveryRoute = {
+  src: '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json)$',
+  dest: '/__server'
+};
 const appShellHeaders = {
   'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
   Pragma: 'no-cache',
@@ -76,6 +80,9 @@ config.routes = [
     headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
     continue: true
   },
+  // OAuth and capability discovery are non-API paths. They must reach Nitro
+  // before the static SPA fallback, otherwise ChatGPT receives index.html.
+  chatGptDiscoveryRoute,
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },

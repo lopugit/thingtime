@@ -425,6 +425,64 @@ Node.js, Python, and Ruby snippets. The browser reference lives at
 `/docs/api`, and the docs smoke tests live in the `/tests` page under the
 `Docs` group.
 
+## ChatGPT / Codex plugin
+
+Thingtime exposes a public HTTPS, OAuth 2.1 + S256 PKCE MCP endpoint at
+`/api/v1/integrations/chatgpt/mcp`. It is packaged at
+[`integrations/ChatGPT/plugin/thingtime-chatgpt`](integrations/ChatGPT/plugin/thingtime-chatgpt)
+for ChatGPT/Codex distribution. The plugin connection page can securely attach
+several named Thingtime accounts and explicitly allowlisted Thingtime API
+origins. It accepts only scoped Personal Access Tokens (PATs), validates them
+with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
+gives ChatGPT only a revocable MCP-only bridge token. When ChatGPT requests the
+optional `offline_access` scope, the 30-day bridge access token is renewed with
+a rotating refresh credential; every credential refers to one encrypted
+connection record, so account selection and disconnects take effect across the
+entire connection. Do not paste a PAT into a chat. The public `tools/list`
+response exposes only tool metadata and its per-tool OAuth requirements; all
+account data and tool calls require the bridge token and are origin-bound to
+this MCP URL.
+
+Set these sensitive server-side deployment variables (for example in Vercel)
+before enabling the connector. Values below are placeholders only:
+
+```sh
+# Exactly 32 random bytes, base64 encoded. Generate/store as a deployment secret.
+THINGTIME_CHATGPT_CREDENTIAL_KEY="<base64-encoded-32-byte-key>"
+
+# Optional. Exact comma-separated HTTPS origins only; no wildcard or paths.
+# Defaults to https://thingtime.com when unset.
+THINGTIME_CHATGPT_ALLOWED_ENDPOINTS="https://thingtime.com,https://dev.thingtime.com"
+
+# Optional. Defaults to ChatGPT's stable Client ID Metadata Document plus the
+# legacy https://chatgpt.com identifier. Set only if the connection page gives
+# you an additional exact OAuth client id.
+THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com/oauth/client.json,https://chatgpt.com"
+```
+
+The MCP protected-resource and authorization-server discovery documents are at
+`/.well-known/oauth-protected-resource` and
+`/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
+is `/.well-known/thingtime-chatgpt-capabilities.json`.
+
+For the supported ChatGPT workspace path, use ChatGPT **on the web** with a
+Business or Enterprise/Edu workspace. An admin or owner enables Developer Mode
+from Workspace Settings → Apps → Create, supplies this remote MCP URL, selects
+OAuth, and uses **Scan Tools**. ChatGPT then opens Thingtime’s first-party
+account form; its advertised `offline_access` scope allows the rotating refresh
+flow. Create the draft, test it from the tools menu or by @mentioning it in a
+new chat, then have an admin/owner publish it from Workspace Settings → Apps.
+Full write/modify MCP access is currently a Business/Enterprise/Edu beta;
+Pro-only connections are limited to read/fetch. ChatGPT custom MCP apps are
+currently web-only, so iOS ChatGPT chats cannot invoke this connector. After
+approval, tool definitions are a frozen snapshot. Enterprise/Edu admins must
+review and enable a refresh before action changes are available; Business
+workspaces currently need to recreate and republish the app to change its
+tools or metadata. Public Plugins Directory
+distribution remains a separate process requiring a fixed production origin,
+verified publisher identity, legal URLs, test cases, and OpenAI review; see
+the package's `SUBMISSION.md`.
+
 ## Extensible data — `extended` + schema-less crystals
 
 Schemas are optional scaffolding, not a cage. Two open surfaces on every thing:

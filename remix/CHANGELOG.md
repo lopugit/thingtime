@@ -17,8 +17,50 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
+  app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
+  tool scanning, draft testing from the tools menu/@mentions, publication,
+  frozen tool snapshots, Enterprise/Edu refresh controls, Business
+  recreate-and-republish release requirements, role/action controls, and the
+  current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
+
+### Added
+
+- **Thingtime’s MCP initialization now supplies connector-wide interaction
+  instructions.** ChatGPT receives the account-selection, token-safety, and
+  confirmed-mutation contract before tools are called; the additive MCP feature
+  advances to `1.1.0`. — Codex (AI), 2026-08-26
+- **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
+  streamable-HTTP MCP gateway now connects multiple named, allowlisted
+  Thingtime API endpoints through encrypted, scoped and revocable PATs. The
+  bridge token cannot act as a Thingtime account session; tools are restricted
+  to account management plus Things reads and explicitly confirmed writes.
+  Protected-resource/auth-server discovery, an origin-scoped capability
+  manifest, API docs, and the distributable plugin package live together so
+  clients can negotiate the contract rather than route-probing. — Codex (AI),
+  2026-08-25
+
 ### Security
 
+- **ChatGPT connections now survive secure refreshes without splitting account
+  state.** The optional `offline_access` scope issues one-time rotating refresh
+  credentials alongside the 30-day MCP bridge token. Every access and refresh
+  credential references one encrypted, origin-bound connection session, so an
+  account switch or final disconnect applies consistently across renewals; a
+  final disconnect revokes the connection and all of its bridge credentials.
+  The OAuth and connections capability features advance to `1.1.0`. — Codex
+  (AI), 2026-08-26
+- **ChatGPT tool annotations now match their actual effects.** Public-content
+  writes are marked as open-world actions, only irreversible writes retain the
+  destructive hint, and the MCP semantic feature advances to `1.0.2` for
+  review-safe metadata scanning. — Codex (AI), 2026-08-26
+- **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
+  catalog publishes standard per-tool OAuth metadata while returning no account
+  data, protected calls emit the model-readable OAuth challenge ChatGPT uses to
+  link an account, and bridge sessions are bound to the exact MCP origin that
+  issued them. — Codex (AI), 2026-08-26
 - **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
   shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
   authored while #320/#325/#326 were retiring exactly that pattern. A
@@ -37,6 +79,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
+  Document.** The connector permits ChatGPT's current `oauth/client.json`
+  client identifier, while retaining the previous fixed identifier for existing
+  developer-mode connections. — Codex (AI), 2026-08-26
 - **The develop Lopu listener exposes the complete maintenance contract**:
   manual recovery now includes the protected controller's bounded
   `backfill-codeql` operation alongside PR management, promotions, branch sync,
