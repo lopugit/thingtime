@@ -462,6 +462,27 @@ runs:
           session_id="$RESULT_SESSION"
         done
 
+    - name: Discard the temporary nested action before scratch verification
+      if: steps.prepare.outcome == 'success'
+      shell: bash
+      env:
+        SCRATCH_ABS: ${{ steps.prepare.outputs.scratch_abs }}
+        WORKSPACE_PATH: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        scratch_abs="$(builtin cd -- "$SCRATCH_ABS" && pwd -P)"
+        workspace_abs="$(builtin cd -- "$WORKSPACE_PATH" && pwd -P)"
+        [[ "$scratch_abs" == "$workspace_abs" ]] || {
+          echo "::error::The prepared conflict scratch is not the workflow workspace."
+          exit 1
+        }
+
+        # The runner needs this protected local action only while expanding the
+        # preceding step. It is not a conflict file and must never participate
+        # in the exact scratch allowlist comparison (including rounds whose
+        # conflicts were all handled deterministically and skipped the model).
+        rm -rf -- "$scratch_abs/trusted"
+
     # SECURITY: this post-model verifier is inline in action metadata parsed
     # before Claude starts. It executes no action/workspace script. The model
     # never sees the real repository; validated scratch bytes are hashed into

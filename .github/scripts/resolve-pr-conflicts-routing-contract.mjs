@@ -682,9 +682,14 @@ function assertWorkflowSource() {
   );
   assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
   assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
-  assert.match(codeqlDispositionBlock, /\$alert_ref" != "\$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
-  assert.match(codeqlDispositionBlock, /\$alert_sha" != "\$analysis_sha/u, "writer revalidates the exact analysis SHA");
-  assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
+  assert.match(
+    codeqlDispositionBlock,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "writer asks GitHub for the alert instances attached to the reviewed PR",
+  );
+  assert.match(codeqlDispositionBlock, /\.ref == \$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
+  assert.match(codeqlDispositionBlock, /\.commit_sha == \$analysis_sha/u, "writer revalidates the exact analysis SHA");
+  assert.match(codeqlDispositionBlock, /\.state == "open"/u, "writer requires the exact reviewed alert instance to remain open");
   assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
   assert.match(
     codeqlDispositionBlock,
@@ -817,6 +822,11 @@ function assertAdminModelRouting(
     rebaseActionSource,
     /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"/u,
     "the protected nested Lopu action is rematerialized after scratch preparation wipes the workspace",
+  );
+  assert.match(
+    rebaseActionSource,
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch file set differs from the exact conflict allowlist/u,
+    "the temporary nested action is discarded before every exact scratch allowlist comparison",
   );
   assert.match(
     rebaseActionSource,
