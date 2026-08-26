@@ -1,16 +1,16 @@
 # Graph Report - lopu-batch-activation.rxgwYp  (2026-08-27)
 
 ## Corpus Check
-- 23 files · ~141,281 words
+- 23 files · ~141,493 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 598 nodes · 1270 edges · 55 communities (30 shown, 25 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.57)
+- 582 nodes · 1250 edges · 56 communities (30 shown, 26 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9e0837dd`
+- Built from commit: `8098626c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -29,7 +29,7 @@
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
 - [[_COMMUNITY_Rebuild Job|Rebuild Job]]
 - [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
-- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
+- [[_COMMUNITY_scope select one analysis owner|scope: select one analysis owner]]
 - [[_COMMUNITY_promotion-worker-routing-contract.mjs|promotion-worker-routing-contract.mjs]]
 - [[_COMMUNITY_Publish or reconcile develop S3 preview job|Publish or reconcile develop S3 preview job]]
 - [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
@@ -70,6 +70,7 @@
 - [[_COMMUNITY_Promotion Recovery|Promotion Recovery]]
 - [[_COMMUNITY_Rebase Stack Recovery|Rebase Stack Recovery]]
 - [[_COMMUNITY_github-actions CI Control Plane|github-actions CI Control Plane]]
+- [[_COMMUNITY_Legacy PR conflict resolver (superseded)|Legacy PR conflict resolver (superseded)]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 48 edges
@@ -88,12 +89,12 @@
   .github/workflows/web-ci.yml → TESTING.md
 - `Lopu Internal All-branch Integration Workflow` --conceptually_related_to--> `All-branch Doctor`  [INFERRED]
   .github/workflows/all-branch.yml → CHANGELOG.md
-- `Lopu CodeQL all branches` --shares_data_with--> `Lopu PR manager (conflict resolver)`  [AMBIGUOUS]
-  .github/workflows/codeql-analysis.yml → .github/workflows/resolve-pr-conflicts.yml
-- `Lopu rebase conflict round (composite action)` --conceptually_related_to--> `Lopu PR manager (conflict resolver)`  [INFERRED]
-  .github/actions/rebase-conflict-round/action.yml → .github/workflows/resolve-pr-conflicts.yml
-- `Lopu PR manager (conflict resolver)` --conceptually_related_to--> `Lopu agent action`  [INFERRED]
-  .github/workflows/resolve-pr-conflicts.yml → .github/actions/lopu-agent/action.yml
+- `bootstrap: copy trusted round code` --references--> `Lopu agent action`  [EXTRACTED]
+  .github/actions/rebase-conflict-round/action.yml → .github/actions/lopu-agent/action.yml
+- `lopu: resolve rebase conflict set` --calls--> `Lopu agent action`  [EXTRACTED]
+  .github/actions/rebase-conflict-round/action.yml → .github/actions/lopu-agent/action.yml
+- `CodeQL PR handoff workflow` --references--> `Lopu CodeQL all branches`  [EXTRACTED]
+  .github/workflows/codeql-pr-handoff.yml → .github/workflows/codeql-analysis.yml
 
 ## Import Cycles
 - None detected.
@@ -107,7 +108,7 @@
 - **Develop PR Preview Controller Flow** — github_workflows_develop_pr_preview_workflow, github_workflows_develop_pr_preview_dispatch_job, github_workflows_develop_pr_preview_repository_dispatch, github_workflows_develop_pr_preview_controller_event, github_workflows_develop_pr_preview_controller_job, github_workflows_develop_pr_preview_deploy_script [EXTRACTED 0.95]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (55 total, 25 thin omitted)
+## Communities (56 total, 26 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -138,8 +139,8 @@ Cohesion: 0.13
 Nodes (26): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+18 more)
 
 ### Community 7 - "prepare-round.sh"
-Cohesion: 0.08
-Nodes (35): Lopu agent action, Lopu rebase conflict round (composite action), bootstrap: copy trusted round code, lopu: resolve rebase conflict set, prepare: validate conflicts and create scratch, verify: recompute and continue rebase, assert_safe_regular_text_conflict(), clear_scratch() (+27 more)
+Cohesion: 0.18
+Nodes (19): Lopu agent action, Lopu rebase conflict round (composite action), bootstrap: copy trusted round code, lopu: resolve rebase conflict set, prepare: validate conflicts and create scratch, verify: recompute and continue rebase, assert_safe_regular_text_conflict(), clear_scratch() (+11 more)
 
 ### Community 8 - "refresh-promotion-graphify.sh"
 Cohesion: 0.12
@@ -165,9 +166,9 @@ Nodes (7): build-all-branch.mjs, Doctor Commit Command, Lopu Internal All-branch
 Cohesion: 0.35
 Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+4 more)
 
-### Community 14 - "Thingtime AI instructions"
-Cohesion: 0.17
-Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
+### Community 14 - "scope: select one analysis owner"
+Cohesion: 0.50
+Nodes (4): analyze: CodeQL matrix job, scope: select one analysis owner, Lopu CodeQL all branches, CodeQL PR handoff workflow
 
 ### Community 15 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.17
@@ -222,31 +223,25 @@ Cohesion: 0.67
 Nodes (3): no-ai-rebase label, REBASE_OWNER_JQ, STACK_MEMBER_JQ
 
 ### Community 43 - "promotion-pr-changelog.mjs"
-Cohesion: 0.14
-Nodes (35): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, computeDelta(), computeMissingLabels(), contentIndex (+27 more)
+Cohesion: 0.11
+Nodes (42): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, computeDelta(), computeMissingLabels(), contentIndex (+34 more)
 
 ### Community 44 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-## Ambiguous Edges - Review These
-- `Lopu CodeQL all branches` → `Lopu PR manager (conflict resolver)`  [AMBIGUOUS]
-  .github/workflows/codeql-analysis.yml · relation: shares_data_with
-
 ## Knowledge Gaps
-- **163 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES` (+158 more)
+- **152 isolated node(s):** `WORKFLOW_URL`, `REBASE_WORKFLOW_URL`, `REBASE_ACTION_URL`, `LOPU_ACTION_URL`, `REPO_ROOT` (+147 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **25 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **26 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **What is the exact relationship between `Lopu CodeQL all branches` and `Lopu PR manager (conflict resolver)`?**
-  _Edge tagged AMBIGUOUS (relation: shares_data_with) - confidence is low._
-- **Why does `promote: replay merged develop PRs` connect `prepare-round.sh` to `promote-features-to-main.mjs`?**
-  _High betweenness centrality (0.051) - this node is a cross-community bridge._
-- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS` to the rest of the system?**
-  _163 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `promote: replay merged develop PRs` connect `promotion-pr-changelog.mjs` to `promote-features-to-main.mjs`?**
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
+- **What connects `WORKFLOW_URL`, `REBASE_WORKFLOW_URL`, `REBASE_ACTION_URL` to the rest of the system?**
+  _152 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `selfTest` be split into smaller, more focused modules?**
@@ -255,3 +250,5 @@ _Questions this graph is uniquely positioned to answer:_
   _Cohesion score 0.11494252873563218 - nodes in this community are weakly interconnected._
 - **Should `failureDetail` be split into smaller, more focused modules?**
   _Cohesion score 0.1455026455026455 - nodes in this community are weakly interconnected._
+- **Should `workflow-control-plane-contract.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.12535612535612536 - nodes in this community are weakly interconnected._
