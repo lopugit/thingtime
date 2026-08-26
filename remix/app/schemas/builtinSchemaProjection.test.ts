@@ -91,7 +91,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
-  'passkey-app-link': ['appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
+  'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
 	'ai-connection': [
 		'sourceType',

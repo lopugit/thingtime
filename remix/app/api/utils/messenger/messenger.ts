@@ -16,7 +16,7 @@ import {
 	inspectReadyAttachmentsForMessage,
 	prepareAttachmentCascadeForThing
 } from '../attachments/attachments';
-import { getUsersReadReceiptsMap, getUserReadReceiptsEnabled, pushUserRecentReaction, findUserById } from '../auth/users';
+import { getUsersReadReceiptsMap, getUserReadReceiptsEnabled, pushUserRecentReaction, findUsersByIds } from '../auth/users';
 import {
 	MAX_CHAT_MEMBERS,
 	MAX_CHAT_MEMBERS_PER_ADD,
@@ -28,6 +28,7 @@ import {
 } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName } from '~/utils/userIdentity';
+import { isDuplicateOnlyBulkWriteError } from './bulkWriteError';
 import { matchesCommittedMessageRequest, messageIdForRequest, normalizedMessengerRequestId } from './messengerMediaCore';
 import { publicExternalAiSource, type PublicExternalAiSource } from './externalAi';
 import { followersOfSet, followingSet, isFollowing } from './follows';
@@ -184,35 +185,65 @@ const previewText = (crystal: any): string => {
 
 // ── membership plumbing ──
 
-const insertChatMember = async (
-  chatId: string,
-  userId: string,
-  fields: { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null },
-	session?: any
-): Promise<boolean> => {
+type ChatMemberFields = { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null };
+
+const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
+  newThingDoc('chat-member', {
+    ownerId: userId,
+    targetId: chatId,
+    crystal: {
+      memberKey: chatMemberKey(chatId, userId),
+      role: fields.role || 'member',
+      state: fields.state || 'active',
+      requestOrigin: fields.requestOrigin ?? null,
+      nickname: null,
+      lastReadMessageId: null,
+      lastReadAt: null,
+      muted: false
+    }
+  });
+
+const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields, session?: any): Promise<boolean> => {
   const things = await getThingsCollection();
   try {
-    await insertMessengerThing(
-			things,
-      newThingDoc('chat-member', {
-        ownerId: userId,
-        targetId: chatId,
-        crystal: {
-          memberKey: chatMemberKey(chatId, userId),
-          role: fields.role || 'member',
-          state: fields.state || 'active',
-          requestOrigin: fields.requestOrigin ?? null,
-          nickname: null,
-          lastReadMessageId: null,
-          lastReadAt: null,
-          muted: false
-        }
-			}) as any,
-			session ? { session } : {}
-    );
+    await insertMessengerThing(things, newChatMemberDoc(chatId, userId, fields) as any, session ? { session } : {});
     return true;
   } catch (err: any) {
     if (err?.code === 11000) return false;
+    throw err;
+  }
+};
+
+// Batch sibling of insertChatMember: ONE insertMany for a whole membership
+// write instead of a round trip per id. Members carry per-id fields because a
+// single batch mixes roles and states (a DM writes owner + member, a group
+// writes owner + a follow-dependent active/pending mix).
+//
+// `ordered: false` makes the driver attempt every doc and report per-doc
+// failures, so a racing duplicate on one id can never block the rest — the
+// same tolerance the per-id `code === 11000` catch gives, at one round trip
+// instead of up to MAX_CHAT_MEMBERS_PER_ADD (50). Promise.all over insertOne
+// was no substitute: maxPoolSize is 10, so 50 concurrent inserts still drain
+// as 5 sequential pool rounds.
+//
+// NOTE (merge of the storage-accounting work): unlike insertChatMember this
+// writes the collection directly, so the rows it mints skip the accounted
+// writer's size stamp and per-owner ledger delta. Chat creation therefore
+// still inserts its members one accounted call at a time. Closing the gap
+// needs a batch primitive alongside insertAccountedThing — until that lands,
+// only addChatMembers takes this path and the reconciler picks up the drift.
+const insertChatMembers = async (chatId: string, members: Array<{ userId: string; fields: ChatMemberFields }>): Promise<void> => {
+  if (!members.length) return;
+  const things = await getThingsCollection();
+  try {
+    await things.insertMany(
+      members.map(({ userId, fields }) => newChatMemberDoc(chatId, userId, fields)) as any,
+      { ordered: false }
+    );
+  } catch (err: any) {
+    // A batch is benign only when every failure is an already-existing member
+    // race and the driver confirms there was no simultaneous durability error.
+    if (isDuplicateOnlyBulkWriteError(err)) return;
     throw err;
   }
 };
@@ -284,9 +315,15 @@ type ChatAccess = { chat: any; member: any };
 // requireActive.
 const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
   if (typeof chatId !== 'string' || !chatId.trim()) return fail(400, 'Chat id required');
-  const chat = await findThingByKind('chat', chatId.trim());
+  // The membership lookup does not need the chat document — findThingByKind
+  // matches on shareId === id, so chat.shareId is just the trimmed id. Running
+  // both together removes one serial round trip from the gate on every
+  // messenger read and write (11 call sites, and open chats poll every 4s).
+  // On the 404 path the member query is issued and discarded: one wasted
+  // indexed findOne on an error path, no correctness change.
+  const id = chatId.trim();
+  const [chat, member] = await Promise.all([findThingByKind('chat', id), getChatMemberDoc(id, viewerId)]);
   if (!chat) return fail(404, 'Chat not found');
-  const member = await getChatMemberDoc(chat.shareId, viewerId);
   const state = member?.crystal?.state;
   if (!member || state === 'left' || state === 'declined') return fail(403, 'You are not in this chat');
   if (opts.requireActive && state !== 'active') return fail(403, 'Accept the message request first');
@@ -329,10 +366,14 @@ export const createChat = async (
       ).filter((id) => id !== viewerId)
     : [];
   if (memberIds.length > MAX_CHAT_MEMBERS_PER_ADD) return fail(400, `Add at most ${MAX_CHAT_MEMBERS_PER_ADD} people at once`);
-  // everyone being added must actually exist — one lookup each is fine at ≤50,
-  // but do them in parallel and fail with the missing id named
-  const found = await Promise.all(memberIds.map((id) => findUserById(id)));
-  const missing = memberIds.filter((_, i) => !found[i]);
+  // Everyone being added must actually exist. findUsersByIds resolves the
+  // whole set in 2 queries (things-era + legacy) instead of 2 per id, so a
+  // 50-person create drops from ~100 lookups to 2. It DROPS rows it cannot
+  // find rather than returning nulls in place, so membership is tested
+  // through the id set, not by position — and the first missing id is still
+  // the one named.
+  const foundIds = new Set((await findUsersByIds(memberIds)).map((user: any) => String(user._id)));
+  const missing = memberIds.filter((id) => !foundIds.has(id));
   if (missing.length) return fail(404, `No such user: ${missing[0]}`);
 
   if (chatType === 'dm') {
@@ -480,8 +521,6 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
   const things = await getThingsCollection();
   const chatIds = memberships.map((m: any) => String(m.targetId));
   const membershipByChat = new Map(memberships.map((m: any) => [String(m.targetId), m]));
-	const chatDocs = chatIds.length ? await things.find({ thingtime: 'chat', shareId: { $in: chatIds } } as any).toArray() : [];
-
   // Unread floor per chat: your receipt, else when you JOINED — history that
   // predates you is not unread, and the clause keeps the scan bounded to
   // recent docs on the { targetId, thingtime, createdAt } index. Newest-
@@ -493,27 +532,43 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
     createdAt: { $gt: m.crystal?.lastReadAt ? new Date(m.crystal.lastReadAt) : new Date(m.createdAt) }
   }));
 
-  const unreadAgg = chatIds.length
-    ? await things
-        .aggregate([
-          {
-            $match: {
-              thingtime: 'chat-message',
-              targetId: { $in: chatIds },
-              'crystal.threadRootId': null,
-              // system events (joins, renames) never bold a chat — only real
-              // words from other people count as unread
-              ownerId: { $ne: viewerId },
-              'crystal.deletedAt': null,
-              'crystal.systemType': null,
-              $or: unreadClauses
-            }
-          },
-          { $group: { _id: '$targetId', count: { $sum: 1 } } }
-        ])
-        .toArray()
-    : [];
+  // The chat docs, the unread rollup and the active-member counts are all
+  // keyed off chatIds alone — none reads another's result — so they issue
+  // together. Only the member ROWS below genuinely have to wait, because
+  // which chats need them is derived from the chat docs' chatType.
+  const [chatDocs, unreadAgg, countAgg] = await Promise.all([
+    chatIds.length ? things.find({ thingtime: 'chat', shareId: { $in: chatIds } } as any).toArray() : Promise.resolve([]),
+    chatIds.length
+      ? things
+          .aggregate([
+            {
+              $match: {
+                thingtime: 'chat-message',
+                targetId: { $in: chatIds },
+                'crystal.threadRootId': null,
+                // system events (joins, renames) never bold a chat — only real
+                // words from other people count as unread
+                ownerId: { $ne: viewerId },
+                'crystal.deletedAt': null,
+                'crystal.systemType': null,
+                $or: unreadClauses
+              }
+            },
+            { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          ])
+          .toArray()
+      : Promise.resolve([]),
+    chatIds.length
+      ? things
+          .aggregate([
+            { $match: { thingtime: 'chat-member', targetId: { $in: chatIds }, 'crystal.state': 'active' } },
+            { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          ])
+          .toArray()
+      : Promise.resolve([])
+  ]);
   const unreadByChat = new Map<string, number>(unreadAgg.map((u: any) => [String(u._id), u.count]));
+  const memberCountByChat = new Map<string, number>(countAgg.map((c: any) => [String(c._id), c.count]));
   const lastByChat = new Map<string, any>(
 		chatDocs.filter((c: any) => c.crystal?.lastMessage?.id).map((c: any) => [c.shareId, c.crystal.lastMessage])
   );
@@ -534,23 +589,15 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
     memberDocsByChat.get(key)!.push(doc);
   }
 
-  const countAgg = chatIds.length
-    ? await things
-        .aggregate([
-          { $match: { thingtime: 'chat-member', targetId: { $in: chatIds }, 'crystal.state': 'active' } },
-          { $group: { _id: '$targetId', count: { $sum: 1 } } }
-        ])
-        .toArray()
-    : [];
-  const memberCountByChat = new Map<string, number>(countAgg.map((c: any) => [String(c._id), c.count]));
-
   const profileIds = new Set<string>();
   for (const doc of memberDocs) profileIds.add(String((doc as any).ownerId));
   for (const preview of lastByChat.values()) profileIds.add(String(preview.authorId));
-  const profiles = await resolveProfiles(Array.from(profileIds));
 
+  // Profiles and both receipt lookups all read from memberDocs and nothing
+  // else, so the profile pass joins the receipt batch instead of preceding it.
   const receiptUserIds = new Set<string>(memberDocs.map((d: any) => String(d.ownerId)));
-  const [viewerReceipts, memberReceipts] = await Promise.all([
+  const [profiles, viewerReceipts, memberReceipts] = await Promise.all([
+    resolveProfiles(Array.from(profileIds)),
     getUserReadReceiptsEnabled(viewerId),
     getUsersReadReceiptsMap(Array.from(receiptUserIds))
   ]);
@@ -811,8 +858,9 @@ export const manageChatMembers = async (
     ).filter((id) => id !== viewerId);
     if (!ids.length) return fail(400, 'Nobody to add');
     if (ids.length > MAX_CHAT_MEMBERS_PER_ADD) return fail(400, `Add at most ${MAX_CHAT_MEMBERS_PER_ADD} people at once`);
-    const found = await Promise.all(ids.map((id) => findUserById(id)));
-    const missing = ids.filter((_, i) => !found[i]);
+    // one batched existence check, not 2 queries per id — see createChat
+    const foundIds = new Set((await findUsersByIds(ids)).map((user: any) => String(user._id)));
+    const missing = ids.filter((id) => !foundIds.has(id));
     if (missing.length) return fail(404, `No such user: ${missing[0]}`);
     // channel access must never outrun the community's invite gate: everyone
     // added to a channel has to already be a community member (the same wall
@@ -839,10 +887,11 @@ export const manageChatMembers = async (
 				$set: { 'crystal.state': 'active', 'crystal.role': 'member', updatedAt: new Date() }
 			});
     }
-    for (const id of toInsert) {
-      // insertChatMember tolerates duplicate-key races per id
-      await insertChatMember(chat.shareId, id, { role: 'member', state: 'active' });
-    }
+    // insertChatMembers tolerates duplicate-key races across the whole batch
+    await insertChatMembers(
+      chat.shareId,
+      toInsert.map((id) => ({ userId: id, fields: { role: 'member' as ChatRole, state: 'active' as MemberState } }))
+    );
     const entered = [...toInsert, ...toRevive.map((doc: any) => String(doc.ownerId))];
     if (entered.length) {
       await insertSystemMessage(chat.shareId, viewerId, 'member-added', entered.length === 1 ? { subjectId: entered[0] } : { subjectIds: entered });
