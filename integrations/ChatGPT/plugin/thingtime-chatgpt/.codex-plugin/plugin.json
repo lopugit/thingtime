@@ -1,6 +1,6 @@
 {
   "name": "thingtime-chatgpt",
-  "version": "1.3.0",
+  "version": "1.3.0+codex.20260826082721",
   "description": "Secure multi-account Thingtime tools for ChatGPT and Codex.",
   "author": {
     "name": "Thingtime",
@@ -8,7 +8,11 @@
   },
   "homepage": "https://thingtime.com",
   "repository": "https://github.com/lopugit/thingtime",
-  "keywords": ["thingtime", "productivity", "mcp"],
+  "keywords": [
+    "thingtime",
+    "productivity",
+    "mcp"
+  ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
@@ -17,7 +21,10 @@
     "longDescription": "Connect one or more Thingtime accounts with scoped, revocable tokens. Read, search, create, update, comment, react, save, share, and switch accounts without exposing a token in chat.",
     "developerName": "Thingtime",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://thingtime.com",
     "defaultPrompt": [
       "Use my selected Thingtime account to help with my Things.",
