@@ -727,6 +727,11 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch file set differs from the exact conflict allowlist/u,
+    "the temporary nested action is discarded before every exact scratch allowlist comparison",
+  );
+  assert.match(
+    rebaseActionSource,
     /cp -pR "\$safe_trusted_abs\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$restored\/\.github\/actions\/lopu-agent\/"/u,
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
   );
