@@ -372,7 +372,15 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
+// The DEFAULT circle set: what an unfiltered feed/search covers. 'hidden' is
+// deliberately absent — an unlisted thing is reachable by its link key (or by
+// its owner's own-things clause), never by simply not filtering.
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+// What a caller may ASK for. Wider than the default set: 'hidden' is a real
+// circle the composer, post menu and feed/search filter chips all offer, so
+// `circles=hidden` has to survive input validation — dropping it silently
+// widens the query back to every default circle, i.e. the opposite filter.
+export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -2147,9 +2155,11 @@ const circleClause = (circle: PostVisibility) => {
     case 'family':
       return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
     case 'private':
-      // $nin on an array field means "contains none of these"
+      // $nin on an array field means "contains none of these". ACL_HIDDEN is
+      // excluded too: hidden things carry no broad grant, so without it every
+      // unlisted thing would also answer the 'private' chip.
       return {
-        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN] } }, { visibility: 'private' }]
       };
     case 'hidden':
       // v2-only (no legacy enum era) — reachable only by explicit circle
@@ -2182,9 +2192,14 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
   if (viewer?.id) {
-    // the viewer's own things, optionally narrowed to the requested circles
+    // The viewer's own things, optionally narrowed to the requested circles.
+    // The unnarrowed shortcut is only sound when `wanted` COVERS every default
+    // circle — a bare length comparison would also fire for a same-sized but
+    // different selection (say public+friends+family+hidden), silently pulling
+    // the viewer's private things back into a feed they filtered them out of.
+    const coversDefaults = VISIBILITIES.every((circle) => wanted.includes(circle));
     clauses.push(
-      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      coversDefaults ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
   }
   // nothing requested that the viewer could ever see
@@ -2442,7 +2457,9 @@ export const getFeed = async (
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
-  const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
+  // REQUESTABLE, not the default set — 'hidden' is a chip the filter menu
+  // offers, and a dropped circle reads as "no filter" downstream
+  const circles = (query.circles || []).filter((circle) => REQUESTABLE_VISIBILITIES.includes(circle));
 
   const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };

@@ -2016,6 +2016,16 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
       Minted rows badge 🌍 GET links. Covered by section H of
       `node scripts/verify-pat-tokens.mjs`.
+- [ ] Circle filters honour every circle they offer (regression: a new circle
+      that the filter menu shows but the API drops reads downstream as "no
+      circle filter", so the chip WIDENS the result set instead of narrowing
+      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
+      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
+      hidden things in the result. Tick any four of the five circles: the
+      omitted circle really is omitted (this used to fall through to an
+      "all circles" shortcut keyed on selection COUNT). Leaving every circle
+      unticked is unchanged — the default feed still shows all of your own
+      things, hidden included.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
