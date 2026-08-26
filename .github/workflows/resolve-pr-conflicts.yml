@@ -2852,8 +2852,25 @@ jobs:
             esac
             live_pr="$(gh api "repos/$REPO/pulls/$number")"
             current_head="$(jq -r '.head.sha' <<<"$live_pr")"
-            current_base="$(jq -r '.base.sha' <<<"$live_pr")"
+            current_base_ref="$(jq -r '.base.ref // empty' <<<"$live_pr")"
             current_repo="$(jq -r '.head.repo.full_name // empty' <<<"$live_pr")"
+            # `.base.sha` is the PR's historical base snapshot, not necessarily
+            # the current branch tip captured by `fetch_ref` before review.
+            # Resolve the live ref again so unchanged evidence is accepted while
+            # a real target-branch advance still invalidates every disposition.
+            git check-ref-format "refs/heads/$current_base_ref" >/dev/null 2>&1 || {
+              echo "::error::PR #$number returned an invalid live base ref while validating CodeQL dispositions."
+              exit 1
+            }
+            current_base_ref_encoded="$(jq -rn --arg value "$current_base_ref" '$value | @uri')"
+            # A deleted base branch or a transient API error must not abort the
+            # whole disposition pass for every other reviewed PR: an unresolved
+            # tip is simply unproven evidence, so skip this PR and leave its
+            # alerts open for the next scan.
+            if ! current_base="$(gh api "repos/$REPO/git/ref/heads/$current_base_ref_encoded" --jq '.object.sha')"; then
+              echo "::warning::Skipping CodeQL dispositions for PR #$number because its live base branch tip could not be resolved; a fresh scan and Lopu pass will decide them."
+              continue
+            fi
             [[ "$current_head" =~ ^[0-9a-f]{40}$ && "$current_base" =~ ^[0-9a-f]{40}$ ]] || {
               echo "::error::PR #$number returned invalid live revisions while validating CodeQL dispositions."
               exit 1
@@ -3057,7 +3074,7 @@ jobs:
             {
               echo '## Lopu repository review'
               echo
-              printf 'Lopu reviewed this PR against %s as Thingtime\047s principal PR and repository manager. Backend: **%s**.\n\n' "$(jq -r ".base" <<<"$record")" "${BACKEND_LABEL:-Claude Code default}"
+              printf 'Lopu reviewed this PR against %s as Thingtime\047s principal PR and repository manager. Using **%s**.\n\n' "$(jq -r ".base" <<<"$record")" "${REVIEW_BACKEND_LABEL:-Claude Code default}"
               case "$outcome" in
                 pushed) printf 'Lopu made justified improvements and pushed %s to %s.\n' "$sha" "$head" ;;
                 already-published) printf 'Lopu\047s reviewed changes are already present at %s.\n' "$sha" ;;
