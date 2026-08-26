@@ -554,6 +554,14 @@ function assertWorkflowSource() {
     /\[ "\$current_head" != "\$reviewed_head" \][\s\S]*\[ "\$current_base" != "\$reviewed_base" \]/u,
     "dispositions wait for a fresh scan whenever the reviewed PR head or base changed",
   );
+  assert.match(reviewBlock, /current_base_ref=.*\.base\.ref/u, "disposition validation reads the live base ref name");
+  assert.match(reviewBlock, /current_base_ref_encoded=.*@uri/u, "live base refs are safely encoded for the GitHub API");
+  assert.match(reviewBlock, /git\/ref\/heads\/\$current_base_ref_encoded/u, "disposition validation resolves the current base branch tip");
+  assert.doesNotMatch(
+    reviewBlock,
+    /current_base=.*\.base\.sha/u,
+    "disposition validation never confuses the PR's historical base snapshot with the live base branch tip",
+  );
   assert.match(reviewBlock, /refs\/pull\/\$number\/head/u, "snapshot accepts default-setup PR-head analyses");
   assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
   assert.match(reviewBlock, /\.reviewed_base_sha == \$reviewed_base_sha/u, "authority binds the reviewed base revision");
