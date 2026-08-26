@@ -8,16 +8,11 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
-  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
   'web-ci.yml',
-  'promote-develop-to-main.yml',
-  'promote-features-to-main.yml',
-  'rebase-pr-stacks.yml',
-  'resolve-pr-conflicts.yml',
-  'sync-main-into-develop.yml'
+  'resolve-pr-conflicts.yml'
 ];
 
 for (const filename of callers) {
@@ -31,6 +26,112 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+for (const retired of [
+  'all-branch.yml',
+  'promote-develop-to-main.yml',
+  'promote-features-to-main.yml',
+  'rebase-pr-stacks.yml',
+  'sync-main-into-develop.yml'
+]) {
+  assert.equal(
+    existsSync(resolve(workflowsRoot, retired)),
+    false,
+    `${retired} must stay retired; Lopu PR manager owns its former public triggers`
+  );
+}
+
+const codeqlCaller = readFileSync(
+  resolve(workflowsRoot, 'codeql-analysis.yml'),
+  'utf8'
+);
+const codeqlTriggersEnd = codeqlCaller.indexOf('\npermissions:\n');
+assert.ok(codeqlTriggersEnd > 0, 'codeql-analysis.yml must retain its trigger block');
+const codeqlTriggers = codeqlCaller.slice(0, codeqlTriggersEnd);
+assert.doesNotMatch(codeqlCaller, /^\s+runs-on:|^\s+steps:|^\s+run:/m, 'CodeQL listener must remain executable-code-free');
+assert.doesNotMatch(codeqlCaller, /\.github\/(?:actions|scripts)\//, 'CodeQL listener must not reference product-branch behavior files');
+assert.equal((codeqlCaller.match(/^\s+uses:/gm) ?? []).length, 2, 'CodeQL listener must contain exactly the analyzer and target-handoff calls');
+assert.match(
+  codeqlCaller,
+  /^\s{4}uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
+  'pull_request_target must call the protected metadata-only handoff'
+);
+assert.match(
+  codeqlCaller,
+  /^\s{4}uses: lopugit\/thingtime\/\.github\/workflows\/codeql-analysis\.yml@github-actions$/m,
+  'unprivileged analysis events must call the protected analyzer'
+);
+assert.match(
+  codeqlTriggers,
+  /^  pull_request:$/m,
+  'codeql-analysis.yml must scan PRs targeting every branch without a base filter'
+);
+assert.match(
+  codeqlTriggers,
+  /^  push:\n    branches: \["\*\*"\]$/m,
+  'codeql-analysis.yml must scan direct pushes to every branch'
+);
+assert.match(
+  codeqlTriggers,
+  /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
+  'the default branch must hand off every PR-head lifecycle update'
+);
+assert.match(codeqlTriggers, /^  schedule:$/m, 'codeql-analysis.yml must retain its scheduled backstop');
+assert.match(codeqlTriggers, /^  workflow_dispatch:$/m, 'codeql-analysis.yml must support manual recovery');
+const codeqlPermissions = codeqlCaller.slice(
+  codeqlCaller.indexOf('\npermissions:\n'),
+  codeqlCaller.indexOf('\njobs:\n')
+);
+assert.match(codeqlPermissions, /^  security-events: write$/m, 'CodeQL caller must permit SARIF upload');
+assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must permit duplicate-run ownership checks');
+assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit only the target handoff to dispatch an unprivileged scan');
+assert.match(
+  codeqlCaller,
+  /^  target-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
+  'the target-event token must never reach the analyzer job'
+);
+
+const resolverCaller = readFileSync(
+  resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
+  'utf8'
+);
+assert.match(
+  resolverCaller,
+  /^name: Lopu PR manager$/m,
+  'the public repository manager must be visibly named Lopu'
+);
+assert.match(
+  resolverCaller,
+  /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]$/m,
+  'Lopu must receive every PR-head lifecycle update even when the PR branch has an old or missing push listener'
+);
+assert.match(
+  resolverCaller,
+  /^  repository_dispatch:\n(?:    #.*\n)*    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
+  'merge cascades and rebase-stack workers must enter through the one public Lopu listener'
+);
+for (const trigger of ['issue_comment', 'pull_request_review_comment', 'check_run']) {
+  assert.match(
+    resolverCaller,
+    new RegExp(`^  ${trigger}:$`, 'm'),
+    `Lopu must receive ${trigger} repository-management signals from the default branch`
+  );
+}
+assert.match(resolverCaller, /^  security-events: write$/m, 'the thin Lopu caller must grant the maximum permission used by its separately fenced CodeQL disposition job');
+for (const input of [
+  'maintenance_operation',
+  'promotion_dry_run',
+  'promotion_lookback',
+  'promotion_source_branch',
+  'promotion_target_branch',
+  'promotion_path_prefix'
+]) {
+  assert.match(
+    resolverCaller,
+    new RegExp(`^      ${input}: \\\${\\\{ inputs\\.${input}`, 'm'),
+    `the public Lopu caller must forward ${input} to the protected controller`
+  );
+}
+
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
   'utf8'
@@ -41,44 +142,20 @@ assert.match(
   'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
 );
 
-const promotionCaller = readFileSync(
-  resolve(workflowsRoot, 'promote-features-to-main.yml'),
-  'utf8'
-);
-const promotionPermissionsStart = promotionCaller.indexOf('\npermissions:\n');
-const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
-assert.ok(
-  promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
-  'promote-features-to-main.yml must retain a top-level permissions block'
-);
-const promotionPermissions = promotionCaller.slice(
-  promotionPermissionsStart,
-  promotionJobsStart
+assert.match(
+  resolverCaller,
+  /^  actions: write$/m,
+  'Lopu PR manager must grant its protected maintenance lanes permission to dispatch trusted workers'
 );
 assert.match(
-  promotionPermissions,
-  /^  actions: write$/m,
-  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
-);
-
-const allBranchCaller = readFileSync(
-  resolve(workflowsRoot, 'all-branch.yml'),
-  'utf8'
-);
-const allBranchPermissionsStart = allBranchCaller.indexOf('\npermissions:\n');
-const allBranchJobsStart = allBranchCaller.indexOf('\njobs:\n');
-assert.ok(
-  allBranchPermissionsStart >= 0 && allBranchJobsStart > allBranchPermissionsStart,
-  'all-branch.yml must retain a top-level permissions block'
-);
-const allBranchPermissions = allBranchCaller.slice(
-  allBranchPermissionsStart,
-  allBranchJobsStart
+  resolverCaller,
+  /^    - cron: "53 \* \* \* \*"$/m,
+  'the one public Lopu manager must retain the hourly wildcard-all backstop'
 );
 assert.match(
-  allBranchPermissions,
-  /^  actions: write$/m,
-  'all-branch.yml must let the protected push handoff dispatch its supported-event worker'
+  resolverCaller,
+  /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/m,
+  'manual wildcard-all and CodeQL recovery must remain Lopu maintenance choices'
 );
 
 const electronPrReleaseCaller = readFileSync(

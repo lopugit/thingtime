@@ -17,8 +17,65 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
 ### Changed
 
+- **The develop Lopu listener exposes the complete maintenance contract**:
+  manual recovery now includes the protected controller's bounded
+  `backfill-codeql` operation alongside PR management, promotions, branch sync,
+  and the wildcard-all build. The caller contract and operational checklist
+  pin this menu so product-branch listeners cannot silently drift behind the
+  single `github-actions` implementation. — Codex (AI), 2026-08-26
+- **The wildcard `all`-branch workflow is folded into the one public Lopu
+  manager**: product branches no longer retain a separate all-branch listener.
+  Develop/main pushes, the full PR lifecycle including draft and close, the
+  hourly backstop, and manual `build-all` recovery all route through **Lopu PR
+  manager** to the protected reusable doctor. — Codex (AI), 2026-08-25
+- **The last duplicate public PR-maintenance Actions are retired on develop**:
+  promotion, main/develop synchronization, merge cascades, and rebase-stack
+  repository events all enter through the one visible Lopu PR manager. The
+  protected rebase engine remains implementation-only on `github-actions`;
+  develop no longer carries a second rebase listener that could duplicate
+  detection or cancellation ownership. — Codex (AI), 2026-08-25
+- **Lopu CodeQL target events now use the metadata-only handoff they describe**:
+  the default-branch listener sends PR number and exact head SHA through the
+  protected handoff, while only the separate unprivileged dispatch invokes the
+  analyzer. This prevents duplicate target-context base scans and the red
+  cancelled analyzer checks they could leave behind. — Codex (AI), 2026-08-25
+- **Lopu now receives every PR-head lifecycle update from the default branch**:
+  `pull_request_target` includes synchronize, ready-for-review, and edited
+  events, so old PR branches and non-default targets no longer depend on
+  carrying a current push listener themselves. The develop caller is also
+  aligned with the current principal-manager contract for comments, failed
+  checks, promotion/maintenance inputs, and the separately fenced CodeQL
+  disposition permission. The protected controller still deduplicates
+  immutable snapshots and admits at most one model-backed Lopu worker per
+  repository. — Codex (AI), 2026-08-25
+- **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
+  all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. Open PR heads use the
+  PR analysis as the single owner, and Lopu accepts immutable head or merge-ref
+  findings after revalidating both the reviewed head and base revisions. The
+  README documents the ordered default-setup-to-advanced-setup activation, and
+  a repository variable prevents expected pre-activation upload failures.
+  — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now use the protected `github-actions` control
   plane**: this branch contains only a `pull_request_target`/manual listener;
   the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,

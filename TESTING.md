@@ -8,6 +8,19 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
+      unique index: `node scripts/verify-passkeys.mjs` covers it (two data
+      things may share one `crystal.linkKey`; the real link still dedupes to
+      one row and keeps counting). After deploying, re-run the
+      `backfill-relationship-unique-keys` migration from /admin so legacy
+      `passkey-app-link` rows get stamped — until then they dedupe through the
+      crystal-path fallback in the upsert filter.
+- [ ] `things_passkey_link_key_unique` is gone from the `things` collection
+      after a boot (`db.things_v2.getIndexes()`). On a dev machine running
+      several worktrees against ONE local mongod, a sibling checkout still on
+      pre-fix code re-creates it at its next boot — drop it again and update
+      that worktree; it is not a code regression.
+
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
       no platform sheet; correct password → the browser/1Password/iCloud sheet
       opens and the saved passkey appears in the list with provider name,
@@ -158,6 +171,27 @@ is fixed, and cite the checklist you ran in the PR description.
       config must map `github-actions` to `false`, while the thin branch config
       must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
       a second fail-safe.
+
+## Lopu CodeQL all-branch listener
+
+- [ ] Open or update PRs targeting `main`, `develop`, `github-actions`, and an
+      older feature branch without the current listener. Confirm normal
+      `pull_request` runs own targets that carry the listener, while the
+      default-branch `pull_request_target` run performs only the protected
+      metadata handoff for missing listeners. Confirm no target-context job
+      checks out PR code, no redundant analyzer cancels an in-flight scan, and
+      both language contexts finish green for the latest immutable snapshot.
+
+## Lopu wildcard `all`-branch maintenance
+
+- [ ] Run `node remix/scripts/workflow-caller-contract.mjs` and confirm product
+      branches contain no `.github/workflows/all-branch.yml` or rebase-specific
+      listener. Push `develop` and `main`, exercise every PR lifecycle transition
+      including draft and close, wait for the `53 * * * *` backstop, and invoke
+      the `build-all` and `backfill-codeql` maintenance choices manually. Every
+      path must appear under **Lopu PR manager**, call the corresponding
+      protected implementation, and keep at most one model-backed Lopu job
+      active without cancelling it.
 
 ## Develop-target Vercel PR previews
 
@@ -925,6 +959,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Push a new commit to an older open PR whose head branch does not contain
+      the current Lopu push listener, including one targeting a non-default
+      branch. Confirm the default-branch `pull_request_target: synchronize`
+      listener dispatches that exact PR to the protected controller, duplicate
+      push/target signals collapse to one live snapshot, and the repository
+      fleet still runs no more than one model-backed Lopu job at a time.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
@@ -1173,7 +1213,7 @@ is fixed, and cite the checklist you ran in the PR description.
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
 
-## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+## Lopu internal PR/stack rebase engine (protected `github-actions` implementation)
 
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
@@ -1181,7 +1221,7 @@ is fixed, and cite the checklist you ran in the PR description.
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      confirm only the **Lopu PR manager** merge lane owns it. Regression class:
       standalone replay failures were incorrectly force-rebased and could
       ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
