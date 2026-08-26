@@ -6,6 +6,25 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## ChatGPT / Codex MCP connector
+
+- [ ] `GET /.well-known/oauth-protected-resource`, `GET
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
+      manifest return the deployed HTTPS origin and the MCP path exactly.
+- [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
+      page works at desktop and a 390px mobile viewport, requires `resource`,
+      state, and S256 PKCE, and never reflects a personal access token in the
+      redirect or an error page.
+- [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
+      list/select them in ChatGPT and verify reads use the selected account.
+      An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
+      authorization code, altered callback/resource, or altered verifier must
+      fail closed.
+- [ ] Confirm a read/search tool succeeds with `things.read`, while each write
+      tool asks for ChatGPT confirmation and the target API rejects a PAT that
+      lacks its exact Things scope. Disconnecting an account removes its bridge
+      access; removing the last account revokes the ChatGPT bridge session.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
@@ -987,6 +1006,11 @@ is fixed, and cite the checklist you ran in the PR description.
       listener dispatches that exact PR to the protected controller, duplicate
       push/target signals collapse to one live snapshot, and the repository
       fleet still runs no more than one model-backed Lopu job at a time.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu
+      listener — the `53 * * * *` backstop and a manual `build-all` dispatch.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
 - [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
       manager** run containing the standing-promotion and per-feature-promotion
       reusable jobs, with no separate **Promote develop to main** or **Promote
@@ -996,10 +1020,12 @@ is fixed, and cite the checklist you ran in the PR description.
       confirm the first run is not cancelled. Exercise each
       `maintenance_operation` choice manually through Lopu and confirm the
       removed workflow files do not reappear in Actions.
-- [ ] On `develop`, push a normal feature merge and open or update a PR.
-      Confirm each `Lopu PR manager` run compiles and creates its controller
-      jobs instead of failing at workflow startup with a nested
-      `security-events: none` permission error. Confirm CodeQL alert mutations
+- [ ] On the default branch, complete a check run and create/edit a normal PR
+      comment, and on `develop` push a normal feature merge and open or update
+      a PR. Confirm each `Lopu PR manager` run compiles and creates its
+      controller jobs instead of failing at workflow startup with a nested
+      `security-events: none` permission error. Also confirm the scheduled and
+      all-branch push listeners create jobs, and that CodeQL alert mutations
       occur only in the controller's separately fenced disposition writer.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
@@ -1091,6 +1117,11 @@ is fixed, and cite the checklist you ran in the PR description.
       must fail closed. A legitimate derived Graphify commit must be exactly
       one direct child of the already-verified source head and may change only
       the approved Graphify output paths.
+- [ ] Promote two independently green features that add the same workflow
+      caller contract at different source offsets. The combined promotion must
+      keep one declaration/assertion block, and
+      `node remix/scripts/workflow-caller-contract.mjs` must pass before the
+      promotion is considered release-clean.
 - [ ] Set `conflict-marker-size=10` for a planned text path and leave real
       10-character start/base/end markers after the model round; verification
       must reject them. A standalone Markdown `=======` divider must remain
@@ -1221,9 +1252,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. Product branches must contain no
-      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
-      rebase repository-dispatch events, while the protected rebase engine is
+      rebase, and stack detection. `rebase-pr-stack-ai` must reach the
+      protected engine only through that one listener's `repository_dispatch`:
+      product branches must contain no separate `rebase-pr-stacks.yml` caller
+      that could create a competing run which Lopu's embedded rebase lane later
+      cancels. `Lopu PR manager` accepts both exact merge and rebase
+      repository-dispatch events, while the protected rebase engine is
       `workflow_call`-only and cannot create a competing public run.
 - [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
       disabled), feature promotion, standing promotion, and main/develop sync.
@@ -1236,9 +1270,9 @@ is fixed, and cite the checklist you ran in the PR description.
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only the **Lopu PR manager** merge lane owns it. Regression class:
-      standalone replay failures were incorrectly force-rebased and could
-      ping-pong with a merge-resolver update.
+      confirm only the **Lopu PR manager** base-merge lane owns it. Regression
+      class: standalone replay failures were incorrectly force-rebased and
+      could ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf

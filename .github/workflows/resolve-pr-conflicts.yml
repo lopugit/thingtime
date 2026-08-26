@@ -11,9 +11,10 @@ on:
     # non-default target already carries a current push listener. The protected
     # controller deduplicates exact snapshots before queueing model work.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
-  # GitHub evaluates issue/review-comment and check-run workflows from the
-  # default branch. Keep this public file metadata-only and forward each of
-  # those PR-manager signals to the protected Lopu controller pinned below.
+  # GitHub evaluates these PR-target, issue/review-comment, and check-run event
+  # workflows from the default branch. Keep this public file metadata-only and
+  # forward each of those PR-manager signals to the protected Lopu controller
+  # pinned at @github-actions below.
   issue_comment:
     types: [created, edited]
   pull_request_review_comment:
@@ -97,9 +98,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  # The called controller narrows this per job: review is read-only in its
-  # model job and only its separately fenced disposition job may close or
-  # dismiss CodeQL alerts. Reusable workflows still cannot request either
+  # The called controller narrows this per job: CodeQL inspection stays
+  # read-only in its model job and only the separately fenced disposition job
+  # may close or dismiss alerts. Reusable workflows still cannot request either
   # permission unless the thin caller grants the maximum required level up
   # front.
   security-events: write

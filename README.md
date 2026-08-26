@@ -49,19 +49,20 @@ listener has an unfiltered `pull_request` trigger and a `push` trigger for
 branch push receives analysis. A default-branch `pull_request_target` listener
 also covers PRs whose target branch predates the listener. That privileged run
 calls a dedicated protected metadata-only handoff, checks out no code, and
-receives no AI credential. The handoff forwards only the PR number and immutable
-event head SHA into a separate
-`workflow_dispatch` run, which revalidates live state and analyzes the exact PR
-merge ref—or the head ref while a conflict prevents GitHub from creating one.
-Lopu validates both merge parents against the live base and head before using
-that ref, because GitHub can retain an obsolete merge ref after a conflict.
-`main` and `develop` carry the normal listener,
-while the protected implementation directly handles PRs targeting and pushes
-to `github-actions`; the central handoff closes the remaining arbitrary-target
-gap. A PR whose target already carries the listener keeps its normal
-`pull_request` run as owner, preserving branch-protection check contexts. When
-the selected ref already has both language snapshots, Lopu exits before CodeQL
-initialization instead of paying for a duplicate scan.
+receives no AI credential: that handoff forwards only the PR number and
+immutable event head SHA into a separate `workflow_dispatch` run, which
+revalidates live state and analyzes the exact PR merge ref—or the head ref
+while a conflict prevents GitHub from creating one. Lopu validates both merge
+parents against the live base and head before using that ref, because GitHub
+can retain an obsolete merge ref after a conflict. `main` and `develop` carry
+the normal listener, and new feature and stack branches inherit it from their
+base, while the protected implementation directly handles PRs targeting and
+pushes to `github-actions`; the central handoff closes the remaining
+arbitrary-target gap. A PR whose target already carries the listener keeps its
+normal `pull_request` run as owner, preserving branch-protection check
+contexts; when that PR already owns a branch head, the matching push run stands
+down. When the selected ref already has both language snapshots, Lopu exits
+before CodeQL initialization instead of paying for a duplicate scan.
 
 The analysis and metadata handoff use separate protected reusable workflows.
 That split is required by GitHub's permission model: ordinary `pull_request`
@@ -78,6 +79,7 @@ listener is present on the default branch, an administrator with repository
 Administration write access should run:
 
 ```sh
+gh variable set CODEQL_CENTRAL_PR_ENABLED --repo OWNER/REPOSITORY --body true
 gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
   -f state=not-configured
 gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
@@ -85,9 +87,12 @@ gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
 
 The absent/false variable deliberately makes the staged advanced jobs skip
 cleanly instead of failing every PR while default setup still owns uploads.
-After setting it, manually run **CodeQL all branches**, confirm both language
-jobs upload results, and verify the repository reports default setup as
-`not-configured`.
+After setting them, manually run **Lopu CodeQL all branches**, confirm both
+language jobs upload results, and verify the repository reports default setup
+as `not-configured`. Then update a PR targeting an older feature/stack branch
+that does not contain the listener and confirm its metadata-only target event
+creates a separate exact-head scan.
+
 After activation, an empty Lopu CodeQL snapshot means no current matching
 head-or-merge findings (or a failed/unavailable analysis), not merely that the
 PR targets `develop` or `github-actions`.
@@ -197,11 +202,11 @@ stale-branch merges into PR heads, conflict resolution, rebases and stack
 cascades, promotions, main/develop synchronization, release analysis, wildcard
 `all`-branch repair, and post-merge Graphify refresh — for every
 same-repository PR regardless of its target branch. Push, PR, conversation,
-failed-check, and scheduled signals all enter through that one manager; a
-branch push never starts a second standalone rebase, promotion, or
-branch-synchronization workflow. Deterministic implementations remain protected
-reusable components; they have no competing push, schedule, or manual triggers
-of their own.
+failed-check, and scheduled signals all enter through that one manager.
+Deterministic implementations remain protected reusable components; they have
+no competing push, schedule, or manual triggers of their own, so a branch push
+never starts a second standalone rebase, promotion, or branch-synchronization
+workflow.
 
 Lopu listens to pushes on `"**"`, every PR-head lifecycle update, PR and inline
 review comments, failed check completions, and bounded maintenance schedules.
@@ -215,35 +220,37 @@ Standalone merge conflicts and clean-but-behind branches go to the base-merge
 lane. Genuine stack members whose history needs replay go to the rebase lane;
 adding `no-ai-rebase` opts a merge-conflicting stack member back into the
 merge-based lane. The protected rebase engine still accepts the manager's
-exact `repository_dispatch` worker handoff through **Lopu PR manager**. It is a
-`workflow_call`-only implementation; no product branch contains or exposes a
-second rebase workflow.
+exact `repository_dispatch` worker handoff through **Lopu PR manager**, but it
+has no public listener of its own. It is a `workflow_call`-only implementation;
+no product branch contains or exposes a second rebase workflow.
 
 Lopu's rebase/stack lane covers the case GitHub reports as `mergeable: true` but
 `rebaseable: false`: a plain merge needs no help, yet replaying the branch's
 commits onto its base stops at a conflict. A detected stack is rebased
 root-to-leaf, so each child is replayed onto the rewritten parent rather than
-onto the parent's old SHA. The merge lane owns standalone merge conflicts;
-stack members and explicit history-rewrite cases stay with the rebase lane.
+onto the parent's old SHA.
 
 For manual recovery, open **Actions → Lopu PR manager → Run workflow** on the
 default branch. Enter an exact PR number, a base/head branch selector, or one
 of the explicit promotion and main/develop maintenance operations; leave the
 selectors blank to scan every open eligible PR. The same entry point
-deliberately retries a reviewed paused merge/rebase snapshot — failed immutable
-snapshots stay auditable and are retried without reviving a separate public
-Action, and the internal rebase handoff is not a second user-facing workflow.
-The `maintenance_operation` choice also exposes the standing develop promotion,
-per-feature promotion (including dry-run and reverse-lane options), and
-main→develop synchronization without restoring separate Actions entries.
+deliberately retries a reviewed paused merge/rebase snapshot, so failed
+immutable snapshots stay auditable without reviving a separate public Action;
+the internal rebase handoff is not a second user-facing workflow. The
+`maintenance_operation` choice also exposes the standing develop promotion,
+per-feature promotion (including dry-run and reverse-lane options),
+main→develop synchronization, the wildcard `all`-branch rebuild, and bounded
+CodeQL backfill without restoring separate Actions entries.
 
-Broad scans are API-only detectors; they hand off one trusted
-default-branch run per conflicted base, so unrelated bases do not share one AI
-job. If a run fails while the same eligible snapshot is still live, it adds
-`ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.
-The hold is bound to the exact owner, refs, SHAs, and topology recorded in a
-bot-only hidden marker: a changed snapshot is eligible again automatically,
-while the same snapshot requires review and a named-base manual retry.
+Broad scans are API-only detectors; they hand off one trusted default-branch
+run per conflicted base, so unrelated bases do not share one AI job. A failed
+merge run reports itself but never auto-pauses: `ai-merge-paused` is a
+user-controlled stop signal that automation never adds or removes, so add it
+yourself to keep the scheduled sweep from spending more AI budget on the same
+PR. The rebase lane's automatic `ai-rebase-paused` hold is bound instead to the
+exact owner, refs, SHAs, and topology recorded in a bot-only hidden marker: a
+changed snapshot is eligible again automatically, while the same snapshot
+requires review and a named-base manual retry.
 
 Lopu's merge lane also snapshots the exact live head and base SHAs, repeats
 its PR/ref/label/stack/protection checks immediately before publication, and
@@ -433,6 +440,64 @@ step-by-step usage, payload and response examples, and generated curl, wget,
 Node.js, Python, and Ruby snippets. The browser reference lives at
 `/docs/api`, and the docs smoke tests live in the `/tests` page under the
 `Docs` group.
+
+## ChatGPT / Codex plugin
+
+Thingtime exposes a public HTTPS, OAuth 2.1 + S256 PKCE MCP endpoint at
+`/api/v1/integrations/chatgpt/mcp`. It is packaged at
+[`integrations/ChatGPT/plugin/thingtime-chatgpt`](integrations/ChatGPT/plugin/thingtime-chatgpt)
+for ChatGPT/Codex distribution. The plugin connection page can securely attach
+several named Thingtime accounts and explicitly allowlisted Thingtime API
+origins. It accepts only scoped Personal Access Tokens (PATs), validates them
+with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
+gives ChatGPT only a revocable MCP-only bridge token. When ChatGPT requests the
+optional `offline_access` scope, the 30-day bridge access token is renewed with
+a rotating refresh credential; every credential refers to one encrypted
+connection record, so account selection and disconnects take effect across the
+entire connection. Do not paste a PAT into a chat. The public `tools/list`
+response exposes only tool metadata and its per-tool OAuth requirements; all
+account data and tool calls require the bridge token and are origin-bound to
+this MCP URL.
+
+Set these sensitive server-side deployment variables (for example in Vercel)
+before enabling the connector. Values below are placeholders only:
+
+```sh
+# Exactly 32 random bytes, base64 encoded. Generate/store as a deployment secret.
+THINGTIME_CHATGPT_CREDENTIAL_KEY="<base64-encoded-32-byte-key>"
+
+# Optional. Exact comma-separated HTTPS origins only; no wildcard or paths.
+# Defaults to https://thingtime.com when unset.
+THINGTIME_CHATGPT_ALLOWED_ENDPOINTS="https://thingtime.com,https://dev.thingtime.com"
+
+# Optional. Defaults to ChatGPT's stable Client ID Metadata Document plus the
+# legacy https://chatgpt.com identifier. Set only if the connection page gives
+# you an additional exact OAuth client id.
+THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com/oauth/client.json,https://chatgpt.com"
+```
+
+The MCP protected-resource and authorization-server discovery documents are at
+`/.well-known/oauth-protected-resource` and
+`/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
+is `/.well-known/thingtime-chatgpt-capabilities.json`.
+
+For the supported ChatGPT workspace path, use ChatGPT **on the web** with a
+Business or Enterprise/Edu workspace. An admin or owner enables Developer Mode
+from Workspace Settings → Apps → Create, supplies this remote MCP URL, selects
+OAuth, and uses **Scan Tools**. ChatGPT then opens Thingtime’s first-party
+account form; its advertised `offline_access` scope allows the rotating refresh
+flow. Create the draft, test it from the tools menu or by @mentioning it in a
+new chat, then have an admin/owner publish it from Workspace Settings → Apps.
+Full write/modify MCP access is currently a Business/Enterprise/Edu beta;
+Pro-only connections are limited to read/fetch. ChatGPT custom MCP apps are
+currently web-only, so iOS ChatGPT chats cannot invoke this connector. After
+approval, tool definitions are a frozen snapshot. Enterprise/Edu admins must
+review and enable a refresh before action changes are available; Business
+workspaces currently need to recreate and republish the app to change its
+tools or metadata. Public Plugins Directory
+distribution remains a separate process requiring a fixed production origin,
+verified publisher identity, legal URLs, test cases, and OpenAI review; see
+the package's `SUBMISSION.md`.
 
 ## Extensible data — `extended` + schema-less crystals
 
@@ -1129,11 +1194,11 @@ the preset fallback responses instead of calling an AI provider.
 ## Branch automation: develop → main promotion
 
 `develop` is the integration branch; `main` is the release branch. The one
-public **Lopu PR manager** owns the branch events and invokes the following
-protected, non-cancelling maintenance lanes, giving two complementary ways to
-ship:
+public **Lopu PR manager** workflow owns the branch events and invokes these
+protected, non-cancelling maintenance components, giving two complementary ways
+to ship:
 
-- **Per-feature promotion** (protected implementation
+- **Lopu's per-feature promotion component** (protected implementation
   `github-actions:.github/workflows/promote-features-to-main.yml`)
   scans PRs merged into `develop` and opens one promotion PR per feature
   against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
@@ -1144,7 +1209,7 @@ ship:
   review and merge bottom-up, deleting each branch on merge. Label a develop
   PR `no-promote` to keep it out of the train; close a promotion PR to reject
   that change for `main` permanently.
-- **Standing develop-to-main promotion** (protected implementation
+- **Lopu's standing develop promotion component** (protected implementation
   `github-actions:.github/workflows/promote-develop-to-main.yml`)
   keeps one standing all-or-nothing PR open (head `develop`, base `main`).
   When everything on `develop` is deemed mergeable, merge it instead of
@@ -1152,17 +1217,22 @@ ship:
   omnibus merge the per-feature workflow sees the content already on `main`,
   skips it, and automatically closes any open promotion PRs whose diff has
   become empty.
-- **Safe main-to-develop synchronization** back-merges `main` after promotions
-  land, publishing any conflicted candidate through the automation-owned
-  `sync/main-into-develop` head. Lopu resolves that branch and never mutates
-  protected `main` as a PR head.
+- **Lopu's main→develop synchronization component** back-merges `main` after
+  promotions land. Any conflicted candidate is published through the
+  automation-owned `sync/main-into-develop` head; Lopu resolves that branch and
+  never mutates protected `main` as a PR head.
 - Lopu's conflict/rebase lanes keep promotion PRs and stacks mergeable.
 
-A `develop` push starts both promotion lanes inside its single Lopu run; a
-`main` push starts synchronization there; and the six-hour maintenance
+A `develop` push starts both promotion components inside its single Lopu run;
+a `main` push starts synchronization there; and the six-hour maintenance
 schedule enters through Lopu too. The old product-branch promotion/sync
 workflow files are removed, so none can compete with or cancel Lopu. Use the
 manager's `maintenance_operation` input for explicit recovery.
+
+Lopu's wildcard `all`-branch rebuild lane is likewise concurrency-free at the
+listener. Its protected implementation owns the durable `queue: max` namespace;
+putting `cancel-in-progress` on the thin caller would cancel the entire
+reusable call before that worker queue can retain it.
 
 Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
 PRs it creates will not trigger CI, and promotion branches touching

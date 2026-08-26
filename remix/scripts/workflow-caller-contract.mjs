@@ -7,6 +7,9 @@ const remixRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
+// codeql-analysis.yml is verified separately below: it is the one listener that
+// legitimately carries two reusable calls (analyzer plus target handoff), so it
+// cannot satisfy this loop's single-call rule.
 const callers = [
   'develop-pr-preview.yml',
   'electron-release.yml',
@@ -127,7 +130,11 @@ assert.ok(
   'resolve-pr-conflicts.yml must retain a top-level permissions block'
 );
 const resolverTriggers = resolverCaller.slice(0, resolverPermissionsStart);
-assert.match(resolverTriggers, /^  push:\n    branches: \["\*\*"\]$/m, 'Lopu must receive pushes on every branch');
+assert.match(
+  resolverTriggers,
+  /^  push:\n    branches: \["\*\*"\]$/m,
+  'Lopu must receive pushes on every branch'
+);
 assert.match(
   resolverTriggers,
   /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]$/m,
@@ -157,7 +164,7 @@ for (const input of [
   assert.match(
     resolverCaller,
     new RegExp(`^      ${input}: \\$\\{\\{ inputs\\.${input}`, 'm'),
-    `Lopu listener must forward ${input} to the protected manager`
+    `the public Lopu caller must forward ${input} to the protected controller`
   );
 }
 assert.match(
