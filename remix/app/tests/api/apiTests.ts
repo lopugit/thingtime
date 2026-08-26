@@ -429,6 +429,16 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/service-account',
     mutates: true,
+    // This is the FIRST account-creating test in the suite, so it is the one
+    // that pays createUserAccount's awaited ensureIndexes() bootstrap against a
+    // cold database (index pruning, the device-index layout migration, then
+    // every things index). That one-time cost is measured in seconds and had
+    // been creeping past the 12s default, aborting a request the server had in
+    // fact completed. The other two account-creating tests already opt into
+    // 30s for the same reason — this one was simply left behind. It asserts a
+    // contract (non-expiring token, 5 GiB allowance, seven-day window), never a
+    // latency budget.
+    timeoutMs: 30000,
     body: uniqueServiceAccountBody,
     expect: expectJson(
       [200, 429, 503],
