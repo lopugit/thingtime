@@ -3337,8 +3337,26 @@ jobs:
 
             pr="$(gh api "repos/$REPO/pulls/$pr_number")"
             live_head="$(jq -r '.head.sha' <<<"$pr")"
-            live_base="$(jq -r '.base.sha' <<<"$pr")"
+            live_base_ref="$(jq -r '.base.ref // empty' <<<"$pr")"
             live_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
+            git check-ref-format "refs/heads/$live_base_ref" >/dev/null 2>&1 || {
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number returned an invalid live base ref."
+              continue
+            }
+            live_base_ref_encoded="$(jq -rn --arg value "$live_base_ref" '$value | @uri')"
+            # `.base.sha` is the base snapshot recorded on the PR, which may
+            # lag the actual target branch tip for an out-of-date PR. Bind the
+            # writer to the live ref tip exactly as the validating handoff did;
+            # otherwise safe dispositions for old develop-based PRs would be
+            # silently skipped even though their reviewed target was unchanged.
+            if ! live_base="$(gh api "repos/$REPO/git/ref/heads/$live_base_ref_encoded" --jq '.object.sha')"; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number's live base branch tip could not be resolved."
+              continue
+            fi
+            [[ "$live_head" =~ ^[0-9a-f]{40}$ && "$live_base" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number returned invalid live revisions."
+              continue
+            }
             if [ "$(jq -r '.state' <<<"$pr")" != open ] \
                || [ "$live_repo" != "$REPO" ] \
                || [ "$live_head" != "$expected_head" ] \

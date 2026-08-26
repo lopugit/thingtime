@@ -681,7 +681,18 @@ function assertWorkflowSource() {
     "the CodeQL writer is credential-free apart from GitHub's scoped token",
   );
   assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
-  assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
+  assert.match(codeqlDispositionBlock, /live_base_ref=.*\.base\.ref/u, "writer reads the live PR base ref name");
+  assert.match(codeqlDispositionBlock, /live_base_ref_encoded=.*@uri/u, "writer safely encodes the live base ref");
+  assert.match(
+    codeqlDispositionBlock,
+    /git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "writer resolves the live target branch tip rather than trusting a historical PR base snapshot",
+  );
+  assert.doesNotMatch(
+    codeqlDispositionBlock,
+    /live_base=.*\.base\.sha/u,
+    "writer never confuses the PR's historical base snapshot with the live target branch tip",
+  );
   assert.match(
     codeqlDispositionBlock,
     /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,

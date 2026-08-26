@@ -1198,6 +1198,11 @@ export function assertControlPlaneContract() {
     /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
     "the isolated writer revalidates the exact reviewed PR alert instance",
   );
+  assert.match(
+    resolver,
+    /live_base_ref=.*\.base\.ref[\s\S]*?git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "the isolated writer binds dispositions to the live target branch tip instead of the PR's historical base snapshot",
+  );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
     resolver.indexOf("\npermissions:\n"),
