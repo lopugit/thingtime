@@ -413,8 +413,8 @@ function assertWorkflowSource() {
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
   assert.equal(
     dispatchCount,
-    5,
-    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, and moving-ref retry use fixed workflow dispatch",
+    7,
+    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, moving-ref retry, and both promotion continuations (stack resume, recoverable retry) use fixed workflow dispatch",
   );
   assert.match(
     rebaseSource,
