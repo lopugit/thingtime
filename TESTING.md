@@ -237,6 +237,21 @@ is fixed, and cite the checklist you ran in the PR description.
       remain automatic. CODEOWNERS presence alone is not an enforcement check;
       independent CODEOWNER approval is optional future hardening once a second
       trusted collaborator can review changes.
+- [ ] Enable `CODEQL_CENTRAL_PR_ENABLED` and update a PR targeting an older
+      feature or stack branch that does not contain the CodeQL listener. The
+      `pull_request_target` run must perform metadata-only handoff with no
+      checkout, CodeQL initialization, AI secret, or repository code execution;
+      its separate `workflow_dispatch` run must revalidate the live head and
+      upload both language categories against the exact merge ref. Repeat with
+      a conflicting PR whose old merge ref still exists: its parent mismatch
+      must be reported and the fallback must scan `refs/pull/<number>/head`.
+- [ ] Update a PR whose target already carries the normal listener. Its
+      `pull_request` run—not the target-context fallback—must remain the owner
+      of both Analyze job contexts required by branch protection.
+- [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
+      present: the protected scope job must report that analysis is complete and
+      skip initialization. Dispatch an older expected SHA and confirm it no-ops
+      rather than scanning or publishing against stale PR state.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain
@@ -965,6 +980,26 @@ is fixed, and cite the checklist you ran in the PR description.
       listener dispatches that exact PR to the protected controller, duplicate
       push/target signals collapse to one live snapshot, and the repository
       fleet still runs no more than one model-backed Lopu job at a time.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu
+      listener — the `53 * * * *` backstop and a manual `build-all` dispatch.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
+- [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
+      manager** run containing the standing-promotion and per-feature-promotion
+      reusable jobs, with no separate **Promote develop to main** or **Promote
+      features to main** workflow run. Push once to `main` and confirm its Lopu
+      run contains the main→develop synchronization job with no standalone
+      sync workflow. Queue a second event while each component is active and
+      confirm the first run is not cancelled. Exercise each
+      `maintenance_operation` choice manually through Lopu and confirm the
+      removed workflow files do not reappear in Actions.
+- [ ] On the default branch, complete a check run and create/edit a normal PR
+      comment. Confirm each `Lopu PR manager` run compiles and creates its
+      controller jobs instead of failing at workflow startup with a nested
+      `security-events: none` permission error. Also confirm the scheduled and
+      all-branch push listeners create jobs, and that CodeQL alert mutations
+      occur only in the controller's separately fenced disposition writer.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
@@ -1055,6 +1090,11 @@ is fixed, and cite the checklist you ran in the PR description.
       must fail closed. A legitimate derived Graphify commit must be exactly
       one direct child of the already-verified source head and may change only
       the approved Graphify output paths.
+- [ ] Promote two independently green features that add the same workflow
+      caller contract at different source offsets. The combined promotion must
+      keep one declaration/assertion block, and
+      `node remix/scripts/workflow-caller-contract.mjs` must pass before the
+      promotion is considered release-clean.
 - [ ] Set `conflict-marker-size=10` for a planned text path and leave real
       10-character start/base/end markers after the model round; verification
       must reject them. A standalone Markdown `=======` divider must remain
@@ -1183,26 +1223,33 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu internal PR/stack rebase engine (protected `github-actions` implementation)
 
+- [ ] Push one commit to a branch with PRs targeting and originating from it.
+      Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
+      rebase, and stack detection. `rebase-pr-stack-ai` must reach the
+      protected engine only through that one listener's
+      `repository_dispatch`: no separate `rebase-pr-stacks.yml` caller may
+      exist to create a competing run that later gets cancelled by Lopu's
+      embedded rebase lane.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only the **Lopu PR manager** merge lane owns it. Regression class:
-      standalone replay failures were incorrectly force-rebased and could
-      ping-pong with a merge-resolver update.
+      confirm only the **Lopu PR manager** base-merge lane owns it. Regression
+      class: standalone replay failures were incorrectly force-rebased and
+      could ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
       without duplicating the parent's commits. Confirm a stack member with
       either `mergeable: false` or `rebaseable: false` remains rebase-owned,
       while a clean stack is left alone.
-- [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
-      every same-repo PR regardless of base branch, never dispatch a
-      standalone history rewrite, route standalone merge conflicts to the
-      merge workflow, do not race a blocked child ahead of its parent, and
+- [ ] Exercise detection through Lopu from a branch push, PR opened/reopened
+      event, the scheduled scan, and a manual PR-number dispatch. Automatic
+      scans evaluate every same-repo PR regardless of base branch, never
+      dispatch a standalone history rewrite, route standalone merge conflicts
+      to Lopu's base-merge lane, do not race a blocked child ahead of its parent, and
       terminate after resolution instead of looping on the workflow's own
       push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm

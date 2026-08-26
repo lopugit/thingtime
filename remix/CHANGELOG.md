@@ -68,13 +68,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   disposition permission. The protected controller still deduplicates
   immutable snapshots and admits at most one model-backed Lopu worker per
   repository. — Codex (AI), 2026-08-25
-- **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
-  all-branch push listener, scheduled backstop, and protected reusable
-  implementation replace default-branch-only scanning. Open PR heads use the
-  PR analysis as the single owner, and Lopu accepts immutable head or merge-ref
-  findings after revalidating both the reviewed head and base revisions. The
-  README documents the ordered default-setup-to-advanced-setup activation, and
-  a repository variable prevents expected pre-activation upload failures.
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work, and Lopu accepts immutable head or merge-ref findings only
+  after revalidating both the reviewed head and base revisions. The README
+  documents the ordered default-setup-to-advanced-setup activation and its two
+  repository variables, one of which prevents expected pre-activation upload
+  failures.
   — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now use the protected `github-actions` control
   plane**: this branch contains only a `pull_request_target`/manual listener;
@@ -117,6 +124,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
+- **Build all branch listener can dispatch its control-plane worker**: the
+  reusable workflow's push handoff requires `actions: write`; the main listener
+  now grants that inherited permission instead of failing at workflow startup.
+  — Codex (AI), 2026-08-24
 - **PR #299 Messenger membership durability**: unordered batched member writes
   now treat duplicate-key failures as benign only when the Mongo driver reports
   no accompanying write-concern failure. The check covers the current driver's
@@ -348,6 +387,58 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
 
 ### Added
 

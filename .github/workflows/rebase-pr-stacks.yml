@@ -1,0 +1,24 @@
+name: Lopu PR manager (internal rebase handoff)
+
+run-name: >-
+  Lopu rebase handoff${{ github.event.client_payload.pr_number && format(' for PR #{0}', github.event.client_payload.pr_number) || '' }}
+
+on:
+  repository_dispatch:
+    types: [rebase-pr-stack-ai]
+
+# The caller grants the maximum set the reusable implementation may narrow per
+# job. No executable steps or third-party actions are permitted in this file.
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/rebase-pr-stacks.yml@github-actions
+    with:
+      pr_number: ""
+      cascade: true
+    secrets: inherit
