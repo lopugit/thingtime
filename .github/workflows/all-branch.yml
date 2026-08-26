@@ -1,9 +1,10 @@
 # Stable event listener only. The wildcard `all` branch builder (PR discovery,
 # stack ordering, merge/conflict policy, and push handling) is versioned on the
-# protected github-actions branch; this caller carries triggers and
-# permissions only. Concurrency dedup lives in the implementation — a caller
-# sharing the called workflow's group deadlocks the pair, which is why no
-# listener in this repo declares one.
+# protected github-actions branch; this caller carries triggers and permissions
+# only. Concurrency dedup lives in the implementation — a caller-level
+# cancellation group can terminate the whole reusable call before its durable
+# queue gets a chance to retain it, and a caller sharing the called workflow's
+# group deadlocks the pair. That is why no listener in this repo declares one.
 
 name: Build all branch
 
@@ -20,6 +21,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  # The protected implementation dispatches a supported-event worker from its
+  # push handoff. Reusable workflows cannot elevate beyond this listener.
+  actions: write
   contents: write
   pull-requests: read
 
