@@ -31,6 +31,17 @@ must refresh and enable future server tool changes before they are available;
 Business workspaces currently must recreate and republish an app to change
 tools or metadata.
 
+## Codex Desktop smoke test
+
+Install the package locally, restart Codex Desktop, and add/authenticate the
+bundled Thingtime streamable-HTTP server in **Settings → MCP servers**. Codex
+uses a callback-specific ChatGPT Client ID Metadata Document and a bounded
+`127.0.0.1` loopback callback. Confirm the authorization page accepts the
+matching callback, shows the encrypted multi-account form, and that Codex
+discovers all thirteen tools before entering a least-privilege reviewer PAT.
+This validates the shared local Codex-host configuration; it does not enable
+custom MCP apps in ChatGPT iOS chats.
+
 ## Required owner-provided materials
 
 - An OpenAI Platform organization with **Apps Management** write access.

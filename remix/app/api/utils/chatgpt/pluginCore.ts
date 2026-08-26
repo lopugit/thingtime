@@ -9,7 +9,7 @@ export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.1.0',
-  'chatgpt.oauth': '1.1.0',
+  'chatgpt.oauth': '1.2.0',
   'chatgpt.connections': '1.1.0',
   'chatgpt.things.read': '1.0.0',
   'chatgpt.things.write': '1.0.0'
@@ -87,6 +87,8 @@ const CHATGPT_REDIRECT_URIS = new Set([
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://chat.openai.com/connector_platform_oauth_redirect'
 ]);
+const CODEX_CIMD_CLIENT_PREFIX = 'https://chatgpt.com/oauth/codex/';
+const CODEX_CIMD_CLIENT_SUFFIX = '/client.json';
 
 const cleanOrigin = (value: unknown): string | null => {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
@@ -128,6 +130,42 @@ const normalizeChatGptRedirectUri = (value: unknown): string | null => {
   return CHATGPT_REDIRECT_URIS.has(value) ? value : null;
 };
 
+// Codex uses a callback-specific ChatGPT Client ID Metadata Document (CIMD)
+// and a loopback redirect URI. The callback ID is intentionally tied between
+// the two values so a client cannot choose an arbitrary local redirect just by
+// presenting a ChatGPT-hosted client ID. RFC 8252 permits the ephemeral port
+// while the loopback host and path remain exact.
+const codexCallbackIdFromClientId = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 2048 || !value.startsWith(CODEX_CIMD_CLIENT_PREFIX) || !value.endsWith(CODEX_CIMD_CLIENT_SUFFIX)) return null;
+  const callbackId = value.slice(CODEX_CIMD_CLIENT_PREFIX.length, -CODEX_CIMD_CLIENT_SUFFIX.length);
+  return /^[A-Za-z0-9_-]{1,256}$/.test(callbackId) ? callbackId : null;
+};
+
+const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): string | null => {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    const port = Number(url.port);
+    if (
+      url.protocol !== 'http:' ||
+      url.hostname !== '127.0.0.1' ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535 ||
+      url.username ||
+      url.password ||
+      url.pathname !== `/callback/${callbackId}` ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   return isMcpResourceForOrigin(value, origin) ? value : null;
@@ -140,10 +178,13 @@ export const parseChatGptAuthorizationRequest = (
   if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
 
   const clientId = params.get('client_id')?.trim() || '';
-  if (!allowedChatGptClientIds().includes(clientId)) return { ok: false, error: 'Unknown OAuth client' };
+  const codexCallbackId = codexCallbackIdFromClientId(clientId);
+  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId) return { ok: false, error: 'Unknown OAuth client' };
 
-  const redirectUri = normalizeChatGptRedirectUri(params.get('redirect_uri'));
-  if (!redirectUri) return { ok: false, error: 'redirect_uri is not a supported ChatGPT callback' };
+  const redirectUri = codexCallbackId
+    ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
+    : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+  if (!redirectUri) return { ok: false, error: 'redirect_uri is not a supported ChatGPT or Codex callback' };
 
   const state = normalizeDesktopState(params.get('state'));
   if (!state) return { ok: false, error: 'state must be a random string of 16-512 characters' };
@@ -227,6 +268,7 @@ export const pluginDiscovery = (origin: string) => ({
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
+    client_id_metadata_document_supported: true,
     scopes_supported: CHATGPT_OAUTH_SCOPES,
     authorization_response_iss_parameter_supported: true
   },

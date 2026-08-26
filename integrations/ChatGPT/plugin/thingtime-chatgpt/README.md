@@ -54,6 +54,20 @@ Plugins Directory submission: OpenAI requires a fixed production origin,
 verified publisher identity, public legal links, reviewer credentials, and
 review approval.
 
+## Test locally in Codex Desktop
+
+The included `.mcp.json` configures the stable Thingtime HTTPS MCP endpoint.
+Install this package as a custom Codex plugin, restart Codex Desktop, then open
+**Settings → MCP servers → Thingtime** and choose **Authenticate**. Codex uses
+a ChatGPT Client ID Metadata Document and a `127.0.0.1` loopback callback; the
+Thingtime authorization server verifies that the callback ID and path match
+before accepting the sign-in. The first-party form validates and encrypts each
+Thingtime PAT server-side, so never enter a token into a Codex prompt or chat.
+
+Codex Desktop, the Codex CLI, and the IDE extension on the same host share
+their MCP configuration. This local installation is a desktop/CLI validation
+path only; it does not make a custom MCP app callable in ChatGPT for iOS.
+
 ## Operational configuration
 
 The default allowed API origin is `https://thingtime.com`. Set
@@ -62,7 +76,9 @@ allowlist for other deployments. Never use wildcards. Configure
 `THINGTIME_CHATGPT_OAUTH_CLIENT_IDS` only if ChatGPT issues a different client
 identifier for the registered MCP server; the default already permits
 ChatGPT's stable Client ID Metadata Document and the legacy ChatGPT client
-identifier.
+identifier. Codex callback-specific CIMD client IDs are accepted only with
+their matching `http://127.0.0.1:<ephemeral-port>/callback/<callback-id>`
+redirect URI; they do not require an environment allowlist entry.
 
 The unauthenticated MCP `tools/list` response publishes only the tool catalog
 and the required OAuth scope. Invoking any Thingtime tool without a bridge

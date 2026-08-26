@@ -1,6 +1,6 @@
 {
   "name": "thingtime-chatgpt",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Secure multi-account Thingtime tools for ChatGPT and Codex.",
   "author": {
     "name": "Thingtime",
@@ -10,6 +10,7 @@
   "repository": "https://github.com/lopugit/thingtime",
   "keywords": ["thingtime", "productivity", "mcp"],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Thingtime",
     "shortDescription": "Use selected Thingtime accounts securely in ChatGPT.",

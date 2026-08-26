@@ -54,6 +54,30 @@ test('ChatGPT OAuth request is tightly bound to this MCP resource and callback',
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
 });
 
+test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () => {
+  const callbackId = 'thingtime_mcp_AbC123';
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: `https://chatgpt.com/oauth/codex/${callbackId}/client.json`,
+    redirect_uri: `http://127.0.0.1:49152/callback/${callbackId}`,
+    resource: `https://thingtime.com${CHATGPT_MCP_PATH}`,
+    code_challenge: validPkceChallenge,
+    code_challenge_method: 'S256',
+    state: validState,
+    scope: 'thingtime offline_access'
+  });
+  const parsed = parseChatGptAuthorizationRequest(params, 'https://thingtime.com');
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(parsed.request.redirectUri, `http://127.0.0.1:49152/callback/${callbackId}`);
+
+  params.set('redirect_uri', 'http://127.0.0.1:49152/callback/attacker');
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+  params.set('redirect_uri', `http://localhost:49152/callback/${callbackId}`);
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+  params.set('redirect_uri', `http://127.0.0.1:49152/callback/${callbackId}?next=https://attacker.invalid`);
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+});
+
 test('Thingtime endpoint and encrypted-bundle parsing fail closed', () => {
   assert.equal(normalizeThingtimeEndpoint('https://thingtime.com'), 'https://thingtime.com');
   assert.equal(normalizeThingtimeEndpoint('https://thingtime.com/api/v1'), null);
@@ -133,6 +157,7 @@ test('capability discovery is origin scoped and every registered route has a sem
   assert.equal(discovery.authorizationServer.issuer, 'https://thingtime.com');
   assert.deepEqual(discovery.authorizationServer.grant_types_supported, ['authorization_code', 'refresh_token']);
   assert.deepEqual(discovery.authorizationServer.scopes_supported, ['thingtime', 'offline_access']);
+  assert.equal(discovery.authorizationServer.client_id_metadata_document_supported, true);
   assert.deepEqual(discovery.capabilityManifest.features, CHATGPT_PLUGIN_FEATURES);
   for (const route of CHATGPT_PLUGIN_ROUTES) {
     assert.ok(route.feature in CHATGPT_PLUGIN_FEATURES, `${route.method} ${route.path} lacks a known capability feature`);
