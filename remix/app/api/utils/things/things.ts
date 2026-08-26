@@ -2193,13 +2193,19 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   }
   if (viewer?.id) {
     // The viewer's own things, optionally narrowed to the requested circles.
-    // The unnarrowed shortcut is only sound when `wanted` COVERS every default
-    // circle — a bare length comparison would also fire for a same-sized but
-    // different selection (say public+friends+family+hidden), silently pulling
-    // the viewer's private things back into a feed they filtered them out of.
-    const coversDefaults = VISIBILITIES.every((circle) => wanted.includes(circle));
+    // The unnarrowed shortcut is only sound when the caller asked for NO
+    // filter, or asked for every circle they could ask for. A bare length
+    // comparison would also fire for a same-sized but different selection
+    // (say public+friends+family+hidden), silently pulling the viewer's
+    // private things back into a feed they filtered them out of — and
+    // covering only the DEFAULT set has the same shape of bug one circle
+    // over: ticking exactly public+friends+family+private (i.e. everything
+    // except 🕵️ Hidden) would take the shortcut and hand back the hidden
+    // things the caller just excluded. An omitted circle must always really
+    // be omitted, so only the two genuinely unfiltered cases skip narrowing.
+    const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
     clauses.push(
-      coversDefaults ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      unfiltered ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
   }
   // nothing requested that the viewer could ever see
