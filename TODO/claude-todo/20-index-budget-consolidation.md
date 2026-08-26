@@ -109,7 +109,7 @@ maps the legacy names onto acls, and `hooks/useApi.tsx` still sends the field.
 | `kind_1_ownerId_1_createdAt_-1_shareId_1` | backs the owner-scoped profile variants |
 | `kind_1_parentId_1_createdAt_1` | backs the `search.ts` comment/reaction rollup |
 | `kind_1_visibility_1_createdAt_-1_shareId_1` | plausibly superseded by the `acl_1_*` index — verify |
-| `parentId_1_ownerId_1_token_1` | `partialFilterExpression: { kind: 'reaction' }` → matches nothing new; superseded by `things_reaction_unique` |
+| `parentId_1_ownerId_1_token_1` | `partialFilterExpression: { kind: 'reaction' }` → nothing writes `kind` any more, but it is still the only unique guard over *existing* legacy reaction docs. The v2 invariant moved to `things_reaction_unique`, which is a different key shape (`{ targetId, ownerId, crystal.emoji }`) and cannot see a legacy `{ parentId, token }` doc |
 
 **Why a zero count in production is not sufficient to drop them.** For an
 `$or`, MongoDB uses an index-union plan *only when every branch is indexed*; if
@@ -135,9 +135,16 @@ Correct order of operations:
 3. **Then** drop the four `kind_*` indexes, and confirm with `explain()` that
    the feed/profile/search plans still use `thingtime_1_*` / `acl_1_*`.
 
-`parentId_1_ownerId_1_token_1` is the one entry that is genuinely inert today
-(its partial filter selects `kind: 'reaction'`, which nothing writes any more)
-and can be retired independently of steps 2–3.
+`parentId_1_ownerId_1_token_1` is the one entry with no *reader* to retire
+first — no query uses its shape — so it comes out without touching the
+era-compat read path above. It is not unconditionally safe, though: it is
+write-dead, not data-dead. `collections.ts` says so at the definition site
+("Legacy relational era … aggregation + dedup indexes stay until the things
+migration converts those docs"), and `things_reaction_unique` does **not**
+inherit the constraint: that index is `{ targetId, ownerId, crystal.emoji }`
+and never matches a legacy `{ parentId, token }` document. Dropping it early
+therefore removes the last uniqueness guard on any surviving `kind: 'reaction'`
+doc. It still needs the step-1 census — just not steps 2–3.
 
 ### 3b. Prefix redundancy — one candidate, probably intentional
 
@@ -162,11 +169,13 @@ Grouped by leading field, the consolidation surface is:
 
 ## 4. Plan
 
-1. **Measure production** — index count + the `kind`/`visibility` census above.
-   Record the real headroom.
-2. **Retire `parentId_1_ownerId_1_token_1`** now — it is inert regardless of the
-   census — using `dropIndexRetrying` (idempotent, absent = fine) behind the
-   usual boot-time ensure rather than a migration.
+1. **Measure production** — index count + the `kind`/`visibility` census above,
+   including `db.things_v2.countDocuments({ kind: 'reaction' })`, which step 2
+   depends on. Record the real headroom.
+2. **Retire `parentId_1_ownerId_1_token_1`** as soon as that census shows no
+   surviving `kind: 'reaction'` documents. It needs no read-path change, so it
+   lands well before steps 3–4 — using `dropIndexRetrying` (idempotent,
+   absent = fine) behind the usual boot-time ensure rather than a migration.
 3. **Retire the v1 era-compat read path**, then drop the four `kind_*` indexes
    (3a, steps 2–3). Order matters: indexes last, or the feed collection-scans.
 4. **Explain-plan the `thingtime` and `quotaKind` families** against the actual
