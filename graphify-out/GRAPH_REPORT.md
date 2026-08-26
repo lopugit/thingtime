@@ -1,16 +1,16 @@
 # Graph Report - lopu-418-controller-review  (2026-08-26)
 
 ## Corpus Check
-- 23 files · ~138,718 words
+- 23 files · ~138,900 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 577 nodes · 1235 edges · 59 communities (30 shown, 29 thin omitted)
+- 574 nodes · 1232 edges · 59 communities (30 shown, 29 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ac6f0abf`
+- Built from commit: `8ab9a6e5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -92,8 +92,6 @@
   .github/workflows/web-ci.yml → TESTING.md
 - `Lopu Internal All-branch Integration Workflow` --conceptually_related_to--> `All-branch Doctor`  [INFERRED]
   .github/workflows/all-branch.yml → CHANGELOG.md
-- `Resolve Rebase Conflict Set with Lopu` --calls--> `Lopu Agent Composite Action`  [EXTRACTED]
-  .github/actions/rebase-conflict-round/action.yml → .github/actions/lopu-agent/action.yml
 - `Workflow Control-plane CI` --calls--> `classify-claude-credential-failure.mjs`  [EXTRACTED]
   .github/workflows/control-plane-ci.yml → .github/actions/lopu-agent/action.yml
 
@@ -179,8 +177,8 @@ Cohesion: 0.17
 Nodes (11): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, graphify, lopuAgent, mainDevelopSyncWorkflow, promoter (+3 more)
 
 ### Community 17 - "Run Lopu with Primary Claude Credential"
-Cohesion: 0.18
-Nodes (11): classify-claude-credential-failure.mjs, Run Lopu with Fallback Claude Credential, Run Lopu with Primary Claude Credential, Run Lopu with Codex, Lopu Agent Composite Action, Validate the Lopu Backend, prepare-round.sh, Lopu Rebase Conflict Round Composite Action (+3 more)
+Cohesion: 0.25
+Nodes (8): classify-claude-credential-failure.mjs, Run Lopu with Fallback Claude Credential, Run Lopu with Primary Claude Credential, Run Lopu with Codex, Lopu Agent Composite Action, Validate the Lopu Backend, Contract Advisories, Workflow Control-plane CI
 
 ### Community 18 - "Publish or reconcile develop S3 preview job"
 Cohesion: 0.20
@@ -235,7 +233,7 @@ Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
 ## Knowledge Gaps
-- **157 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES` (+152 more)
+- **157 isolated node(s):** `WORKFLOW_URL`, `REBASE_WORKFLOW_URL`, `REBASE_ACTION_URL`, `LOPU_ACTION_URL`, `REPO_ROOT` (+152 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -248,7 +246,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `queueTrustedPromotionWorker`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS` to the rest of the system?**
+- **What connects `WORKFLOW_URL`, `REBASE_WORKFLOW_URL`, `REBASE_ACTION_URL` to the rest of the system?**
   _157 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
