@@ -48,6 +48,14 @@ const MAX_BODY_PARAM_BYTES = 64 * 1024;
 // every param except these merges into the op's args
 const RESERVED_PARAMS = new Set(['token', 'op', 'body', 'key']);
 
+// Param NAMES are attacker-chosen here (unlike a JSON body, where the keys at
+// least came through one parse). `args[name] = …` with name '__proto__' hits
+// Object.prototype's setter and re-points the args object's prototype, and a
+// '__proto__' key surviving JSON.parse of ?body= is an OWN property that any
+// downstream recursive merge would walk straight onto Object.prototype. Drop
+// the three unsafe names on both paths — no op has a legitimate field there.
+const UNSAFE_ARG_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 const OPS = ['get', 'list', 'search', 'feed', 'self', 'create', 'update', 'upsert', 'delete', 'react', 'comment', 'save', 'share'] as const;
 type BridgeOp = (typeof OPS)[number];
 
@@ -154,18 +162,23 @@ export const loader = async ({ request }: { request: Request }) => {
   if (bodyParam.length > MAX_BODY_PARAM_BYTES) {
     return respond({ ok: false, error: 'body param too large' }, { status: 413 });
   }
-  let args: Record<string, any> = {};
+  // null-prototype base: even if an unsafe key slipped through, it could not
+  // reach Object.prototype from here
+  let args: Record<string, any> = Object.create(null);
   if (bodyParam.trim()) {
     try {
       const parsed = JSON.parse(bodyParam);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
-      args = parsed as Record<string, any>;
+      for (const [name, value] of Object.entries(parsed as Record<string, any>)) {
+        if (UNSAFE_ARG_KEYS.has(name)) continue;
+        args[name] = value;
+      }
     } catch {
       return respond({ ok: false, error: 'body must be a URL-encoded JSON object' }, { status: 400 });
     }
   }
   for (const [name, value] of params.entries()) {
-    if (RESERVED_PARAMS.has(name)) continue;
+    if (RESERVED_PARAMS.has(name) || UNSAFE_ARG_KEYS.has(name)) continue;
     args[name] = overlayValue(value);
   }
   // thingtime commonly arrives as a bare csv ("post,comment") — normalize
