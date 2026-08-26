@@ -193,7 +193,7 @@ Two mitigations, both cheap:
 - Vercel: add the second region to `regions` in the root `vercel.json` —
   **plan gating applies, see §7 table**. (Fluid Compute was still a to-do when
   this was written; it has since been enabled — `"fluid": true` is in the root
-  `vercel.json` as of 2026-08-08.)
+  `vercel.json`, confirmed at the 2026-08-26 re-verification.)
 - Nothing changes in the data model. This option is a *topology* change, not
   a *schema* change. Rollback = remove the read nodes + revert to one region.
 
@@ -315,7 +315,7 @@ verify with live measurements — same curl methodology as PRs #157/#161).
 | **0. Round-trip diets** | The open round-trip items in [performance/TODO.md](../../performance/TODO.md) — chiefly its "Database — N+1 and per-item round trips" and "connection lifecycle" sections, and the single-RT rate limiter | none | Shrinks every gap A leaves; makes B likely unnecessary for years |
 | **1. Paid tier + topology dry run** | M0 → M10 (Sydney, 3 electable). Add one us-east read-only node. Functions stay syd1-only. | budget: **~$112/mo** (§7) | No user-visible change; validates replication, lag metrics, backup story. Rollback: remove node. |
 | **2. Read-preference plumbing** | `nearest` + `maxStalenessSeconds` for data-plane reads; explicit `primary` for auth-critical + transactions; regional rate-limit strategy | Phase 1 | Still no user change (one region) — but code is now region-ready and dev-parity is proven |
-| **3. Second function region** | `regions: ["syd1", "iad1"]` in the root `vercel.json` | **Vercel Pro plan** (multi-region isn't on Hobby, §7). Fluid Compute was the other prereq here and is already done (`"fluid": true`, enabled 2026-08-08) | 🎉 US users: reads drop ~200ms → ~5ms. Measure from a US probe before/after (curl from a US VPS or Vercel cron in iad1). |
+| **3. Second function region** | `regions: ["syd1", "iad1"]` in the root `vercel.json` | **Vercel Pro plan** (multi-region isn't on Hobby, §7). Fluid Compute was the other prereq here and is already done (`"fluid": true` in the root `vercel.json`, confirmed 2026-08-26) | 🎉 US users: reads drop ~200ms → ~5ms. Measure from a US probe before/after (curl from a US VPS or Vercel cron in iad1). |
 | **4. Write forwarding (optional)** | Dispatcher-level forward of mutating routes to primary region | Phase 3 + real US-user write-latency data | US writes ≈ single hop |
 | **5. EU node/region (repeat 1+3)** | fra1/lhr1 + eu read node | traffic justifies | EU joins the party |
 | **6. Zone sharding (C)** | homeRegion stamping, identity-reservation collection, M30+ Global Cluster, regional feed strategy | genuine regional write scale | Region-local writes; the full "spread out but single truth" end-state |
