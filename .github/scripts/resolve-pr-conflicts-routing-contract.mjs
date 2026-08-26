@@ -220,6 +220,26 @@ function assertWorkflowSource() {
   assert.match(source, /github\.ref_name == 'github-actions'/);
   assert.match(source, /inputs\.detector_handoff == true/);
   assert.match(source, /manual_retry is internal routing state and requires detector_handoff/);
+  assert.match(
+    source,
+    /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
+    "read-only GitHub API calls retry a bounded set of transient failures with backoff",
+  );
+  assert.match(
+    source,
+    /gh_read_retry graphql --paginate --slurp[\s\S]*successful but malformed PR inventory response/u,
+    "the GraphQL PR inventory is parsed only after transport success and response-shape validation",
+  );
+  assert.match(
+    source,
+    /all_open="\$\(all_open_prs\)"\n\s+prs="\$\(query\)"/u,
+    "the detector filters and classifies one complete PR inventory snapshot",
+  );
+  assert.doesNotMatch(
+    source,
+    /query\(\) \{\n\s+local open\n\s+open="\$\(all_open_prs\)"/u,
+    "query filters must not issue a redundant full-repository GraphQL request",
+  );
   assert.match(source, /--base "\$HEAD_REF" --state open --limit 1000/);
   assert.match(source, /ref:"github-actions"/);
   assert.doesNotMatch(source, /ref:"develop"/);
