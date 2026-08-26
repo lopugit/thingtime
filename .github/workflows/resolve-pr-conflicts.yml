@@ -2863,7 +2863,14 @@ jobs:
               exit 1
             }
             current_base_ref_encoded="$(jq -rn --arg value "$current_base_ref" '$value | @uri')"
-            current_base="$(gh api "repos/$REPO/git/ref/heads/$current_base_ref_encoded" --jq '.object.sha')"
+            # A deleted base branch or a transient API error must not abort the
+            # whole disposition pass for every other reviewed PR: an unresolved
+            # tip is simply unproven evidence, so skip this PR and leave its
+            # alerts open for the next scan.
+            if ! current_base="$(gh api "repos/$REPO/git/ref/heads/$current_base_ref_encoded" --jq '.object.sha')"; then
+              echo "::warning::Skipping CodeQL dispositions for PR #$number because its live base branch tip could not be resolved; a fresh scan and Lopu pass will decide them."
+              continue
+            fi
             [[ "$current_head" =~ ^[0-9a-f]{40}$ && "$current_base" =~ ^[0-9a-f]{40}$ ]] || {
               echo "::error::PR #$number returned invalid live revisions while validating CodeQL dispositions."
               exit 1
