@@ -21,6 +21,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu's historical CodeQL backfill now advances past completed PR
+  snapshots instead of repeatedly dispatching safe no-ops**: inventory resolves
+  each live synthetic merge ref and validates its exact base/head parents using
+  the same ownership rule as the analyzer. It no longer trusts the lagging
+  `merge_commit_sha` returned by the paginated pull-list API, so the bounded
+  maintenance window reaches older genuinely missing PR analyses. — Codex
+  (AI), 2026-08-27
 - **Lopu's isolated CodeQL writer now validates repository-level dispositions
   against the live target branch tip** instead of the historical base snapshot
   stored on an out-of-date PR. The pre-write guard still requires the exact
