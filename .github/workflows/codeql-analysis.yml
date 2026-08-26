@@ -130,7 +130,22 @@ jobs:
               fi
 
               merge_ref="refs/pull/$PR_NUMBER/merge"
-              merge_sha="$(gh api "repos/$REPO/git/ref/pull/$PR_NUMBER/merge" --jq .object.sha 2>/dev/null || true)"
+              merge_sha=""
+              # `gh api` writes GitHub's JSON error body to stdout for a
+              # missing synthetic merge ref. Do not capture that body through
+              # `|| true` and later mistake it for a commit SHA. A conflicted
+              # PR legitimately has no merge ref, so retain the exact-head
+              # fallback below when the request fails.
+              if candidate_merge_sha="$(
+                gh api "repos/$REPO/git/ref/pull/$PR_NUMBER/merge" \
+                  --jq .object.sha 2>/dev/null
+              )"; then
+                if [[ "$candidate_merge_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
+                  merge_sha="$candidate_merge_sha"
+                elif [ -n "$candidate_merge_sha" ]; then
+                  echo "::warning::PR #$PR_NUMBER returned an invalid synthetic merge SHA; analyzing its exact head instead."
+                fi
+              fi
               if [ -n "$merge_sha" ]; then
                 merge_parents="$(gh api "repos/$REPO/git/commits/$merge_sha" --jq '[.parents[].sha]')"
                 if ! jq -e --arg base "$base_sha" --arg head "$live_head_sha" \
