@@ -94,10 +94,10 @@ export const repositoryName = () =>
 
 const workflowFileByKey = {
   'resolve-conflicts': 'resolve-pr-conflicts.yml',
-  'rebase-stack': 'rebase-pr-stacks.yml',
-  'promote-features': 'promote-features-to-main.yml',
-  'promote-develop': 'promote-develop-to-main.yml',
-  'sync-main': 'sync-main-into-develop.yml',
+  'rebase-stack': 'resolve-pr-conflicts.yml',
+  'promote-features': 'resolve-pr-conflicts.yml',
+  'promote-develop': 'resolve-pr-conflicts.yml',
+  'sync-main': 'resolve-pr-conflicts.yml',
   'web-ci': 'web-ci.yml',
   'electron-release': 'electron-release.yml'
 } as const;
@@ -131,6 +131,44 @@ export const resolveCiWorkflowEntryRef = (workflow: CiWorkflowKey, requested?: u
   return expected;
 };
 
+export const resolveCiWorkflowDispatch = (
+  workflow: CiWorkflowKey,
+  requestedInputs: Record<string, unknown> = {}
+): { workflowFile: string; inputs: Record<string, string | boolean> } => {
+  const workflowFile = workflowFileByKey[workflow];
+  if (!workflowFile) throw new Error('Unsupported CI workflow');
+  const allowed = new Set(inputAllowlist[workflow]);
+  const selected = Object.fromEntries(
+    Object.entries(requestedInputs)
+      .filter(([key]) => allowed.has(key))
+      .map(([key, value]) => [key, typeof value === 'boolean' ? value : String(value ?? '').slice(0, 300)])
+  ) as Record<string, string | boolean>;
+
+  const managerInputs = (maintenanceOperation: string) => ({
+    maintenance_operation: maintenanceOperation
+  }) satisfies Record<string, string | boolean>;
+  if (workflow === 'rebase-stack') {
+    const inputs: Record<string, string | boolean> = managerInputs('manage-prs');
+    if ('pr_number' in selected) inputs.pr_number = selected.pr_number;
+    if ('branch' in selected) inputs.branch = selected.branch;
+    if ('cascade' in selected) inputs.rebase_cascade = selected.cascade;
+    return { workflowFile, inputs };
+  }
+  if (workflow === 'promote-features') {
+    const inputs: Record<string, string | boolean> = managerInputs('promote-features');
+    if ('dry_run' in selected) inputs.promotion_dry_run = selected.dry_run;
+    if ('lookback' in selected) inputs.promotion_lookback = selected.lookback;
+    return { workflowFile, inputs };
+  }
+  if (workflow === 'promote-develop') {
+    return { workflowFile, inputs: managerInputs('promote-develop') };
+  }
+  if (workflow === 'sync-main') {
+    return { workflowFile, inputs: managerInputs('sync-main-develop') };
+  }
+  return { workflowFile, inputs: selected };
+};
+
 export const dispatchCiWorkflow = async (input: {
   workflow: CiWorkflowKey;
   ref?: string;
@@ -139,18 +177,11 @@ export const dispatchCiWorkflow = async (input: {
   externalId?: string;
   requestedAt?: Date;
 }) => {
-  const workflowFile = workflowFileByKey[input.workflow];
-  if (!workflowFile) throw new Error('Unsupported CI workflow');
+  const { workflowFile, inputs } = resolveCiWorkflowDispatch(input.workflow, input.inputs);
   // workflow_dispatch loads its listener from `ref`. Keep that entrypoint on
   // the two reviewed product branches; an arbitrary feature ref could carry
   // executable YAML and would defeat the protected control plane.
   const ref = resolveCiWorkflowEntryRef(input.workflow, input.ref);
-  const allowed = new Set(inputAllowlist[input.workflow]);
-  const inputs = Object.fromEntries(
-    Object.entries(input.inputs ?? {})
-      .filter(([key]) => allowed.has(key))
-      .map(([key, value]) => [key, typeof value === 'boolean' ? value : String(value ?? '').slice(0, 300)])
-  );
   const repository = repositoryName();
   const policy = await getCiAutomationPolicy(repository, input.workflow);
   if (!policy.enabled) throw new Error(`The ${input.workflow} automation is disabled`);
