@@ -1,6 +1,7 @@
 import { defineHandler } from 'nitro/h3';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
@@ -32,6 +33,10 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/peers': () => import('../../../app/routes/api/v1/peers/_peers'),
   'v1/peers/sync': () => import('../../../app/routes/api/v1/peers/sync/_sync'),
   'v1/integrations/github/webhook': () => import('../../../app/routes/api/v1/integrations/github/webhook/_webhook'),
+  [CHATGPT_MCP_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/mcp/_mcp'),
+  [CHATGPT_AUTHORIZE_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/authorize/_authorize'),
+  [CHATGPT_TOKEN_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/token/_token'),
+  [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),

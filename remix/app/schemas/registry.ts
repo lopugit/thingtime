@@ -2425,6 +2425,7 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 	requiresTarget: true,
 	createdVia: 'POST /api/v1/auth/passkeys/login',
 	fields: [
+		{ name: 'linkKey', type: 'string', required: true, description: 'Pair key `<passkeyId>:<appKey>` — dedupe rides root uniqueKeys, not this path.' },
 		{ name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
 		{ name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
 		{ name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
