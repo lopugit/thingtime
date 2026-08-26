@@ -17,8 +17,50 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
+  app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
+  tool scanning, draft testing from the tools menu/@mentions, publication,
+  frozen tool snapshots, Enterprise/Edu refresh controls, Business
+  recreate-and-republish release requirements, role/action controls, and the
+  current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
+
+### Added
+
+- **Thingtime’s MCP initialization now supplies connector-wide interaction
+  instructions.** ChatGPT receives the account-selection, token-safety, and
+  confirmed-mutation contract before tools are called; the additive MCP feature
+  advances to `1.1.0`. — Codex (AI), 2026-08-26
+- **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
+  streamable-HTTP MCP gateway now connects multiple named, allowlisted
+  Thingtime API endpoints through encrypted, scoped and revocable PATs. The
+  bridge token cannot act as a Thingtime account session; tools are restricted
+  to account management plus Things reads and explicitly confirmed writes.
+  Protected-resource/auth-server discovery, an origin-scoped capability
+  manifest, API docs, and the distributable plugin package live together so
+  clients can negotiate the contract rather than route-probing. — Codex (AI),
+  2026-08-25
+
 ### Security
 
+- **ChatGPT connections now survive secure refreshes without splitting account
+  state.** The optional `offline_access` scope issues one-time rotating refresh
+  credentials alongside the 30-day MCP bridge token. Every access and refresh
+  credential references one encrypted, origin-bound connection session, so an
+  account switch or final disconnect applies consistently across renewals; a
+  final disconnect revokes the connection and all of its bridge credentials.
+  The OAuth and connections capability features advance to `1.1.0`. — Codex
+  (AI), 2026-08-26
+- **ChatGPT tool annotations now match their actual effects.** Public-content
+  writes are marked as open-world actions, only irreversible writes retain the
+  destructive hint, and the MCP semantic feature advances to `1.0.2` for
+  review-safe metadata scanning. — Codex (AI), 2026-08-26
+- **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
+  catalog publishes standard per-tool OAuth metadata while returning no account
+  data, protected calls emit the model-readable OAuth challenge ChatGPT uses to
+  link an account, and bridge sessions are bound to the exact MCP origin that
+  issued them. — Codex (AI), 2026-08-26
 - **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
   shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
   authored while #320/#325/#326 were retiring exactly that pattern. A
@@ -37,6 +79,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
+  Document.** The connector permits ChatGPT's current `oauth/client.json`
+  client identifier, while retaining the previous fixed identifier for existing
+  developer-mode connections. — Codex (AI), 2026-08-26
 - **The develop Lopu listener exposes the complete maintenance contract**:
   manual recovery now includes the protected controller's bounded
   `backfill-codeql` operation alongside PR management, promotions, branch sync,
@@ -68,13 +114,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   disposition permission. The protected controller still deduplicates
   immutable snapshots and admits at most one model-backed Lopu worker per
   repository. — Codex (AI), 2026-08-25
-- **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
-  all-branch push listener, scheduled backstop, and protected reusable
-  implementation replace default-branch-only scanning. Open PR heads use the
-  PR analysis as the single owner, and Lopu accepts immutable head or merge-ref
-  findings after revalidating both the reviewed head and base revisions. The
-  README documents the ordered default-setup-to-advanced-setup activation, and
-  a repository variable prevents expected pre-activation upload failures.
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work, and Lopu accepts immutable head or merge-ref findings only
+  after revalidating both the reviewed head and base revisions. The README
+  documents the ordered default-setup-to-advanced-setup activation and its two
+  repository variables, one of which prevents expected pre-activation upload
+  failures.
   — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now use the protected `github-actions` control
   plane**: this branch contains only a `pull_request_target`/manual listener;
@@ -130,6 +183,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.

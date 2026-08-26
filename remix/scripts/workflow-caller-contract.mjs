@@ -7,6 +7,9 @@ const remixRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
+// codeql-analysis.yml is verified separately below: it is the one listener that
+// legitimately carries two reusable calls (analyzer plus target handoff), so it
+// cannot satisfy this loop's single-call rule.
 const callers = [
   'develop-pr-preview.yml',
   'electron-release.yml',
@@ -89,6 +92,16 @@ assert.match(
   /^  target-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
   'the target-event token must never reach the analyzer job'
 );
+assert.match(
+  codeqlCaller,
+  /^      pr_number: \$\{\{ inputs\.pr_number \|\| '' \}\}$/m,
+  'CodeQL caller must forward only the optional trusted PR number'
+);
+assert.match(
+  codeqlCaller,
+  /^      expected_head_sha: \$\{\{ inputs\.expected_head_sha \|\| '' \}\}$/m,
+  'CodeQL caller must bind a central scan to the event head SHA'
+);
 
 const resolverCaller = readFileSync(
   resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
@@ -99,24 +112,57 @@ assert.match(
   /^name: Lopu PR manager$/m,
   'the public repository manager must be visibly named Lopu'
 );
+const resolverPermissionsStart = resolverCaller.indexOf('\npermissions:\n');
+const resolverJobsStart = resolverCaller.indexOf('\njobs:\n');
+assert.ok(
+  resolverPermissionsStart >= 0 && resolverJobsStart > resolverPermissionsStart,
+  'resolve-pr-conflicts.yml must retain a top-level permissions block'
+);
+const resolverTriggers = resolverCaller.slice(0, resolverPermissionsStart);
 assert.match(
-  resolverCaller,
+  resolverTriggers,
+  /^  push:\n    branches: \["\*\*"\]$/m,
+  'Lopu must receive pushes on every branch'
+);
+assert.match(
+  resolverTriggers,
   /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]$/m,
   'Lopu must receive every PR-head lifecycle update even when the PR branch has an old or missing push listener'
 );
 assert.match(
-  resolverCaller,
+  resolverTriggers,
   /^  repository_dispatch:\n(?:    #.*\n)*    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
   'merge cascades and rebase-stack workers must enter through the one public Lopu listener'
 );
-for (const trigger of ['issue_comment', 'pull_request_review_comment', 'check_run']) {
-  assert.match(
-    resolverCaller,
-    new RegExp(`^  ${trigger}:$`, 'm'),
-    `Lopu must receive ${trigger} repository-management signals from the default branch`
-  );
-}
-assert.match(resolverCaller, /^  security-events: write$/m, 'the thin Lopu caller must grant the maximum permission used by its separately fenced CodeQL disposition job');
+assert.match(
+  resolverTriggers,
+  /^  issue_comment:\n    types: \[created, edited\]$/m,
+  'Lopu must receive PR conversations from the default branch'
+);
+assert.match(
+  resolverTriggers,
+  /^  pull_request_review_comment:\n    types: \[created, edited\]$/m,
+  'Lopu must receive inline review conversations from the default branch'
+);
+assert.match(
+  resolverTriggers,
+  /^  check_run:\n    types: \[completed\]$/m,
+  'Lopu must receive completed checks for repair review from the default branch'
+);
+assert.match(
+  resolverTriggers,
+  /^    - cron: "43 \*\/6 \* \* \*"$/m,
+  'Lopu must own the former feature-promotion maintenance schedule'
+);
+const resolverPermissions = resolverCaller.slice(
+  resolverPermissionsStart,
+  resolverJobsStart
+);
+assert.match(
+  resolverPermissions,
+  /^  security-events: write$/m,
+  'the thin Lopu caller must grant the maximum permission used by its separately fenced CodeQL disposition job'
+);
 for (const input of [
   'maintenance_operation',
   'promotion_dry_run',
@@ -127,7 +173,7 @@ for (const input of [
 ]) {
   assert.match(
     resolverCaller,
-    new RegExp(`^      ${input}: \\\${\\\{ inputs\\.${input}`, 'm'),
+    new RegExp(`^      ${input}: \\$\\{\\{ inputs\\.${input}`, 'm'),
     `the public Lopu caller must forward ${input} to the protected controller`
   );
 }
