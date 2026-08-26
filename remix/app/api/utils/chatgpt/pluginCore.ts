@@ -3,13 +3,14 @@ import { normalizeDesktopState, normalizePkceChallenge } from '../apps/desktopOA
 export const CHATGPT_MCP_PATH = '/api/v1/integrations/chatgpt/mcp';
 export const CHATGPT_AUTHORIZE_PATH = '/api/v1/integrations/chatgpt/oauth/authorize';
 export const CHATGPT_TOKEN_PATH = '/api/v1/integrations/chatgpt/oauth/token';
+export const CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH = '/api/v1/integrations/chatgpt/oauth/register';
 export const CHATGPT_PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
 export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server';
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.1.0',
-  'chatgpt.oauth': '1.2.0',
+  'chatgpt.oauth': '1.3.0',
   'chatgpt.connections': '1.1.0',
   'chatgpt.things.read': '1.0.0',
   'chatgpt.things.write': '1.0.0'
@@ -23,6 +24,7 @@ export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'GET', path: CHATGPT_AUTHORIZE_PATH, feature: 'chatgpt.oauth' },
   { method: 'POST', path: CHATGPT_AUTHORIZE_PATH, feature: 'chatgpt.oauth' },
   { method: 'POST', path: CHATGPT_TOKEN_PATH, feature: 'chatgpt.oauth' },
+  { method: 'POST', path: CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_PROTECTED_RESOURCE_METADATA_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_CAPABILITY_MANIFEST_PATH, feature: 'chatgpt.mcp' }
@@ -54,6 +56,11 @@ export type ChatGptOAuthRequest = {
   codeChallenge: string;
   resource: string;
   scope: string[];
+};
+
+export type ChatGptDynamicOAuthClient = {
+  clientId: string;
+  redirectUris: string[];
 };
 
 export type ChatGptConnection = {
@@ -166,6 +173,34 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
   }
 };
 
+// Dynamic Client Registration is a compatibility path for Codex clients that
+// cannot use CIMD yet. A registration may contain only a loopback callback;
+// no arbitrary web, custom-scheme, or localhost redirect can become trusted.
+export const normalizeDynamicClientRedirectUri = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    const port = Number(url.port);
+    if (
+      url.protocol !== 'http:' ||
+      url.hostname !== '127.0.0.1' ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535 ||
+      url.username ||
+      url.password ||
+      !/^\/callback(?:\/[A-Za-z0-9_-]{1,256})?$/.test(url.pathname) ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   return isMcpResourceForOrigin(value, origin) ? value : null;
@@ -173,17 +208,24 @@ const normalizeResource = (value: unknown, origin: string): string | null => {
 
 export const parseChatGptAuthorizationRequest = (
   params: URLSearchParams,
-  origin: string
+  origin: string,
+  dynamicClient: ChatGptDynamicOAuthClient | null = null
 ): { ok: true; request: ChatGptOAuthRequest } | { ok: false; error: string } => {
   if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
 
   const clientId = params.get('client_id')?.trim() || '';
   const codexCallbackId = codexCallbackIdFromClientId(clientId);
-  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId) return { ok: false, error: 'Unknown OAuth client' };
+  const registeredDynamicClient = dynamicClient?.clientId === clientId ? dynamicClient : null;
+  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
 
-  const redirectUri = codexCallbackId
-    ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
-    : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+  const redirectUri = registeredDynamicClient
+    ? normalizeDynamicClientRedirectUri(params.get('redirect_uri'))
+    : codexCallbackId
+      ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
+      : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+  if (registeredDynamicClient && (!redirectUri || !registeredDynamicClient.redirectUris.includes(redirectUri))) {
+    return { ok: false, error: 'redirect_uri is not registered for this OAuth client' };
+  }
   if (!redirectUri) return { ok: false, error: 'redirect_uri is not a supported ChatGPT or Codex callback' };
 
   const state = normalizeDesktopState(params.get('state'));
@@ -264,6 +306,7 @@ export const pluginDiscovery = (origin: string) => ({
     issuer: origin,
     authorization_endpoint: `${origin}${CHATGPT_AUTHORIZE_PATH}`,
     token_endpoint: `${origin}${CHATGPT_TOKEN_PATH}`,
+    registration_endpoint: `${origin}${CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH}`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],

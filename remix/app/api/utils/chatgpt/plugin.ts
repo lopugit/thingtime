@@ -9,6 +9,7 @@ import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/des
 
 import {
   CHATGPT_AUTHORIZE_PATH,
+  CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
   CHATGPT_MCP_PATH,
   CHATGPT_MCP_INSTRUCTIONS,
@@ -18,16 +19,18 @@ import {
   escapeHtml,
   isMcpResourceForOrigin,
   normalizeChatGptOAuthScopes,
+  normalizeDynamicClientRedirectUri,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
   renderConnectionPage
 } from './pluginCore';
-import type { ChatGptConnection, ChatGptCredentialBundle, ChatGptOAuthRequest } from './pluginCore';
+import type { ChatGptConnection, ChatGptCredentialBundle, ChatGptDynamicOAuthClient, ChatGptOAuthRequest } from './pluginCore';
 
 const OAUTH_REQUEST_PURPOSE = 'chatgpt-oauth-request';
 const OAUTH_CODE_PURPOSE = 'chatgpt-oauth-code';
+const OAUTH_DYNAMIC_CLIENT_PURPOSE = 'chatgpt-oauth-dynamic-client';
 const MCP_SESSION_PURPOSE = 'chatgpt-mcp';
 const MCP_REFRESH_SESSION_PURPOSE = 'chatgpt-mcp-refresh';
 const MCP_CONNECTION_PURPOSE = 'chatgpt-mcp-connection';
@@ -128,6 +131,19 @@ const formBody = async (request: Request): Promise<Result<URLSearchParams>> => {
   return { ok: true, value: new URLSearchParams(body.value) };
 };
 
+const jsonBody = async (request: Request): Promise<Result<unknown>> => {
+  const body = await limitRequestBody(request);
+  if (body.ok === false) return body;
+  if (!(request.headers.get('content-type') || '').includes('application/json')) {
+    return { ok: false, status: 415, error: 'Content-Type must be application/json' };
+  }
+  try {
+    return { ok: true, value: JSON.parse(body.value) };
+  } catch {
+    return { ok: false, status: 400, error: 'Request body must be valid JSON' };
+  }
+};
+
 const oauthErrorPage = (status: number, message: string) =>
   new Response(`<!doctype html><meta charset="utf-8"><title>Thingtime connection</title><main><h1>Thingtime connection could not continue</h1><p>${escapeHtml(message)}</p></main>`, {
     status,
@@ -144,6 +160,14 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
   const scope = normalizeChatGptOAuthScopes(rawScope);
   if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope) return null;
   return { clientId, redirectUri, state, codeChallenge, resource, scope };
+};
+
+const dynamicClientFromId = async (clientId: string): Promise<ChatGptDynamicOAuthClient | null> => {
+  const claims = await verifyPurposeToken(clientId, OAUTH_DYNAMIC_CLIENT_PURPOSE);
+  if (!claims || !Array.isArray(claims.redirectUris)) return null;
+  const redirectUris = [...new Set(claims.redirectUris.map(normalizeDynamicClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  if (!redirectUris.length || redirectUris.length > 8) return null;
+  return { clientId, redirectUris };
 };
 
 type PatIntrospection = {
@@ -352,7 +376,9 @@ const resolveMcpBundle = async (session: SessionDoc, origin: string): Promise<Re
 };
 
 export const beginChatGptAuthorization = async ({ request }: { request: Request }) => {
-  const parsed = parseChatGptAuthorizationRequest(new URL(request.url).searchParams, requestOrigin(request));
+  const params = new URL(request.url).searchParams;
+  const dynamicClient = await dynamicClientFromId(params.get('client_id')?.trim() || '');
+  const parsed = parseChatGptAuthorizationRequest(params, requestOrigin(request), dynamicClient);
   if (parsed.ok === false) return oauthErrorPage(400, parsed.error);
   const allowed = allowedThingtimeEndpoints();
   if (!allowed.length) return oauthErrorPage(503, 'No Thingtime API endpoints have been configured for ChatGPT connections.');
@@ -367,6 +393,35 @@ export const beginChatGptAuthorization = async ({ request }: { request: Request 
       'Referrer-Policy': 'no-referrer'
     }
   });
+};
+
+export const registerChatGptOAuthClient = async ({ request }: { request: Request }) => {
+  const body = await jsonBody(request);
+  if (body.ok === false) {
+    return json({ error: 'invalid_client_metadata', error_description: body.error }, { status: body.status, headers: noStoreHeaders });
+  }
+  const candidate = body.value && typeof body.value === 'object' ? body.value as Record<string, unknown> : null;
+  const rawRedirectUris = candidate?.redirect_uris;
+  if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length < 1 || rawRedirectUris.length > 8) {
+    return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight loopback callbacks' }, { status: 400, headers: noStoreHeaders });
+  }
+  const redirectUris = [...new Set(rawRedirectUris.map(normalizeDynamicClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  if (redirectUris.length !== rawRedirectUris.length) {
+    return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact http://127.0.0.1:<port>/callback loopback URL' }, { status: 400, headers: noStoreHeaders });
+  }
+  const clientId = await signPurposeToken(OAUTH_DYNAMIC_CLIENT_PURPOSE, { redirectUris }, '1y');
+  return json(
+    {
+      client_id: clientId,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      redirect_uris: redirectUris,
+      response_types: ['code'],
+      grant_types: ['authorization_code', 'refresh_token'],
+      token_endpoint_auth_method: 'none',
+      scope: 'thingtime offline_access'
+    },
+    { status: 201, headers: noStoreHeaders }
+  );
 };
 
 export const submitChatGptAuthorization = async ({ request }: { request: Request }) => {

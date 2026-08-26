@@ -63,6 +63,9 @@ a ChatGPT Client ID Metadata Document and a `127.0.0.1` loopback callback; the
 Thingtime authorization server verifies that the callback ID and path match
 before accepting the sign-in. The first-party form validates and encrypts each
 Thingtime PAT server-side, so never enter a token into a Codex prompt or chat.
+For Codex versions that do not support CIMD, the server instead performs OAuth
+Dynamic Client Registration with the same strict `127.0.0.1` loopback-only
+redirect policy.
 
 Codex Desktop, the Codex CLI, and the IDE extension on the same host share
 their MCP configuration. This local installation is a desktop/CLI validation

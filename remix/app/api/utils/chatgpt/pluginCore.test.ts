@@ -8,6 +8,7 @@ import {
   applyUpstreamQuery,
   isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
+  normalizeDynamicClientRedirectUri,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
@@ -76,6 +77,29 @@ test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () 
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
   params.set('redirect_uri', `http://127.0.0.1:49152/callback/${callbackId}?next=https://attacker.invalid`);
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
+});
+
+test('dynamic OAuth clients are bound to registered loopback callbacks only', () => {
+  const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
+  assert.equal(normalizeDynamicClientRedirectUri(redirectUri), redirectUri);
+  assert.equal(normalizeDynamicClientRedirectUri('http://localhost:49152/callback/thingtime_mcp_AbC123'), null);
+  assert.equal(normalizeDynamicClientRedirectUri('https://127.0.0.1:49152/callback/thingtime_mcp_AbC123'), null);
+  assert.equal(normalizeDynamicClientRedirectUri('http://127.0.0.1:49152/callback/thingtime_mcp_AbC123?next=https://attacker.invalid'), null);
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: 'ttdcr_signed-client-id',
+    redirect_uri: redirectUri,
+    resource: `https://thingtime.com${CHATGPT_MCP_PATH}`,
+    code_challenge: validPkceChallenge,
+    code_challenge_method: 'S256',
+    state: validState,
+    scope: 'thingtime'
+  });
+  const dynamicClient = { clientId: 'ttdcr_signed-client-id', redirectUris: [redirectUri] };
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, true);
+  params.set('redirect_uri', 'http://127.0.0.1:49152/callback/other');
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, false);
 });
 
 test('Thingtime endpoint and encrypted-bundle parsing fail closed', () => {
@@ -158,6 +182,7 @@ test('capability discovery is origin scoped and every registered route has a sem
   assert.deepEqual(discovery.authorizationServer.grant_types_supported, ['authorization_code', 'refresh_token']);
   assert.deepEqual(discovery.authorizationServer.scopes_supported, ['thingtime', 'offline_access']);
   assert.equal(discovery.authorizationServer.client_id_metadata_document_supported, true);
+  assert.equal(discovery.authorizationServer.registration_endpoint, 'https://thingtime.com/api/v1/integrations/chatgpt/oauth/register');
   assert.deepEqual(discovery.capabilityManifest.features, CHATGPT_PLUGIN_FEATURES);
   for (const route of CHATGPT_PLUGIN_ROUTES) {
     assert.ok(route.feature in CHATGPT_PLUGIN_FEATURES, `${route.method} ${route.path} lacks a known capability feature`);

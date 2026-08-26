@@ -1,4 +1,4 @@
-import { CHATGPT_AUTHORIZE_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -228,7 +228,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_AUTHORIZE_PATH,
     summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, the configured ChatGPT client_id, the fixed ChatGPT redirect URI, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to ChatGPT. POST submits that form; credentials are never included in the redirect, OAuth code, or ChatGPT transcript.',
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to the approved callback. POST submits that form; credentials are never included in the redirect, OAuth code, or client transcript.',
     auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -257,6 +257,30 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 200, description: 'First-party form requesting named endpoint/token pairs.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
       { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-register',
+    group: 'integrations',
+    title: 'ChatGPT OAuth dynamic client registration',
+    endpoint: CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
+    summary: 'Register a bounded loopback public client when a Codex client cannot use CIMD.',
+    detail:
+      'OAuth Dynamic Client Registration is a compatibility fallback for Codex clients that do not yet support ChatGPT Client ID Metadata Documents. The endpoint accepts one to eight exact http://127.0.0.1:<port>/callback loopback redirect URIs only, returns a signed opaque public client ID, and never accepts a custom scheme, localhost alias, web URL, query, fragment, or credentialed redirect. The resulting client remains bound to those same registered redirect URIs during authorization-code exchange.',
+    auth: { mode: 'none', description: 'Public-client registration is safe because every accepted callback is an exact local loopback URL.' },
+    methods: ['POST'],
+    steps: ['Register exact loopback callbacks before authorization.', 'Use the returned opaque client_id for the matching authorization-code flow.', 'Discard the client ID when the local client no longer needs the connection.'],
+    requestExamples: [
+      {
+        name: 'Register a Codex loopback client',
+        description: 'The client supplies its exact ephemeral local callback before authorization.',
+        method: 'POST',
+        body: { redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' }
+      }
+    ],
+    responseExamples: [
+      { status: 201, description: 'A signed public client ID bound to the supplied loopback callback.', body: { client_id: '<signed-opaque-client-id>', redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' } },
+      { status: 400, description: 'The client attempted an unsupported redirect URI.' }
     ]
   }),
   endpoint({
