@@ -424,8 +424,7 @@ export const RETIRED_THINGS_INDEXES = [
 	'notification_unread',
 	'shareOfId_1',
 	'sourceIds_1_createdAt_-1_shareId_1',
-	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
-	'things_passkey_link_key_unique'
+	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1'
 ] as const;
 
 // Home-only: a custom data endpoint belongs to the user and may legitimately
