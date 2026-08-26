@@ -1,7 +1,7 @@
 # Graph Report - lopu-rebase-scratch-cleanup.5JlUzd  (2026-08-27)
 
 ## Corpus Check
-- 23 files · ~139,437 words
+- 23 files · ~139,762 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b19f8acc`
+- Built from commit: `0a60041d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
