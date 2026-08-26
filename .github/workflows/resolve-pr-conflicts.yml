@@ -3067,7 +3067,7 @@ jobs:
             {
               echo '## Lopu repository review'
               echo
-              printf 'Lopu reviewed this PR against %s as Thingtime\047s principal PR and repository manager. Backend: **%s**.\n\n' "$(jq -r ".base" <<<"$record")" "${BACKEND_LABEL:-Claude Code default}"
+              printf 'Lopu reviewed this PR against %s as Thingtime\047s principal PR and repository manager. Using **%s**.\n\n' "$(jq -r ".base" <<<"$record")" "${REVIEW_BACKEND_LABEL:-Claude Code default}"
               case "$outcome" in
                 pushed) printf 'Lopu made justified improvements and pushed %s to %s.\n' "$sha" "$head" ;;
                 already-published) printf 'Lopu\047s reviewed changes are already present at %s.\n' "$sha" ;;

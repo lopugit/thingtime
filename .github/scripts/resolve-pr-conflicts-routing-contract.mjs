@@ -514,6 +514,16 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /POST repos\/\$REPO\/pulls\/<PR_NUMBER>\/comments\/<COMMENT_ID>\/replies/u, "Lopu can reply inline");
   assert.match(reviewBlock, /thingtime-lopu-conversation:v1/u, "Lopu marks its free-form conversational comments");
   assert.match(reviewBlock, /Never\n            edit another actor's comment/u, "Lopu edits only its own comments");
+  assert.match(
+    reviewBlock,
+    /Using \*\*%s\*\*[\s\S]*\$\{REVIEW_BACKEND_LABEL:-Claude Code default\}/u,
+    "published Lopu review comments name the actual configured model backend",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /\$\{BACKEND_LABEL:-Claude Code default\}/u,
+    "review comments never fall back because they read an unset backend-label variable",
+  );
   assert.match(reviewBlock, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/u, "review runs through the single protected Lopu action");
   assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
   assert.match(modelBlock, /LOPU_AGENT_BACKEND/u, "Lopu's global agent backend is repository-configurable");
