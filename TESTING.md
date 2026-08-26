@@ -224,7 +224,14 @@ is fixed, and cite the checklist you ran in the PR description.
       must be reported and the fallback must scan `refs/pull/<number>/head`.
 - [ ] Update a PR whose target already carries the normal listener. Its
       `pull_request` run—not the target-context fallback—must remain the owner
-      of both Analyze job contexts required by branch protection.
+      of both Analyze job contexts required by branch protection. Confirm the
+      listener's `control-plane` call reaches the unprivileged analyzer without
+      the former nested `actions: write` workflow-validation error, while the
+      `pr-handoff` call is skipped.
+- [ ] On the corresponding `pull_request_target` event, confirm only
+      `pr-handoff` calls the protected metadata bridge and `control-plane` is
+      skipped. The bridge may dispatch the exact unprivileged scan but must not
+      check out repository code or receive an AI/provider credential.
 - [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
       present: the protected scope job must report that analysis is complete and
       skip initialization. Dispatch an older expected SHA and confirm it no-ops
@@ -1156,10 +1163,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. The thin `rebase-pr-stacks.yml` listener
-      must accept only `repository_dispatch: rebase-pr-stack-ai`: it has no
-      push, PR, schedule, or manual trigger and cannot create a competing run
-      that later gets cancelled by Lopu's embedded rebase lane.
+      rebase, and stack detection. Product branches must contain no
+      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
+      rebase repository-dispatch events, while the protected rebase engine is
+      `workflow_call`-only and cannot create a competing public run.
+- [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
+      disabled), feature promotion, standing promotion, and main/develop sync.
+      Confirm each audit record names `resolve-pr-conflicts.yml`, the request
+      retains its original allowlisted operation key, and the translated Lopu
+      inputs preserve the requested PR/branch, cascade, dry-run, and lookback.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
