@@ -1,7 +1,7 @@
 # Graph Report - lopu-codeql-base.7HCgL3  (2026-08-27)
 
 ## Corpus Check
-- 23 files · ~139,175 words
+- 23 files · ~139,210 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6b0e3bfa`
+- Built from commit: `ae784a15`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
