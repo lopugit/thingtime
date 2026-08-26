@@ -183,26 +183,25 @@ export GIT_CONFIG_KEY_1=core.fsmonitor
 export GIT_CONFIG_VALUE_1=false
 
 GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.4}"
-[ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
-[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
-
-# The workflow supplies only the closed, validated Admin primary. A named
-# model is forced through Graphify's API flag and Claude CLI environment; the
-# `default` sentinel intentionally leaves both backends unforced.
-graphify_model_args=()
-case "${PREFERRED_MODEL:-default}" in
-  default)
-    unset GRAPHIFY_CLAUDE_CLI_MODEL
-    ;;
-  claude-fable-5|claude-opus-5)
-    graphify_model_args=(--model "$PREFERRED_MODEL")
-    export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+[ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || unset ANTHROPIC_API_KEY_FALLBACK
+[ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+primary_anthropic_api_key="${ANTHROPIC_API_KEY:-}"
+primary_claude_code_oauth_token="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+case "$credential_slot" in
+  primary) ;;
+  fallback)
+    ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY_FALLBACK:-}"
+    CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"
     ;;
   *)
-    echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
-    unset GRAPHIFY_CLAUDE_CLI_MODEL
+    echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."
+    unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
     ;;
 esac
+[ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
+[ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
 builtin cd -- "$repo_abs"
 git rev-parse --is-inside-work-tree >/dev/null
@@ -228,23 +227,88 @@ if (( install_status != 0 )); then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 
+select_claude_backend() {
+  if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    printf 'claude\n'
+  elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+    printf 'claude-cli\n'
+  fi
+}
+
 backend=""
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  backend=claude
-elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+case "${GRAPHIFY_BACKEND_PREFERENCE:-claude}" in
+  codex)
+    if [ -n "${OPENAI_API_KEY:-}" ]; then
+      backend=openai
+    else
+      backend="$(select_claude_backend)"
+    fi
+    ;;
+  claude)
+    backend="$(select_claude_backend)"
+    if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
+      backend=openai
+    fi
+    ;;
+  *)
+    echo "::warning::Unexpected Graphify backend preference; using the available credential fallback."
+    backend="$(select_claude_backend)"
+    if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
+      backend=openai
+    fi
+    ;;
+esac
+
+if [ "$backend" = claude-cli ]; then
   if command -v claude >/dev/null 2>&1; then
-    backend=claude-cli
+    :
   else
     claude_install_status=0
     npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || claude_install_status=$?
     assert_tool_boundary
     if (( claude_install_status == 0 )) && command -v claude >/dev/null 2>&1; then
-      backend=claude-cli
+      :
     else
       echo "::warning::claude CLI is unavailable; using the AST/text Graphify fallback."
+      backend=""
     fi
   fi
 fi
+
+# The workflow supplies only closed, validated controller outputs. Force the
+# selected provider's configured model; each provider's default sentinel
+# intentionally leaves Graphify unforced.
+graphify_model_args=()
+case "$backend" in
+  openai)
+    unset GRAPHIFY_CLAUDE_CLI_MODEL
+    case "${LOPU_OPENAI_MODEL:-default}" in
+      default|'') unset GRAPHIFY_OPENAI_MODEL ;;
+      gpt-5.6-terra|gpt-5.6-sol)
+        graphify_model_args=(--model "$LOPU_OPENAI_MODEL")
+        export GRAPHIFY_OPENAI_MODEL="$LOPU_OPENAI_MODEL"
+        ;;
+      *)
+        echo "::warning::Unexpected Lopu OpenAI model; Graphify will use its built-in OpenAI default."
+        unset GRAPHIFY_OPENAI_MODEL
+        ;;
+    esac
+    ;;
+  claude|claude-cli)
+    unset GRAPHIFY_OPENAI_MODEL
+    case "${PREFERRED_MODEL:-default}" in
+      default) unset GRAPHIFY_CLAUDE_CLI_MODEL ;;
+      claude-fable-5|claude-opus-5)
+        graphify_model_args=(--model "$PREFERRED_MODEL")
+        export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+        ;;
+      *)
+        echo "::warning::Unexpected preferred Claude model; Graphify will use its built-in default."
+        unset GRAPHIFY_CLAUDE_CLI_MODEL
+        ;;
+    esac
+    ;;
+esac
 
 graph_not_collapsed() {
   local old_n new_n
@@ -265,7 +329,7 @@ if [ -n "$backend" ]; then
   [ "$backend" != claude-cli ] || concurrency=1
   semantic_status=0
   graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
-    --max-concurrency "$concurrency" --api-timeout 240 \
+    --max-concurrency "$concurrency" --api-timeout 7200 \
     && graphify cluster-only . --no-viz --no-label \
     && graph_not_collapsed || semantic_status=$?
   assert_tool_boundary
@@ -316,7 +380,9 @@ fi
 # derived bytes. Reject exact raw or base64 credential material before commit.
 needles="$RUNNER_TEMP/promotion-graphify-needles.txt"
 : >"$needles"
-for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+for secret in "${OPENAI_API_KEY:-}" "$primary_anthropic_api_key" \
+  "$primary_claude_code_oauth_token" "${ANTHROPIC_API_KEY_FALLBACK:-}" \
+  "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"; do
   [ -n "$secret" ] || continue
   printf '%s\n' "$secret" >>"$needles"
   printf '%s' "$secret" | base64 -w0 >>"$needles"
@@ -347,7 +413,7 @@ if git diff --cached --quiet; then
 fi
 
 case "$semantic" in
-  claude|claude-cli)
+  openai|claude|claude-cli)
     detail="graphify extract with semantic $semantic backend; unchanged content reused the tracked cache" ;;
   failed)
     detail="semantic extraction failed; graphify update completed the AST/text fallback" ;;

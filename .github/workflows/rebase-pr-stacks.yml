@@ -30,6 +30,8 @@
 # Secrets are shared with the merge resolver:
 # - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN powers Claude (one required
 #   only when a non-graphify conflict actually reaches the AI).
+# - ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK optionally
+#   supplies a second account after a primary capacity or credential failure.
 # - CONFLICT_RESOLVER_PAT is optional. GITHUB_TOKEN is sufficient unless the
 #   rewritten history changes .github/workflows/. A PAT used here needs
 #   contents/pull-request/issues/workflow access appropriate to this repository.
@@ -111,6 +113,16 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_retry:
+        description: "Internal: bounded publication-race retry count"
+        required: false
+        default: "0"
+        type: string
+      automatic_retry:
+        description: "Internal: exact automatic retry without manual-selector authority"
+        required: false
+        default: false
+        type: boolean
       visited:
         required: false
         default: ""
@@ -119,9 +131,6 @@ on:
         required: false
         default: false
         type: boolean
-  repository_dispatch:
-    types: [rebase-pr-stack-ai]
-
 permissions:
   contents: read
 
@@ -182,7 +191,8 @@ jobs:
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
       internal_worker: >-
-        ${{ github.event_name == 'repository_dispatch'
+        ${{ (github.event_name == 'repository_dispatch'
+             && github.event.action == 'rebase-pr-stack-ai')
             || (github.event_name == 'workflow_dispatch'
                 && inputs.worker_handoff == true
                 && inputs.pr_number != ''
@@ -229,6 +239,7 @@ jobs:
           EVENT_PR: ${{ github.event.pull_request.number }}
           MANUAL_PR: ${{ inputs.pr_number }}
           MANUAL_BRANCH: ${{ inputs.branch }}
+          AUTOMATIC_RETRY: ${{ inputs.automatic_retry && 'true' || 'false' }}
           CASCADE: >-
             ${{ github.event_name == 'workflow_dispatch'
                 && inputs.cascade == false && 'false' || 'true' }}
@@ -366,6 +377,11 @@ jobs:
                 cursor="$(jq -r '.base.ref' <<<"$parent")"
               done
             done < <(jq -r '.[] | @base64' <<<"$seeds")
+          fi
+
+          manual_selection="$explicit"
+          if [ "$AUTOMATIC_RETRY" = true ]; then
+            manual_selection=false
           fi
 
           if [ "$explicit" = true ] && [ "$(jq 'length' <<<"$candidates")" -eq 0 ]; then
@@ -571,7 +587,7 @@ jobs:
             stale_lock=false
             if jq -e 'index("ai-rebase-in-progress") != null' >/dev/null <<<"$labels"; then
               stale_lock=true
-              if [ "$explicit" = true ]; then
+              if [ "$manual_selection" = true ]; then
                 echo "Manual run will recover the existing ai-rebase-in-progress lock on #$number."
               else
                 labelled_at="$(
@@ -701,7 +717,7 @@ jobs:
               continue
             fi
 
-            if [ "$rebase_paused" = true ] && [ "$explicit" != true ]; then
+            if [ "$rebase_paused" = true ] && [ "$manual_selection" != true ]; then
               topology=standalone
               [ "$stack_member" != true ] || topology=stack
               if rebase_pause_matches "$topology"; then
@@ -734,7 +750,7 @@ jobs:
               --arg head_sha "$head_sha" \
               --arg base_sha "$base_sha" \
               --argjson cascade "$CASCADE" \
-              --argjson manual "$explicit" \
+              --argjson manual "$manual_selection" \
               --argjson stale_lock "$stale_lock" \
               '{number:$number, head:$head, base:$base,
                 head_sha:$head_sha, base_sha:$base_sha,
@@ -755,7 +771,7 @@ jobs:
           # A clean parent is not itself a barrier, so a genuinely root-most
           # blocked child can still run. Manual targeting remains deliberate
           # and bypasses this automatic ordering filter.
-          if [ "$explicit" = true ]; then
+          if [ "$manual_selection" = true ]; then
             roots="$blocked"
           else
             # Large PR bodies and file lists can make the repository-wide
@@ -814,7 +830,9 @@ jobs:
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
-      actions: write
+      # POST /repos/{owner}/{repo}/dispatches requires Contents write. Keep the
+      # root handoff on the GITHUB_TOKEN and grant only that documented scope.
+      contents: write
     steps:
       - name: Dispatch one exact ref snapshot per root PR
         env:
@@ -826,6 +844,8 @@ jobs:
           CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
           ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
+          REF_RACE_RETRY: ${{ inputs.ref_race_retry || '0' }}
+          AUTOMATIC_RETRY: ${{ inputs.automatic_retry && 'true' || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -843,33 +863,39 @@ jobs:
               --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
               --arg routing_proof "$ROUTING_PROOF" \
               --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
+              --arg ref_race_retry "$REF_RACE_RETRY" \
               --argjson cascade "$(jq -r '.cascade' <<<"$target")" \
               --argjson manual "$(jq -r '.manual' <<<"$target")" \
+              --argjson automatic_retry "$AUTOMATIC_RETRY" \
               --argjson recover_stale_lock "$(jq -r '.stale_lock' <<<"$target")" '
                 {
-                  ref:"github-actions",
-                  inputs:{
+                  event_type:"rebase-pr-stack-ai",
+                  client_payload:{
                     pr_number:$pr_number,
-                    branch:"",
-                    cascade:$cascade,
                     execution_provider:$execution_provider,
                     runner_label:$runner_label,
                     control_dispatch_id:$control_dispatch_id,
                     routing_proof:$routing_proof,
                     routing_proof_issued_at:$routing_proof_issued_at,
-                    worker_handoff:true,
-                    expected_head_sha:$expected_head_sha,
-                    expected_base_sha:$expected_base_sha,
-                    old_base_sha:"",
-                    new_base_sha:"",
-                    manual:$manual,
-                    depth:"0",
-                    visited:"",
-                    recover_stale_lock:$recover_stale_lock
+                    worker:{
+                      branch:"",
+                      cascade:$cascade,
+                      worker_handoff:true,
+                      expected_head_sha:$expected_head_sha,
+                      expected_base_sha:$expected_base_sha,
+                      old_base_sha:"",
+                      new_base_sha:"",
+                      manual:$manual,
+                      depth:"0",
+                      ref_race_retry:$ref_race_retry,
+                      automatic_retry:$automatic_retry,
+                      visited:"",
+                      recover_stale_lock:$recover_stale_lock
+                    }
                   }
                 }
               ' | gh api --method POST \
-                "repos/$REPO/actions/workflows/rebase-pr-stacks.yml/dispatches" \
+                "repos/$REPO/dispatches" \
                 --input -
           done < <(jq -r '.[] | @base64' <<<"$TARGETS")
 
@@ -878,7 +904,8 @@ jobs:
     needs: route
     if: >-
       needs.route.outputs.execute == 'true'
-      && (github.event_name == 'repository_dispatch'
+      && ((github.event_name == 'repository_dispatch'
+           && github.event.action == 'rebase-pr-stack-ai')
           || (github.event_name == 'workflow_dispatch'
               && inputs.worker_handoff == true
               && github.actor == 'github-actions[bot]'
@@ -894,19 +921,31 @@ jobs:
     # repository's queue one model-backed operation at a time.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      # Preserve every pending stack operation while the repository's one
+      # live Lopu worker finishes the current review/resolve/promotion task.
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.client_payload.pr_number || inputs.pr_number }}
-      EXPECTED_HEAD_SHA: ${{ github.event.client_payload.expected_head_sha || inputs.expected_head_sha }}
-      EXPECTED_BASE_SHA: ${{ github.event.client_payload.expected_base_sha || inputs.expected_base_sha }}
-      OLD_BASE_SHA: ${{ github.event.client_payload.old_base_sha || inputs.old_base_sha }}
-      NEW_BASE_SHA: ${{ github.event.client_payload.new_base_sha || inputs.new_base_sha }}
-      CASCADE: ${{ github.event.client_payload.cascade || inputs.cascade || 'true' }}
-      MANUAL: ${{ github.event.client_payload.manual || inputs.manual || 'false' }}
-      DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
-      VISITED: ${{ github.event.client_payload.visited || inputs.visited || '' }}
-      RECOVER_STALE_LOCK: ${{ github.event.client_payload.recover_stale_lock || inputs.recover_stale_lock || 'false' }}
+      EXPECTED_HEAD_SHA: ${{ github.event.client_payload.worker.expected_head_sha || inputs.expected_head_sha }}
+      EXPECTED_BASE_SHA: ${{ github.event.client_payload.worker.expected_base_sha || inputs.expected_base_sha }}
+      OLD_BASE_SHA: ${{ github.event.client_payload.worker.old_base_sha || inputs.old_base_sha }}
+      NEW_BASE_SHA: ${{ github.event.client_payload.worker.new_base_sha || inputs.new_base_sha }}
+      CASCADE: >-
+        ${{ github.event_name == 'repository_dispatch'
+            && format('{0}', github.event.client_payload.worker.cascade)
+            || (inputs.cascade && 'true' || 'false') }}
+      MANUAL: >-
+        ${{ github.event_name == 'repository_dispatch'
+            && format('{0}', github.event.client_payload.worker.manual)
+            || (inputs.manual && 'true' || 'false') }}
+      DEPTH: ${{ github.event.client_payload.worker.depth || inputs.depth || '0' }}
+      VISITED: ${{ github.event.client_payload.worker.visited || inputs.visited || '' }}
+      RECOVER_STALE_LOCK: >-
+        ${{ github.event_name == 'repository_dispatch'
+            && format('{0}', github.event.client_payload.worker.recover_stale_lock)
+            || (inputs.recover_stale_lock && 'true' || 'false') }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # Every trusted git operation is hook- and fsmonitor-proof, including
       # commands launched inside the exact-SHA local composite action.
@@ -1173,6 +1212,7 @@ jobs:
           [ "$trusted_sha" = "$trusted_ref_sha" ] \
             || { echo "::error::Trusted checkout does not match origin/github-actions."; exit 1; }
           for path in \
+            .github/actions/lopu-agent/action.yml \
             .github/actions/rebase-conflict-round/action.yml \
             .github/scripts/rebase-stack/start.sh \
             .github/scripts/rebase-stack/prepare-round.sh; do
@@ -1279,6 +1319,7 @@ jobs:
         if: steps.context.outputs.skip == 'false' && steps.start.outputs.complete != 'true'
         uses: &thingtime_rebase_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
         with: &thingtime_rebase_conflict_round_inputs
+          backend: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
           repo-path: ${{ env.REBASE_REPO }}
           pr-number: ${{ env.PR_NUMBER }}
           base-ref: ${{ steps.context.outputs.base_ref }}
@@ -1288,8 +1329,13 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           model-args: ${{ steps.models.outputs.model_args }}
+          codex-model: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
 
       - &thingtime_rebase_conflict_retry
         name: Continue replay conflict resolution (up to round 500)
@@ -1901,8 +1947,13 @@ jobs:
         timeout-minutes: 360
         env:
           GRAPHIFY_VERSION: "0.9.4"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
+          CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
           PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}
           PIP_CONFIG_FILE: /dev/null
           PIP_INDEX_URL: https://pypi.org/simple
@@ -1912,8 +1963,21 @@ jobs:
         run: |
           set -euo pipefail
           cd -- "$REBASE_REPO"
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."; unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN ;;
+          esac
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+          [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 
           graphify_model_args=()
           case "${PREFERRED_MODEL:-default}" in
@@ -1956,17 +2020,39 @@ jobs:
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
+          select_claude_backend() {
+            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then printf 'claude\n'; fi
+          }
           backend=''
-          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-            backend=claude
+          case "${AGENT_BACKEND:-claude}" in
+            codex)
+              if [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; else backend="$(select_claude_backend)"; fi
+              ;;
+            claude)
+              backend="$(select_claude_backend)"
+              if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; fi
+              ;;
+            *) echo "::warning::Unexpected Lopu backend; choosing an available Graphify credential."; backend="$(select_claude_backend)" ;;
+          esac
+          if [ "$backend" = claude ]; then
             # The API backend does not need the separate OAuth credential.
             unset CLAUDE_CODE_OAUTH_TOKEN
-          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -z "$backend" ]; then
             # graphify's claude-cli backend would launch Claude from the PR
             # checkout, where project settings/hooks are untrusted. Keep OAuth
             # runs AST-only; the API backend does not consume project config.
             echo "::warning::OAuth-only run: using AST/text-only graphify update."
             unset CLAUDE_CODE_OAUTH_TOKEN
+          fi
+          if [ "$backend" = openai ]; then
+            unset GRAPHIFY_CLAUDE_CLI_MODEL
+            case "${CODEX_MODEL:-gpt-5.6-terra}" in
+              gpt-5.6-terra|gpt-5.6-sol)
+                graphify_model_args=(--model "$CODEX_MODEL")
+                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+                ;;
+              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
+            esac
           fi
 
           graph_not_collapsed() {
@@ -2024,7 +2110,9 @@ jobs:
           # backstop. The security boundary remains review on the PR branch.
           needles="$RUNNER_TEMP/graphify-secret-needles.txt"
           : > "$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
+            "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \
+            "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             {
               printf '%s\n' "$secret"
@@ -2272,6 +2360,16 @@ jobs:
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
+          defer_ref_race() {
+            local reason="$1" live_sha="$2"
+            {
+              echo "remote_state=retry"
+              echo "retry_reason=$reason"
+              echo "live_sha=$live_sha"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason moved to $live_sha beside publication; the exact lease preserved it and Lopu will requeue from fresh refs."
+            exit 0
+          }
           # This is deliberately adjacent to the push. Child discovery may
           # have taken time since the earlier full validation.
           pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
@@ -2299,10 +2397,12 @@ jobs:
             echo "::error::The rebase ownership mutex disappeared immediately before push."
             exit 1
           fi
-          [ "$(live_ref_sha "$HEAD_REF")" = "$EXPECTED_HEAD_SHA" ] \
-            || { echo "::error::Head moved immediately before push."; exit 1; }
-          [ "$(live_ref_sha "$BASE_REF")" = "$EXPECTED_BASE_SHA" ] \
-            || { echo "::error::Base moved immediately before push."; exit 1; }
+          live_head_sha="$(live_ref_sha "$HEAD_REF")"
+          [ "$live_head_sha" = "$EXPECTED_HEAD_SHA" ] \
+            || defer_ref_race head "$live_head_sha"
+          live_base_sha="$(live_ref_sha "$BASE_REF")"
+          [ "$live_base_sha" = "$EXPECTED_BASE_SHA" ] \
+            || defer_ref_race base "$live_base_sha"
           [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
             || { echo "::error::Head became protected immediately before push."; exit 1; }
           default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
@@ -2394,6 +2494,113 @@ jobs:
           echo "::error::Ambiguous push outcome: live head is unexpected ($remote_sha)."
           exit 1
 
+      - name: Requeue after a moving-ref rebase race
+        if: steps.push.outputs.remote_state == 'retry'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL_WRITE_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT }}
+          RACE_RETRY_ATTEMPT: ${{ github.event.client_payload.worker.ref_race_retry || inputs.ref_race_retry || '0' }}
+          RACE_REASON: ${{ steps.push.outputs.retry_reason }}
+          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$RACE_RETRY_ATTEMPT" in
+            ''|*[!0-9]*)
+              echo "::error::ref_race_retry must be a decimal integer."
+              exit 1
+              ;;
+          esac
+          if [ "$RACE_RETRY_ATTEMPT" -ge 3 ]; then
+            echo "::error::Head/base refs moved during four consecutive rebase publication attempts; leaving every exact remote ref untouched for the scheduled sweep."
+            exit 1
+          fi
+
+          remove_label_verified() {
+            local number="$1" label="$2" encoded token issue absent
+            encoded="$(jq -rn --arg value "$label" '$value | @uri')"
+            local -a tokens=("$GH_TOKEN")
+            if [ -n "${LABEL_WRITE_TOKEN:-}" ] \
+               && [ "$LABEL_WRITE_TOKEN" != "$GH_TOKEN" ]; then
+              tokens+=("$LABEL_WRITE_TOKEN")
+            fi
+            for token in "${tokens[@]}"; do
+              GH_TOKEN="$token" gh api --method DELETE \
+                "repos/$REPO/issues/$number/labels/$encoded" \
+                --silent >/dev/null 2>&1 || true
+              for _ in 1 2 3; do
+                issue="$(GH_TOKEN="$token" gh api "repos/$REPO/issues/$number" 2>/dev/null || true)"
+                absent="$(jq -r --arg label "$label" '
+                    if type == "object" and (.labels | type) == "array"
+                    then ([.labels[].name] | index($label) == null)
+                    else false
+                    end
+                  ' <<<"$issue" 2>/dev/null || true)"
+                [ "$absent" != true ] || return 0
+                sleep 1
+              done
+            done
+            echo "::error::Could not release $label from PR #$number before retry."
+            return 1
+          }
+
+          # Release every ownership hold acquired by this exact attempt before
+          # asking the normal detector to take a new live snapshot.
+          remove_label_verified "$PR_NUMBER" ai-rebase-in-progress
+          children="$RUNNER_TEMP/rebase-children.json"
+          if [ -f "$children" ]; then
+            while IFS= read -r number; do
+              [ -n "$number" ] || continue
+              remove_label_verified "$number" ai-rebase-in-progress
+            done < <(jq -r '.[].number' "$children")
+          fi
+
+          next_attempt=$((RACE_RETRY_ATTEMPT + 1))
+          dispatch_id="rebase-ref-race:$PR_NUMBER:${{ github.run_id }}:${{ github.run_attempt }}:$next_attempt"
+          payload="$(jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg retry "$next_attempt" \
+            --arg dispatch_id "$dispatch_id" \
+            --argjson cascade "$CASCADE" '
+              {
+                ref:"github-actions",
+                inputs:{
+                  pr_number:$pr_number,
+                  branch:"",
+                  maintenance_operation:"manage-prs",
+                  rebase_cascade:$cascade,
+                  detector_handoff:false,
+                  manual_retry:false,
+                  ref_race_retry:$retry,
+                  ref_race_handoff:true,
+                  execution_provider:"github-actions",
+                  runner_label:"",
+                  control_dispatch_id:$dispatch_id,
+                  routing_proof:"",
+                  routing_proof_issued_at:""
+                }
+              }
+            ')"
+          for attempt in 1 2 3; do
+            if gh api --method POST \
+                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                 --input - <<<"$payload"; then
+              break
+            fi
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep 2
+          done
+
+          body="$RUNNER_TEMP/rebase-ref-race.md"
+          {
+            echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside rebase publication, released this attempt's ownership labels, and queued retry $next_attempt/3 from fresh PR refs."
+            echo
+            echo "No stale rewritten history was pushed. [View this guarded attempt]($RUN_URL)."
+          } > "$body"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || \
+            echo "::warning::Rebase retry was queued, but the PR comment could not be posted."
+
       - name: Verify the published ref
         id: published
         if: steps.push.outputs.remote_state == 'published'
@@ -2481,29 +2688,33 @@ jobs:
               --arg routing_proof "$ROUTING_PROOF" \
               --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
-                  ref:"github-actions",
-                  inputs:{
+                  event_type:"rebase-pr-stack-ai",
+                  client_payload:{
                     pr_number:$pr_number,
-                    branch:"",
-                    cascade:true,
                     execution_provider:$execution_provider,
                     runner_label:$runner_label,
                     control_dispatch_id:$control_dispatch_id,
                     routing_proof:$routing_proof,
                     routing_proof_issued_at:$routing_proof_issued_at,
-                    worker_handoff:true,
-                    expected_head_sha:$expected_head_sha,
-                    expected_base_sha:$expected_base_sha,
-                    old_base_sha:$old_base_sha,
-                    new_base_sha:$new_base_sha,
-                    manual:false,
-                    depth:$depth,
-                    visited:$visited,
-                    recover_stale_lock:false
+                    worker:{
+                      branch:"",
+                      cascade:true,
+                      worker_handoff:true,
+                      expected_head_sha:$expected_head_sha,
+                      expected_base_sha:$expected_base_sha,
+                      old_base_sha:$old_base_sha,
+                      new_base_sha:$new_base_sha,
+                      manual:false,
+                      depth:$depth,
+                      ref_race_retry:"0",
+                      automatic_retry:false,
+                      visited:$visited,
+                      recover_stale_lock:false
+                    }
                   }
                 }
               ' | gh api --method POST \
-                "repos/$REPO/actions/workflows/rebase-pr-stacks.yml/dispatches" \
+                "repos/$REPO/dispatches" \
                 --input -; then
               echo "Dispatched child PR #$number."
             else

@@ -1,7 +1,11 @@
-name: AI rebase conflict round
-description: Resolve one stopped-rebase conflict set in a repo-less scratch directory, verify it, and continue.
+name: Lopu rebase conflict round
+description: Resolve one stopped-rebase conflict set with Lopu in a repo-less scratch directory, verify it, and continue.
 
 inputs:
+  backend:
+    description: "Closed Lopu provider selector: claude or codex."
+    required: false
+    default: claude
   repo-path:
     description: Real stopped-rebase checkout under RUNNER_TEMP and outside GITHUB_WORKSPACE.
     required: true
@@ -32,6 +36,15 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token, when OAuth authentication is configured.
     required: false
+  anthropic-api-key-fallback:
+    description: Secondary Anthropic API key for account-capacity failover.
+    required: false
+  claude-code-oauth-token-fallback:
+    description: Secondary Claude Code OAuth token for account-capacity failover.
+    required: false
+  openai-api-key:
+    description: OpenAI Platform project key when the Codex backend is selected.
+    required: false
   github-token:
     description: GitHub token required by claude-code-action.
     required: true
@@ -43,6 +56,14 @@ inputs:
     description: Trusted administrator-selected Claude model arguments.
     required: false
     default: ""
+  codex-model:
+    description: Closed Codex model selector passed to Lopu agent.
+    required: false
+    default: gpt-5.6-terra
+  codex-reasoning-effort:
+    description: Closed Codex reasoning-effort selector passed to Lopu agent.
+    required: false
+    default: xhigh
   conflict-policy:
     description: "Closed path policy: pr-rebase (default) or trusted develop promotion."
     required: false
@@ -227,13 +248,16 @@ runs:
       if: steps.prepare.outputs.needs_ai == 'true'
       shell: bash
       env:
-        HAS_AI_CREDENTIAL: ${{ inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' }}
+        BACKEND: ${{ inputs.backend }}
+        HAS_CLAUDE_CREDENTIAL: ${{ inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
+        HAS_OPENAI_CREDENTIAL: ${{ inputs.openai-api-key != '' }}
       run: |
         set -euo pipefail
-        if [[ "$HAS_AI_CREDENTIAL" != true ]]; then
-          echo "::error::An Anthropic API key or Claude Code OAuth token is required for a non-generated conflict."
-          exit 1
-        fi
+        case "$BACKEND" in
+          claude) [[ "$HAS_CLAUDE_CREDENTIAL" == true ]] || { echo "::error::Lopu's Claude backend needs a primary or fallback Anthropic/Claude Code credential."; exit 1; } ;;
+          codex) [[ "$HAS_OPENAI_CREDENTIAL" == true ]] || { echo "::error::Lopu's Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
+          *) echo "::error::Unknown Lopu backend: $BACKEND"; exit 1 ;;
+        esac
 
     - name: Mark the credentialed AI attempt
       id: attempt
@@ -243,17 +267,25 @@ runs:
         echo "started=true" >>"$GITHUB_OUTPUT"
         echo "THINGTIME_AI_REBASE_STARTED=true" >>"$GITHUB_ENV"
 
-    - name: Resolve this rebase conflict set with Claude in scratch
-      id: claude
+    - name: Resolve this rebase conflict set with Lopu in scratch
+      id: lopu
       if: steps.prepare.outputs.needs_ai == 'true'
       continue-on-error: true
-      # v1 pinned: the action itself is executable supply-chain code.
-      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79
+      uses: ./trusted/.github/actions/lopu-agent
       with:
-        anthropic_api_key: ${{ inputs.anthropic-api-key }}
-        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
-        github_token: ${{ inputs.github-token }}
-        allowed_bots: ${{ inputs.allowed-bots }}
+        backend: ${{ inputs.backend }}
+        anthropic-api-key: ${{ inputs.anthropic-api-key }}
+        claude-code-oauth-token: ${{ inputs.claude-code-oauth-token }}
+        anthropic-api-key-fallback: ${{ inputs.anthropic-api-key-fallback }}
+        claude-code-oauth-token-fallback: ${{ inputs.claude-code-oauth-token-fallback }}
+        openai-api-key: ${{ inputs.openai-api-key }}
+        github-token: ${{ inputs.github-token }}
+        allowed-bots: ${{ inputs.allowed-bots }}
+        codex-model: ${{ inputs.codex-model }}
+        codex-reasoning-effort: ${{ inputs.codex-reasoning-effort }}
+        working-directory: .
+        sandbox: danger-full-access
+        safety-strategy: drop-sudo
         prompt: |
           You are resolving bounded git rebase conflict round
           ${{ steps.bootstrap.outputs.round_number }} of at most 500 for PR
@@ -287,7 +319,7 @@ runs:
           If a resolution is not high-confidence, leave its markers intact so
           verification stops for human review. A bare `=======` line outside a
           marker block can be legitimate Markdown and is not itself a conflict.
-        claude_args: |
+        claude-args: |
           ${{ inputs.model-args }}
           --effort max
           --max-turns 500
@@ -295,15 +327,32 @@ runs:
           --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
     - name: Continue the exact Claude session until it finishes
-      if: steps.prepare.outputs.needs_ai == 'true' && steps.claude.outcome == 'failure'
+      if: steps.prepare.outputs.needs_ai == 'true' && inputs.backend == 'claude' && steps.lopu.outcome == 'failure'
       shell: bash
       env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        PRIMARY_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        FALLBACK_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key-fallback }}
+        FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token-fallback }}
         MODEL_ARGS: ${{ inputs.model-args }}
       run: |
         set -euo pipefail
         IFS=$'\n\t'
+
+        credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+        case "$credential_slot" in
+          primary)
+            export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+            export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+            ;;
+          fallback)
+            export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+            export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+            ;;
+          *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+        esac
+        [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+        [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
         classify_output() {
           node - "$1" <<'NODE'
@@ -420,6 +469,9 @@ runs:
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
+        CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         ACTION_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
@@ -655,7 +707,9 @@ runs:
 
         needles="$temp_dir/secret-needles"
         : >"$needles"
-        for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${ACTION_GITHUB_TOKEN:-}"; do
+        for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+          "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+          "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
           [[ -n "$secret" ]] || continue
           {
             printf '%s\n' "$secret"

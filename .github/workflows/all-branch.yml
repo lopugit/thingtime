@@ -27,9 +27,10 @@
 # next rebuild; a fixup that stops applying (the source PRs healed) is dropped
 # silently. Unchanged inputs skip the build check and every model round.
 # `anthropics/claude-code-action` rejects push events, including a reusable
-# workflow called by a push listener. Push-triggered calls therefore dispatch
-# one bot-authored workflow_dispatch worker on the protected github-actions
-# ref; only that supported-event worker may enter the rebuild/doctor path.
+# workflow called by a push listener. The one public Lopu PR manager therefore
+# converts qualifying pushes into a bot-authored workflow_dispatch before it
+# calls this internal implementation. PR lifecycle, schedule, and manual
+# manager events are already supported and call it directly.
 #
 # Security model (matches the resolver): the model has NO shell and NO git —
 # it only edits files; both checkouts use persist-credentials: false, so no
@@ -42,67 +43,51 @@
 # trigger no workflows, and Vercel still builds `all` because its GitHub App
 # watches branch pushes regardless of the pushing token. ANTHROPIC_API_KEY or
 # CLAUDE_CODE_OAUTH_TOKEN (the resolver's credential) enables the doctor;
-# without one the union is pushed unhealed, exactly as before.
+# ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK supplies the
+# optional second account. Without any Claude/Codex credential the union is
+# pushed unhealed, exactly as before.
 
-name: Build all branch
+name: Lopu internal all-branch integration
 
 on:
-  push:
-    branches: [github-actions]
   workflow_call:
-  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: read
 
-# Standalone dispatches on the github-actions ref dedupe against themselves;
-# called runs dedupe through the caller listener's identical group.
-concurrency:
-  # Keep the tiny push handoff separate from the worker it dispatches so the
-  # worker cannot cancel its own caller before the caller reports success.
-  group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
-  cancel-in-progress: true
-
 jobs:
-  handoff:
-    name: Hand off push rebuild to the github-actions control plane
-    if: github.repository == 'lopugit/thingtime' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch supported-event rebuild
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          jq -n '{ref:"github-actions"}' \
-            | gh api --method POST \
-                "repos/$REPO/actions/workflows/all-branch.yml/dispatches" \
-                --input -
-
   rebuild:
-    if: github.repository == 'lopugit/thingtime' && github.event_name != 'push'
+    name: Lopu builds and repairs the all branch
+    if: github.repository == 'lopugit/thingtime'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The deterministic union build and its optional model-backed doctor stay
+    # in one job because they share an exact working tree. Put that whole job
+    # in Lopu's durable repository fleet so no doctor overlaps a PR review,
+    # promotion, conflict resolution, rebase, or stack cascade.
+    concurrency:
+      group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
+      cancel-in-progress: false
     env:
-      # The `secrets` context is not available in step `if:` expressions;
-      # step conditions read this job-level flag instead (same pattern as the
-      # resolver's HAS_AI_CREDENTIAL gate).
-      HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      LOPU_AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
+      LOPU_CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
+      LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
     steps:
       - name: Check out develop working tree
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: develop
           fetch-depth: 0
+          # The builder fetches every exact base/PR ref itself. Keep complete
+          # commit ancestry for merge ordering without downloading historical
+          # blobs that no current union build reads.
+          filter: blob:none
           persist-credentials: false
 
       - name: Check out protected build controller
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
           path: control-plane
@@ -132,6 +117,27 @@ jobs:
         if: steps.build.outputs.proceed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
+      - name: Select the Lopu agent backend
+        id: backend
+        if: >-
+          steps.build.outputs.proceed == 'true'
+          && steps.check1.outputs.build_ok != 'true'
+          && steps.check1.outputs.ai_eligible == 'true'
+        env:
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$LOPU_AGENT_BACKEND" in
+            claude) has_credential="$HAS_CLAUDE_CREDENTIAL" ;;
+            codex) has_credential="$HAS_OPENAI_CREDENTIAL" ;;
+            *) echo "::error::Unsupported Lopu backend: $LOPU_AGENT_BACKEND"; exit 1 ;;
+          esac
+          echo "backend=$LOPU_AGENT_BACKEND" >>"$GITHUB_OUTPUT"
+          echo "has_credential=$has_credential" >>"$GITHUB_OUTPUT"
+          echo "Lopu all-branch backend: $LOPU_AGENT_BACKEND"
+
       # The doctor reuses the resolver's admin-configured model waterfall (one
       # dial governs both automations), validated against the same closed
       # allowlist so a compromised response can never inject CLI flags.
@@ -141,7 +147,7 @@ jobs:
           steps.build.outputs.proceed == 'true'
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
-          && env.HAS_AI_CREDENTIAL == 'true'
+          && steps.backend.outputs.has_credential == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -220,18 +226,28 @@ jobs:
           echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}")"
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
 
-      - name: Build doctor round 1
+      - name: Lopu build doctor round 1
         id: doctor1
         if: steps.models.outcome == 'success'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./control-plane/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
+          backend: ${{ steps.backend.outputs.backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: "github-actions"
+          codex-model: ${{ env.LOPU_CODEX_MODEL }}
+          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY. You have NO shell and NO git access — that is
             intentional. A later deterministic step verifies the build, commits, and
             pushes whatever you leave in the working tree.
@@ -272,7 +288,7 @@ jobs:
               every rebuild — broad refactors are wasted work and get dropped.
             - If the failure cannot be fixed by editing app source (infrastructure,
               network, dependency installation), make NO edits at all.
-          claude_args: |
+          claude-args: |
             ${{ steps.models.outputs.model_args }}
             --effort max
             --max-turns 150
@@ -285,6 +301,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 1
 
@@ -293,21 +312,31 @@ jobs:
         if: steps.commit1.outputs.committed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
-      - name: Build doctor round 2
+      - name: Lopu build doctor round 2
         id: doctor2
         if: >-
           steps.models.outcome == 'success'
           && steps.commit1.outputs.scrubbed != 'true'
           && steps.check2.outputs.build_ok != 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./control-plane/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
+          backend: ${{ steps.backend.outputs.backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: "github-actions"
+          codex-model: ${{ env.LOPU_CODEX_MODEL }}
+          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
             an earlier round either did not finish or did not fix the build (later
             build stages often reveal new collisions once earlier ones are fixed).
@@ -324,7 +353,7 @@ jobs:
             any .gitattributes, or any lockfile; no new/renamed/deleted files unless
             the error demands it; fix only what the log implicates; if it is not
             fixable by editing app source, make NO edits.
-          claude_args: |
+          claude-args: |
             ${{ steps.models.outputs.model_args }}
             --effort max
             --max-turns 150
@@ -337,6 +366,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 2
 
@@ -345,7 +377,7 @@ jobs:
         if: steps.commit2.outputs.committed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
-      - name: Build doctor round 3
+      - name: Lopu build doctor round 3
         id: doctor3
         if: >-
           steps.models.outcome == 'success'
@@ -354,14 +386,24 @@ jobs:
           && steps.check2.outputs.build_ok != 'true'
           && steps.check3.outputs.build_ok != 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./control-plane/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
+          backend: ${{ steps.backend.outputs.backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: "github-actions"
+          codex-model: ${{ env.LOPU_CODEX_MODEL }}
+          codex-reasoning-effort: ${{ env.LOPU_CODEX_REASONING_EFFORT }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
             an earlier round either did not finish or did not fix the build (later
             build stages often reveal new collisions once earlier ones are fixed).
@@ -378,7 +420,7 @@ jobs:
             any .gitattributes, or any lockfile; no new/renamed/deleted files unless
             the error demands it; fix only what the log implicates; if it is not
             fixable by editing app source, make NO edits.
-          claude_args: |
+          claude-args: |
             ${{ steps.models.outputs.model_args }}
             --effort max
             --max-turns 150
@@ -391,6 +433,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 3
 
@@ -405,8 +450,8 @@ jobs:
           ALL_DOCTOR_SKIP_REASON: >-
             ${{ steps.check1.outputs.build_ok != 'true'
                 && steps.check1.outputs.ai_eligible == 'true'
-                && env.HAS_AI_CREDENTIAL != 'true'
-                && 'no ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN secret — union pushed unhealed'
+                && steps.backend.outputs.has_credential != 'true'
+                && 'the selected Lopu backend has no matching Actions credential — union pushed unhealed'
                 || '' }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-record
 
