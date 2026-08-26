@@ -327,6 +327,16 @@ function assertWorkflowSource() {
     2,
     "detector handoff and cascade both carry canonical PR batches",
   );
+  // Per-PR retry intent lives INSIDE the canonical batch, so both dispatch
+  // payloads pin the top-level flag to the literal false. Binding the lowercase
+  // per-PR shell variable the batch refactor deleted (the detector's own
+  // uppercase `$MANUAL_RETRY` env stays valid) is an unbound variable under
+  // `set -u`, which aborts the handoff before a single worker is dispatched.
+  assert.doesNotMatch(
+    source,
+    /--argjson manual_retry "\$manual_retry"/u,
+    "batch dispatchers pin top-level manual_retry to false instead of a per-PR variable",
+  );
   assert.match(source, /issue_comment:\n    types: \[created, edited\]/u, "human PR comments wake Lopu");
   assert.match(
     source,

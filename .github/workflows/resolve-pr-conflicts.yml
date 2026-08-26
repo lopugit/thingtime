@@ -1129,17 +1129,6 @@ jobs:
             fi
           fi
 
-          manual_retry_for_pr() {
-            local number="$1"
-            if [ -n "$PR_BATCH_B64" ]; then
-              jq -r --argjson number "$number" \
-                '[.[] | select(.number == $number) | .manual_retry] | first // false' \
-                <<<"$BATCH_JSON"
-            else
-              printf '%s\n' "$MANUAL_RETRY"
-            fi
-          }
-
           encode_ref() {
             jq -rn --arg value "$1" '$value | @uri'
           }
@@ -1939,8 +1928,7 @@ jobs:
               --arg runner_label "$RUNNER_LABEL" \
               --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
               --arg routing_proof "$ROUTING_PROOF" \
-              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
-              --argjson manual_retry "$manual_retry" '
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
                   ref:"github-actions",
                   inputs:{
