@@ -692,6 +692,26 @@ function assertAdminModelRouting(
     /round_number <= 500/,
     "the composite independently enforces the 500-round ceiling",
   );
+  assert.equal(
+    rebaseActionSource.match(/find \.github\/actions\/lopu-agent -type f -print0/g)?.length || 0,
+    3,
+    "the protected Lopu action participates in every trusted-tree hash",
+  );
+  assert.match(
+    rebaseActionSource,
+    /cp -pR "\$source_trusted\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$safe_trusted\/\.github\/actions\/lopu-agent\/"/u,
+    "the round bootstrap preserves the protected nested Lopu action outside the model workspace",
+  );
+  assert.match(
+    rebaseActionSource,
+    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"/u,
+    "the protected nested Lopu action is rematerialized after scratch preparation wipes the workspace",
+  );
+  assert.match(
+    rebaseActionSource,
+    /cp -pR "\$safe_trusted_abs\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$restored\/\.github\/actions\/lopu-agent\/"/u,
+    "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
+  );
   assert.match(
     lopuActionSource,
     /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,

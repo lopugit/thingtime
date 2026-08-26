@@ -2041,9 +2041,16 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
   }
   const labelled = withActionsToken(labelArgs);
   if (!labelled.ok) return { ok: false, error: `cannot repair promotion labels: ${labelled.error}` };
+  // Every call site renders this inside a Markdown inline code span (`…`), and
+  // GFM does not apply backslash escapes inside code spans — an escaped
+  // backtick still closes the span, so the previous `\``-escape neither
+  // protected the span nor escaped the backslashes it introduced (CodeQL
+  // js/incomplete-sanitization). Remove the one character that can break out
+  // rather than escape it: these are short control-plane config strings (model
+  // waterfall, graphify mode/semantic) that never legitimately hold a backtick.
   const inline = (value, fallback) => String(value || fallback)
     .slice(0, 500)
-    .replace(/`/g, "\\`");
+    .replace(/`/g, "");
   const reviewBody = [
     aiResolved
       ? "🤖 **Lopu completed the promotion conflict resolution.**"

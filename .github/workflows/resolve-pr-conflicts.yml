@@ -2561,6 +2561,9 @@ jobs:
             check. Only when the finding is demonstrably not applicable may you
             replace the disposition file with a JSON array containing
             `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
+            Every entry must contain exactly those three keys, and its comment
+            must be 40 through 1000 characters including the required
+            `Lopu evidence: ` prefix.
             Do not use `won't fix`, do not include an alert absent from the
             trusted snapshot, and do not PATCH CodeQL alert state yourself. A
             later isolated trusted job validates and applies only those exact
@@ -2829,8 +2832,8 @@ jobs:
                      and startswith("Lopu evidence: ")
                      and length >= 40 and length <= 1000))
             ' "$proposals" >/dev/null || {
-              echo "::error::Lopu proposed an invalid CodeQL disposition schema for PR #$number."
-              exit 1
+              echo "::warning::Skipping malformed CodeQL disposition proposals for PR #$number; every referenced alert remains open for a later review."
+              continue
             }
             # `prepare` seeds every disposition file with `[]`, so an untouched
             # file is still non-empty. Stop here once the schema is trusted and
@@ -5783,6 +5786,20 @@ jobs:
           }
           printf '%s\n' "$merge_out" | tail -n +2 | sed -n '/^$/q;p' | sort -u > "$RUNNER_TEMP/conflicted-derived.txt"
 
+          # The merge step deliberately assigned the whole Graphify subtree to
+          # the exact base snapshot. Reassert that assignment after the model
+          # returns: repo instructions, background tooling, or an over-eager
+          # agent may refresh graphify-out/ while resolving unrelated source
+          # conflicts. Restoring the immutable MERGE_HEAD tree cannot hide an
+          # accepted source edit, and the subtree OID guard below still proves
+          # the staged result byte-for-byte before publication.
+          if [ "$GRAPHIFY_RESET" = "true" ]; then
+            git rm -rfq --ignore-unmatch -- graphify-out/
+            if git rev-parse --verify --quiet "$merge_head:graphify-out" >/dev/null; then
+              git checkout "$merge_head" -- graphify-out/
+            fi
+          fi
+
           # DETERMINISTIC STAGING: the model only edited the working tree; we
           # stage its resolutions ourselves, and ONLY for the recomputed
           # conflicted paths (never a path the model might have invented). A
@@ -5832,7 +5849,7 @@ jobs:
           if [ "$graphify_changed" = true ]; then
             if [ "$GRAPHIFY_RESET" = "true" ]; then
               staged_sub="$(git rev-parse --verify --quiet "$index_tree:graphify-out" || echo missing)"
-              base_sub="$(git rev-parse --verify --quiet "origin/$BASE_REF:graphify-out" || echo missing)"
+              base_sub="$(git rev-parse --verify --quiet "$merge_head:graphify-out" || echo missing)"
               if [ "$staged_sub" != "$base_sub" ]; then
                 echo "::error::graphify-out was reset to the base side, but the staged subtree no longer matches it — refusing to commit."
                 exit 1

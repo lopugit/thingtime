@@ -143,6 +143,7 @@ runs:
               printf '%s\0' "$trusted_file"
               sha256_file "$trusted_file"
             done < <({
+              find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
             } | LC_ALL=C sort -z)
@@ -162,12 +163,19 @@ runs:
           echo "::error::Trusted rebase-stack scripts are missing."
           exit 1
         }
+        [[ -f "$source_trusted/.github/actions/lopu-agent/action.yml" ]] || {
+          echo "::error::The protected Lopu agent action is missing."
+          exit 1
+        }
 
         round_abs="$(mktemp -d "$runner_temp_abs/ai-rebase-round.XXXXXX")"
         safe_trusted="$round_abs/trusted"
         mkdir -p \
+          "$safe_trusted/.github/actions/lopu-agent" \
           "$safe_trusted/.github/actions/rebase-conflict-round" \
           "$safe_trusted/.github/scripts/rebase-stack"
+        cp -pR "$source_trusted/.github/actions/lopu-agent/." \
+          "$safe_trusted/.github/actions/lopu-agent/"
         cp -pR "$action_abs/." "$safe_trusted/.github/actions/rebase-conflict-round/"
         cp -pR "$source_trusted/.github/scripts/rebase-stack/." \
           "$safe_trusted/.github/scripts/rebase-stack/"
@@ -229,6 +237,15 @@ runs:
           echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
         fi
         (( prepare_status == 0 )) || exit "$prepare_status"
+
+        # prepare-round intentionally replaces the workspace with the bounded
+        # conflict scratch. A nested local action is resolved only when its
+        # step starts, so materialize the protected Lopu action again after
+        # that wipe. Conflict edits remain bounded to the mechanically-listed
+        # paths; post-model verification rejects every unlisted repository edit.
+        mkdir -p "$WORKSPACE_PATH/trusted/.github/actions/lopu-agent"
+        cp -pR "$SAFE_TRUSTED_PATH/.github/actions/lopu-agent/." \
+          "$WORKSPACE_PATH/trusted/.github/actions/lopu-agent/"
 
     - name: Record this mechanically-derived conflict set for the caller
       if: steps.prepare.outcome == 'success'
@@ -514,6 +531,7 @@ runs:
               printf '%s\0' "$trusted_file"
               sha256_file "$trusted_file"
             done < <({
+              find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
             } | LC_ALL=C sort -z)
@@ -922,6 +940,7 @@ runs:
               printf '%s\0' "$trusted_file"
               sha256_file "$trusted_file"
             done < <({
+              find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
             } | LC_ALL=C sort -z)
@@ -954,8 +973,11 @@ runs:
 
         restored="$workspace_abs/trusted"
         mkdir -p \
+          "$restored/.github/actions/lopu-agent" \
           "$restored/.github/actions/rebase-conflict-round" \
           "$restored/.github/scripts/rebase-stack"
+        cp -pR "$safe_trusted_abs/.github/actions/lopu-agent/." \
+          "$restored/.github/actions/lopu-agent/"
         cp -pR "$safe_trusted_abs/.github/actions/rebase-conflict-round/." \
           "$restored/.github/actions/rebase-conflict-round/"
         cp -pR "$safe_trusted_abs/.github/scripts/rebase-stack/." \
