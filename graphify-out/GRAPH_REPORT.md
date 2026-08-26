@@ -1,7 +1,7 @@
-# Graph Report - lopu-queue-coalesce.pTFIUP  (2026-08-27)
+# Graph Report - lopu-codeql-base.7HCgL3  (2026-08-27)
 
 ## Corpus Check
-- 23 files · ~139,045 words
+- 23 files · ~139,175 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a95cf142`
+- Built from commit: `6b0e3bfa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
