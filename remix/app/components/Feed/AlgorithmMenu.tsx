@@ -194,6 +194,13 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const navigate = useNavigate();
 
   const [algorithms, setAlgorithms] = React.useState<PublicAlgorithm[]>([]);
+  // `sessionEventCount` is the whole scroll session's log — it never resets,
+  // because "Save session as algorithm" trains on all of it. The growth stage
+  // therefore overlays only the events recorded SINCE the list was last
+  // loaded: anything older is already inside the refetched `eventCount`, and
+  // on an algorithm switch this session's training belongs to the previous
+  // algorithm, not the newly selected one.
+  const [sessionBaseline, setSessionBaseline] = React.useState(0);
   const [modalMode, setModalMode] = React.useState<ModalMode | null>(null);
   const [draftName, setDraftName] = React.useState('');
   const [draftEmoji, setDraftEmoji] = React.useState('🧠');
@@ -201,17 +208,22 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  const sessionEventCountRef = React.useRef(sessionEventCount);
+  sessionEventCountRef.current = sessionEventCount;
 
   const active = value ? algorithms.find((algorithm) => algorithm.id === value) || null : null;
 
   const reload = React.useCallback(async () => {
     if (!user) {
       setAlgorithms([]);
+      setSessionBaseline(sessionEventCountRef.current);
       return;
     }
     try {
       const resp = await apiRef.current.v1.algorithms.list();
       setAlgorithms(resp.algorithms || []);
+      // rebase the overlay only when fresh counts actually landed
+      setSessionBaseline(sessionEventCountRef.current);
     } catch {
       // background load — stay quiet, the menu just shows Latest
     }
@@ -303,10 +315,12 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const buttonLabel = value === null ? '⏱️ Latest' : active ? `${active.emoji} ${active.name}` : '🧠 Algorithm';
 
   // growth stage (🥚→🐣→🐥→🧠): server-counted signals + this session's
-  // not-yet-refetched events. The slight overlap after a flush lands before a
-  // list refetch can only ever nudge the total forward — stages are monotonic,
-  // so the dot never regresses mid-session.
-  const activeStage = active ? growthStageFor((active.eventCount || 0) + sessionEventCount) : null;
+  // events that the server total cannot include yet (see `sessionBaseline`).
+  // The slight overlap after a flush lands before a list refetch can only ever
+  // nudge the total forward — stages are monotonic, so the dot never regresses
+  // mid-session.
+  const sessionSinceLoad = Math.max(0, sessionEventCount - sessionBaseline);
+  const activeStage = active ? growthStageFor((active.eventCount || 0) + sessionSinceLoad) : null;
 
   const modalTitle =
     modalMode === 'branch'
