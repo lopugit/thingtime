@@ -2561,6 +2561,9 @@ jobs:
             check. Only when the finding is demonstrably not applicable may you
             replace the disposition file with a JSON array containing
             `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
+            Every entry must contain exactly those three keys, and its comment
+            must be 40 through 1000 characters including the required
+            `Lopu evidence: ` prefix.
             Do not use `won't fix`, do not include an alert absent from the
             trusted snapshot, and do not PATCH CodeQL alert state yourself. A
             later isolated trusted job validates and applies only those exact
@@ -2829,8 +2832,8 @@ jobs:
                      and startswith("Lopu evidence: ")
                      and length >= 40 and length <= 1000))
             ' "$proposals" >/dev/null || {
-              echo "::error::Lopu proposed an invalid CodeQL disposition schema for PR #$number."
-              exit 1
+              echo "::warning::Skipping malformed CodeQL disposition proposals for PR #$number; every referenced alert remains open for a later review."
+              continue
             }
             # `prepare` seeds every disposition file with `[]`, so an untouched
             # file is still non-empty. Stop here once the schema is trusted and
