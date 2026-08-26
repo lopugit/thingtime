@@ -1163,6 +1163,21 @@ export function assertControlPlaneContract() {
     /maintain_codeql_backfill:[\s\S]*group: lopu-codeql-open-pr-backfill-\$\{\{ github\.repository \}\}[\s\S]*cancel-in-progress: false/u,
     "CodeQL inventory passes serialize without terminating active work",
   );
+  assert.match(
+    resolver,
+    /Every entry must contain exactly those three keys[\s\S]{0,220}40 through 1000 characters[\s\S]{0,220}`Lopu evidence: `/u,
+    "the model prompt states the exact trusted CodeQL disposition schema",
+  );
+  assert.match(
+    resolver,
+    /::warning::Skipping malformed CodeQL disposition proposals for PR #\$number; every referenced alert remains open for a later review\.[\s\S]{0,80}continue/u,
+    "one malformed model disposition stays fail-closed without failing unrelated Lopu review work",
+  );
+  assert.doesNotMatch(
+    resolver,
+    /::error::Lopu proposed an invalid CodeQL disposition schema/u,
+    "a malformed optional disposition never makes the repository-wide review job red",
+  );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
     resolver.indexOf("\npermissions:\n"),
