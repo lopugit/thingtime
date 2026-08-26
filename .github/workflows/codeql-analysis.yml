@@ -4,9 +4,11 @@ name: Lopu CodeQL all branches
 # protected github-actions branch.
 on:
   pull_request:
-  # The target-context lane executes only the protected metadata handoff. It
+  # This default-branch listener exists independently of the PR's base branch.
+  # The target-context lane executes only the protected metadata handoff: it
   # never analyzes the base branch or checks out untrusted PR content with the
-  # target event's write-capable token.
+  # target event's write-capable token. A separate workflow_dispatch run then
+  # analyzes the exact immutable PR head without secrets.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
