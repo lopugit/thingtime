@@ -30,6 +30,20 @@ export const CHATGPT_PLUGIN_ROUTES = [
 
 export const mcpResourceForOrigin = (origin: string) => `${origin}${CHATGPT_MCP_PATH}`;
 
+// Tool arguments arrive optional, and the argument readers in plugin.ts report
+// "absent" as null. Null and undefined must both drop the parameter: sending
+// the literal string "null" upstream makes /things filter on a thingtime kind
+// named "null" and /things/search search for that word, so an unfiltered list
+// or an empty search silently returns nothing. tsconfig sets strictNullChecks
+// false, so this guard — not the type — is what keeps an omitted filter
+// omitted.
+export const applyUpstreamQuery = (url: URL, query: Record<string, string | number | null | undefined> = {}): URL => {
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+  return url;
+};
+
 export const isMcpResourceForOrigin = (resource: unknown, origin: string): resource is string =>
   typeof resource === 'string' && resource === mcpResourceForOrigin(origin);
 
@@ -182,8 +196,13 @@ export const parseCredentialBundle = (value: unknown): ChatGptCredentialBundle |
   return { version: 1, defaultConnectionId, connections };
 };
 
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
+// Single definition for both plugin HTML surfaces (the connection page here
+// and the OAuth error page in plugin.ts). Keeping one copy is the point: the
+// pattern must match every character the replacement map handles, and a second
+// copy is free to drift back to `/&/g`, which silently escapes only ampersands
+// and passes `<`, `>`, `"` and `'` into attribute and text positions.
+export const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 
 export const renderConnectionPage = (requestToken: string, allowedEndpoints: string[]) => {
   const options = allowedEndpoints.map((endpoint) => `<option value="${escapeHtml(endpoint)}">${escapeHtml(endpoint)}</option>`).join('');

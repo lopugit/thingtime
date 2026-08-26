@@ -5,11 +5,13 @@ import {
   CHATGPT_MCP_PATH,
   CHATGPT_PLUGIN_FEATURES,
   CHATGPT_PLUGIN_ROUTES,
+  applyUpstreamQuery,
   isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
-  pluginDiscovery
+  pluginDiscovery,
+  renderConnectionPage
 } from './pluginCore';
 
 const validPkceChallenge = 'A'.repeat(43);
@@ -76,6 +78,53 @@ test('Thingtime endpoint and encrypted-bundle parsing fail closed', () => {
   });
   assert.ok(valid);
   assert.equal(parseCredentialBundle({ ...valid, connections: [{ ...valid!.connections[0], endpoint: 'https://attacker.invalid' }] }), null);
+});
+
+test('omitted tool filters stay omitted upstream instead of becoming the string "null"', () => {
+  // The argument readers in plugin.ts return null for an absent tool argument.
+  // A guard that only drops undefined would send thingtime=null&folder=null,
+  // making an unfiltered list_thingtime_things filter on a kind named "null"
+  // and an empty search_thingtime_things search for that word.
+  const listed = applyUpstreamQuery(new URL('/api/v1/things', 'https://thingtime.com'), {
+    thingtime: null,
+    folder: null,
+    limit: undefined
+  });
+  assert.equal(listed.toString(), 'https://thingtime.com/api/v1/things');
+  assert.equal(listed.searchParams.has('thingtime'), false);
+  assert.equal(listed.searchParams.has('folder'), false);
+
+  const searched = applyUpstreamQuery(new URL('/api/v1/things/search', 'https://thingtime.com'), {
+    q: null,
+    thingtime: '',
+    limit: 25
+  });
+  assert.equal(searched.searchParams.has('q'), false);
+  assert.equal(searched.searchParams.has('thingtime'), false);
+  assert.equal(searched.searchParams.get('limit'), '25');
+
+  // Supplied filters still ride through, including a literal "null" the user
+  // genuinely asked for and values that need escaping.
+  const supplied = applyUpstreamQuery(new URL('/api/v1/things', 'https://thingtime.com'), {
+    thingtime: 'null',
+    folder: 'a b&c',
+    limit: 1
+  });
+  assert.equal(supplied.searchParams.get('thingtime'), 'null');
+  assert.equal(supplied.searchParams.get('folder'), 'a b&c');
+  assert.equal(supplied.searchParams.get('limit'), '1');
+});
+
+test('the connection page escapes every HTML-significant character it interpolates', () => {
+  const page = renderConnectionPage('tok"><script>alert(1)</script>', ['https://thingtime.com']);
+  // The request token lands in a double-quoted attribute: an unescaped quote
+  // would close it and an unescaped angle bracket would open a real element.
+  assert.equal(page.includes('<script>alert(1)</script>'), false);
+  assert.equal(page.includes('tok"><script>'), false);
+  assert.ok(page.includes('tok&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;'));
+  // The page's own trusted markup and inline bootstrap must survive intact.
+  assert.ok(page.includes('<option value="https://thingtime.com">https://thingtime.com</option>'));
+  assert.ok(page.includes("document.getElementById('add')"));
 });
 
 test('capability discovery is origin scoped and every registered route has a semantic feature', () => {

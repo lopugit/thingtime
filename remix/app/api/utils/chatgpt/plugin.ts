@@ -14,6 +14,8 @@ import {
   CHATGPT_MCP_INSTRUCTIONS,
   CHATGPT_PLUGIN_FEATURES,
   allowedThingtimeEndpoints,
+  applyUpstreamQuery,
+  escapeHtml,
   isMcpResourceForOrigin,
   normalizeChatGptOAuthScopes,
   normalizeThingtimeEndpoint,
@@ -42,7 +44,6 @@ type Result<T> = Failure | Success<T>;
 const noStoreHeaders = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 
 const requestOrigin = (request: Request) => new URL(request.url).origin;
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 
 const configuredCipherKey = (): Buffer | null => {
   const encoded = process.env.THINGTIME_CHATGPT_CREDENTIAL_KEY?.trim();
@@ -185,15 +186,12 @@ const endpointRequest = async (
   endpoint: string,
   token: string,
   path: string,
-  init: { method?: string; query?: Record<string, string | number | undefined>; body?: unknown } = {}
+  init: { method?: string; query?: Record<string, string | number | null | undefined>; body?: unknown } = {}
 ): Promise<Result<unknown>> => {
   const normalizedEndpoint = normalizeThingtimeEndpoint(endpoint);
   if (!normalizedEndpoint) return { ok: false, status: 403, error: 'This Thingtime endpoint is no longer allowed by the gateway' };
 
-  const url = new URL(path, normalizedEndpoint);
-  for (const [key, value] of Object.entries(init.query || {})) {
-    if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
-  }
+  const url = applyUpstreamQuery(new URL(path, normalizedEndpoint), init.query);
   try {
     const response = await fetch(url, {
       method: init.method || 'GET',
