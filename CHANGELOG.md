@@ -21,6 +21,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Commander macOS releases are now Developer ID signed, notarized, and
+  stapled**: the release job imports the existing Developer ID certificate and
+  App Store Connect key into an ephemeral runner keychain, builds under the
+  distribution signing policy instead of the previous ad-hoc identity, and then
+  submits, staples, and Gatekeeper-assesses the bundle before it publishes any
+  asset. Credentials are imported only after the duplicate-release check — the
+  same ordering the Electron PR release uses — so a re-run that publishes
+  nothing never unlocks them, and the otherwise unbounded notarization wait is
+  capped so an Apple-side stall cannot hold a macOS runner for six hours. The
+  lane requires the six existing macOS signing secrets and stays inert until
+  the Commander sources reach `main` (#263) and a thin `main` listener calls
+  this workflow. — Lopu (AI), 2026-08-26
 - **All-branch maintenance now coalesces before it reaches Lopu's durable model
   fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
   the same metadata-only handoff to the protected manager instead of attaching

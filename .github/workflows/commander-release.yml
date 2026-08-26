@@ -42,7 +42,50 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.12.1 --activate
 
+      - name: Resolve release metadata version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_version="$(node Commander/script/release-version.mjs check)"
+          build_number="${GITHUB_RUN_NUMBER}"
+          release_version="${base_version}+build.${build_number}"
+          release_tag="commander-v${release_version}"
+
+          {
+            echo "THINGTIME_COMMANDER_BASE_VERSION=${base_version}"
+            echo "THINGTIME_COMMANDER_BUILD_NUMBER=${build_number}"
+            echo "THINGTIME_COMMANDER_RELEASE_VERSION=${release_version}"
+            echo "THINGTIME_COMMANDER_RELEASE_TAG=${release_tag}"
+          } >> "${GITHUB_ENV}"
+
+          {
+            echo "base_version=${base_version}"
+            echo "build_number=${build_number}"
+            echo "release_version=${release_version}"
+            echo "release_tag=${release_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Stop if this release already exists
+        id: existing_release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${THINGTIME_COMMANDER_RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::${THINGTIME_COMMANDER_RELEASE_TAG} already exists; skipping duplicate publish."
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # Signing credentials are imported last, only once a publishable release
+      # is known to be missing: the same ordering electron-pr-release.yml uses,
+      # so a duplicate-tag re-run never unlocks the Developer ID key or the
+      # App Store Connect key it has no artifact to sign.
       - name: Import Developer ID and notarization credentials
+        if: steps.existing_release.outputs.exists != 'true'
         shell: bash
         env:
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -85,44 +128,6 @@ jobs:
             echo "COMMANDER_NOTARY_TEAM_ID=${APPLE_TEAM_ID}"
           } >> "${GITHUB_ENV}"
 
-      - name: Resolve release metadata version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          base_version="$(node Commander/script/release-version.mjs check)"
-          build_number="${GITHUB_RUN_NUMBER}"
-          release_version="${base_version}+build.${build_number}"
-          release_tag="commander-v${release_version}"
-
-          {
-            echo "THINGTIME_COMMANDER_BASE_VERSION=${base_version}"
-            echo "THINGTIME_COMMANDER_BUILD_NUMBER=${build_number}"
-            echo "THINGTIME_COMMANDER_RELEASE_VERSION=${release_version}"
-            echo "THINGTIME_COMMANDER_RELEASE_TAG=${release_tag}"
-          } >> "${GITHUB_ENV}"
-
-          {
-            echo "base_version=${base_version}"
-            echo "build_number=${build_number}"
-            echo "release_version=${release_version}"
-            echo "release_tag=${release_tag}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Stop if this release already exists
-        id: existing_release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if gh release view "${THINGTIME_COMMANDER_RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-            echo "::notice::${THINGTIME_COMMANDER_RELEASE_TAG} already exists; skipping duplicate publish."
-          else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Build Commander bundle
         if: steps.existing_release.outputs.exists != 'true'
         working-directory: Commander
@@ -134,6 +139,11 @@ jobs:
       - name: Notarize and staple Commander bundle
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
+        # `notarytool --wait` blocks on an Apple-side queue with no bound of its
+        # own, and this job has no timeout, so a stalled submission would hold a
+        # 10x-billed macOS runner for GitHub's 6-hour default. Notarizing this
+        # bundle takes minutes; cap the wait so a stall fails fast and retries.
+        timeout-minutes: 45
         run: |
           set -euo pipefail
           app_bundle="Commander/dist/Commander.app"
