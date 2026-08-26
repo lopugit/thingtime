@@ -214,16 +214,22 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const active = value ? algorithms.find((algorithm) => algorithm.id === value) || null : null;
 
   const reload = React.useCallback(async () => {
+    // Snapshot the session count BEFORE the request. Events recorded while it
+    // is in flight cannot be inside the total it returns, so rebasing on the
+    // post-await count would subtract them twice and the dot could regress
+    // (🐣 → 🥚 mid-scroll). Over-counting the overlap is the safe direction —
+    // that is what keeps the stage monotonic.
+    const baseline = sessionEventCountRef.current;
     if (!user) {
       setAlgorithms([]);
-      setSessionBaseline(sessionEventCountRef.current);
+      setSessionBaseline(baseline);
       return;
     }
     try {
       const resp = await apiRef.current.v1.algorithms.list();
       setAlgorithms(resp.algorithms || []);
       // rebase the overlay only when fresh counts actually landed
-      setSessionBaseline(sessionEventCountRef.current);
+      setSessionBaseline(baseline);
     } catch {
       // background load — stay quiet, the menu just shows Latest
     }
