@@ -58,6 +58,9 @@ jobs:
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
+      - name: Validate Claude credential failover classification
+        run: node .github/scripts/classify-claude-credential-failure.mjs --self-test
+
       - name: Validate signed Electron PR release contract
         run: node .github/scripts/electron-pr-release-contract.mjs
 

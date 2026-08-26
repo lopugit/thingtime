@@ -167,22 +167,40 @@ export function shouldRevertDoctorStatusPath(path) {
   return isForbiddenDoctorPath(p);
 }
 
-// Keep the push handoff executable, not merely documented. GitHub only runs
-// a workflow for events declared in its top-level `on` block; the handoff job
-// is unreachable if that trigger drifts away.
+// Keep the doctor internal to the one public Lopu manager. Push normalization
+// lives in resolve-pr-conflicts.yml because provider actions reject push-event
+// provenance even when the implementation is reached through workflow_call.
 export function assertAllBranchWorkflowContract(workflowText) {
   const text = String(workflowText ?? "").replaceAll("\r\n", "\n");
   const triggerBlock = text.split("\npermissions:", 1)[0];
+  assert.match(text, /^name: Lopu internal all-branch integration$/m, "the union doctor is branded as Lopu");
   assert.match(
     triggerBlock,
-    /\non:\n(?:[ \t].*\n)*?  push:\n    branches: \[github-actions\]\n/,
-    "all-branch workflow must trigger on pushes to github-actions"
+    /\non:\n  workflow_call:\n/,
+    "all-branch workflow must remain callable by the public Lopu manager"
   );
-  assert.match(text, /\n  handoff:\n[\s\S]*?github\.event_name == 'push'/, "push events must enter the handoff job");
+  assert.doesNotMatch(
+    triggerBlock,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    "all-branch workflow must not expose a second public trigger"
+  );
+  assert.doesNotMatch(text, /\n  handoff:\n/, "push normalization belongs to the public Lopu manager");
+  const rebuildBlock = text.slice(text.indexOf("\n  rebuild:"));
+  assert.match(rebuildBlock, /if: github\.repository == 'lopugit\/thingtime'/);
   assert.match(
-    text,
-    /\n  rebuild:\n[\s\S]*?github\.event_name != 'push'/,
-    "push events must stay out of the unsupported rebuild/doctor job"
+    rebuildBlock,
+    /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/,
+    "the union doctor must share Lopu's durable single-agent fleet"
+  );
+  assert.match(
+    rebuildBlock,
+    /name: Check out develop working tree[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/,
+    "the union checkout keeps exact ancestry without eagerly downloading historical blobs"
+  );
+  assert.equal(
+    [...rebuildBlock.matchAll(/You are Lopu, Thingtime's principal PR and repository manager\./g)].length,
+    3,
+    "every union repair round must identify itself as Lopu"
   );
 }
 
@@ -823,7 +841,14 @@ function doctorCommitMode(round) {
   // House rule: a committed fixup must never contain any credential this job
   // could see, raw or base64. On a hit, discard the entire round.
   const staged = tryGit("diff", "--cached").stdout || "";
-  const leaked = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].some((name) => {
+  const leaked = [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY_FALLBACK",
+    "CLAUDE_CODE_OAUTH_TOKEN_FALLBACK",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+  ].some((name) => {
     const value = process.env[name];
     if (!value) return false;
     return staged.includes(value) || staged.includes(Buffer.from(value, "utf8").toString("base64"));

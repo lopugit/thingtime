@@ -1,0 +1,250 @@
+name: Lopu agent
+description: Run Thingtime's principal repository agent through a validated Claude or Codex backend.
+
+inputs:
+  backend:
+    description: "Closed provider selector: claude or codex."
+    required: false
+    default: claude
+  prompt:
+    description: Complete Lopu task prompt.
+    required: true
+  anthropic-api-key:
+    description: Anthropic API key when the Claude backend uses API authentication.
+    required: false
+  claude-code-oauth-token:
+    description: Claude Code OAuth token when the Claude backend uses OAuth authentication.
+    required: false
+  anthropic-api-key-fallback:
+    description: Secondary Anthropic API key used only after an account-capacity or credential failure.
+    required: false
+  claude-code-oauth-token-fallback:
+    description: Secondary Claude Code OAuth token used only after an account-capacity or credential failure.
+    required: false
+  openai-api-key:
+    description: OpenAI Platform project key when the Codex backend is selected.
+    required: false
+  github-token:
+    description: Repository-scoped GitHub token available to the selected backend.
+    required: true
+  allowed-bots:
+    description: Bot actor allowlist passed to claude-code-action.
+    required: false
+    default: github-actions
+  claude-args:
+    description: Trusted, caller-validated Claude CLI arguments.
+    required: false
+    default: ""
+  codex-model:
+    description: Closed Codex model selector.
+    required: false
+    default: gpt-5.6-terra
+  codex-reasoning-effort:
+    description: Closed Codex reasoning-effort selector.
+    required: false
+    default: xhigh
+  working-directory:
+    description: Working directory passed to codex-action.
+    required: false
+    default: .
+  sandbox:
+    description: Codex filesystem sandbox mode.
+    required: false
+    default: danger-full-access
+  safety-strategy:
+    description: Codex runner hardening strategy.
+    required: false
+    default: drop-sudo
+
+outputs:
+  backend:
+    description: Validated backend that ran.
+    value: ${{ steps.config.outputs.backend }}
+  backend-label:
+    description: Human-readable provider and model label.
+    value: ${{ steps.config.outputs.backend_label }}
+  claude-credential-slot:
+    description: Safe identifier for the Claude credential slot that produced the current execution output.
+    value: ${{ steps.claude_result.outputs.credential_slot }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate the Lopu backend
+      id: config
+      shell: bash
+      env:
+        BACKEND: ${{ inputs.backend }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
+        CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        CODEX_MODEL: ${{ inputs.codex-model }}
+        CODEX_REASONING_EFFORT: ${{ inputs.codex-reasoning-effort }}
+        CODEX_SANDBOX: ${{ inputs.sandbox }}
+        CODEX_SAFETY_STRATEGY: ${{ inputs.safety-strategy }}
+      run: |
+        set -euo pipefail
+        case "$BACKEND" in
+          claude)
+            primary_available=false
+            fallback_available=false
+            if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+              primary_available=true
+            fi
+            if [ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ]; then
+              fallback_available=true
+            fi
+            if [ "$primary_available" != true ] && [ "$fallback_available" != true ]; then
+              echo "::error::Lopu's Claude backend requires a primary or fallback Anthropic/Claude Code credential."
+              exit 1
+            fi
+            backend_label="Claude Code"
+            echo "claude_primary_available=$primary_available" >>"$GITHUB_OUTPUT"
+            echo "claude_fallback_available=$fallback_available" >>"$GITHUB_OUTPUT"
+            ;;
+          codex)
+            [ -n "${OPENAI_API_KEY:-}" ] || {
+              echo "::error::Lopu's Codex backend requires an OpenAI Platform project key in OPENAI_API_KEY."
+              exit 1
+            }
+            case "$CODEX_MODEL" in
+              gpt-5.6-terra) model_label="GPT-5.6 Terra" ;;
+              gpt-5.6-sol) model_label="GPT-5.6 Sol" ;;
+              *) echo "::error::Unsupported Lopu Codex model: $CODEX_MODEL"; exit 1 ;;
+            esac
+            case "$CODEX_REASONING_EFFORT" in
+              medium) effort_label="Medium" ;;
+              high) effort_label="High" ;;
+              xhigh) effort_label="Extra High" ;;
+              max) effort_label="Maximum" ;;
+              *) echo "::error::Unsupported Lopu Codex reasoning effort: $CODEX_REASONING_EFFORT"; exit 1 ;;
+            esac
+            case "$CODEX_SANDBOX" in
+              read-only|workspace-write|danger-full-access) ;;
+              *) echo "::error::Unsupported Lopu Codex sandbox: $CODEX_SANDBOX"; exit 1 ;;
+            esac
+            [ "$CODEX_SAFETY_STRATEGY" = drop-sudo ] || {
+              echo "::error::Lopu Codex must use the drop-sudo runner strategy."
+              exit 1
+            }
+            backend_label="OpenAI API $model_label $effort_label"
+            ;;
+          *)
+            echo "::error::Unsupported Lopu backend: $BACKEND"
+            exit 1
+            ;;
+        esac
+        echo "Lopu backend: $BACKEND ($backend_label)"
+        echo "backend=$BACKEND" >>"$GITHUB_OUTPUT"
+        echo "backend_label=$backend_label" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with the primary Claude credential
+      id: claude_primary
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_primary_available == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify a primary Claude credential failure
+      id: claude_primary_failure
+      if: >-
+        steps.config.outputs.backend == 'claude'
+        && steps.config.outputs.claude_primary_available == 'true'
+        && steps.claude_primary.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_primary.outputs.execution_file }}
+      run: |
+        set -euo pipefail
+        execution_file="${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"
+        node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" \
+          "$execution_file" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with the fallback Claude credential
+      id: claude_fallback
+      if: >-
+        steps.config.outputs.backend == 'claude'
+        && steps.config.outputs.claude_fallback_available == 'true'
+        && (steps.config.outputs.claude_primary_available != 'true'
+            || (steps.claude_primary.outcome == 'failure'
+                && steps.claude_primary_failure.outputs.retryable == 'true'))
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key-fallback }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token-fallback }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Record the Claude credential slot and outcome
+      id: claude_result
+      if: always() && steps.config.outputs.backend == 'claude'
+      shell: bash
+      env:
+        PRIMARY_AVAILABLE: ${{ steps.config.outputs.claude_primary_available }}
+        PRIMARY_OUTCOME: ${{ steps.claude_primary.outcome }}
+        FALLBACK_OUTCOME: ${{ steps.claude_fallback.outcome }}
+      run: |
+        set -euo pipefail
+        credential_slot=primary
+        successful=false
+        if [ "$FALLBACK_OUTCOME" = success ]; then
+          credential_slot=fallback
+          successful=true
+        elif [ "$PRIMARY_OUTCOME" = success ]; then
+          credential_slot=primary
+          successful=true
+        elif [ "$FALLBACK_OUTCOME" = failure ]; then
+          credential_slot=fallback
+        elif [ "$PRIMARY_AVAILABLE" != true ]; then
+          credential_slot=fallback
+        fi
+        printf '%s\n' "$credential_slot" >"$RUNNER_TEMP/lopu-claude-credential-slot"
+        echo "credential_slot=$credential_slot" >>"$GITHUB_OUTPUT"
+        echo "successful=$successful" >>"$GITHUB_OUTPUT"
+        if [ "$credential_slot" = fallback ]; then
+          echo "::notice::Lopu used the fallback Claude credential slot."
+        fi
+
+    - name: Require a successful Claude execution
+      if: always() && steps.config.outputs.backend == 'claude'
+      shell: bash
+      env:
+        SUCCESSFUL: ${{ steps.claude_result.outputs.successful }}
+        PRIMARY_FAILURE_REASON: ${{ steps.claude_primary_failure.outputs.reason }}
+      run: |
+        set -euo pipefail
+        if [ "$SUCCESSFUL" != true ]; then
+          if [ -n "${PRIMARY_FAILURE_REASON:-}" ]; then
+            echo "::error::Lopu's Claude execution did not complete ($PRIMARY_FAILURE_REASON)."
+          else
+            echo "::error::Lopu's Claude execution did not complete."
+          fi
+          exit 1
+        fi
+
+    - name: Run Lopu with Codex
+      if: steps.config.outputs.backend == 'codex'
+      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        working-directory: ${{ inputs.working-directory }}
+        sandbox: ${{ inputs.sandbox }}
+        safety-strategy: ${{ inputs.safety-strategy }}
+        model: ${{ inputs.codex-model }}
+        effort: ${{ inputs.codex-reasoning-effort }}
+        allow-bots: true
+        allow-bot-users: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}

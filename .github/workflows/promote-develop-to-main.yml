@@ -1,7 +1,8 @@
 # Keep a standing promotion PR open from develop into main, with a live
 # changelog of what merging it would ship.
 #
-# On every push to develop (or manual dispatch),
+# When the public Lopu manager receives a develop push (or an explicit owner
+# maintenance request),
 # .github/scripts/promotion-pr-changelog.mjs:
 # - opens the promotion PR (base main, head develop) when develop is ahead of
 #   main and none is open — the body already contains the changelog section;
@@ -33,7 +34,7 @@
 #   immediately. Description edits and changelog comments stay on
 #   GITHUB_TOKEN.
 
-name: Promote develop to main
+name: Lopu internal develop promotion
 
 on:
   workflow_call:
@@ -43,26 +44,6 @@ on:
         required: false
         default: "github-actions"
         type: string
-      runner_label:
-        description: "Internal: unique Vercel Sandbox self-hosted runner label"
-        required: false
-        default: ""
-        type: string
-      control_dispatch_id:
-        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
-        required: false
-        default: ""
-        type: string
-  push:
-    branches: [develop]
-  workflow_dispatch:
-    inputs:
-      execution_provider:
-        description: "Internal: hosted compute selected by Thingtime CI Control"
-        required: false
-        default: "github-actions"
-        type: choice
-        options: [github-actions, vercel-sandbox]
       runner_label:
         description: "Internal: unique Vercel Sandbox self-hosted runner label"
         required: false

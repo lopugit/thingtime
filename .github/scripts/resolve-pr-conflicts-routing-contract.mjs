@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.meta.url);
 const REBASE_WORKFLOW_URL = new URL("../workflows/rebase-pr-stacks.yml", import.meta.url);
 const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml", import.meta.url);
+const LOPU_ACTION_URL = new URL("../actions/lopu-agent/action.yml", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
@@ -32,6 +33,7 @@ export function route(input) {
   const depth = String(input.depth ?? "0");
   const detectorHandoff = input.detectorHandoff === true;
   const routedManualRetry = input.manualRetry === true;
+  const refRaceHandoff = input.refRaceHandoff === true;
 
   const errors = [];
   if (!validDepth(depth)) errors.push("invalid depth");
@@ -51,7 +53,8 @@ export function route(input) {
 
   const valid = errors.length === 0;
   const internalWorker = valid && internalShape;
-  const humanDispatch = event === "workflow_dispatch" && !detectorHandoff;
+  const humanDispatch =
+    event === "workflow_dispatch" && !detectorHandoff && !refRaceHandoff;
   const humanExplicit = humanDispatch && Boolean(prNumber || branch);
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
@@ -105,6 +108,7 @@ export function route(input) {
     scanAll,
     scanHead,
     manualRetry,
+    refRaceHandoff,
     selector,
     concurrency,
     cancelInProgress: !internalShape,
@@ -123,6 +127,7 @@ function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
+  const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
@@ -131,11 +136,47 @@ function assertWorkflowSource() {
     source.indexOf("\n  review:"),
     source.indexOf("\n  resolve_promotion:"),
   );
+  const codeqlDispositionBlock = source.slice(
+    source.indexOf("\n  codeql_dispositions:"),
+    source.indexOf("\n  resolve_promotion:"),
+  );
   const reviewHandoffBlock = source.slice(
     source.indexOf("\n  review_handoff:"),
     source.indexOf("\n  model_config:"),
   );
+  const manageRebasesBlock = source.slice(
+    source.indexOf("\n  manage_rebases:"),
+    source.indexOf("\n  maintain_develop_promotion:"),
+  );
+  const detectBlock = source.slice(
+    source.indexOf("\n  detect:"),
+    source.indexOf("\n  handoff:"),
+  );
+  const reviewDetectBlock = source.slice(
+    source.indexOf("\n  review_detect:"),
+    source.indexOf("\n  review_handoff:"),
+  );
   const resolveBlock = source.slice(source.indexOf("\n  resolve:"));
+  const mergePushBlock = source.slice(
+    source.indexOf("      - name: Push merge commit"),
+    source.indexOf("      - name: Requeue after a moving-ref race"),
+  );
+  const rebaseContextBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Validate dispatch against live PR and branch refs"),
+    rebaseSource.indexOf("      - name: Comment on PR (rebase starting)"),
+  );
+  const rebasePushBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Force-push the fully verified rewritten history once"),
+    rebaseSource.indexOf("      - name: Requeue after a moving-ref rebase race"),
+  );
+  const rebaseHandoffBlock = rebaseSource.slice(
+    rebaseSource.indexOf("\n  handoff:"),
+    rebaseSource.indexOf("\n  rebase:"),
+  );
+  const rebaseChildDispatchBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Dispatch exact child transplants"),
+    rebaseSource.indexOf("      - name: Release current PR and report success"),
+  );
   const cascadeBlock = source.slice(
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
     source.indexOf("      - name: Comment on PR (needs attention)"),
@@ -144,12 +185,24 @@ function assertWorkflowSource() {
     source.indexOf("      - name: Comment on PR (resolution starting)"),
     source.indexOf("      - name: Check out PR head"),
   );
+  const admissionBlock = source.slice(
+    source.indexOf("      - name: Revalidate queued PR snapshot before expensive work"),
+    source.indexOf("      - name: Comment on PR (resolution starting)"),
+  );
+  const checkoutBlock = source.slice(
+    source.indexOf("      - name: Check out PR head"),
+    source.indexOf("      - name: Clear deliberately retried rebase ownership pauses"),
+  );
   const resolvedCommentBlock = source.slice(
     source.indexOf("      - name: Comment on PR (resolved)"),
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
   );
   const failureCommentBlock = source.slice(
     source.indexOf("      - name: Comment on PR (needs attention)"),
+  );
+  const graphifyBlock = source.slice(
+    source.indexOf("      - name: Rebuild Graphify structure, then LLM semantics"),
+    source.indexOf("      - name: Push merge commit"),
   );
 
   assert.match(source, /description: "PR base or head branch to scan;/);
@@ -167,6 +220,26 @@ function assertWorkflowSource() {
   assert.match(source, /github\.ref_name == 'github-actions'/);
   assert.match(source, /inputs\.detector_handoff == true/);
   assert.match(source, /manual_retry is internal routing state and requires detector_handoff/);
+  assert.match(
+    source,
+    /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
+    "read-only GitHub API calls retry a bounded set of transient failures with backoff",
+  );
+  assert.match(
+    source,
+    /gh_read_retry graphql --paginate --slurp[\s\S]*successful but malformed PR inventory response/u,
+    "the GraphQL PR inventory is parsed only after transport success and response-shape validation",
+  );
+  assert.match(
+    source,
+    /all_open="\$\(all_open_prs\)"\n\s+prs="\$\(query\)"/u,
+    "the detector filters and classifies one complete PR inventory snapshot",
+  );
+  assert.doesNotMatch(
+    source,
+    /query\(\) \{\n\s+local open\n\s+open="\$\(all_open_prs\)"/u,
+    "query filters must not issue a redundant full-repository GraphQL request",
+  );
   assert.match(source, /--base "\$HEAD_REF" --state open --limit 1000/);
   assert.match(source, /ref:"github-actions"/);
   assert.doesNotMatch(source, /ref:"develop"/);
@@ -200,6 +273,31 @@ function assertWorkflowSource() {
     "conversation events do not launch unrelated conflict scans",
   );
   assert.match(
+    manageRebasesBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'/u,
+    "exact rebase repository events are owned only by the rebase engine",
+  );
+  assert.match(
+    source,
+    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.ref_race_handoff == true[\s\S]*&& 'rebase-stack'/u,
+    "automatic rebase race retries retain the rebase compute-provider policy",
+  );
+  assert.match(
+    detectBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'resolve-conflicts-cascade'/u,
+    "merge cascade repository events are owned only by the conflict detector",
+  );
+  assert.match(
+    detectBlock,
+    /inputs\.ref_race_handoff != true/u,
+    "automatic rebase race retries cannot also enter the merge detector",
+  );
+  assert.match(
+    reviewDetectBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
+    "internal events and automatic rebase retries never launch a duplicate whole-PR review",
+  );
+  assert.match(
     source,
     /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
     "only PR-associated failing checks enter the Lopu route",
@@ -207,11 +305,72 @@ function assertWorkflowSource() {
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
   assert.doesNotMatch(cascadeBlock, /if: env\.HAS_WORKFLOW_PUSH/);
+  assert.match(source, /mergeStateStatus/u, "detector reads GitHub's behind/current state");
+  assert.match(
+    source,
+    /select\(\.mergeable == "CONFLICTING" or \.mergeStateStatus == "BEHIND"\)/u,
+    "conflicting and clean-but-behind PRs both enter Lopu's base-merge lane",
+  );
+  assert.match(
+    source,
+    /mode: \(if \.mergeable == "CONFLICTING" then "conflict" else "outdated" end\)/u,
+    "workers retain why the PR needs a base merge",
+  );
+  assert.match(
+    source,
+    /select\(\.mergeStateStatus != "BEHIND" and \.mergeStateStatus != "UNKNOWN"\)/u,
+    "whole-PR review waits until its head is current",
+  );
+  assert.match(
+    graphifyBlock,
+    /steps\.admission\.outputs\.current == 'true'/u,
+    "every completed base merge gets a Graphify rebuild",
+  );
+  assert.doesNotMatch(
+    graphifyBlock,
+    /if:.*graphify_reset/u,
+    "Graphify refresh is not limited to graph-tree conflicts",
+  );
+  assert.ok(
+    graphifyBlock.indexOf("graphify update .") < graphifyBlock.indexOf("graphify extract ."),
+    "structural Graphify extraction runs before LLM semantic extraction",
+  );
+  assert.match(
+    graphifyBlock,
+    /preserving the completed structural refresh/u,
+    "semantic failure retains the completed structural graph",
+  );
 
   assert.match(
     resolveBlock,
     /RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=\$\{\{ github\.run_id \}\} -->'/u,
     "resolver status marker is scoped to the workflow run",
+  );
+  assert.match(admissionBlock, /id: admission/u, "queued workers have an admission gate");
+  assert.match(
+    admissionBlock,
+    /live_head_sha[\s\S]*?EXPECTED_HEAD_SHA[\s\S]*?live_base_sha[\s\S]*?EXPECTED_BASE_SHA/u,
+    "admission revalidates both immutable ref snapshots",
+  );
+  assert.match(
+    admissionBlock,
+    /checkout, AI, Graphify, and publication were skipped/u,
+    "superseded queued workers document the bounded no-op",
+  );
+  assert.ok(
+    resolveBlock.indexOf("Revalidate queued PR snapshot before expensive work") <
+      resolveBlock.indexOf("Check out PR head"),
+    "snapshot admission runs before checkout",
+  );
+  assert.match(
+    checkoutBlock,
+    /steps\.admission\.outputs\.current == 'true'/u,
+    "checkout is impossible for a superseded queued snapshot",
+  );
+  assert.match(
+    startCommentBlock,
+    /steps\.admission\.outputs\.current == 'true'/u,
+    "superseded queued work does not post a misleading start comment",
   );
   assert.doesNotMatch(
     resolveBlock,
@@ -252,7 +411,73 @@ function assertWorkflowSource() {
 
   const dispatchCount =
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
-  assert.equal(dispatchCount, 3, "conflict detector, Lopu review batch, and stacked cascade use fixed workflow dispatch");
+  assert.equal(
+    dispatchCount,
+    5,
+    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, and moving-ref retry use fixed workflow dispatch",
+  );
+  assert.match(
+    rebaseSource,
+    /event_type:"rebase-pr-stack-ai"/u,
+    "rebase roots and children return through the unified Lopu repository event",
+  );
+  assert.equal(
+    rebaseSource.match(/event_type:"rebase-pr-stack-ai"/gu)?.length,
+    2,
+    "root and child handoffs use the same exact rebase event",
+  );
+  assert.equal(
+    rebaseSource.match(/worker:\{/gu)?.length,
+    2,
+    "immutable root and child snapshots are nested under one bounded worker payload",
+  );
+  assert.match(
+    rebaseHandoffBlock,
+    /permissions:\s+#[^\n]*\n(?:\s+#[^\n]*\n)*\s+contents: write/u,
+    "root repository dispatch has the documented Contents write permission",
+  );
+  const boundedPayloadShape =
+    /client_payload:\{\s+pr_number:\$pr_number,\s+execution_provider:\$execution_provider,\s+runner_label:\$runner_label,\s+control_dispatch_id:\$control_dispatch_id,\s+routing_proof:\$routing_proof,\s+routing_proof_issued_at:\$routing_proof_issued_at,\s+worker:\{/u;
+  assert.match(
+    rebaseHandoffBlock,
+    boundedPayloadShape,
+    "root dispatch keeps six routing properties plus one nested worker object",
+  );
+  assert.match(
+    rebaseChildDispatchBlock,
+    boundedPayloadShape,
+    "child dispatch keeps six routing properties plus one nested worker object",
+  );
+  assert.doesNotMatch(
+    rebaseSource,
+    /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u,
+    "the triggerless reusable rebase engine never tries to workflow-dispatch itself",
+  );
+  assert.match(
+    rebaseSource,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_handoff:true/u,
+    "moving rebase refs release ownership and re-enter Lopu as an automatic detector",
+  );
+  for (const [name, block] of [
+    ["merge publication", mergePushBlock],
+    ["rebase publication", rebasePushBlock],
+  ]) {
+    assert.ok(
+      block.indexOf("defer_ref_race()") >= 0 &&
+        block.indexOf("defer_ref_race()") < block.indexOf("|| defer_ref_race"),
+      `${name}: moving-ref helper is defined in the same Actions step before use`,
+    );
+  }
+  assert.doesNotMatch(
+    detectBlock,
+    /defer_ref_race\(\)/u,
+    "merge detector does not define a publication-only shell helper",
+  );
+  assert.doesNotMatch(
+    rebaseContextBlock,
+    /defer_ref_race\(\)/u,
+    "rebase context validation does not define a publication-only shell helper",
+  );
   assert.match(source, /review_detect:/, "clean PRs have a Lopu review selector");
   assert.match(source, /review_handoff:/, "one review selector handoff exists");
   assert.match(
@@ -289,17 +514,104 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /POST repos\/\$REPO\/pulls\/<PR_NUMBER>\/comments\/<COMMENT_ID>\/replies/u, "Lopu can reply inline");
   assert.match(reviewBlock, /thingtime-lopu-conversation:v1/u, "Lopu marks its free-form conversational comments");
   assert.match(reviewBlock, /Never\n            edit another actor's comment/u, "Lopu edits only its own comments");
-  assert.match(reviewBlock, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu has a pinned Codex review backend");
+  assert.match(reviewBlock, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/u, "review runs through the single protected Lopu action");
   assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
-  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "Lopu review backend is repository-configurable");
+  assert.match(modelBlock, /LOPU_AGENT_BACKEND/u, "Lopu's global agent backend is repository-configurable");
+  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "the historical review backend remains a compatibility fallback");
   assert.match(modelBlock, /gpt-5\.6-terra/u, "Terra is an allowed Lopu Codex model");
   assert.match(modelBlock, /gpt-5\.6-sol/u, "Sol is an allowed Lopu Codex model");
-  assert.match(modelBlock, /model_reasoning_effort/u, "Codex reasoning effort is configured explicitly");
+  assert.match(lopuActionSource, /effort: \$\{\{ inputs\.codex-reasoning-effort \}\}/u, "Codex reasoning effort is configured explicitly");
+  assert.match(lopuActionSource, /allow-bot-users: \$\{\{ inputs\.allowed-bots \}\}/u, "Codex receives the same closed bot identity as Claude");
+  assert.match(lopuActionSource, /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u, "Lopu pins its Claude implementation");
+  assert.match(lopuActionSource, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu pins its Codex implementation");
+  assert.match(lopuActionSource, /gpt-5\.6-terra\) model_label=/u, "Lopu accepts Terra");
+  assert.match(lopuActionSource, /gpt-5\.6-sol\) model_label=/u, "Lopu accepts Sol");
+  assert.doesNotMatch(source, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "controller workflows never bypass the protected Lopu action");
+  assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
+  assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
-  assert.match(reviewBlock, /Never push or merge `github-actions`, `main`, or any target\/default/u, "model may not directly publish protected branches");
+  assert.match(reviewBlock, /Never push `github-actions`, `main`, or\s+another target\/default branch directly/u, "model may not directly publish protected branches");
+  assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
+  assert.doesNotMatch(
+    source.slice(source.indexOf("\n  review:"), source.indexOf("\n  codeql_dispositions:")),
+    /security-events: write/u,
+    "the model-bearing review job cannot mutate CodeQL alert state",
+  );
+  assert.match(reviewBlock, /codeql_alerts_path/u, "each reviewed PR carries exact CodeQL evidence");
+  assert.match(reviewBlock, /codeql_dispositions_path/u, "the model has a structured disposition channel");
+  assert.match(reviewBlock, /codeql_authority_b64/u, "pre-model CodeQL authority crosses an immutable step output");
+  assert.match(
+    reviewBlock,
+    /bounded immutable authority snapshot/u,
+    "model proposals must match the trusted pre-model CodeQL snapshot",
+  );
+  assert.match(reviewBlock, /the next CodeQL scan\n\s+will mark it fixed/u, "real findings are fixed through code and a fresh scan");
+  assert.match(reviewBlock, /Never dismiss a real issue/u, "real CodeQL findings cannot be greenwashed");
+  assert.match(reviewBlock, /Do not use `won't fix`/u, "Lopu never chooses the won't-fix disposition");
+  assert.match(
+    reviewBlock,
+    /\[ "\$current_head" != "\$reviewed_head" \][\s\S]*\[ "\$current_base" != "\$reviewed_base" \]/u,
+    "dispositions wait for a fresh scan whenever the reviewed PR head or base changed",
+  );
+  assert.match(reviewBlock, /refs\/pull\/\$number\/head/u, "snapshot accepts default-setup PR-head analyses");
+  assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
+  assert.match(reviewBlock, /\.reviewed_base_sha == \$reviewed_base_sha/u, "authority binds the reviewed base revision");
+  assert.match(reviewBlock, /\.merge_sha' <<<"\$record"/u, "merge-ref alerts bind the captured merge SHA");
+  assert.match(
+    reviewBlock,
+    /"false positive" \| "used in tests"/u,
+    "model proposals use the two evidence-backed disposition reasons",
+  );
+  assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
+  assert.doesNotMatch(
+    codeqlDispositionBlock,
+    /ANTHROPIC_API_KEY|OPENAI_API_KEY|claude-code-action|codex-action/u,
+    "the CodeQL writer is credential-free apart from GitHub's scoped token",
+  );
+  assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
+  assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
+  assert.match(codeqlDispositionBlock, /\$alert_ref" != "\$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
+  assert.match(codeqlDispositionBlock, /\$alert_sha" != "\$analysis_sha/u, "writer revalidates the exact analysis SHA");
+  assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
+  assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
+  assert.match(
+    codeqlDispositionBlock,
+    /\.reason == "false positive" or \.reason == "used in tests"/u,
+    "writer independently restricts disposition reasons",
+  );
+  assert.match(codeqlDispositionBlock, /code-scanning\/alerts\/\$alert_number/u, "writer uses the exact alert endpoint");
+  assert.match(codeqlDispositionBlock, /thingtime-lopu-codeql:v1/u, "each applied disposition is audited on its PR");
+  assert.match(
+    reviewBlock,
+    /jq -e 'length > 0' "\$proposals"/u,
+    "an untouched `[]` disposition file short-circuits before the live head lookup",
+  );
 
-  assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
+  // `${x:-{}}` does not mean "default to an empty object": bash closes the
+  // expansion at the first `}`, so the default is `{` and the trailing `}` is
+  // appended to whatever the variable held. A populated variable therefore
+  // becomes `<value>}`, which fails every downstream `jq` under `set -e`.
+  for (const [name, controllerSource] of [
+    ["resolve-pr-conflicts.yml", source],
+    ["rebase-pr-stacks.yml", rebaseSource],
+    ["rebase-conflict-round/action.yml", rebaseActionSource],
+  ]) {
+    assert.doesNotMatch(
+      controllerSource,
+      /:-\{\}\}/u,
+      `${name} must not use the \${x:-{}} brace-default expansion, which appends a stray brace`,
+    );
+  }
+
+  assertAdminModelRouting(
+    source,
+    rebaseSource,
+    rebaseActionSource,
+    lopuActionSource,
+    modelBlock,
+    resolveBlock,
+  );
 }
 
 function aiRuntimeSourceFiles(directory) {
@@ -327,7 +639,14 @@ function assertAdminLoader(block, label) {
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
 }
 
-function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock) {
+function assertAdminModelRouting(
+  source,
+  rebaseSource,
+  rebaseActionSource,
+  lopuActionSource,
+  modelBlock,
+  resolveBlock,
+) {
   const rebaseModelBlock = rebaseSource.slice(
     rebaseSource.indexOf("      - name: Load the conflict-resolver model waterfall"),
     rebaseSource.indexOf("      - name: Isolate the real rebasing repository outside model workspace"),
@@ -378,8 +697,29 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     /round_number <= 500/,
     "the composite independently enforces the 500-round ceiling",
   );
+  assert.match(
+    lopuActionSource,
+    /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
+    "the protected Lopu action exposes an ordered secondary Anthropic account slot",
+  );
+  assert.match(
+    lopuActionSource,
+    /classify-claude-credential-failure\.mjs[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
+    "the protected Lopu action falls back only after classified account-capacity or credential failures",
+  );
+  assert.match(
+    rebaseActionSource,
+    /lopu-claude-credential-slot/u,
+    "rebase continuations stay on the Claude credential slot that owns the exact session",
+  );
+  assert.match(
+    resolveBlock,
+    /name: Check out the fixed trusted github-actions control plane[\s\S]*ref: github-actions[\s\S]*path: trusted/u,
+    "the conflict worker materializes the protected Lopu action after checking out the PR head",
+  );
 
-  const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"|')?claude(?:"|')?\b/;
+  const aiRuntimePattern =
+    /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -389,6 +729,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     .map((path) => relative(REPO_ROOT, path))
     .sort();
   assert.deepEqual(actualRuntimeFiles, [
+    ".github/actions/lopu-agent/action.yml",
     ".github/actions/rebase-conflict-round/action.yml",
     ".github/scripts/rebase-stack/refresh-promotion-graphify.sh",
     ".github/workflows/all-branch.yml",
@@ -396,7 +737,22 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     ".github/workflows/resolve-pr-conflicts.yml",
   ], "new AI runtime source must be added to the Admin-model contract");
 
+  const promotionGraphify = readFileSync(
+    join(REPO_ROOT, ".github/scripts/rebase-stack/refresh-promotion-graphify.sh"),
+    "utf8",
+  );
+  assert.match(promotionGraphify, /GRAPHIFY_BACKEND_PREFERENCE/u, "promotion Graphify follows Lopu's provider choice");
+  assert.match(promotionGraphify, /backend=openai/u, "promotion Graphify supports the OpenAI backend");
+  assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
+  assert.match(
+    promotionGraphify,
+    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
+    "promotion Graphify scans every provider credential before committing derived output",
+  );
+  assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
+
   const requiredModelBindings = new Map([
+    [".github/actions/lopu-agent/action.yml", "${{ inputs.codex-model }}"],
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
     [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
     [".github/workflows/all-branch.yml", "${{ steps.models.outputs.model_args }}"],
@@ -416,6 +772,24 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
       /GRAPHIFY_CLAUDE_CLI_MODEL\s*[:=]\s*["']?(?:sonnet|haiku|opus|claude-)/,
       `${path}: Graphify model must come from the Admin handoff`,
     );
+
+    const lines = runtime.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+        continue;
+      }
+      const call = lines.slice(index, index + 32).join("\n");
+      assert.match(
+        call,
+        /anthropic-api-key-fallback:/u,
+        `${path}:${index + 1}: every Lopu call receives the secondary API-key slot`,
+      );
+      assert.match(
+        call,
+        /claude-code-oauth-token-fallback:/u,
+        `${path}:${index + 1}: every Lopu call receives the secondary subscription slot`,
+      );
+    }
   }
 }
 
@@ -456,6 +830,25 @@ export function selfTest() {
     detectorOnly: true,
     handoffEligible: true,
     manualRetry: true,
+    selector: "pr:190",
+    concurrency: "resolve-detect-pr190",
+    cancelInProgress: true,
+    modelAndResolve: false,
+  });
+
+  assertRoute("automatic moving-ref retry", {
+    event: "workflow_dispatch",
+    ref: "github-actions",
+    actor: "github-actions[bot]",
+    prNumber: "190",
+    refRaceHandoff: true,
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    humanExplicit: false,
+    manualRetry: false,
+    refRaceHandoff: true,
     selector: "pr:190",
     concurrency: "resolve-detect-pr190",
     cancelInProgress: true,

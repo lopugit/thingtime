@@ -15,7 +15,7 @@ function count(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
 
-function assertSignedPrReleaseContract() {
+function assertPrReleaseContract() {
   assert.match(workflow, /^  workflow_call:/mu, "release worker is reusable");
   assert.match(workflow, /^  workflow_dispatch:/mu, "release worker permits explicit owner dispatch");
   assert.doesNotMatch(
@@ -75,13 +75,25 @@ function assertSignedPrReleaseContract() {
   assert.ok(count(workflow, "GH_TOKEN: ${{ github.token }}") >= 3, "GitHub token is scoped to API and final publish steps");
 
   const unsignedTests = workflow.indexOf("      - name: Test unsigned source before accessing signing credentials\n");
+  const selectDistribution = workflow.indexOf("      - name: Select release distribution\n");
   const importCredentials = workflow.indexOf("      - name: Import Developer ID and notarization credentials\n");
-  assert.ok(unsignedTests >= 0 && importCredentials > unsignedTests, "unsigned source checks precede signing credential import");
+  assert.ok(unsignedTests >= 0 && selectDistribution > unsignedTests, "source checks precede distribution selection");
+  assert.ok(importCredentials > selectDistribution, "distribution selection precedes signing credential import");
+  assert.match(workflow, /0\) distribution="unsigned"/u, "an entirely absent credential set selects the temporary unsigned lane");
+  assert.match(workflow, /6\) distribution="signed"/u, "a complete credential set selects the signed lane");
+  assert.match(workflow, /Incomplete signing configuration/u, "partial credential sets fail closed rather than publishing an ambiguous artifact");
+  assert.match(workflow, /release_version="\$\{release_version\}\.unsigned"/u, "unsigned artifacts carry an explicit SemVer marker");
+  assert.match(workflow, /corepack pnpm --dir electron run dist:unsigned/u, "the unsigned lane uses the dedicated unsigned builder");
+  assert.match(workflow, /build-unsigned-release\.sh/u, "the unsigned lane builds the companion Recovery artifact without notarization");
+  assert.match(workflow, /Thingtime-Electron-App-UNSIGNED-Release/u, "unsigned desktop assets have a non-ambiguous public name");
+  assert.match(workflow, /Thingtime-Recovery-App-UNSIGNED-Release/u, "unsigned Recovery assets have a non-ambiguous public name");
+  assert.match(workflow, /UNSIGNED Thingtime Desktop PR release/u, "unsigned release notes are unmistakable");
+  assert.match(workflow, /Open Anyway/u, "unsigned release notes direct users to macOS's explicit approval path");
   assert.match(workflow, /MAC_CSC_LINK: \$\{\{ secrets\.MAC_CSC_LINK \}\}/u, "Developer ID certificate remains a release-only secret");
   assert.match(workflow, /APPLE_API_KEY_BASE64: \$\{\{ secrets\.APPLE_API_KEY_BASE64 \}\}/u, "notarization key remains a release-only secret");
   assert.match(workflow, /Thingtime-Recovery-App-Release-\*/u, "release publishes the companion Recovery asset");
   assert.match(workflow, /--prerelease/u, "PR artifacts are never published as stable releases");
 }
 
-assertSignedPrReleaseContract();
+assertPrReleaseContract();
 console.log("electron-pr-release-contract-ok");
