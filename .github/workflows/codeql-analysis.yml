@@ -5,8 +5,10 @@ name: Lopu CodeQL all branches
 on:
   pull_request:
   # This default-branch listener exists independently of the PR's base branch.
-  # Its protected worker performs metadata-only handoff, then a separate
-  # workflow_dispatch run analyzes the exact immutable PR head without secrets.
+  # The target-context lane executes only the protected metadata handoff: it
+  # never analyzes the base branch or checks out untrusted PR content with the
+  # target event's write-capable token. A separate workflow_dispatch run then
+  # analyzes the exact immutable PR head without secrets.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
@@ -34,7 +36,12 @@ permissions:
   security-events: write
 
 jobs:
+  target-handoff:
+    if: github.event_name == 'pull_request_target'
+    uses: lopugit/thingtime/.github/workflows/codeql-pr-handoff.yml@github-actions
+
   control-plane:
+    if: github.event_name != 'pull_request_target'
     uses: lopugit/thingtime/.github/workflows/codeql-analysis.yml@github-actions
     with:
       pr_number: ${{ inputs.pr_number || '' }}

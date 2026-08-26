@@ -6,6 +6,25 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## ChatGPT / Codex MCP connector
+
+- [ ] `GET /.well-known/oauth-protected-resource`, `GET
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
+      manifest return the deployed HTTPS origin and the MCP path exactly.
+- [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
+      page works at desktop and a 390px mobile viewport, requires `resource`,
+      state, and S256 PKCE, and never reflects a personal access token in the
+      redirect or an error page.
+- [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
+      list/select them in ChatGPT and verify reads use the selected account.
+      An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
+      authorization code, altered callback/resource, or altered verifier must
+      fail closed.
+- [ ] Confirm a read/search tool succeeds with `things.read`, while each write
+      tool asks for ChatGPT confirmation and the target API rejects a PAT that
+      lacks its exact Things scope. Disconnecting an account removes its bridge
+      access; removing the last account revokes the ChatGPT bridge session.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
@@ -154,8 +173,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
-      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
-      staged at root, and invalid source output preserves the prior artifact.
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -169,6 +190,27 @@ is fixed, and cite the checklist you ran in the PR description.
       config must map `github-actions` to `false`, while the thin branch config
       must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
       a second fail-safe.
+
+## Lopu CodeQL all-branch listener
+
+- [ ] Open or update PRs targeting `main`, `develop`, `github-actions`, and an
+      older feature branch without the current listener. Confirm normal
+      `pull_request` runs own targets that carry the listener, while the
+      default-branch `pull_request_target` run performs only the protected
+      metadata handoff for missing listeners. Confirm no target-context job
+      checks out PR code, no redundant analyzer cancels an in-flight scan, and
+      both language contexts finish green for the latest immutable snapshot.
+
+## Lopu wildcard `all`-branch maintenance
+
+- [ ] Run `node remix/scripts/workflow-caller-contract.mjs` and confirm product
+      branches contain no `.github/workflows/all-branch.yml` or rebase-specific
+      listener. Push `develop` and `main`, exercise every PR lifecycle transition
+      including draft and close, wait for the `53 * * * *` backstop, and invoke
+      the `build-all` and `backfill-codeql` maintenance choices manually. Every
+      path must appear under **Lopu PR manager**, call the corresponding
+      protected implementation, and keep at most one model-backed Lopu job
+      active without cancelling it.
 
 ## Develop-target Vercel PR previews
 
@@ -246,6 +288,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
@@ -343,6 +389,37 @@ is fixed, and cite the checklist you ran in the PR description.
       targeted lint command: the startup probe performs one forced relink and
       ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
       both ESLint and the directly declared Prettier CLI can start.
+
+## Branding page (`remix/app/routes/branding/_index.tsx`, `remix/app/components/Branding/`)
+
+- [ ] `/branding` renders full-width with a centred max-width column at desktop
+      (≥1280px) and mobile (375px); no horizontal scrollbar at either size and
+      no borders/cards/checkerboard grids anywhere — previews sit on soft
+      panels only.
+- [ ] Every variant section (wordmark, icon, both pink cuts) shows its live
+      SVG preview; the light/dark panel dots swap the preview surface.
+- [ ] "Download SVG" and "PNG · 1024px" point at real committed files under
+      `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
+      grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
+      wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
+- [ ] Ready-made sizes render as two lines — the SVG line
+      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
+      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
+      scroll at 375px.
+- [ ] Custom export: format PNG/SVG, any width, padding all-sides and
+      per-side, background transparent/white/ink — downloads a file named
+      `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
+      Lopu success toast (errors also route through Lopu, never `alert`).
+- [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
+      test:branding` passes (trim + padding + pixel-size unit tests).
+- [ ] Press kit grid renders all generated marketing images; the portrait
+      phone wallpaper previews as a centre crop and must not stretch its grid
+      row (no giant empty gap beside it).
+- [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
+- [ ] After changing `logoMatrix.ts` matrices/colours, re-run
+      `npm --prefix remix run branding-assets` and commit the refreshed
+      `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
+      when nothing changed).
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -916,7 +993,14 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
-- [ ] Queue two all-branch rebuild signals through the default `main` listener.
+- [ ] Push a new commit to an older open PR whose head branch does not contain
+      the current Lopu push listener, including one targeting a non-default
+      branch. Confirm the default-branch `pull_request_target: synchronize`
+      listener dispatches that exact PR to the protected controller, duplicate
+      push/target signals collapse to one live snapshot, and the repository
+      fleet still runs no more than one model-backed Lopu job at a time.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu
+      listener — the `53 * * * *` backstop and a manual `build-all` dispatch.
       Confirm the thin caller has no concurrency block, both calls reach the
       protected implementation, and its `queue: max` worker completes the
       first request rather than cancelling it when the second arrives.
@@ -1156,23 +1240,24 @@ is fixed, and cite the checklist you ran in the PR description.
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
 
-## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+## Lopu internal PR/stack rebase engine (protected `github-actions` implementation)
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. The thin `rebase-pr-stacks.yml` listener
-      must accept only `repository_dispatch: rebase-pr-stack-ai`: it has no
-      push, PR, schedule, or manual trigger and cannot create a competing run
-      that later gets cancelled by Lopu's embedded rebase lane.
+      rebase, and stack detection. `rebase-pr-stack-ai` must reach the
+      protected engine only through that one listener's
+      `repository_dispatch`: no separate `rebase-pr-stacks.yml` caller may
+      exist to create a competing run that later gets cancelled by Lopu's
+      embedded rebase lane.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only Lopu's base-merge lane owns it. Regression class:
-      standalone replay failures were incorrectly force-rebased and could
-      ping-pong with a merge-resolver update.
+      confirm only the **Lopu PR manager** base-merge lane owns it. Regression
+      class: standalone replay failures were incorrectly force-rebased and
+      could ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
