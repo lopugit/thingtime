@@ -2801,8 +2801,10 @@ jobs:
           set -euo pipefail
 
           canonical="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          conflicting_alerts="$RUNNER_TEMP/lopu-codeql-conflicting-alerts.json"
           trusted_authority="$RUNNER_TEMP/lopu-codeql-authority-trusted.json"
           printf '[]\n' >"$canonical"
+          printf '[]\n' >"$conflicting_alerts"
           printf '%s' "$CODEQL_AUTHORITY_B64" | base64 --decode >"$trusted_authority"
           printf 'dispositions_b64=\n' >>"$GITHUB_OUTPUT"
           [ -s "${MANIFEST:-}" ] || exit 0
@@ -2887,11 +2889,6 @@ jobs:
               [ -n "$proposal_b64" ] || continue
               proposal="$(base64 --decode <<<"$proposal_b64")"
               alert_number="$(jq -r '.alert_number' <<<"$proposal")"
-              if jq -e --argjson alert_number "$alert_number" \
-                   'any(.[]; .alert_number == $alert_number)' "$canonical" >/dev/null; then
-                echo "::error::CodeQL alert #$alert_number was proposed more than once in this Lopu session."
-                exit 1
-              fi
               alert="$(jq -c \
                 --argjson pr_number "$number" \
                 --argjson alert_number "$alert_number" \
@@ -2919,9 +2916,43 @@ jobs:
               [ "$(jq -r '.state' <<<"$alert")" = open ] \
                 && [ -n "$expected_analysis_sha" ] \
                 && [ "$analysis_sha" = "$expected_analysis_sha" ] || {
-                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
-                  exit 1
-                }
+                echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
+                exit 1
+              }
+
+              # CodeQL alert numbers identify repository-level alerts. The same
+              # alert can therefore appear in several exact PR analysis
+              # snapshots when those branches share the finding. Coalesce
+              # compatible proposals instead of failing the whole batch or
+              # attempting the same repository-level dismissal more than once.
+              # Conflicting reasons are ambiguous, so remove the earlier entry
+              # and leave that alert open for a later review.
+              if jq -e --argjson alert_number "$alert_number" \
+                   'index($alert_number) != null' "$conflicting_alerts" >/dev/null; then
+                echo "::notice::Skipping another CodeQL alert #$alert_number proposal because this Lopu session already found conflicting disposition reasons."
+                continue
+              fi
+              existing="$(jq -c --argjson alert_number "$alert_number" \
+                '[.[] | select(.alert_number == $alert_number)] | first // empty' \
+                "$canonical")"
+              if [ -n "$existing" ]; then
+                existing_reason="$(jq -r '.reason' <<<"$existing")"
+                proposed_reason="$(jq -r '.reason' <<<"$proposal")"
+                if [ "$existing_reason" = "$proposed_reason" ]; then
+                  echo "::notice::Coalescing CodeQL alert #$alert_number across PR analysis snapshots with the same '$proposed_reason' disposition."
+                  continue
+                fi
+                echo "::warning::Leaving CodeQL alert #$alert_number open because this Lopu session proposed conflicting disposition reasons."
+                jq -c --argjson alert_number "$alert_number" \
+                  '[.[] | select(.alert_number != $alert_number)]' \
+                  "$canonical" >"$canonical.next"
+                mv "$canonical.next" "$canonical"
+                jq -c --argjson alert_number "$alert_number" \
+                  'if index($alert_number) == null then . + [$alert_number] else . end' \
+                  "$conflicting_alerts" >"$conflicting_alerts.next"
+                mv "$conflicting_alerts.next" "$conflicting_alerts"
+                continue
+              fi
 
               entry="$(jq -cn \
                 --argjson pr_number "$number" \
@@ -3192,11 +3223,21 @@ jobs:
             fi
 
             alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
-            alert_ref="$(jq -r '.most_recent_instance.ref' <<<"$alert")"
-            alert_sha="$(jq -r '.most_recent_instance.commit_sha' <<<"$alert")"
-            if [ "$(jq -r '.state' <<<"$alert")" != open ] \
-               || [ "$alert_ref" != "$analysis_ref" ] \
-               || [ "$alert_sha" != "$analysis_sha" ]; then
+            if [ "$(jq -r '.state' <<<"$alert")" != open ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
+              continue
+            fi
+            instances="$(gh api --paginate --slurp \
+              "repos/$REPO/code-scanning/alerts/$alert_number/instances?pr=$pr_number&per_page=100")"
+            if ! jq -e \
+              --arg analysis_ref "$analysis_ref" \
+              --arg analysis_sha "$analysis_sha" '
+                add // []
+                | any(.[];
+                    .ref == $analysis_ref
+                    and .commit_sha == $analysis_sha
+                    and .state == "open")
+              ' <<<"$instances" >/dev/null; then
               echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-analysis evidence changed."
               continue
             fi

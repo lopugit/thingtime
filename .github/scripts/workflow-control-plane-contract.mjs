@@ -1178,6 +1178,26 @@ export function assertControlPlaneContract() {
     /::error::Lopu proposed an invalid CodeQL disposition schema/u,
     "a malformed optional disposition never makes the repository-wide review job red",
   );
+  assert.doesNotMatch(
+    resolver,
+    /::error::CodeQL alert #\$alert_number was proposed more than once/u,
+    "one repository-level CodeQL alert appearing in several PR snapshots does not fail the review batch",
+  );
+  assert.match(
+    resolver,
+    /Coalescing CodeQL alert #\$alert_number across PR analysis snapshots with the same '\$proposed_reason' disposition/u,
+    "compatible CodeQL dispositions are coalesced to one repository-level write",
+  );
+  assert.match(
+    resolver,
+    /Leaving CodeQL alert #\$alert_number open because this Lopu session proposed conflicting disposition reasons/u,
+    "conflicting CodeQL dispositions fail closed per alert without failing unrelated reviews",
+  );
+  assert.match(
+    resolver,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "the isolated writer revalidates the exact reviewed PR alert instance",
+  );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
     resolver.indexOf("\npermissions:\n"),
