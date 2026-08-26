@@ -4696,9 +4696,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          jq -n '{ref:"github-actions",inputs:{dry_run:false,lookback:"100"}}' \
+          jq -n '{ref:"github-actions",inputs:{
+              maintenance_operation:"promote-features",
+              promotion_dry_run:false,
+              promotion_lookback:"100"}}' \
             | gh api --method POST \
-                "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                 --input -
 
       - name: Pause only this immutable promotion snapshot after failure
@@ -4918,9 +4921,12 @@ jobs:
              || [ "$retry_without_pause" = true ]; then
             gh api --method DELETE "repos/$REPO/issues/$SOURCE_PR/labels/ai-promotion-paused" >/dev/null 2>&1 || true
             if [ "$retry_without_pause" != true ]; then
-              jq -n '{ref:"github-actions",inputs:{dry_run:false,lookback:"100"}}' \
+              jq -n '{ref:"github-actions",inputs:{
+                  maintenance_operation:"promote-features",
+                  promotion_dry_run:false,
+                  promotion_lookback:"100"}}' \
                 | gh api --method POST \
-                    "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                    "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                     --input - \
                 || echo "::warning::Could not dispatch the recovery promoter; its scheduled run will recover this promotion."
             fi
