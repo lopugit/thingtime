@@ -514,6 +514,16 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /POST repos\/\$REPO\/pulls\/<PR_NUMBER>\/comments\/<COMMENT_ID>\/replies/u, "Lopu can reply inline");
   assert.match(reviewBlock, /thingtime-lopu-conversation:v1/u, "Lopu marks its free-form conversational comments");
   assert.match(reviewBlock, /Never\n            edit another actor's comment/u, "Lopu edits only its own comments");
+  assert.match(
+    reviewBlock,
+    /Using \*\*%s\*\*[\s\S]*\$\{REVIEW_BACKEND_LABEL:-Claude Code default\}/u,
+    "published Lopu review comments name the actual configured model backend",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /\$\{BACKEND_LABEL:-Claude Code default\}/u,
+    "review comments never fall back because they read an unset backend-label variable",
+  );
   assert.match(reviewBlock, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/u, "review runs through the single protected Lopu action");
   assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
   assert.match(modelBlock, /LOPU_AGENT_BACKEND/u, "Lopu's global agent backend is repository-configurable");
@@ -553,6 +563,14 @@ function assertWorkflowSource() {
     reviewBlock,
     /\[ "\$current_head" != "\$reviewed_head" \][\s\S]*\[ "\$current_base" != "\$reviewed_base" \]/u,
     "dispositions wait for a fresh scan whenever the reviewed PR head or base changed",
+  );
+  assert.match(reviewBlock, /current_base_ref=.*\.base\.ref/u, "disposition validation reads the live base ref name");
+  assert.match(reviewBlock, /current_base_ref_encoded=.*@uri/u, "live base refs are safely encoded for the GitHub API");
+  assert.match(reviewBlock, /git\/ref\/heads\/\$current_base_ref_encoded/u, "disposition validation resolves the current base branch tip");
+  assert.doesNotMatch(
+    reviewBlock,
+    /current_base=.*\.base\.sha/u,
+    "disposition validation never confuses the PR's historical base snapshot with the live base branch tip",
   );
   assert.match(reviewBlock, /refs\/pull\/\$number\/head/u, "snapshot accepts default-setup PR-head analyses");
   assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
