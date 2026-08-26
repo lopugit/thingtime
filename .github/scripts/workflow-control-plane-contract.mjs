@@ -12,6 +12,7 @@ const githubRoot = resolve(here, "..");
 const workflows = resolve(githubRoot, "workflows");
 const actions = resolve(githubRoot, "actions");
 const scripts = resolve(githubRoot, "scripts");
+const codeqlBackfillScriptPath = resolve(scripts, "codeql-open-pr-backfill.mjs");
 
 const IMPLEMENTATIONS = [
   "codeql-analysis.yml",
@@ -623,7 +624,13 @@ export function assertControlPlaneContract() {
 
   const codeql = readWorkflow("codeql-analysis.yml");
   const codeqlHandoff = readWorkflow("codeql-pr-handoff.yml");
+  const codeqlBackfill = readFileSync(codeqlBackfillScriptPath, "utf8");
   const codeqlTriggers = codeql.slice(0, codeql.indexOf("\npermissions:\n"));
+  assert.match(
+    codeql,
+    /run-name:[\s\S]*Lopu CodeQL PR #\{0\} @ \{1\}[\s\S]*github\.event\.pull_request\.head\.sha/u,
+    "current central and ordinary PR scans expose the immutable head in their run title",
+  );
   assert.match(
     codeql,
     /^  pull_request:$/mu,
@@ -711,6 +718,20 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /^      security-events: read$/mu);
   assert.match(codeql, /ref: \$\{\{ needs\.scope\.outputs\.analysis_ref \}\}/u);
   assert.match(codeql, /sha: \$\{\{ needs\.scope\.outputs\.analysis_sha \}\}/u);
+  assert.match(codeqlBackfill, /backfill_listener_owned: "true"/u);
+  assert.match(codeqlBackfill, /sort\(\(left, right\)[\s\S]*right\.updated_at/u);
+  assert.match(codeqlBackfill, /ACTIVE_RUN_STATUSES/u);
+  assert.match(codeqlBackfill, /invalidMergeSnapshots/u);
+  assert.match(codeqlBackfill, /MAX_DISPATCHES must be an integer from 1 through 20/u);
+  assert.doesNotMatch(
+    codeqlBackfill,
+    /ANTHROPIC|OPENAI|actions\/checkout/u,
+    "the CodeQL inventory helper receives no model credential and executes no PR code",
+  );
+  execFileSync(process.execPath, [codeqlBackfillScriptPath, "--self-test"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   const developPreview = readWorkflow("develop-pr-preview.yml");
   assert.match(
@@ -988,6 +1009,7 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /maintain_develop_promotion:/);
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
+  assert.match(resolver, /maintain_codeql_backfill:/);
   assert.match(resolver, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
   assert.match(
     resolver,
@@ -1031,18 +1053,44 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all\]/u,
-    "manual all-branch recovery stays inside Lopu maintenance",
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/u,
+    "manual all-branch and CodeQL recovery stay inside Lopu maintenance",
+  );
+  const allBranchHandoff = resolver.slice(
+    resolver.indexOf("\n  handoff_all_branch_event:"),
+    resolver.indexOf("\n  maintain_all_branch:"),
+  );
+  const allBranchMaintenance = resolver.slice(
+    resolver.indexOf("\n  maintain_all_branch:"),
+    resolver.indexOf("\n  maintain_develop_promotion:"),
+  );
+  assert.match(allBranchHandoff, /github\.event_name == 'push'/u);
+  assert.match(allBranchHandoff, /github\.event_name == 'pull_request_target'/u);
+  assert.match(allBranchHandoff, /github\.event\.schedule == '53 \* \* \* \*'/u);
+  assert.match(
+    allBranchHandoff,
+    /branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
+    "every automatic union signal returns through one coalescing Lopu maintenance namespace",
+  );
+  assert.match(
+    allBranchMaintenance,
+    /inputs\.maintenance_operation == 'build-all'[\s\S]*inputs\.branch == 'lopu-internal-all-branch'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
+    "manual and trusted central events call the internal all-branch implementation",
+  );
+  assert.doesNotMatch(
+    allBranchMaintenance,
+    /github\.event_name == '(?:pull_request_target|schedule)'/u,
+    "PR and schedule listeners never enqueue one durable all-branch worker apiece",
   );
   assert.match(
     resolver,
-    /handoff_all_branch_push:[\s\S]*branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
-    "push-triggered union rebuilds return through a supported event on the one public manager",
+    /maintain_codeql_backfill:[\s\S]*github\.event_name == 'schedule'[\s\S]*inputs\.maintenance_operation == 'backfill-codeql'[\s\S]*ref: github-actions[\s\S]*MAX_DISPATCHES: \$\{\{ github\.event_name == 'workflow_dispatch' && '12' \|\| '2' \}\}[\s\S]*codeql-open-pr-backfill\.mjs/u,
+    "one bounded CodeQL backfill lane is scheduled and manually recoverable through Lopu",
   );
   assert.match(
     resolver,
-    /maintain_all_branch:[\s\S]*inputs\.maintenance_operation == 'build-all'[\s\S]*github\.event\.schedule == '53 \* \* \* \*'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
-    "PR, schedule, and manual events call only the internal all-branch implementation",
+    /maintain_codeql_backfill:[\s\S]*group: lopu-codeql-open-pr-backfill-\$\{\{ github\.repository \}\}[\s\S]*cancel-in-progress: false/u,
+    "CodeQL inventory passes serialize without terminating active work",
   );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),

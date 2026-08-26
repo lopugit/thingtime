@@ -21,6 +21,28 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **All-branch maintenance now coalesces before it reaches Lopu's durable model
+  fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
+  the same metadata-only handoff to the protected manager instead of attaching
+  one full union doctor to every originating run. That central namespace keeps
+  the active rebuild plus one newest pending live snapshot and never cancels
+  active work, preventing the unbounded all-branch waiter backlog that delayed
+  conflict resolution and ordinary PR checks. The eventual doctor still shares
+  the repository-wide single-agent fleet, while its full-history checkout uses
+  blobless transport to avoid downloading historical file contents the current
+  union never reads. — Codex (AI), 2026-08-26
+- **Lopu now closes historical CodeQL coverage gaps across every open PR**:
+  each existing repository-maintenance cadence inventories current merge/head
+  snapshots, both required CodeQL languages, and already-active analysis runs,
+  then dispatches at most two recent missing snapshots through the protected
+  unprivileged analyzer. A manual `backfill-codeql` operation may process up to
+  twelve. Every dispatch is bound to the PR's current head SHA, stale merge
+  snapshots are rejected, completed or active work is skipped, transient
+  GitHub API failures receive bounded retries, and no AI credential or PR code
+  enters the inventory job. The lane is part of **Lopu PR manager**, shares its
+  existing schedules, serializes without cancelling active work, and resumes
+  idempotently from live CodeQL state on the next pass. — Codex (AI),
+  2026-08-26
 - **Conflict resolution now recovers from incomplete partial-clone object
   hydration**: ordinary resolver checkouts remain blobless for cost and speed,
   but a GitHub promisor-object rejection now aborts the partial merge, refetches
@@ -164,6 +186,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Lopu's PR detector now survives transient GitHub API outages without
+  corrupting its JSON pipeline**: read-only API calls retry bounded HTTP 408,
+  429, 500, 502, 503, and 504 responses with short backoff while permanent
+  authentication, permission, and schema failures still fail closed. The
+  detector validates GraphQL response shape before parsing it and reuses each
+  complete repository PR snapshot for selection and stack ownership instead of
+  immediately requesting the same inventory twice. This fixes the pre-model
+  HTTP 504 failure observed on the first safe `main`→`develop` sync PR #414.
+  — Codex (AI), 2026-08-26
 - **PR resolution no longer downloads every historical repository blob**:
   Lopu's merge worker keeps full commit ancestry for exact merge-base and
   merge-tree verification while using `blob:none` partial clone. Current and
