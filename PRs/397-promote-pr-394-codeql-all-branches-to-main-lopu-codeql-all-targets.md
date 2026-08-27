@@ -11,6 +11,10 @@ Thingtime has long-lived feature and stack branches that do not.
 
 - The normal `pull_request` path remains the owner when the target already
   carries the listener, preserving its branch-protection job contexts.
+- Normal analysis and the privileged metadata handoff call two separate
+  protected reusable workflows. GitHub caps ordinary PR events at
+  `actions: read`, so the metadata bridge's `actions: write` requirement
+  cannot invalidate an otherwise unprivileged analysis run.
 - The copy on the default branch also receives `pull_request_target` lifecycle
   events for every PR target.
 - That privileged run never checks out or analyzes repository code and receives
@@ -29,8 +33,8 @@ Thingtime has long-lived feature and stack branches that do not.
 
 ## Activation order
 
-1. Merge the protected worker/queue PR #396.
-2. Merge this listener promotion.
+1. Merge the protected handoff/queue follow-up into `github-actions`.
+2. Merge the listener follow-up into `main`.
 3. Set `CODEQL_CENTRAL_PR_ENABLED=true`.
 4. Disable GitHub CodeQL default setup.
 5. Set `CODEQL_ADVANCED_ENABLED=true` and verify a normal target plus an older
@@ -41,8 +45,8 @@ Thingtime has long-lived feature and stack branches that do not.
 The executable contract must prove that the target-context block is
 metadata-only and that checkout/CodeQL steps are excluded from that event. The
 product caller contract must prove that all target lifecycle events reach the
-single protected reusable implementation and that only the two bounded inputs
-are forwarded.
+correct one of the two protected reusable implementations and that only the two
+bounded analysis inputs are forwarded.
 
 ## Default-branch listener compiler fix
 
@@ -60,12 +64,11 @@ silently restore the startup failure.
 ## Single automatic Lopu entry point
 
 The unified manager already owns merge, stale-branch, rebase, and stack
-detection. Its former standalone rebase listener is retained only for the
-exact internal `rebase-pr-stack-ai` worker handoff; it has no push, PR,
-schedule, or manual trigger. This prevents one branch update from launching
-two overlapping model-management workflows and avoids the legacy rebase run
-being cancelled when Lopu's embedded rebase lane starts. Manual recovery now
-uses **Lopu PR manager** with an exact PR or branch selector.
+detection. The former product `rebase-pr-stacks.yml` listener is removed too:
+exact `rebase-pr-stack-ai` workers now enter through **Lopu PR manager**, and
+the protected rebase engine is `workflow_call`-only. This prevents one branch
+update from launching two overlapping model-management workflows. Manual
+recovery uses **Lopu PR manager** with an exact PR or branch selector.
 
 The final consolidation also removes the three product-branch promotion/sync
 workflow files. Their protected implementations now run only as reusable jobs
@@ -75,8 +78,27 @@ manual maintenance choices enter through Lopu. This makes the earlier
 "single public workflow" claim true for repository management rather than only
 for model-backed merge/rebase work.
 
+CI Control keeps its stable operation keys (`rebase-stack`, both promotion
+lanes, and `sync-main`) but now translates them into typed Lopu manager inputs.
+That fixes the otherwise-broken admin/Vercel dispatch path after the old
+workflow files are removed, including preservation of rebase cascade and
+promotion dry-run/lookback choices.
+
 The live #399 check exposed one final default-listener mismatch: `main` still
 had a caller-level `cancel-in-progress: true` group around the all-branch
 reusable call. That outer group can cancel the call before the protected
 implementation's durable queue starts. This PR removes it and locks the absence
 in the caller contract, matching the already-correct `develop` listener.
+
+## Post-merge activation audit
+
+The first live run after #397 merged exposed another reusable-workflow
+permission ceiling that static YAML parsing cannot simulate:
+`codeql-analysis.yml` mixed an `actions: write` metadata handoff into the same
+called workflow as the ordinary read-capped `pull_request` analysis. GitHub
+rejected that PR run before creating a job. The follow-up keeps one public
+CodeQL listener but gives its two event classes separate protected calls:
+`codeql-pr-handoff.yml` is selected only for `pull_request_target`, and the
+normal analyzer is selected for every other event. This preserves both
+all-target coverage and the PR-associated Analyze contexts required by branch
+protection.

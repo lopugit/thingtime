@@ -114,6 +114,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   disposition permission. The protected controller still deduplicates
   immutable snapshots and admits at most one model-backed Lopu worker per
   repository. — Codex (AI), 2026-08-25
+- **CodeQL keeps normal PR checks while covering arbitrary targets**: the thin
+  listener now calls separate protected workflows for unprivileged analysis
+  and the metadata-only `pull_request_target` handoff. Ordinary PR tokens no
+  longer fail workflow validation by inheriting the handoff's
+  `actions: write` request; normal PRs retain their branch-protection contexts,
+  while older target branches still receive exact-ref analysis through the
+  trusted dispatch hop. — Codex (AI), 2026-08-25
 - **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
   listener, all-branch push listener, scheduled backstop, and protected reusable
   implementation replace default-branch-only scanning. A metadata-only
@@ -302,6 +309,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **CI Control repository maintenance now dispatches the unified Lopu
+  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
+  operation keys translate to typed `Lopu PR manager` inputs instead of naming
+  retired workflow files. Rebase cascade and promotion dry-run/lookback values
+  remain intact for GitHub-hosted and Vercel-routed runs. The last product
+  rebase listener is removed; exact stack workers enter Lopu and then invoke
+  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
 - **The default-branch all-builder listener no longer cancels its protected
   worker before the durable queue starts**: `main` now matches `develop` by
   leaving concurrency ownership entirely to the `github-actions`

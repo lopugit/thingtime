@@ -36,7 +36,7 @@ permissions:
   security-events: write
 
 jobs:
-  target-handoff:
+  pr-handoff:
     if: github.event_name == 'pull_request_target'
     uses: lopugit/thingtime/.github/workflows/codeql-pr-handoff.yml@github-actions
 
