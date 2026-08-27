@@ -2463,11 +2463,19 @@ export const listUserPosts = async (
   const own = viewer?.id === ownerId;
   // a friend browsing this profile also sees the owner's friends-circle posts
   const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
-  const match = own
+  const baseMatch = own
     ? withMatch(postMatch(), { ownerId })
     : friendOfOwner
       ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
       : withMatch(postMatch(), { ownerId }, circleClause('public'));
+  // visibility-restricted tokens: conjoin the audience fence the same way
+  // listThings does. Not just paging hygiene (without it a public-only token
+  // pages an owner's mostly-private profile in near-empty slices while the
+  // cursor advances) — postCount below is computed from this match, so an
+  // unfenced match would report the owner's private posts to a token that
+  // must never learn they exist.
+  const fence = patVisibilityMatchClause(viewer);
+  const match = fence ? withMatch(baseMatch, fence) : baseMatch;
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
