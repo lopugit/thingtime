@@ -1,6 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
+import { COLLECTION_SCHEMA_VERSIONS, EMBEDDED_THINGTIME } from '../../../schemas/registry';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+
+// Embedded things share the one `things` collection with posts and every other
+// kind, so they MUST carry the era fields the generic readers key off. Without
+// them a `kind: 'embed'` doc reads as a schema-v1 document, which things.ts
+// interprets as a POST (`thingtimeOf`: a v1 doc with no shareOfId is ['post']),
+// and a `visibility: 'public'` embed matched the public audience clause in
+// things/search.ts — so its name/value (wildcard-text-indexed) surfaced to
+// anonymous /api/v1/things/search as a blank ghost post. Stamping the v2
+// schemaVersion plus a real thingtime lets the existing PROTECTED_THINGTIME
+// `$nin` exclusion in search/listThings do its job, exactly as it does for
+// every other server-minted kind.
 
 export type EmbeddedThingVisibility = 'public' | 'private';
 
@@ -19,6 +31,8 @@ export type EmbeddedThingSummary = Omit<EmbeddedThing, 'value'>;
 type EmbeddedThingDoc = {
 	shareId: string;
 	kind: 'embed';
+	schemaVersion: number;
+	thingtime: string[];
 	ownerId: string;
 	name: string;
 	value: unknown;
@@ -178,6 +192,8 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 		const doc: EmbeddedThingDoc = {
 			shareId: randomUUID(),
 			kind: 'embed',
+			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+			thingtime: [EMBEDDED_THINGTIME],
 			ownerId,
 			name,
 			value: parsedValue.value,

@@ -84,6 +84,12 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
+// Embed SDK things (api/utils/things/embeddedThings.ts), served only by
+// /api/v1/embed/things. Named here, with the other protected kinds, so the
+// pure registry stays the single source for what generic /things CRUD and the
+// ordinary post/search surfaces must exclude.
+export const EMBEDDED_THINGTIME = 'embed';
+
 // GitHub/Vercel control-plane projections and their append-only audit events.
 // This registry is the single source for their protection and schema docs.
 export const CI_CONTROL_THINGTIME = [
@@ -2163,7 +2169,13 @@ export const PROTECTED_THINGTIME = [
   // auth-plane credentials: a forged passkey doc would BE a working login
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
-  'passkey-app-link'
+  'passkey-app-link',
+  // Embed SDK things (api/utils/things/embeddedThings.ts) are owned by
+  // /api/v1/embed/things end to end — version-checked writes, their own
+  // audience field. Protected so generic /things CRUD cannot forge or edit
+  // them AND so the search/listThings `$nin` keeps a *public* embed out of
+  // the ordinary post surfaces it is not content for.
+  EMBEDDED_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
