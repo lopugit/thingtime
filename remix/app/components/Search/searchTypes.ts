@@ -2,6 +2,8 @@
 // projections (the server module imports node builtins, so the client keeps
 // its own lean types, same as Feed's feedTypes.ts).
 
+import type { PublicPost } from '~/components/Feed/feedTypes';
+
 export type SearchAuthor = {
   id: string;
   username: string;
@@ -23,18 +25,7 @@ export type SearchThing = {
   updatedAt: string;
 };
 
-export type SearchPost = {
-  id: string;
-  type: string;
-  author: SearchAuthor | null;
-  text: string;
-  images: string[];
-  tags: string[];
-  reactionCounts: Record<string, number>;
-  commentCount: number;
-  shareCount: number;
-  createdAt: string;
-};
+export type SearchPost = PublicPost;
 
 // public profile projection from /api/v1/users/search (the People rail)
 export type SearchPerson = {
