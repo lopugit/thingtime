@@ -7,19 +7,40 @@ on:
   push:
     branches: ["**"]
   pull_request_target:
-    types: [opened, reopened]
-  # GitHub evaluates issue/review-comment and check-run workflows from the
-  # default branch, so this thin listener forwards those PR-manager signals to
-  # the protected Lopu controller at @github-actions.
+    # This default-branch signal is independent of whether an old PR head or
+    # non-default target already carries a current push listener. The protected
+    # controller deduplicates exact snapshots before queueing model work.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
+  # GitHub evaluates these PR-target, issue/review-comment, and check-run event
+  # workflows from the default branch. Keep the public file metadata-only and
+  # forward each signal to the protected Lopu controller pinned at
+  # @github-actions below.
   issue_comment:
     types: [created, edited]
   pull_request_review_comment:
     types: [created, edited]
   check_run:
     types: [completed]
+  # check_run/check_suite events are suppressed for checks created by GitHub
+  # Actions itself. workflow_run closes that blind spot for first-party PR CI;
+  # the protected controller admits only PR-associated non-success conclusions
+  # and does not listen to Lopu PR manager, so review failures cannot recurse.
+  workflow_run:
+    workflows:
+      - API tests
+      - CI
+      - Lopu CodeQL all branches
+      - Workflow control-plane CI
+      - Develop S3 PR preview
+      - Signed Electron PR Release
+      - Electron App Release
+      - Web CI
+      - Build all branch
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
     - cron: "43 */6 * * *"
+    - cron: "53 * * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -37,7 +58,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update repository state"
         required: false
@@ -84,6 +105,8 @@ on:
         default: "0"
         type: string
   repository_dispatch:
+    # Both internal stack events enter through the same public Lopu listener;
+    # the protected controller assigns exactly one merge or rebase owner.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
 permissions:

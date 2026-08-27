@@ -954,10 +954,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
-- [ ] Queue two all-branch rebuild signals through the default `main` listener.
-      Confirm the thin caller has no concurrency block, both calls reach the
-      protected implementation, and its `queue: max` worker completes the
-      first request rather than cancelling it when the second arrives.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu PR
+      manager. Confirm `.github/workflows/all-branch.yml` is absent from the
+      product branch, no standalone **Build all branch** workflow run appears,
+      and both signals enter the protected `lopu-maintenance-build-all`
+      namespace. The active rebuild must finish without cancellation while
+      only one newest not-yet-started union snapshot waits for the shared Lopu
+      fleet slot.
 - [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
       manager** run containing the standing-promotion and per-feature-promotion
       reusable jobs, with no separate **Promote develop to main** or **Promote
@@ -970,9 +973,24 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] On the default branch, complete a check run and create/edit a normal PR
       comment. Confirm each `Lopu PR manager` run compiles and creates its
       controller jobs instead of failing at workflow startup with a nested
-      `security-events: none` permission error. Also confirm the scheduled and
-      all-branch push listeners create jobs, and that CodeQL alert mutations
-      occur only in the controller's separately fenced disposition writer.
+      `security-events: none` permission error. Also confirm scheduled and
+      push-driven all-branch signals enter that same Lopu manager (never a
+      standalone **Build all branch** listener), and that CodeQL alert
+      mutations occur only in the controller's separately fenced disposition
+      writer.
+- [ ] After changing a product-branch listener, compare the active default
+      `main` listener with the reviewed `develop` listener before calling the
+      rollout complete. PR synchronize/draft/edit/close signals, the hourly
+      all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
+      operations must already be present on `main`; a half-hour sweep is only
+      recovery coverage, not proof that every repository change wakes Lopu.
+- [ ] Fail or cancel one listed GitHub Actions PR workflow after the opening
+      review has finished. Confirm the default listener receives a completed
+      `workflow_run`, routes only the associated non-successful PR to one Lopu
+      review, preserves the exact source run id for log diagnosis, and never
+      listens to `Lopu PR manager` itself. External checks remain covered by
+      `check_run`; first-party Actions checks must not rely on that suppressed
+      event.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
