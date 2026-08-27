@@ -21,6 +21,19 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now wakes on first-party CI failures without duplicating repository
+  review sessions**: the default listener forwards a bounded allowlist of
+  completed GitHub Actions workflows, and the protected controller binds the
+  exact workflow-run id into the review evidence. PR, CodeQL, external-check,
+  and first-party CI signals coalesce only when an identical review scope is
+  still unstarted; a running review retains one newest waiter and is never
+  cancelled. Human conversation is deliberately never coalesced — only its own
+  dispatch id names the comment Lopu must read and answer — so every PR comment
+  still wakes its own session. CodeQL dispositions enforce GitHub's
+  280-character evidence limit and accept a transient nullable alert state only
+  when the exact newest instance remains open, unfixed, and undismissed
+  immediately before the isolated writer acts. — Codex (AI), reviewed by Lopu
+  (AI), 2026-08-27
 - **Lopu's historical CodeQL backfill now advances past completed PR
   snapshots instead of repeatedly dispatching safe no-ops**: inventory resolves
   each live synthetic merge ref and validates its exact base/head parents using

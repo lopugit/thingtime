@@ -236,6 +236,11 @@ run-name: >-
       && format('Lopu responds to PR #{0}', github.event.issue.number)
       || github.event_name == 'pull_request_review_comment'
       && format('Lopu responds to inline review on PR #{0}', github.event.pull_request.number)
+      || github.event_name == 'workflow_run'
+      && github.event.workflow_run.pull_requests[0].number
+      && format('Lopu investigates failed workflow {0} on PR #{1}',
+          github.event.workflow_run.name,
+          github.event.workflow_run.pull_requests[0].number)
       || github.event_name == 'check_run'
       && github.event.check_run.pull_requests[0].number
       && format('Lopu investigates failed check {0} on PR #{1}',
@@ -397,6 +402,23 @@ on:
   # is PR-scoped and flows to the same serialized worker, which reads the live
   # logs before deciding whether a code or controller fix is justified.
   check_run:
+    types: [completed]
+  # GitHub suppresses check_run/check_suite events for checks created by
+  # GitHub Actions itself. The default-branch listener therefore forwards
+  # completed first-party CI workflows through workflow_run; the route below
+  # admits only PR-associated non-success conclusions and never listens to
+  # Lopu PR manager itself, preventing a review-failure loop.
+  workflow_run:
+    workflows:
+      - API tests
+      - CI
+      - Lopu CodeQL all branches
+      - Workflow control-plane CI
+      - Develop S3 PR preview
+      - Signed Electron PR Release
+      - Electron App Release
+      - Web CI
+      - Build all branch
     types: [completed]
   schedule:
     # Event triggers already cover every branch. This global backstop catches
@@ -613,6 +635,9 @@ concurrency:
         || github.event_name == 'check_run'
         && github.event.check_run.pull_requests[0].number
         && format('lopu-check-fix-pr{0}', github.event.check_run.pull_requests[0].number)
+        || github.event_name == 'workflow_run'
+        && github.event.workflow_run.pull_requests[0].number
+        && format('lopu-workflow-fix-pr{0}', github.event.workflow_run.pull_requests[0].number)
         || (github.event_name == 'issue_comment'
             || github.event_name == 'pull_request_review_comment')
         && github.event.pull_request.number
@@ -657,6 +682,12 @@ jobs:
                   || github.event.check_run.conclusion == 'timed_out'
                   || github.event.check_run.conclusion == 'cancelled'
                   || github.event.check_run.conclusion == 'action_required')))
+      && (github.event_name != 'workflow_run'
+          || (github.event.workflow_run.pull_requests[0].number
+              && (github.event.workflow_run.conclusion == 'failure'
+                  || github.event.workflow_run.conclusion == 'timed_out'
+                  || github.event.workflow_run.conclusion == 'cancelled'
+                  || github.event.workflow_run.conclusion == 'action_required')))
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: >-
@@ -683,7 +714,7 @@ jobs:
                         && inputs.branch == ''))
                 && inputs.promotion_source_pr == ''
                 && inputs.promotion_plan_b64 == '') }}
-      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || '' }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || '' }}
       branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
     secrets: inherit
 
@@ -708,6 +739,7 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && github.event_name != 'workflow_run'
       && (github.event_name != 'repository_dispatch'
           || github.event.action == 'rebase-pr-stack-ai')
       && !(github.event_name == 'workflow_dispatch'
@@ -920,6 +952,7 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && github.event_name != 'workflow_run'
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
@@ -2010,7 +2043,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref_name }}
-          SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
           SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
         run: |
           set -euo pipefail
@@ -2099,6 +2132,14 @@ jobs:
            && github.ref_name == 'github-actions')
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
+    # PR lifecycle, CodeQL/check, and first-party workflow events have distinct
+    # detector concurrency keys because they retain different evidence. Only
+    # their tiny review-dispatch step is serialized by review scope. GitHub's
+    # default one-pending behavior then keeps the newest waiter without ever
+    # interrupting a handoff that is already running.
+    concurrency:
+      group: lopu-review-handoff-${{ needs.review_detect.outputs.pr_number || needs.review_detect.outputs.branch || 'all' }}
+      cancel-in-progress: false
     permissions:
       actions: write
     steps:
@@ -2106,6 +2147,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ needs.review_detect.outputs.pr_number }}
           BRANCH: ${{ needs.review_detect.outputs.branch }}
           EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
@@ -2122,11 +2164,68 @@ jobs:
                 && format('lopu-review:inline-comment:{0}:{1}', github.event.comment.id, github.run_id)
                 || github.event_name == 'check_run'
                 && format('lopu-review:check-run:{0}:{1}', github.event.check_run.id, github.run_id)
+                || github.event_name == 'workflow_run'
+                && format('lopu-review:workflow-run:{0}:{1}', github.event.workflow_run.id, github.run_id)
                 || format('lopu-review:{0}', github.run_id) }}
           ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+
+          if [ -n "$PR_NUMBER" ]; then
+            review_title="Lopu reviews PR #$PR_NUMBER from the control plane"
+          elif [ -n "$BRANCH" ]; then
+            review_title="Lopu reviews PRs matching $BRANCH from the control plane"
+          else
+            review_title='Lopu reviews all eligible PRs from the control plane'
+          fi
+
+          # Coalescing is only sound for signals a later session reconstructs
+          # by itself. PR lifecycle, check, and first-party CI events qualify:
+          # the admitted review re-reads the newest head and the complete live
+          # check set regardless of which of them woke it. A human comment does
+          # not qualify — only an `issue-comment:`/`inline-comment:` dispatch id
+          # tells Lopu which exact comment to fetch and answer, and a review
+          # that is already queued carries no such id. Dropping that event
+          # would silently leave a human question unanswered, so conversation
+          # always gets its own session.
+          case "$EVENT_NAME" in
+            issue_comment | pull_request_review_comment) coalescible=false ;;
+            *) coalescible=true ;;
+          esac
+
+          # A queued review has not snapshotted its worktree yet, so it will
+          # naturally inspect the newest live head and the complete check set
+          # when admitted to the repository-wide Lopu slot. Do not enqueue the
+          # same scope again merely because several checks completed together.
+          # An already-running review is deliberately not suppressed: a head
+          # move during that session needs one newest waiter behind it.
+          if [ "$coalescible" = true ]; then
+            workflow_runs="$(gh api \
+              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&per_page=100")"
+            pending_review_url="$(jq -r --arg title "$review_title" '
+              [.workflow_runs[]
+                | select(.display_title == $title)
+                | select(.status == "pending"
+                         or .status == "queued"
+                         or .status == "waiting"
+                         or .status == "requested")]
+              | sort_by(.created_at)
+              | .[0].html_url // empty
+            ' <<<"$workflow_runs")"
+            if [ -n "$pending_review_url" ]; then
+              echo "::notice::Skipping duplicate Lopu review handoff; an unstarted review for this exact scope is already queued: $pending_review_url"
+              {
+                echo '## Coalesced Lopu review handoff'
+                echo
+                echo "A queued review already owns \`$review_title\`. It will read the newest PR head and complete live check state when admitted."
+                echo
+                echo "[Queued Lopu review]($pending_review_url)"
+              } >>"$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
           jq -n \
             --arg pr_number "$PR_NUMBER" \
             --arg branch "$BRANCH" \
@@ -2712,6 +2811,16 @@ jobs:
             reproducible defect from an external outage, stale result, or
             cancellation before changing anything.
 
+            When `REVIEW_DISPATCH_ID` starts with
+            `lopu-review:workflow-run:<WORKFLOW_RUN_ID>:` this session was
+            woken by a GitHub Actions workflow whose check_run event GitHub
+            intentionally suppresses. Retrieve that exact run with
+            `gh api repos/$REPO/actions/runs/<WORKFLOW_RUN_ID>`, inspect its
+            jobs and logs, and verify that its live conclusion still explains
+            the PR's current failing state before changing code or controller
+            automation. A cancelled superseded run is not itself a code bug;
+            rerun or explain it when that is the justified repair.
+
             CodeQL is an explicit fix-or-disposition responsibility. Each
             manifest record names `codeql_alerts_path`, a trusted snapshot of
             the open alerts on that exact PR head, and
@@ -2723,7 +2832,8 @@ jobs:
             replace the disposition file with a JSON array containing
             `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
             Every entry must contain exactly those three keys, and its comment
-            must be 40 through 1000 characters including the required
+            must be 40 through 280 characters (GitHub's CodeQL API limit)
+            including the required
             `Lopu evidence: ` prefix.
             Do not use `won't fix`, do not include an alert absent from the
             trusted snapshot, and do not PATCH CodeQL alert state yourself. A
@@ -2993,7 +3103,7 @@ jobs:
                 and (.reason == "false positive" or .reason == "used in tests")
                 and (.comment | type == "string"
                      and startswith("Lopu evidence: ")
-                     and length >= 40 and length <= 1000))
+                     and length >= 40 and length <= 280))
             ' "$proposals" >/dev/null || {
               echo "::warning::Skipping malformed CodeQL disposition proposals for PR #$number; every referenced alert remains open for a later review."
               continue
@@ -3346,7 +3456,7 @@ jobs:
               and (.reason == "false positive" or .reason == "used in tests")
               and (.comment | type == "string"
                    and startswith("Lopu evidence: ")
-                   and length >= 40 and length <= 1000)
+                   and length >= 40 and length <= 280)
               and (.analysis_ref | type == "string" and test("^refs/pull/[1-9][0-9]*/(head|merge)$"))
               and (.analysis_sha | type == "string" and test("^[0-9a-f]{40}$"))
               and (.reviewed_base_sha | type == "string" and test("^[0-9a-f]{40}$"))
@@ -3402,9 +3512,29 @@ jobs:
             fi
 
             alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
-            if [ "$(jq -r '.state' <<<"$alert")" != open ]; then
-              echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
-              continue
+            alert_state="$(jq -r '.state // empty' <<<"$alert")"
+            if [ "$alert_state" != open ]; then
+              # GitHub can transiently return `state: null` for a newly
+              # published PR-only alert even while both its filtered list and
+              # instance endpoints report `open` (observed on PR #429 alert
+              # #92). Accept that one omission only when the detail response
+              # independently binds the same open immutable instance and has
+              # neither dismissal nor fix metadata. The instances endpoint is
+              # revalidated again immediately below before any PATCH.
+              if [ -z "$alert_state" ] && jq -e \
+                --arg analysis_ref "$analysis_ref" \
+                --arg analysis_sha "$analysis_sha" '
+                  .dismissed_at == null
+                  and .fixed_at == null
+                  and .most_recent_instance.state == "open"
+                  and .most_recent_instance.ref == $analysis_ref
+                  and .most_recent_instance.commit_sha == $analysis_sha
+                ' <<<"$alert" >/dev/null; then
+                echo "::notice::CodeQL alert #$alert_number omitted its repository state but retained the exact open instance; continuing with independent instance validation."
+              else
+                echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
+                continue
+              fi
             fi
             instances="$(gh api --paginate --slurp \
               "repos/$REPO/code-scanning/alerts/$alert_number/instances?pr=$pr_number&per_page=100")"
