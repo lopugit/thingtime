@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
@@ -16,6 +17,8 @@ import test from "node:test"
 import {
   computeSourceFingerprint,
   finalizeSnapshot,
+  hydrateSemanticCache,
+  ingestSemanticCache,
   listSnapshots,
   selectSnapshot,
   withRepositoryLock,
@@ -198,6 +201,44 @@ test("an existing artifact path rejects changed portable bytes", () => {
   }
 })
 
+test("mutable semantic cache revisions become immutable coexisting variants", () => {
+  const root = fixture()
+  try {
+    const inputKey = "a".repeat(64)
+    const mutable = path.join(root, "graphify-out/cache/semantic")
+    const mutableEntry = path.join(mutable, `${inputKey}.json`)
+    mkdirSync(mutable, { recursive: true })
+    writeFileSync(
+      mutableEntry,
+      `${JSON.stringify({ nodes: [{ id: "one" }], edges: [], hyperedges: [] })}\n`,
+    )
+    ingestSemanticCache(root)
+
+    writeFileSync(
+      mutableEntry,
+      `${JSON.stringify({ nodes: [{ id: "one" }, { id: "two" }], edges: [{ source: "one", target: "two" }], hyperedges: [] })}\n`,
+    )
+    ingestSemanticCache(root)
+    rmSync(mutable, { recursive: true, force: true })
+    hydrateSemanticCache(root)
+
+    const variants = path.join(
+      root,
+      "graphify-out/cache/semantic-cas/v1",
+      inputKey,
+    )
+    assert.equal(
+      readdirSync(variants).filter((name) => name.endsWith(".json")).length,
+      2,
+    )
+    const hydrated = JSON.parse(readFileSync(mutableEntry, "utf8"))
+    assert.equal(hydrated.nodes.length, 2)
+    assert.equal(hydrated.edges.length, 1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("a live repository writer serializes the next writer", async () => {
   const root = fixture()
   const moduleUrl = pathToFileURL(
@@ -250,7 +291,7 @@ test("independent branch snapshots merge without generated-file conflicts", () =
     git(root, ["config", "user.email", "lopu-test@example.invalid"])
     writeFileSync(
       path.join(root, ".gitattributes"),
-      "graphify-out/snapshots/** -merge\n",
+      "graphify-out/snapshots/** -merge\ngraphify-out/cache/semantic-cas/** -merge\n",
     )
     writeFileSync(path.join(root, "source.txt"), "base\n")
     git(root, ["add", "."])
@@ -263,6 +304,12 @@ test("independent branch snapshots merge without generated-file conflicts", () =
     )
     mkdirSync(branchA, { recursive: true })
     writeFileSync(path.join(branchA, "graph.json"), '{"nodes":[],"links":[]}\n')
+    const cacheA = path.join(
+      root,
+      "graphify-out/cache/semantic-cas/v1/input-key/content-a.json",
+    )
+    mkdirSync(path.dirname(cacheA), { recursive: true })
+    writeFileSync(cacheA, '{"nodes":[{"id":"a"}],"edges":[],"hyperedges":[]}\n')
     git(root, ["add", "."])
     git(root, ["commit", "-qm", "snapshot a"])
 
@@ -274,6 +321,12 @@ test("independent branch snapshots merge without generated-file conflicts", () =
     )
     mkdirSync(branchB, { recursive: true })
     writeFileSync(path.join(branchB, "graph.json"), '{"nodes":[],"links":[]}\n')
+    const cacheB = path.join(
+      root,
+      "graphify-out/cache/semantic-cas/v1/input-key/content-b.json",
+    )
+    mkdirSync(path.dirname(cacheB), { recursive: true })
+    writeFileSync(cacheB, '{"nodes":[{"id":"b"}],"edges":[],"hyperedges":[]}\n')
     git(root, ["add", "."])
     git(root, ["commit", "-qm", "snapshot b"])
 
@@ -286,6 +339,8 @@ test("independent branch snapshots merge without generated-file conflicts", () =
       readFileSync(path.join(branchB, "graph.json"), "utf8"),
       '{"nodes":[],"links":[]}\n',
     )
+    assert.equal(existsSync(cacheA), true)
+    assert.equal(existsSync(cacheB), true)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

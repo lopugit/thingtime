@@ -2,4 +2,4 @@
 # add distinct paths or add byte-identical content at the same path. If a hash
 # invariant is ever violated, fail closed instead of text-merging JSON.
 graphify-out/snapshots/** -merge
-graphify-out/cache/semantic/** -merge
+graphify-out/cache/semantic-cas/** -merge

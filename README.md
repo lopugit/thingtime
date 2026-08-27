@@ -16,8 +16,9 @@ branch too.
 
 Graphify output is stored as immutable content-addressed snapshots. Use
 `.github/scripts/graphify`; it fingerprints the source tree without generated
-output, serializes writers, validates each atomic graph set, and keeps mutable
-root aliases out of Git. The same trusted router is copied into Lopu
+output, serializes writers, validates each atomic graph set, converts mutable
+semantic responses into immutable input-key/content-hash variants, and keeps
+mutable root aliases out of Git. The same trusted router is copied into Lopu
 workspaces, so post-merge Graphify publication never executes a PR-head script
 with repository credentials.
 

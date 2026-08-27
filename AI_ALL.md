@@ -293,13 +293,16 @@ Rules:
 - Use the repository-aware Graphify router for queries and mutations. On this
   control-plane branch it lives at `.github/scripts/graphify`; product branches
   use `scripts/graphify`. Both route Graphify through immutable snapshots under
-  `graphify-out/snapshots/v1/` and refresh ignored root compatibility aliases.
+  `graphify-out/snapshots/v1/`, promote semantic responses into immutable
+  `graphify-out/cache/semantic-cas/v1/<input-key>/<content-hash>.json`
+  variants, and refresh ignored root compatibility aliases.
 - After modifying code, run `.github/scripts/graphify update .` here. Use the
   configured semantic backend for Markdown/docs/non-code corpus changes, then
   let the router cluster and export the result.
 - Never commit mutable root graph, manifest, report, or cost files. Commit the
   immutable source-fingerprint/artifact-hash snapshot and additive semantic
-  cache entries. A matching hash path must contain matching bytes; the router
+  cache variants. Graphify's input-keyed `cache/semantic/` directory is private
+  work state and remains ignored. A matching hash path must contain matching bytes; the router
   fails closed on an invariant violation or an unexplained 50% node collapse.
 - A commit SHA cannot name generated output included in itself, so the first
   key is a source-only Git-tree fingerprint excluding `graphify-out`; the
@@ -309,9 +312,9 @@ Rules:
 - On a legacy branch, resolve the whole old generated set to one side and let
   the trusted router publish a new snapshot. Never combine a graph from one
   run with a manifest from another.
-- Snapshot HTML, mutable aliases, AST caches, stat indexes, locks, and work
-  directories remain local. Portable snapshots and the semantic cache are
-  tracked.
+- Snapshot HTML, mutable aliases, hydrated semantic data, AST caches, stat
+  indexes, locks, and work directories remain local. Portable snapshots and
+  immutable semantic-cache variants are tracked.
 
 ## Delivery messaging
 
