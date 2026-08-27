@@ -727,6 +727,21 @@ function assertWorkflowSource() {
     /"false positive" \| "used in tests"/u,
     "model proposals use the two evidence-backed disposition reasons",
   );
+  assert.match(
+    reviewBlock,
+    /40 through 280 characters \(GitHub's CodeQL API limit\)/u,
+    "the model receives GitHub's live dismissal-comment size boundary",
+  );
+  assert.equal(
+    (source.match(/length >= 40 and length <= 280/g) || []).length,
+    2,
+    "both trusted CodeQL disposition validators enforce GitHub's 280-character comment limit",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /length >= 40 and length <= 1000/u,
+    "CodeQL disposition validation cannot accept comments GitHub will reject",
+  );
   assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
   assert.doesNotMatch(
     codeqlDispositionBlock,

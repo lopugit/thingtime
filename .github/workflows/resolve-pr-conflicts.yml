@@ -2780,7 +2780,8 @@ jobs:
             replace the disposition file with a JSON array containing
             `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
             Every entry must contain exactly those three keys, and its comment
-            must be 40 through 1000 characters including the required
+            must be 40 through 280 characters (GitHub's CodeQL API limit)
+            including the required
             `Lopu evidence: ` prefix.
             Do not use `won't fix`, do not include an alert absent from the
             trusted snapshot, and do not PATCH CodeQL alert state yourself. A
@@ -3050,7 +3051,7 @@ jobs:
                 and (.reason == "false positive" or .reason == "used in tests")
                 and (.comment | type == "string"
                      and startswith("Lopu evidence: ")
-                     and length >= 40 and length <= 1000))
+                     and length >= 40 and length <= 280))
             ' "$proposals" >/dev/null || {
               echo "::warning::Skipping malformed CodeQL disposition proposals for PR #$number; every referenced alert remains open for a later review."
               continue
@@ -3403,7 +3404,7 @@ jobs:
               and (.reason == "false positive" or .reason == "used in tests")
               and (.comment | type == "string"
                    and startswith("Lopu evidence: ")
-                   and length >= 40 and length <= 1000)
+                   and length >= 40 and length <= 280)
               and (.analysis_ref | type == "string" and test("^refs/pull/[1-9][0-9]*/(head|merge)$"))
               and (.analysis_sha | type == "string" and test("^[0-9a-f]{40}$"))
               and (.reviewed_base_sha | type == "string" and test("^[0-9a-f]{40}$"))
