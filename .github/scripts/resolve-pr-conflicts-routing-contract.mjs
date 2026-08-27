@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
+import { TextDecoder } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.meta.url);
@@ -21,12 +22,53 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
 const validDepth = (value) => /^[0-9]+$/.test(value) && Number(value) <= 3;
+const MAX_BATCH = 200;
+const standardBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+export function encodeBatch(items) {
+  const canonical = items
+    .map((item) => ({ manual_retry: item.manual_retry === true, number: Number(item.number) }))
+    .sort((left, right) => left.number - right.number);
+  return Buffer.from(JSON.stringify(canonical), "utf8").toString("base64");
+}
+
+function decodeBatch(encoded) {
+  if (!encoded || encoded.length > 20000 || !standardBase64.test(encoded)) {
+    throw new Error("invalid PR batch");
+  }
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length || bytes.length > 15000 || bytes.toString("base64") !== encoded) {
+    throw new Error("invalid PR batch");
+  }
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const value = JSON.parse(text);
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_BATCH) {
+    throw new Error("invalid PR batch");
+  }
+  let previous = 0;
+  for (const item of value) {
+    if (!item || Array.isArray(item) || Object.keys(item).join(",") !== "manual_retry,number") {
+      throw new Error("invalid PR batch");
+    }
+    if (
+      typeof item.manual_retry !== "boolean" ||
+      !Number.isSafeInteger(item.number) ||
+      item.number <= previous
+    ) {
+      throw new Error("invalid PR batch");
+    }
+    previous = item.number;
+  }
+  if (JSON.stringify(value) !== text) throw new Error("invalid PR batch");
+  return value;
+}
 
 export function route(input) {
   const event = String(input.event || "");
   const ref = String(input.ref || "");
   const actor = String(input.actor || "");
   const prNumber = String(input.prNumber || "");
+  const prBatchB64 = String(input.prBatchB64 || "");
   const eventPrNumber = String(input.eventPrNumber || "");
   const branch = String(input.branch || "");
   const target = branch || String(input.target || ref);
@@ -36,8 +78,19 @@ export function route(input) {
   const refRaceHandoff = input.refRaceHandoff === true;
 
   const errors = [];
+  let batch = null;
   if (!validDepth(depth)) errors.push("invalid depth");
   if (prNumber && !positiveDecimal(prNumber)) errors.push("invalid PR number");
+  if (prNumber && prBatchB64) errors.push("mutually exclusive PR selectors");
+  if (prBatchB64) {
+    try {
+      batch = decodeBatch(prBatchB64);
+    } catch {
+      errors.push("invalid PR batch");
+    }
+    if (!detectorHandoff) errors.push("batch without detector handoff");
+    if (routedManualRetry) errors.push("batch with top-level manual retry");
+  }
   if (routedManualRetry && !detectorHandoff) {
     errors.push("manual retry without detector handoff");
   }
@@ -47,14 +100,18 @@ export function route(input) {
     detectorHandoff &&
     ref === "github-actions" &&
     actor === "github-actions[bot]" &&
-    positiveDecimal(prNumber) &&
+    ((positiveDecimal(prNumber) && prBatchB64 === "") ||
+      (prNumber === "" && batch !== null)) &&
     branch === "";
   if (detectorHandoff && !internalShape) errors.push("invalid internal handoff");
 
   const valid = errors.length === 0;
   const internalWorker = valid && internalShape;
   const humanDispatch =
-    event === "workflow_dispatch" && !detectorHandoff && !refRaceHandoff;
+    event === "workflow_dispatch" &&
+    !detectorHandoff &&
+    prBatchB64 === "" &&
+    !refRaceHandoff;
   const humanExplicit = humanDispatch && Boolean(prNumber || branch);
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
@@ -70,16 +127,19 @@ export function route(input) {
     ((detectorHandoff && routedManualRetry) || humanExplicit);
   const selector = prNumber
     ? `pr:${prNumber}`
-    : (conversationEvent || failedCheckEvent) && eventPrNumber
-      ? `pr:${eventPrNumber}`
-    : scanAll
-      ? "all"
-      : scanHead
-        ? `base-or-head:${target}`
-        : `base:${target}`;
+    : batch
+      ? `batch:${batch.length}`
+      : (conversationEvent || failedCheckEvent) && eventPrNumber
+        ? `pr:${eventPrNumber}`
+        : scanAll
+          ? "all"
+          : scanHead
+            ? `base-or-head:${target}`
+            : `base:${target}`;
 
   let concurrency;
-  if (internalShape) concurrency = `resolve-pr${prNumber}`;
+  if (internalShape) concurrency = `resolve-worker-${input.runId || "run"}`;
+  else if (prBatchB64) concurrency = `resolve-invalid-batch-${input.runId || "run"}`;
   else if (event === "workflow_dispatch" && prNumber) {
     concurrency = `resolve-detect-pr${prNumber}`;
   } else if (event === "workflow_dispatch" && branch) {
@@ -108,6 +168,7 @@ export function route(input) {
     scanAll,
     scanHead,
     manualRetry,
+    batchSize: batch?.length ?? 0,
     refRaceHandoff,
     selector,
     concurrency,
@@ -210,7 +271,21 @@ function assertWorkflowSource() {
   assert.match(source, /No open PR matched the manual selector/);
   assert.match(source, /Manual selector matched, but no merge worker is needed/);
   assert.match(source, /format\('resolve-detect-pr\{0\}'/);
-  assert.match(source, /format\('resolve-pr\{0\}'/);
+  assert.match(source, /format\('resolve-worker-\{0\}', github\.run_id\)/);
+  assert.match(resolveBlock, /queue: max/);
+  // A batch handoff can select up to 200 PRs, so the matrix must stay bounded
+  // rather than flooding the durable fleet queue's pending-job limit.
+  assert.match(resolveBlock, /max-parallel: 3/);
+  assert.match(resolveBlock, /fail-fast: false/);
+  assert.match(resolveBlock, /Revalidate queued PR snapshot/);
+  assert.match(admissionBlock, /\.state/);
+  assert.match(admissionBlock, /no-ai-merge/);
+  assert.match(admissionBlock, /ai-rebase-in-progress/);
+  assert.equal(
+    resolveBlock.match(/steps\.admission\.outputs\.current == 'true'/g)?.length,
+    18,
+    "every post-admission resolution step is gated",
+  );
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);
   assert.doesNotMatch(
     source,
@@ -220,6 +295,8 @@ function assertWorkflowSource() {
   assert.match(source, /github\.ref_name == 'github-actions'/);
   assert.match(source, /inputs\.detector_handoff == true/);
   assert.match(source, /manual_retry is internal routing state and requires detector_handoff/);
+  assert.match(source, /pr_batch_b64 is internal routing state and requires detector_handoff/);
+  assert.match(source, /PR batch must contain from 1 through 200 selections/);
   assert.match(
     source,
     /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
@@ -245,6 +322,21 @@ function assertWorkflowSource() {
   assert.doesNotMatch(source, /ref:"develop"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
+  assert.equal(
+    source.match(/pr_batch_b64:\$pr_batch_b64/g)?.length,
+    2,
+    "detector handoff and cascade both carry canonical PR batches",
+  );
+  // Per-PR retry intent lives INSIDE the canonical batch, so both dispatch
+  // payloads pin the top-level flag to the literal false. Binding the lowercase
+  // per-PR shell variable the batch refactor deleted (the detector's own
+  // uppercase `$MANUAL_RETRY` env stays valid) is an unbound variable under
+  // `set -u`, which aborts the handoff before a single worker is dispatched.
+  assert.doesNotMatch(
+    source,
+    /--argjson manual_retry "\$manual_retry"/u,
+    "batch dispatchers pin top-level manual_retry to false instead of a per-PR variable",
+  );
   assert.match(source, /issue_comment:\n    types: \[created, edited\]/u, "human PR comments wake Lopu");
   assert.match(
     source,
@@ -406,6 +498,7 @@ function assertWorkflowSource() {
     assert.match(block, /github\.actor == 'github-actions\[bot\]'/, `${name}: actor gate`);
     assert.match(block, /github\.ref_name == 'github-actions'/, `${name}: ref gate`);
     assert.match(block, /inputs\.pr_number != ''/, `${name}: PR gate`);
+    assert.match(block, /inputs\.pr_batch_b64 != ''/, `${name}: batch gate`);
     assert.match(block, /inputs\.branch == ''/, `${name}: empty branch gate`);
   }
 
@@ -588,10 +681,26 @@ function assertWorkflowSource() {
     "the CodeQL writer is credential-free apart from GitHub's scoped token",
   );
   assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
-  assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
-  assert.match(codeqlDispositionBlock, /\$alert_ref" != "\$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
-  assert.match(codeqlDispositionBlock, /\$alert_sha" != "\$analysis_sha/u, "writer revalidates the exact analysis SHA");
-  assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
+  assert.match(codeqlDispositionBlock, /live_base_ref=.*\.base\.ref/u, "writer reads the live PR base ref name");
+  assert.match(codeqlDispositionBlock, /live_base_ref_encoded=.*@uri/u, "writer safely encodes the live base ref");
+  assert.match(
+    codeqlDispositionBlock,
+    /git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "writer resolves the live target branch tip rather than trusting a historical PR base snapshot",
+  );
+  assert.doesNotMatch(
+    codeqlDispositionBlock,
+    /live_base=.*\.base\.sha/u,
+    "writer never confuses the PR's historical base snapshot with the live target branch tip",
+  );
+  assert.match(
+    codeqlDispositionBlock,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "writer asks GitHub for the alert instances attached to the reviewed PR",
+  );
+  assert.match(codeqlDispositionBlock, /\.ref == \$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
+  assert.match(codeqlDispositionBlock, /\.commit_sha == \$analysis_sha/u, "writer revalidates the exact analysis SHA");
+  assert.match(codeqlDispositionBlock, /\.state == "open"/u, "writer requires the exact reviewed alert instance to remain open");
   assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
   assert.match(
     codeqlDispositionBlock,
@@ -727,6 +836,11 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch file set differs from the exact conflict allowlist/u,
+    "the temporary nested action is discarded before every exact scratch allowlist comparison",
+  );
+  assert.match(
+    rebaseActionSource,
     /cp -pR "\$safe_trusted_abs\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$restored\/\.github\/actions\/lopu-agent\/"/u,
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
   );
@@ -827,6 +941,11 @@ function assertAdminModelRouting(
 }
 
 export function selfTest() {
+  const trustedBatch = encodeBatch([
+    { number: 190, manual_retry: true },
+    { number: 220, manual_retry: false },
+  ]);
+
   assertRoute("human blank", {
     event: "workflow_dispatch", ref: "feature/ref", actor: "lopugit",
   }, {
@@ -925,7 +1044,23 @@ export function selfTest() {
     handoffEligible: false,
     manualRetry: false,
     selector: "pr:190",
-    concurrency: "resolve-pr190",
+    concurrency: "resolve-worker-run",
+    cancelInProgress: false,
+    modelAndResolve: true,
+  });
+
+  assertRoute("machine batch worker", {
+    event: "workflow_dispatch", ref: "github-actions", actor: "github-actions[bot]",
+    prBatchB64: trustedBatch, detectorHandoff: true, runId: "batch-123",
+  }, {
+    valid: true,
+    internalWorker: true,
+    detectorOnly: false,
+    handoffEligible: false,
+    manualRetry: false,
+    batchSize: 2,
+    selector: "batch:2",
+    concurrency: "resolve-worker-batch-123",
     cancelInProgress: false,
     modelAndResolve: true,
   });
@@ -949,6 +1084,42 @@ export function selfTest() {
     internalWorker: true,
     manualRetry: true,
     modelAndResolve: true,
+  });
+
+  const unsortedBatch = Buffer.from(JSON.stringify([
+    { manual_retry: false, number: 220 },
+    { manual_retry: false, number: 190 },
+  ])).toString("base64");
+  for (const [name, overrides, error] of [
+    ["machine malformed batch", { prBatchB64: "not-base64" }, "invalid PR batch"],
+    ["machine unsorted batch", { prBatchB64: unsortedBatch }, "invalid PR batch"],
+    ["machine batch plus exact PR", { prNumber: "190", prBatchB64: trustedBatch }, "mutually exclusive PR selectors"],
+    ["machine batch plus top-level retry", { prBatchB64: trustedBatch, manualRetry: true }, "batch with top-level manual retry"],
+    [
+      "machine oversized batch",
+      { prBatchB64: encodeBatch(Array.from({ length: 201 }, (_, index) => ({ number: index + 1 }))) },
+      "invalid PR batch",
+    ],
+  ]) {
+    const result = route({
+      event: "workflow_dispatch", ref: "github-actions", actor: "github-actions[bot]",
+      prNumber: "", detectorHandoff: true, ...overrides,
+    });
+    assert.equal(result.valid, false, name);
+    assert.equal(result.modelAndResolve, false, `${name}: no secret-bearing worker`);
+    assert.ok(result.errors.includes(error), `${name}: ${error}`);
+  }
+
+  assertRoute("human cannot inject a PR batch", {
+    event: "workflow_dispatch", ref: "github-actions", actor: "lopugit",
+    prBatchB64: trustedBatch,
+  }, {
+    valid: false,
+    internalWorker: false,
+    handoffEligible: false,
+    scanAll: false,
+    concurrency: "resolve-invalid-batch-run",
+    modelAndResolve: false,
   });
 
   for (const [name, overrides, error] of [

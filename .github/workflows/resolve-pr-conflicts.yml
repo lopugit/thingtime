@@ -44,9 +44,10 @@
 #
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
-# then hand off — the `handoff` job dispatches one exact PR selection to this
-# workflow at the protected `github-actions` control-plane ref. That internal
-# workflow_dispatch (a supported event) performs the resolution. Do not move the
+# then hand off — the `handoff` job dispatches one bounded batch of exact PR
+# selections to this workflow at the protected `github-actions` control-plane
+# ref. That internal workflow_dispatch (a supported event) performs the
+# resolutions as isolated matrix jobs. Do not move the
 # resolve job back onto `push`; the AI step fails there every time, after the
 # merge has already been computed. pull_request_target and legacy
 # repository_dispatch runs take the same detector-only handoff hop — the action
@@ -121,8 +122,9 @@
 #   safely push to them, and running the model when publication is forbidden
 #   would expose content to secrets and spend AI budget for no useful result.
 # - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
-#   direct stacked children are dispatched individually to the fixed `github-actions`
-#   control plane, with a depth cap as a loop guard. No secret-bearing resolver
+#   direct stacked children are dispatched in bounded batches to the fixed
+#   `github-actions` control plane, with a depth cap as a loop guard. No
+#   secret-bearing resolver
 #   YAML is loaded from an arbitrary PR base or head ref.
 # - `ai-merge-paused` is a user-controlled, durable stop signal. Automation
 #   never creates, adds, removes, or treats it as stale: when present, every
@@ -176,8 +178,27 @@ run-name: >-
       && inputs.manual_retry != true
       && inputs.depth == '0'
       && inputs.pr_number == ''
+      && inputs.pr_batch_b64 == ''
       && inputs.branch == ''
       && format('Lopu manages promotion for source PR #{0}', inputs.promotion_source_pr)
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.pr_number == ''
+      && inputs.pr_batch_b64 != ''
+      && inputs.branch == ''
+      && 'Lopu resolves a PR batch from the control plane'
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.pr_number != ''
+      && inputs.pr_batch_b64 == ''
+      && inputs.branch == ''
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
+      && format('Lopu resolves PR #{0} from the control plane', inputs.pr_number)
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -203,16 +224,10 @@ run-name: >-
       && inputs.branch == ''
       && 'Lopu reviews all eligible PRs from the control plane'
       || github.event_name == 'workflow_dispatch'
-      && inputs.detector_handoff == true
-      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
-      && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'github-actions'
-      && inputs.pr_number != ''
-      && inputs.branch == ''
-      && format('Lopu resolves PR #{0} from the control plane', inputs.pr_number)
-      || github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+      && inputs.pr_batch_b64 == '' && inputs.pr_number != ''
       && format('Lopu scans PR #{0}', inputs.pr_number)
-      || github.event_name == 'workflow_dispatch' && inputs.branch != ''
+      || github.event_name == 'workflow_dispatch'
+      && inputs.pr_batch_b64 == '' && inputs.branch != ''
       && format('Lopu scans PRs matching {0}', inputs.branch)
       || github.event_name == 'push' && github.ref_name == 'github-actions'
       && 'Lopu scans all open PRs (control-plane push)'
@@ -228,7 +243,9 @@ run-name: >-
           github.event.check_run.pull_requests[0].number)
       || (github.event_name == 'schedule'
           || (github.event_name == 'workflow_dispatch'
-              && inputs.pr_number == '' && inputs.branch == ''))
+              && inputs.pr_number == ''
+              && inputs.pr_batch_b64 == ''
+              && inputs.branch == ''))
       && 'Lopu scans all open PRs'
       || format('Lopu scans PRs under {0}',
           github.event.client_payload.branch
@@ -240,6 +257,11 @@ on:
     inputs:
       pr_number:
         description: "Exact PR to scan (takes precedence over branch); leave blank for a branch/all scan"
+        required: false
+        default: ""
+        type: string
+      pr_batch_b64:
+        description: "Internal: canonical-base64 bounded PR selection batch (leave blank)"
         required: false
         default: ""
         type: string
@@ -284,7 +306,7 @@ on:
         default: true
         type: boolean
       detector_handoff:
-        description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
+        description: "Internal: exact/batch handoff to the github-actions resolver control plane (leave false)"
         required: false
         default: false
         type: boolean
@@ -394,6 +416,11 @@ on:
         required: false
         default: ""
         type: string
+      pr_batch_b64:
+        description: "Internal: canonical-base64 bounded PR selection batch (leave blank)"
+        required: false
+        default: ""
+        type: string
       branch:
         description: "PR base or head branch to scan; leave blank with no PR number to scan all"
         required: false
@@ -436,7 +463,7 @@ on:
         default: true
         type: boolean
       detector_handoff:
-        description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
+        description: "Internal: exact/batch handoff to the github-actions resolver control plane (leave false)"
         required: false
         default: false
         type: boolean
@@ -501,17 +528,23 @@ on:
     # workflow instead of a second rebase-specific product listener.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector and worker runs never share a namespace. Within each semantic
+# Detector runs are disposable; internal batch workers are not, and a detector
+# and the worker it spawns never share a namespace. Within each semantic
 # PR/branch namespace, GitHub keeps the active run plus the newest pending run;
 # the newest run re-derives live PR, comment, check, and branch state, so an
 # older pending snapshot is redundant. The model jobs below still use the
-# durable repository fleet queue because work for distinct PRs must not vanish.
+# durable repository fleet queue because work for distinct PRs must not vanish,
+# and each queued matrix job revalidates its own immutable snapshot before it
+# spends checkout, secret, AI, or Graphify budget.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
-  #   resolve-pr<N>      one internal github-actions-control-plane resolver per PR
+  #   resolve-worker-*   one internal github-actions-control-plane batch run
   #   lopu-review-*      one batch review scope; model work is fleet-serialized
-  # A human exact-PR detector therefore cannot cancel the worker it creates.
+  # Every model-bearing job additionally shares the durable
+  # `lopu-agent-fleet-<repo>` queue declared on the job itself.
+  # A human exact-PR detector therefore cannot cancel the worker it creates,
+  # and different worker runs never cancel a batch that is already draining.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
         && github.actor == 'github-actions[bot]'
@@ -536,6 +569,7 @@ concurrency:
         && inputs.manual_retry != true
         && inputs.depth == '0'
         && inputs.pr_number == ''
+        && inputs.pr_batch_b64 == ''
         && inputs.branch == ''
         && format('resolve-promotion-pr{0}', inputs.promotion_source_pr)
         || (inputs.promotion_source_pr != '' || inputs.promotion_plan_b64 != '')
@@ -559,12 +593,17 @@ concurrency:
            == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
            || github.workflow_ref
            == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
-        && inputs.pr_number != ''
+        && ((inputs.pr_number != '' && inputs.pr_batch_b64 == '')
+            || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
         && inputs.branch == ''
-        && format('resolve-pr{0}', inputs.pr_number)
-        || github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+        && format('resolve-worker-{0}', github.run_id)
+        || inputs.pr_batch_b64 != ''
+        && format('resolve-invalid-batch-{0}', github.run_id)
+        || github.event_name == 'workflow_dispatch'
+        && inputs.pr_batch_b64 == '' && inputs.pr_number != ''
         && format('resolve-detect-pr{0}', inputs.pr_number)
-        || github.event_name == 'workflow_dispatch' && inputs.branch != ''
+        || github.event_name == 'workflow_dispatch'
+        && inputs.pr_batch_b64 == '' && inputs.branch != ''
         && format('resolve-detect-selector-{0}', inputs.branch)
         || (github.event_name == 'schedule'
             || github.event_name == 'workflow_dispatch')
@@ -639,7 +678,8 @@ jobs:
                 && inputs.detector_handoff == true
                 && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
                     || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
-                        && inputs.pr_number != ''
+                        && ((inputs.pr_number != '' && inputs.pr_batch_b64 == '')
+                            || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
                         && inputs.branch == ''))
                 && inputs.promotion_source_pr == ''
                 && inputs.promotion_plan_b64 == '') }}
@@ -910,6 +950,7 @@ jobs:
           EVENT_ACTOR: ${{ github.actor }}
           TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
           SELECTED_PR: ${{ inputs.pr_number || github.event.client_payload.pr_number || '' }}
+          PR_BATCH_B64: ${{ inputs.pr_batch_b64 }}
           INPUT_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || '' }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
           DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
@@ -931,10 +972,12 @@ jobs:
             ${{ github.event_name == 'push'
                 || (github.event_name == 'workflow_dispatch'
                     && inputs.detector_handoff != true
+                    && inputs.pr_batch_b64 == ''
                     && inputs.pr_number == ''
                     && inputs.branch != '') }}
           # Scheduled sweeps and external blank manual runs cover every open PR.
-          # Internal workers always carry an exact PR number and never scan all.
+          # Internal workers always carry an exact PR number or a canonical
+          # batch and never scan all.
           # A push to the control-plane branch ITSELF sweeps everything too: no
           # PR targets `github-actions`, so the ordinary base/head match would
           # find nothing, yet a control-plane push is exactly when every open
@@ -947,11 +990,13 @@ jobs:
                     && github.ref_name == 'github-actions')
                 || (github.event_name == 'workflow_dispatch'
                     && inputs.detector_handoff != true
+                    && inputs.pr_batch_b64 == ''
                     && inputs.pr_number == ''
                     && inputs.branch == '') }}
           HUMAN_EXPLICIT: >-
             ${{ github.event_name == 'workflow_dispatch'
                 && inputs.detector_handoff != true
+                && inputs.pr_batch_b64 == ''
                 && inputs.ref_race_handoff != true
                 && (inputs.pr_number != '' || inputs.branch != '') }}
           # An explicit human PR/base/head detector may recover rebase-owned
@@ -1002,11 +1047,61 @@ jobs:
             echo "::error::depth must not exceed the cascade cap of 3."
             exit 1
           fi
+          if [ -n "$SELECTED_PR" ] && [ -n "$PR_BATCH_B64" ]; then
+            echo "::error::pr_number and pr_batch_b64 are mutually exclusive."
+            exit 1
+          fi
           if [ -n "$SELECTED_PR" ]; then
             if ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
               echo "::error::pr_number must be a positive decimal PR number."
               exit 1
             fi
+          fi
+          BATCH_JSON='[]'
+          if [ -n "$PR_BATCH_B64" ]; then
+            if [ "$DETECTOR_HANDOFF" != true ]; then
+              echo "::error::pr_batch_b64 is internal routing state and requires detector_handoff."
+              exit 1
+            fi
+            if [ "$ROUTED_MANUAL_RETRY" = true ]; then
+              echo "::error::A batch carries manual_retry per PR; top-level manual_retry must be false."
+              exit 1
+            fi
+            # The quoted heredoc intentionally preserves JavaScript template
+            # syntax for Node instead of expanding it in Bash.
+            # shellcheck disable=SC2016
+            node - "$RUNNER_TEMP/pr-batch.json" <<'NODE'
+          const fs = require('node:fs');
+          const { TextDecoder } = require('node:util');
+          const encoded = process.env.PR_BATCH_B64 || '';
+          if (encoded.length > 20000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+            throw new Error('pr_batch_b64 is oversized or non-canonical');
+          }
+          const bytes = Buffer.from(encoded, 'base64');
+          if (!bytes.length || bytes.length > 15000 || bytes.toString('base64') !== encoded) {
+            throw new Error('PR batch is empty, oversized, or non-canonical');
+          }
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          if (text.includes('\0')) throw new Error('PR batch contains NUL');
+          const value = JSON.parse(text);
+          if (!Array.isArray(value) || value.length < 1 || value.length > 200) {
+            throw new Error('PR batch must contain from 1 through 200 selections');
+          }
+          let previous = 0;
+          for (const item of value) {
+            if (!item || Array.isArray(item) || Object.keys(item).join(',') !== 'manual_retry,number') {
+              throw new Error('PR batch entries must use the exact canonical schema');
+            }
+            if (typeof item.manual_retry !== 'boolean' || !Number.isSafeInteger(item.number) || item.number <= 0) {
+              throw new Error('PR batch entries require a positive safe integer and boolean retry flag');
+            }
+            if (item.number <= previous) throw new Error('PR batch entries must be sorted and unique');
+            previous = item.number;
+          }
+          if (JSON.stringify(value) !== text) throw new Error('PR batch JSON must be canonical');
+          fs.writeFileSync(process.argv[2], `${text}\n`, { encoding: 'utf8', mode: 0o600 });
+          NODE
+            BATCH_JSON="$(cat "$RUNNER_TEMP/pr-batch.json")"
           fi
           if [ "$ROUTED_MANUAL_RETRY" = true ]; then
             if [ "$DETECTOR_HANDOFF" != true ]; then
@@ -1023,10 +1118,13 @@ jobs:
             [ "$EVENT_NAME" = workflow_dispatch ] || invalid_handoff=true
             control_plane_revision || invalid_handoff=true
             [ "$EVENT_ACTOR" = "github-actions[bot]" ] || invalid_handoff=true
-            [ -n "$SELECTED_PR" ] || invalid_handoff=true
+            if { [ -n "$SELECTED_PR" ] && [ -n "$PR_BATCH_B64" ]; } \
+               || { [ -z "$SELECTED_PR" ] && [ -z "$PR_BATCH_B64" ]; }; then
+              invalid_handoff=true
+            fi
             [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
             if [ "$invalid_handoff" = true ]; then
-              echo "::error::Invalid internal resolver handoff: require a bot-authored workflow_dispatch of the github-actions revision (directly, or through the develop/main listener) with a positive pr_number and empty branch."
+              echo "::error::Invalid internal resolver handoff: require a bot-authored workflow_dispatch of the github-actions revision (directly, or through the develop/main listener) with exactly one positive pr_number or canonical PR batch, plus an empty branch."
               exit 1
             fi
           fi
@@ -1171,6 +1269,12 @@ jobs:
           }
 
           query() {
+            if [ -n "$PR_BATCH_B64" ]; then
+              jq -c --argjson selected "$BATCH_JSON" '
+                [.[] | . as $pr | select(any($selected[]; .number == $pr.number))]
+              ' <<<"$all_open"
+              return
+            fi
             if [ -n "$SELECTED_PR" ]; then
               jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$all_open"
               return
@@ -1237,6 +1341,8 @@ jobs:
 
           if [ "$SCAN_ALL" = "true" ]; then
             echo "Open PRs in repository-wide scan:"
+          elif [ -n "$PR_BATCH_B64" ]; then
+            echo "Open PRs selected by the trusted batch:"
           elif [ -n "$SELECTED_PR" ]; then
             echo "Open PR selected exactly as #$SELECTED_PR:"
           elif [ "$SCAN_HEAD" = "true" ]; then
@@ -1341,6 +1447,7 @@ jobs:
           conflicting="$(jq -c \
             --arg only "${ONLY_PR:-}" \
             --argjson manual_retry "$MANUAL_RETRY" \
+            --argjson batch "$BATCH_JSON" \
             --argjson all "$all_open" \
             --arg default_ref "$default_ref" '
             [.[] as $pr
@@ -1365,7 +1472,12 @@ jobs:
               | select($only == "" or (.number | tostring) == $only)
               | {number: .number, head: .headRefName, base: .baseRefName,
                   mode: (if .mergeable == "CONFLICTING" then "conflict" else "outdated" end),
-                  manual_retry: $manual_retry,
+                  manual_retry:
+                    (if ($batch | length) > 0
+                     then ([ $batch[]
+                             | select(.number == $pr.number)
+                             | .manual_retry ] | first // false)
+                     else $manual_retry end),
                   recover_rebase_pause:
                     ([.labels[].name] | index("ai-rebase-paused") != null)}]
           ' <<<"$prs")"
@@ -1474,6 +1586,7 @@ jobs:
           CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_ACTOR: ${{ github.actor }}
           ORDINARY_PR: ${{ inputs.pr_number }}
+          ORDINARY_BATCH: ${{ inputs.pr_batch_b64 }}
           ORDINARY_BRANCH: ${{ inputs.branch }}
           DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
           MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
@@ -1544,7 +1657,8 @@ jobs:
             || fail "Promotion handoff cannot use external compute routing."
           [ -z "$RUNNER_LABEL" ] && [ -z "$CONTROL_DISPATCH_ID" ] \
             || fail "Promotion handoff cannot carry external runner metadata."
-          [ -z "$ORDINARY_PR" ] && [ -z "$ORDINARY_BRANCH" ] \
+          [ -z "$ORDINARY_PR" ] && [ -z "$ORDINARY_BATCH" ] \
+            && [ -z "$ORDINARY_BRANCH" ] \
             || fail "Promotion and ordinary PR selectors are mutually exclusive."
           [ "$DETECTOR_HANDOFF" = false ] && [ "$MANUAL_RETRY" = false ] \
             || fail "Promotion and ordinary detector routing flags are mutually exclusive."
@@ -1754,13 +1868,14 @@ jobs:
   # pull_request_review_comment, workflow_dispatch, repository_dispatch,
   # schedule, workflow_run. All external events — including human
   # workflow_dispatch and legacy repository_dispatch — are detector-only.
-  # Eligible PR selections are handed off one-by-one through the Actions API to
-  # this workflow at the hard-coded `github-actions` control-plane ref. The worker
-  # re-detects and snapshots the selected PR's live refs before any checkout.
+  # Eligible PR selections are handed off in canonical batches (at most 200,
+  # below GitHub's 256-job matrix cap) through the Actions API to this workflow
+  # at the hard-coded `github-actions` control-plane ref. The worker re-detects
+  # and snapshots every selected PR's live refs before any checkout.
   # Product branches only host thin listeners. Every secret-bearing worker is
   # dispatched directly to this protected github-actions implementation.
   handoff:
-    name: Hand off each selected PR to the github-actions resolver control plane
+    name: Hand off the selected PR batch to the github-actions resolver control plane
     needs: [route, detect]
     if: >-
       needs.detect.outputs.any == 'true'
@@ -1778,7 +1893,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Dispatch one trusted github-actions worker per selected PR
+      - name: Dispatch one trusted github-actions worker per bounded PR batch
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -1791,28 +1906,37 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
-          while IFS= read -r encoded; do
-            [ -n "$encoded" ] || continue
-            selected="$(base64 --decode <<<"$encoded")"
-            number="$(jq -r '.number' <<<"$selected")"
-            manual_retry="$(jq -r '.manual_retry' <<<"$selected")"
-            echo "Dispatching selected PR #$number to the fixed github-actions resolver control plane."
+          selections="$(jq -cS '
+            [.[] | {manual_retry:(.manual_retry == true), number:.number}]
+            | sort_by(.number)
+            | unique_by(.number)
+          ' <<<"$PRS")"
+          total="$(jq 'length' <<<"$selections")"
+          [ "$total" -gt 0 ] || { echo "::error::Detector returned an empty handoff batch."; exit 1; }
+
+          while IFS= read -r batch; do
+            [ -n "$batch" ] || continue
+            batch_b64="$(printf '%s' "$batch" | base64 -w0)"
+            count="$(jq 'length' <<<"$batch")"
+            first="$(jq -r '.[0].number' <<<"$batch")"
+            last="$(jq -r '.[-1].number' <<<"$batch")"
+            echo "Dispatching $count selected PR(s), #$first through #$last, to one fixed-control-plane worker."
             jq -n \
-              --arg pr_number "$number" \
+              --arg pr_batch_b64 "$batch_b64" \
               --arg depth "$DEPTH" \
               --arg execution_provider "$EXECUTION_PROVIDER" \
               --arg runner_label "$RUNNER_LABEL" \
               --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
               --arg routing_proof "$ROUTING_PROOF" \
-              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
-              --argjson manual_retry "$manual_retry" '
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
                   ref:"github-actions",
                   inputs:{
-                    pr_number:$pr_number,
+                    pr_number:"",
+                    pr_batch_b64:$pr_batch_b64,
                     branch:"",
                     detector_handoff:true,
-                    manual_retry:$manual_retry,
+                    manual_retry:false,
                     depth:$depth,
                     execution_provider:$execution_provider,
                     runner_label:$runner_label,
@@ -1825,7 +1949,7 @@ jobs:
               | gh api --method POST \
                   "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                   --input -
-          done < <(jq -r '.[] | @base64' <<<"$PRS")
+          done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$selections")
 
   review_detect:
     name: Find PRs for Lopu repository review
@@ -2016,7 +2140,8 @@ jobs:
            && inputs.promotion_plan_b64 == ''
            && inputs.detector_handoff == true
            && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
-           && inputs.pr_number != ''
+           && ((inputs.pr_number != '' && inputs.pr_batch_b64 == '')
+               || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
            && inputs.branch == '')
           || (github.actor == 'github-actions[bot]'
               && inputs.promotion_source_pr == ''
@@ -2028,6 +2153,7 @@ jobs:
               && github.actor == 'github-actions[bot]'
               && inputs.detector_handoff != true
               && inputs.pr_number == ''
+              && inputs.pr_batch_b64 == ''
               && inputs.branch == ''
               && inputs.promotion_source_pr != ''
               && inputs.promotion_plan_b64 != ''))
@@ -2801,8 +2927,10 @@ jobs:
           set -euo pipefail
 
           canonical="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          conflicting_alerts="$RUNNER_TEMP/lopu-codeql-conflicting-alerts.json"
           trusted_authority="$RUNNER_TEMP/lopu-codeql-authority-trusted.json"
           printf '[]\n' >"$canonical"
+          printf '[]\n' >"$conflicting_alerts"
           printf '%s' "$CODEQL_AUTHORITY_B64" | base64 --decode >"$trusted_authority"
           printf 'dispositions_b64=\n' >>"$GITHUB_OUTPUT"
           [ -s "${MANIFEST:-}" ] || exit 0
@@ -2887,11 +3015,6 @@ jobs:
               [ -n "$proposal_b64" ] || continue
               proposal="$(base64 --decode <<<"$proposal_b64")"
               alert_number="$(jq -r '.alert_number' <<<"$proposal")"
-              if jq -e --argjson alert_number "$alert_number" \
-                   'any(.[]; .alert_number == $alert_number)' "$canonical" >/dev/null; then
-                echo "::error::CodeQL alert #$alert_number was proposed more than once in this Lopu session."
-                exit 1
-              fi
               alert="$(jq -c \
                 --argjson pr_number "$number" \
                 --argjson alert_number "$alert_number" \
@@ -2919,9 +3042,43 @@ jobs:
               [ "$(jq -r '.state' <<<"$alert")" = open ] \
                 && [ -n "$expected_analysis_sha" ] \
                 && [ "$analysis_sha" = "$expected_analysis_sha" ] || {
-                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
-                  exit 1
-                }
+                echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
+                exit 1
+              }
+
+              # CodeQL alert numbers identify repository-level alerts. The same
+              # alert can therefore appear in several exact PR analysis
+              # snapshots when those branches share the finding. Coalesce
+              # compatible proposals instead of failing the whole batch or
+              # attempting the same repository-level dismissal more than once.
+              # Conflicting reasons are ambiguous, so remove the earlier entry
+              # and leave that alert open for a later review.
+              if jq -e --argjson alert_number "$alert_number" \
+                   'index($alert_number) != null' "$conflicting_alerts" >/dev/null; then
+                echo "::notice::Skipping another CodeQL alert #$alert_number proposal because this Lopu session already found conflicting disposition reasons."
+                continue
+              fi
+              existing="$(jq -c --argjson alert_number "$alert_number" \
+                '[.[] | select(.alert_number == $alert_number)] | first // empty' \
+                "$canonical")"
+              if [ -n "$existing" ]; then
+                existing_reason="$(jq -r '.reason' <<<"$existing")"
+                proposed_reason="$(jq -r '.reason' <<<"$proposal")"
+                if [ "$existing_reason" = "$proposed_reason" ]; then
+                  echo "::notice::Coalescing CodeQL alert #$alert_number across PR analysis snapshots with the same '$proposed_reason' disposition."
+                  continue
+                fi
+                echo "::warning::Leaving CodeQL alert #$alert_number open because this Lopu session proposed conflicting disposition reasons."
+                jq -c --argjson alert_number "$alert_number" \
+                  '[.[] | select(.alert_number != $alert_number)]' \
+                  "$canonical" >"$canonical.next"
+                mv "$canonical.next" "$canonical"
+                jq -c --argjson alert_number "$alert_number" \
+                  'if index($alert_number) == null then . + [$alert_number] else . end' \
+                  "$conflicting_alerts" >"$conflicting_alerts.next"
+                mv "$conflicting_alerts.next" "$conflicting_alerts"
+                continue
+              fi
 
               entry="$(jq -cn \
                 --argjson pr_number "$number" \
@@ -3180,8 +3337,26 @@ jobs:
 
             pr="$(gh api "repos/$REPO/pulls/$pr_number")"
             live_head="$(jq -r '.head.sha' <<<"$pr")"
-            live_base="$(jq -r '.base.sha' <<<"$pr")"
+            live_base_ref="$(jq -r '.base.ref // empty' <<<"$pr")"
             live_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
+            git check-ref-format "refs/heads/$live_base_ref" >/dev/null 2>&1 || {
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number returned an invalid live base ref."
+              continue
+            }
+            live_base_ref_encoded="$(jq -rn --arg value "$live_base_ref" '$value | @uri')"
+            # `.base.sha` is the base snapshot recorded on the PR, which may
+            # lag the actual target branch tip for an out-of-date PR. Bind the
+            # writer to the live ref tip exactly as the validating handoff did;
+            # otherwise safe dispositions for old develop-based PRs would be
+            # silently skipped even though their reviewed target was unchanged.
+            if ! live_base="$(gh api "repos/$REPO/git/ref/heads/$live_base_ref_encoded" --jq '.object.sha')"; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number's live base branch tip could not be resolved."
+              continue
+            fi
+            [[ "$live_head" =~ ^[0-9a-f]{40}$ && "$live_base" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number returned invalid live revisions."
+              continue
+            }
             if [ "$(jq -r '.state' <<<"$pr")" != open ] \
                || [ "$live_repo" != "$REPO" ] \
                || [ "$live_head" != "$expected_head" ] \
@@ -3192,11 +3367,21 @@ jobs:
             fi
 
             alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
-            alert_ref="$(jq -r '.most_recent_instance.ref' <<<"$alert")"
-            alert_sha="$(jq -r '.most_recent_instance.commit_sha' <<<"$alert")"
-            if [ "$(jq -r '.state' <<<"$alert")" != open ] \
-               || [ "$alert_ref" != "$analysis_ref" ] \
-               || [ "$alert_sha" != "$analysis_sha" ]; then
+            if [ "$(jq -r '.state' <<<"$alert")" != open ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
+              continue
+            fi
+            instances="$(gh api --paginate --slurp \
+              "repos/$REPO/code-scanning/alerts/$alert_number/instances?pr=$pr_number&per_page=100")"
+            if ! jq -e \
+              --arg analysis_ref "$analysis_ref" \
+              --arg analysis_sha "$analysis_sha" '
+                add // []
+                | any(.[];
+                    .ref == $analysis_ref
+                    and .commit_sha == $analysis_sha
+                    and .state == "open")
+              ' <<<"$instances" >/dev/null; then
               echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-analysis evidence changed."
               continue
             fi
@@ -3277,6 +3462,7 @@ jobs:
       && inputs.manual_retry != true
       && inputs.depth == '0'
       && inputs.pr_number == ''
+      && inputs.pr_batch_b64 == ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
     timeout-minutes: 360
@@ -4819,8 +5005,8 @@ jobs:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: [route, detect, model_config]
     # Secret-bearing resolution runs only from the fixed github-actions control-plane
-    # revision after a bot-originated exact-PR selection handoff. The detect step has
-    # already validated the routing shape and re-snapshotted live PR refs.
+    # revision after a bot-originated exact/batch selection handoff. The detect
+    # step has already validated the routing shape and re-snapshotted live PR refs.
     #
     # `!cancelled()` plus explicit per-need result checks is LOAD-BEARING, not
     # style: promotion_validate is skipped in ordinary PR mode, and GitHub
@@ -4845,7 +5031,8 @@ jobs:
          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
          || github.workflow_ref
          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
-      && inputs.pr_number != ''
+      && ((inputs.pr_number != '' && inputs.pr_batch_b64 == '')
+          || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
       && inputs.branch == ''
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 360
@@ -4862,6 +5049,10 @@ jobs:
       cancel-in-progress: false
     strategy:
       fail-fast: false
+      # A batch handoff can select up to 200 PRs. Bounding how many matrix jobs
+      # are in flight keeps the durable fleet queue above from overflowing its
+      # pending-job limit, so no discovered PR is silently dropped.
+      max-parallel: 3
       matrix:
         pr: ${{ fromJSON(needs.detect.outputs.prs) }}
     env:
@@ -4896,6 +5087,10 @@ jobs:
       GIT_CONFIG_GLOBAL: /dev/null
       GIT_CONFIG_SYSTEM: /dev/null
     steps:
+      # `ai-merge-paused` is a user-controlled hard stop, not a stale-snapshot
+      # cache: while it is present no queued worker may comment, check out,
+      # resolve, or push, and only the user who applied it can lift it. It is
+      # therefore the outermost gate, ahead of the snapshot revalidation below.
       - name: Honor user-controlled ai-merge-paused
         id: user_merge_pause
         env:
@@ -5328,6 +5523,8 @@ jobs:
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
           && steps.merge.outputs.conflicted == 'true'
+        # The turn-budget continuation step below needs this step's outcome,
+        # so a max-turns stop must not fail the job here.
         continue-on-error: true
         uses: ./trusted/.github/actions/lopu-agent
         with:
@@ -6203,10 +6400,10 @@ jobs:
           fi
 
       - name: Push merge commit
+        id: push
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
-        id: push
         env:
           PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
           DEFAULT_TOKEN: ${{ github.token }}
@@ -6540,8 +6737,9 @@ jobs:
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
           && steps.push.outputs.remote_state == 'published'
-        # Always dispatch exact child PR selections, even when a PAT-backed
-        # push also creates a detector run. Duplicate discovery is harmless:
+        # Always dispatch exact child PR selections in a canonical batch, even
+        # when a PAT-backed push also creates a detector run. Duplicate
+        # discovery is harmless:
         # trusted workers serialize per PR without cancellation and re-detect
         # the live mergeability/ref snapshot before doing secret-bearing work.
         env:
@@ -6564,26 +6762,32 @@ jobs:
             echo "Cascade depth cap reached ($DEPTH) — not dispatching further."
             exit 0
           fi
-          children="$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open --limit 1000 --json number --jq '.[].number')"
-          if [ -z "$children" ]; then
+          children="$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open --limit 1000 --json number \
+            | jq -cS '[.[] | {manual_retry:false, number:.number}] | sort_by(.number) | unique_by(.number)')"
+          count="$(jq 'length' <<<"$children")"
+          if [ "$count" -eq 0 ]; then
             echo "No PRs are stacked on $HEAD_REF."
             exit 0
           fi
 
-          count="$(wc -l <<<"$children" | tr -d ' ')"
           next_depth="$((DEPTH + 1))"
-          echo "$count open PR(s) are based on $HEAD_REF — dispatching each exact PR selection to the fixed github-actions control plane."
-          while IFS= read -r child_number; do
-            [ -n "$child_number" ] || continue
+          echo "$count open PR(s) are based on $HEAD_REF — dispatching bounded batches to the fixed github-actions control plane."
+          while IFS= read -r batch; do
+            [ -n "$batch" ] || continue
+            batch_b64="$(printf '%s' "$batch" | base64 -w0)"
+            batch_count="$(jq 'length' <<<"$batch")"
+            first="$(jq -r '.[0].number' <<<"$batch")"
+            last="$(jq -r '.[-1].number' <<<"$batch")"
             if ! jq -n \
-              --arg pr_number "$child_number" \
+              --arg pr_batch_b64 "$batch_b64" \
               --arg depth "$next_depth" \
               --arg routing_proof "$ROUTING_PROOF" \
               --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
                   ref:"github-actions",
                   inputs:{
-                    pr_number:$pr_number,
+                    pr_number:"",
+                    pr_batch_b64:$pr_batch_b64,
                     branch:"",
                     detector_handoff:true,
                     manual_retry:false,
@@ -6599,9 +6803,9 @@ jobs:
               | gh api --method POST \
                   "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                   --input -; then
-              echo "::warning::Cascade dispatch for child PR #$child_number failed — the next real push or scheduled sweep re-covers it."
+              echo "::warning::Cascade dispatch for $batch_count child PR(s), #$first through #$last, failed — the next real push or scheduled sweep re-covers them."
             fi
-          done <<<"$children"
+          done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$children")
 
       - name: Collect residual conflicts for failure reporting
         if: >-
