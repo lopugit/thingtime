@@ -21,6 +21,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Graphify snapshot activation now repairs dangling compatibility aliases**:
+  deleting a stale snapshot leaves its ignored root symlink present even though
+  ordinary existence checks report it missing. The trusted router now inspects
+  the link itself, replaces it with the newly selected immutable target, and
+  regression-tests the exact migration sequence. — Codex (AI), 2026-08-27
 - **Lopu's Graphify publisher now content-addresses semantic-cache variants as
   well as graph snapshots**: real semantic builds proved that upstream can
   rewrite one input-key filename with different valid response bytes. The
