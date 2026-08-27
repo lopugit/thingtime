@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Web search now exposes its real relevance signal and keeps post context
+  inline.** Ranked Thing results carry the query-relative Mongo text score and
+  show it as subdued metadata in both Standard and Data views; unselected
+  Commander Enter defaults to the full-search row without stealing setter
+  commands, and `/thing/:id` renders a post-shaped Thing with its interactive
+  post card above the raw data. — Codex (AI), 2026-08-27
 - **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
   app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
   tool scanning, draft testing from the tools menu/@mentions, publication,
