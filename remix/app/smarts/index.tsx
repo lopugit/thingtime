@@ -1169,6 +1169,10 @@ export const create = (obj1, obj2, opts) => {
   return ret;
 };
 
+// Keys that reach a prototype rather than the object itself. Thing data is
+// user-authored and arrives as parsed JSON, so these are never merged.
+const POLLUTING_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   if (seen.has(value1)) return seen.get(value1);
 
@@ -1215,6 +1219,15 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   const value2PropertyKeys = Object.keys(value2);
 
   value2PropertyKeys.forEach((value2Property) => {
+    // Prototype-pollution guard. `Object.keys` reports `__proto__` as an own
+    // enumerable key whenever value2 came from `JSON.parse`, so a thing
+    // authored by someone else and merged into local state could otherwise
+    // write straight onto `Object.prototype` (directly, or by recursing
+    // through `constructor.prototype`) for the whole page.
+    if (POLLUTING_KEYS.has(value2Property)) {
+      return;
+    }
+
     const value1PropertyValue = value1[value2Property];
     if (value2Property in value1 && basic(value1PropertyValue) && !opts.overwrite) {
       return;
