@@ -1037,6 +1037,11 @@ function assertAdminModelRouting(
     /name: Check out the fixed trusted github-actions control plane[\s\S]*ref: github-actions[\s\S]*path: trusted/u,
     "the conflict worker materializes the protected Lopu action after checking out the PR head",
   );
+  assert.match(
+    source,
+    /  review:\n[\s\S]*?name: Check out the fixed trusted github-actions control plane[\s\S]*?fetch-depth: 0[\s\S]*?filter: blob:none[\s\S]*?persist-credentials: false[\s\S]*?path: trusted/u,
+    "repository review keeps complete ancestry while lazily materializing selected PR blobs",
+  );
 
   const aiRuntimePattern =
     /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
