@@ -952,6 +952,39 @@ is fixed, and cite the checklist you ran in the PR description.
       real result, and the protected `github-actions` advisory updates one
       warning comment without producing a failing or required status.
 
+## Content-addressed Graphify snapshots (`scripts/graphify`)
+
+- [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
+      source fingerprint unchanged, source edits change it, and computing a
+      fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Finalize the same portable output twice and confirm it deduplicates to
+      one artifact path. Finalize two valid variants for one source fingerprint
+      and confirm both remain immutable while the deterministic selector picks
+      the richer graph.
+- [ ] Create two branches that each add a distinct
+      `graphify-out/snapshots/v1/<source>/<artifact>/` path. Merge them in a
+      fresh clone without installing a custom merge driver and confirm Git
+      reports no generated-file conflict and both snapshots remain present.
+- [ ] Start two local mutation commands together. Confirm the repository writer
+      lock serializes them, a live writer is never stolen during owner-file
+      creation, and a dead writer lock is recoverable.
+- [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
+      the four mutable root outputs from tracking, and run
+      `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
+      `scripts/graphify snapshot` matches the current source fingerprint, and
+      ordinary `graphify query` still succeeds through the aliases.
+- [ ] Change a Markdown file and run semantic extraction through the local
+      Codex LLM proxy. Confirm the wrapper clusters and exports after extraction,
+      records the Graphify version and source tree in `snapshot.json`, keeps the
+      semantic cache shared, and never prints the proxy key.
+- [ ] Corrupt a portable file at an existing artifact-hash path and attempt to
+      finalize identical output. Confirm the wrapper rejects the violated hash
+      invariant instead of overwriting or accepting it.
+- [ ] Merge a source branch, run the trusted Lopu Graphify publisher, and
+      confirm the post-merge source fingerprint has a valid immutable snapshot.
+      Confirm no controller job pushes mutable root aliases or cancels an
+      already-running Lopu/Graphify job.
+
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
 - [ ] Queue two all-branch rebuild signals through the default `main` Lopu PR

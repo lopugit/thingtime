@@ -15,6 +15,22 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## Conflict-free Graphify snapshots
+
+Thingtime does not ask every branch to modify the same generated Graphify JSON
+files. `scripts/graphify` stores portable output under the immutable,
+content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
+snapshot through ignored compatibility aliases at the conventional root
+paths. Independent branches therefore add different files instead of
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+
+Use `scripts/graphify query`, `scripts/graphify update .`, or
+`scripts/graphify extract . --backend openai`; the wrapper serializes local
+writers, validates each atomic output set, deduplicates identical artifacts,
+and regenerates the report/HTML. See
+[`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
+for the rationale, layout, migration path, and retention model.
+
 ## GitHub Actions control plane
 
 Thingtime keeps executable CI/CD behavior on the long-lived, protected

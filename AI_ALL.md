@@ -290,10 +290,36 @@ Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- graphify-out/graph.json + manifest.json are an atomic pair from one update run (manifest.json records which files are already analyzed). On any merge conflict under graphify-out/, take ONE side for the whole directory (`git checkout --ours -- graphify-out/` or `--theirs`, never mixed per-file), then run `graphify update .` and commit the refreshed outputs with the merge.
-- Recovery for a poisoned pair (graph missing data for files `graphify update` reports as unchanged): delete graphify-out/manifest.json and run `graphify update .` — everything re-extracts (AST is free; semantic extraction is served from the tracked content-addressed cache in graphify-out/cache/semantic/) and a consistent pair is rewritten. `graphify update --force` bypasses the fewer-nodes guard after large deletions/refactors.
-- graphify-out/graph.html is untracked derived viz — regenerate with `graphify export html`, never `git add` it. graphify-out/cache/semantic/ IS tracked (content-addressed, merge-safe); cache/ast/ and cache/stat-index.json stay local.
+- Use the repository wrapper, `scripts/graphify`, for queries and mutations. It
+  routes Graphify through immutable content-addressed snapshots under
+  `graphify-out/snapshots/v1/`, preserves the shared semantic cache, and
+  refreshes ignored root aliases so ordinary `graphify query` remains
+  compatible. Do not invoke mutating commands through the bare binary in this
+  repository.
+- After modifying code, run `scripts/graphify update .` to keep the graph
+  current (AST-only, no API cost). When Markdown, docs, PDFs, images, or another
+  non-code corpus changes, use the semantic extraction path through the local
+  Codex LLM proxy and then let the wrapper cluster/export the result.
+- Never commit mutable `graphify-out/graph.json`, `manifest.json`,
+  `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
+  selected by the wrapper. Commit the immutable snapshot directory and any new
+  `graphify-out/cache/semantic/` entries instead.
+- A commit SHA cannot name generated output included in that same commit.
+  Thingtime therefore keys snapshots first by a source-only Git-tree
+  fingerprint that excludes `graphify-out`, then by the Graphify version and
+  portable output bytes. Identical builders deduplicate; divergent valid
+  outputs coexist and merge additively instead of line-merging an atomic JSON
+  pair.
+- On an old branch that still carries legacy root artifacts, take either side
+  for the entire legacy generated set, remove those root files from tracking,
+  and run `scripts/graphify update .`. Do not hand-merge graph JSON or combine
+  a graph from one run with a manifest from another.
+- `graphify-out/graph.html` and snapshot-local HTML are untracked derived viz.
+  The wrapper regenerates them with a high node limit. The semantic cache and
+  immutable portable snapshots are tracked; AST caches, stat indexes, locks,
+  work directories, and mutable aliases stay local.
+- The design, migration procedure, integrity rules, and research references
+  live in `docs/graphify-content-addressed-snapshots.md`.
 
 ## Delivery messaging
 
