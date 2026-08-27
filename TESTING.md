@@ -973,6 +973,12 @@ is fixed, and cite the checklist you ran in the PR description.
       `security-events: none` permission error. Also confirm the scheduled and
       all-branch push listeners create jobs, and that CodeQL alert mutations
       occur only in the controller's separately fenced disposition writer.
+- [ ] After changing a product-branch listener, compare the active default
+      `main` listener with the reviewed `develop` listener before calling the
+      rollout complete. PR synchronize/draft/edit/close signals, the hourly
+      all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
+      operations must already be present on `main`; a half-hour sweep is only
+      recovery coverage, not proof that every repository change wakes Lopu.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
