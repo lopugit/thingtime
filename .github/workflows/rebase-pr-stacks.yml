@@ -1243,6 +1243,8 @@ jobs:
         env:
           MODE: ${{ steps.context.outputs.mode }}
           BASE_SHA: ${{ steps.context.outputs.base_sha }}
+          BASE_REF: ${{ steps.context.outputs.base_ref }}
+          HEAD_REF: ${{ steps.context.outputs.head_ref }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1251,12 +1253,68 @@ jobs:
           git -C "$repo_path" config user.name "github-actions[bot]"
           git -C "$repo_path" config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ "$MODE" = onto ]; then
-            "$start_script" "$repo_path" onto "$BASE_SHA" \
-              "$OLD_BASE_SHA" "$NEW_BASE_SHA"
-          else
-            "$start_script" "$repo_path" root "$BASE_SHA"
+          for ref_name in "$HEAD_REF" "$BASE_REF"; do
+            git check-ref-format "refs/heads/$ref_name" >/dev/null \
+              || { echo "::error::Unsafe rebase branch ref: $ref_name"; exit 1; }
+          done
+
+          # Keep the routine checkout blobless so old branches do not download
+          # the repository's multi-gigabyte history before Lopu knows it needs
+          # a historical file. Git normally demand-fetches promised blobs in
+          # batches. If GitHub refuses one of those raw-object batches, abort
+          # the incomplete replay, refetch only the exact head/base histories
+          # without a filter, and retry the trusted rebase once. `--refetch`
+          # is required because both commits already exist in the partial
+          # clone; an ordinary fetch would otherwise report them up to date.
+          start_log="$RUNNER_TEMP/rebase-start.log"
+          run_start() {
+            if [ "$MODE" = onto ]; then
+              "$start_script" "$repo_path" onto "$BASE_SHA" \
+                "$OLD_BASE_SHA" "$NEW_BASE_SHA"
+            else
+              "$start_script" "$repo_path" root "$BASE_SHA"
+            fi
+          }
+          promisor_fetch_failed() {
+            grep -Eq \
+              'could not fetch [0-9a-f]{40} from promisor remote|upload-pack: not our ref [0-9a-f]{40}' \
+              "$start_log"
+          }
+          attempt_start() {
+            local status
+            : > "$start_log"
+            set +e
+            run_start \
+              > >(tee -a "$start_log") \
+              2> >(tee -a "$start_log" >&2)
+            status=$?
+            set -e
+            return "$status"
+          }
+
+          status=0
+          attempt_start || status=$?
+          if [ "$status" -ne 0 ] && promisor_fetch_failed; then
+            echo "::notice::The blobless checkout could not hydrate a promised rebase object; refetching the exact PR branches without a partial-clone filter and retrying once."
+            git -C "$repo_path" rebase --abort >/dev/null 2>&1 || true
+            git -C "$repo_path" reset --hard "$EXPECTED_HEAD_SHA"
+            git -C "$repo_path" fetch --no-tags --no-recurse-submodules \
+              --refetch --no-filter origin \
+              "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF" \
+              "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+            git -C "$repo_path" config --unset-all remote.origin.promisor || true
+            git -C "$repo_path" config --unset-all remote.origin.partialclonefilter || true
+            git -C "$repo_path" config --unset-all extensions.partialClone || true
+            git -C "$repo_path" reset --hard "$EXPECTED_HEAD_SHA"
+
+            status=0
+            attempt_start || status=$?
+            if [ "$status" -ne 0 ] && promisor_fetch_failed; then
+              echo "::error::The complete-history retry still could not materialize the exact rebase snapshot."
+              exit 1
+            fi
           fi
+          exit "$status"
 
       - name: Load the conflict-resolver model waterfall
         id: models
