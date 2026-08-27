@@ -769,7 +769,12 @@ function assertWorkflowSource() {
   assert.match(codeqlDispositionBlock, /\.ref == \$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
   assert.match(codeqlDispositionBlock, /\.commit_sha == \$analysis_sha/u, "writer revalidates the exact analysis SHA");
   assert.match(codeqlDispositionBlock, /\.state == "open"/u, "writer requires the exact reviewed alert instance to remain open");
-  assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
+  assert.match(codeqlDispositionBlock, /alert_state=.*\.state \/\/ empty/u, "writer reads GitHub's nullable repository-level alert state");
+  assert.match(
+    codeqlDispositionBlock,
+    /\[ -z "\$alert_state" \][\s\S]*?\.dismissed_at == null[\s\S]*?\.fixed_at == null[\s\S]*?\.most_recent_instance\.state == "open"[\s\S]*?\.most_recent_instance\.ref == \$analysis_ref[\s\S]*?\.most_recent_instance\.commit_sha == \$analysis_sha/u,
+    "a transient null alert state is accepted only with the same open immutable instance and no terminal metadata",
+  );
   assert.match(
     codeqlDispositionBlock,
     /\.reason == "false positive" or \.reason == "used in tests"/u,

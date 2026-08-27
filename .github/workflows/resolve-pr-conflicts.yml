@@ -3460,9 +3460,29 @@ jobs:
             fi
 
             alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
-            if [ "$(jq -r '.state' <<<"$alert")" != open ]; then
-              echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
-              continue
+            alert_state="$(jq -r '.state // empty' <<<"$alert")"
+            if [ "$alert_state" != open ]; then
+              # GitHub can transiently return `state: null` for a newly
+              # published PR-only alert even while both its filtered list and
+              # instance endpoints report `open` (observed on PR #429 alert
+              # #92). Accept that one omission only when the detail response
+              # independently binds the same open immutable instance and has
+              # neither dismissal nor fix metadata. The instances endpoint is
+              # revalidated again immediately below before any PATCH.
+              if [ -z "$alert_state" ] && jq -e \
+                --arg analysis_ref "$analysis_ref" \
+                --arg analysis_sha "$analysis_sha" '
+                  .dismissed_at == null
+                  and .fixed_at == null
+                  and .most_recent_instance.state == "open"
+                  and .most_recent_instance.ref == $analysis_ref
+                  and .most_recent_instance.commit_sha == $analysis_sha
+                ' <<<"$alert" >/dev/null; then
+                echo "::notice::CodeQL alert #$alert_number omitted its repository state but retained the exact open instance; continuing with independent instance validation."
+              else
+                echo "::warning::Skipping CodeQL alert #$alert_number because its repository-level state changed."
+                continue
+              fi
             fi
             instances="$(gh api --paginate --slurp \
               "repos/$REPO/code-scanning/alerts/$alert_number/instances?pr=$pr_number&per_page=100")"
