@@ -19,6 +19,9 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Fixed Lopu's `all`-branch rebuild so a failed lazy promisor fetch triggers
+  one complete refetch of the exact live base and PR refs and retries the
+  affected merge, instead of silently omitting current PRs from the union.
 - Fixed Lopu's stack-rebase prompt so the live rebase checkout is explicitly
   inspection-only and every bounded related edit is submitted as a verified
   scratch copy, preventing model-side writes from tripping the immutable real

@@ -82,6 +82,13 @@ const DOCTOR_SUBJECT_PREFIX = "all: build doctor";
 const MANIFEST_SUBJECT_PREFIX = "all: manifest (";
 const MAX_REPLAYED_DOCTOR_COMMITS = 30;
 
+// The fast path keeps the checkout blobless. If Git asks the promisor remote
+// for an object GitHub no longer serves lazily, materialize the exact live
+// base and PR refs once and retry the affected merge. The refspec list is
+// populated from the same live `gh pr list` snapshot used for the build.
+let completeRefspecs = [];
+let completeRefetchAttempted = false;
+
 // Override the repo's graphify union merge driver (the binary is not
 // installed here) with a take-theirs command matching the global bias.
 const MERGE_CONFIG = [
@@ -118,6 +125,42 @@ const singleLine = (text, max = 120) => {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 const tableCell = (text) => singleLine(text).replaceAll("|", "\\|");
+
+export function isPromisorFetchFailure(...parts) {
+  const text = parts.map((part) => String(part ?? "")).join("\n");
+  return (
+    /remote error: upload-pack: not our ref [0-9a-f]{40}/i.test(text) ||
+    /could not fetch [0-9a-f]{40} from promisor remote/i.test(text) ||
+    /promisor remote[^\n]*failed/i.test(text)
+  );
+}
+
+function refetchCompleteInputs() {
+  if (completeRefetchAttempted || completeRefspecs.length === 0) return false;
+  completeRefetchAttempted = true;
+  console.warn(
+    `build-all-branch: lazy promisor fetch failed; refetching ${completeRefspecs.length} exact live ref(s) without a blob filter`
+  );
+  const refetch = spawnSync(
+    "git",
+    [
+      ...gitAuthConfig(),
+      "fetch",
+      "--no-tags",
+      "--force",
+      "--refetch",
+      "--no-filter",
+      "origin",
+      ...completeRefspecs,
+    ],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "inherit", "pipe"] }
+  );
+  if (refetch.status === 0) return true;
+  console.error(
+    `build-all-branch: complete-history refetch failed: ${singleLine(refetch.stderr, 300)}`
+  );
+  return false;
+}
 
 // Only commits the doctor itself created are replayed onto the next rebuild;
 // pins, manifests, and human commits never are. Pure: exercised by --self-test.
@@ -342,7 +385,7 @@ export function renderManifest({ allBranch, baseTips, merges, skipped }) {
 // Merge one ref with the newest-wins policy. Returns { result } on success or
 // { failed } after cleanly aborting, so one impossible merge never poisons the
 // rest of the rebuild.
-function mergeRef(ref, message) {
+function mergeRefOnce(ref, message) {
   const before = git("rev-parse", "HEAD");
   const merge = spawnSync(
     "git",
@@ -354,6 +397,13 @@ function mergeRef(ref, message) {
       ? { result: "already included" }
       : { result: "clean merge" };
   }
+  if (isPromisorFetchFailure(merge.stdout, merge.stderr)) {
+    tryGit("merge", "--abort");
+    return {
+      failed: `lazy promisor fetch failed: ${singleLine(merge.stderr, 200)}`,
+      promisorFailure: true,
+    };
+  }
   if (tryGit("rev-parse", "-q", "--verify", "MERGE_HEAD").status !== 0) {
     return { failed: `merge could not start: ${singleLine(merge.stderr, 200)}` };
   }
@@ -362,9 +412,9 @@ function mergeRef(ref, message) {
   // structural cases (modify/delete, directory/file, -merge attributes).
   // Resolve them with the same bias: theirs where a "theirs" version exists,
   // deletion where theirs deleted.
-  const abort = (failed) => {
+  const abort = (failed, promisorFailure = false) => {
     tryGit("merge", "--abort");
-    return { failed };
+    return { failed, promisorFailure };
   };
   const stagesByPath = new Map();
   for (const entry of git("ls-files", "-u", "-z").split("\0").filter(Boolean)) {
@@ -376,11 +426,26 @@ function mergeRef(ref, message) {
   }
   const resolvedPaths = [];
   for (const [path, stages] of stagesByPath) {
-    const resolved = stages.has("3")
-      ? tryGit("checkout", "--theirs", "--", path).status === 0 &&
-        tryGit("add", "--", path).status === 0
-      : tryGit("rm", "-f", "-q", "--ignore-unmatch", "--", path).status === 0;
-    if (!resolved) return abort(`could not theirs-resolve ${singleLine(path, 160)}`);
+    const resolution = stages.has("3")
+      ? tryGit("checkout", "--theirs", "--", path)
+      : tryGit("rm", "-f", "-q", "--ignore-unmatch", "--", path);
+    const add =
+      stages.has("3") && resolution.status === 0
+        ? tryGit("add", "--", path)
+        : null;
+    const resolved = resolution.status === 0 && (!add || add.status === 0);
+    if (!resolved) {
+      const promisorFailure = isPromisorFetchFailure(
+        resolution.stdout,
+        resolution.stderr,
+        add?.stdout,
+        add?.stderr
+      );
+      return abort(
+        `could not theirs-resolve ${singleLine(path, 160)}`,
+        promisorFailure
+      );
+    }
     resolvedPaths.push(path);
   }
   if (git("ls-files", "-u") !== "") {
@@ -394,6 +459,19 @@ function mergeRef(ref, message) {
   return {
     result: `auto-resolved theirs (${resolvedPaths.length} paths: ${shown}${resolvedPaths.length > 8 ? ", …" : ""})`,
   };
+}
+
+function mergeRef(ref, message) {
+  const first = mergeRefOnce(ref, message);
+  if (!first.promisorFailure || !refetchCompleteInputs()) return first;
+  console.warn(`build-all-branch: retrying ${ref} after complete-history refetch`);
+  const retry = mergeRefOnce(ref, message);
+  if (retry.failed) {
+    return {
+      failed: `${retry.failed} (complete-history retry did not recover the merge)`,
+    };
+  }
+  return retry;
 }
 
 // Re-establish the invariants merges can break: make .github exactly match
@@ -487,6 +565,19 @@ function selfTest() {
 
   // Doctor replay-subject and forbidden-path rules.
   {
+    assert.equal(
+      isPromisorFetchFailure(
+        "fatal: remote error: upload-pack: not our ref e4714e180e060da862f577de5ab5a63282de7e97"
+      ),
+      true
+    );
+    assert.equal(
+      isPromisorFetchFailure(
+        "fatal: could not fetch 16686feec299bb96c2ebece335afb2b299fe41cc from promisor remote"
+      ),
+      true
+    );
+    assert.equal(isPromisorFetchFailure("CONFLICT (content): Merge conflict in app.ts"), false);
     assert.equal(isReplayableDoctorSubject("all: build doctor round 1 — fix union build (client-build): a.ts"), true);
     assert.equal(isReplayableDoctorSubject("all: build doctor — mechanical pnpm lockfile reset to develop"), true);
     assert.equal(isReplayableDoctorSubject("all: manifest (61 PRs merged, 4 skipped)"), false);
@@ -596,6 +687,11 @@ function buildMode() {
   });
   const { ordered } = plan;
   const skipped = [...plan.skipped];
+  completeRefetchAttempted = false;
+  completeRefspecs = [
+    ...BASE_BRANCHES.map((branch) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
+    ...ordered.map((pr) => `+refs/pull/${pr.number}/head:refs/all-build/pr-${pr.number}`),
+  ];
   console.log(
     `build-all-branch: ${pullRequests.length} open PRs — merging ${ordered.length}, skipping ${skipped.length}`
   );
