@@ -896,6 +896,18 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
   if (input.acl !== undefined && input.acl !== null) {
     const acl = sanitizeAcl(input.acl);
     if (isFail(acl)) return acl;
+    // tt:inherit is SERVER-assigned (createThing stamps it on comments and
+    // target-attached things) — never caller-supplied, the same stance the
+    // visibility branch below already takes. Accepting it would detach a
+    // thing's audience from its own acl: both visibility-fence checks skip
+    // inherit acls on the grounds that the target was already judged, so a
+    // restricted token could hand itself an unjudged audience, and a
+    // standalone thing has no target to resolve — leaving it visible to
+    // nobody but its owner and permanently un-editable, since every later
+    // acl change 400s on the guard above.
+    if (acl.includes(ACL_INHERIT)) {
+      return fail(400, 'tt:inherit is set by the server on target-attached things — it cannot be supplied');
+    }
     return acl;
   }
   if (input.visibility !== undefined && input.visibility !== null) {

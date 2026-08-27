@@ -474,6 +474,19 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
     body: { id: publicPostId, acl: ['tt:user'] }
   });
   check('public-only cannot make a public thing private', pubHide.status === 403, `${pubHide.status}`);
+  // tt:inherit is server-assigned. If it were accepted as input it would walk
+  // straight past the fence, whose post-resolution check deliberately skips
+  // inherit acls on the grounds that the target was already judged.
+  const pubInherit = await api('/api/v1/things', {
+    token: pub.token,
+    method: 'PATCH',
+    body: { id: publicPostId, acl: ['tt:inherit'] }
+  });
+  check(
+    'public-only cannot hide a public thing behind an inherit acl',
+    pubInherit.status === 400,
+    `${pubInherit.status}`
+  );
   const pubEditPrivate = await api('/api/v1/things', {
     token: pub.token,
     method: 'PATCH',
@@ -551,6 +564,19 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
     body: { id: privateDataId, acl: ['tt:all'] }
   });
   check('private-only cannot publish a private thing', privPublish.status === 403, `${privPublish.status}`);
+  // the mirror of the public-only inherit case: an inherit acl on a targeted
+  // thing resolves to the target's audience, so accepting it as input would
+  // let a private-only token publish by proxy
+  const privInherit = await api('/api/v1/things', {
+    token: priv.token,
+    method: 'PATCH',
+    body: { id: privateDataId, acl: ['tt:inherit'] }
+  });
+  check(
+    'private-only cannot publish a private thing via an inherit acl',
+    privInherit.status === 400,
+    `${privInherit.status}`
+  );
   const privReactPublic = await api('/api/v1/things/react', {
     token: priv.token,
     method: 'POST',
