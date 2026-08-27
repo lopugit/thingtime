@@ -979,6 +979,13 @@ is fixed, and cite the checklist you ran in the PR description.
       all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
       operations must already be present on `main`; a half-hour sweep is only
       recovery coverage, not proof that every repository change wakes Lopu.
+- [ ] Fail or cancel one listed GitHub Actions PR workflow after the opening
+      review has finished. Confirm the default listener receives a completed
+      `workflow_run`, routes only the associated non-successful PR to one Lopu
+      review, preserves the exact source run id for log diagnosis, and never
+      listens to `Lopu PR manager` itself. External checks remain covered by
+      `check_run`; first-party Actions checks must not rely on that suppressed
+      event.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
