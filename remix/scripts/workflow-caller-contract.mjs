@@ -8,7 +8,6 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
-  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
@@ -26,18 +25,6 @@ for (const filename of callers) {
   assert.doesNotMatch(source, /\.github\/(?:actions|scripts)\//, `${filename} must not reference product-branch behavior files`);
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
-
-const allBranchCaller = readFileSync(
-  resolve(workflowsRoot, 'all-branch.yml'),
-  'utf8'
-);
-const allBranchTriggersEnd = allBranchCaller.indexOf('\npermissions:\n');
-assert.ok(allBranchTriggersEnd > 0, 'all-branch.yml must retain its public trigger block');
-assert.doesNotMatch(
-  allBranchCaller,
-  /^concurrency:$/m,
-  'the thin all-branch listener must not cancel a reusable call before the protected durable queue owns it'
-);
 
 const codeqlCaller = readFileSync(
   resolve(workflowsRoot, 'codeql-analysis.yml'),
@@ -112,7 +99,30 @@ assert.match(resolverTriggers, /^  pull_request_review_comment:\n    types: \[cr
 assert.match(resolverTriggers, /^  check_run:\n    types: \[completed\]$/m, 'Lopu must receive completed checks for repair review');
 assert.match(
   resolverTriggers,
-  /^  repository_dispatch:\n    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
+  /^  pull_request_target:\n(?:    .*\n)*?    types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]$/m,
+  'Lopu must own every PR lifecycle signal that changes the wildcard union'
+);
+assert.match(
+  resolverTriggers,
+  /^    - cron: "53 \* \* \* \*"$/m,
+  'Lopu must own the hourly wildcard-union backstop'
+);
+assert.match(
+  resolverTriggers,
+  /^  workflow_run:\n    workflows:\n(?:      - .*\n)+    types: \[completed\]$/m,
+  'Lopu must receive the bounded first-party CI workflow completion list'
+);
+assert.doesNotMatch(
+  resolverTriggers.slice(
+    resolverTriggers.indexOf('\n  workflow_run:'),
+    resolverTriggers.indexOf('\n  schedule:')
+  ),
+  /^      - Lopu PR manager$/m,
+  'Lopu must not recursively review its own workflow failures'
+);
+assert.match(
+  resolverTriggers,
+  /^  repository_dispatch:\n(?:    .*\n)*?    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
   'Lopu must receive exact stack workers without a second public rebase listener'
 );
 assert.match(
@@ -160,6 +170,7 @@ assert.match(
 );
 
 for (const retiredPublicWorkflow of [
+  'all-branch.yml',
   'rebase-pr-stacks.yml',
   'promote-develop-to-main.yml',
   'promote-features-to-main.yml',

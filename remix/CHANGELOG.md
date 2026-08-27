@@ -97,6 +97,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu is the sole wildcard-union listener**: the legacy public **Build all
+  branch** workflow is retired from the product branch. PR lifecycle, branch
+  push, manual, and hourly union-build signals now enter the default-branch
+  **Lopu PR manager**, whose protected maintenance namespace preserves the
+  active build and coalesces only obsolete not-yet-started snapshots. The
+  listener contract now rejects any reintroduction of the competing workflow.
+  — Codex (AI), 2026-08-27
 - **CI Control repository maintenance now dispatches the unified Lopu
   workflow**: existing rebase, feature-promotion, standing-promotion, and sync
   operation keys translate to typed `Lopu PR manager` inputs instead of naming
