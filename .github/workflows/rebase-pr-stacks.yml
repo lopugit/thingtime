@@ -2107,6 +2107,9 @@ jobs:
             exit 1
           fi
           export PATH="$HOME/.local/bin:$PATH"
+          graphify_router="$GITHUB_WORKSPACE/trusted/.github/scripts/graphify-cas.mjs"
+          graphify_stager="$GITHUB_WORKSPACE/trusted/.github/scripts/stage-graphify-snapshots.mjs"
+          test -f "$graphify_router" && test -f "$graphify_stager"
 
           select_claude_backend() {
             if [ -n "${ANTHROPIC_API_KEY:-}" ]; then printf 'claude\n'; fi
@@ -2159,9 +2162,8 @@ jobs:
           if [ -n "$backend" ]; then
             concurrency=4
             [ "$backend" != claude-cli ] || concurrency=1
-            if graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+            if node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
                  --max-concurrency "$concurrency" --api-timeout 240 \
-               && graphify cluster-only . --no-viz --no-label \
                && graph_not_collapsed; then
               semantic="$backend"
             else
@@ -2173,20 +2175,10 @@ jobs:
           fi
 
           if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
-            graphify update .
+            node "$graphify_router" update .
           fi
 
-          for file in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-            path="graphify-out/$file"
-            if [ -e "$path" ] \
-               || git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-              git add -A -- "$path"
-            fi
-          done
-          if [ -d graphify-out/cache/semantic ] \
-             || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-            git add -A -- graphify-out/cache/semantic/
-          fi
+          node "$graphify_stager"
 
           if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
             echo "::error::graphify changed a tracked file outside graphify-out/."
@@ -2233,6 +2225,10 @@ jobs:
               -m "Refreshed by the rebase-pr-stacks workflow: $RUN_URL"
             refreshed=true
           fi
+          # The router may leave ignored aliases and derived HTML/analysis
+          # beside the committed portable snapshot. The pre-push fence requires
+          # an exactly clean checkout, so drop only untracked Graphify material.
+          git clean -qffdx -- graphify-out/
           {
             echo "refreshed=$refreshed"
             echo "semantic=$semantic"

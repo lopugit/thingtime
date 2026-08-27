@@ -1291,7 +1291,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /Every entry must contain exactly those three keys[\s\S]{0,220}40 through 1000 characters[\s\S]{0,220}`Lopu evidence: `/u,
+    /Every entry must contain exactly those three keys[\s\S]{0,260}40 through 280 characters \(GitHub's CodeQL API limit\)[\s\S]{0,220}`Lopu evidence: `/u,
     "the model prompt states the exact trusted CodeQL disposition schema",
   );
   assert.match(

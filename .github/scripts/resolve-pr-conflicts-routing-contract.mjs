@@ -116,6 +116,7 @@ export function route(input) {
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
   const failedCheckEvent = event === "check_run";
+  const failedWorkflowEvent = event === "workflow_run";
   const scanAll =
     event === "schedule" ||
     (humanDispatch && prNumber === "" && branch === "");
@@ -129,7 +130,7 @@ export function route(input) {
     ? `pr:${prNumber}`
     : batch
       ? `batch:${batch.length}`
-      : (conversationEvent || failedCheckEvent) && eventPrNumber
+      : (conversationEvent || failedCheckEvent || failedWorkflowEvent) && eventPrNumber
         ? `pr:${eventPrNumber}`
         : scanAll
           ? "all"
@@ -146,6 +147,8 @@ export function route(input) {
     concurrency = `resolve-detect-selector-${branch}`;
   } else if (failedCheckEvent && eventPrNumber) {
     concurrency = `lopu-check-fix-pr${eventPrNumber}`;
+  } else if (failedWorkflowEvent && eventPrNumber) {
+    concurrency = `lopu-workflow-fix-pr${eventPrNumber}`;
   } else if (conversationEvent && eventPrNumber) {
     concurrency = `lopu-conversation-pr${eventPrNumber}`;
   } else if (event === "workflow_dispatch" || event === "schedule") {
@@ -322,6 +325,21 @@ function assertWorkflowSource() {
   assert.doesNotMatch(source, /ref:"develop"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*\.head == "sync\/main-into-develop" and \.base == "develop"[\s\S]*== \$priority_sync/u,
+    "the standing main-to-develop synchronizer is partitioned into the first conflict handoff",
+  );
+  assert.match(
+    source,
+    /priority main-to-develop synchronizer batch/u,
+    "priority synchronizer dispatches remain observable in the run log",
+  );
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*sort_by\(\.number\)[\s\S]*unique_by\(\.number\)[\s\S]*range\(0; length; 200\)/u,
+    "each priority partition remains a canonical, bounded, number-sorted batch",
+  );
   assert.equal(
     source.match(/pr_batch_b64:\$pr_batch_b64/g)?.length,
     2,
@@ -346,6 +364,16 @@ function assertWorkflowSource() {
   assert.match(source, /check_run:\n    types: \[completed\]/u, "failed PR checks wake Lopu");
   assert.match(
     source,
+    /workflow_run:\n    workflows:[\s\S]*?- Web CI[\s\S]*?- Build all branch\n    types: \[completed\]/u,
+    "GitHub Actions-produced PR workflow failures wake Lopu",
+  );
+  assert.doesNotMatch(
+    source.slice(source.indexOf("\n  workflow_run:"), source.indexOf("\n  schedule:")),
+    /- Lopu PR manager\s*$/mu,
+    "the workflow-run bridge cannot recursively review Lopu's own runs",
+  );
+  assert.match(
+    source,
     /github\.event\.issue\.pull_request[\s\S]*?github\.event\.comment\.user\.type == 'User'/u,
     "only human PR conversation comments enter the Lopu route",
   );
@@ -358,6 +386,11 @@ function assertWorkflowSource() {
     source,
     /manage_rebases:[\s\S]*?github\.event_name != 'issue_comment'/u,
     "conversation events do not launch unrelated rebases",
+  );
+  assert.match(
+    manageRebasesBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated rebases",
   );
   assert.match(
     source,
@@ -385,6 +418,11 @@ function assertWorkflowSource() {
     "automatic rebase race retries cannot also enter the merge detector",
   );
   assert.match(
+    detectBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated conflict scans",
+  );
+  assert.match(
     reviewDetectBlock,
     /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal events and automatic rebase retries never launch a duplicate whole-PR review",
@@ -393,6 +431,11 @@ function assertWorkflowSource() {
     source,
     /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
     "only PR-associated failing checks enter the Lopu route",
+  );
+  assert.match(
+    source,
+    /github\.event\.workflow_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.workflow_run\.conclusion == 'failure'/u,
+    "only PR-associated failing Actions workflows enter the Lopu route",
   );
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
@@ -424,8 +467,19 @@ function assertWorkflowSource() {
     "Graphify refresh is not limited to graph-tree conflicts",
   );
   assert.ok(
-    graphifyBlock.indexOf("graphify update .") < graphifyBlock.indexOf("graphify extract ."),
+    graphifyBlock.indexOf('node "$graphify_router" update .') <
+      graphifyBlock.indexOf('node "$graphify_router" extract .'),
     "structural Graphify extraction runs before LLM semantic extraction",
+  );
+  assert.match(
+    graphifyBlock,
+    /trusted\/\.github\/scripts\/graphify-cas\.mjs/u,
+    "privileged Graphify publication executes only the trusted router",
+  );
+  assert.match(
+    graphifyBlock,
+    /node "\$graphify_stager"/u,
+    "only immutable portable snapshots and additive cache entries are staged",
   );
   assert.match(
     graphifyBlock,
@@ -598,6 +652,36 @@ function assertWorkflowSource() {
     /lopu-review:check-run:\{0\}:\{1\}/u,
     "failing-check handoffs preserve the triggering check-run id",
   );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:workflow-run:\{0\}:\{1\}/u,
+    "failing-workflow handoffs preserve the triggering workflow-run id",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /concurrency:[\s\S]*?group: lopu-review-handoff-\$\{\{ needs\.review_detect\.outputs\.pr_number \|\| needs\.review_detect\.outputs\.branch \|\| 'all' \}\}[\s\S]*?cancel-in-progress: false/u,
+    "review-event handoffs serialize by PR or branch without interrupting an admitted handoff",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /actions\/workflows\/resolve-pr-conflicts\.yml\/runs\?event=workflow_dispatch&per_page=100[\s\S]*?\.display_title == \$title[\s\S]*?\.status == "pending"[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "simultaneous check and PR events coalesce behind one unstarted Lopu review for the same scope",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /An already-running review is deliberately not suppressed/u,
+    "a head move during an active review retains one newest follow-up waiter",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /EVENT_NAME: \$\{\{ github\.event_name \}\}/u,
+    "the review handoff knows which event it is coalescing",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /case "\$EVENT_NAME" in\n\s+issue_comment \| pull_request_review_comment\) coalescible=false ;;[\s\S]*?if \[ "\$coalescible" = true \]; then[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "human conversation always gets its own session because no queued review carries its comment id",
+  );
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
@@ -633,6 +717,11 @@ function assertWorkflowSource() {
   assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
   assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
+  assert.match(
+    reviewBlock,
+    /gh api repos\/\$REPO\/actions\/runs\/<WORKFLOW_RUN_ID>/u,
+    "Lopu retrieves the exact first-party workflow run before diagnosing it",
+  );
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
   assert.match(reviewBlock, /Never push `github-actions`, `main`, or\s+another target\/default branch directly/u, "model may not directly publish protected branches");
   assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
@@ -674,6 +763,21 @@ function assertWorkflowSource() {
     /"false positive" \| "used in tests"/u,
     "model proposals use the two evidence-backed disposition reasons",
   );
+  assert.match(
+    reviewBlock,
+    /40 through 280 characters \(GitHub's CodeQL API limit\)/u,
+    "the model receives GitHub's live dismissal-comment size boundary",
+  );
+  assert.equal(
+    (source.match(/length >= 40 and length <= 280/g) || []).length,
+    2,
+    "both trusted CodeQL disposition validators enforce GitHub's 280-character comment limit",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /length >= 40 and length <= 1000/u,
+    "CodeQL disposition validation cannot accept comments GitHub will reject",
+  );
   assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
   assert.doesNotMatch(
     codeqlDispositionBlock,
@@ -701,7 +805,12 @@ function assertWorkflowSource() {
   assert.match(codeqlDispositionBlock, /\.ref == \$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
   assert.match(codeqlDispositionBlock, /\.commit_sha == \$analysis_sha/u, "writer revalidates the exact analysis SHA");
   assert.match(codeqlDispositionBlock, /\.state == "open"/u, "writer requires the exact reviewed alert instance to remain open");
-  assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
+  assert.match(codeqlDispositionBlock, /alert_state=.*\.state \/\/ empty/u, "writer reads GitHub's nullable repository-level alert state");
+  assert.match(
+    codeqlDispositionBlock,
+    /\[ -z "\$alert_state" \][\s\S]*?\.dismissed_at == null[\s\S]*?\.fixed_at == null[\s\S]*?\.most_recent_instance\.state == "open"[\s\S]*?\.most_recent_instance\.ref == \$analysis_ref[\s\S]*?\.most_recent_instance\.commit_sha == \$analysis_sha/u,
+    "a transient null alert state is accepted only with the same open immutable instance and no terminal metadata",
+  );
   assert.match(
     codeqlDispositionBlock,
     /\.reason == "false positive" or \.reason == "used in tests"/u,
@@ -1036,6 +1145,17 @@ export function selfTest() {
     handoffEligible: true,
     selector: "pr:190",
     concurrency: "lopu-check-fix-pr190",
+    modelAndResolve: false,
+  });
+
+  assertRoute("failing PR workflow", {
+    event: "workflow_run", ref: "main", actor: "github-actions[bot]", eventPrNumber: "190",
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    selector: "pr:190",
+    concurrency: "lopu-workflow-fix-pr190",
     modelAndResolve: false,
   });
 

@@ -21,6 +21,27 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu's Graphify publisher now content-addresses semantic-cache variants as
+  well as graph snapshots**: real semantic builds proved that upstream can
+  rewrite one input-key filename with different valid response bytes. The
+  trusted router hydrates a private work cache from
+  `semantic-cas/v1/<input-key>/<content-hash>.json`, ingests only after a
+  successful build, preserves divergent responses additively, and restores any
+  legacy tracked mutable cache after staging so old product branches remain
+  clean. — Codex (AI), 2026-08-27
+- **Lopu now wakes on first-party CI failures without duplicating repository
+  review sessions**: the default listener forwards a bounded allowlist of
+  completed GitHub Actions workflows, and the protected controller binds the
+  exact workflow-run id into the review evidence. PR, CodeQL, external-check,
+  and first-party CI signals coalesce only when an identical review scope is
+  still unstarted; a running review retains one newest waiter and is never
+  cancelled. Human conversation is deliberately never coalesced — only its own
+  dispatch id names the comment Lopu must read and answer — so every PR comment
+  still wakes its own session. CodeQL dispositions enforce GitHub's
+  280-character evidence limit and accept a transient nullable alert state only
+  when the exact newest instance remains open, unfixed, and undismissed
+  immediately before the isolated writer acts. — Codex (AI), reviewed by Lopu
+  (AI), 2026-08-27
 - **Lopu's historical CodeQL backfill now advances past completed PR
   snapshots instead of repeatedly dispatching safe no-ops**: inventory resolves
   each live synthetic merge ref and validates its exact base/head parents using
@@ -36,6 +57,14 @@ every entry is attributed the same way the app changelog attributes them.
   recorded base SHA predates the current target. Matching proposals for a
   shared repository alert are coalesced to one write; conflicting reasons leave
   the alert open without failing unrelated reviews. — Codex (AI), 2026-08-27
+- **Unrouted Lopu review events now fail closed instead of escalating to every
+  open PR**: exact PR, branch, operator-wide, and protected-controller-push
+  scopes retain their existing behavior, while any unknown event that carries
+  no derivable scope logs a notice and dispatches no model work. This removes
+  merge-order dependence between metadata-only product listeners and the
+  protected controller, preventing a newly activated trigger from saturating
+  the repository-wide Lopu fleet before its matching router lands. — Codex
+  (AI), 2026-08-27
 - **All-branch maintenance now coalesces before it reaches Lopu's durable model
   fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
   the same metadata-only handoff to the protected manager instead of attaching
@@ -167,6 +196,12 @@ every entry is attributed the same way the app changelog attributes them.
   then records the evidence and disposition on the PR. Lopu never selects
   `won't fix`, and the model itself has read-only code-scanning access. — Codex
   (AI), 2026-08-25
+- **Lopu now publishes conflict-free Graphify snapshots**: structural and
+  semantic refreshes run through a trusted content-addressed router that
+  fingerprints only source, serializes writers, validates atomic portable
+  output, rejects large accidental collapse, and stages immutable additive
+  snapshots. Root graph aliases are local-only, so independent PRs and stacks
+  no longer fight over the same generated JSON paths. — Codex (AI), 2026-08-27
 - **Lopu now updates clean-but-behind PR branches before reviewing them**:
   the shared detector treats GitHub's `BEHIND` state as a base-merge request,
   snapshots both refs, and merges the PR target into an eligible same-repo
