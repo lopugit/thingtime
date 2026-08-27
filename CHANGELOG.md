@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Fixed Lopu's stack-rebase prompt so the live rebase checkout is explicitly
+  inspection-only and every bounded related edit is submitted as a verified
+  scratch copy, preventing model-side writes from tripping the immutable real
+  checkout guard during large semantic conflict rounds.
+
 ### Changed
 
 - **Lopu now resolves Git's marker-free distinct-type conflicts for the

@@ -1009,6 +1009,21 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
+    /strictly\s+read-only inspection context:[\s\S]*?Your only writable\s+submission surface is the current conflict-scratch workspace/u,
+    "the model is told that the real rebase checkout is inspection-only",
+  );
+  assert.match(
+    rebaseActionSource,
+    /first copy\s+the exact tracked file from the read-only inspection checkout to the\s+same relative path in the current scratch, then edit only that scratch\s+copy/u,
+    "related edits are explicitly submitted through verified scratch copies",
+  );
+  assert.match(
+    rebaseActionSource,
+    /Creating this scratch submission copy is permitted and does not\s+create a new repository path/u,
+    "the related-edit contract does not contradict the no-new-repository-path rule",
+  );
+  assert.match(
+    rebaseActionSource,
     /git ls-files --stage -- ":\(literal\)\$path"[\s\S]*?"\$extra_mode" == 100644[\s\S]*?"\$extra_stage" == 0[\s\S]*?"\$extra_path" == "\$path"/u,
     "related scratch edits are admitted only for exact existing stage-0 regular files",
   );
