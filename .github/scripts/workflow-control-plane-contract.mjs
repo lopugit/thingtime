@@ -1189,6 +1189,11 @@ export function assertControlPlaneContract() {
   assert.doesNotMatch(rebase, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u);
   assert.match(
     rebase,
+    /name: Configure and begin the rebase[\s\S]*?promisor_fetch_failed\(\)[\s\S]*?could not fetch \[0-9a-f\]\{40\} from promisor remote[\s\S]*?--refetch --no-filter origin[\s\S]*?refs\/heads\/\$HEAD_REF:refs\/remotes\/origin\/\$HEAD_REF[\s\S]*?refs\/heads\/\$BASE_REF:refs\/remotes\/origin\/\$BASE_REF[\s\S]*?attempt_start \|\| status=\$\?[\s\S]*?complete-history retry still could not materialize/u,
+    "rebase workers retry a failed lazy promisor fetch once from complete exact branch histories",
+  );
+  assert.match(
+    rebase,
     /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/u,
     "repository-dispatch handoff receives Contents write rather than relying on Actions write",
   );
