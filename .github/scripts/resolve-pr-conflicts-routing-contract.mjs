@@ -284,15 +284,20 @@ function assertWorkflowSource() {
     source.indexOf("  handoff:"),
     source.indexOf("  review_detect:"),
   );
-  assert.match(handoffBlock, /status=\$pending_status/);
-  assert.match(handoffBlock, /pending\|queued\)/);
-  assert.match(handoffBlock, /actions\/runs\/\$pending_run_id\/cancel/);
+  assert.match(handoffBlock, /status=queued/);
+  assert.doesNotMatch(
+    handoffBlock,
+    /status=\$pending_status|status=pending/,
+    "a pending workflow can contain active matrix work and must never be coalesced",
+  );
+  assert.match(handoffBlock, /case "\$live_status" in[\s\S]*?queued\)/u);
+  assert.match(handoffBlock, /actions\/runs\/\$queued_run_id\/cancel/);
   assert.match(handoffBlock, /changed state before cancellation; preserving it/);
   assert.match(handoffBlock, /did not release queue capacity within 60 seconds/);
   assert.ok(
-    handoffBlock.indexOf("Coalescing obsolete pending Lopu worker run") <
+    handoffBlock.indexOf("Coalescing obsolete queued Lopu worker run") <
       handoffBlock.indexOf("for priority_sync in true false"),
-    "pending workers are coalesced before replacement batches dispatch",
+    "never-started queued workers are coalesced before replacement batches dispatch",
   );
   assert.match(resolveBlock, /Revalidate queued PR snapshot/);
   assert.match(admissionBlock, /\.state/);
