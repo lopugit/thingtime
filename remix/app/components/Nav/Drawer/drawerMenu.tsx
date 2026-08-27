@@ -77,6 +77,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '📦',
 		to: '/things',
 		children: [
+			{ id: 'things-browse', label: 'Browse', icon: '📦', to: '/things' },
 			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },

@@ -4,25 +4,9 @@
 import { randomBytes } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import { resolveProfiles } from '../things/things';
-import {
-  MAX_COMMUNITIES_PER_USER,
-  MAX_COMMUNITY_DESCRIPTION_CHARS,
-  MAX_COMMUNITY_NAME_CHARS,
-  MAX_SECTION_NAME_CHARS
-} from '~/schemas/registry';
-import type {
-  ChatRole,
-  Fail} from './shared';
-import {
-  boundedTrimmed,
-  communityMemberKey,
-  communityRoleOf,
-  fail,
-  findThingByKind,
-  getCommunityMemberDoc,
-  newThingDoc,
-  ROLE_RANK
-} from './shared';
+import { MAX_COMMUNITIES_PER_USER, MAX_COMMUNITY_DESCRIPTION_CHARS, MAX_COMMUNITY_NAME_CHARS, MAX_SECTION_NAME_CHARS } from '~/schemas/registry';
+import type { ChatRole, Fail } from './shared';
+import { boundedTrimmed, communityMemberKey, communityRoleOf, fail, findThingByKind, getCommunityMemberDoc, newThingDoc, ROLE_RANK } from './shared';
 
 export type PublicCommunity = {
   id: string;
@@ -76,9 +60,7 @@ const insertMember = async (communityId: string, userId: string, role: ChatRole)
 // community's channels as left (their DMs/groups are untouched).
 const revokeCommunityChannelMemberships = async (communityId: string, userId: string) => {
   const things = await getThingsCollection();
-  const channels = await things
-    .find({ thingtime: 'chat', 'crystal.communityId': communityId } as any, { projection: { shareId: 1 } })
-    .toArray();
+	const channels = await things.find({ thingtime: 'chat', 'crystal.communityId': communityId } as any, { projection: { shareId: 1 } }).toArray();
   if (!channels.length) return;
   await things.updateMany(
     {
@@ -91,11 +73,7 @@ const revokeCommunityChannelMemberships = async (communityId: string, userId: st
   );
 };
 
-export const requireCommunityRole = async (
-  communityId: string,
-  userId: string,
-  atLeast: ChatRole
-): Promise<{ ok: true; role: ChatRole } | Fail> => {
+export const requireCommunityRole = async (communityId: string, userId: string, atLeast: ChatRole): Promise<{ ok: true; role: ChatRole } | Fail> => {
   const role = await communityRoleOf(communityId, userId);
   if (!role) return fail(403, 'You are not a member of this community');
   if (ROLE_RANK[role] < ROLE_RANK[atLeast]) return fail(403, 'You need a bigger hat for that (admin required)');
@@ -106,10 +84,7 @@ export const requireCommunityRole = async (
 
 export type CreateCommunityResult = Fail | { ok: true; community: PublicCommunity };
 
-export const createCommunity = async (
-  ownerId: string,
-  input: { name?: unknown; description?: unknown }
-): Promise<CreateCommunityResult> => {
+export const createCommunity = async (ownerId: string, input: { name?: unknown; description?: unknown }): Promise<CreateCommunityResult> => {
   const name = boundedTrimmed(input.name, MAX_COMMUNITY_NAME_CHARS);
   if (!name) return fail(400, 'Communities need a name');
   const description = boundedTrimmed(input.description, MAX_COMMUNITY_DESCRIPTION_CHARS);
@@ -151,7 +126,7 @@ export const listMyCommunities = async (
       ])
       .toArray()
   ]);
-  const countById = new Map(counts.map((c: any) => [String(c._id), c.count]));
+	const countById = new Map<string, number>(counts.map((c: any) => [String(c._id), Number(c.count) || 0] as const));
   const sectionsById = new Map<string, PublicSection[]>();
   for (const doc of sectionDocs) {
     const key = String((doc as any).targetId);
@@ -322,10 +297,9 @@ export const createInvite = async (
   if (gate.ok === false) return gate;
   const things = await getThingsCollection();
   if (typeof input.revokeId === 'string' && input.revokeId.trim()) {
-    const res = await things.updateOne(
-      { shareId: input.revokeId.trim(), thingtime: 'community-invite', targetId: community.shareId } as any,
-      { $set: { 'crystal.revoked': true, updatedAt: new Date() } }
-    );
+		const res = await things.updateOne({ shareId: input.revokeId.trim(), thingtime: 'community-invite', targetId: community.shareId } as any, {
+			$set: { 'crystal.revoked': true, updatedAt: new Date() }
+		});
     if (!res.matchedCount) return fail(404, 'Invite not found');
     return { ok: true };
   }
@@ -337,9 +311,7 @@ export const createInvite = async (
   if (live >= MAX_LIVE_INVITES_PER_COMMUNITY) return fail(400, 'Too many live invites — revoke some first');
   const days = Number(input.expiresInDays);
   const expiresAt =
-    Number.isFinite(days) && days > 0
-      ? new Date(Date.now() + Math.min(days, MAX_INVITE_DAYS) * 24 * 60 * 60 * 1000).toISOString()
-      : null;
+		Number.isFinite(days) && days > 0 ? new Date(Date.now() + Math.min(days, MAX_INVITE_DAYS) * 24 * 60 * 60 * 1000).toISOString() : null;
   const maxUsesNum = Number(input.maxUses);
   const maxUses = Number.isFinite(maxUsesNum) && maxUsesNum > 0 ? Math.min(Math.floor(maxUsesNum), 10_000) : null;
   const invite = newThingDoc('community-invite', {
@@ -422,27 +394,23 @@ export const manageSections = async (
     if (!name) return fail(400, 'Sections need a name');
     const count = await things.countDocuments({ thingtime: 'chat-section', targetId: community.shareId } as any);
     if (count >= 50) return fail(400, 'That is enough sections');
-    await things.insertOne(
-      newThingDoc('chat-section', { ownerId: viewerId, targetId: community.shareId, crystal: { name, order: count } }) as any
-    );
+		await things.insertOne(newThingDoc('chat-section', { ownerId: viewerId, targetId: community.shareId, crystal: { name, order: count } }) as any);
   } else if (input.rename && typeof input.rename === 'object') {
     const id = boundedTrimmed((input.rename as any).id, 128);
     const name = boundedTrimmed((input.rename as any).name, MAX_SECTION_NAME_CHARS);
     if (!id || !name) return fail(400, 'Renaming a section needs { id, name }');
-    const res = await things.updateOne(
-      { shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any,
-      { $set: { 'crystal.name': name, updatedAt: new Date() } }
-    );
+		const res = await things.updateOne({ shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any, {
+			$set: { 'crystal.name': name, updatedAt: new Date() }
+		});
     if (!res.matchedCount) return fail(404, 'Section not found');
   } else if (typeof input.remove === 'string' && input.remove.trim()) {
     const removed = await things.findOne({ shareId: input.remove.trim(), thingtime: 'chat-section', targetId: community.shareId } as any);
     if (!removed) return fail(404, 'Section not found');
     await things.deleteOne({ shareId: (removed as any).shareId } as any);
     // un-file the section's channels rather than orphaning their pointer
-    await things.updateMany(
-      { thingtime: 'chat', 'crystal.communityId': community.shareId, 'crystal.sectionId': (removed as any).shareId } as any,
-      { $set: { 'crystal.sectionId': null, updatedAt: new Date() } }
-    );
+		await things.updateMany({ thingtime: 'chat', 'crystal.communityId': community.shareId, 'crystal.sectionId': (removed as any).shareId } as any, {
+			$set: { 'crystal.sectionId': null, updatedAt: new Date() }
+		});
   } else if (Array.isArray(input.reorder)) {
     const ids = (input.reorder as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 100);
     if (ids.length) {

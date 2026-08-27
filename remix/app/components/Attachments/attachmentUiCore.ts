@@ -1,0 +1,350 @@
+import type {
+	AttachmentComposerSnapshot,
+	AttachmentMediaKind,
+	AttachmentUploadPurpose,
+	ComposerAttachmentUpload,
+	PublicAttachment
+} from './attachmentTypes';
+
+const INLINE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+// Mirrors the server's ATTACHMENT_INLINE_CONTENT_TYPES video set. Codec support
+// inside a container still varies per browser; PostAttachments degrades an
+// unplayable video to its download row via the element's error event.
+const INLINE_VIDEO_TYPES = new Set([
+	'video/3gpp',
+	'video/3gpp2',
+	'video/mp4',
+	'video/ogg',
+	'video/quicktime',
+	'video/webm',
+	'video/x-m4v',
+	'video/x-matroska'
+]);
+export const MAX_POST_ATTACHMENTS = 25;
+const MAX_POST_TAGS = 12;
+const MAX_POST_TAG_CHARS = 40;
+
+export type AttachmentUploadScope = 'public' | 'private';
+
+export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose): AttachmentUploadScope =>
+	purpose === 'message' || purpose === 'profile-avatar' || purpose === 'profile-banner' ? 'private' : 'public';
+
+// Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
+// compares the exact committed payload rather than the raw composer text.
+export const canonicalPostTags = (values: readonly unknown[]): string[] => {
+	const tags: string[] = [];
+	for (const value of values) {
+		if (typeof value !== 'string') continue;
+		const tag = value.trim().toLowerCase().slice(0, MAX_POST_TAG_CHARS);
+		if (tag && !tags.includes(tag)) tags.push(tag);
+		if (tags.length >= MAX_POST_TAGS) break;
+	}
+	return tags;
+};
+
+export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: unknown): AttachmentMediaKind => {
+	const type = typeof contentType === 'string' ? contentType.trim().toLowerCase() : '';
+	if (requestedKind === 'image' && INLINE_IMAGE_TYPES.has(type)) return 'image';
+	if (requestedKind === 'video' && INLINE_VIDEO_TYPES.has(type)) return 'video';
+	return 'file';
+};
+
+export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKind => {
+	const type = file.type.trim().toLowerCase();
+	if (INLINE_IMAGE_TYPES.has(type)) return 'image';
+	if (INLINE_VIDEO_TYPES.has(type)) return 'video';
+	return 'file';
+};
+
+const MAX_ATTACHMENT_TITLE_CHARS = 200;
+const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
+
+const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	return trimmed ? trimmed.slice(0, maxChars) : undefined;
+};
+
+export const normalizePublicAttachment = (value: unknown): PublicAttachment | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	const id = typeof record.id === 'string' ? record.id.trim() : '';
+	const name = typeof record.name === 'string' ? record.name.trim() : '';
+	const contentType = typeof record.contentType === 'string' ? record.contentType.trim().toLowerCase() : 'application/octet-stream';
+	const size = Number(record.size);
+	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
+	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
+	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
+	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
+	const detectedContentType =
+		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
+	return {
+		id,
+		name,
+		size,
+		contentType,
+		...(detectedContentType ? { detectedContentType } : {}),
+		// Audio is valid canonical server metadata, but is intentionally treated as
+		// a generic download until Thingtime ships a vetted inline audio player.
+		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		...(title ? { title } : {}),
+		...(description ? { description } : {}),
+		// only an explicit server true survives — nothing client-side can set it
+		...(record.nsfw === true ? { nsfw: true } : {})
+	};
+};
+
+// The stable deeplink to a media attachment's own Thing page.
+export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
+
+// Display names for containers the server can sniff but never renders inline,
+// plus common claimed types; anything unmapped shows its raw MIME string.
+const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
+	'application/gzip': 'GZIP archive',
+	'application/pdf': 'PDF document',
+	'application/vnd.rar': 'RAR archive',
+	'application/x-7z-compressed': '7-Zip archive',
+	'application/zip': 'ZIP archive',
+	'audio/aac': 'AAC audio',
+	'audio/flac': 'FLAC audio',
+	'audio/midi': 'MIDI audio',
+	'audio/mpeg': 'MP3 audio',
+	'audio/ogg': 'Ogg audio',
+	'audio/opus': 'Opus audio',
+	'audio/vnd.wave': 'WAV audio',
+	'audio/wav': 'WAV audio',
+	'audio/x-m4a': 'M4A audio',
+	'audio/x-wav': 'WAV audio',
+	'image/bmp': 'BMP image',
+	'image/heic': 'HEIC image',
+	'image/heif': 'HEIF image',
+	'image/tiff': 'TIFF image',
+	'video/mp2t': 'MPEG-TS video',
+	'video/mpeg': 'MPEG video',
+	'video/quicktime': 'QuickTime video',
+	'video/vnd.avi': 'AVI video',
+	'video/x-flv': 'FLV video',
+	'video/x-ms-asf': 'ASF video',
+	'video/x-ms-wmv': 'WMV video',
+	'video/x-msvideo': 'AVI video'
+};
+
+export const attachmentTypeLabel = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string => {
+	const shown =
+		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType
+			? attachment.detectedContentType
+			: attachment.contentType;
+	if (!shown || shown === 'application/octet-stream') return 'File';
+	return FRIENDLY_CONTENT_TYPE_LABELS[shown] || shown;
+};
+
+export const attachmentContentUrl = (id: string, download = false): string => {
+	const params = new URLSearchParams({ id });
+	if (download) params.set('download', '1');
+	return `/api/v1/attachments/content?${params.toString()}`;
+};
+
+export const formatAttachmentBytes = (bytes: number): string => {
+	if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown size';
+	if (bytes < 1024) return `${Math.round(bytes)} B`;
+	const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+	let value = bytes / 1024;
+	let unit = units[0];
+	for (let index = 1; index < units.length && value >= 1024; index += 1) {
+		value /= 1024;
+		unit = units[index];
+	}
+	return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${unit}`;
+};
+
+export type AttachmentUploadErrorContext = {
+	fileSizeBytes?: number;
+	remainingBytes?: number | null;
+	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
+};
+
+const ATTACHMENT_QUOTA_ERROR =
+	'This account’s storage quota is full for this file. Delete stored media or upgrade the account’s storage tier, then retry.';
+
+export const attachmentUploadError = (
+	error: unknown,
+	phase: 'prepare' | 'upload' | 'complete' | 'cleanup',
+	context: AttachmentUploadErrorContext = {}
+): string => {
+	const status = Number((error as { status?: unknown } | null)?.status);
+	const code = String((error as { code?: unknown } | null)?.code || '');
+	const snapshotShowsQuota =
+		phase === 'prepare' &&
+		context.storageStatus === 'ready' &&
+		Number.isSafeInteger(context.fileSizeBytes) &&
+		Number(context.fileSizeBytes) > 0 &&
+		Number.isSafeInteger(context.remainingBytes) &&
+		Number(context.remainingBytes) >= 0 &&
+		Number(context.fileSizeBytes) > Number(context.remainingBytes);
+	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
+	if (code === 'public_uploads_not_approved') {
+		return 'Public media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
+	if (code === 'private_uploads_not_approved') {
+		return 'Private media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
+	if (status === 403) return 'This account is not allowed to upload that file.';
+	if (status === 413) return 'This file is larger than Thingtime can accept.';
+	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
+	if (status === 507 || code === 'quota_exceeded' || snapshotShowsQuota) return ATTACHMENT_QUOTA_ERROR;
+	if (code === 'storage_unconfigured') {
+		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';
+	}
+	if (code === 'accounting_unavailable' || code === 'storage_conflict' || code === 'storage_invariant') {
+		return 'Thingtime is verifying this account’s storage balance. Wait a moment, then retry this file.';
+	}
+	if (code === 'storage_unavailable' || (status === 503 && phase === 'prepare')) {
+		return 'Private storage is temporarily unavailable. Wait a moment, then retry this file.';
+	}
+	if (status === 410 || code === 'upload_unavailable') {
+		return 'This upload can no longer resume. Remove the file, then add it again.';
+	}
+	if (
+		status === 409 &&
+		(error as { retryable?: unknown; code?: unknown } | null)?.retryable === true &&
+		['upload_parts_retryable', 'upload_not_ready'].includes(code)
+	) {
+		return 'One or more file parts need uploading again. Retry to resume this secure upload.';
+	}
+	if (status === 409) return 'Thingtime is still settling this upload. Retry to verify it safely.';
+	if (phase === 'upload') return 'The file could not reach storage. Check your connection and retry.';
+	if (phase === 'complete') return 'Thingtime could not verify the uploaded file. Retry to upload it safely.';
+	if (phase === 'cleanup') return 'Thingtime could not remove that draft file. It will be cleaned up automatically.';
+	return 'Thingtime could not prepare this file. Please retry.';
+};
+
+export const attachmentCompleteRetryPhase = (error: unknown): 'upload' | 'complete' | 'terminal' => {
+	const failure = error as { code?: unknown; retryable?: unknown } | null;
+	if (failure?.code === 'upload_unavailable' || Number((error as { status?: unknown } | null)?.status) === 410) return 'terminal';
+	return failure?.retryable === true && (failure.code === 'upload_parts_retryable' || failure.code === 'upload_not_ready') ? 'upload' : 'complete';
+};
+
+export const attachmentUploadFailurePhase = (error: unknown, fallback: 'prepare' | 'upload'): 'prepare' | 'upload' | 'terminal' =>
+	attachmentCompleteRetryPhase(error) === 'terminal' ? 'terminal' : fallback;
+
+export const shouldFreezeAmbiguousPostSubmission = (unknownNow: boolean, status: number, hadUnknownOutcome: boolean): boolean =>
+	unknownNow || (status === 409 && hadUnknownOutcome);
+
+export const attachmentSnapshot = (uploads: ComposerAttachmentUpload[]): AttachmentComposerSnapshot => {
+	const attachments = uploads.flatMap((upload) => (upload.status === 'ready' && upload.attachment ? [upload.attachment] : []));
+	return {
+		attachmentIds: attachments.map((attachment) => attachment.id),
+		attachments,
+		blocking: uploads.some((upload) => upload.status !== 'ready'),
+		hasSelection: uploads.length > 0
+	};
+};
+
+export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: AttachmentComposerSnapshot): boolean => {
+	if (left.blocking !== right.blocking || left.hasSelection !== right.hasSelection) return false;
+	if (left.attachments.length !== right.attachments.length || left.attachmentIds.length !== right.attachmentIds.length) return false;
+	for (let index = 0; index < left.attachments.length; index += 1) {
+		const leftAttachment = left.attachments[index];
+		const rightAttachment = right.attachments[index];
+		if (
+			left.attachmentIds[index] !== right.attachmentIds[index] ||
+			leftAttachment.id !== rightAttachment.id ||
+			leftAttachment.name !== rightAttachment.name ||
+			leftAttachment.size !== rightAttachment.size ||
+			leftAttachment.contentType !== rightAttachment.contentType ||
+			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
+			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
+			leftAttachment.nsfw !== rightAttachment.nsfw
+		) {
+			return false;
+		}
+	}
+	return true;
+};
+
+export type AttachmentCleanupAction = { kind: 'delete'; attachmentId: string } | { kind: 'abort'; uploadId: string } | null;
+
+export const attachmentCleanupAction = (upload: ComposerAttachmentUpload, committedAttachmentIds: ReadonlySet<string>): AttachmentCleanupAction => {
+	if (upload.attachment) {
+		return committedAttachmentIds.has(upload.attachment.id) ? null : { kind: 'delete', attachmentId: upload.attachment.id };
+	}
+	// `localId` is also the idempotency key sent to start(). If that response is
+	// lost after the server reserved quota, aborting by the stable request id can
+	// still find and clean the upload instead of stranding the account's bytes.
+	return { kind: 'abort', uploadId: upload.uploadId || upload.localId };
+};
+
+export const dedupeSelectedFiles = (current: ComposerAttachmentUpload[], incoming: File[]): File[] => {
+	const seen = new Set(current.map((upload) => `${upload.file.name}\u0000${upload.file.size}\u0000${upload.file.lastModified}`));
+	return incoming.filter((file) => {
+		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+};
+
+export const multipartPartRange = (partNumber: number, partSizeBytes: number, fileSize: number) => {
+	const start = (partNumber - 1) * partSizeBytes;
+	return { start, end: Math.min(fileSize, start + partSizeBytes) };
+};
+
+export type CommittedPostExpectation = {
+	shareId: string;
+	ownerId: string;
+	crystal: Record<string, unknown>;
+	tags: string[];
+	visibility: string;
+	attachmentIds: string[];
+};
+
+const recordOf = (value: unknown): Record<string, unknown> | null =>
+	value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const canonicalJson = (value: unknown): unknown => {
+	if (Array.isArray(value)) return value.map(canonicalJson);
+	const record = recordOf(value);
+	if (!record) return value;
+	return Object.fromEntries(
+		Object.keys(record)
+			.sort()
+			.filter((key) => record[key] !== undefined)
+			.map((key) => [key, canonicalJson(record[key])])
+	);
+};
+
+const sameJson = (left: unknown, right: unknown) => JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+
+const exactStringArray = (value: unknown, expected: readonly string[], unordered = false): boolean => {
+	if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return false;
+	const actual = value as string[];
+	if (actual.length !== expected.length) return false;
+	if (unordered) {
+		const sortedExpected = [...expected].sort();
+		return [...actual].sort().every((entry, index) => entry === sortedExpected[index]);
+	}
+	return actual.every((entry, index) => entry === expected[index]);
+};
+
+// A lost post-create response is ambiguous: Mongo may already have committed
+// the post and atomically bound its files. A client-generated shareId lets the
+// composer read that exact id back, but it is considered success only when the
+// complete immutable create snapshot matches. A 409 by itself is never enough.
+export const matchesCommittedPostCreate = (response: unknown, expected: CommittedPostExpectation): boolean => {
+	const root = recordOf(response);
+	const thing = recordOf(root?.thing);
+	const post = recordOf(root?.post);
+	const thingAuthor = recordOf(thing?.author);
+	const postAuthor = recordOf(post?.author);
+	if (!thing || !post || !thingAuthor || !postAuthor) return false;
+	if (thing.id !== expected.shareId || post.id !== expected.shareId) return false;
+	if (thingAuthor.id !== expected.ownerId || postAuthor.id !== expected.ownerId) return false;
+	if (!exactStringArray(thing.thingtime, ['post']) || thing.targetId !== null || post.isShare !== false) return false;
+	if (!sameJson(thing.crystal, expected.crystal)) return false;
+	if (!exactStringArray(thing.tags, expected.tags) || !exactStringArray(post.tags, expected.tags)) return false;
+	if (post.visibility !== expected.visibility) return false;
+	const attachments = Array.isArray(post.attachments) ? post.attachments : null;
+	if (!attachments) return false;
+	const attachmentIds = attachments.map((attachment) => recordOf(attachment)?.id);
+	return exactStringArray(attachmentIds, expected.attachmentIds, true);
+};
