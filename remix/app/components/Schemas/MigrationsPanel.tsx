@@ -8,6 +8,8 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
 
+import { actionableAdoptionIssues } from './migrationUiCore';
+
 type CollectionCensus = {
   collection: string;
   physical: string;
@@ -153,6 +155,9 @@ export function MigrationsPanel() {
   );
 
   const busy = runningKey !== null;
+  const visibleAdoptionIssues = status
+    ? actionableAdoptionIssues(status.adoptionIssues, status.migrations)
+    : [];
 
   return (
     <Box as="section" id="database-migrations" minW={0} scrollMarginTop="112px">
@@ -201,7 +206,7 @@ export function MigrationsPanel() {
 
       {status ? (
         <Stack spacing={5}>
-          {status.adoptionIssues.length ? (
+          {visibleAdoptionIssues.length ? (
             <Box {...CARD_STYLES} borderColor="var(--tt-warning, #d69e2e)" p={4}>
               <Flex align="center" gap={2} mb={1}>
                 <Badge colorScheme="orange">adoption</Badge>
@@ -209,7 +214,7 @@ export function MigrationsPanel() {
                   Legacy collections not yet adopted
                 </Text>
               </Flex>
-              {status.adoptionIssues.map((issue) => (
+              {visibleAdoptionIssues.map((issue) => (
                 <Text color="var(--tt-text, #5a5a66)" fontFamily="mono" fontSize="xs" key={issue} mt={1}>
                   {issue}
                 </Text>

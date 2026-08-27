@@ -3,7 +3,7 @@ import { smarts } from '~/smarts';
 import { stringLiteralToRichText } from '~/utils';
 
 import cmdWatcher from './defaults/cmdWatcher';
-import assets from '~/routes/branding/assets/all';
+import { brandingAssetRecords as assets } from '~/components/Branding/brandingAssetsData';
 
 export const thingtimeMinimumValues: any = {
   settings: {

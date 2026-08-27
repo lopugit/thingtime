@@ -1,6 +1,4 @@
 import React, { createContext } from 'react';
-// @ts-ignore
-import { parse as parseAux, stringify as stringifyAux } from 'flatted';
 import { Subject } from 'rxjs';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
@@ -12,6 +10,13 @@ import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
+import {
+	hasPersistedThingtimeRuntimeMethods,
+	parseThingtime,
+	parseThingtimeWithDiagnostics,
+	stringifyThingtime,
+	stringifyThingtimeForStorage
+} from './thingtimeSerialization';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
@@ -29,84 +34,11 @@ export interface EverythingTypes {
 
 export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
-// wrap flatted parse and stringify with a function reviver and replacer
-
-const reviver = (allowFunctionRevival: boolean) => (key: string, value: any) => {
-	// if value is a Date, return it as a Date object
-	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
-		return new Date(value);
-	}
-
-	// if value is a function, return it as a function
-	if (allowFunctionRevival && value?.ttype === 'function') {
-		try {
-			const func = eval(value.code);
-			if (typeof func === 'function') {
-				if (value?.ttScope && typeof value.ttScope === 'object') {
-					func.ttScope = value.ttScope;
-				}
-
-				// if the scope has keys
-				// re-eval the function with these keyed values in a fake function scope
-				if (Object.keys(func.ttScope || {}).length > 0) {
-					const scopeKeys = Object.keys(func.ttScope);
-					const newEval = `function scoper() {
-						${scopeKeys.map((key) => `const ${key} = this.ttScope.${key};`).join('\n')}
-						return ${value.code}
-					}`;
-					const scopedFunc = eval(newEval);
-					scopedFunc.ttScope = func.ttScope;
-					return scopedFunc;
-				}
-
-				return func;
-			}
-		} catch (err) {
-			console.error('There was an error evaluating the function code:', err);
-		}
-		return function () {
-			console.warn('Function could not be revived:', value.code);
-		};
-	}
-
-	return value;
-};
-
-const replacer = (key: string, value: any) => {
-	// if value is a Date, return it as a string
-	if (value instanceof Date) {
-		return value.toISOString();
-	}
-
-	// if value is a function, return it as an object with ttype and code properties
-	if (typeof value === 'function') {
-		return {
-			ttype: 'function',
-			code: value.toString(),
-			ttScope: value?.ttScope || {}
-		};
-	}
-
-	return value;
-};
-
-const parse = (text: string, allowFunctionRevival = true): any => {
-	try {
-		return parseAux(text, reviver(allowFunctionRevival));
-	} catch (err) {
-		console.error('There was an error parsing the thingtime data:', err);
-		return null;
-	}
-};
-
-const stringify = (data: any): string => {
-	try {
-		return stringifyAux(data, replacer);
-	} catch (err) {
-		console.error('There was an error stringifying the thingtime data:', err);
-		return '';
-	}
-};
+// The persist codec (flatted parse/stringify + reviver/replacer) lives in
+// ./thingtimeSerialization so it can be unit-tested without React. Persisted
+// functions are always omitted on write and removed on read; hydration then
+// re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
+// second boundary, not the mechanism that makes storage-controlled code inert.
 
 export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const storageKey = props?.storageKey || 'thingtime';
@@ -150,7 +82,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			debounceMs: 350,
 			maxWaitMs: 2_000,
 			serialize: (value) => {
-				const serialized = stringify(value);
+				const serialized = stringifyThingtimeForStorage(value);
 				if (!serialized) throw new Error('Thingtime autosave could not serialize the current value');
 				return serialized;
 			},
@@ -174,7 +106,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		try {
 			window.smarts = smarts;
-			window.flatted = { parse, stringify };
+			window.flatted = { parse: parseThingtime, stringify: stringifyThingtime };
 		} catch {
 			// Global tools are best-effort outside a browser.
 		}
@@ -203,7 +135,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				newThingtime.Content = thingtimeDefaults.Content;
 			}
 
-			setThingtimeObjectWrapper(newThingtime);
+			return setThingtimeObjectWrapper(newThingtime);
 		},
 		[setThingtimeObjectWrapper]
 	);
@@ -424,10 +356,11 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
-					const parsed =
+					const parseResult =
 						typeof localStorageThingtime === 'string'
-							? parse(localStorageThingtime, allowFunctionRevival)
-							: localStorageThingtime;
+							? parseThingtimeWithDiagnostics(localStorageThingtime)
+							: { value: localStorageThingtime, repaired: false, removedFunctionCount: 0 };
+					const parsed = parseResult.value;
 
 					if (parsed) {
 						const localIsUptoDateVersion = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
@@ -449,7 +382,17 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 							overwriteAll: true
 						});
 
-						restoreThingtime(newThingtime);
+						const restoredThingtime = restoreThingtime(newThingtime);
+
+						// Older blobs can contain function tags or root set/get closures.
+						// Commit the inert repair before exposing the hydrated UI so this
+						// first load is also the last load that sees executable-looking data.
+						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
+							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
+							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
+							await localforage.setItem('thingtime', repairedSerialized);
+							if (cancelled) return;
+						}
 					} else {
 						throw new Error('Stored Thingtime value could not be parsed');
 					}

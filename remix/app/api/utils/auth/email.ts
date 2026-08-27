@@ -2,6 +2,7 @@ import { sendEmail } from '../email/service';
 import {
   renderEmailOtpTemplate,
   renderEmailVerificationTemplate,
+  renderNewUserAdminNotificationTemplate,
   renderNewsletterTemplate,
   renderPasswordResetTemplate
 } from '../email/templates';
@@ -121,6 +122,58 @@ export const sendNewsletterEmail = async ({
     tags: {
       stream: 'newsletter',
       template: 'newsletter.generic'
+    }
+  });
+};
+
+// Where the internal "new user" notification lands. Overridable per deployment
+// so a preview/staging stack can point at a test inbox instead of the real one.
+export const adminNotificationEmail = () =>
+  process.env.THINGTIME_ADMIN_NOTIFICATION_EMAIL?.trim() || 'admin@thingtime.com';
+
+// Ops mail: a newly registered account finished email verification and now
+// needs an admin to grant public file/media uploads (they are withheld at
+// signup — see auth/registerUser.ts). Recipient is the admin inbox, never the
+// user, so the body carries the account details verbatim.
+export const sendNewUserAdminNotification = async ({
+  username,
+  email,
+  displayName,
+  userId,
+  createdAt,
+  origin
+}: {
+  username: string;
+  email: string;
+  displayName?: string | null;
+  userId: string;
+  createdAt?: string | null;
+  origin?: string;
+}): Promise<EmailSendResult> => {
+  const base = origin || process.env.APP_URL || 'http://localhost:9999';
+  const rendered = renderNewUserAdminNotificationTemplate({
+    username,
+    email,
+    displayName,
+    userId,
+    createdAt,
+    adminUrl: `${base}/admin`
+  });
+  return sendEmail({
+    to: adminNotificationEmail(),
+    stream: 'transactional',
+    templateKey: 'admin.new_user',
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    metadata: {
+      purpose: 'admin_new_user',
+      userId,
+      username
+    },
+    tags: {
+      stream: 'transactional',
+      template: 'admin.new_user'
     }
   });
 };
