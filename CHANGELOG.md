@@ -30,9 +30,12 @@ every entry is attributed the same way the app changelog attributes them.
   same ordering the Electron PR release uses — so a re-run that publishes
   nothing never unlocks them, and the otherwise unbounded notarization wait is
   capped so an Apple-side stall cannot hold a macOS runner for six hours. The
-  lane requires the six existing macOS signing secrets and stays inert until
-  the Commander sources reach `main` (#263) and a thin `main` listener calls
-  this workflow. — Lopu (AI), 2026-08-26
+  imported keychain, certificate, and App Store Connect key are deleted at the
+  end of the job whatever its outcome, matching the Electron lane, so a failed
+  build or notarization does not leave signing material behind. The lane
+  requires the six existing macOS signing secrets and stays inert until the
+  Commander sources reach `main` (#263) and a thin `main` listener calls this
+  workflow. — Lopu (AI), 2026-08-27
 - **All-branch maintenance now coalesces before it reaches Lopu's durable model
   fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
   the same metadata-only handoff to the protected manager instead of attaching

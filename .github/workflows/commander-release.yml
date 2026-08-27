@@ -224,3 +224,18 @@ jobs:
             --target "${GITHUB_SHA}" \
             --title "Commander App Release ${THINGTIME_COMMANDER_RELEASE_VERSION}" \
             --notes-file commander-release-notes.md
+
+      # The other half of electron-pr-release.yml's credential contract. Import
+      # leaves the Developer ID private key in an unlocked keychain that is also
+      # the runner's default keychain, plus the raw .p12 and App Store Connect
+      # .p8 on disk. Unlike the Electron lane, which tests the unsigned source
+      # before touching credentials, `build_and_run.sh` installs and runs the
+      # third-party pnpm/cargo/swift dependency tree *after* that import, so this
+      # teardown is the one place the window is closed. `if: always()` so a
+      # failed build or notarization does not leave the key behind either.
+      - name: Remove ephemeral signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "${RUNNER_TEMP}/commander-signing.keychain-db" 2>/dev/null || true
+          rm -f "${RUNNER_TEMP}/commander-developer-id.p12" "${RUNNER_TEMP}"/AuthKey_*.p8
