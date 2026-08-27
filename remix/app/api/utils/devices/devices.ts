@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { createSession, type SessionDoc } from '../auth/sessions';
 import { getHomeThingsCollection, getSessionsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { thingUniqueKeyFilter, thingUniqueKeys } from '../mongodb/uniqueKeys';
 import { deleteAccountedThings, insertAccountedThing, updateAccountedThing } from '../storage/accountedThings';
 import {
 	DEVICE_SESSION_LIFETIME_MS,
@@ -86,15 +87,13 @@ export const newDeviceThing = (
 			DEVICE_UNIQUE_KEY_FIELDS.map((field) => fields.crystal[field]).filter((value): value is string => typeof value === 'string' && value.length > 0)
 		)
 	];
-	const crystal: Record<string, unknown> = {
-		...fields.crystal,
-		...(deviceUniqueKeys.length ? { deviceUniqueKeys } : {})
-	};
+	const crystal: Record<string, unknown> = { ...fields.crystal };
 	return {
 		shareId: fields.shareId || randomUUID(),
 		schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 		thingtime: [kind],
 		crystal,
+		...(deviceUniqueKeys.length ? { uniqueKeys: thingUniqueKeys('deviceUniqueKey', deviceUniqueKeys) } : {}),
 		extended: null,
 		ownerId: fields.ownerId,
 		acl: ['tt:user'],
@@ -733,7 +732,7 @@ export const updateDeviceState = async (
 	const stateKey = deviceHash('state', ownerId, deviceId);
 	const connectorKeys = connectors.map((connector) => deviceHash('connector', ownerId, deviceId, connector.id));
 	const [existingState, existingConnectors] = await Promise.all([
-		things.findOne({ 'crystal.deviceUniqueKeys': stateKey } as any),
+		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey, 'deviceUniqueKeys') as any),
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);

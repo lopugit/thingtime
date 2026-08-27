@@ -3,6 +3,7 @@ import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } 
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
 import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { thingUniqueKey } from './uniqueKeys';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -420,6 +421,57 @@ const LEGACY_DEVICE_TTL_INDEXES = [
 	'things_device_approval_ttl'
 ] as const;
 
+const CONSOLIDATED_THING_UNIQUE_INDEXES = [
+	'things_ai_connection_key_unique',
+	'things_external_community_key_unique',
+	'things_external_conversation_key_unique',
+	'things_external_message_key_unique',
+	'things_device_unique_keys'
+] as const;
+
+const CONSOLIDATED_THING_UNIQUE_FIELDS = [
+	{ crystalField: 'aiConnectionKey', uniqueField: 'aiConnectionKey', array: false },
+	{ crystalField: 'externalCommunityKey', uniqueField: 'externalCommunityKey', array: false },
+	{ crystalField: 'externalConversationKey', uniqueField: 'externalConversationKey', array: false },
+	{ crystalField: 'externalMessageKey', uniqueField: 'externalMessageKey', array: false },
+	{ crystalField: 'deviceUniqueKeys', uniqueField: 'deviceUniqueKey', array: true }
+] as const;
+
+export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
+	const cursor = raw.find(
+		{
+			$or: CONSOLIDATED_THING_UNIQUE_FIELDS.map(({ crystalField, array }) => ({
+				[`crystal.${crystalField}`]: { $type: array ? 'array' : 'string' }
+			}))
+		},
+		{
+			projection: Object.fromEntries([
+				['_id', 1],
+				...CONSOLIDATED_THING_UNIQUE_FIELDS.map(({ crystalField }) => [`crystal.${crystalField}`, 1])
+			])
+		}
+	).batchSize(500);
+	let operations: any[] = [];
+	const flush = async () => {
+		if (!operations.length) return;
+		await raw.bulkWrite(operations, { ordered: false });
+		operations = [];
+	};
+	for await (const doc of cursor) {
+		const keys = CONSOLIDATED_THING_UNIQUE_FIELDS.flatMap(({ crystalField, uniqueField, array }) => {
+			const rawValue = doc.crystal?.[crystalField];
+			const values = array ? (Array.isArray(rawValue) ? rawValue : []) : [rawValue];
+			return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))).map((value) =>
+				thingUniqueKey(uniqueField, value)
+			);
+		});
+		if (!keys.length) continue;
+		operations.push({ updateOne: { filter: { _id: doc._id }, update: { $addToSet: { uniqueKeys: { $each: keys } } } } });
+		if (operations.length >= 500) await flush();
+	}
+	await flush();
+};
+
 // Indexes installed by superseded Things-era implementations. None of these
 // names is part of the current index plan: their query paths are now served by
 // the general thingtime/owner indexes, protected uniqueKeys, or migrated v2
@@ -493,6 +545,11 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 			}
 		]
 	);
+	// Fold the five pre-release uniqueness families into the existing protected
+	// root uniqueKeys index before removing their one-index-per-field copies.
+	// One cursor covers all affected rows and adds Binary domain keys in bounded
+	// batches; $addToSet makes repeated bootstraps idempotent.
+	await backfillConsolidatedThingUniqueKeys(raw);
 	await raw.updateMany(
 		{
 			thingtime: { $in: ['device-command', 'device-command-event'] },
@@ -511,14 +568,6 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 	);
 	for (const name of LEGACY_DEVICE_TTL_INDEXES) await dropIndexRetrying(col, name);
 	await col.createIndex(
-		{ 'crystal.deviceUniqueKeys': 1 },
-		{
-			name: 'things_device_unique_keys',
-			unique: true,
-			partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
-		}
-	);
-	await col.createIndex(
 		{ 'crystal.deviceTtlAt': 1 },
 		{
 			name: 'things_device_ttl',
@@ -526,6 +575,7 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 			partialFilterExpression: { 'crystal.deviceTtlAt': { $type: 'date' } }
 		}
 	);
+	for (const name of CONSOLIDATED_THING_UNIQUE_INDEXES) await dropIndexRetrying(col, name);
 	for (const name of LEGACY_DEVICE_UNIQUE_INDEXES) await dropIndexRetrying(col, name);
 };
 
@@ -567,7 +617,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
     // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
-    // linkKey: — stamped by
+    // linkKey:, AI import hashes, and device idempotency hashes — stamped by
     // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
     // element unique across the collection; sparse so ordinary things skip
     // the index entirely. Root field + BinData = no user input can ever
@@ -882,41 +932,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
-    // Desktop AI imports: stable server hashes make repeat/resume safe without
-    // exposing provider ids in public projections. Each key namespace is
-    // structurally unique across the shared things collection.
-    col.createIndex(
-      { 'crystal.aiConnectionKey': 1 },
-      { name: 'things_ai_connection_key_unique', unique: true, partialFilterExpression: { 'crystal.aiConnectionKey': { $type: 'string' } } }
-    ),
-    col.createIndex(
-      { 'crystal.externalCommunityKey': 1 },
-      { name: 'things_external_community_key_unique', unique: true, partialFilterExpression: { 'crystal.externalCommunityKey': { $type: 'string' } } }
-    ),
-    col.createIndex(
-      { 'crystal.externalConversationKey': 1 },
-			{
-				name: 'things_external_conversation_key_unique',
-				unique: true,
-				partialFilterExpression: { 'crystal.externalConversationKey': { $type: 'string' } }
-			}
-    ),
-    col.createIndex(
-      { 'crystal.externalMessageKey': 1 },
-      { name: 'things_external_message_key_unique', unique: true, partialFilterExpression: { 'crystal.externalMessageKey': { $type: 'string' } } }
-    ),
-		// Thingtime mesh entities carry one or more domain-separated server
-		// hashes in a single multikey field. One unique index therefore enforces
-		// every device/state/connector/command/event/approval/screen idempotency
-		// invariant without exhausting MongoDB's per-collection index budget.
-		col.createIndex(
-			{ 'crystal.deviceUniqueKeys': 1 },
-			{
-				name: 'things_device_unique_keys',
-				unique: true,
-				partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
-			}
-		),
+		// AI-import and device idempotency hashes ride the protected root
+		// uniqueKeys index above. Do not reintroduce per-crystal unique indexes:
+		// they consume five slots and place plain hashes in the wildcard text
+		// index instead of its Binary-safe namespace.
 		col.createIndex(
 			{ ownerId: 1, targetId: 1, 'crystal.approvalPendingSlot': 1 },
 			{
@@ -1006,7 +1025,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;
-	const run = migrateDeviceIndexLayout(db).then(() => Promise.all(createThingsDataIndexes(db))).then(
+	const run = Promise.all(createThingsDataIndexes(db)).then(
     () => undefined,
     (err) => {
       customIndexesEnsured.delete(uri);

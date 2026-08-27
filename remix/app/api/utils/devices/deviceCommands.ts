@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import {
 	DEVICE_APPROVAL_STATUSES,
 	DEVICE_COMMAND_STATUSES,
@@ -251,7 +252,7 @@ export const createDeviceCommand = async (
 			return deviceFail(409, 'The target connector does not advertise support for this command');
 		}
 	}
-	const existing = await things.findOne({ 'crystal.deviceUniqueKeys': prepared.commandKey } as any);
+	const existing = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', prepared.commandKey, 'deviceUniqueKeys') as any);
 	if (existing) return reconcileCommand(existing, prepared.payloadHash);
 	const requiresApproval = prepared.doc.crystal.requiresApproval === true;
 	const commandId = String(prepared.doc.shareId);
@@ -409,7 +410,7 @@ export const createDeviceCommand = async (
 			return deviceFail(429, 'This device has too much pending command data; wait for delivery or cancel older work');
 		}
 		if (error?.code !== 11000) throw error;
-		const raced = await things.findOne({ 'crystal.deviceUniqueKeys': prepared.commandKey } as any);
+		const raced = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', prepared.commandKey, 'deviceUniqueKeys') as any);
 		return raced ? reconcileCommand(raced, prepared.payloadHash) : deviceFail(409, 'Command creation raced; retry');
 	}
 	return { ok: true, command: publicDeviceCommand(prepared.doc), idempotent: false };
@@ -866,7 +867,7 @@ export const requestDeviceApproval = async (
 		prompt,
 		expiresAt: input?.expiresAt === undefined || input.expiresAt === null ? 'default' : expiresAt.toISOString()
 	});
-	const existing = await things.findOne({ 'crystal.deviceUniqueKeys': key } as any);
+	const existing = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', key, 'deviceUniqueKeys') as any);
 	if (existing) {
 		return existing.crystal?.payloadHash === payloadHash
 			? { ok: true, approval: publicApproval(existing), idempotent: true }
@@ -936,7 +937,7 @@ export const requestDeviceApproval = async (
 			return deviceFail(409, 'The command lease or approval deadline elapsed; retry the operation');
 		}
 		if (error?.code === 11000) {
-			const raced = await things.findOne({ 'crystal.deviceUniqueKeys': key } as any);
+			const raced = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', key, 'deviceUniqueKeys') as any);
 			return raced && raced.crystal?.payloadHash === payloadHash
 				? { ok: true, approval: publicApproval(raced), idempotent: true }
 				: deviceFail(409, 'Approval creation raced; retry');

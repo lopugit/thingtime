@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { RETIRED_THINGS_INDEXES, createThingsDataIndexes, pruneRetiredHomeThingsIndexes } from './collections.ts';
+import { fromBin } from '../auth/users.ts';
+import {
+	RETIRED_THINGS_INDEXES,
+	backfillConsolidatedThingUniqueKeys,
+	createThingsDataIndexes,
+	pruneRetiredHomeThingsIndexes
+} from './collections.ts';
 
 const MONGODB_COLLECTION_INDEX_LIMIT = 64;
 const REQUIRED_INDEX_HEADROOM = 4;
@@ -59,4 +65,28 @@ test('home layout pruning frees every retired slot before replacement indexes ru
 	assert.deepEqual(fixture.dropped, [...RETIRED_THINGS_INDEXES]);
 	assert.equal(fixture.created.length, 0);
 	assert.ok(fixture.actions.every((action) => action.startsWith('drop:')));
+});
+
+test('AI and device hashes backfill into domain-separated Binary root keys', async () => {
+	const batches: any[][] = [];
+	const docs = [
+		{ _id: 'ai', crystal: { aiConnectionKey: 'same', externalConversationKey: 'same' } },
+		{ _id: 'device', crystal: { deviceUniqueKeys: ['event', 'event', '', 42] } }
+	];
+	const raw = {
+		find() {
+			return { batchSize: () => ({ async *[Symbol.asyncIterator]() { yield* docs; } }) };
+		},
+		async bulkWrite(operations: any[]) {
+			batches.push(operations);
+		}
+	};
+	await backfillConsolidatedThingUniqueKeys(raw);
+	const operations = batches.flat();
+	assert.equal(operations.length, 2);
+	assert.deepEqual(operations[0].updateOne.update.$addToSet.uniqueKeys.$each.map(fromBin), [
+		'aiConnectionKey:same',
+		'externalConversationKey:same'
+	]);
+	assert.deepEqual(operations[1].updateOne.update.$addToSet.uniqueKeys.$each.map(fromBin), ['deviceUniqueKey:event']);
 });

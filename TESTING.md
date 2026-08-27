@@ -1497,6 +1497,15 @@ is fixed, and cite the checklist you ran in the PR description.
       notes also census (never modify) data things carrying relationship
       names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] Desktop AI import hashes and device idempotency hashes also ride root
+      Binary `uniqueKeys`, never one unique index per crystal field. Run
+      `npm --prefix remix run test:collections`, `test:devices`, and
+      `test:messenger`; the complete home Things plan must remain at or below
+      60/64, repeated device/import writes must reuse the original row, and a
+      home bootstrap must backfill then retire the five
+      `things_{ai_connection,external_*,device_unique_keys}` generations.
+      A custom data endpoint must receive only the current additive index plan:
+      it must never run Thingtime's home-only backfill/drop migration.
 - [ ] The data-crystal namespace reserves NO names: a data thing carrying
       `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
       `friendKey`, or `voteKey` at its crystal root (any nesting, any value

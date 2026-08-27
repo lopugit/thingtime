@@ -1,4 +1,5 @@
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { insertAccountedThing, updateAccountedThing } from '../storage/accountedThings';
 import {
 	DEVICE_SCREEN_STATUSES,
@@ -78,7 +79,7 @@ export const startDeviceScreenSession = async (
 	const key = deviceHash('screen', ownerId, deviceId, requestId);
 	const payloadHash = devicePayloadHash({ action: 'start', viewOnly });
 	const things = await getHomeThingsCollection();
-	let doc = await things.findOne({ 'crystal.deviceUniqueKeys': key } as any);
+	let doc = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', key, 'deviceUniqueKeys') as any);
 	let idempotent = !!doc;
 	if (doc && doc.crystal?.payloadHash !== payloadHash) {
 		return deviceFail(409, 'requestId was already used for different screen-session content');
@@ -117,7 +118,7 @@ export const startDeviceScreenSession = async (
 			});
 		} catch (error: any) {
 			if (error?.code !== 11000) throw error;
-			doc = await things.findOne({ 'crystal.deviceUniqueKeys': key } as any);
+			doc = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', key, 'deviceUniqueKeys') as any);
 			if (!doc || doc.crystal?.payloadHash !== payloadHash) {
 				return deviceFail(409, 'Screen-session creation raced; retry');
 			}

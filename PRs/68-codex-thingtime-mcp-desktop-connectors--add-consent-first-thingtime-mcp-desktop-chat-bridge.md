@@ -998,3 +998,25 @@ an offline database or offline conflict resolution layer.
   the rollback artifact in place. The final local release-mode artifacts both
   verified independently at version
   `0.1.0-pr.68.updater.g2048de7d6262.unsigned`.
+
+### Index-budget consolidation follow-up (2026-08-28)
+
+- Lopu's repository review correctly found the merged lineage at 62/64 Things
+  indexes, violating this PR's own four-slot safe-upgrade invariant. The five
+  new uniqueness families for AI connections, imported communities/chats/
+  messages, and device idempotency now share the existing protected root
+  `uniqueKeys` multikey index as domain-prefixed Binary values. The complete
+  home plan is 57/64 without weakening the guard.
+- Existing preview rows are upgraded before their obsolete indexes are
+  retired. New writes stamp root keys atomically, exact/batched reads prefer
+  those indexed keys, and crystal fallbacks keep an interrupted pre-upgrade row
+  recoverable. Device documents no longer add the redundant
+  `crystal.deviceUniqueKeys` plaintext array.
+- The migration is home-only. Custom data endpoints receive the additive
+  current index set but are no longer scanned, rewritten, or stripped of
+  historical index names owned by their users.
+- Validation: collections 19/19, devices 52/52, messenger 41/41, the complete
+  unit battery, targeted ESLint, and the production/Vercel build all pass. A
+  live worktree server also passes auth 22/22 (cold service-account creation
+  128 ms) and Things 31/31 API groups; the imported-AI and device entry routes
+  are present and auth-guarded.

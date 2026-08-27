@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Desktop AI and device idempotency now share Thingtime's protected
+  uniqueness namespace.** Five one-off crystal-path unique indexes were
+  consolidated into the existing Binary root `uniqueKeys` index, restoring
+  five MongoDB slots (57/64 in the complete home plan), keeping domain hashes
+  out of the wildcard text index's uniqueness mechanism, and preserving
+  compatibility through a home-only backfill plus legacy query fallbacks. The
+  migration no longer rewrites or drops indexes in user-owned custom data
+  endpoints. — Codex (AI), 2026-08-28
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
   A dedicated provider-double suite proves that a reasoning-starved decorated
   Claude or OpenAI stream retries bare on the same model, never retries after

@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
 import { isFullAccountSessionPurpose } from '../auth/getCurrentUser.ts';
+import { thingUniqueKey } from '../mongodb/uniqueKeys.ts';
 import {
 	deviceCredentialHash,
 	canonicalDevicePairingClaimBytes,
@@ -81,14 +82,19 @@ test('device idempotency hashes share one bounded multikey index field', () => {
 		control: true,
 		crystal: { deviceCommandKey: 'command-key' }
 	});
-	assert.deepEqual(command.crystal.deviceUniqueKeys, ['command-key']);
+	assert.deepEqual(command.uniqueKeys, [thingUniqueKey('deviceUniqueKey', 'command-key')]);
+	assert.equal(command.crystal.deviceUniqueKeys, undefined);
 	const event = newDeviceThing('device-command-event', {
 		ownerId: 'owner',
 		targetId: 'device',
 		control: true,
 		crystal: { deviceEventKey: 'event-key', liveEventSequenceKey: 'sequence-key' }
 	});
-	assert.deepEqual(event.crystal.deviceUniqueKeys, ['event-key', 'sequence-key']);
+	assert.deepEqual(event.uniqueKeys, [
+		thingUniqueKey('deviceUniqueKey', 'event-key'),
+		thingUniqueKey('deviceUniqueKey', 'sequence-key')
+	]);
+	assert.equal(event.crystal.deviceUniqueKeys, undefined);
 });
 
 test('pairing complete proof is canonical Ed25519 and bound to credential, device and both nonces', () => {

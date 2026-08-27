@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Binary } from 'mongodb';
 import { getThingsCollection } from '../mongodb/collections';
-import { toBin } from '../auth/users';
+import { thingUniqueKey } from '../mongodb/uniqueKeys';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export type Fail = { ok: false; status: number; error: string };
@@ -62,21 +62,27 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {
 	const field = RELATIONSHIP_UNIQUE_CRYSTAL_KEYS[kind];
 	const value = field ? crystal?.[field] : undefined;
-	return typeof value === 'string' && value ? [toBin(`${field}:${value}`)] : undefined;
+	return typeof value === 'string' && value ? [thingUniqueKey(field, value)] : undefined;
 };
 
 export const newThingDoc = (
   kind: string,
-  fields: { ownerId: string; targetId?: string | null; crystal: Record<string, unknown>; shareId?: string }
+  fields: {
+		ownerId: string;
+		targetId?: string | null;
+		crystal: Record<string, unknown>;
+		shareId?: string;
+		uniqueKeys?: Binary[];
+	}
 ) => {
   const now = new Date();
-  const uniqueKeys = relationshipUniqueKeys(kind, fields.crystal);
+  const uniqueKeys = [...(relationshipUniqueKeys(kind, fields.crystal) || []), ...(fields.uniqueKeys || [])];
   return {
     shareId: fields.shareId || randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: [kind],
     crystal: fields.crystal,
-    ...(uniqueKeys ? { uniqueKeys } : {}),
+    ...(uniqueKeys.length ? { uniqueKeys } : {}),
     extended: null,
     ownerId: fields.ownerId,
     acl: ['tt:user'],
