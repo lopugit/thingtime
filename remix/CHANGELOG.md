@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
+  A dedicated provider-double suite proves that a reasoning-starved decorated
+  Claude or OpenAI stream retries bare on the same model, never retries after
+  visible text, reads the durable waterfall once, emits no blank provider
+  metadata, and reaches the canned library only after both providers genuinely
+  starve. — Codex (AI), 2026-08-27
 - **Web search now exposes its real relevance signal and keeps post context
   inline.** Ranked Thing results carry the query-relative Mongo text score and
   show it as subdued metadata in both Standard and Data views; unselected

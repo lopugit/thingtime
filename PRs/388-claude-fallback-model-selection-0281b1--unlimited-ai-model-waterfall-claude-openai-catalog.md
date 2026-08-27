@@ -161,3 +161,22 @@ scenario 1, `["meta:claude","done"]` with empty text for scenario 2. After:
 18/18 checks pass, including that Claude still carries
 `output_config.effort` + `speed: 'fast'`, OpenAI carries `reasoning_effort` +
 `service_tier: 'priority'`, and `ultra` still clamps to `max`.
+
+## Review round 4 — behavioral streaming contract (Codex, 2026-08-27)
+
+The round-3 reviewer proved five streaming scenarios with a temporary local
+SSE harness, then correctly showed that reverting the zero-text fall-through
+left every committed suite green. Lopu explicitly approved landing that
+harness as `test:lopu-streaming`; the requested test was still absent at the
+latest PR head.
+
+`musing.streaming.test.mts` now drives the real `streamLopuMusing` generator
+and the real Anthropic/OpenAI SDKs against an in-process local SSE server,
+module-mocking only the durable settings read. It asserts the exact provider
+request bodies and observable NDJSON events for five cases: Claude bare retry
+after starvation, Claude-to-OpenAI fallback with no blank Claude metadata, no
+retry after Claude text, symmetric OpenAI bare retry without effort/priority,
+and final canned fallback after all four provider attempts starve. It also pins
+one waterfall read per musing.
+The experimental Node module-mock flag is scoped to the dedicated
+`test:lopu-streaming` script; the ordinary `test:lopu` glob remains unchanged.

@@ -1350,9 +1350,12 @@ is fixed, and cite the checklist you ran in the PR description.
       and GPT-5 models reject it), and both providers leave enough output
       headroom that a high/max-effort entry still streams visible text. Put a
       reasoning entry first and confirm a real musing arrives, not an empty
-      one. If a provider does finish without a single text delta, the musing
-      must fall through to the next provider and then the canned library —
-      never render a blank message.
+      one. If a decorated attempt finishes without a single text delta, it
+      must retry once bare on the same model before falling through to the
+      next provider and then the canned library — never emit a blank provider
+      meta event or render a blank message. Run `npm --prefix remix run
+      test:lopu-streaming` to exercise both provider request bodies and every
+      starvation/fallback transition with local SSE doubles.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
