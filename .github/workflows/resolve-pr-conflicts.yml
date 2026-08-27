@@ -5858,6 +5858,13 @@ jobs:
           echo "graphify_reset=$graphify_reset" >> "$GITHUB_OUTPUT"
 
           if [ "$clean" = false ]; then
+            # Historical PRs can still carry the old regular root instruction
+            # files while the target has the canonical AI_ALL.md symlinks.
+            # Git represents that exact migration as distinct-type conflicts
+            # plus marker-free `~HEAD` sidecars. Normalize only the fully
+            # proven canonical pair from the fixed trusted control plane;
+            # unfamiliar type conflicts remain for semantic/manual review.
+            bash trusted/.github/scripts/resolve-canonical-instruction-type-conflicts.sh "$base"
             git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicted.txt"
             if [ ! -s "$RUNNER_TEMP/conflicted.txt" ]; then
               # the graphify reset was the only conflict — finish the merge

@@ -1073,6 +1073,11 @@ export function assertControlPlaneContract() {
     /node --test \.github\/scripts\/rebase-related-edits\.test\.mjs/u,
     "control-plane CI executes the real stopped-rebase related-edit verifier fixture",
   );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/resolve-canonical-instruction-type-conflicts\.test\.mjs/u,
+    "control-plane CI executes the canonical instruction type-conflict fixture",
+  );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /^name: Lopu internal develop promotion$/m);
@@ -1216,6 +1221,11 @@ export function assertControlPlaneContract() {
   }
 
   const resolver = readWorkflow("resolve-pr-conflicts.yml");
+  assert.match(
+    resolver,
+    /bash trusted\/\.github\/scripts\/resolve-canonical-instruction-type-conflicts\.sh "\$base"/u,
+    "the merge resolver normalizes proven canonical instruction type conflicts before AI resolution",
+  );
   assert.match(resolver, /github\.ref_name == 'github-actions'/);
   assert.match(resolver, /ref:"github-actions"/);
   assert.doesNotMatch(resolver, /ref:"develop"/);

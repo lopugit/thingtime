@@ -64,6 +64,7 @@ jobs:
         run: |
           node --test .github/scripts/rebase-index-fingerprint.test.mjs
           node --test .github/scripts/rebase-related-edits.test.mjs
+          node --test .github/scripts/resolve-canonical-instruction-type-conflicts.test.mjs
 
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test

@@ -21,6 +21,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now resolves Git's marker-free distinct-type conflicts for the
+  repository's canonical root instruction aliases**: when the exact target
+  snapshot proves `AGENTS.md` and `CLAUDE.md` are `AI_ALL.md` symlinks and the
+  historical PR head proves regular files, the trusted controller preserves
+  the canonical symlinks, removes Git's synthetic `~HEAD` sidecars, and leaves
+  every unfamiliar type conflict untouched. A real merge fixture protects the
+  behavior. — Codex (AI), 2026-08-28
 - **Lopu rebase rounds now preserve validated related fixes instead of
   discarding an otherwise-correct conflict resolution**: a live Commander
   replay resolved all thirteen mechanically-derived conflicts but also updated
