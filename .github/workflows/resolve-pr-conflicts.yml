@@ -236,6 +236,11 @@ run-name: >-
       && format('Lopu responds to PR #{0}', github.event.issue.number)
       || github.event_name == 'pull_request_review_comment'
       && format('Lopu responds to inline review on PR #{0}', github.event.pull_request.number)
+      || github.event_name == 'workflow_run'
+      && github.event.workflow_run.pull_requests[0].number
+      && format('Lopu investigates failed workflow {0} on PR #{1}',
+          github.event.workflow_run.name,
+          github.event.workflow_run.pull_requests[0].number)
       || github.event_name == 'check_run'
       && github.event.check_run.pull_requests[0].number
       && format('Lopu investigates failed check {0} on PR #{1}',
@@ -397,6 +402,23 @@ on:
   # is PR-scoped and flows to the same serialized worker, which reads the live
   # logs before deciding whether a code or controller fix is justified.
   check_run:
+    types: [completed]
+  # GitHub suppresses check_run/check_suite events for checks created by
+  # GitHub Actions itself. The default-branch listener therefore forwards
+  # completed first-party CI workflows through workflow_run; the route below
+  # admits only PR-associated non-success conclusions and never listens to
+  # Lopu PR manager itself, preventing a review-failure loop.
+  workflow_run:
+    workflows:
+      - API tests
+      - CI
+      - Lopu CodeQL all branches
+      - Workflow control-plane CI
+      - Develop S3 PR preview
+      - Signed Electron PR Release
+      - Electron App Release
+      - Web CI
+      - Build all branch
     types: [completed]
   schedule:
     # Event triggers already cover every branch. This global backstop catches
@@ -613,6 +635,9 @@ concurrency:
         || github.event_name == 'check_run'
         && github.event.check_run.pull_requests[0].number
         && format('lopu-check-fix-pr{0}', github.event.check_run.pull_requests[0].number)
+        || github.event_name == 'workflow_run'
+        && github.event.workflow_run.pull_requests[0].number
+        && format('lopu-workflow-fix-pr{0}', github.event.workflow_run.pull_requests[0].number)
         || (github.event_name == 'issue_comment'
             || github.event_name == 'pull_request_review_comment')
         && github.event.pull_request.number
@@ -657,6 +682,12 @@ jobs:
                   || github.event.check_run.conclusion == 'timed_out'
                   || github.event.check_run.conclusion == 'cancelled'
                   || github.event.check_run.conclusion == 'action_required')))
+      && (github.event_name != 'workflow_run'
+          || (github.event.workflow_run.pull_requests[0].number
+              && (github.event.workflow_run.conclusion == 'failure'
+                  || github.event.workflow_run.conclusion == 'timed_out'
+                  || github.event.workflow_run.conclusion == 'cancelled'
+                  || github.event.workflow_run.conclusion == 'action_required')))
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: >-
@@ -683,7 +714,7 @@ jobs:
                         && inputs.branch == ''))
                 && inputs.promotion_source_pr == ''
                 && inputs.promotion_plan_b64 == '') }}
-      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || '' }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || '' }}
       branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
     secrets: inherit
 
@@ -708,6 +739,7 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && github.event_name != 'workflow_run'
       && (github.event_name != 'repository_dispatch'
           || github.event.action == 'rebase-pr-stack-ai')
       && !(github.event_name == 'workflow_dispatch'
@@ -920,6 +952,7 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && github.event_name != 'workflow_run'
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
@@ -1989,7 +2022,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref_name }}
-          SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
           SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
         run: |
           set -euo pipefail
@@ -2087,6 +2120,8 @@ jobs:
                 && format('lopu-review:inline-comment:{0}:{1}', github.event.comment.id, github.run_id)
                 || github.event_name == 'check_run'
                 && format('lopu-review:check-run:{0}:{1}', github.event.check_run.id, github.run_id)
+                || github.event_name == 'workflow_run'
+                && format('lopu-review:workflow-run:{0}:{1}', github.event.workflow_run.id, github.run_id)
                 || format('lopu-review:{0}', github.run_id) }}
           ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
@@ -2676,6 +2711,16 @@ jobs:
             follow its details URL/run logs as needed. Distinguish a real,
             reproducible defect from an external outage, stale result, or
             cancellation before changing anything.
+
+            When `REVIEW_DISPATCH_ID` starts with
+            `lopu-review:workflow-run:<WORKFLOW_RUN_ID>:` this session was
+            woken by a GitHub Actions workflow whose check_run event GitHub
+            intentionally suppresses. Retrieve that exact run with
+            `gh api repos/$REPO/actions/runs/<WORKFLOW_RUN_ID>`, inspect its
+            jobs and logs, and verify that its live conclusion still explains
+            the PR's current failing state before changing code or controller
+            automation. A cancelled superseded run is not itself a code bug;
+            rerun or explain it when that is the justified repair.
 
             CodeQL is an explicit fix-or-disposition responsibility. Each
             manifest record names `codeql_alerts_path`, a trusted snapshot of

@@ -116,6 +116,7 @@ export function route(input) {
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
   const failedCheckEvent = event === "check_run";
+  const failedWorkflowEvent = event === "workflow_run";
   const scanAll =
     event === "schedule" ||
     (humanDispatch && prNumber === "" && branch === "");
@@ -129,7 +130,7 @@ export function route(input) {
     ? `pr:${prNumber}`
     : batch
       ? `batch:${batch.length}`
-      : (conversationEvent || failedCheckEvent) && eventPrNumber
+      : (conversationEvent || failedCheckEvent || failedWorkflowEvent) && eventPrNumber
         ? `pr:${eventPrNumber}`
         : scanAll
           ? "all"
@@ -146,6 +147,8 @@ export function route(input) {
     concurrency = `resolve-detect-selector-${branch}`;
   } else if (failedCheckEvent && eventPrNumber) {
     concurrency = `lopu-check-fix-pr${eventPrNumber}`;
+  } else if (failedWorkflowEvent && eventPrNumber) {
+    concurrency = `lopu-workflow-fix-pr${eventPrNumber}`;
   } else if (conversationEvent && eventPrNumber) {
     concurrency = `lopu-conversation-pr${eventPrNumber}`;
   } else if (event === "workflow_dispatch" || event === "schedule") {
@@ -346,6 +349,16 @@ function assertWorkflowSource() {
   assert.match(source, /check_run:\n    types: \[completed\]/u, "failed PR checks wake Lopu");
   assert.match(
     source,
+    /workflow_run:\n    workflows:[\s\S]*?- Web CI[\s\S]*?- Build all branch\n    types: \[completed\]/u,
+    "GitHub Actions-produced PR workflow failures wake Lopu",
+  );
+  assert.doesNotMatch(
+    source.slice(source.indexOf("\n  workflow_run:"), source.indexOf("\n  schedule:")),
+    /- Lopu PR manager\s*$/mu,
+    "the workflow-run bridge cannot recursively review Lopu's own runs",
+  );
+  assert.match(
+    source,
     /github\.event\.issue\.pull_request[\s\S]*?github\.event\.comment\.user\.type == 'User'/u,
     "only human PR conversation comments enter the Lopu route",
   );
@@ -358,6 +371,11 @@ function assertWorkflowSource() {
     source,
     /manage_rebases:[\s\S]*?github\.event_name != 'issue_comment'/u,
     "conversation events do not launch unrelated rebases",
+  );
+  assert.match(
+    manageRebasesBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated rebases",
   );
   assert.match(
     source,
@@ -385,6 +403,11 @@ function assertWorkflowSource() {
     "automatic rebase race retries cannot also enter the merge detector",
   );
   assert.match(
+    detectBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated conflict scans",
+  );
+  assert.match(
     reviewDetectBlock,
     /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal events and automatic rebase retries never launch a duplicate whole-PR review",
@@ -393,6 +416,11 @@ function assertWorkflowSource() {
     source,
     /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
     "only PR-associated failing checks enter the Lopu route",
+  );
+  assert.match(
+    source,
+    /github\.event\.workflow_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.workflow_run\.conclusion == 'failure'/u,
+    "only PR-associated failing Actions workflows enter the Lopu route",
   );
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
@@ -598,6 +626,11 @@ function assertWorkflowSource() {
     /lopu-review:check-run:\{0\}:\{1\}/u,
     "failing-check handoffs preserve the triggering check-run id",
   );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:workflow-run:\{0\}:\{1\}/u,
+    "failing-workflow handoffs preserve the triggering workflow-run id",
+  );
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
@@ -633,6 +666,11 @@ function assertWorkflowSource() {
   assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
   assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
+  assert.match(
+    reviewBlock,
+    /gh api repos\/\$REPO\/actions\/runs\/<WORKFLOW_RUN_ID>/u,
+    "Lopu retrieves the exact first-party workflow run before diagnosing it",
+  );
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
   assert.match(reviewBlock, /Never push `github-actions`, `main`, or\s+another target\/default branch directly/u, "model may not directly publish protected branches");
   assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
@@ -1031,6 +1069,17 @@ export function selfTest() {
     handoffEligible: true,
     selector: "pr:190",
     concurrency: "lopu-check-fix-pr190",
+    modelAndResolve: false,
+  });
+
+  assertRoute("failing PR workflow", {
+    event: "workflow_run", ref: "main", actor: "github-actions[bot]", eventPrNumber: "190",
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    selector: "pr:190",
+    concurrency: "lopu-workflow-fix-pr190",
     modelAndResolve: false,
   });
 
