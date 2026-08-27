@@ -2,6 +2,7 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -472,6 +473,80 @@ function validatePortableOutput(outputPath) {
   return graph
 }
 
+function nodeCountsBySource(graph) {
+  const counts = new Map()
+  for (const node of graph.nodes) {
+    if (typeof node?.source_file !== "string" || !node.source_file) continue
+    counts.set(node.source_file, (counts.get(node.source_file) ?? 0) + 1)
+  }
+  return counts
+}
+
+function unchangedManifestEntry(before, after) {
+  if (
+    !before ||
+    Array.isArray(before) ||
+    typeof before !== "object" ||
+    !after ||
+    Array.isArray(after) ||
+    typeof after !== "object"
+  ) {
+    return false
+  }
+  const beforeAst = before.ast_hash
+  const beforeSemantic = before.semantic_hash
+  return (
+    typeof beforeAst === "string" &&
+    beforeAst.length > 0 &&
+    typeof beforeSemantic === "string" &&
+    beforeSemantic.length > 0 &&
+    beforeAst === after.ast_hash &&
+    beforeSemantic === after.semantic_hash
+  )
+}
+
+/**
+ * Detect a poisoned incremental result that silently loses symbols for source
+ * files Graphify's own manifest says are unchanged. A one-node difference is
+ * tolerated for upstream extractor jitter; losing two or more is rejected.
+ */
+export function findPoisonedGraphFiles(baselinePath, candidatePath) {
+  const baselineGraph = safeJson(path.join(baselinePath, "graph.json"))
+  const candidateGraph = safeJson(path.join(candidatePath, "graph.json"))
+  const baselineManifest = safeJson(path.join(baselinePath, "manifest.json"))
+  const candidateManifest = safeJson(path.join(candidatePath, "manifest.json"))
+  if (
+    !Array.isArray(baselineGraph?.nodes) ||
+    !Array.isArray(candidateGraph?.nodes) ||
+    !baselineManifest ||
+    Array.isArray(baselineManifest) ||
+    typeof baselineManifest !== "object" ||
+    !candidateManifest ||
+    Array.isArray(candidateManifest) ||
+    typeof candidateManifest !== "object"
+  ) {
+    return []
+  }
+
+  const beforeCounts = nodeCountsBySource(baselineGraph)
+  const afterCounts = nodeCountsBySource(candidateGraph)
+  const poisoned = []
+  for (const sourceFile of Object.keys(baselineManifest).sort()) {
+    if (
+      !unchangedManifestEntry(
+        baselineManifest[sourceFile],
+        candidateManifest[sourceFile],
+      )
+    ) {
+      continue
+    }
+    const before = beforeCounts.get(sourceFile) ?? 0
+    const after = afterCounts.get(sourceFile) ?? 0
+    if (before - after >= 2) poisoned.push({ sourceFile, before, after })
+  }
+  return poisoned
+}
+
 function artifactHash(outputPath, version) {
   const parts = [`${SNAPSHOT_SCHEMA}\0`, version, "\0"]
   for (const name of PORTABLE_FILES) {
@@ -486,6 +561,15 @@ function removeCacheLink(outputPath) {
   const cachePath = path.join(outputPath, "cache")
   if (existsSync(cachePath) && lstatSync(cachePath).isSymbolicLink()) {
     rmSync(cachePath)
+  }
+}
+
+function protectSnapshotFiles(snapshotPath) {
+  for (const name of SNAPSHOT_FILES) {
+    const target = path.join(snapshotPath, name)
+    if (existsSync(target) && lstatSync(target).isFile()) {
+      chmodSync(target, 0o444)
+    }
   }
 }
 
@@ -507,6 +591,24 @@ export function finalizeSnapshot(
     fail(
       `Graphify output collapsed from ${minimumNodeCount} to ${graph.nodes.length} nodes; rerun an intentional large deletion with --force`,
     )
+  }
+  const baseline = selectSnapshot(root, sourceFingerprint)
+  if (baseline) {
+    const poisoned = findPoisonedGraphFiles(baseline.path, workingOutput)
+    if (poisoned.length > 0) {
+      const details = poisoned
+        .slice(0, 20)
+        .map(
+          ({ sourceFile, before, after }) =>
+            `${sourceFile} (${before} -> ${after} nodes)`,
+        )
+        .join(", ")
+      const remainder =
+        poisoned.length > 20 ? `, plus ${poisoned.length - 20} more` : ""
+      fail(
+        `Graphify output dropped symbols for unchanged files: ${details}${remainder}`,
+      )
+    }
   }
   removeCacheLink(workingOutput)
   const digest = artifactHash(workingOutput, version)
@@ -555,6 +657,10 @@ export function finalizeSnapshot(
     rmSync(staging, { recursive: true, force: true })
     rmSync(workingOutput, { recursive: true, force: true })
   }
+  // Compatibility aliases are intentionally ordinary filesystem symlinks.
+  // Make their immutable targets read-only so a legacy raw Graphify hook
+  // cannot follow an alias and rewrite a content-addressed artifact in place.
+  protectSnapshotFiles(destination)
   return snapshotRecord(destination)
 }
 
@@ -569,6 +675,7 @@ function isTracked(root, relativePath) {
 
 /** Materialize compatibility aliases without putting mutable pointers in Git. */
 export function activateSnapshot(root, snapshot) {
+  protectSnapshotFiles(snapshot.path)
   const outputRoot = graphifyRoot(root)
   mkdirSync(outputRoot, { recursive: true })
   const names = [...PORTABLE_FILES, "graph.html"]
@@ -593,7 +700,10 @@ export function activateSnapshot(root, snapshot) {
         // Migration mode: never replace a still-tracked portable output.
         continue
       } else {
-        fail(`Refusing to replace non-symlink Graphify alias: ${alias}`)
+        // Legacy/raw Graphify can unlink a compatibility symlink and write a
+        // regular generated file at the ignored root alias. The immutable
+        // snapshot remains protected; reclaim this exact generated pathname.
+        rmSync(alias)
       }
     }
     symlinkSync(path.relative(outputRoot, source), alias)

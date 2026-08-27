@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now rejects poisoned Graphify snapshots at the single immutable CAS
+  boundary**: every structural and semantic result is compared with the richest
+  snapshot for the same source fingerprint. If Graphify's manifest says a file
+  is unchanged but its graph loses two or more symbols, publication fails even
+  when other files make the total graph larger; one-node extractor jitter and
+  legitimate hash-changing edits remain allowed. Immutable snapshot files are
+  also made read-only when finalized or activated, so a legacy raw Graphify
+  hook cannot follow a compatibility symlink and rewrite a content-addressed
+  artifact in place; if that legacy writer replaces only an ignored root alias
+  with a regular generated file, the next CAS activation safely reclaims the
+  exact compatibility pathname. — Codex (AI), 2026-08-27
 - **Graphify snapshot activation now repairs dangling compatibility aliases**:
   deleting a stale snapshot leaves its ignored root symlink present even though
   ordinary existence checks report it missing. The trusted router now inspects

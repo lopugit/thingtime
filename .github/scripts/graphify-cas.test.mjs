@@ -1,13 +1,16 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn } from "node:child_process"
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   readlinkSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -56,6 +59,32 @@ function writeOutput(root, name, nodeCount) {
     `${JSON.stringify({ directed: false, multigraph: false, graph: {}, nodes, links: [] })}\n`,
   )
   writeFileSync(path.join(output, "manifest.json"), "{}\n")
+  writeFileSync(path.join(output, "GRAPH_REPORT.md"), `# ${name}\n`)
+  return output
+}
+
+function writeDetailedOutput(root, name, files) {
+  const output = path.join(root, "graphify-out", ".work", name)
+  mkdirSync(output, { recursive: true })
+  const nodes = []
+  const manifest = {}
+  for (const [sourceFile, details] of Object.entries(files)) {
+    for (let index = 0; index < details.nodes; index += 1) {
+      nodes.push({ id: `${sourceFile}-${index}`, source_file: sourceFile })
+    }
+    manifest[sourceFile] = {
+      ast_hash: details.astHash ?? `${sourceFile}-ast`,
+      semantic_hash: details.semanticHash ?? `${sourceFile}-semantic`,
+    }
+  }
+  writeFileSync(
+    path.join(output, "graph.json"),
+    `${JSON.stringify({ directed: false, multigraph: false, graph: {}, nodes, links: [] })}\n`,
+  )
+  writeFileSync(
+    path.join(output, "manifest.json"),
+    `${JSON.stringify(manifest)}\n`,
+  )
   writeFileSync(path.join(output, "GRAPH_REPORT.md"), `# ${name}\n`)
   return output
 }
@@ -137,6 +166,90 @@ test("a large graph collapse requires an explicit force decision", () => {
   }
 })
 
+test("an unchanged file cannot silently lose multiple symbols", () => {
+  const root = fixture()
+  try {
+    const fingerprint = computeSourceFingerprint(root)
+    finalizeSnapshot(
+      root,
+      writeDetailedOutput(root, "per-file-baseline", {
+        "unchanged.ts": { nodes: 4 },
+        "other.ts": { nodes: 1 },
+      }),
+      { ...fingerprint, version: "graphify test" },
+    )
+
+    assert.throws(
+      () =>
+        finalizeSnapshot(
+          root,
+          writeDetailedOutput(root, "per-file-poisoned", {
+            "unchanged.ts": { nodes: 1 },
+            "other.ts": { nodes: 6 },
+          }),
+          { ...fingerprint, version: "graphify test" },
+        ),
+      /Graphify output dropped symbols for unchanged files: unchanged\.ts \(4 -> 1 nodes\)/,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("one-node extractor jitter remains publishable", () => {
+  const root = fixture()
+  try {
+    const fingerprint = computeSourceFingerprint(root)
+    finalizeSnapshot(
+      root,
+      writeDetailedOutput(root, "jitter-baseline", {
+        "unchanged.ts": { nodes: 4 },
+        "other.ts": { nodes: 1 },
+      }),
+      { ...fingerprint, version: "graphify test" },
+    )
+    const candidate = finalizeSnapshot(
+      root,
+      writeDetailedOutput(root, "jitter-candidate", {
+        "unchanged.ts": { nodes: 3 },
+        "other.ts": { nodes: 2 },
+      }),
+      { ...fingerprint, version: "graphify test" },
+    )
+
+    assert.ok(candidate)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("a changed manifest hash permits a legitimate per-file reduction", () => {
+  const root = fixture()
+  try {
+    const fingerprint = computeSourceFingerprint(root)
+    finalizeSnapshot(
+      root,
+      writeDetailedOutput(root, "changed-baseline", {
+        "changed.ts": { nodes: 4, astHash: "before" },
+        "other.ts": { nodes: 1 },
+      }),
+      { ...fingerprint, version: "graphify test" },
+    )
+    const candidate = finalizeSnapshot(
+      root,
+      writeDetailedOutput(root, "changed-candidate", {
+        "changed.ts": { nodes: 1, astHash: "after" },
+        "other.ts": { nodes: 4 },
+      }),
+      { ...fingerprint, version: "graphify test" },
+    )
+
+    assert.ok(candidate)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("byte-identical output deduplicates to one snapshot", () => {
   const root = fixture()
   try {
@@ -180,6 +293,7 @@ test("an existing artifact path rejects changed portable bytes", () => {
       ...fingerprint,
       version: "graphify test",
     })
+    chmodSync(path.join(snapshot.path, "graph.json"), 0o644)
     writeFileSync(
       path.join(snapshot.path, "graph.json"),
       '{"directed":false,"multigraph":false,"graph":{},"nodes":[],"links":[]}\n',
@@ -252,6 +366,7 @@ test("activation replaces a dangling compatibility alias", () => {
       version: "graphify test",
     })
     activateSnapshot(root, first)
+    assert.equal(statSync(path.join(first.path, "graph.json")).mode & 0o222, 0)
     const alias = path.join(root, "graphify-out/graph.json")
     rmSync(first.path, { recursive: true, force: true })
     assert.equal(existsSync(alias), false)
@@ -264,6 +379,32 @@ test("activation replaces a dangling compatibility alias", () => {
     assert.equal(
       path.resolve(path.dirname(alias), readlinkSync(alias)),
       path.join(second.path, "graph.json"),
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("activation reclaims an untracked regular compatibility alias", () => {
+  const root = fixture()
+  try {
+    git(root, ["rm", "-q", "graphify-out/graph.json"])
+    git(root, ["commit", "-qm", "remove legacy graph"])
+    const fingerprint = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(
+      root,
+      writeOutput(root, "regular-alias", 2),
+      { ...fingerprint, version: "graphify test" },
+    )
+    const alias = path.join(root, "graphify-out", "graph.json")
+    writeFileSync(alias, "legacy generated output\n")
+
+    activateSnapshot(root, snapshot)
+
+    assert.equal(lstatSync(alias).isSymbolicLink(), true)
+    assert.equal(
+      path.resolve(path.dirname(alias), readlinkSync(alias)),
+      path.join(snapshot.path, "graph.json"),
     )
   } finally {
     rmSync(root, { recursive: true, force: true })
