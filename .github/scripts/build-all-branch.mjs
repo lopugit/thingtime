@@ -501,7 +501,10 @@ function mergeRefOnce(ref, message) {
   }
   const shown = singleLine(resolvedPaths.slice(0, 8).join(", "), 200);
   return {
-    result: `auto-resolved theirs (${resolvedPaths.length} paths: ${shown}${resolvedPaths.length > 8 ? ", …" : ""})`,
+    result:
+      resolvedPaths.length === 0
+        ? "pinned generated Graphify state"
+        : `auto-resolved theirs (${resolvedPaths.length} paths: ${shown}${resolvedPaths.length > 8 ? ", …" : ""}); pinned generated Graphify state`,
   };
 }
 
