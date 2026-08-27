@@ -1228,6 +1228,10 @@ jobs:
           ref: ${{ steps.context.outputs.head_sha }}
           path: repo
           fetch-depth: 0
+          # The rebase needs complete commit ancestry, not every historical
+          # blob in this multi-gigabyte repository. Missing current/replayed
+          # blobs are fetched lazily by Git as their commits are checked out.
+          filter: blob:none
           persist-credentials: false
           set-safe-directory: false
 
