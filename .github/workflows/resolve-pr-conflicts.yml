@@ -3261,7 +3261,7 @@ jobs:
               git -C "$worktree" commit -m 'chore(lopu): apply repository review improvements'
             fi
             local_head="$(git -C "$worktree" rev-parse HEAD)"
-            remote_head="$(gh api "repos/$REPO/git/ref/heads/$(jq -rn --arg value "$head" '$value | @uri')" --jq '.object.sha')"
+            remote_head="$(gh api "repos/$REPO/git/ref/heads/$head" --jq '.object.sha')"
             outcome='no-change'
             if [ "$remote_head" = "$local_head" ]; then
               if [ "$local_head" != "$initial_head" ]; then outcome='already-published'; fi

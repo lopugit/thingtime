@@ -1228,6 +1228,16 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /internal_worker: >-/);
   assert.match(resolver, /routing_proof:\$routing_proof/);
   assert.match(resolver, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  assert.match(
+    resolver,
+    /remote_head="\$\(gh api "repos\/\$REPO\/git\/ref\/heads\/\$head" --jq '\.object\.sha'\)"/u,
+    "repository review publishers look up slash-containing branch refs without double-encoding them",
+  );
+  assert.doesNotMatch(
+    resolver,
+    /git\/ref\/heads\/\$\(jq[^\n]*@uri/u,
+    "repository review publishers never pass a pre-encoded branch ref through gh api",
+  );
   assert.match(resolver, /maintain_develop_promotion:/);
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
