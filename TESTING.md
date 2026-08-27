@@ -6,6 +6,25 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## ChatGPT / Codex MCP connector
+
+- [ ] `GET /.well-known/oauth-protected-resource`, `GET
+    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      manifest return the deployed HTTPS origin and the MCP path exactly.
+- [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
+      page works at desktop and a 390px mobile viewport, requires `resource`,
+      state, and S256 PKCE, and never reflects a personal access token in the
+      redirect or an error page.
+- [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
+      list/select them in ChatGPT and verify reads use the selected account.
+      An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
+      authorization code, altered callback/resource, or altered verifier must
+      fail closed.
+- [ ] Confirm a read/search tool succeeds with `things.read`, while each write
+      tool asks for ChatGPT confirmation and the target API rejects a PAT that
+      lacks its exact Things scope. Disconnecting an account removes its bridge
+      access; removing the last account revokes the ChatGPT bridge session.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
@@ -154,8 +173,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
-      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
-      staged at root, and invalid source output preserves the prior artifact.
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -169,6 +190,27 @@ is fixed, and cite the checklist you ran in the PR description.
       config must map `github-actions` to `false`, while the thin branch config
       must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
       a second fail-safe.
+
+## Lopu CodeQL all-branch listener
+
+- [ ] Open or update PRs targeting `main`, `develop`, `github-actions`, and an
+      older feature branch without the current listener. Confirm normal
+      `pull_request` runs own targets that carry the listener, while the
+      default-branch `pull_request_target` run performs only the protected
+      metadata handoff for missing listeners. Confirm no target-context job
+      checks out PR code, no redundant analyzer cancels an in-flight scan, and
+      both language contexts finish green for the latest immutable snapshot.
+
+## Lopu wildcard `all`-branch maintenance
+
+- [ ] Run `node remix/scripts/workflow-caller-contract.mjs` and confirm product
+      branches contain no `.github/workflows/all-branch.yml` or rebase-specific
+      listener. Push `develop` and `main`, exercise every PR lifecycle transition
+      including draft and close, wait for the `53 * * * *` backstop, and invoke
+      the `build-all` and `backfill-codeql` maintenance choices manually. Every
+      path must appear under **Lopu PR manager**, call the corresponding
+      protected implementation, and keep at most one model-backed Lopu job
+      active without cancelling it.
 
 ## Develop-target Vercel PR previews
 
@@ -253,6 +295,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
@@ -830,6 +876,16 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
+- [ ] MODERATION/PERMALINK: when comment moderation is temporarily pending,
+      the comment author still sees the new standalone comment and its count
+      after reloading `/post/:id`; another viewer does not see it until it is
+      released. The permalink projection and `GET ?target=…&thingtime=comment`
+      listing must agree (regression: the batch post projection filtered every
+      pending child, including the owner's own comment, and rendered zero).
+- [ ] COUNT LAYERS: a post with direct comments plus nested replies reports
+      viewer-relative `commentCounts.direct`, `replies`, `total`, and `loaded`;
+      legacy `commentCount` equals `total`. A viewer excluded from a comment
+      layer never learns that hidden row through any count.
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
       the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
       Comment rows mirror the pattern — reply icon then react control inline
@@ -926,6 +982,13 @@ is fixed, and cite the checklist you ran in the PR description.
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
+
+- [ ] On the landing page and a short authenticated route, scroll from top to
+      bottom at desktop and 375px widths. The shared footer follows content
+      with ordinary visual spacing, not a large blank/dead-scroll region; its
+      links and controls remain reachable without horizontal overflow.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
@@ -1001,6 +1064,17 @@ is fixed, and cite the checklist you ran in the PR description.
       namespace. The active rebuild must finish without cancellation while
       only one newest not-yet-started union snapshot waits for the shared Lopu
       fleet slot.
+- [ ] Push a new commit to an older open PR whose head branch does not contain
+      the current Lopu push listener, including one targeting a non-default
+      branch. Confirm the default-branch `pull_request_target: synchronize`
+      listener dispatches that exact PR to the protected controller, duplicate
+      push/target signals collapse to one live snapshot, and the repository
+      fleet still runs no more than one model-backed Lopu job at a time.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu
+      listener — the `53 * * * *` backstop and a manual `build-all` dispatch.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
 - [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
       manager** run containing the standing-promotion and per-feature-promotion
       reusable jobs, with no separate **Promote develop to main** or **Promote
@@ -1208,24 +1282,41 @@ is fixed, and cite the checklist you ran in the PR description.
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
-      returns the public key, ordered waterfall, and curated model catalog;
-      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
-      admin can save a valid reordered waterfall.
+      returns the public key, ordered waterfall, and the base-model catalog
+      with per-model `provider`, `efforts`, and `speeds`; `POST` returns 401.
+      A signed-in non-admin `POST` returns 403, while an admin can save a
+      valid reordered waterfall.
 - [ ] Settings → Admin paints the last-known waterfall immediately, then
-      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
-      dedicated handle, use the Up/Down controls, remove a non-default row,
-      save, reload, and confirm the exact order persists. `default` stays
-      present and cannot be removed.
+      reconciles in the background. Via the Add-fallback picker, add a Claude
+      model with an explicit effort, an OpenAI model with effort + Fast, and
+      at least five total entries (more than the historical 3-entry cap);
+      drag a row by its dedicated handle, use the Up/Down controls, remove a
+      non-default row, save, reload, and confirm the exact order persists.
+      `default` stays present and cannot be removed. The effort select only
+      offers that model's tiers and the speed select only appears for models
+      with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
-      bottom of `/settings`: model names, Max-effort badges, handles, fallback
-      copy, and save/add/remove controls never clip, overlap, or create
-      horizontal scrolling.
-- [ ] Resolver workflow config parsing accepts only `default`,
-      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
-      appends `default` defensively. An unavailable endpoint, malformed JSON,
-      duplicate/unknown model, wrong key, or empty array emits a warning and
-      selects only `--model default`; no stored value can inject another CLI
-      flag.
+      bottom of `/settings`: model names, provider/effort/speed subtitles,
+      handles, the add-fallback picker row, and save/add/remove controls
+      never clip, overlap, or create horizontal scrolling.
+- [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
+      efforts a model does not support, `fast` on a model without a fast
+      lane, and duplicate segments are rejected on write; reads drop unknown
+      entries without discarding the rest of the order and always keep
+      `default` present.
+- [ ] Resolver workflow config parsing in the `github-actions` control plane
+      (PR #391) validates the widened-but-closed grammar: unique 1..256
+      entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
+      model/effort/fast segments. Claude Code runs `default` plus `claude-*`
+      bases (rebuilt from the closed pattern, variants collapse to one CLI
+      slot per base); OpenAI entries are skipped with a log line; the
+      primary entry's effort becomes the session `--effort` (default max)
+      and fast mode is logged as not applied headless. Malformed JSON,
+      unknown/duplicate/empty segments, oversized arrays, or an unavailable
+      endpoint fail closed to `--model default --effort max` with a warning;
+      `default` is appended defensively and no stored value can inject
+      another CLI flag. Control planes predating PR #391 fail closed to
+      `[default]` for any non-legacy entry.
 - [ ] Save a new Admin order, then issue GETs through separate warm app
       instances immediately (no 15-second wait): both must read the new
       home-DB value. With Mongo unavailable, a warm instance may return its
@@ -1240,26 +1331,47 @@ is fixed, and cite the checklist you ran in the PR description.
     --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
-      Anthropic request uses the same current Admin primary. Reorder from Opus
-      to Fable without restarting the app; the next musing must use Fable.
+      Anthropic request uses the first Anthropic-capable Admin entry — model
+      plus any explicit effort (`output_config.effort`) and fast mode.
+      Reorder from Opus to Fable without restarting the app; the next musing
+      must use Fable. An OpenAI entry ordered above the Claude entry must not
+      change the Anthropic request.
 - [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
       use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
-      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
-      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
-      Claude, that Claude call must still resolve the current Admin preference.
+      literal Claude Code `default` sentinel to Anthropic. With
+      `LOPU_PROVIDER=openai` and an OpenAI entry configured, the OpenAI call
+      must use that entry's model/`reasoning_effort`/priority tier; with no
+      OpenAI entry above `default` it must retain `LOPU_OPENAI_MODEL`. If it
+      falls through to Claude, that Claude call must still resolve the
+      current Admin preference. A rejected effort/fast knob retries once bare
+      on the same model before the provider is skipped.
+- [ ] Musing requests budget for reasoning: the OpenAI call sends
+      `max_completion_tokens` and never the deprecated `max_tokens` (o-series
+      and GPT-5 models reject it), and both providers leave enough output
+      headroom that a high/max-effort entry still streams visible text. Put a
+      reasoning entry first and confirm a real musing arrives, not an empty
+      one. If a decorated attempt finishes without a single text delta, it
+      must retry once bare on the same model before falling through to the
+      next provider and then the canned library — never emit a blank provider
+      meta event or render a blank message. Run `npm --prefix remix run
+      test:lopu-streaming` to exercise both provider request bodies and every
+      starvation/fallback transition with local SSE doubles.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
 
-## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+## Lopu internal PR/stack rebase engine (protected `github-actions` implementation)
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
       rebase, and stack detection. Product branches must contain no
       `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
-      rebase repository-dispatch events, while the protected rebase engine is
-      `workflow_call`-only and cannot create a competing public run.
+      rebase repository-dispatch events, so `rebase-pr-stack-ai` reaches the
+      protected engine only through that one listener's `repository_dispatch`.
+      The protected rebase engine is `workflow_call`-only and cannot create a
+      competing public run that later gets cancelled by Lopu's embedded rebase
+      lane.
 - [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
       disabled), feature promotion, standing promotion, and main/develop sync.
       Confirm each audit record names `resolve-pr-conflicts.yml`, the request
@@ -1271,9 +1383,9 @@ is fixed, and cite the checklist you ran in the PR description.
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only Lopu's base-merge lane owns it. Regression class:
-      standalone replay failures were incorrectly force-rebased and could
-      ping-pong with a merge-resolver update.
+      confirm only the **Lopu PR manager** base-merge lane owns it. Regression
+      class: standalone replay failures were incorrectly force-rebased and
+      could ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf

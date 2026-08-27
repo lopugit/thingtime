@@ -114,10 +114,11 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  # The protected controller keeps CodeQL inspection read-only in its model
-  # job and isolates dispositions in a separately fenced writer. Reusable
-  # workflows still cannot request either permission unless the thin caller
-  # grants the maximum required level up front.
+  # The called controller narrows this per job: CodeQL inspection stays
+  # read-only in its model job and only the separately fenced disposition job
+  # may close or dismiss alerts. Reusable workflows still cannot request either
+  # permission unless the thin caller grants the maximum required level up
+  # front.
   security-events: write
 
 jobs:
