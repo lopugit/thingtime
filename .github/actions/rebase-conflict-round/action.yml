@@ -985,6 +985,9 @@ runs:
               find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
+              printf '%s\0' \
+                .github/scripts/graphify-cas.mjs \
+                .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
         }
@@ -1007,11 +1010,11 @@ runs:
         esac
 
         safe_hash="$(hash_trusted_tree "$safe_trusted_abs")"
-        clear_workspace "$workspace_abs"
         [[ "$safe_hash" == "$EXPECTED_TRUSTED_SHA256" ]] || {
-          echo "::error::Trusted round copy changed; scratch was wiped but action was not restored."
+          echo "::error::Trusted round copy changed; workspace was preserved and the next action round will not run."
           exit 1
         }
+        clear_workspace "$workspace_abs"
 
         restored="$workspace_abs/trusted"
         mkdir -p \
