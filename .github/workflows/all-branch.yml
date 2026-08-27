@@ -241,7 +241,7 @@ jobs:
             elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
               model="${BASH_REMATCH[0]}"
             else
-              echo "Skipping non-Claude waterfall entry '$id'; it configures that provider's own consumers."
+              echo "Skipping waterfall entry '$id'; this Claude Code chain cannot run it."
               continue
             fi
             duplicate=0
@@ -286,6 +286,14 @@ jobs:
             model_args="$model_args --fallback-model $fallbacks"
           fi
           model_args="$model_args --effort $claude_effort"
+          # Fail closed at the loader if the chain exceeds the 2048-character
+          # transport cap enforced downstream, instead of erroring after work.
+          if [ "${#model_args}" -gt 2048 ]; then
+            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
+            models=("default")
+            claude_effort="max"
+            model_args="--model ${models[0]} --effort $claude_effort"
+          fi
 
           echo "Model waterfall source: $source"
           echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}") · effort $claude_effort"

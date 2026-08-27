@@ -2285,7 +2285,7 @@ jobs:
             elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
               model="${BASH_REMATCH[0]}"
             else
-              echo "Skipping non-Claude waterfall entry '$id'; it configures that provider's own consumers."
+              echo "Skipping waterfall entry '$id'; this Claude Code chain cannot run it."
               continue
             fi
             duplicate=0
@@ -2349,6 +2349,17 @@ jobs:
             model_args="$model_args --fallback-model $fallbacks"
           fi
           model_args="$model_args --effort $claude_effort"
+          # An oversized chain would otherwise only hard-fail downstream AFTER
+          # the resolution work is done (the promotion publish step caps
+          # model_args at 2048 characters); fail closed at the loader instead.
+          if [ "${#model_args}" -gt 2048 ]; then
+            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
+            models=("default")
+            primary="default"
+            claude_effort="max"
+            backend_label="Claude Code default"
+            model_args="--model $primary --effort $claude_effort"
+          fi
 
           echo "Model waterfall source: $source"
           echo "Lopu backend model waterfall (Claude Code): $(IFS=,; echo "${models[*]}") · effort $claude_effort"
