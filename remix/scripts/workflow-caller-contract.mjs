@@ -52,7 +52,7 @@ assert.ok(codeqlTriggersEnd > 0, 'codeql-analysis.yml must retain its trigger bl
 const codeqlTriggers = codeqlCaller.slice(0, codeqlTriggersEnd);
 assert.doesNotMatch(codeqlCaller, /^\s+runs-on:|^\s+steps:|^\s+run:/m, 'CodeQL listener must remain executable-code-free');
 assert.doesNotMatch(codeqlCaller, /\.github\/(?:actions|scripts)\//, 'CodeQL listener must not reference product-branch behavior files');
-assert.equal((codeqlCaller.match(/^\s+uses:/gm) ?? []).length, 2, 'CodeQL listener must contain exactly the analyzer and target-handoff calls');
+assert.equal((codeqlCaller.match(/^\s+uses:/gm) ?? []).length, 2, 'CodeQL listener must have exactly one analysis call and one target-event handoff call');
 assert.match(
   codeqlCaller,
   /^\s{4}uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
@@ -89,8 +89,18 @@ assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must 
 assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit only the target handoff to dispatch an unprivileged scan');
 assert.match(
   codeqlCaller,
-  /^  target-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
+  /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
   'the target-event token must never reach the analyzer job'
+);
+assert.match(
+  codeqlCaller,
+  /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
+  'CodeQL target events must call the isolated protected metadata handoff'
+);
+assert.match(
+  codeqlCaller,
+  /^  control-plane:\n    if: github\.event_name != 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-analysis\.yml@github-actions$/m,
+  'read-capped PR events must call only the unprivileged CodeQL analyzer'
 );
 assert.match(
   codeqlCaller,
@@ -151,6 +161,11 @@ assert.match(
 );
 assert.match(
   resolverTriggers,
+  /^  repository_dispatch:\n(?:    #.*\n)*    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
+  'Lopu must receive exact stack workers without a second public rebase listener'
+);
+assert.match(
+  resolverTriggers,
   /^    - cron: "43 \*\/6 \* \* \*"$/m,
   'Lopu must own the former feature-promotion maintenance schedule'
 );
@@ -177,6 +192,11 @@ for (const input of [
     `the public Lopu caller must forward ${input} to the protected controller`
   );
 }
+assert.match(
+  resolverCaller,
+  /^      rebase_cascade: \$\{\{ github\.event_name != 'workflow_dispatch' \|\| inputs\.rebase_cascade \}\}$/m,
+  'automatic Lopu events cascade stacks while an explicit CI Control retry may opt out'
+);
 
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
@@ -259,4 +279,4 @@ assert.deepEqual(
   'product branches must not retain local Actions scripts; the develop-preview controller lives on github-actions'
 );
 
-console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);
+console.log(`workflow caller contract: ${callers.length + 1} thin listeners pinned to github-actions`);
