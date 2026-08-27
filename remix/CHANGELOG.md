@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The retired `Build all branch` product listener stays retired**: the
+  main-into-develop merge that carried #397 back into `develop` resurrected
+  `.github/workflows/all-branch.yml` after it had already been deleted, so
+  `develop` ran a second automatic principal listener whose `push`,
+  `pull_request_target`, and `53 * * * *` triggers all duplicate Lopu's
+  `handoff_all_branch_event` lane. Deleting the caller again restores the
+  documented single-manager topology; the protected `workflow_call`-only
+  implementation on `github-actions` is untouched and still reached through
+  Lopu's `maintain_all_branch` job. — Lopu, 2026-08-27
 - **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
   app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
   tool scanning, draft testing from the tools menu/@mentions, publication,
@@ -190,13 +199,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   implementation. Bursty PR/push events therefore remain queued instead of
   cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
   (AI), 2026-08-25
-- **CI Control repository maintenance now dispatches the unified Lopu
-  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
-  operation keys translate to typed `Lopu PR manager` inputs instead of naming
-  retired workflow files. Rebase cascade and promotion dry-run/lookback values
-  remain intact for GitHub-hosted and Vercel-routed runs. The last product
-  rebase listener is removed; exact stack workers enter Lopu and then invoke
-  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
 - **Lopu is the only automatic promotion and branch-sync entrypoint**: the
   three product-branch workflows that separately promoted develop, promoted
   features, and synchronized main into develop are removed. Their protected
