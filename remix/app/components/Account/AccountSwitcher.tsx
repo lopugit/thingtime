@@ -7,7 +7,10 @@ import { Login } from '../Login/Login';
 import { Register } from '../Login/Register';
 import { useAccountSwitcher } from './useAccountSwitcher';
 import type { SwitcherAccount, SwitcherAccountUser } from './useAccountSwitcher';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useApi } from '~/hooks/useApi';
 import { RAINBOW } from '~/theme/rainbow';
+import { getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
 // Account switcher: every account signed in to this browser, click-to-switch,
 // per-account sign-out, plus "Add account" (login) and "Register new" (fresh
@@ -21,7 +24,7 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
     return (
       <Image
         src={user.avatarUrl}
-        alt={user.displayName || user.username}
+        alt={getUserDisplayName(user)}
         width="32px"
         height="32px"
         borderRadius="999px"
@@ -32,7 +35,7 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
     );
   }
 
-  const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
+  const initial = getUserDisplayName(user).trim().charAt(0).toUpperCase();
 
   return (
     <Center
@@ -52,14 +55,69 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
   );
 };
 
+type OwnedAccount = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  temporary?: boolean;
+  avatarUrl?: string | null;
+  accountKind: 'user' | 'service';
+};
+
+const OWNED_CACHE_KEY = 'tt-owned-accounts';
+
 export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
   const { onNavigate } = props;
 
   const navigate = useNavigate();
+  const api = useApi();
   const { accounts, loading, busyUserId, refresh, switchTo, removeAccount, logoutActive } = useAccountSwitcher();
 
   const [mode, setMode] = React.useState<null | 'login' | 'register'>(null);
   const [loggingOutAll, setLoggingOutAll] = React.useState(false);
+
+  // Owned accounts (admin-assigned 'account' links): painted from cache
+  // instantly (optimistic-rendering house rule), refreshed in the background.
+  // Assuming one mints a fresh session server-side and folds it into this
+  // browser's roster — no credentials involved.
+  const [owned, setOwned] = React.useState<OwnedAccount[]>(() => readLocalCache<OwnedAccount[]>(OWNED_CACHE_KEY) ?? []);
+  const [assumingId, setAssumingId] = React.useState<string | null>(null);
+  const apiRef = React.useRef(api);
+  apiRef.current = api;
+  const signedIn = accounts.some((account) => account.active);
+
+  React.useEffect(() => {
+    if (!signedIn) return;
+    let cancelled = false;
+    apiRef.current.v1.auth.accounts
+      .owned()
+      .then((resp: any) => {
+        if (cancelled || !resp?.ok) return;
+        setOwned(resp.accounts);
+        writeLocalCache(OWNED_CACHE_KEY, resp.accounts);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [signedIn]);
+
+  const rosterIds = new Set(accounts.map((account) => account.user.id));
+  const assumable = signedIn ? owned.filter((account) => !rosterIds.has(account.id)) : [];
+
+  const handleAssume = async (account: OwnedAccount) => {
+    if (assumingId) return;
+    setAssumingId(account.id);
+    try {
+      const resp: any = await api.v1.auth.accounts.assume({ accountId: account.id });
+      if (resp?.ok) refresh();
+    } catch {
+      // surfaced by the roster staying unchanged; the admin may have removed
+      // the link since this list was cached
+    } finally {
+      setAssumingId(null);
+    }
+  };
 
   const handleSwitch = async (account: SwitcherAccount) => {
     if (account.active || busyUserId) return;
@@ -129,7 +187,7 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
               key={account.user.id}
               role={account.active ? 'group' : 'button'}
               tabIndex={account.active ? undefined : 0}
-              aria-label={account.active ? undefined : `Switch to @${account.user.username}`}
+              aria-label={account.active ? undefined : `Switch to ${getUserMention(account.user)}`}
               alignItems="center"
               columnGap={3}
               padding={2}
@@ -145,16 +203,16 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                   handleSwitch(account);
                 }
               }}
-              title={account.active ? 'Active account' : `Switch to @${account.user.username}`}
+              title={account.active ? 'Active account' : `Switch to ${getUserMention(account.user)}`}
             >
               <RowAvatar user={account.user} />
               <Box minWidth={0} flex="1 1 auto">
                 <Text fontSize="sm" fontWeight={600} noOfLines={1}>
-                  {account.user.displayName || account.user.username}
+                  {getUserDisplayName(account.user)}
                 </Text>
                 <Text fontSize="xs" opacity={0.6} noOfLines={1}>
-                  @{account.user.username}
-                  {account.active && account.user.email
+                  {getUserIdentityDetail(account.user)}
+                  {account.active && !account.user.temporary && account.user.email
                     ? ` · ${account.user.email} ${account.user.emailVerified ? '✅' : '· ✉️ unverified'}`
                     : ''}
                 </Text>
@@ -176,12 +234,61 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                 opacity={0.35}
                 _hover={{ opacity: 1, background: 'var(--tt-surface-hover, rgba(0,0,0,0.05))' }}
                 cursor="pointer"
-                aria-label={`Sign @${account.user.username} out`}
-                title={`Sign @${account.user.username} out`}
+                aria-label={`Sign ${getUserMention(account.user)} out`}
+                title={`Sign ${getUserMention(account.user)} out`}
                 onClick={(event) => handleRemove(event, account)}
               >
                 <X size={13} strokeWidth={2} />
               </Center>
+            </Flex>
+          ))}
+        </Flex>
+      )}
+
+      {assumable.length > 0 && (
+        <Flex flexDirection="column" rowGap={1}>
+          <Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
+            Owned accounts
+          </Text>
+          {assumable.map((account) => (
+            <Flex
+              key={account.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Sign in as ${getUserMention(account)}`}
+              alignItems="center"
+              columnGap={3}
+              padding={2}
+              borderRadius="var(--tt-radius-sm, 9px)"
+              cursor="pointer"
+              transition="background 150ms ease"
+              _hover={{ background: 'var(--tt-surface-hover, var(--tt-surface-alt, #f5f5f7))' }}
+              onClick={() => handleAssume(account)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleAssume(account);
+                }
+              }}
+              title={`Sign in as ${getUserMention(account)} (no password needed — you own this account)`}
+            >
+              <RowAvatar user={account as SwitcherAccountUser} />
+              <Box minWidth={0} flex="1 1 auto">
+                <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+                  {getUserDisplayName(account)}
+                </Text>
+                <Text fontSize="xs" opacity={0.6} noOfLines={1}>
+                  {getUserIdentityDetail(account)}
+                  {account.accountKind === 'service' ? ' · 🤖 service' : ''}
+                </Text>
+              </Box>
+              {assumingId === account.id ? (
+                <Spinner size="xs" flexShrink={0} />
+              ) : (
+                <Text fontSize="xs" opacity={0.5} flexShrink={0}>
+                  Sign in →
+                </Text>
+              )}
             </Flex>
           ))}
         </Flex>

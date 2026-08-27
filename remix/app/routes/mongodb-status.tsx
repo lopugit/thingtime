@@ -1,6 +1,7 @@
 import { Badge, Box, Button, Container, Divider, Flex, Heading, Text } from '@chakra-ui/react';
 import { useLoaderData, useRevalidator } from 'react-router';
 import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
+import { MongoEndpointConfig } from '~/components/MongoDB/MongoEndpointConfig';
 
 const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <Flex justifyContent="space-between" columnGap={6} py={2}>
@@ -40,16 +41,23 @@ export default function MongoStatusPage() {
           <Heading size="lg">MongoDB Connection Status</Heading>
         </Flex>
 
-        <Badge
-          alignSelf="flex-start"
-          colorScheme={connected ? 'green' : 'red'}
-          fontSize="md"
-          px={3}
-          py={1}
-          borderRadius="md"
-        >
-          {connected ? 'Connected' : 'Disconnected'}
-        </Badge>
+        <Flex columnGap={2}>
+          <Badge
+            alignSelf="flex-start"
+            colorScheme={connected ? 'green' : 'red'}
+            fontSize="md"
+            px={3}
+            py={1}
+            borderRadius="md"
+          >
+            {connected ? 'Connected' : 'Disconnected'}
+          </Badge>
+          {status.custom && (
+            <Badge alignSelf="flex-start" colorScheme="purple" fontSize="md" px={3} py={1} borderRadius="md">
+              Custom endpoint
+            </Badge>
+          )}
+        </Flex>
 
         <Text color="var(--tt-muted, #718096)" fontSize="sm">
           This page checks the live MongoDB connection through the Thingtime API
@@ -88,6 +96,10 @@ export default function MongoStatusPage() {
             Re-check connection
           </Button>
         </Flex>
+
+        <Divider />
+
+        <MongoEndpointConfig />
       </Flex>
     </Container>
   );

@@ -8,3 +8,7 @@
 /remix/dist/**
 /remix/server/assets/
 /remix/server/assets/**
+
+# Root agent aliases resolve to AI_ALL.md; index the canonical file once.
+/AGENTS.md
+/CLAUDE.md

@@ -4,7 +4,10 @@ import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
+import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -66,6 +69,45 @@ const rewriteProxyCookieForLocalDev = (cookie: string) => {
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
 const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
 const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
+const previewFreshnessPath = '/tt-preview-freshness.js';
+const previewFreshnessScript = '(' + installPreviewBuildFreshness.toString() + ')();\n';
+
+const previewFreshnessHtmlPlugin = (): Plugin => ({
+  name: 'thingtime-preview-freshness-bootstrap',
+  enforce: 'pre' as const,
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== previewFreshnessPath) {
+        next();
+        return;
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end(previewFreshnessScript);
+    });
+  },
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: previewFreshnessPath.slice(1),
+      source: previewFreshnessScript
+    });
+  },
+  transformIndexHtml() {
+    return [
+      {
+        tag: 'script',
+        attrs: {
+          src: previewFreshnessPath,
+          'data-thingtime-preview-freshness': ''
+        },
+        injectTo: 'head-prepend' as const
+      }
+    ];
+  }
+});
 
 const designDocsStaticPlugin = () => ({
   name: 'thingtime-design-docs-static',
@@ -124,6 +166,11 @@ const designDocsStaticPlugin = () => ({
 
       res.statusCode = 200;
       res.setHeader('Cache-Control', 'no-cache');
+      // Repo-controlled generated prototypes compile their Design Components
+      // at runtime. Keep that compatibility exception on this path only; the
+      // application shell continues to use devCsp without unsafe-eval.
+      res.setHeader('Content-Security-Policy', designBundlesCsp);
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Length', String(stats.size));
       res.setHeader('Content-Type', mimeTypes[extname(filePath)] || 'application/octet-stream');
       createReadStream(filePath).pipe(res);
@@ -146,6 +193,12 @@ export default defineConfig({
     host: '127.0.0.1',
     port: devPorts.web,
     strictPort: true,
+    // Same CSP as production (scripts/csp.mjs) with dev-only allowances
+    // (react-refresh inline preamble, HMR websocket) — and still no
+    // 'unsafe-eval', so eval regressions surface in dev too.
+    headers: {
+      'Content-Security-Policy': devCsp
+    },
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
       port: devPorts.hmr
@@ -155,7 +208,24 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
         configure(proxy) {
-          if (!shouldUseProductionApiProxy) return;
+          if (!shouldUseProductionApiProxy) {
+            // changeOrigin rewrites Host to the nitro API port, hiding the
+            // origin the browser is actually on. Forward the real host the way
+            // Vercel's edge does (x-forwarded-*): statusTarget's
+            // getRequestOrigin() honours these, which keeps "Current Tab"
+            // health checks classified LOCAL — answered in the request's own
+            // cookie/session context (the footer's "MongoDB (custom)"
+            // indicator depends on this) instead of re-fetched cookielessly.
+            // An upstream proxy's x-forwarded-* (e.g. Tailscale funnel) wins.
+            proxy.on('proxyReq', (proxyReq, req) => {
+              const host = req.headers.host;
+              if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+              proxyReq.setHeader('x-forwarded-host', host);
+              const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+              proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+            });
+            return;
+          }
 
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');
@@ -173,5 +243,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react(), designDocsStaticPlugin()]
+  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin()]
 });

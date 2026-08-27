@@ -1,19 +1,32 @@
 import React from 'react';
-import { Box, Button, Flex, Image, Input, Switch, Text, Textarea } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { NotificationSettingsSection } from './NotificationSettings';
+import { PasskeysManager } from './PasskeysManager';
+import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
+import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
-import { ColorControl } from '~/components/ThemeSettings/controls';
-import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
+import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import type { CurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
+import {
+	profileMediaUpdateFields,
+	profileSaveErrorMessage,
+	preservedProfileMediaSnapshot,
+	type ProfileMediaFieldSnapshot
+} from '~/components/Profile/profileMediaCore';
+import { LOGIN_TO_CLAIM_LABEL, getUserMention } from '~/utils/userIdentity';
 
 // The dedicated /settings page: account, profile, feed algorithms, appearance
 // and drawer preferences in stacked section cards. Fully usable logged out
@@ -21,6 +34,75 @@ import { RAINBOW_TEXT } from '~/theme/rainbow';
 // are local-first and always work).
 
 const BIO_MAX = 500;
+
+const formatStorageBytes = (bytes: number): string => {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+	let value = bytes;
+	let unit = -1;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit += 1;
+	}
+	return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unit]}`;
+};
+
+const AccountStorageSummary = (props: { user: NonNullable<CurrentUser> }) => {
+	const { storage } = props.user;
+	const percent =
+		storage.status === 'unavailable' || storage.usedBytes === null || storage.allowanceBytes === null || storage.allowanceBytes <= 0
+			? null
+			: Math.min(100, (storage.usedBytes / storage.allowanceBytes) * 100);
+	const statusLabel = storage.status === 'ready' ? 'Exact' : storage.status === 'reconciling' ? 'Reconciling' : 'Unavailable';
+	const statusScheme = storage.status === 'ready' ? 'green' : storage.status === 'reconciling' ? 'orange' : 'gray';
+
+	return (
+		<Box
+			width="100%"
+			border="1px solid var(--tt-border, #ececef)"
+			borderRadius="var(--tt-radius-md, 12px)"
+			padding={3}
+			background="var(--tt-surface-alt, #f5f5f7)"
+		>
+			<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
+				<Text fontSize="sm" fontWeight={700}>
+					Account storage
+				</Text>
+				<Badge colorScheme={statusScheme} fontSize="9px">
+					{statusLabel}
+				</Badge>
+				<Text marginLeft="auto" fontSize="sm" fontWeight={600}>
+					{storage.status === 'unavailable' || storage.usedBytes === null
+						? 'Not available yet'
+						: `${formatStorageBytes(storage.usedBytes)} / ${
+								storage.allowanceBytes === null ? 'Unlimited' : formatStorageBytes(storage.allowanceBytes)
+							}${storage.status === 'reconciling' ? ' · provisional' : ''}`}
+				</Text>
+			</Flex>
+			{percent !== null && (
+				<Progress value={percent} size="xs" colorScheme={(storage.overageBytes ?? 0) > 0 ? 'red' : 'purple'} borderRadius="full" mt={2} />
+			)}
+			<Text mt={2} fontSize="11px" color="var(--tt-muted, #777783)" lineHeight="1.45">
+				{storage.status === 'reconciling'
+					? 'The bytes shown are provisional. Content growth is briefly paused while Thingtime verifies every stored byte.'
+					: 'Includes posts, comments, reactions, saves, schemas, themes, algorithms, and app data once.'}
+			</Text>
+			{storage.status === 'ready' && storage.usedBytes !== null && (
+				<Text mt={1} fontSize="10px" color="var(--tt-muted, #9a9aa6)" wordBreak="break-word">
+					Exact logical usage: {storage.usedBytes.toLocaleString()} bytes
+					{storage.remainingBytes === null ? '' : ` · ${storage.remainingBytes.toLocaleString()} bytes remaining`}
+					{(storage.overageBytes ?? 0) > 0 ? ` · ${storage.overageBytes!.toLocaleString()} bytes over allowance` : ''}
+				</Text>
+			)}
+			{storage.status === 'reconciling' && storage.usedBytes !== null && (
+				<Text mt={1} fontSize="10px" color="var(--tt-muted, #9a9aa6)" wordBreak="break-word">
+					Provisional ledger reading: {storage.usedBytes.toLocaleString()} bytes
+					{storage.remainingBytes === null ? '' : ` · approximately ${storage.remainingBytes.toLocaleString()} bytes remaining`}
+				</Text>
+			)}
+		</Box>
+	);
+};
 
 const inputStyles = {
   background: 'var(--tt-surface-alt, #f5f5f7)',
@@ -43,9 +125,11 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 
   const [displayName, setDisplayName] = React.useState(user.displayName || '');
   const [bio, setBio] = React.useState(user.bio || '');
-  const [avatarUrl, setAvatarUrl] = React.useState(user.avatarUrl || '');
-  const [bannerUrl, setBannerUrl] = React.useState(user.bannerUrl || '');
+	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.avatarUrl));
+	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.bannerUrl));
   const [saving, setSaving] = React.useState(false);
+	const avatarMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
+	const bannerMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
 
   const handleSave = async () => {
     if (bio.length > BIO_MAX) {
@@ -56,19 +140,30 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
       });
       return;
     }
+		if (avatarMedia.blocking || bannerMedia.blocking) {
+			lopu({
+				title: 'Profile media is not ready yet',
+				description: 'Finish or remove the avatar and banner drafts before saving.',
+				status: 'info'
+			});
+			return;
+		}
     setSaving(true);
     try {
-      await api.v1.profile.update({
+			const response = await api.v1.profile.update({
         displayName: displayName.trim() || null,
         bio: bio.trim() || null,
-        avatarUrl: avatarUrl.trim() || null,
-        bannerUrl: bannerUrl.trim() || null
+				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
+				...profileMediaUpdateFields('banner', bannerMedia.mutation)
       });
+			if (!response?.user) throw new Error('invalid profile response');
+			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
+			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null);
       lopu({ title: 'Profile saved ✨', status: 'success', duration: 4000 });
-    } catch (err: any) {
+		} catch (error: unknown) {
       lopu({
         title: 'Could not save profile 😔',
-        description: err?.error || 'Please try again in a moment.',
+				description: profileSaveErrorMessage(error),
         status: 'error'
       });
     } finally {
@@ -107,55 +202,32 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
         />
       </Flex>
 
-      <Flex flexDirection="column" rowGap={1}>
-        <FieldLabel>Avatar URL 🖼️</FieldLabel>
-        <Flex alignItems="center" columnGap={2}>
-          <Input
-            size="sm"
-            value={avatarUrl}
-            placeholder="https://…"
-            onChange={(e) => setAvatarUrl(e.target.value)}
-            {...inputStyles}
-          />
-          {avatarUrl.trim() && (
-            <Image
-              src={avatarUrl.trim()}
-              alt="Avatar preview"
-              width="32px"
-              height="32px"
-              borderRadius="999px"
-              objectFit="cover"
-              flexShrink={0}
-              border="1px solid var(--tt-border, #ececef)"
-              fallback={<Box width="32px" flexShrink={0} />}
+			<ProfileMediaField
+				ref={avatarMediaRef}
+				slot="avatar"
+				ownerId={user.id}
+				savedUrl={user.avatarUrl}
+				savedLinkedUrl={user.avatarLinkedUrl}
+				disabled={saving}
+				remainingBytes={user.storage.remainingBytes}
+				storageStatus={user.storage.status}
+				onChange={setAvatarMedia}
             />
-          )}
-        </Flex>
-      </Flex>
 
-      <Flex flexDirection="column" rowGap={1}>
-        <FieldLabel>Banner URL 🌄</FieldLabel>
-        <Input
-          size="sm"
-          value={bannerUrl}
-          placeholder="https://…"
-          onChange={(e) => setBannerUrl(e.target.value)}
-          {...inputStyles}
-        />
-        {bannerUrl.trim() && (
-          <Box
-            height="48px"
-            borderRadius="var(--tt-radius-md, 12px)"
-            border="1px solid var(--tt-border, #ececef)"
-            backgroundImage={`url(${bannerUrl.trim()})`}
-            backgroundSize="cover"
-            backgroundPosition="center"
+			<ProfileMediaField
+				ref={bannerMediaRef}
+				slot="banner"
+				ownerId={user.id}
+				savedUrl={user.bannerUrl}
+				savedLinkedUrl={user.bannerLinkedUrl}
+				disabled={saving}
+				remainingBytes={user.storage.remainingBytes}
+				storageStatus={user.storage.status}
+				onChange={setBannerMedia}
           />
-        )}
-      </Flex>
 
       <Box>
-        <RainbowButton size="sm" isLoading={saving} onClick={handleSave}>
+				<RainbowButton size="sm" minHeight="44px" isLoading={saving} isDisabled={avatarMedia.blocking || bannerMedia.blocking} onClick={handleSave}>
           Save changes ✨
         </RainbowButton>
       </Box>
@@ -181,8 +253,11 @@ export const SettingsPage = () => {
     resetOrdering
   } = useDrawer();
 
-  const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
-    useTtTheme();
+	const { theme, preset, overrides, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } = useTtTheme();
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: theme.general.thingsBadgeCustomPadding;
 
   const [loggingOut, setLoggingOut] = React.useState(false);
   const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
@@ -214,7 +289,7 @@ export const SettingsPage = () => {
     // over and settings re-renders on it. Only a fully signed-out browser
     // leaves for /login.
     if (resp?.user) {
-      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
       return;
     }
     lopu({ title: 'Logged out', status: 'success', duration: 6000 });
@@ -226,8 +301,8 @@ export const SettingsPage = () => {
   // reconciles in the background, and the toggle flips instantly + reverts on
   // failure. Cache key is per-user so the account switcher can't bleed states.
   const twoFactorCacheKey = user ? `tt-two-factor-${user.id}` : null;
-  const [twoFactorEnabled, setTwoFactorEnabled] = React.useState<boolean>(
-    () => (twoFactorCacheKey ? readLocalCache<boolean>(twoFactorCacheKey) === true : false)
+	const [twoFactorEnabled, setTwoFactorEnabled] = React.useState<boolean>(() =>
+		twoFactorCacheKey ? readLocalCache<boolean>(twoFactorCacheKey) === true : false
   );
   const [twoFactorSaving, setTwoFactorSaving] = React.useState(false);
 
@@ -262,9 +337,7 @@ export const SettingsPage = () => {
         if (twoFactorCacheKey) writeLocalCache(twoFactorCacheKey, !!resp.enabled);
         lopu({
           title: resp.enabled ? 'Email 2FA is on 🔐' : 'Email 2FA is off',
-          description: resp.enabled
-            ? 'Logins now need a 6-digit code from your inbox.'
-            : 'Logins go back to password only.',
+					description: resp.enabled ? 'Logins now need a 6-digit code from your inbox.' : 'Logins go back to password only.',
           status: 'success',
           duration: 6000
         });
@@ -363,33 +436,40 @@ export const SettingsPage = () => {
         <SettingsSection eyebrow="Account">
           <AccountSwitcher />
           {user && (
+						<Flex flexDirection="column" rowGap={3} width="100%">
+							<AccountStorageSummary user={user} />
             <Flex columnGap={2} rowGap={2} flexWrap="wrap">
-              <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
-                Profile 👤
-              </Button>
-              <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
-                Log out 🗝️
-              </Button>
-              {!user.emailVerified && (
-                <Button size="xs" variant="outline" onClick={handleResendVerification}>
-                  Resend verification 📬
+              {user.temporary ? (
+                <Button size="xs" variant="outline" onClick={() => navigate('/login')}>
+                  {LOGIN_TO_CLAIM_LABEL}
                 </Button>
+              ) : (
+                <>
+                  <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
+                    Profile 👤
+                  </Button>
+                  <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
+                    Log out 🗝️
+                  </Button>
+                  {!user.emailVerified && (
+                    <Button size="xs" variant="outline" onClick={handleResendVerification}>
+                      Resend verification 📬
+                    </Button>
+                  )}
+                </>
               )}
             </Flex>
+						</Flex>
           )}
         </SettingsSection>
 
         {/* security (auth only) — email 2FA + the reset flow's home */}
-        {user && (
+        {user && !user.temporary && (
           <SettingsSection eyebrow="Security" description="Extra checks between a password and a session.">
             <Flex flexDirection="column">
               <SettingRow
                 label="Email 2FA 🔐"
-                hint={
-                  user.emailVerified
-                    ? 'Logins also need a 6-digit code emailed to you'
-                    : 'Verify your email first — codes are delivered there'
-                }
+								hint={user.emailVerified ? 'Logins also need a 6-digit code emailed to you' : 'Verify your email first — codes are delivered there'}
               >
                 <Switch
                   isChecked={twoFactorEnabled}
@@ -402,13 +482,32 @@ export const SettingsPage = () => {
                   Reset 🔑
                 </Button>
               </SettingRow>
+              <Box paddingY={2}>
+                <PasskeysManager />
+              </Box>
             </Flex>
           </SettingsSection>
         )}
 
+        {/* connected apps — grants + everything each app stores */}
+        {user && <ConnectedAppsSection userId={user.id} />}
+
+        {/* token minter (auth only) — scoped API tokens for AIs & scripts */}
+        {user && (
+          <SettingsSection
+            eyebrow="Token minter 🪙"
+            description="Mint scoped API tokens to hand to an AI, agent, or script — it can push new things, update things, and scan your things, without your password. Expire them by time (1ms to never) or by number of uses, optionally sandbox one to only the things it creates, and revoke anytime."
+          >
+            <TokenMinter key={user.id} userId={user.id} />
+          </SettingsSection>
+        )}
+
+        {/* notifications (auth only) — per-type switches for the bell */}
+        {user && <NotificationSettingsSection user={user} />}
+
         {/* admin (admins only) */}
         {user?.isAdmin && (
-          <SettingsSection eyebrow="Admin" description="Global controls — rate limits and admin access.">
+          <SettingsSection eyebrow="Admin" description="Global controls — AI conflict resolution, rate limits, and admin access.">
             <AdminPanel />
           </SettingsSection>
         )}
@@ -433,20 +532,12 @@ export const SettingsPage = () => {
         {/* 4 · appearance — mirrors UserSettingsModal's theming section */}
         <SettingsSection eyebrow="Appearance">
           <Flex flexDirection="column">
-            <SettingRow
-              label="Theme"
-              hint={appliedThemeShareId ? `Custom theme applied: ${theme.name}` : 'Pick a base look'}
-            >
+						<SettingRow label="Theme" hint={appliedThemeShareId ? `Custom theme applied: ${theme.name}` : 'Pick a base look'}>
               <Flex columnGap={1} flexWrap="wrap" justifyContent="flex-end">
                 {builtinThemes.map((builtin) => {
                   const active = preset === builtin.name && !hasOverrides && !appliedThemeShareId;
                   return (
-                    <Button
-                      key={builtin.name}
-                      size="xs"
-                      variant={active ? 'solid' : 'ghost'}
-                      onClick={() => handlePreset(builtin.name)}
-                    >
+										<Button key={builtin.name} size="xs" variant={active ? 'solid' : 'ghost'} onClick={() => handlePreset(builtin.name)}>
                       {builtin.name}
                     </Button>
                   );
@@ -460,22 +551,23 @@ export const SettingsPage = () => {
 
             <SettingRow label="Shadows" hint="Soft blur or hard offset">
               <Flex columnGap={1}>
-                <Button
-                  size="xs"
-                  variant={theme.general.shadow === 'soft' ? 'solid' : 'ghost'}
-                  onClick={() => setGeneral('shadow', 'soft')}
-                >
+								<Button size="xs" variant={theme.general.shadow === 'soft' ? 'solid' : 'ghost'} onClick={() => setGeneral('shadow', 'soft')}>
                   Soft
                 </Button>
-                <Button
-                  size="xs"
-                  variant={theme.general.shadow === 'hard' ? 'solid' : 'ghost'}
-                  onClick={() => setGeneral('shadow', 'hard')}
-                >
+								<Button size="xs" variant={theme.general.shadow === 'hard' ? 'solid' : 'ghost'} onClick={() => setGeneral('shadow', 'hard')}>
                   Hard 🧱
                 </Button>
               </Flex>
             </SettingRow>
+
+			<SettingRow label="Things badge padding" hint="View / Show / Arrange / Kind controls">
+				<ThingsBadgePaddingControl
+					value={theme.general.thingsBadgePadding}
+					customValue={thingsBadgeCustomPadding}
+					onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+					onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+				/>
+			</SettingRow>
 
             <SettingRow label="Motion" hint="Rainbow + decorative animation">
               <Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>
@@ -517,12 +609,7 @@ export const SettingsPage = () => {
 
             <SettingRow label="Top-level items" hint="How many items show before “More”">
               <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" justifyContent="flex-end">
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={lowerTopLevelLimit}
-                  isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}
-                >
+								<Button size="xs" variant="outline" onClick={lowerTopLevelLimit} isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}>
                   −
                 </Button>
                 <Text minWidth="74px" textAlign="center" fontSize="sm">

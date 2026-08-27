@@ -1,8 +1,9 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
+import { appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
 import { issueAppToken } from '~/api/utils/apps/appTokens';
+import { thirdPartyProfileMediaUrl } from '~/api/utils/apps/profileMedia';
 import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -64,6 +65,9 @@ export const action = async ({ request }: { request: Request }) => {
 
   const app = await findAppByClientId(clientId);
   if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
+  if (appIsRevoked(app)) {
+    return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
+  }
 
   if (!appAllowsOrigin(app, origin)) {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
@@ -86,7 +90,7 @@ export const action = async ({ request }: { request: Request }) => {
       id: user.id,
       username: user.username,
       ...(has('profile.displayName') ? { displayName: user.displayName } : {}),
-      ...(has('profile.avatar') ? { avatarUrl: user.avatarUrl } : {})
+			...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl) } : {})
     }
   });
 };

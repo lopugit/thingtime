@@ -1,11 +1,4 @@
-import {
-  expectJson,
-  expectNdjson,
-  expectRedirectedTo,
-  expectStatus,
-  type ApiTestContext,
-  type ApiTestDefinition
-} from './apiTestRunner';
+import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTestContext, type ApiTestDefinition } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
@@ -13,6 +6,14 @@ import { apiEndpointDocs } from '~/docs/apiDocs';
 // tests page + Node ≥ 18), so there's no reason to trip CodeQL over
 // Math.random here
 const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
+// Documentation-only IPv6 range (RFC 3849), randomized per runner load so the
+// inherited auth.register IP bucket cannot mask the body-cap assertion on
+// repeated local/CI runs.
+const uniqueTestIp = () => {
+  const hex = crypto.randomUUID().replace(/-/g, '');
+  return `2001:db8:${hex.slice(0, 4)}:${hex.slice(4, 8)}:${hex.slice(8, 12)}:${hex.slice(12, 16)}:${hex.slice(16, 20)}:${hex.slice(20, 24)}`;
+};
 
 // Email tests deliver to the configured test inbox via plus aliases so real
 // sends stay contained: support@x.com → support+signup-<suffix>@x.com.
@@ -91,9 +92,25 @@ const uniqueEmailOtpBody = (context: ApiTestContext) => ({
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
+// Shared by the two app-shaped data-thing tests below: BOTH requests send this
+// exact crystal so the second create collides with the first on (ownerId,
+// crystal.appId, crystal.key). The things_app_data_unique index is partial-
+// filtered to thingtime: 'app-data' docs (see api/utils/mongodb/collections.ts),
+// so free-form data things carrying these keys must both persist — before the
+// kind scoping the second create 409'd on the app-data unique index. Computed
+// once per page load; duplicates across runs are fine (data things are not
+// unique on these keys, by design).
+const appShapedDataCrystal = (() => {
+  const suffix = uniqueSuffix();
+  return { name: `tt-api-test-app-shaped-${suffix}`, appId: `tt-api-test-appid-${suffix}`, key: 'tt-api-test-shared-key' };
+})();
+
 const decodeJwtPayload = (token: unknown) => {
   const encodedPayload = String(token || '').split('.')[1] || '';
-  const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+  const base64 = encodedPayload
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
 
   try {
     return JSON.parse(atob(base64));
@@ -243,6 +260,22 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Register returned validation error.')
   },
   {
+    id: 'auth-register-body-cap',
+    name: 'Register caps body size',
+    description: 'An oversized register body is rejected (413) before it is buffered/validated, rather than parsed in full.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    headers: { 'X-Forwarded-For': uniqueTestIp() },
+    // ~64 KB payload, well over the 16 KB route cap.
+    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
+    expect: expectJson(
+      [413],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Oversized register body was rejected with a 413 error shape.'
+    )
+  },
+  {
     id: 'auth-login-invalid',
     name: 'Login invalid credentials',
     description: 'Login rejects invalid credentials, is rate-limited, or surfaces environment failure if MongoDB is unavailable.',
@@ -257,10 +290,7 @@ export const apiTests: ApiTestDefinition[] = [
     // error shape; a 401/500 must be a real rejection (ok:false + error).
     expect: expectJson(
       [401, 429, 500],
-      (body, response) =>
-        response.status === 429
-          ? typeof body?.error === 'string'
-          : body?.ok === false && typeof body?.error === 'string',
+      (body, response) => (response.status === 429 ? typeof body?.error === 'string' : body?.ok === false && typeof body?.error === 'string'),
       'Login rejects invalid credentials (ok:false + error), or is rate-limited/env-limited with an error shape.'
     )
   },
@@ -281,12 +311,16 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-password-reset-confirm-invalid',
     name: 'Password reset confirm rejects bad tokens',
-    description: 'Unknown/expired reset tokens are rejected with a 400 error shape.',
+		description: 'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/password-reset/confirm',
     body: { token: 'not-a-real-reset-token', password: 'valid-length-password' },
-    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid reset token rejected with an error shape.')
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Invalid reset token rejected with an error shape.'
+    )
   },
   {
     id: 'auth-two-factor-state-guarded',
@@ -309,7 +343,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/two-factor',
     body: {},
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid 2FA toggle rejected with an error shape.')
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Invalid 2FA toggle rejected with an error shape.'
+    )
   },
   {
     id: 'auth-login-otp-invalid-challenge',
@@ -319,17 +357,25 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/login',
     body: { challenge: 'not-a-real-challenge-id', code: '000000' },
-    expect: expectJson([401, 429], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown OTP challenge rejected with an error shape.')
+    expect: expectJson(
+      [401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown OTP challenge rejected with an error shape.'
+    )
   },
   {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
-    description: 'The resend route returns ok for empty input so account existence cannot be probed.',
+		description: 'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/resend-verification',
     body: {},
-    expect: expectJson([200], (body) => body?.ok === true, 'Resend verification returned ok.')
+    expect: expectJson(
+      [200, 429],
+      (body, response) => (response.status === 429 ? body?.ok === false : body?.ok === true),
+      'Resend verification returned ok (or the per-IP window was exhausted).'
+    )
   },
   {
     id: 'auth-verify-email-missing',
@@ -343,15 +389,36 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
-    description: 'The service account endpoint is public but requires a valid email.',
+    description: 'The service account endpoint is public but requires a valid email (429/503 when the per-IP provisioning window or limiter is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
     body: { serviceName: 'Thingtime API Test Missing Email' },
     expect: expectJson(
-      [400],
-      (body) => body?.ok === false && String(body?.error || '').toLowerCase().includes('email'),
-      'Service account route requires a valid email.'
+      [400, 429, 503],
+      (body, response) =>
+        response.status === 400
+          ? body?.ok === false && String(body?.error || '').toLowerCase().includes('email')
+          : body?.ok === false && typeof body?.error === 'string',
+      'Service account route requires a valid email (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-service-account-body-cap',
+    name: 'Service account body size cap',
+    description: 'Oversized provisioning bodies are rejected with 413 before any account work (the route caps bodies at 16 KiB).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    body: {
+      serviceName: 'Thingtime API Test Oversized Body',
+      email: 'oversized-body@example.invalid',
+      meta: { padding: 'x'.repeat(20 * 1024) }
+    },
+    expect: expectJson(
+      [413, 429, 503],
+      (body, response) => (response.status === 413 ? body?.ok === false : typeof body?.error === 'string'),
+      'Oversized service-account body rejected with 413 (or rate-limited with an error shape).'
     )
   },
   {
@@ -363,23 +430,28 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/auth/service-account',
     mutates: true,
     body: uniqueServiceAccountBody,
-    expect: expectJson([200], (body) => {
-      const payload = decodeJwtPayload(body?.accessToken);
-      const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
-      const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
-      const deadlineLooksRight = Number.isFinite(deadlineMs) && deadlineMs - Date.now() <= sevenDaysMs + 60_000;
+    expect: expectJson(
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
+        const payload = decodeJwtPayload(body?.accessToken);
+        const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
+        const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
+        const deadlineLooksRight = Number.isFinite(deadlineMs) && deadlineMs - Date.now() <= sevenDaysMs + 60_000;
 
-      return (
-        body?.ok === true &&
-        body?.tokenType === 'Bearer' &&
-        body?.expiresAt === null &&
-        body?.storageAllowanceBytes === 5368709120 &&
-        body?.user?.accountKind === 'service' &&
-        body?.user?.emailVerified === false &&
-        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp') &&
-        deadlineLooksRight
-      );
-    }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+        return (
+          body?.ok === true &&
+          body?.tokenType === 'Bearer' &&
+          body?.expiresAt === null &&
+          body?.storageAllowanceBytes === 5368709120 &&
+          body?.user?.accountKind === 'service' &&
+          body?.user?.emailVerified === false &&
+          !Object.prototype.hasOwnProperty.call(payload || {}, 'exp') &&
+          deadlineLooksRight
+        );
+      },
+      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance (or the per-IP provisioning limit answered with an error shape).'
+    )
   },
   {
     id: 'email-config',
@@ -410,14 +482,13 @@ export const apiTests: ApiTestDefinition[] = [
     emailSend: true,
     timeoutMs: 30000,
     body: uniqueEmailRegisterBody,
-    expect: expectJson([200], (body) => {
-      return (
-        body?.ok === true &&
-        body?.user?.emailVerified === false &&
-        typeof body?.user?.email === 'string' &&
-        body.user.email.includes('@')
-      );
-    }, 'Signup created an unverified user and triggered verification email delivery.')
+    expect: expectJson(
+      [200],
+      (body) => {
+        return body?.ok === true && body?.user?.emailVerified === false && typeof body?.user?.email === 'string' && body.user.email.includes('@');
+      },
+      'Signup created an unverified user and triggered verification email delivery.'
+    )
   },
   {
     id: 'email-service-account-verification',
@@ -430,16 +501,21 @@ export const apiTests: ApiTestDefinition[] = [
     emailSend: true,
     timeoutMs: 30000,
     body: uniqueEmailServiceAccountBody,
-    expect: expectJson([200], (body) => {
-      const payload = decodeJwtPayload(body?.accessToken);
-      return (
-        body?.ok === true &&
-        body?.user?.accountKind === 'service' &&
-        body?.user?.emailVerified === false &&
-        body?.tokenType === 'Bearer' &&
-        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
-      );
-    }, 'Service account was created and triggered verification email delivery.')
+    expect: expectJson(
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
+        const payload = decodeJwtPayload(body?.accessToken);
+        return (
+          body?.ok === true &&
+          body?.user?.accountKind === 'service' &&
+          body?.user?.emailVerified === false &&
+          body?.tokenType === 'Bearer' &&
+          !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+        );
+      },
+      'Service account was created and triggered verification email delivery (or the per-IP provisioning limit answered with an error shape).'
+    )
   },
   {
     id: 'email-otp-helper',
@@ -486,6 +562,32 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/crypto',
     body: { intent: 'thingtime-test-unknown-action' },
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Unknown crypto action rejected.')
+  },
+  {
+    id: 'teapot-418',
+    name: 'Teapot declines to brew',
+    description: 'The hidden RFC 2324 endpoint answers 418 with a brew-time haiku, and its -docs twin is real.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/teapot',
+    expect: expectJson(
+      [418],
+      (body) => body?.ok === false && typeof body?.haiku === 'string' && /🫖/.test(body.haiku),
+      'The teapot returned 418 with a haiku.'
+    )
+  },
+  {
+    id: 'unknown-endpoint-lopu-404',
+    name: 'Unknown endpoints speak Lopu',
+    description: 'A missing API path returns the standard {ok:false, error} envelope in Lopu voice, not a bare text 404.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/definitely-not-a-real-endpoint',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string' && body.error.includes('Lopu'),
+      'The 404 envelope is JSON and Lopu-voiced.'
+    )
   },
   {
     id: 'health-frontend',
@@ -610,7 +712,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    // 200/500 as admin; 401 anonymous; 403 when the suite's earlier auth tests
+    // left an ordinary (non-admin) session cookie — all are correct behavior
+    expect: expectStatus([200, 401, 403, 500], 'MongoDB populate ran (admin) or was rejected (non-admin).')
   },
   {
     id: 'template-action',
@@ -659,7 +763,11 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'themes',
     method: 'GET',
     path: '/api/v1/themes',
-    expect: expectJson([200, 401], (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'), 'Themes list returned themes for a session or a 401 error shape anonymously.')
+    expect: expectJson(
+      [200, 401],
+      (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'),
+      'Themes list returned themes for a session or a 401 error shape anonymously.'
+    )
   },
   {
     id: 'themes-save-guarded',
@@ -735,10 +843,12 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/quota?key=api-test',
+    // 401 anonymous, 403 when an ordinary session cookie from earlier auth
+    // tests is present — either way, no service credentials → no quota access
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota read was rejected.'
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Quota read without service credentials was rejected.'
     )
   },
   {
@@ -756,9 +866,9 @@ export const apiTests: ApiTestDefinition[] = [
       policy: { dailyLimit: 1, rollingLimit: 1, rollingWindowMs: 1_000 }
     },
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota write was rejected before initialization.'
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Quota write without service credentials was rejected before initialization.'
     )
   },
   {
@@ -787,6 +897,22 @@ export const apiTests: ApiTestDefinition[] = [
       [200, 401],
       (body) => (body?.ok === true && body?.post?.id) || (body?.ok === false && typeof body?.error === 'string'),
       'Post create either persisted (session) or was rejected with an error shape (anonymous).'
+    )
+  },
+  {
+    id: 'things-data-relationship-names-open',
+    name: 'Data crystals may carry relationship key names',
+    description:
+      'Relationship dedupe rides the server-only root uniqueKeys namespace, so a data thing carrying followKey (or memberKey, dmKey, …) at its crystal root is ordinary user data: it enters no unique index, squats nothing, and saves normally (401 anonymous).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { thingtime: ['data'], crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' }, visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && (body?.thing?.id || body?.post?.id)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Relationship names saved as ordinary data (or 401 anonymous).'
     )
   },
   {
@@ -838,11 +964,166 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/reactions-recent',
+    expect: expectJson([200], (body) => body?.ok === true && Array.isArray(body?.recentReactions), 'Recent reactions returned an array.')
+  },
+  {
+    id: 'tiers-public-live-catalog',
+    name: 'Public live tier catalog',
+    description: 'The tier-card catalog returns only selectable live revisions with immutable version identities and rich inclusions.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/tiers',
     expect: expectJson(
       [200],
-      (body) => body?.ok === true && Array.isArray(body?.recentReactions),
-      'Recent reactions returned an array.'
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.tiers) &&
+        body.tiers.length > 0 &&
+        new Set(body.tiers.map((tier: any) => tier?.versionId)).size === body.tiers.length &&
+        body.tiers.every(
+          (tier: any) =>
+            typeof tier?.id === 'string' &&
+            typeof tier?.versionId === 'string' &&
+            Number.isSafeInteger(tier?.version) &&
+            tier.version > 0 &&
+            tier.status === 'live' &&
+            isObject(tier?.prices) &&
+            isObject(tier?.discounts) &&
+            tier?.inclusions?.kind === 'rich-text' &&
+            Array.isArray(tier.inclusions.blocks) &&
+            isObject(tier?.quotas)
+        ),
+      'Public catalog returned unique, live, versioned tier cards.'
     )
+  },
+  {
+    id: 'users-follow-auth-required',
+    name: 'Follow requires auth',
+    description: 'POST /users/follow rejects anonymous callers (401) or unknown targets (404) with an error shape.',
+    group: 'social',
+    method: 'POST',
+    path: '/api/v1/users/follow',
+    body: { username: 'not-a-real-user-xyz' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Follow was rejected with an error shape.')
+  },
+  {
+    id: 'users-friend-auth-required',
+    name: 'Friend intents require auth',
+    description: 'POST /users/friend rejects anonymous callers (401) or unknown targets (404) with an error shape.',
+    group: 'social',
+    method: 'POST',
+    path: '/api/v1/users/friend',
+    body: { username: 'not-a-real-user-xyz', intent: 'request' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Friend intent was rejected with an error shape.')
+  },
+  {
+    id: 'users-relationships-unknown-404',
+    name: 'Relationships 404s unknown users',
+    description: 'GET /users/relationships works logged out and 404s an unknown username.',
+    group: 'social',
+    method: 'GET',
+    path: '/api/v1/users/relationships?username=not-a-real-user-xyz',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown user 404ed with an error shape.')
+  },
+  {
+    id: 'users-connections-bad-type',
+    name: 'Connections validates type',
+    description: 'GET /users/connections rejects an unsupported type with 400 (or 404 for unknown user first).',
+    group: 'social',
+    method: 'GET',
+    path: '/api/v1/users/connections?username=not-a-real-user-xyz&type=nonsense',
+    expect: expectJson([400, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Bad connections request was rejected.')
+  },
+  {
+    id: 'notifications-auth-required',
+    name: 'Notifications list requires auth',
+    description: 'GET /notifications is per-user — anonymous callers get 401; authed callers get their list + unreadCount.',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications',
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        body?.ok === false
+          ? typeof body?.error === 'string'
+          : Array.isArray(body?.notifications) && typeof body?.unreadCount === 'number',
+      'Notifications returned a list + unreadCount (or 401 anonymous).'
+    )
+  },
+  {
+    id: 'notifications-settings-shape',
+    name: 'Notification settings shape',
+    description:
+      'GET /notifications/settings returns the per-channel matrix — push + email per type plus channel masters (or 401 anonymous).',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications/settings',
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        body?.ok === false
+          ? typeof body?.error === 'string'
+          : body?.prefs &&
+            typeof body.prefs.push?.['new-follower'] === 'boolean' &&
+            typeof body.prefs.push?.['friend-request'] === 'boolean' &&
+            typeof body.prefs.email?.['weekly-summary'] === 'boolean' &&
+            body.prefs.email?.['post-from-followed'] !== undefined &&
+            typeof body.prefs.masters?.push === 'boolean' &&
+            typeof body.prefs.masters?.email === 'boolean',
+      'Notification settings returned the full channel matrix (or 401 anonymous).'
+    )
+  },
+  {
+    id: 'notifications-email-unsubscribe-bad-token',
+    name: 'Email unsubscribe rejects bad links',
+    description:
+      'GET /notifications/email/unsubscribe with a bogus uid+token pair is refused (400 page) instead of flipping anything.',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications/email/unsubscribe?uid=nobody&token=bogus',
+    expect: expectStatus([400, 429], 'Unsubscribe refused the invalid token (or was rate limited).')
+  },
+  {
+    id: 'notifications-weekly-summary-auth-required',
+    name: 'Weekly summary run is gated',
+    description:
+      'GET /notifications/email/weekly-summary?dryRun=1 — anonymous/non-admin callers are refused; an admin gets a dry-run preview (dryRun keeps a /tests run from sending real digests).',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications/email/weekly-summary?dryRun=1',
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        body?.ok === false
+          ? typeof body?.error === 'string'
+          : typeof body?.sent === 'number' && body?.dryRun === true,
+      'Weekly summary run was gated (or dry-ran for an admin without sending).'
+    )
+  },
+  {
+    id: 'things-views-anonymous-ok',
+    name: 'View telemetry accepts anonymous batches',
+    description:
+      'POST /things/views works logged out (identity = salted ip+UA hash); unknown post ids are silently dropped, so counted is 0 here.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/views',
+    body: { events: [{ id: 'not-a-real-post-id', dwellMs: 1200, ratio: 1, pos: 0.4 }] },
+    expect: expectJson(
+      [200, 429],
+      (body) => body?.ok === true ? typeof body?.counted === 'number' : typeof body?.error === 'string',
+      'View batch was accepted (unknown ids dropped) or rate-limited.'
+    )
+  },
+  {
+    id: 'things-search-null-condition',
+    name: 'Search rejects null conditions',
+    description: 'A conditions list carrying null is rejected with a 400 error shape instead of a 500.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/search',
+    body: { conditions: [null] },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Null condition entry was rejected with a 400 error shape.')
   },
   {
     id: 'admin-rate-limits-guarded',
@@ -851,11 +1132,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'admin',
     method: 'GET',
     path: '/api/v1/admin/rate-limits',
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin rate-limit read was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin rate-limit read was rejected.')
   },
   {
     id: 'admin-users-guarded',
@@ -864,11 +1141,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'admin',
     method: 'GET',
     path: '/api/v1/admin/users',
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin user lookup was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin user lookup was rejected.')
   },
   {
     id: 'admin-set-admin-guarded',
@@ -878,11 +1151,123 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/admin/set-admin',
     body: { userId: '000000000000000000000000', admin: true },
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin promote attempt was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
+  },
+  {
+    id: 'admin-moderation-guarded',
+    name: 'Moderation queue is admin-only',
+    description: 'Reading the NSFW/TOS moderation review queue requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/moderation',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin moderation read was rejected.')
+  },
+  {
+    id: 'admin-moderation-review-guarded',
+    name: 'Moderation review is admin-only',
+    description: 'Overriding a moderation verdict requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/moderation',
+    body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
+  },
+  {
+    id: 'admin-users-overview-guarded',
+    name: 'Users overview is admin-only',
+    description: 'The /admin Users tab data requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/users/overview',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin users overview was rejected.')
+  },
+  {
+    id: 'admin-apps-guarded',
+    name: 'Apps overview is admin-only',
+    description: 'The cross-user apps overview requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/apps',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin apps overview was rejected.')
+  },
+  {
+    id: 'admin-apps-revoke-guarded',
+    name: 'App suspension is admin-only',
+    description: 'Suspending an app requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/apps/revoke',
+    body: { clientId: 'ttapp_00000000-0000-0000-0000-000000000000', revoked: true },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin suspension attempt was rejected.')
+  },
+  {
+    id: 'admin-tiers-read-guarded',
+    name: 'Tier version history is admin-only',
+    description: 'Reading live, draft, and archived tier revisions requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/tiers',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier-history read was rejected.')
+  },
+  {
+    id: 'admin-tiers-write-guarded',
+    name: 'Tier lifecycle is admin-only',
+    description: 'Tier lifecycle actions require an admin session; the fixture uses an unknown revision so it cannot archive a real tier.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/tiers',
+    body: { action: 'archive', versionId: 'not-a-real-tier-version' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier lifecycle attempt was rejected.')
+  },
+  {
+    id: 'admin-subscriptions-guarded',
+    name: 'Subscriptions are admin-only',
+    description: 'Assigning tiers/overrides requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/subscriptions',
+    body: {
+      subjectType: 'user',
+      subjectId: '000000000000000000000000',
+      tier: 'not-a-real-tier',
+      tierVersionId: 'not-a-real-tier-version'
+    },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier assignment was rejected.')
+  },
+  {
+    id: 'admin-links-guarded',
+    name: 'Ownership links are admin-only',
+    description: 'Assigning account/app ownership links requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/links',
+    body: { action: 'add', linkKind: 'account', userId: '000000000000000000000000', targetId: '000000000000000000000001' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin link assignment was rejected.')
+  },
+  {
+    id: 'auth-accounts-owned-guarded',
+    name: 'Owned accounts need a session',
+    description: 'Listing owned accounts anonymously is rejected.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/accounts/owned',
+    // strict [401] needs a truly session-less request — with the suite's
+    // shared cookie state an earlier registration would make this a 200
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous owned-accounts read was rejected.')
+  },
+  {
+    id: 'auth-accounts-assume-guarded',
+    name: 'Assume needs a session + link',
+    description: 'Assuming an account anonymously is rejected.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/assume',
+    body: { accountId: '000000000000000000000000' },
+    // strict [401] needs a truly session-less request — with the suite's
+    // shared cookie state an earlier registration would make this a 403
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous assume attempt was rejected.')
   },
   {
     id: 'things-comment-guarded',
@@ -984,10 +1369,12 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things',
     mutates: true,
     body: { id: 'api-test-upsert-001', thingtime: ['post'], crystal: { type: 'text', text: 'API test upsert 🧪' }, acl: ['tt:user'] },
+    // 404: a session cookie from earlier auth tests is present but this id
+    // doesn't exist / isn't owned by that throwaway user — still a guarded no
     expect: expectJson(
-      [200, 201, 401],
+      [200, 201, 401, 404],
       (body) => (body?.ok === true && typeof body?.created === 'boolean') || (body?.ok === false && typeof body?.error === 'string'),
-      'Unified PUT either upserted (session) or was rejected (anonymous).'
+      'Unified PUT either upserted (session) or was rejected with an error shape.'
     )
   },
   {
@@ -997,7 +1384,11 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'DELETE',
     path: '/api/v1/things?id=not-a-real-post-id',
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unified DELETE was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unified DELETE was rejected with an error shape.'
+    )
   },
   {
     id: 'things-acl-validated',
@@ -1037,6 +1428,50 @@ export const apiTests: ApiTestDefinition[] = [
             Array.isArray(body?.thing?.extended?.nested) &&
             body?.thing?.crystal?.legs === 4,
       'Schema-less create resolved to a data crystal and round-tripped extended verbatim (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-create',
+    name: 'Data crystal may carry appId + key',
+    description:
+      'A free-form data thing whose crystal contains appId and key entries is stored (session) — these are ordinary user keys, not reserved app-data fields — or rejected anonymously.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            Array.isArray(body?.thing?.thingtime) &&
+            body.thing.thingtime.includes('data') &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Data thing with appId + key crystal entries persisted (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-duplicate',
+    name: 'Duplicate app-shaped data crystals do not collide',
+    description:
+      'A second data thing with the SAME appId + key crystal values as the previous test also persists: the app-data unique index is scoped to thingtime app-data docs, so free-form data things never 409 against it (pre-scoping this returned a duplicate-key conflict).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Second data thing with identical appId + key crystal values persisted alongside the first.'
     )
   },
   {
@@ -1125,11 +1560,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'schemas',
     method: 'GET',
     path: '/api/v1/schemas/browse?sort=popular&limit=5',
-    expect: expectJson(
-      [200],
-      (body) => body?.ok === true && Array.isArray(body?.schemas),
-      'Popular browse returned a schema page.'
-    )
+    expect: expectJson([200], (body) => body?.ok === true && Array.isArray(body?.schemas), 'Popular browse returned a schema page.')
   },
   {
     id: 'schemas-browse-library-guarded',
@@ -1166,11 +1597,44 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/admin/migrations',
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && Array.isArray(body?.collections)) || (body?.ok === false && typeof body?.error === 'string'),
       'Migration status either returned the census (admin) or was rejected (non-admin).'
     )
   },
+	{
+		id: 'admin-migrations-diagnostic-guarded',
+		name: 'Migration diagnostics are admin-only',
+		description: 'Anonymous/non-admin callers are rejected; inaccessible ids are non-enumerating 404s for admins.',
+		group: 'admin',
+		method: 'GET',
+		path: '/api/v1/admin/migrations/diagnostic?id=migration-diagnostic-00000000-0000-4000-8000-000000000000',
+		anonymous: true,
+		expect: expectJson(
+			[401],
+			(body) => body?.ok === false && body?.error === 'Unauthorized',
+			'The registered diagnostic route rejected an anonymous caller with its admin guard.'
+		)
+	},
+	{
+		id: 'things-sensitive-reveal-guarded',
+		name: 'Sensitive Thing reveal requires a full session',
+		description: 'The password-confirmed reveal route rejects anonymous callers before reading the submitted password.',
+		group: 'things',
+		method: 'POST',
+		path: '/api/v1/things/reveal',
+		anonymous: true,
+		body: {
+			thingId: 'migration-diagnostic-00000000-0000-4000-8000-000000000000',
+			reference: 'mongodb-object-id-1',
+			password: 'not-read-without-a-session'
+		},
+		expect: expectJson(
+			[401],
+			(body) => body?.ok === false && body?.error === 'Unauthorized',
+			'The registered sensitive reveal route rejected an anonymous caller before password confirmation.'
+		)
+	},
   {
     id: 'admin-migrations-run-guarded',
     name: 'Migration run is admin-only',
@@ -1181,7 +1645,7 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { migration: 'things-v1-to-v2', dryRun: true },
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && body?.report?.dryRun === true) || (body?.ok === false && typeof body?.error === 'string'),
       'Dry-run either reported (admin) or was rejected (non-admin).'
     )
@@ -1195,9 +1659,7 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/algorithms',
     expect: expectJson(
       [200, 401],
-      (body) =>
-        (body?.ok === true && Array.isArray(body?.algorithms)) ||
-        (body?.ok === false && typeof body?.error === 'string'),
+      (body) => (body?.ok === true && Array.isArray(body?.algorithms)) || (body?.ok === false && typeof body?.error === 'string'),
       'Algorithms list returned algorithms for a session or a 401 error shape anonymously.'
     )
   },
@@ -1209,7 +1671,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms',
     body: { name: '' },
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Nameless algorithm rejected with an error shape.')
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Nameless algorithm rejected with an error shape.'
+    )
   },
   {
     id: 'algorithms-active-guarded',
@@ -1244,7 +1710,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms/update',
     body: { id: 'not-a-real-algorithm-id', name: 'renamed' },
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm update was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Algorithm update was rejected with an error shape.'
+    )
   },
   {
     id: 'algorithms-delete-guarded',
@@ -1254,7 +1724,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms/delete',
     body: { id: 'not-a-real-algorithm-id' },
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm delete was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Algorithm delete was rejected with an error shape.'
+    )
   },
   {
     id: 'profile-get-missing-username',
@@ -1326,7 +1800,120 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/waitlist',
     mutates: true,
     body: { email: 'tt-api-test-waitlist@example.invalid' },
-    expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
+    expect: expectJson(
+      [200, 429],
+      (body) => body?.ok === true || typeof body?.error === 'string',
+      'Waitlist join succeeded (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'apps-desktop-authorize-guarded',
+    name: 'Desktop authorization requires a session and complete PKCE request',
+    description:
+      'POST /api/v1/oauth/desktop/authorize is registered and rejects anonymous or incomplete installed-app consent requests before issuing a code.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/desktop/authorize',
+    body: {},
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop authorize rejected an unauthenticated/incomplete request with the bounded error envelope.'
+    )
+  },
+  {
+    id: 'apps-desktop-token-grant-type',
+    name: 'Desktop token exchange rejects unsupported grants',
+    description: 'POST /api/v1/oauth/token is registered and accepts only the authorization_code grant.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/token',
+    body: { grantType: 'client_credentials' },
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop token endpoint rejected an unsupported grant with the bounded error envelope.'
+    )
+  },
+  {
+    id: 'apps-sandbox-mint',
+    name: 'Sandbox token mint',
+    description:
+      'POST /api/v1/oauth/sandbox mints a real revocable token for any clientId — the credential that exercises the full app-namespace surface pre-registration.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/sandbox',
+    mutates: true,
+    body: { clientId: 'ttapp_api_tests', scope: 'profile app-data' },
+    expect: expectJson(
+      [200, 429],
+      (body) =>
+        (body?.ok === true && body?.sandbox === true && typeof body?.token === 'string' && Array.isArray(body?.scopes)) ||
+        typeof body?.error === 'string',
+      'Sandbox mint returned a Bearer token + scopes (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'apps-app-data-needs-token',
+    name: 'App storage requires an app token',
+    description: 'GET /api/v1/app-data rejects sessions and anonymous callers — the embed surface is app-Bearer-only.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/app-data',
+    expect: expectJson([401], (body) => body?.ok === false, 'App-data without an app token is 401.')
+  },
+  {
+    id: 'apps-usage-needs-token',
+    name: 'Storage usage requires an app token',
+    description: 'GET /api/v1/app-data/usage (the byte-budget ledger) is app-Bearer-only like the rest of the embed surface.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/app-data/usage',
+    expect: expectJson([401], (body) => body?.ok === false, 'Usage without an app token is 401.')
+  },
+  {
+    id: 'apps-data-summary-guarded',
+    name: 'App data summary requires a session',
+    description: 'GET /api/v1/apps/data-summary is the first-party browse surface — anonymous callers get 401, sessions get the per-app roster.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/apps/data-summary',
+    expect: expectJson(
+      [200, 401, 429],
+      (body) => (body?.ok === true && Array.isArray(body?.apps)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Summary returned the apps roster (session) or a guarded error shape (anonymous).'
+    )
+  },
+  {
+    id: 'apps-data-shared-needs-app-id',
+    name: 'App-view lens validates appId',
+    description: 'GET /api/v1/apps/data/shared without appId is a 400 for sessions (401 anonymous) — never an unfiltered read.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/apps/data/shared',
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'The lens refused to read without an appId (or without a session).'
+    )
+  },
+  {
+    id: 'docs-markdown-bundle',
+    name: 'API docs Markdown bundle',
+    description: 'GET /api/docs returns one text/markdown document covering the whole endpoint catalog.',
+    group: 'docs',
+    method: 'GET',
+    path: '/api/docs',
+    expect: ({ response, textBody }) => {
+      const markdown = (response.headers.get('Content-Type') || '').includes('text/markdown');
+      const hasTitle = textBody.includes('# Thingtime API reference');
+      // spot-check that catalog entries actually rendered
+      const hasEndpoints = textBody.includes('/api/v1/app-data/shared') && textBody.includes('/api/v1/things');
+      return {
+        pass: response.status === 200 && markdown && hasTitle && hasEndpoints,
+        details: `status ${response.status}, markdown content-type ${markdown}, title ${hasTitle}, endpoints ${hasEndpoints}`
+      };
+    }
   },
   ...apiDocsSmokeTests
 ];

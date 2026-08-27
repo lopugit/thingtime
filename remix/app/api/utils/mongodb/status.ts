@@ -1,5 +1,6 @@
 import { safeErrorText } from '../errors/safeError';
-import { getMongoUri, sanitiseMongoHost } from './config';
+import { sanitiseMongoHost } from './config';
+import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 
 // Single source of truth for the status payload the API returns and the
@@ -9,31 +10,41 @@ export type MongoConnectionStatus = {
 	// human-friendly host (credentials stripped) for safe display
 	host: string | null;
 	dbName: string | null;
+	// true when the session's custom endpoint override (endpoint.ts) is what
+	// was checked, rather than the home deployment DB
+	custom: boolean;
 	// round-trip time of a `ping` command, in milliseconds
 	pingMs: number | null;
 	collections: number | null;
+	// replica set name from `hello` — null on a STANDALONE mongod, where
+	// multi-document transactions (registration, storage accounting) fail
+	replicaSet: string | null;
 	checkedAt: string;
 	error: string | null;
 };
 
 // Connects to MongoDB through the Thingtime API layer, pings it, and reports
-// what it found. Fails fast (2s) and always closes the client so a status
-// check never hangs a request or leaks a connection.
+// what it found. Checks the request's ACTIVE endpoint (the session's custom
+// override when one is set, else home). Fails fast (2s) and always closes the
+// client so a status check never hangs a request or leaks a connection.
 export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 	const checkedAt = new Date().toISOString();
+	const custom = isCustomMongoEndpointActive();
 	let uri: string;
 	let host: string | null = null;
 
 	try {
-		uri = getMongoUri();
+		uri = getActiveMongoUri();
 		host = sanitiseMongoHost(uri);
 	} catch (err: any) {
 		return {
 			connected: false,
 			host,
 			dbName: null,
+			custom,
 			pingMs: null,
 			collections: null,
+			replicaSet: null,
 			checkedAt,
 			error: safeErrorText(err, 'mongodb status: config', 'MongoDB configuration error')
 		};
@@ -51,20 +62,26 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 
 		await client.connect();
 
-		const db = client.db('thingtime');
+		const db = client.db(getActiveMongoDbName());
 
 		const start = Date.now();
 		await db.command({ ping: 1 });
 		const pingMs = Date.now() - start;
 
-		const collections = (await db.listCollections().toArray()).length;
+		// nameOnly: the server returns just names instead of the full metadata
+		// document per collection (options, info, idIndex spec). Only the count
+		// is used, and the cursor is already materialised with toArray().
+		const collections = (await db.listCollections({}, { nameOnly: true }).toArray()).length;
+		const hello = await db.command({ hello: 1 }).catch(() => null);
 
 		return {
 			connected: true,
 			host,
 			dbName: db.databaseName,
+			custom,
 			pingMs,
 			collections,
+			replicaSet: typeof hello?.setName === 'string' ? hello.setName : null,
 			checkedAt,
 			error: null
 		};
@@ -73,8 +90,10 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			connected: false,
 			host,
 			dbName: null,
+			custom,
 			pingMs: null,
 			collections: null,
+			replicaSet: null,
 			checkedAt,
 			error: safeErrorText(err, 'mongodb status: connect', 'MongoDB connection failed')
 		};

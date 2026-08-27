@@ -5,13 +5,27 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 
+import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
+import type { AdminRowField } from './adminRowQuery';
+import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
+
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
-// Lets admins tune the global rate limits and grant/revoke admin on other
-// users. Every action re-checks admin server-side; this UI is just the surface.
+// Lets admins choose the conflict resolver model order, tune global rate
+// limits, and grant/revoke admin on other users. Every action re-checks admin
+// server-side; this UI is just the surface.
 
 type Rule = { limit: number; windowMs: number; enabled: boolean };
 type Config = Record<string, Rule>;
-type AdminRow = { id: string; username: string; displayName: string | null; email?: string; isAdmin: boolean; envAdmin: boolean };
+type AdminRow = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  email?: string;
+  isAdmin: boolean;
+  envAdmin: boolean;
+  createdAt?: string | null;
+};
+type RateLimitRow = Rule & { endpoint: string; label: string };
 
 const eyebrow = {
   fontSize: '10px',
@@ -27,6 +41,27 @@ const ENDPOINT_LABELS: Record<string, string> = {
   'mongodb.query': 'MongoDB queries'
 };
 
+const RATE_LIMIT_QUERY_FIELDS: readonly AdminRowField<RateLimitRow>[] = [
+  { id: 'endpoint', label: 'Endpoint', kind: 'string' },
+  { id: 'label', label: 'Label', kind: 'string' },
+  { id: 'limit', label: 'Limit', kind: 'number' },
+  { id: 'windowMs', label: 'Window milliseconds', kind: 'number' },
+  { id: 'enabled', label: 'Enabled', kind: 'boolean' }
+];
+
+const ADMIN_QUERY_FIELDS: readonly AdminRowField<AdminRow>[] = [
+  { id: 'id', label: 'User ID', kind: 'string' },
+  { id: 'username', label: 'Username', kind: 'string' },
+  { id: 'displayName', label: 'Display name', kind: 'string' },
+  { id: 'email', label: 'Email', kind: 'string' },
+  { id: 'isAdmin', label: 'Admin', kind: 'boolean' },
+  { id: 'envAdmin', label: 'Environment admin', kind: 'boolean' },
+  { id: 'createdAt', label: 'Created time', kind: 'date' }
+];
+
+const rateLimitQueryRowId = (row: RateLimitRow) => row.endpoint;
+const adminQueryRowId = (row: AdminRow) => row.id;
+
 const RateLimitEditor = () => {
   const api = useApi();
   const lopu = useLopu();
@@ -36,6 +71,23 @@ const RateLimitEditor = () => {
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
+
+  const rateLimitRows = React.useMemo<RateLimitRow[]>(
+    () =>
+      config
+        ? endpoints.flatMap((endpoint) => {
+            const rule = config[endpoint];
+            return rule ? [{ endpoint, label: ENDPOINT_LABELS[endpoint] || endpoint, ...rule }] : [];
+          })
+        : [],
+    [config, endpoints]
+  );
+  const rateLimitQuery = useAdminRowQuery({
+    rows: rateLimitRows,
+    fields: RATE_LIMIT_QUERY_FIELDS,
+    getRowId: rateLimitQueryRowId,
+    initialSort: { field: 'endpoint', direction: 'asc' }
+  });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -84,7 +136,16 @@ const RateLimitEditor = () => {
   return (
     <Flex flexDirection="column" rowGap={3}>
       <Text sx={eyebrow}>Rate limits</Text>
-      {endpoints.map((name) => {
+      <AdminRowQueryControls
+        ariaLabel="Query rate limit rules"
+        fields={RATE_LIMIT_QUERY_FIELDS}
+        onChange={rateLimitQuery.setQuery}
+        resultCount={rateLimitQuery.rows.length}
+        searchPlaceholder="Search endpoint, label, limit, window, or state…"
+        totalCount={rateLimitRows.length}
+        value={rateLimitQuery.query}
+      />
+      {rateLimitQuery.rows.map(({ endpoint: name }) => {
         const rule = config[name];
         if (!rule) return null;
         return (
@@ -139,6 +200,11 @@ const RateLimitEditor = () => {
           </Flex>
         );
       })}
+      {rateLimitRows.length > 0 && rateLimitQuery.rows.length === 0 ? (
+        <Text fontSize="xs" opacity={0.6}>
+          No rate-limit rules match this query.
+        </Text>
+      ) : null}
       <Flex>
         <Button size="xs" variant="outline" isLoading={saving} onClick={save}>
           Save rate limits 💾
@@ -153,6 +219,8 @@ const AdminManager = () => {
   const lopu = useLopu();
   const me = useCurrentUser();
   const [admins, setAdmins] = React.useState<AdminRow[]>([]);
+  const [adminsLimit, setAdminsLimit] = React.useState(200);
+  const [adminsCapped, setAdminsCapped] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<AdminRow[]>([]);
   const [busyId, setBusyId] = React.useState<string | null>(null);
@@ -160,11 +228,20 @@ const AdminManager = () => {
   const apiRef = React.useRef(api);
   apiRef.current = api;
 
+  const adminQuery = useAdminRowQuery({
+    rows: admins,
+    fields: ADMIN_QUERY_FIELDS,
+    getRowId: adminQueryRowId,
+    initialSort: { field: 'username', direction: 'asc' }
+  });
+
   const refresh = React.useCallback(async (q?: string) => {
     try {
       const resp = await apiRef.current.v1.admin.users(q ? { q } : undefined);
       if (resp?.ok) {
         setAdmins(resp.admins || []);
+        setAdminsLimit(Number(resp.limit) || 200);
+        setAdminsCapped(resp.totalCapped === true);
         if (q !== undefined) setResults(resp.results || []);
       }
     } catch {
@@ -238,7 +315,35 @@ const AdminManager = () => {
   return (
     <Flex flexDirection="column" rowGap={3}>
       <Text sx={eyebrow}>Admins</Text>
-      <Flex flexDirection="column" rowGap={0}>{admins.length ? admins.map(row) : <Text fontSize="xs" opacity={0.6}>No DB-flagged admins yet.</Text>}</Flex>
+      {adminsCapped ? (
+        <Text fontSize="xs" opacity={0.65}>
+          Showing the newest {adminsLimit} admins. Filters apply to this bounded roster snapshot.
+        </Text>
+      ) : null}
+      <AdminRowQueryControls
+        ariaLabel="Query current admins"
+        fields={ADMIN_QUERY_FIELDS}
+        onChange={adminQuery.setQuery}
+        resultCount={adminQuery.rows.length}
+        searchPlaceholder="Search every admin field…"
+        totalCount={admins.length}
+        value={adminQuery.query}
+      />
+      <Flex flexDirection="column" rowGap={0}>
+        {admins.length ? (
+          adminQuery.rows.length ? (
+            adminQuery.rows.map(row)
+          ) : (
+            <Text fontSize="xs" opacity={0.6}>
+              No admins match this query.
+            </Text>
+          )
+        ) : (
+          <Text fontSize="xs" opacity={0.6}>
+            No DB-flagged admins yet.
+          </Text>
+        )}
+      </Flex>
 
       <Text sx={eyebrow}>Promote a user</Text>
       <Flex columnGap={2}>
@@ -266,6 +371,7 @@ const AdminManager = () => {
 
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
+    <PRConflictResolverModelWaterfallEditor />
     <RateLimitEditor />
     <AdminManager />
   </Flex>

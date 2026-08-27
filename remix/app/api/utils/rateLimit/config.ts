@@ -10,6 +10,19 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  // Private attachment storage: start and completion mutate both S3 and the
+  // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
+  // short-lived private redirects. Every surface stays bounded per account/IP.
+  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
+  'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
+  // owner title/description edits (POST /api/v1/attachments/annotate) — small
+  // crystal-only writes, same shape as delete
+  'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
+  'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
+  // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
+  'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
@@ -25,6 +38,26 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // public people search (/api/v1/users/search) — bounded like things.search;
   // it only ever returns public profile projections
   'users.search': { limit: 120, windowMs: 60_000, enabled: true },
+  // social graph writes: follow toggles are reaction-shaped; friend intents
+  // (request/accept/…) are rarer and each can emit a notification, so tighter
+  'users.follow': { limit: 30, windowMs: 60_000, enabled: true },
+  'users.friend': { limit: 20, windowMs: 60_000, enabled: true },
+  // social graph reads (counts + lists) — public-projection reads, bounded
+  // like the other public reads (anonymous callers key by IP)
+  'users.relationships': { limit: 120, windowMs: 60_000, enabled: true },
+  'users.connections': { limit: 120, windowMs: 60_000, enabled: true },
+  // notifications: list backs the bell (poll + focus refetch), read flips
+  // readAt, settings is a rare interactive toggle
+  'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
+  'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
+  'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
+  // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
+  // this is hygiene against link-scanner hammering, not a security boundary
+  'notifications.emailUnsubscribe': { limit: 20, windowMs: 60_000, enabled: true },
+  // post view telemetry (POST /api/v1/things/views) — anonymous-capable
+  // batched beacons; one flush covers a whole scroll session, so this window
+  // is generous for humans and a wall for replay scripts (anon keys by IP)
+  'things.views': { limit: 60, windowMs: 60_000, enabled: true },
   // Admin-only raw queries can still be expensive; keep accidental repeated
   // scans bounded independently from the ordinary app APIs.
   'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
@@ -32,6 +65,17 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // showcase posts/schemas) — bound it tightly so repeated runs can't hammer
   // the DB or burn serverless compute. Enforced fail-closed at the route.
   'mongodb.populate': { limit: 3, windowMs: 60_000, enabled: true },
+  // Data-endpoint override actions (thin-frontend mode). Each activation/save
+  // makes the SERVER probe (TCP connect + ping, ≤2.5s) whatever host:port the
+  // caller supplied — unbounded, that's an anonymous outbound port-scan /
+  // connection-hammer vector, so both windows stay tight. Switching endpoints
+  // is a rare interactive action; 5-minute windows leave humans unthrottled.
+  // mongodb.endpoint: activate/reset the session override (anon keys by IP).
+  // mongodb.endpoints: saved-list writes (authed; save also probes).
+  // Both enforced fail-closed at their routes (reset stays exempt — it probes
+  // nothing and bailing back to the home DB must always work).
+  'mongodb.endpoint': { limit: 20, windowMs: 300_000, enabled: true },
+  'mongodb.endpoints': { limit: 30, windowMs: 300_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust
@@ -45,6 +89,18 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous consent-screen lookup (/api/v1/apps/public) — each call is an
   // unauthenticated DB read, so bound it per IP like the other public reads
   'apps.public': { limit: 60, windowMs: 60_000, enabled: true },
+  // anonymous sandbox-token mint (/api/v1/oauth/sandbox) — each call writes a
+  // short-lived session doc and unlocks a (small, TTL-reaped) storage
+  // namespace, so the per-IP budget is deliberately tight: worst-case junk
+  // per IP ≈ limit/min × 60 × SANDBOX_STORAGE_BYTES, all gone within 1h
+  'oauth.sandbox': { limit: 10, windowMs: 60_000, enabled: true },
+  // Global sandbox storage brake (TODO/claude-todo/15 §1): the app-wide byte
+  // budget every sandbox write charges against, layered on the per-namespace
+  // budget. UNIT EXCEPTION: `limit` here is MEGABYTES per window (a byte
+  // budget, consumed by rateLimit/byteBudget.ts), not a request count — the
+  // default is 512MB/hour across ALL sandboxes. Enforced FAIL-CLOSED: sandbox
+  // writes are anonymous standing storage, so an unavailable ledger refuses.
+  'sandbox.storage.global': { limit: 512, windowMs: 3_600_000, enabled: true },
   // app-token READ endpoints (oauth/userinfo, oauth/shared, app-data GET) —
   // token-gated, keyed per (user, app); a backstop against a compromised or
   // abusive integration hammering the resolution + read path
@@ -64,7 +120,68 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
-  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // passkey ceremonies: options endpoints only mint signed challenge cookies
+  // (cheap, but unauthenticated), verify endpoints do signature checks + at
+  // most one session mint — bound both like login. Management (register/
+  // rename/revoke/delete) is session-authed and keyed by user.
+  'auth.passkeyOptions': { limit: 60, windowMs: 60_000, enabled: true },
+  'auth.passkeyLogin': { limit: 30, windowMs: 60_000, enabled: true },
+  'auth.passkeyManage': { limit: 30, windowMs: 60_000, enabled: true },
+  // cross-deployment auto-login suggestions: resolves at most a handful of
+  // roster/session docs per call, unauthenticated, so bound per IP
+  'auth.accountHints': { limit: 60, windowMs: 60_000, enabled: true },
+  // federated flavor of the above: other Thingtime deployments' pages read it
+  // cross-origin (same-site credentials), so it gets its own IP bucket
+  'auth.hintsResolve': { limit: 60, windowMs: 60_000, enabled: true },
+  // cross-origin session handoff: minting is session-authed (user-keyed) and
+  // each code is single-use + 2-minute TTL; redemption is anonymous (IP)
+  'auth.ssoHandoff': { limit: 20, windowMs: 60_000, enabled: true },
+  'auth.ssoSession': { limit: 20, windowMs: 60_000, enabled: true },
+  // FedCM: browser-mediated fetches (Sec-Fetch-Dest: webidentity). Accounts
+  // reads are roster lookups; assertions mint at most one code/token each.
+  'fedcm.accounts': { limit: 120, windowMs: 60_000, enabled: true },
+  'fedcm.assertion': { limit: 20, windowMs: 60_000, enabled: true },
+  // public sign-up: anonymous bcrypt + user-doc writes, every success emails
+  // the supplied address (mail-bomb + enumeration surface like the other auth
+  // mailers), and it's an awaited ensureIndexes bootstrap caller — throttling
+  // keeps retries from re-running the index battery too. Keyed by IP; roomy
+  // enough for a human fumbling taken usernames, tight for account farming.
+  'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // First-session /things bootstrap: every success creates a durable user,
+  // session, roster entry, and subscription ledger. Reuse is checked before
+  // this bucket, so five creations per IP/day is generous for cookie loss and
+  // deliberately tight against anonymous account farming. Fail-closed route.
+  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
+  // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
+  // each mint writes a session doc, so bound accumulation beyond the per-user
+  // token cap
+  'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
+  'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
+  // PAT revocation — cheap owner-bound update, still bounded
+  'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true },
+  // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
+  // ~100ms of CPU per call by design, so the budget is tight per IP — the
+  // compute is the abuse surface, not the hash it returns
+  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true },
+  // Messenger. Sending is chattier than posting, so it gets a higher window
+  // than things.write; membership/chat mutations share one bounded bucket.
+  'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
+  'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // message reactions mirror things.react but chats toggle faster in practice
+  'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
+  // read receipts fire on every focused chat scroll — cheap single-doc updates,
+  // but still bounded so a stuck client can't hammer the collection
+  'chats.read': { limit: 240, windowMs: 60_000, enabled: true },
+  // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
+  // interactive action, so the budget is per-hour like app registration
+  'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

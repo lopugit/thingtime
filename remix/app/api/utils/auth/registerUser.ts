@@ -1,4 +1,4 @@
-import { ensureIndexes } from '../mongodb/collections';
+import { ensureIndexes, withHomeMongoTransaction } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
@@ -9,6 +9,9 @@ import { hashPassword } from './passwords';
 import { createSession } from './sessions';
 import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
 import type { PublicUser, UserDoc } from './users';
+import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById } from '../subscriptions/tierCatalog';
+import { setSubscription } from '../subscriptions/subscriptions';
+import { getLiveSubscriptionTier, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
 
 export type RegisterInput = {
   username: string;
@@ -33,19 +36,22 @@ export type CreateUserAccountInput = {
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
-  storageUsedBytes?: number;
+  // Opt a creation path INTO an upload scope (admin-provisioned accounts
+  // only). Public signup never sets them — see the meta assignment below.
+  publicUploads?: boolean;
+  privateUploads?: boolean;
   meta?: Record<string, any>;
 };
 
-export type CreateUserAccountResult =
-  | { ok: false; status: number; error: string }
-  | { ok: true; user: any; publicUser: PublicUser };
+export type CreateUserAccountResult = { ok: false; status: number; error: string } | { ok: true; user: any; publicUser: PublicUser };
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Privileged meta keys that must never be set at account creation (only via
-// their own admin-gated / authenticated endpoints).
-const PRIVILEGED_META_KEYS = ['admin'];
+// their own admin-gated / authenticated endpoints). `publicUploads` and
+// `privateUploads` join `admin` here: a public signup body must not be able to
+// hand itself the upload permissions this hotfix exists to withhold.
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploads', 'privateUploads'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -98,19 +104,58 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
     // admin-gated setUserAdmin (auth/admin.ts).
-    meta: sanitizeCreateMeta(input.meta)
+    // File/media uploads start WITHHELD for every newly created account, in
+    // BOTH scopes (public = post/comment/emoji, private = messages + own
+    // profile media) — verifying the email address no longer grants either. An
+    // admin turns them on per user, per scope or all at once, from /admin
+    // (POST /api/v1/admin/users/public-uploads) after the "new user"
+    // notification lands. Both keys are stripped from any caller-supplied meta
+    // above, so this is the only writer at creation time. Accounts that
+    // predate the hotfix have no flags at all and stay enabled.
+    meta: {
+      ...sanitizeCreateMeta(input.meta),
+      publicUploads: input.publicUploads === true,
+      privateUploads: input.privateUploads === true
+    }
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
     userDoc.emailVerificationRequiredBy = input.emailVerificationRequiredBy;
   }
-  if (input.storageAllowanceBytes !== undefined) userDoc.storageAllowanceBytes = input.storageAllowanceBytes;
-  if (input.storageUsedBytes !== undefined) userDoc.storageUsedBytes = input.storageUsedBytes;
-
+  const liveDefault = await getLiveSubscriptionTier(DEFAULT_SUBSCRIPTION_TIER);
+  const defaultSnapshot = tierAssignmentSnapshot(liveDefault ?? subscriptionTierById(DEFAULT_SUBSCRIPTION_TIER));
   let user;
+	let assignedSubscription = null;
+	let assignmentFailure: Extract<CreateUserAccountResult, { ok: false }> | null = null;
   try {
-    user = await insertUser(userDoc);
+		await withHomeMongoTransaction(async (session) => {
+			user = await insertUser(userDoc, { initialSubscription: defaultSnapshot, session });
+    const userId = String(user._id);
+    const assigned = await setSubscription({
+      subjectType: 'user',
+      subjectId: userId,
+      ownerId: userId,
+      tier: defaultSnapshot.tierId,
+      tierVersionId: defaultSnapshot.versionId,
+				overrides: input.storageAllowanceBytes !== undefined ? { userStorageBytes: Math.max(0, Math.floor(input.storageAllowanceBytes)) } : null,
+      updatedBy: 'system',
+				isDefaultAssignment: true,
+				// A just-created account cannot own content yet because the user and
+				// ledger are born in this transaction. Never accept a caller-supplied
+				// baseline that could manufacture or hide usage.
+				initialStorageUsedBytes: 0,
+				session
+    });
+    if (assigned.ok === false) {
+				assignmentFailure = assigned;
+				// Throwing aborts the user insert too; registration never leaves an
+				// account without its authoritative ready storage ledger.
+				throw new Error('Initial subscription assignment failed');
+    }
+			assignedSubscription = assigned.subscription;
+		});
   } catch (err: any) {
+		if (assignmentFailure) return assignmentFailure;
     // a unique index caught a duplicate that raced past the checks above —
     // things-era collisions surface via uniqueKeys ('email:<hash>' or
     // 'username:<name>'), legacy ones via the old per-field indexes
@@ -135,7 +180,11 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     throw err;
   }
 
-  return { ok: true, user, publicUser: toPublicUser(user) };
+	if (!user || !assignedSubscription) {
+		return { ok: false, status: 503, error: 'Account storage setup did not complete — please try again' };
+	}
+
+	return { ok: true, user, publicUser: toPublicUser(user, assignedSubscription) };
 };
 
 // Single creation path for users — used by the register route AND by seeding,
@@ -168,5 +217,5 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // returned regardless and the user can resend from Settings.
   void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
 
-  return { ok: true, user: toPublicUser(user), jwt, jti: session.jti, verificationLink };
+	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

@@ -1,6 +1,8 @@
 export type ApiTestGroup =
   | 'admin'
   | 'algorithms'
+  | 'apps'
+  | 'attachments'
   | 'auth'
   | 'crypto'
   | 'docs'
@@ -8,9 +10,11 @@ export type ApiTestGroup =
   | 'health'
   | 'lopu'
   | 'mongodb'
+  | 'notifications'
   | 'profile'
   | 'root'
   | 'schemas'
+  | 'social'
   | 'template'
   | 'themes'
   | 'things'
@@ -21,6 +25,9 @@ export type ApiTestResultStatus = 'pass' | 'fail';
 
 export type ApiTestContext = {
   origin: string;
+  // Node runner (scripts/run-api-tests.mts) injects a cookie-jar fetch here;
+  // the browser /tests page leaves it unset and uses the page's own fetch
+  fetchImpl?: typeof globalThis.fetch;
   // sanitized /api/v1/email/config payload — lets email tests respect the SES
   // sandbox send rate (1 msg/sec) and target the configured test recipient
   email?: {
@@ -54,6 +61,13 @@ export type ApiTestDefinition = {
   // sends real email — the runner sleeps before these when the SES sandbox is
   // active so the 1 msg/sec sandbox limit is respected
   emailSend?: boolean;
+  // auth-guard tests that must reach the API with NO ambient session: the
+  // suite runs sequentially through one cookie state (register → session →
+  // later tests), so once registration succeeds every later request carries a
+  // session unless it opts out. credentials:'omit' strips cookies in the
+  // browser /tests page; the preset empty Cookie header stops the Node
+  // runner's jar from injecting one (browsers ignore it — forbidden header).
+  anonymous?: boolean;
   timeoutMs?: number;
   body?: unknown | ((context: ApiTestContext) => unknown);
   headers?: Record<string, string>;
@@ -78,7 +92,8 @@ export const resolveApiTestBody = (test: ApiTestDefinition, context: ApiTestCont
   return typeof test.body === 'function' ? test.body(context) : test.body;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+// plain globals so the same runner works on the /tests page and under Node
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const getEmailSendDelayMs = (test: ApiTestDefinition, context: ApiTestContext) => {
   if (!test.emailSend || !context.email?.sesSandbox) return 0;
@@ -202,20 +217,25 @@ export const runApiTest = async (
   const startedAt = performance.now();
   const controller = new AbortController();
   const timeoutMs = test.timeoutMs ?? 12000;
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const delayMs = getEmailSendDelayMs(test, context);
     if (delayMs) await sleep(delayMs);
 
     const body = options.hasBodyOverride ? options.bodyOverride : resolveApiTestBody(test, context);
-    const response = await fetch(test.path, {
+    // In the browser test.path stays relative (same-origin); the Node runner
+    // provides origin + fetchImpl, so paths resolve against the target server
+    const fetchImpl = context.fetchImpl ?? fetch;
+    const url = context.origin ? new URL(test.path, context.origin).toString() : test.path;
+    const response = await fetchImpl(url, {
       method: test.method,
-      credentials: 'include',
+      credentials: test.anonymous ? 'omit' : 'include',
       redirect: 'follow',
       headers: {
         Accept: 'application/json, application/x-ndjson, text/plain, text/html',
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(test.anonymous ? { Cookie: '' } : {}),
         ...(test.headers ?? {})
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -251,6 +271,6 @@ export const runApiTest = async (
       preview: ''
     };
   } finally {
-    window.clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 };

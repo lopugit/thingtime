@@ -1,11 +1,13 @@
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession, getLiveSession } from '../auth/sessions';
-import { findUserById, toPublicUser } from '../auth/users';
+import { findUserById, toPublicUserWithStorage } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
-import { appAllowsOrigin, findAppByClientId } from './apps';
+import { appAllowsOrigin, appIsRevoked, findAppByClientId } from './apps';
+import { sandboxPublicUser } from './sandbox';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
+import { thirdPartyProfileMediaUrl } from './profileMedia';
 import { MAX_APP_SESSIONS_PER_APP_USER } from '~/schemas/registry';
 
 // App-scoped tokens: the credential a third-party site holds after a user
@@ -30,7 +32,7 @@ export const toEmbedUser = (user: PublicUser): EmbedUser => ({
   id: user.id,
   username: user.username,
   displayName: user.displayName,
-  avatarUrl: user.avatarUrl
+	avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl)
 });
 
 export type AppTokenGrant = {
@@ -67,10 +69,7 @@ export const issueAppToken = async (
     .sort({ createdAt: -1 })
     .limit(MAX_APP_SESSIONS_PER_APP_USER)
     .toArray();
-  await sessions.updateMany(
-    { ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } },
-    { $set: { revokedAt: new Date() } }
-  );
+	await sessions.updateMany({ ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } }, { $set: { revokedAt: new Date() } });
 
   return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings };
 };
@@ -82,12 +81,23 @@ export type AppTokenContext = {
   jti: string;
   scopes: AppScopeId[];
   sharedThings: string[];
+  // true for sandbox tokens (purpose 'app-sandbox', apps/sandbox.ts): the
+  // user is synthetic, the clientId may be unregistered, and app-data written
+  // under it is TTL-reaped. Routes that touch real per-user state must branch
+  // on this.
+  sandbox?: boolean;
+  // the opt-in pool this sandbox token was minted into (null = isolated):
+  // same-space tokens share their 'app'-visibility entries as pretend users
+  sandboxSpace?: string | null;
 };
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
 // tokens live in third-party page JS and never ride a Thingtime cookie, so a
 // cross-site request can't use ambient credentials. The grant also dies with
 // its app: the app must still exist and must still allow the bound origin.
+// Sandbox tokens (purpose 'app-sandbox') resolve too — to a synthetic user,
+// with no app-registration requirement — so integrators can exercise the
+// whole surface pre-registration.
 export const resolveAppToken = async (request: Request): Promise<AppTokenContext | null> => {
   const header = request.headers.get('Authorization');
   if (!header?.startsWith('Bearer ')) return null;
@@ -98,25 +108,43 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   if (!claims) return null;
 
   const session = await getLiveSession(claims.jti);
-  if (!session || session.purpose !== 'app') return null;
+  if (!session || (session.purpose !== 'app' && session.purpose !== 'app-sandbox')) return null;
   if (String(session.userId) !== claims.sub) return null;
 
   const clientId = session.meta?.clientId;
   const origin = session.meta?.origin;
   if (typeof clientId !== 'string' || typeof origin !== 'string') return null;
 
+  if (session.purpose === 'app-sandbox') {
+    return {
+      user: sandboxPublicUser(
+        String(session.userId),
+        session.createdAt,
+        typeof session.meta?.username === 'string' ? session.meta.username : undefined
+      ),
+      clientId,
+      origin,
+      jti: claims.jti,
+      scopes: sessionScopes(session.meta),
+      sharedThings: [],
+      sandbox: true,
+      sandboxSpace: typeof session.meta?.space === 'string' ? session.meta.space : null
+    };
+  }
+
   const app = await findAppByClientId(clientId);
   if (!app || !appAllowsOrigin(app, origin)) return null;
+  // Admin suspension: a revoked app's tokens die here even if the session
+  // sweep hasn't caught them yet.
+  if (appIsRevoked(app)) return null;
 
   const user = await findUserById(claims.sub);
   if (!user) return null;
 
-  const sharedThings = Array.isArray(session.meta?.sharedThings)
-    ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string')
-    : [];
+	const sharedThings = Array.isArray(session.meta?.sharedThings) ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string') : [];
 
   return {
-    user: toPublicUser(user),
+		user: await toPublicUserWithStorage(user),
     clientId,
     origin,
     jti: claims.jti,

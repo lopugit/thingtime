@@ -3,6 +3,12 @@ import { Box, Button, Flex } from '@chakra-ui/react';
 
 import { Login } from '~/components/Login/Login';
 import { Register } from '~/components/Login/Register';
+import {
+  appendDesktopAuthorizationResult,
+  normalizeDesktopRedirectUri,
+  normalizeDesktopState,
+  normalizePkceChallenge
+} from '~/api/utils/apps/desktopOAuthRedirect';
 
 // The "Login with Thingtime" popup (route /authorize, opened by the embed SDK
 // from a third-party site). Flow: validate clientId + origin against
@@ -12,7 +18,9 @@ import { Register } from '~/components/Login/Register';
 // more" section where the user can volunteer extra profile fields and
 // hand-pick specific things to share → POST /api/v1/oauth/authorize → hand
 // the app-scoped token to the opener via postMessage (targetOrigin = the
-// validated origin, never '*') → close.
+// validated origin, never '*') → close. Installed apps use the same consent
+// screen with redirect_uri + S256 PKCE: approval yields a one-time code at the
+// loopback callback and the native host exchanges it for an app token.
 //
 // SANDBOX MODE (?sandbox=1, used by /sdk/demo.html): the full consent UI runs
 // against a pretend app — no server validation, no real token, nothing
@@ -20,13 +28,22 @@ import { Register } from '~/components/Login/Register';
 // UX is explorable without an account.
 
 type EmbedApp = { clientId: string; name: string };
-type EmbedUser = { id: string; username: string; displayName?: string | null; avatarUrl?: string | null };
+type EmbedUser = {
+  id: string;
+  username: string;
+  displayName?: string | null;
+  temporary?: boolean;
+  avatarUrl?: string | null;
+};
 type ScopeDescriptor = {
   id: string;
   title: string;
   description: string;
   kind: 'namespace' | 'field' | 'capability' | 'picker';
   baseline?: boolean;
+  // privacy-expanding leaves an ancestor grant never covers (server rule) —
+  // e.g. 'app-data' does not imply 'app-data.shared'
+  exact?: boolean;
 };
 type PickerThing = { id: string; label: string; detail: string };
 
@@ -44,6 +61,7 @@ const SCOPE_EMOJI: Record<string, string> = {
   'profile.banner': '🎨',
   email: '💌',
   'app-data': '📦',
+  'app-data.shared': '🤝',
   things: '🗂️'
 };
 
@@ -71,9 +89,13 @@ const fetchJson = async (url: string, init: RequestInit = {}) => {
   }
 };
 
-// Client-side mirror of the server's ancestor-covers rule.
-const coversPath = (scope: string, path: string) => scope === path || path.startsWith(`${scope}.`);
-const anyCovers = (scopes: string[], path: string) => scopes.some((s) => coversPath(s, path));
+// Client-side mirror of the server's ancestor-covers rule. Exact scopes
+// (catalog exact: true) are only covered by their literal path — pass the
+// catalog's exact-id set wherever the distinction matters.
+const coversPath = (scope: string, path: string, exactIds?: Set<string>) =>
+  exactIds?.has(path) ? scope === path : scope === path || path.startsWith(`${scope}.`);
+const anyCovers = (scopes: string[], path: string, exactIds?: Set<string>) =>
+  scopes.some((s) => coversPath(s, path, exactIds));
 
 const parseScopeList = (raw: string, catalog: ScopeDescriptor[]): string[] => {
   const known = new Set(catalog.map((s) => s.id));
@@ -177,12 +199,30 @@ export const AuthorizePage = () => {
 
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const clientId = (params.get('client_id') || params.get('clientId') || '').trim();
-  const origin = (params.get('origin') || '').trim();
+  const redirectUri = (params.get('redirect_uri') || '').trim();
+  const codeChallenge = (params.get('code_challenge') || '').trim();
+  const codeChallengeMethod = (params.get('code_challenge_method') || '').trim();
+  const desktopFlow = !!(redirectUri || codeChallenge || codeChallengeMethod);
+  const desktopRedirect = React.useMemo(() => normalizeDesktopRedirectUri(redirectUri), [redirectUri]);
+  const desktopChallenge = React.useMemo(() => normalizePkceChallenge(codeChallenge, codeChallengeMethod), [codeChallenge, codeChallengeMethod]);
+  const origin = desktopFlow ? desktopRedirect?.origin ?? '' : (params.get('origin') || '').trim();
   const state = (params.get('state') || '').slice(0, MAX_STATE_CHARS);
+  const desktopState = desktopFlow ? normalizeDesktopState(state) : null;
   const scopeParam = (params.get('scope') || '').slice(0, 1024);
   const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
   const extrasAllowed = params.get('extra') !== '0';
   const sandbox = params.get('sandbox') === '1';
+  // Self mode (?self=1): the "app" is another Thingtime deployment (an
+  // immutable *.vercel.app preview, a custom domain) asking for a FULL
+  // session, not an app-scoped grant. No clientId, no scope consent — the
+  // approve step mints an aud-bound single-use handoff code the opener
+  // redeems at its own /api/v1/auth/sso-session. Origins stay default-open;
+  // the per-code binding is the security.
+  const selfMode = !sandbox && !desktopFlow && params.get('self') === '1';
+  // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
+  // mint verbatim — the server validates
+  const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
+  const sandboxUsername = (params.get('sandbox_username') || '').slice(0, 32);
 
   const [catalog, setCatalog] = React.useState<ScopeDescriptor[]>([]);
   const [defaultScopes, setDefaultScopes] = React.useState<string[]>([]);
@@ -228,8 +268,35 @@ export const AuthorizePage = () => {
       return;
     }
 
+    if (selfMode) {
+      // No app to validate — just a well-formed target origin. The auth probe
+      // still runs so a signed-in visitor goes straight to the confirm card.
+      try {
+        const normalized = new URL(origin).origin;
+        if (normalized !== origin) throw new Error('origin must be a bare web origin');
+        setVerifiedOrigin(normalized);
+      } catch {
+        setInvalidReason('This link is missing a valid target origin.');
+        return;
+      }
+      fetchJson('/api/v1/auth/me').then((resp) => {
+        if (resp?.user && !resp.user.temporary) setUser(resp.user);
+        setCheckedAuth(true);
+      });
+      return;
+    }
+
+    if (desktopFlow && (!desktopRedirect || !desktopChallenge || !desktopState)) {
+      setInvalidReason('This desktop login link is missing its loopback callback, random state, or S256 PKCE challenge.');
+      return;
+    }
+
     if (!clientId || !origin) {
-      setInvalidReason('This link is missing its app details (client_id and origin).');
+      setInvalidReason(
+        desktopFlow
+          ? 'This desktop login link is missing its app details (client_id and redirect_uri).'
+          : 'This link is missing its app details (client_id and origin).'
+      );
       return;
     }
 
@@ -251,7 +318,7 @@ export const AuthorizePage = () => {
     // Always resolves (fetchJson never rejects); a failed auth probe just
     // means "not logged in yet" — the login form handles it from there.
     fetchJson('/api/v1/auth/me').then((resp) => {
-      if (resp?.user) setUser(resp.user);
+      if (resp?.user && !resp.user.temporary) setUser(resp.user);
       setCheckedAuth(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,10 +336,11 @@ export const AuthorizePage = () => {
       setVerifiedOrigin(null);
     }
 
+    const exact = new Set(catalog.filter((s) => s.exact).map((s) => s.id));
     const baseline = catalog.filter((s) => s.baseline).map((s) => s.id);
     const requestedRequired = scopeParam ? parseScopeList(scopeParam, catalog) : [...defaultScopes];
-    const requiredIds = [...baseline.filter((b) => !anyCovers(requestedRequired, b)), ...requestedRequired];
-    const optionalIds = parseScopeList(optionalScopeParam, catalog).filter((id) => !anyCovers(requiredIds, id));
+    const requiredIds = [...baseline.filter((b) => !anyCovers(requestedRequired, b, exact)), ...requestedRequired];
+    const optionalIds = parseScopeList(optionalScopeParam, catalog).filter((id) => !anyCovers(requiredIds, id, exact));
 
     const byId = new Map(catalog.map((s) => [s.id, s]));
     setRequiredScopes(requiredIds.map((id) => byId.get(id)).filter(Boolean) as ScopeDescriptor[]);
@@ -291,6 +359,7 @@ export const AuthorizePage = () => {
 
   const requiredIds = React.useMemo(() => requiredScopes.map((s) => s.id), [requiredScopes]);
   const optionalIds = React.useMemo(() => optionalScopes.map((s) => s.id), [optionalScopes]);
+  const exactIds = React.useMemo(() => new Set(catalog.filter((s) => s.exact).map((s) => s.id)), [catalog]);
 
   // The grant the user is currently composing.
   const selection = React.useMemo(
@@ -311,10 +380,10 @@ export const AuthorizePage = () => {
         (scope) =>
           scope.kind !== 'namespace' &&
           !scope.baseline &&
-          !anyCovers(requiredIds, scope.id) &&
-          !anyCovers(optionalIds, scope.id)
+          !anyCovers(requiredIds, scope.id, exactIds) &&
+          !anyCovers(optionalIds, scope.id, exactIds)
       ),
-    [catalog, requiredIds, optionalIds]
+    [catalog, requiredIds, optionalIds, exactIds]
   );
 
   const thingsActive = React.useMemo(() => anyCovers(selection, 'things'), [selection]);
@@ -399,19 +468,36 @@ export const AuthorizePage = () => {
     setIssueError(null);
 
     if (sandbox) {
-      // Mirror the server's scope gating: even a pretend handoff only carries
-      // the fields the selection covers — never the raw /auth/me object.
+      // Mint a REAL sandbox token (POST /oauth/sandbox — anonymous, 1h,
+      // synthetic user, TTL-reaped data) so the pretend session actually
+      // works against /app-data* and /oauth/userinfo. If the mint fails the
+      // demo still completes with the legacy inert token — the popup never
+      // strands on a network hiccup. Either way the handoff mirrors the
+      // server's scope gating: only fields the selection covers, never the
+      // raw /auth/me object.
+      const minted = await fetchJson('/api/v1/oauth/sandbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: app.clientId,
+          origin: verifiedOrigin,
+          scopes: selection,
+          ...(sandboxSpace ? { space: sandboxSpace } : {}),
+          ...(sandboxUsername ? { username: sandboxUsername } : {})
+        })
+      });
+      const real = !!(minted?.ok && minted.token);
       postToOpener({
         type: 'thingtime:login',
         ok: true,
         sandbox: true,
-        token: 'tt-sandbox-token',
+        token: real ? minted.token : 'tt-sandbox-token',
         tokenType: 'Bearer',
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-        scopes: selection,
+        expiresAt: real ? minted.expiresAt : new Date(Date.now() + 1000 * 60 * 60).toISOString(),
+        scopes: real && Array.isArray(minted.scopes) ? minted.scopes : selection,
         sharedThings: thingsActive ? pickedIds.length : 0,
         user: {
-          id: activeUser.id,
+          id: real && minted.user?.id ? minted.user.id : activeUser.id,
           username: activeUser.username,
           ...(anyCovers(selection, 'profile.displayName') ? { displayName: activeUser.displayName ?? null } : {}),
           ...(anyCovers(selection, 'profile.avatar') ? { avatarUrl: activeUser.avatarUrl ?? null } : {})
@@ -420,6 +506,39 @@ export const AuthorizePage = () => {
       setDone('approved');
       setIssuing(false);
       setTimeout(() => window.close(), 700);
+      return;
+    }
+
+    if (desktopFlow) {
+      if (!desktopRedirect || !desktopChallenge || !desktopState) {
+        setIssueError('This window could not verify the app’s loopback callback. Close it and start the sign-in again.');
+        setIssuing(false);
+        return;
+      }
+
+      const resp = await fetchJson('/api/v1/oauth/desktop/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: app.clientId,
+          redirectUri: desktopRedirect.uri,
+          codeChallenge: desktopChallenge,
+          codeChallengeMethod: 'S256',
+          state: desktopState,
+          scope: scopeParam,
+          optionalScope: optionalScopeParam,
+          extra: extrasAllowed ? '1' : '0',
+          scopes: selection,
+          sharedThings: thingsActive ? pickedIds : []
+        })
+      });
+
+      if (resp?.ok && typeof resp.redirectTo === 'string') {
+        window.location.assign(resp.redirectTo);
+        return;
+      }
+      setIssueError(resp?.error || 'Could not authorize — please try again.');
+      setIssuing(false);
       return;
     }
 
@@ -474,8 +593,55 @@ export const AuthorizePage = () => {
     setIssuing(false);
   };
 
+  // Self mode's approve: mint the handoff code and hand it to the opener —
+  // the opener's own deployment turns it into a first-class session.
+  const approveSelf = async () => {
+    if (issuing) return;
+    setIssuing(true);
+    setIssueError(null);
+
+    if (!verifiedOrigin || typeof window === 'undefined' || !window.opener) {
+      setIssueError('This window lost its connection to the site that opened it. Close it and start the sign-in again.');
+      setIssuing(false);
+      return;
+    }
+
+    const resp = await fetchJson('/api/v1/auth/sso-handoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: verifiedOrigin })
+    });
+
+    if (resp?.ok && resp.code) {
+      const delivered = postToOpener({ type: 'thingtime:sso', ok: true, code: resp.code });
+      if (delivered) {
+        setDone('approved');
+        setTimeout(() => window.close(), 400);
+      } else {
+        setIssueError('The window that opened this sign-in closed before it could finish. Close this and try again.');
+      }
+    } else {
+      setIssueError(resp?.error || 'Could not sign you in — please try again.');
+    }
+    setIssuing(false);
+  };
+
   const cancel = () => {
-    postToOpener({ type: 'thingtime:login', ok: false, error: 'cancelled', ...(sandbox ? { sandbox: true } : {}) });
+    if (desktopFlow && desktopRedirect && desktopState) {
+      window.location.assign(
+        appendDesktopAuthorizationResult(desktopRedirect.uri, {
+          error: 'access_denied',
+          errorDescription: 'The user cancelled',
+          state: desktopState
+        })
+      );
+      return;
+    }
+    postToOpener(
+      selfMode
+        ? { type: 'thingtime:sso', ok: false, error: 'cancelled' }
+        : { type: 'thingtime:login', ok: false, error: 'cancelled', ...(sandbox ? { sandbox: true } : {}) }
+    );
     setDone('cancelled');
     setTimeout(() => window.close(), 400);
   };
@@ -544,13 +710,13 @@ export const AuthorizePage = () => {
         </Box>
       </Flex>
     );
-  } else if (!app || (!sandbox && !checkedAuth)) {
+  } else if ((!selfMode && !app) || (!sandbox && !checkedAuth)) {
     // True cold start (fresh popup): a minimal frame, no spinner flash.
     body = (
       <Flex sx={cardSx}>
         <Kicker>Thingtime · Login with Thingtime</Kicker>
         <Box color="var(--tt-muted, #9a9aa6)" fontSize="14px">
-          Checking this app…
+          {selfMode ? 'Checking your account…' : 'Checking this app…'}
         </Box>
       </Flex>
     );
@@ -561,9 +727,9 @@ export const AuthorizePage = () => {
           <Kicker>Login with Thingtime</Kicker>
           <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
             <Box as="strong" color="var(--tt-text, #1c1c22)">
-              {app.name}
+              {selfMode ? 'The Thingtime at' : app?.name}
             </Box>{' '}
-            ({originHost}) wants to sign you in with your Thingtime account.
+            {selfMode ? `${originHost} wants to sign you in with your Thingtime account.` : `(${originHost}) wants to sign you in with your Thingtime account.`}
           </Box>
         </Flex>
         {mode === 'login' ? (
@@ -573,13 +739,58 @@ export const AuthorizePage = () => {
         )}
       </Flex>
     );
+  } else if (selfMode) {
+    // Another Thingtime deployment wants a FULL session — no scopes to pick,
+    // just an explicit "continue as" confirmation.
+    body = (
+      <Flex sx={cardSx}>
+        <Kicker>Thingtime · Sign in</Kicker>
+        <Box as="h1" fontSize="20px" fontWeight="700" lineHeight="1.3">
+          Continue to {originHost}?
+        </Box>
+        <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
+          This signs you into the Thingtime at{' '}
+          <Box as="strong" color="var(--tt-text, #1c1c22)">
+            {originHost}
+          </Box>{' '}
+          as{' '}
+          <Box as="strong" color="var(--tt-text, #1c1c22)">
+            @{activeUser.username}
+          </Box>{' '}
+          — your full account, same as signing in there directly. To use a different account, switch
+          accounts on Thingtime first and start again.
+        </Box>
+
+        {issueError ? (
+          <Box fontSize="13px" color="var(--tt-danger, #d3455b)">
+            {issueError}
+          </Box>
+        ) : null}
+
+        <Flex gap={2}>
+          <Button
+            onClick={approveSelf}
+            isLoading={issuing}
+            flex="1"
+            background="var(--tt-text, #1c1c22)"
+            color="var(--tt-card, #ffffff)"
+            _hover={{ opacity: 0.9 }}
+          >
+            Continue as @{activeUser.username}
+          </Button>
+          <Button onClick={cancel} variant="ghost">
+            Cancel
+          </Button>
+        </Flex>
+      </Flex>
+    );
   } else {
     body = (
       <Flex sx={cardSx}>
         <Kicker>Login with Thingtime</Kicker>
         {sandbox ? <SandboxChip /> : null}
         <Box as="h1" fontSize="20px" fontWeight="700" lineHeight="1.3">
-          {app.name}
+          {app?.name}
         </Box>
         <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
           {originHost || 'This site'} wants to sign you in as{' '}

@@ -6,14 +6,15 @@ import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
-import { drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
-import { ColorControl } from '../../ThemeSettings/controls';
+import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
+import { getUserMention } from '~/utils/userIdentity';
 import {
 	electronAutoUpdateSettingPath,
 	electronUrlSettingKey,
@@ -75,8 +76,12 @@ export const UserSettingsModal = () => {
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
-	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
+	const { theme, preset, overrides, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
 		useTtTheme();
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: theme.general.thingsBadgeCustomPadding;
 	const { thingtime, setThingtime } = useThingtime();
 	const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
 
@@ -168,7 +173,7 @@ export const UserSettingsModal = () => {
 		// over and the modal stays open on it. Only a fully signed-out browser
 		// leaves for /login.
 		if (resp?.user) {
-			lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+			lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
 			return;
 		}
 
@@ -676,7 +681,7 @@ export const UserSettingsModal = () => {
 						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
-						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin).map((top) => (
 							<React.Fragment key={top.id}>
 								<Flex alignItems="center" columnGap={4} paddingY={1}>
 									<Text fontSize="sm">
@@ -685,11 +690,11 @@ export const UserSettingsModal = () => {
 									<Switch
 										size="sm"
 										marginLeft="auto"
-										isChecked={closeOnClick?.[top.id] !== false}
+										isChecked={drawerItemClosesOnClick(closeOnClick, top.id)}
 										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
 									></Switch>
 								</Flex>
-								{filterDrawerItemsByAuth(top.children || [], !!user).map((child) => (
+								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin).map((child) => (
 									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
 										<Text fontSize="xs" opacity={0.8}>
 											{child.icon} {child.label}
@@ -697,7 +702,7 @@ export const UserSettingsModal = () => {
 										<Switch
 											size="sm"
 											marginLeft="auto"
-											isChecked={closeOnClick?.[child.id] !== false}
+											isChecked={drawerItemClosesOnClick(closeOnClick, child.id)}
 											onChange={(event) => setCloseOnClickFor(child.id, event.target.checked)}
 										></Switch>
 									</Flex>
@@ -754,6 +759,17 @@ export const UserSettingsModal = () => {
 						</Button>
 					</Flex>,
 					'Soft blur or hard offset'
+				)}
+
+				{settingRow(
+					'Things badge padding',
+					<ThingsBadgePaddingControl
+						value={theme.general.thingsBadgePadding}
+						customValue={thingsBadgeCustomPadding}
+						onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+						onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+					/>,
+					'View / Show / Arrange / Kind controls'
 				)}
 
 				{settingRow(
