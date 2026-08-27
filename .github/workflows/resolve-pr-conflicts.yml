@@ -2725,6 +2725,11 @@ jobs:
         with:
           ref: github-actions
           fetch-depth: 0
+          # Review worktrees need complete ancestry for merge refs and diffs,
+          # but only the current files for each selected PR. Fetch historical
+          # blobs lazily as those exact worktrees are materialized instead of
+          # downloading the multi-gigabyte object history up front.
+          filter: blob:none
           persist-credentials: false
           path: trusted
           set-safe-directory: false
