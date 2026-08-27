@@ -197,7 +197,11 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
           yield event.delta.text;
         }
       }
-      return;
+      // A decorated attempt that completes WITHOUT a single text delta starved
+      // its output budget on reasoning — treat it like a failure and fall
+      // through to the bare retry, so the admin's Claude preference is not
+      // silently skipped in favor of the next provider.
+      if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
       // Never retry after emitting text (it would duplicate the musing), and
       // never swallow the final attempt's failure — the provider loop needs it.
@@ -250,7 +254,9 @@ async function* streamOpenAI(
           yield text;
         }
       }
-      return;
+      // Same starvation rule as the Claude side: an empty decorated completion
+      // falls through to the bare retry before the provider is given up on.
+      if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
       if (yielded || attempt === attempts.length - 1) throw err;
     }
@@ -299,11 +305,14 @@ export async function* streamLopuMusing(
   const base = mode === 'commented' ? pickFallback() : '';
   const user = buildUserPrompt(mode, ctx, base);
 
+  // One durable read serves every provider attempt in this musing;
+  // getWaterfall catches internally and never throws.
+  const choices = await getLopuModelChoices();
+
   for (const provider of providerOrder()) {
     const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
     if (!key) continue;
     try {
-      const choices = await getLopuModelChoices();
       const gen =
         provider === 'claude'
           ? streamClaude(SYSTEM_PROMPT, user, choices.claude)

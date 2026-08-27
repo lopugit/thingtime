@@ -33,7 +33,10 @@ const baseModelById = new Map(AI_WORKFLOW_BASE_MODELS.map((model) => [model.id, 
 // Base models an admin can add from the picker; `default` is always present
 // in the waterfall (it cannot be removed), so it is never offered here.
 const PICKER_MODELS = AI_WORKFLOW_BASE_MODELS.filter((model) => model.provider !== 'default');
-const PICKER_PROVIDERS = ['anthropic', 'openai'] as const;
+// Derived from the catalog so a new provider's models appear in the picker
+// with no editor change — adding a model to the catalog stays the whole
+// registration.
+const PICKER_PROVIDERS = [...new Set(PICKER_MODELS.map((model) => model.provider))];
 
 // Full human name of one waterfall entry, for aria labels and live
 // announcements where the row subtitle is not read alongside the title.
