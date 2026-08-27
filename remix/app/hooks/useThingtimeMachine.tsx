@@ -180,7 +180,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo
@@ -255,7 +254,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo

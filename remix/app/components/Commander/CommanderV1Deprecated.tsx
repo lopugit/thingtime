@@ -181,7 +181,16 @@ export const CommanderV1 = (props: commanderArgs) => {
 		const endingQuotation = commandValue?.[commandValue?.length - 1];
 		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
 		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'")?.replace(/`/g, '\\`');
+		// Backslash FIRST (see CommanderV2): escaping the quotes before the
+		// backslashes lets an input ending in \ close the literal early. The
+		// result is wrapped in BACKTICKS here, so ${ has to be neutralised too
+		// — otherwise it stays a live interpolation inside the eval'd template.
+		const escaped = restOfCommandValue
+			?.replace(/\\/g, '\\\\')
+			?.replace(/"/g, '\\"')
+			?.replace(/'/g, "\\'")
+			?.replace(/`/g, '\\`')
+			?.replace(/\$\{/g, '\\${');
 
 		const ret = `\`${escaped}\``;
 		return ret;

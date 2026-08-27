@@ -149,7 +149,11 @@ export const CommanderV2 = (props) => {
 		const endingQuotation = commandValue?.[commandValue?.length - 1];
 		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
 		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
+		// Backslash FIRST, always: escaping the quotes before the backslashes
+		// turns an input ending in \ into \\" — the pair closes as one escaped
+		// backslash and the quote then terminates the literal early, so the
+		// eval fallback below sees a different expression than the user typed.
+		const escaped = restOfCommandValue?.replace(/\\/g, '\\\\')?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
 		const ret = `"${escaped}"`;
 		return ret;
 	}, [commandValue, validQuotations]);

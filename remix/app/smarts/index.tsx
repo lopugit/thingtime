@@ -1215,6 +1215,15 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   const value2PropertyKeys = Object.keys(value2);
 
   value2PropertyKeys.forEach((value2Property) => {
+    // Prototype-pollution guard. JSON.parse('{"__proto__":{…}}') produces an
+    // OWN enumerable "__proto__" key, so Object.keys hands it to us and the
+    // plain assignments below (value1[value2Property] = …) would run
+    // Object.prototype's setter and re-point every object in the page.
+    // "constructor"/"prototype" reach the same place one hop further out. No
+    // thing ever legitimately merges a property at one of these three names.
+    if (value2Property === '__proto__' || value2Property === 'constructor' || value2Property === 'prototype') {
+      return;
+    }
     const value1PropertyValue = value1[value2Property];
     if (value2Property in value1 && basic(value1PropertyValue) && !opts.overwrite) {
       return;
