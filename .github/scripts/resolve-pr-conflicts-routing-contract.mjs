@@ -645,9 +645,21 @@ function aiRuntimeSourceFiles(directory) {
 function assertAdminLoader(block, label) {
   assert.match(block, /https:\/\/thingtime\.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/, `${label}: endpoint`);
   assert.match(block, /Thingtime\.PRConflictAutoResolverModelWaterfall/, `${label}: singleton key`);
-  for (const model of ["default", "claude-fable-5", "claude-opus-5"]) {
-    assert.ok(block.includes(model), `${label}: closed model ${model}`);
-  }
+  // Thingtime's Admin catalog is open and spans providers, and entries compose
+  // as `<model>[:<effort>][:fast]`. The loader therefore validates entry SHAPE
+  // against an injection-safe charset (no space, quote, comma, or leading dash
+  // survives it) and takes provider eligibility from the response's own
+  // catalog, instead of pinning a model list that would drift out of date.
+  assert.ok(
+    block.includes('^[a-z0-9][a-z0-9.-]{0,47}(:[a-z]{1,8}){0,2}$'),
+    `${label}: charset-gates every stored waterfall entry`,
+  );
+  assert.ok(block.includes("length >= 1 and length <= 512"), `${label}: bounds the stored order`);
+  assert.ok(block.includes("select(length == (unique | length))"), `${label}: rejects duplicates`);
+  assert.ok(block.includes('.provider == "anthropic"'), `${label}: provider eligibility from the response`);
+  assert.ok(block.includes('base="${id%%:*}"'), `${label}: strips variant segments before the CLI`);
+  assert.ok(block.includes("default"), `${label}: keeps the default sentinel`);
+  assert.doesNotMatch(block, /\bclaude-(?:[a-z]+-)?\d[a-z0-9.-]*/iu, `${label}: pins no model id`);
   assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
 }

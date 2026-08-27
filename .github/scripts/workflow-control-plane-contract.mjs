@@ -215,7 +215,13 @@ function assertRoutingProofContract(providerRouter) {
 const ADMIN_MODEL_ENDPOINT =
   "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall";
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
-const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
+// Thingtime's Admin catalog is open (every Claude and OpenAI model, each entry
+// composed as `<model>[:<effort>][:fast]`), so the control plane must NOT carry
+// a second model list that silently drifts. A loader is safe when it validates
+// entry SHAPE against this injection-safe charset — no space, quote, comma, or
+// leading dash can survive it, which is what makes a value safe to sit next to
+// a CLI flag — and takes provider eligibility from the response's own catalog.
+const ADMIN_ENTRY_CHARSET = '^[a-z0-9][a-z0-9.-]{0,47}(:[a-z]{1,8}){0,2}$';
 const AI_RUNTIME_YAML = [
   ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
@@ -248,9 +254,35 @@ function assertAdminLoader(block, label) {
     block.includes(ADMIN_MODEL_KEY),
     `${label}: validates the exact Admin setting key`,
   );
-  for (const model of ALLOWED_MODELS) {
-    assert.ok(block.includes(model), `${label}: allowlists ${model}`);
-  }
+  assert.ok(
+    block.includes(ADMIN_ENTRY_CHARSET),
+    `${label}: charset-gates every stored waterfall entry`,
+  );
+  assert.ok(
+    block.includes("length >= 1 and length <= 512"),
+    `${label}: bounds the stored order`,
+  );
+  assert.ok(
+    block.includes("select(length == (unique | length))"),
+    `${label}: rejects duplicate entries`,
+  );
+  assert.ok(
+    block.includes('.provider == "anthropic"'),
+    `${label}: takes provider eligibility from the response catalog`,
+  );
+  assert.ok(
+    block.includes('base="${id%%:*}"'),
+    `${label}: strips Thingtime variant segments before the CLI`,
+  );
+  // Strictly stronger than the old positive allowlist: the loader must pin no
+  // model id at all, so a growing Admin catalog can never strand this plane.
+  // Model ids carry a version number (claude-opus-5, claude-haiku-4-5); the
+  // credential/argument names that legitimately live here do not.
+  assert.doesNotMatch(
+    block,
+    /\bclaude-(?:[a-z]+-)?\d[a-z0-9.-]*/iu,
+    `${label}: pins no model id`,
+  );
   assert.match(
     block,
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,

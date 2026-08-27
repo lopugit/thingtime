@@ -2082,7 +2082,17 @@ jobs:
             "$endpoint"; then
             # Slurp first so a response containing multiple top-level JSON
             # values is malformed too. Only the exact public setting key and a
-            # unique 1..3 item array from the closed model allowlist is valid.
+            # unique, bounded array of well-formed option ids is valid.
+            #
+            # Thingtime's Admin catalog is open and spans both providers, and
+            # each entry composes a base model with optional variant segments
+            # (`<model>[:<effort>][:fast]`). Pinning model names here would put
+            # a second catalog in the control plane, so this stage validates
+            # SHAPE only: a bounded, unique array whose every entry matches an
+            # injection-safe charset with no space, quote, comma, or leading
+            # dash. That is what makes it safe to place an entry next to a CLI
+            # flag; which entries are eligible is decided below from the same
+            # response's own provider metadata.
             if configured="$(jq -cse '
               select(length == 1)
               | .[0]
@@ -2091,12 +2101,9 @@ jobs:
               | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
               | .waterfall
               | select(type == "array")
-              | select(length >= 1 and length <= 3)
+              | select(length >= 1 and length <= 512)
               | select(all(.[]; type == "string"))
-              | select(all(.[];
-                  . == "default"
-                  or . == "claude-fable-5"
-                  or . == "claude-opus-5"))
+              | select(all(.[]; test("^[a-z0-9][a-z0-9.-]{0,47}(:[a-z]{1,8}){0,2}$")))
               | select(length == (unique | length))
             ' "$response_file" 2>/dev/null)"; then
               waterfall="$configured"
@@ -2113,30 +2120,88 @@ jobs:
             echo "::warning::Thingtime conflict-resolver model waterfall is unavailable; using [default]."
           fi
 
-          # Never interpolate API strings into claude_args. Rebuild the entire
-          # ordered chain from fixed literals after validation, so even a
-          # compromised response cannot inject another CLI flag or model name.
+          # Which catalog ids THIS backend can run, taken from the same
+          # response's base-model catalog rather than a model list pinned here.
+          # A pre-catalog deployment publishes no `provider` field and was
+          # Claude-only, so every id it lists stays eligible. Charset-validated
+          # again so a hostile catalog can only ever narrow this set.
+          eligible_bases="$(jq -r '
+            (.models // [])
+            | (map(select(has("provider"))) | length > 0) as $typed
+            | map(select(if $typed then (.provider == "anthropic" or .provider == "default") else true end))
+            | map(.id // empty)
+            | map(select(type == "string" and test("^[a-z0-9][a-z0-9.-]{0,47}$")))
+            | .[]
+          ' "$response_file" 2>/dev/null || true)"
+
+          is_eligible_base() {
+            if [ "$1" = default ]; then return 0; fi
+            local candidate
+            while IFS= read -r candidate; do
+              if [ "$candidate" = "$1" ]; then return 0; fi
+            done <<<"$eligible_bases"
+            return 1
+          }
+
+          # Never interpolate raw API strings into claude_args. Every id emitted
+          # below already passed the charset gate above, so it cannot carry a
+          # space, quote, comma, or leading dash and can never become a second
+          # CLI flag. Claude Code takes a bare model id, so the Thingtime
+          # variant segments are stripped first. An entry this backend cannot
+          # run (an OpenAI model, or a model absent from the catalog) is skipped
+          # rather than failing the whole order closed, so one unrunnable entry
+          # never costs the administrator the rest of their preference.
           mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
           models=()
+          skipped=0
+          truncated=0
           for id in "${configured_ids[@]}"; do
-            case "$id" in
-              default) models+=("default") ;;
-              claude-fable-5) models+=("claude-fable-5") ;;
-              claude-opus-5) models+=("claude-opus-5") ;;
-              *)
-                echo "::warning::Validated waterfall mapping failed closed; using [default]."
-                models=("default")
-                source="built-in default"
-                break
-                ;;
-            esac
+            base="${id%%:*}"
+            if ! is_eligible_base "$base"; then
+              skipped=$((skipped + 1))
+              continue
+            fi
+            # Two variants of one model collapse onto a single CLI id; keep the
+            # administrator's first (highest priority) occurrence.
+            duplicate=0
+            for existing in ${models[@]+"${models[@]}"}; do
+              if [ "$existing" = "$base" ]; then duplicate=1; break; fi
+            done
+            if [ "$duplicate" -eq 1 ]; then continue; fi
+            # Bound the emitted chain so the handoff string stays well inside
+            # the downstream 2048-character audit budget even if the catalog
+            # response is hostile. Real catalogs are far below this.
+            if [ "${#models[@]}" -ge 16 ]; then
+              truncated=$((truncated + 1))
+              continue
+            fi
+            models+=("$base")
           done
+          if [ "$skipped" -gt 0 ]; then
+            echo "::notice::Skipped $skipped waterfall entries this backend cannot run."
+          fi
+          if [ "$truncated" -gt 0 ]; then
+            echo "::warning::Waterfall longer than 16 runnable entries; dropped the last $truncated."
+          fi
+          if [ "${#models[@]}" -eq 0 ]; then
+            echo "::warning::No backend-capable waterfall entry; using [default]."
+            models=("default")
+            source="built-in default"
+          fi
+          # `default` is the hard fallback and must survive dedup/truncation.
+          has_default=0
+          for existing in ${models[@]+"${models[@]}"}; do
+            if [ "$existing" = default ]; then has_default=1; break; fi
+          done
+          if [ "$has_default" -eq 0 ]; then models+=("default"); fi
 
           primary="${models[0]}"
+          # The Admin-selected id is already charset-restricted to
+          # [a-z0-9.-], so it is safe to surface verbatim. Naming models here
+          # would put a second, drifting catalog in the control plane.
           case "$primary" in
-            claude-fable-5) backend_label="Claude Fable 5 Max Fast" ;;
-            claude-opus-5) backend_label="Claude Opus 5" ;;
-            *) backend_label="Claude Code default" ;;
+            default) backend_label="Claude Code default" ;;
+            *) backend_label="$primary" ;;
           esac
           model_args="--model $primary"
           if [ "${#models[@]}" -gt 1 ]; then
@@ -2700,7 +2765,7 @@ jobs:
             echo "::warning::Lopu repository review stopped with subtype $RESULT_SUBTYPE; no unrelated retry was sent."
             exit 1
           fi
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9.-]{1,47})(\ --fallback-model\ (default|claude-[a-z0-9.-]{1,47})(,(default|claude-[a-z0-9.-]{1,47}))*)?$ ]] || {
             echo "::warning::The Lopu review model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -4476,7 +4541,7 @@ jobs:
           fi
           session_id="$RESULT_SESSION"
 
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9.-]{1,47})(\ --fallback-model\ (default|claude-[a-z0-9.-]{1,47})(,(default|claude-[a-z0-9.-]{1,47}))*)?$ ]] || {
             echo "::warning::The release-analysis model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -5500,7 +5565,7 @@ jobs:
           fi
           session_id="$RESULT_SESSION"
 
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9.-]{1,47})(\ --fallback-model\ (default|claude-[a-z0-9.-]{1,47})(,(default|claude-[a-z0-9.-]{1,47}))*)?$ ]] || {
             echo "::error::The trusted model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -5999,7 +6064,7 @@ jobs:
             default)
               unset GRAPHIFY_CLAUDE_CLI_MODEL
               ;;
-            claude-fable-5|claude-opus-5)
+            claude-*)
               graphify_model_args=(--model "$PREFERRED_MODEL")
               export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
               ;;
