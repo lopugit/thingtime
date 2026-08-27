@@ -6392,6 +6392,9 @@ jobs:
             exit 0
           fi
           export PATH="$HOME/.local/bin:$PATH"
+          graphify_router="$GITHUB_WORKSPACE/trusted/.github/scripts/graphify-cas.mjs"
+          graphify_stager="$GITHUB_WORKSPACE/trusted/.github/scripts/stage-graphify-snapshots.mjs"
+          test -f "$graphify_router" && test -f "$graphify_stager"
 
           select_claude_backend() {
             if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -6457,21 +6460,12 @@ jobs:
           # point: a half-written semantic run can be discarded without losing
           # the completed structural rebuild.
           stage_graphify_outputs() {
-            for f in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-              p="graphify-out/$f"
-              if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
-                git add -A -- "$p"
-              fi
-            done
-            if [ -d graphify-out/cache/semantic ] \
-               || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-              git add -A -- graphify-out/cache/semantic/
-            fi
+            node "$graphify_stager"
           }
 
           # Phase 1 is unconditional after every completed base-into-head
           # merge. This is the source-of-truth code graph build and uses no LLM.
-          if ! graphify update . || ! graph_not_collapsed; then
+          if ! node "$graphify_router" update . || ! graph_not_collapsed; then
             echo "::warning::Structural \`graphify update\` failed in CI — keeping the merged commit's existing graph as-is."
             echo "semantic=unavailable" >> "$GITHUB_OUTPUT"
             echo "refreshed=failed" >> "$GITHUB_OUTPUT"
@@ -6489,9 +6483,8 @@ jobs:
           if [ -n "$backend" ]; then
             conc=4
             if [ "$backend" = "claude-cli" ]; then conc=1; fi
-            if graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+            if node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
                  --max-concurrency "$conc" --api-timeout 240 \
-               && graphify cluster-only . --no-viz --no-label \
                && graph_not_collapsed; then
               semantic="$backend"
               stage_graphify_outputs
@@ -6563,6 +6556,7 @@ jobs:
               -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL"
             echo "refreshed=true" >> "$GITHUB_OUTPUT"
           fi
+          git clean -qffdx -- graphify-out/
 
       - name: Push merge commit
         id: push

@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu's Graphify publisher now content-addresses semantic-cache variants as
+  well as graph snapshots**: real semantic builds proved that upstream can
+  rewrite one input-key filename with different valid response bytes. The
+  trusted router hydrates a private work cache from
+  `semantic-cas/v1/<input-key>/<content-hash>.json`, ingests only after a
+  successful build, preserves divergent responses additively, and restores any
+  legacy tracked mutable cache after staging so old product branches remain
+  clean. — Codex (AI), 2026-08-27
 - **Lopu now wakes on first-party CI failures without duplicating repository
   review sessions**: the default listener forwards a bounded allowlist of
   completed GitHub Actions workflows, and the protected controller binds the
@@ -188,6 +196,12 @@ every entry is attributed the same way the app changelog attributes them.
   then records the evidence and disposition on the PR. Lopu never selects
   `won't fix`, and the model itself has read-only code-scanning access. — Codex
   (AI), 2026-08-25
+- **Lopu now publishes conflict-free Graphify snapshots**: structural and
+  semantic refreshes run through a trusted content-addressed router that
+  fingerprints only source, serializes writers, validates atomic portable
+  output, rejects large accidental collapse, and stages immutable additive
+  snapshots. Root graph aliases are local-only, so independent PRs and stacks
+  no longer fight over the same generated JSON paths. — Codex (AI), 2026-08-27
 - **Lopu now updates clean-but-behind PR branches before reviewing them**:
   the shared detector treats GitHub's `BEHIND` state as a base-merge request,
   snapshots both refs, and merges the PR target into an eligible same-repo
