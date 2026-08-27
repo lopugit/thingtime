@@ -328,8 +328,13 @@ let indexesEnsured: Promise<void> | null = null;
 // Promise.all, so on the boot that performs an index swap a legacy-name drop
 // can race a sibling index build and get rejected (observed live: the first
 // swap run left crystal.clientId_1 behind while its replacement built).
-// Absent index (IndexNotFound 27) is success; anything else backs off and
-// retries, then gives up quietly — the next boot's run re-prunes.
+// Absent index (IndexNotFound 27) is success, and so is an absent collection
+// (NamespaceNotFound 26): a `things` collection that does not exist yet cannot
+// be holding a stale index, so there is nothing to retry for. Treating 26 as a
+// transient error instead cost every FRESH database ~2s of pure backoff sleep
+// per pruned name on the awaited bootstrap path (5 retired names = ~10s added
+// to the first write). Anything else backs off and retries, then gives up
+// quietly — the next boot's run re-prunes.
 const dropIndexRetrying = async (collection: any, name: string, attempts = 5) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
@@ -337,6 +342,7 @@ const dropIndexRetrying = async (collection: any, name: string, attempts = 5) =>
       return;
     } catch (err: any) {
       if (err?.code === 27 || err?.codeName === 'IndexNotFound') return;
+      if (err?.code === 26 || err?.codeName === 'NamespaceNotFound') return;
       if (attempt === attempts - 1) return;
       await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
     }
@@ -420,9 +426,16 @@ const LEGACY_DEVICE_TTL_INDEXES = [
 // fields. Prune them before creating anything so a database already sitting at
 // MongoDB's 64-index ceiling can still converge instead of failing every
 // bootstrap and blocking unrelated schema migrations.
+// NOTE: `notification_unread` and `shareOfId_1` are deliberately NOT listed.
+// Both are still created by createThingsDataIndexes below and still serve live
+// hot query paths — the unread badge count polled by every session
+// (notifications.ts `countDocuments({thingtime:'notification', ownerId,
+// readAt:null})`) and the share-count $or that runs on every feed/profile/
+// search/post read and reaction toggle (things.ts `$or: [{thingtime:'share',
+// targetId}, {shareOfId}]`). Listing them here would drop and immediately
+// rebuild both on EVERY bootstrap, leaving those two aggregations on a
+// collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
-	'notification_unread',
-	'shareOfId_1',
 	'sourceIds_1_createdAt_-1_shareId_1',
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
 	'things_passkey_link_key_unique'
