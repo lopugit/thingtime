@@ -247,6 +247,25 @@ export const friendIdsOf = async (userId: string): Promise<Set<string>> => {
   return ids;
 };
 
+// The viewer's audience-group memberships — the preload behind tt:group/<id>
+// acl entries (AclViewer.groupIds), shaped exactly like friendIdsOf: member
+// docs carry targetId = the MEMBER's user id (api/utils/groups), so one query
+// on the existing (thingtime, targetId) access pattern answers.
+export const groupIdsOf = async (userId: string): Promise<Set<string>> => {
+  const things = await getThingsCollection();
+  const docs = await things
+    .find({ thingtime: 'group-member', targetId: userId } as any)
+    .project({ crystal: 1 })
+    .limit(2000)
+    .toArray();
+  const ids = new Set<string>();
+  for (const doc of docs as any[]) {
+    const groupId = String((doc as any).crystal?.groupId || '');
+    if (groupId) ids.add(groupId);
+  }
+  return ids;
+};
+
 // ---------------------------------------------------------------------------
 // Read side: counts, viewer state, lists
 
