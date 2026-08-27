@@ -6694,7 +6694,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
 			'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
       'The target thing (post or comment) must be visible to the current user.',
-			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
+			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card. A temporarily pending comment remains visible and counted for its author while moderation completes; other viewers do not see it until release.',
       'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [

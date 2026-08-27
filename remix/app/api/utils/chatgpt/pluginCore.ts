@@ -12,8 +12,8 @@ export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.1.0',
   'chatgpt.oauth': '1.3.0',
   'chatgpt.connections': '1.1.0',
-  'chatgpt.things.read': '1.0.0',
-  'chatgpt.things.write': '1.0.0'
+  'chatgpt.things.read': '1.0.1',
+  'chatgpt.things.write': '1.0.1'
 } as const;
 
 export const CHATGPT_MCP_INSTRUCTIONS =

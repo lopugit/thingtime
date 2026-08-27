@@ -145,6 +145,19 @@ let fullToken;
   });
   check('PAT comments through the dedicated route', commented.status === 200 && commented.body?.ok === true);
 
+  const postWithComment = await api(`/api/v1/things?id=${postId}`, { cookie: session.cookie });
+  check(
+    'session permalink read discovers the PAT-created comment relationally',
+    postWithComment.status === 200 &&
+      postWithComment.body?.post?.commentCount === 1 &&
+      postWithComment.body?.post?.comments?.some((comment) => comment.id === commented.body?.comment?.id),
+    JSON.stringify({
+      status: postWithComment.status,
+      commentCount: postWithComment.body?.post?.commentCount,
+      commentIds: postWithComment.body?.post?.comments?.map((comment) => comment.id)
+    })
+  );
+
   const reacted = await api('/api/v1/things/react', {
     token: fullToken,
     method: 'POST',
