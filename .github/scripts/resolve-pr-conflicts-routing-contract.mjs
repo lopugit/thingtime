@@ -969,6 +969,16 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
+    /hash_index_entries\(\)[\s\S]*?git ls-files --stage -z \| sha256_stdin[\s\S]*?EXPECTED_INDEX_ENTRIES_SHA256/u,
+    "the rebase verifier fingerprints semantic index entries instead of volatile index-file bytes",
+  );
+  assert.doesNotMatch(
+    rebaseActionSource,
+    /sha256_file "\$index_path"/u,
+    "the rebase verifier must not compare the volatile on-disk index encoding",
+  );
+  assert.match(
+    rebaseActionSource,
     /cp -pR "\$safe_trusted_abs\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$restored\/\.github\/actions\/lopu-agent\/"/u,
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
   );

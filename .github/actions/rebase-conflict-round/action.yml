@@ -500,7 +500,7 @@ runs:
         EXPECTED_HEAD_SHA: ${{ steps.prepare.outputs.head_sha }}
         EXPECTED_REBASE_HEAD_SHA: ${{ steps.prepare.outputs.rebase_head_sha }}
         EXPECTED_REBASE_PARENT_SHA: ${{ steps.prepare.outputs.rebase_parent_sha }}
-        EXPECTED_INDEX_SHA256: ${{ steps.prepare.outputs.index_sha256 }}
+        EXPECTED_INDEX_ENTRIES_SHA256: ${{ steps.prepare.outputs.index_entries_sha256 }}
         EXPECTED_REBASE_STATE_SHA256: ${{ steps.prepare.outputs.rebase_state_sha256 }}
         EXPECTED_CONFLICT_PATHS: ${{ steps.prepare.outputs.conflict_paths }}
         EXPECTED_AI_CONFLICT_PATHS: ${{ steps.prepare.outputs.ai_conflict_paths }}
@@ -545,6 +545,9 @@ runs:
           else
             shasum -a 256 | awk '{ print $1 }'
           fi
+        }
+        hash_index_entries() {
+          git ls-files --stage -z | sha256_stdin
         }
         hash_trusted_tree() {
           local root="$1"
@@ -691,9 +694,8 @@ runs:
         [[ "$(git rev-parse "REBASE_HEAD^1^{commit}")" == "$EXPECTED_REBASE_PARENT_SHA" ]] || {
           echo "::error::Incoming commit parent changed while Claude was isolated."; exit 1;
         }
-        index_path="$(git rev-parse --git-path index)"
-        [[ "$(sha256_file "$index_path")" == "$EXPECTED_INDEX_SHA256" ]] || {
-          echo "::error::The real Git index changed while Claude was isolated."; exit 1;
+        [[ "$(hash_index_entries)" == "$EXPECTED_INDEX_ENTRIES_SHA256" ]] || {
+          echo "::error::The real Git index entries changed while Claude was isolated."; exit 1;
         }
         [[ "$(hash_rebase_state)" == "$EXPECTED_REBASE_STATE_SHA256" ]] || {
           echo "::error::The real rebase sequencer changed while Claude was isolated."; exit 1;

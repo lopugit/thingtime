@@ -177,6 +177,14 @@ sha256_stdin() {
   fi
 }
 
+# The on-disk index contains volatile implementation details such as stat-cache
+# records and its selected binary encoding. Git may rewrite those bytes during
+# an otherwise read-only refresh. Fingerprint the complete semantic index
+# instead: mode, object id, stage, and NUL-delimited path for every entry.
+hash_index_entries() {
+  git ls-files --stage -z | sha256_stdin
+}
+
 hash_rebase_state() {
   local state_dir
   if [[ -d "$git_dir/rebase-merge" ]]; then
@@ -334,8 +342,7 @@ fi
 head_sha="$(git rev-parse "HEAD^{commit}")"
 rebase_head_sha="$(git rev-parse "REBASE_HEAD^{commit}")"
 rebase_parent_sha="$(git rev-parse "REBASE_HEAD^1^{commit}")"
-index_path="$(git rev-parse --git-path index)"
-index_sha256="$(sha256_file "$index_path")"
+index_entries_sha256="$(hash_index_entries)"
 rebase_state_sha256="$(hash_rebase_state)"
 
 # The local action is already parsed and its trusted files have been copied to
@@ -358,7 +365,7 @@ emit graphify_reset "$graphify_reset"
 emit head_sha "$head_sha"
 emit rebase_head_sha "$rebase_head_sha"
 emit rebase_parent_sha "$rebase_parent_sha"
-emit index_sha256 "$index_sha256"
+emit index_entries_sha256 "$index_entries_sha256"
 emit rebase_state_sha256 "$rebase_state_sha256"
 emit_paths conflict_paths "$all_conflicts"
 emit_paths ai_conflict_paths "$ai_conflicts"

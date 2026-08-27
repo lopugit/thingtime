@@ -60,6 +60,9 @@ jobs:
           node --test .github/scripts/graphify-cas.test.mjs
           node .github/scripts/stage-graphify-snapshots.mjs --self-test
 
+      - name: Validate rebase index integrity fingerprint
+        run: node --test .github/scripts/rebase-index-fingerprint.test.mjs
+
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
