@@ -3638,7 +3638,10 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
+      # The writer reports its evidence on the PR timeline after applying the
+      # repository-level disposition. GitHub authorizes that issue-comment
+      # endpoint for pull requests through `pull-requests: write`.
+      pull-requests: write
       issues: write
       security-events: write
     env:
