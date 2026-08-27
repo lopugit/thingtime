@@ -323,6 +323,51 @@ graph_not_collapsed() {
   fi
 }
 
+# A total-node count cannot see the failure AGENTS.md calls a poisoned pair:
+# semantic extraction rebuilds graph.json from the files it treats as changed
+# plus the tracked semantic cache, so a file whose content never moved but
+# whose semantics are not cached comes back as a bare file node with every
+# symbol dropped. The loss is per file and the run total can even rise while it
+# happens, so compare per file against the same verified baseline and fall back
+# to the AST/text refresh rather than promoting a graph that silently lost
+# symbols. One node of clustering jitter is tolerated; two or more is collapse.
+graph_pair_not_poisoned() {
+  local baseline poisoned
+  baseline="$(mktemp -d)"
+  if ! git show "$verified_head:graphify-out/graph.json" >"$baseline/graph.json" 2>/dev/null \
+     || ! git show "$verified_head:graphify-out/manifest.json" >"$baseline/manifest.json" 2>/dev/null \
+     || [ ! -r graphify-out/graph.json ] || [ ! -r graphify-out/manifest.json ]; then
+    rm -rf "$baseline"
+    return 0
+  fi
+  poisoned="$(jq -rn \
+    --slurpfile old_graph "$baseline/graph.json" \
+    --slurpfile new_graph graphify-out/graph.json \
+    --slurpfile old_manifest "$baseline/manifest.json" \
+    --slurpfile new_manifest graphify-out/manifest.json '
+    def counts: reduce (.nodes // [])[] as $node ({}; .[$node.source_file // "?"] += 1);
+    ($old_graph[0] | counts) as $before
+    | ($new_graph[0] | counts) as $after
+    | ($old_manifest[0] // {}) as $old
+    | ($new_manifest[0] // {}) as $new
+    | $old
+    | keys_unsorted[]
+    | select($new[.] != null)
+    | select($old[.].ast_hash == $new[.].ast_hash)
+    | select($old[.].semantic_hash == $new[.].semantic_hash)
+    | select((($before[.] // 0) - ($after[.] // 0)) >= 2)
+    | "\(.): \($before[.] // 0) -> \($after[.] // 0) nodes"
+  ' 2>/dev/null || true)"
+  rm -rf "$baseline"
+  [ -n "$poisoned" ] || return 0
+  echo "::warning::Semantic Graphify refresh dropped symbols for files whose content never changed; refusing the poisoned pair."
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    echo "  poisoned: $entry"
+  done <<<"$poisoned"
+  return 1
+}
+
 semantic=none
 if [ -n "$backend" ]; then
   concurrency=4
@@ -331,13 +376,14 @@ if [ -n "$backend" ]; then
   graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
     --max-concurrency "$concurrency" --api-timeout 7200 \
     && graphify cluster-only . --no-viz --no-label \
-    && graph_not_collapsed || semantic_status=$?
+    && graph_not_collapsed \
+    && graph_pair_not_poisoned || semantic_status=$?
   assert_tool_boundary
   if (( semantic_status == 0 )); then
     semantic="$backend"
   else
     semantic=failed
-    echo "::warning::Semantic Graphify extraction failed; restoring the verified graph before AST/text fallback."
+    echo "::warning::Semantic Graphify extraction failed or was refused; restoring the verified graph before AST/text fallback."
     git checkout -q "$verified_head" -- graphify-out/ 2>/dev/null || true
     git clean -qffdx -- graphify-out/
   fi
