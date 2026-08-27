@@ -64,6 +64,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **/branding redesigned as a full brand-resources page**: full-width
+  Meta-style sections per logo variant with whitespace-trimmed previews and a
+  minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
+  optional background); pre-generated PNG ladders (10px → 10000px) + SVGs
+  committed under `remix/public/branding/generated/` via the new
+  `npm run branding-assets` (zero-dep deterministic PNG encoder), lazy-loaded
+  for Google-image indexing; generated press-kit suite (OG cards, banners,
+  wallpapers, tiles, confetti pattern); palette + usage sections; Asset
+  library JSON dump removed. Details:
+  `PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md`.
+  — Claude (AI), 2026-08-22
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs
