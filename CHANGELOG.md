@@ -410,6 +410,18 @@ every entry is attributed the same way the app changelog attributes them.
   and the control-plane contract inventories all active AI workflow/action
   YAML while rejecting legacy or hardcoded model selections. — Codex (AI),
   2026-08-10
+- **A branch pushed just before its PR opens no longer times out that PR's
+  CodeQL check**: the analyzer's scope pre-flight samples PR ownership seconds
+  after the push, so a branch adopted by a PR moments later still reached the
+  analyze job believing it owned analysis. The resulting `refs/heads` analysis
+  at a live PR head made GitHub Advanced Security open that PR's check against
+  the branch snapshot and close it `timed_out` with only one of the two
+  language configurations uploaded — the recurring "1 configuration not found"
+  symptom. The analyze job now re-confirms ownership after database init and
+  before upload, ceding to the PR's own run; a transient lookup failure keeps
+  the prepared analysis rather than failing the check it protects. Only the
+  branch-ref push path is affected, so `pull_request`, scheduled, and centrally
+  dispatched merge-ref analyses are unchanged. — Lopu (AI), 2026-08-27
 
 ### Added
 
