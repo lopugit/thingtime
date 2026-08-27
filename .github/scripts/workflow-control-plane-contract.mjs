@@ -245,7 +245,13 @@ function workflowBlock(source, start, end, label) {
   return source.slice(startIndex, endIndex);
 }
 
-function assertAdminLoader(block, label) {
+// One Admin dial drives every model-backed Lopu lane, so each copy of the
+// loader must enforce the identical grammar. A copy that quietly accepts an id
+// the others reject produces a split brain — the same setting routing one lane
+// to a named model and another to `default`. Pin the grammar on every copy,
+// including the build doctor's, which emits no `primary_model` and so cannot
+// use the fuller `assertAdminLoader` below.
+function assertAdminWaterfallGrammar(block, label) {
   assert.ok(
     block.includes(ADMIN_MODEL_ENDPOINT),
     `${label}: fetches Thingtime Admin endpoint`,
@@ -270,6 +276,16 @@ function assertAdminLoader(block, label) {
     block.includes('. + ["default"]'),
     `${label}: appends the default hard fallback defensively`,
   );
+  // A repeated segment (`model:fast:fast`, `model:high:low`) must fail the
+  // whole mapping closed rather than being silently absorbed by one copy.
+  assert.ok(
+    block.includes('[ "$fast" -eq 0 ] || segments_ok=0'),
+    `${label}: rejects a repeated fast segment`,
+  );
+  assert.ok(
+    block.includes('[ -z "$effort" ] || segments_ok=0'),
+    `${label}: rejects a repeated effort segment`,
+  );
   assert.match(
     block,
     /--effort \$claude_effort/u,
@@ -280,6 +296,10 @@ function assertAdminLoader(block, label) {
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,
     `${label}: exports validated model args`,
   );
+}
+
+function assertAdminLoader(block, label) {
+  assertAdminWaterfallGrammar(block, label);
   assert.match(
     block,
     /primary_model=.*>> "\$GITHUB_OUTPUT"/u,
@@ -287,7 +307,7 @@ function assertAdminLoader(block, label) {
   );
 }
 
-function assertAdminModelRouting(resolver, rebase) {
+function assertAdminModelRouting(resolver, rebase, allBranch) {
   const resolverLoader = workflowBlock(
     resolver,
     "  model_config:\n",
@@ -300,9 +320,19 @@ function assertAdminModelRouting(resolver, rebase) {
     "      - name: Isolate the real rebasing repository outside model workspace\n",
     "rebase model loader",
   );
+  const buildDoctorLoader = workflowBlock(
+    allBranch,
+    "      - name: Load the build-doctor model waterfall\n",
+    "      - name: Lopu build doctor round 1\n",
+    "build-doctor model loader",
+  );
 
   assertAdminLoader(resolverLoader, "resolver model loader");
   assertAdminLoader(rebaseLoader, "rebase model loader");
+  // The build doctor reuses the same Admin dial and hands its result to the
+  // same Claude CLI, so it is held to the same grammar even though the rest of
+  // all-branch.yml owns its bounded build-doctor policy separately.
+  assertAdminWaterfallGrammar(buildDoctorLoader, "build-doctor model loader");
   assert.doesNotMatch(
     rebaseLoader,
     /steps\.start\.outputs\.complete/u,
@@ -1274,7 +1304,7 @@ export function assertControlPlaneContract() {
   );
 
   assertUserControlledMergePause(resolver, rebase);
-  assertAdminModelRouting(resolver, rebase);
+  assertAdminModelRouting(resolver, rebase, readWorkflow("all-branch.yml"));
   assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
   assertBareControlPlaneTree();
