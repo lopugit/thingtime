@@ -278,6 +278,9 @@ export type PublicPost = {
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
   commentCount: number;
+  // Viewer-relative layers: never disclose comments hidden by ACL/moderation.
+  // `commentCount` remains the backward-compatible alias of total.
+  commentCounts: { direct: number; replies: number; total: number; loaded: number };
   comments: PublicComment[];
   shareCount: number;
   // true whenever this post is a share, even if the original is deleted or
@@ -1698,6 +1701,17 @@ const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[]
   return [...embedded, ...standalone].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 };
 
+export const layeredPostCommentCounts = (
+	direct: number,
+	total: number,
+	loaded: number
+): PublicPost['commentCounts'] => ({
+	direct,
+	replies: Math.max(0, total - direct),
+	total,
+	loaded
+});
+
 // Merge a post's v1 embedded reaction map with standalone reaction things
 // (v2 thingtime things + interim kind docs, already folded by resolveRelated).
 // Users can hold several tokens at once, so dedupe by exact (user, token) pair.
@@ -1846,6 +1860,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
       commentCount: totalComments,
+      commentCounts: layeredPostCommentCounts(allComments.length, totalComments, comments.length),
       comments,
       shareCount: liveShareCountOf(doc, related),
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),

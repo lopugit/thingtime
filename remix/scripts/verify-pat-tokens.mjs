@@ -150,11 +150,41 @@ let fullToken;
     'session permalink read discovers the PAT-created comment relationally',
     postWithComment.status === 200 &&
       postWithComment.body?.post?.commentCount === 1 &&
+      postWithComment.body?.post?.commentCounts?.direct === 1 &&
+      postWithComment.body?.post?.commentCounts?.replies === 0 &&
+      postWithComment.body?.post?.commentCounts?.total === 1 &&
+      postWithComment.body?.post?.commentCounts?.loaded === 1 &&
       postWithComment.body?.post?.comments?.some((comment) => comment.id === commented.body?.comment?.id),
     JSON.stringify({
       status: postWithComment.status,
       commentCount: postWithComment.body?.post?.commentCount,
+      commentCounts: postWithComment.body?.post?.commentCounts,
       commentIds: postWithComment.body?.post?.comments?.map((comment) => comment.id)
+    })
+  );
+
+  const replied = await api('/api/v1/things/comment', {
+    token: fullToken,
+    method: 'POST',
+    body: { id: commented.body?.comment?.id, text: 'pat reply' }
+  });
+  check('PAT replies to a comment through the dedicated route', replied.status === 200 && replied.body?.ok === true);
+
+  const postWithReply = await api(`/api/v1/things?id=${postId}`, { cookie: session.cookie });
+  check(
+    'session permalink separates direct and reply count layers',
+    postWithReply.status === 200 &&
+      postWithReply.body?.post?.commentCount === 2 &&
+      postWithReply.body?.post?.commentCounts?.direct === 1 &&
+      postWithReply.body?.post?.commentCounts?.replies === 1 &&
+      postWithReply.body?.post?.commentCounts?.total === 2 &&
+      postWithReply.body?.post?.commentCounts?.loaded === 1 &&
+      postWithReply.body?.post?.comments?.[0]?.comments?.some((comment) => comment.id === replied.body?.comment?.id),
+    JSON.stringify({
+      status: postWithReply.status,
+      commentCount: postWithReply.body?.post?.commentCount,
+      commentCounts: postWithReply.body?.post?.commentCounts,
+      replyIds: postWithReply.body?.post?.comments?.[0]?.comments?.map((comment) => comment.id)
     })
   );
 

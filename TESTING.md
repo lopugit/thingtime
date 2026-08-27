@@ -882,6 +882,10 @@ is fixed, and cite the checklist you ran in the PR description.
       released. The permalink projection and `GET ?target=…&thingtime=comment`
       listing must agree (regression: the batch post projection filtered every
       pending child, including the owner's own comment, and rendered zero).
+- [ ] COUNT LAYERS: a post with direct comments plus nested replies reports
+      viewer-relative `commentCounts.direct`, `replies`, `total`, and `loaded`;
+      legacy `commentCount` equals `total`. A viewer excluded from a comment
+      layer never learns that hidden row through any count.
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
       the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
       Comment rows mirror the pattern — reply icon then react control inline
