@@ -2112,6 +2112,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ needs.review_detect.outputs.pr_number }}
           BRANCH: ${{ needs.review_detect.outputs.branch }}
           EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
@@ -2144,34 +2145,50 @@ jobs:
             review_title='Lopu reviews all eligible PRs from the control plane'
           fi
 
+          # Coalescing is only sound for signals a later session reconstructs
+          # by itself. PR lifecycle, check, and first-party CI events qualify:
+          # the admitted review re-reads the newest head and the complete live
+          # check set regardless of which of them woke it. A human comment does
+          # not qualify — only an `issue-comment:`/`inline-comment:` dispatch id
+          # tells Lopu which exact comment to fetch and answer, and a review
+          # that is already queued carries no such id. Dropping that event
+          # would silently leave a human question unanswered, so conversation
+          # always gets its own session.
+          case "$EVENT_NAME" in
+            issue_comment | pull_request_review_comment) coalescible=false ;;
+            *) coalescible=true ;;
+          esac
+
           # A queued review has not snapshotted its worktree yet, so it will
           # naturally inspect the newest live head and the complete check set
           # when admitted to the repository-wide Lopu slot. Do not enqueue the
           # same scope again merely because several checks completed together.
           # An already-running review is deliberately not suppressed: a head
           # move during that session needs one newest waiter behind it.
-          workflow_runs="$(gh api \
-            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&per_page=100")"
-          pending_review_url="$(jq -r --arg title "$review_title" '
-            [.workflow_runs[]
-              | select(.display_title == $title)
-              | select(.status == "pending"
-                       or .status == "queued"
-                       or .status == "waiting"
-                       or .status == "requested")]
-            | sort_by(.created_at)
-            | .[0].html_url // empty
-          ' <<<"$workflow_runs")"
-          if [ -n "$pending_review_url" ]; then
-            echo "::notice::Skipping duplicate Lopu review handoff; an unstarted review for this exact scope is already queued: $pending_review_url"
-            {
-              echo '## Coalesced Lopu review handoff'
-              echo
-              echo "A queued review already owns \`$review_title\`. It will read the newest PR head and complete live check state when admitted."
-              echo
-              echo "[Queued Lopu review]($pending_review_url)"
-            } >>"$GITHUB_STEP_SUMMARY"
-            exit 0
+          if [ "$coalescible" = true ]; then
+            workflow_runs="$(gh api \
+              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&per_page=100")"
+            pending_review_url="$(jq -r --arg title "$review_title" '
+              [.workflow_runs[]
+                | select(.display_title == $title)
+                | select(.status == "pending"
+                         or .status == "queued"
+                         or .status == "waiting"
+                         or .status == "requested")]
+              | sort_by(.created_at)
+              | .[0].html_url // empty
+            ' <<<"$workflow_runs")"
+            if [ -n "$pending_review_url" ]; then
+              echo "::notice::Skipping duplicate Lopu review handoff; an unstarted review for this exact scope is already queued: $pending_review_url"
+              {
+                echo '## Coalesced Lopu review handoff'
+                echo
+                echo "A queued review already owns \`$review_title\`. It will read the newest PR head and complete live check state when admitted."
+                echo
+                echo "[Queued Lopu review]($pending_review_url)"
+              } >>"$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
 
           jq -n \

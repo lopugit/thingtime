@@ -646,6 +646,16 @@ function assertWorkflowSource() {
     /An already-running review is deliberately not suppressed/u,
     "a head move during an active review retains one newest follow-up waiter",
   );
+  assert.match(
+    reviewHandoffBlock,
+    /EVENT_NAME: \$\{\{ github\.event_name \}\}/u,
+    "the review handoff knows which event it is coalescing",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /case "\$EVENT_NAME" in\n\s+issue_comment \| pull_request_review_comment\) coalescible=false ;;[\s\S]*?if \[ "\$coalescible" = true \]; then[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "human conversation always gets its own session because no queued review carries its comment id",
+  );
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
