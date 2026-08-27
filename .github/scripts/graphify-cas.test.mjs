@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -15,6 +16,7 @@ import { pathToFileURL } from "node:url"
 import test from "node:test"
 
 import {
+  activateSnapshot,
   computeSourceFingerprint,
   finalizeSnapshot,
   hydrateSemanticCache,
@@ -234,6 +236,35 @@ test("mutable semantic cache revisions become immutable coexisting variants", ()
     const hydrated = JSON.parse(readFileSync(mutableEntry, "utf8"))
     assert.equal(hydrated.nodes.length, 2)
     assert.equal(hydrated.edges.length, 1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("activation replaces a dangling compatibility alias", () => {
+  const root = fixture()
+  try {
+    git(root, ["rm", "-q", "graphify-out/graph.json"])
+    git(root, ["commit", "-qm", "remove legacy graph"])
+    const fingerprint = computeSourceFingerprint(root)
+    const first = finalizeSnapshot(root, writeOutput(root, "first-alias", 1), {
+      ...fingerprint,
+      version: "graphify test",
+    })
+    activateSnapshot(root, first)
+    const alias = path.join(root, "graphify-out/graph.json")
+    rmSync(first.path, { recursive: true, force: true })
+    assert.equal(existsSync(alias), false)
+
+    const second = finalizeSnapshot(root, writeOutput(root, "second-alias", 2), {
+      ...fingerprint,
+      version: "graphify test",
+    })
+    activateSnapshot(root, second)
+    assert.equal(
+      path.resolve(path.dirname(alias), readlinkSync(alias)),
+      path.join(second.path, "graph.json"),
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

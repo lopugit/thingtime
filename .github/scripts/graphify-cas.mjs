@@ -577,8 +577,13 @@ export function activateSnapshot(root, snapshot) {
     if (!existsSync(source)) continue
     const alias = path.join(outputRoot, name)
     const relativeAlias = path.relative(root, alias)
-    if (existsSync(alias)) {
-      const stat = lstatSync(alias)
+    let stat = null
+    try {
+      stat = lstatSync(alias)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
+    if (stat) {
       if (stat.isSymbolicLink()) {
         const current = readlinkSync(alias)
         const desired = path.relative(outputRoot, source)
