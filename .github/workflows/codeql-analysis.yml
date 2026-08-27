@@ -263,13 +263,23 @@ jobs:
           set -euo pipefail
 
           upload=true
-          open_prs="$(gh pr list --repo "$REPO" --state open \
+          # Every push to every branch reaches this step, so a rate-limited or
+          # transient lookup must not fail the job. Failing here would produce
+          # exactly the red CodeQL check this step exists to prevent, and would
+          # additionally discard a database that is already built. Preserve
+          # `gh`'s exit status the way the scope pre-flight does for its
+          # optional lookups — never `|| true` — and fall back to the prior
+          # behaviour of analyzing.
+          if open_prs="$(gh pr list --repo "$REPO" --state open \
             --head "$GITHUB_REF_NAME" --limit 100 \
-            --json headRefOid)"
-          if jq -e --arg sha "$GITHUB_SHA" \
-               'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
-            upload=false
-            echo "::notice::An open PR adopted $GITHUB_REF_NAME@$GITHUB_SHA after this push started; its pull_request run is the single CodeQL analysis owner."
+            --json headRefOid)"; then
+            if jq -e --arg sha "$GITHUB_SHA" \
+                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+              upload=false
+              echo "::notice::An open PR adopted $GITHUB_REF_NAME@$GITHUB_SHA after this push started; its pull_request run is the single CodeQL analysis owner."
+            fi
+          else
+            echo "::warning::Could not re-confirm PR ownership of $GITHUB_REF_NAME@$GITHUB_SHA; analyzing this push rather than leaving the commit unscanned."
           fi
           echo "upload=$upload" >>"$GITHUB_OUTPUT"
 

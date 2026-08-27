@@ -660,6 +660,36 @@ export function assertControlPlaneContract() {
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
+  // The scope pre-flight samples ownership seconds after the push, so a branch
+  // pushed first and adopted by a PR moments later still reaches the analyzer
+  // believing it owns analysis. The resulting refs/heads analysis at a live PR
+  // head makes GHAS open that PR's CodeQL check against the branch snapshot and
+  // close it `timed_out` with only one of the two configurations present.
+  assert.match(
+    codeql,
+    /- name: Initialize CodeQL[\s\S]*?- name: Confirm this push still owns the analysis[\s\S]*?- name: Analyze the triggering revision/u,
+    "the ownership re-check sits after database init, so it absorbs the whole init window before the upload",
+  );
+  assert.match(
+    codeql,
+    /- name: Confirm this push still owns the analysis\n\s+id: ownership\n\s+if: github\.event_name == 'push' && needs\.scope\.outputs\.analysis_ref == ''/u,
+    "only a branch-ref push re-checks ownership; PR and centrally dispatched runs are untouched",
+  );
+  assert.match(
+    codeql,
+    /- name: Analyze the triggering revision\n\s+if: needs\.scope\.outputs\.analysis_ref == '' && steps\.ownership\.outputs\.upload != 'false'/u,
+    "the re-check suppresses only an adopted branch upload, and its skipped empty output still analyzes every other event",
+  );
+  assert.match(
+    codeql,
+    /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
+    "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
+  );
+  assert.match(
+    codeql,
+    /^      actions: read\n      contents: read\n      packages: read\n      pull-requests: read\n      security-events: write$/mu,
+    "the analyzer reads PR ownership without gaining any write beyond its security-events upload",
+  );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
   assert.match(
     codeql,
