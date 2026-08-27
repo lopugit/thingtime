@@ -222,6 +222,10 @@ const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
 const ADMIN_MODEL_ID_CHARSET = "[a-z0-9][a-z0-9.:-]{0,63}";
 const ADMIN_MODEL_EFFORT_SEGMENTS = "none|minimal|low|medium|high|xhigh|max|ultra";
 const ADMIN_CLAUDE_BASE_PATTERN = "^claude-[a-z0-9-]{1,48}$";
+// Must stay identical to the promotion audit gate's own cap in
+// resolve-pr-conflicts.yml; the loader-side guard exists to fail closed
+// *before* that gate can hard-fail a finished resolution.
+const ADMIN_MODEL_ARGS_CAP = 2048;
 const AI_RUNTIME_YAML = [
   ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
@@ -296,6 +300,52 @@ function assertAdminWaterfallGrammar(block, label) {
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,
     `${label}: exports validated model args`,
   );
+  assertAdminTransportCap(block, label);
+}
+
+// The promotion publish step rejects a `model_args` longer than
+// ADMIN_MODEL_ARGS_CAP characters, so a valid-but-oversized chain has to
+// collapse here rather than hard-fail after the resolution work is finished.
+// Widening the waterfall to 256 ids made that reachable, and the guard now
+// lives in three copies of the loader with the same split-brain risk as the
+// grammar above — so pin its cap, its ordering, and its fail-closed body.
+function assertAdminTransportCap(block, label) {
+  const guard = new RegExp(
+    `if \\[ "\\$\\{#(?:model_)?args\\}" -gt ${ADMIN_MODEL_ARGS_CAP} \\]; then\\n([\\s\\S]*?)\\n\\s*fi\\n`,
+    "u",
+  ).exec(block);
+  assert.ok(
+    guard,
+    `${label}: caps the assembled model args at the ${ADMIN_MODEL_ARGS_CAP}-character transport limit`,
+  );
+  const body = guard[1];
+  assert.match(
+    body,
+    /::warning::/u,
+    `${label}: warns when the transport cap collapses the chain`,
+  );
+  assert.match(
+    body,
+    /claude_effort="max"/u,
+    `${label}: transport-cap fallback resets the session effort`,
+  );
+  assert.match(
+    body,
+    /(?:model_)?args="--model \$\{?[a-z_]+.*--effort \$claude_effort"/u,
+    `${label}: transport-cap fallback rebuilds the chain from validated variables`,
+  );
+  // Measuring anything but the finished chain would let an oversized value
+  // through to the downstream gate, which is the failure this guard exists to
+  // prevent — so pin assembly < guard < export.
+  const assembled = block.search(
+    /(?:model_)?args="\$(?:model_)?args --effort \$claude_effort"/u,
+  );
+  const capped = block.indexOf(`-gt ${ADMIN_MODEL_ARGS_CAP}`);
+  const exported = block.search(/echo "model_args=/u);
+  assert.ok(
+    assembled >= 0 && assembled < capped && capped < exported,
+    `${label}: measures the finished chain after assembly and before export`,
+  );
 }
 
 function assertAdminLoader(block, label) {
@@ -337,6 +387,21 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
     rebaseLoader,
     /steps\.start\.outputs\.complete/u,
     "rebase model loader: runs for clean rebases so Graphify receives the Admin model",
+  );
+
+  // The loader-side cap is only useful while it matches the promotion audit
+  // gate it front-runs. If the two ever drift apart, an oversized chain is
+  // either rejected for no reason or reaches the gate the guard exists to
+  // keep it away from, so pin both ends of the shared constant.
+  assert.ok(
+    resolver.includes(`(( \${#MODEL_ARGS} <= ${ADMIN_MODEL_ARGS_CAP} ))`),
+    `promotion audit gate: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
+  );
+  assert.ok(
+    resolver.includes(
+      `value.model_args.length <= ${ADMIN_MODEL_ARGS_CAP}`,
+    ),
+    `promotion attestation replay: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
   );
 
   assert.ok(
