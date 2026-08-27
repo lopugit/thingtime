@@ -307,9 +307,22 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
 // are positive entries only (exclusions shape VIEW, not capabilities); the
 // strongest matching suffix wins, and any plain view match floors at 'read'.
 // Callers only consult this when acl carries tt:custom.
+//
+// No view, no capability. An exclusion outranks a grant for VIEW under
+// most-specific-wins, so an acl carrying BOTH a grant and a same-specificity
+// exclusion for one subject — ['tt:custom','tt:all','tt:user',
+// 'tt:user/bob/write','-tt:user/bob'] — denies bob the thing entirely. Without
+// this floor the loop below still saw the positive 'tt:user/bob/write' and
+// handed back 'write', i.e. edit rights on a thing the same acl says he may
+// not even read. Every caller happens to prove view first today (updateThing
+// via canViewInherited, the engage gates via findViewableThingAs), so this was
+// unreachable rather than live — but that made the invariant a precondition
+// every future caller had to rediscover. Anchoring it here makes the function
+// answer correctly on its own.
 export const aclCapabilityFor = (acl: string[], viewer: AclViewer, ownerId: string): AclCapability => {
   if (viewer?.id && viewer.id === ownerId) return 'write';
-  let best: AclCapability = aclAllows(acl, viewer, ownerId) ? 'read' : 'none';
+  if (!aclAllows(acl, viewer, ownerId)) return 'none';
+  let best: AclCapability = 'read';
   for (const raw of acl) {
     if (raw.startsWith('-')) continue;
     const { base, cap } = splitCapability(raw);

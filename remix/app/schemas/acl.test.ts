@@ -92,6 +92,27 @@ test('aclCapabilityFor: exclusions shape view, never capability', () => {
 	assert.equal(aclCapabilityFor(acl, bob, OWNER), 'none');
 });
 
+test('aclCapabilityFor: a grant the acl also excludes from VIEW confers nothing', () => {
+	// The dangerous shape is a POSITIVE grant sitting beside a plain exclusion
+	// of the same subject: most-specific-wins denies the view (exclusions win
+	// ties), so the capability must fall with it. Reading the grant on its own
+	// would hand out edit rights on a thing the same acl says the person may
+	// not even read. Callers all prove view first, so this is the function's
+	// own floor rather than a live hole — pin it so it stays one.
+	const userAcl = ['tt:custom', 'tt:all', 'tt:user', 'tt:user/bob/write', '-tt:user/bob'];
+	assert.equal(aclAllows(userAcl, bob, OWNER), false);
+	assert.equal(aclCapabilityFor(userAcl, bob, OWNER), 'none');
+
+	// …and the same for a group grant shadowed by a group exclusion
+	const member = { ...carol, groupIds: new Set(['group-1']) };
+	const groupAcl = ['tt:custom', 'tt:all', 'tt:user', 'tt:group/group-1/write', '-tt:group/group-1'];
+	assert.equal(aclAllows(groupAcl, member, OWNER), false);
+	assert.equal(aclCapabilityFor(groupAcl, member, OWNER), 'none');
+
+	// a bystander the exclusion doesn't name still reads via the tt:all baseline
+	assert.equal(aclCapabilityFor(userAcl, { id: 'stranger-id', username: 'stranger' }, OWNER), 'read');
+});
+
 test('sanitizeAcl: capability suffixes are accepted, deeper paths are refused', () => {
 	assert.deepEqual(entries(sanitizeAcl(['tt:custom', 'tt:user', 'tt:user/bob/write', 'tt:group/g1/comment'])), [
 		'tt:custom',

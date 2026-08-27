@@ -142,6 +142,20 @@ export const CustomAudienceModal = (props: {
         setGroups((prev) =>
           prev.map((entry) => ({ ...entry, name: (resp.groups || []).find((g: MiniGroup) => g.id === entry.id)?.name || entry.name }))
         );
+        // …and the same for people: an acl only carries usernames, so seeded
+        // entries start with id === username, which is NOT a real user id.
+        // Matching them against the social context recovers the true id (plus
+        // avatar and display name for the chips) — without it "save selection
+        // as group" silently drops every reopened pick, since group membership
+        // is stored by user id.
+        const known: MiniUser[] = [...(resp.recents || []), ...(resp.friends || []), ...(resp.connections || [])];
+        setUsers((prev) =>
+          prev.map((entry) => {
+            if (entry.id !== entry.username) return entry;
+            const match = known.find((user) => (user.username || '').toLowerCase() === entry.username.toLowerCase());
+            return match ? { ...match, cap: entry.cap } : entry;
+          })
+        );
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,9 +228,25 @@ export const CustomAudienceModal = (props: {
       lopu({ title: 'Name the group first 🏷️', status: 'error' });
       return;
     }
-    // entries seeded from an existing acl only carry usernames (id ===
-    // username) — group membership needs real user ids, so those are skipped
-    const memberIds = users.filter((entry) => entry.id && entry.id !== entry.username).map((entry) => entry.id);
+    // Group membership is stored by user id, but an acl only carries
+    // usernames, so entries seeded from an existing audience arrive with
+    // id === username until the audience-sources backfill above resolves
+    // them. Anyone still unresolved has no id to store — saving anyway would
+    // mint a group quietly missing them (and, if every pick came from the
+    // acl, an EMPTY group) while the toast below reported success. Say so
+    // instead: the picker still shows them, so the mismatch would be
+    // invisible otherwise.
+    const resolved = users.filter((entry) => entry.id && entry.id !== entry.username);
+    const unresolved = users.filter((entry) => !entry.id || entry.id === entry.username);
+    if (unresolved.length) {
+      lopu({
+        title: 'Re-pick these people first 🔎',
+        description: `${unresolved.map((entry) => `@${entry.username}`).join(', ')} came from the saved audience — search for them above and add them again so the group can store who they are.`,
+        status: 'error'
+      });
+      return;
+    }
+    const memberIds = resolved.map((entry) => entry.id);
     setSavingGroup(true);
     try {
       const resp = await api.v1.groups.create({ name, memberIds });
