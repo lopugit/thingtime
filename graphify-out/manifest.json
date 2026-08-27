@@ -1517,7 +1517,7 @@
   "README.md": {
     "mtime": 1787810154.4129322,
     "ast_hash": "a3cd6b35e9392708742d8d8558ca43b9",
-    "semantic_hash": ""
+    "semantic_hash": "a3cd6b35e9392708742d8d8558ca43b9"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1787810154.4164286,
@@ -2812,7 +2812,7 @@
   "TODO/TODO.md": {
     "mtime": 1787810154.4143198,
     "ast_hash": "3ef65adb5e780677ba45d0d3dad6db32",
-    "semantic_hash": ""
+    "semantic_hash": "3ef65adb5e780677ba45d0d3dad6db32"
   },
   "TODO/claude-todo/01-mongodb-connection-status.md": {
     "mtime": 1787810154.4144316,
@@ -2852,12 +2852,12 @@
   "TODO/claude-todo/08-drawer-nav-editor-polish.md": {
     "mtime": 1787810154.415018,
     "ast_hash": "767ac20870cdf1d5000d398723213a46",
-    "semantic_hash": ""
+    "semantic_hash": "767ac20870cdf1d5000d398723213a46"
   },
   "TODO/claude-todo/README.md": {
     "mtime": 1787810154.416325,
     "ast_hash": "53479b241024ba2930acef7a78096ca4",
-    "semantic_hash": ""
+    "semantic_hash": "53479b241024ba2930acef7a78096ca4"
   },
   "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
     "mtime": 1787810154.4198177,
@@ -3040,9 +3040,9 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1787810154.730456,
-    "ast_hash": "22b53400327d6cc125fafcd54cf57eb6",
-    "semantic_hash": "22b53400327d6cc125fafcd54cf57eb6"
+    "mtime": 1787822672.124381,
+    "ast_hash": "f8c473c8d8588213453525868a4ddc68",
+    "semantic_hash": "f8c473c8d8588213453525868a4ddc68"
   },
   "remix/app/components/Feed/Feed.tsx": {
     "mtime": 1787810154.7383382,
@@ -3050,9 +3050,9 @@
     "semantic_hash": "2583bd6444d79c4c73003f3135287d45"
   },
   "remix/app/components/Feed/feedTypes.ts": {
-    "mtime": 1787810154.7409985,
-    "ast_hash": "7ed034aab9bc2e61bc17284af055091f",
-    "semantic_hash": "7ed034aab9bc2e61bc17284af055091f"
+    "mtime": 1787822672.1249127,
+    "ast_hash": "b9f94c2bd719eba0cc5a09ca1a46b62a",
+    "semantic_hash": "b9f94c2bd719eba0cc5a09ca1a46b62a"
   },
   "remix/app/components/Profile/EditProfileModal.tsx": {
     "mtime": 1787810154.7487593,
@@ -3200,8 +3200,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1787812544.474188,
-    "ast_hash": "c8c43bc8d971ee0dc1c88c7d6b39fab9",
+    "mtime": 1787822672.1257286,
+    "ast_hash": "7423adb7ba74a411f71a87d6e850e7c1",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -4145,8 +4145,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787812690.3902745,
-    "ast_hash": "e4330e6c973bfd11e4ab5b4121e256bb",
+    "mtime": 1787822672.0556777,
+    "ast_hash": "b274625217ce7ec531f69404b787a433",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -4232,7 +4232,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1787810154.4042044,
     "ast_hash": "1d51ced5a8e1f646210532426805b230",
-    "semantic_hash": ""
+    "semantic_hash": "1d51ced5a8e1f646210532426805b230"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1787810154.632085,
@@ -6405,9 +6405,9 @@
     "semantic_hash": "bc60ff0f9914d6aa1494f8700bf3eeab"
   },
   "remix/app/api/utils/things/relatedProjection.test.ts": {
-    "mtime": 1787810154.7294683,
-    "ast_hash": "3f2b4b35f5ea716c3b9220f8c546768a",
-    "semantic_hash": "3f2b4b35f5ea716c3b9220f8c546768a"
+    "mtime": 1787822672.1239395,
+    "ast_hash": "dea4dcd02fbe4689c358fdfccc4dde66",
+    "semantic_hash": "dea4dcd02fbe4689c358fdfccc4dde66"
   },
   ".github/workflows/all-branch.yml": {
     "mtime": 1787810154.403278,
@@ -6447,7 +6447,7 @@
   ".github/workflows/codeql-analysis.yml": {
     "mtime": 1787810154.4037023,
     "ast_hash": "c1bb1c141fc9fad6e3590377fdfbd693",
-    "semantic_hash": ""
+    "semantic_hash": "c1bb1c141fc9fad6e3590377fdfbd693"
   },
   "PRs/397-promote-pr-394-codeql-all-branches-to-main-lopu-codeql-all-targets.md": {
     "mtime": 1787810154.4113946,
@@ -6480,9 +6480,9 @@
     "semantic_hash": "8d6dcc2a29a0c4721c9f9cfa53e2ba82"
   },
   "remix/app/api/utils/chatgpt/pluginCore.ts": {
-    "mtime": 1787810154.7151072,
-    "ast_hash": "f9ac4741c3825c7a098c0048d6eba1d9",
-    "semantic_hash": "f9ac4741c3825c7a098c0048d6eba1d9"
+    "mtime": 1787822672.1236727,
+    "ast_hash": "d2c68f8d90b4e91ba4bafb4d95bace60",
+    "semantic_hash": "d2c68f8d90b4e91ba4bafb4d95bace60"
   },
   "remix/app/components/Branding/BrandAssetSection.tsx": {
     "mtime": 1787810154.7352061,
@@ -6547,496 +6547,506 @@
   "PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md": {
     "mtime": 1787810154.4067323,
     "ast_hash": "4ea5777901e6c2b86eaeae9dd8530b29",
-    "semantic_hash": ""
+    "semantic_hash": "4ea5777901e6c2b86eaeae9dd8530b29"
   },
   "PRs/412-codex-thingtime-chatgpt-plugin--add-secure-chatgpt-thingtime-plugin.md": {
     "mtime": 1787810154.4116893,
     "ast_hash": "b2b2c936e63c166970366f48a29858d2",
-    "semantic_hash": ""
+    "semantic_hash": "b2b2c936e63c166970366f48a29858d2"
   },
   "TODO/claude-todo/18-account-invite-links.md": {
     "mtime": 1787810154.416143,
     "ast_hash": "7b0514efa0d9ce5612f9b97e4c04eb7e",
-    "semantic_hash": ""
+    "semantic_hash": "7b0514efa0d9ce5612f9b97e4c04eb7e"
   },
   "TODO/claude-todo/19-anonymous-group-chats.md": {
     "mtime": 1787810154.4162383,
     "ast_hash": "8da48b50cf586c4bb2db4d861a218ece",
-    "semantic_hash": ""
+    "semantic_hash": "8da48b50cf586c4bb2db4d861a218ece"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/README.md": {
     "mtime": 1787810154.6346345,
     "ast_hash": "c68d9ace0c952afd32f85c71b45980c8",
-    "semantic_hash": ""
+    "semantic_hash": "c68d9ace0c952afd32f85c71b45980c8"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/SUBMISSION.md": {
     "mtime": 1787810154.6347017,
     "ast_hash": "ac80e9639612c655dbbe5a239595439f",
-    "semantic_hash": ""
+    "semantic_hash": "ac80e9639612c655dbbe5a239595439f"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/skills/thingtime/SKILL.md": {
     "mtime": 1787810154.6348011,
     "ast_hash": "40e266710a1469cfb9065caeee779ef7",
-    "semantic_hash": ""
+    "semantic_hash": "40e266710a1469cfb9065caeee779ef7"
   },
   "timeline/21-08-2026/INTEGRATION_ORDER.md": {
     "mtime": 1787810154.9463315,
     "ast_hash": "859cddaac741c5dd1c82307275d8a1c7",
-    "semantic_hash": ""
+    "semantic_hash": "859cddaac741c5dd1c82307275d8a1c7"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-10000x10000.png": {
     "mtime": 1787810154.9135883,
     "ast_hash": "58d5bd16e058be37f5d79745bca2d715",
-    "semantic_hash": ""
+    "semantic_hash": "58d5bd16e058be37f5d79745bca2d715"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-1000x1000.png": {
     "mtime": 1787810154.9136863,
     "ast_hash": "df19ef905fe0846f15f05081fcae5a1b",
-    "semantic_hash": ""
+    "semantic_hash": "df19ef905fe0846f15f05081fcae5a1b"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-100x100.png": {
     "mtime": 1787810154.9137385,
     "ast_hash": "7ba13cf3fe5c1913fd65ba82e057776c",
-    "semantic_hash": ""
+    "semantic_hash": "7ba13cf3fe5c1913fd65ba82e057776c"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-1024x1024.png": {
     "mtime": 1787810154.9138072,
     "ast_hash": "522b1d6eadd8da29e2a793e39959850d",
-    "semantic_hash": ""
+    "semantic_hash": "522b1d6eadd8da29e2a793e39959850d"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-10x10.png": {
     "mtime": 1787810154.9138482,
     "ast_hash": "0fc6ea3feb92cabe912d3a7c4ac89230",
-    "semantic_hash": ""
+    "semantic_hash": "0fc6ea3feb92cabe912d3a7c4ac89230"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-128x128.png": {
     "mtime": 1787810154.9138958,
     "ast_hash": "aecbc18223db79844d9ce5efb4c85925",
-    "semantic_hash": ""
+    "semantic_hash": "aecbc18223db79844d9ce5efb4c85925"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-16x16.png": {
     "mtime": 1787810154.9139392,
     "ast_hash": "e1433c591a330e96e6aeae33ce6b04aa",
-    "semantic_hash": ""
+    "semantic_hash": "e1433c591a330e96e6aeae33ce6b04aa"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-2000x2000.png": {
     "mtime": 1787810154.9140003,
     "ast_hash": "96b163f8153dc1657d7375ce7a93969a",
-    "semantic_hash": ""
+    "semantic_hash": "96b163f8153dc1657d7375ce7a93969a"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-200x200.png": {
     "mtime": 1787810154.9140487,
     "ast_hash": "153d8aee8e86e8e1fb4c17138945bc7d",
-    "semantic_hash": ""
+    "semantic_hash": "153d8aee8e86e8e1fb4c17138945bc7d"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-2048x2048.png": {
     "mtime": 1787810154.9141073,
     "ast_hash": "5283d572ccfb2f49728c54374b5ef24d",
-    "semantic_hash": ""
+    "semantic_hash": "5283d572ccfb2f49728c54374b5ef24d"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-256x256.png": {
     "mtime": 1787810154.9141583,
     "ast_hash": "c05b718eb14106e909b7aa2f1ac21467",
-    "semantic_hash": ""
+    "semantic_hash": "c05b718eb14106e909b7aa2f1ac21467"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-32x32.png": {
     "mtime": 1787810154.9141974,
     "ast_hash": "b0d083bd93f596b8e2c92c725d95292a",
-    "semantic_hash": ""
+    "semantic_hash": "b0d083bd93f596b8e2c92c725d95292a"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-4096x4096.png": {
     "mtime": 1787810154.914281,
     "ast_hash": "282c8aa628c78adda9d506bdde3937c2",
-    "semantic_hash": ""
+    "semantic_hash": "282c8aa628c78adda9d506bdde3937c2"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-5000x5000.png": {
     "mtime": 1787810154.91441,
     "ast_hash": "7dee25c21215fe9f231158d78db70fa9",
-    "semantic_hash": ""
+    "semantic_hash": "7dee25c21215fe9f231158d78db70fa9"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-500x500.png": {
     "mtime": 1787810154.9144695,
     "ast_hash": "5f1186d4d73267f1480cbff8f08b4943",
-    "semantic_hash": ""
+    "semantic_hash": "5f1186d4d73267f1480cbff8f08b4943"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-50x50.png": {
     "mtime": 1787810154.9145205,
     "ast_hash": "b19b553862ca59c70217570722fe7de7",
-    "semantic_hash": ""
+    "semantic_hash": "b19b553862ca59c70217570722fe7de7"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-512x512.png": {
     "mtime": 1787810154.91458,
     "ast_hash": "bb7421a95a90ef16074086b39c61e69d",
-    "semantic_hash": ""
+    "semantic_hash": "bb7421a95a90ef16074086b39c61e69d"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-64x64.png": {
     "mtime": 1787810154.91464,
     "ast_hash": "4deb7a80fc342c68b782c4045b9dbe93",
-    "semantic_hash": ""
+    "semantic_hash": "4deb7a80fc342c68b782c4045b9dbe93"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink-8192x8192.png": {
     "mtime": 1787810154.9148529,
     "ast_hash": "176e880d81ded694a8d02444d07b4ddb",
-    "semantic_hash": ""
+    "semantic_hash": "176e880d81ded694a8d02444d07b4ddb"
   },
   "remix/public/branding/generated/icon-pink/thingtime-icon-pink.svg": {
     "mtime": 1787810154.9149127,
     "ast_hash": "3a82a2026b838f8563bd1247f5c707df",
-    "semantic_hash": ""
+    "semantic_hash": "3a82a2026b838f8563bd1247f5c707df"
   },
   "remix/public/branding/generated/icon/thingtime-icon-10000x10000.png": {
     "mtime": 1787810154.915159,
     "ast_hash": "b94bc37e3e0ff78585fff3617bc058f9",
-    "semantic_hash": ""
+    "semantic_hash": "b94bc37e3e0ff78585fff3617bc058f9"
   },
   "remix/public/branding/generated/icon/thingtime-icon-1000x1000.png": {
     "mtime": 1787810154.9152334,
     "ast_hash": "9dfa0b80cb9419127fdf03a9fe2506c4",
-    "semantic_hash": ""
+    "semantic_hash": "9dfa0b80cb9419127fdf03a9fe2506c4"
   },
   "remix/public/branding/generated/icon/thingtime-icon-100x100.png": {
     "mtime": 1787810154.9152749,
     "ast_hash": "1c41be1a7acfdffd830299dcd14d5fc5",
-    "semantic_hash": ""
+    "semantic_hash": "1c41be1a7acfdffd830299dcd14d5fc5"
   },
   "remix/public/branding/generated/icon/thingtime-icon-1024x1024.png": {
     "mtime": 1787810154.9153333,
     "ast_hash": "55c0e660b5ee698f59df0bff140c6da8",
-    "semantic_hash": ""
+    "semantic_hash": "55c0e660b5ee698f59df0bff140c6da8"
   },
   "remix/public/branding/generated/icon/thingtime-icon-10x10.png": {
     "mtime": 1787810154.9153736,
     "ast_hash": "3f7b961e200f52d564007b70e6c39624",
-    "semantic_hash": ""
+    "semantic_hash": "3f7b961e200f52d564007b70e6c39624"
   },
   "remix/public/branding/generated/icon/thingtime-icon-128x128.png": {
     "mtime": 1787810154.9154167,
     "ast_hash": "7b3419132d5bf6d2ef8d8cfb5c1fc035",
-    "semantic_hash": ""
+    "semantic_hash": "7b3419132d5bf6d2ef8d8cfb5c1fc035"
   },
   "remix/public/branding/generated/icon/thingtime-icon-16x16.png": {
     "mtime": 1787810154.915456,
     "ast_hash": "2928f27f3a279a6b6be5a25ab2b8a57a",
-    "semantic_hash": ""
+    "semantic_hash": "2928f27f3a279a6b6be5a25ab2b8a57a"
   },
   "remix/public/branding/generated/icon/thingtime-icon-2000x2000.png": {
     "mtime": 1787810154.9155025,
     "ast_hash": "e3f750ee0e0b07dcc9c6758e0889e61b",
-    "semantic_hash": ""
+    "semantic_hash": "e3f750ee0e0b07dcc9c6758e0889e61b"
   },
   "remix/public/branding/generated/icon/thingtime-icon-200x200.png": {
     "mtime": 1787810154.9155512,
     "ast_hash": "401b75fbbd17c93e65c1510344ac0452",
-    "semantic_hash": ""
+    "semantic_hash": "401b75fbbd17c93e65c1510344ac0452"
   },
   "remix/public/branding/generated/icon/thingtime-icon-2048x2048.png": {
     "mtime": 1787810154.9155982,
     "ast_hash": "e5b6b5ad2a9f570275c3f2f0d5d90dbd",
-    "semantic_hash": ""
+    "semantic_hash": "e5b6b5ad2a9f570275c3f2f0d5d90dbd"
   },
   "remix/public/branding/generated/icon/thingtime-icon-256x256.png": {
     "mtime": 1787810154.9156468,
     "ast_hash": "d6e04d1bd310ffa056348b1754c835f8",
-    "semantic_hash": ""
+    "semantic_hash": "d6e04d1bd310ffa056348b1754c835f8"
   },
   "remix/public/branding/generated/icon/thingtime-icon-32x32.png": {
     "mtime": 1787810154.9156904,
     "ast_hash": "ee95af154104b4afb9b4d3daf36466c2",
-    "semantic_hash": ""
+    "semantic_hash": "ee95af154104b4afb9b4d3daf36466c2"
   },
   "remix/public/branding/generated/icon/thingtime-icon-4096x4096.png": {
     "mtime": 1787810154.9157684,
     "ast_hash": "f8e796657b0a3e89a5a7f375c7bab878",
-    "semantic_hash": ""
+    "semantic_hash": "f8e796657b0a3e89a5a7f375c7bab878"
   },
   "remix/public/branding/generated/icon/thingtime-icon-5000x5000.png": {
     "mtime": 1787810154.9158695,
     "ast_hash": "5292c5956c328d508d38d4a5cb8865c4",
-    "semantic_hash": ""
+    "semantic_hash": "5292c5956c328d508d38d4a5cb8865c4"
   },
   "remix/public/branding/generated/icon/thingtime-icon-500x500.png": {
     "mtime": 1787810154.9159198,
     "ast_hash": "a667a3d5b9931186cab3bb9b45f0c589",
-    "semantic_hash": ""
+    "semantic_hash": "a667a3d5b9931186cab3bb9b45f0c589"
   },
   "remix/public/branding/generated/icon/thingtime-icon-50x50.png": {
     "mtime": 1787810154.9159646,
     "ast_hash": "a3d93acd0a91b0bcf2d223b46312e3a7",
-    "semantic_hash": ""
+    "semantic_hash": "a3d93acd0a91b0bcf2d223b46312e3a7"
   },
   "remix/public/branding/generated/icon/thingtime-icon-512x512.png": {
     "mtime": 1787810154.9160066,
     "ast_hash": "ebad98dd6318752d55cbe12022839573",
-    "semantic_hash": ""
+    "semantic_hash": "ebad98dd6318752d55cbe12022839573"
   },
   "remix/public/branding/generated/icon/thingtime-icon-64x64.png": {
     "mtime": 1787810154.9160457,
     "ast_hash": "7656142d7b55faae15af6d2a9b989464",
-    "semantic_hash": ""
+    "semantic_hash": "7656142d7b55faae15af6d2a9b989464"
   },
   "remix/public/branding/generated/icon/thingtime-icon-8192x8192.png": {
     "mtime": 1787810154.9162054,
     "ast_hash": "a6d58635e47d6f12693079bdea58ab20",
-    "semantic_hash": ""
+    "semantic_hash": "a6d58635e47d6f12693079bdea58ab20"
   },
   "remix/public/branding/generated/icon/thingtime-icon.svg": {
     "mtime": 1787810154.9162567,
     "ast_hash": "6e01b199730ed5ece7f22086eeaa95c9",
-    "semantic_hash": ""
+    "semantic_hash": "6e01b199730ed5ece7f22086eeaa95c9"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-10000x1852.png": {
     "mtime": 1787810154.91641,
     "ast_hash": "db96d43eaa345b35b6f57e23b25187ee",
-    "semantic_hash": ""
+    "semantic_hash": "db96d43eaa345b35b6f57e23b25187ee"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-1000x185.png": {
     "mtime": 1787810154.9164655,
     "ast_hash": "58ca1603a743693021eaf1f5f327ab25",
-    "semantic_hash": ""
+    "semantic_hash": "58ca1603a743693021eaf1f5f327ab25"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-100x19.png": {
     "mtime": 1787810154.9165127,
     "ast_hash": "d9f1740923f34bd8d01097abc47ae1de",
-    "semantic_hash": ""
+    "semantic_hash": "d9f1740923f34bd8d01097abc47ae1de"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-1024x190.png": {
     "mtime": 1787810154.9165637,
     "ast_hash": "1340dcbf31fc3704f252d73d6c8ca756",
-    "semantic_hash": ""
+    "semantic_hash": "1340dcbf31fc3704f252d73d6c8ca756"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-10x2.png": {
     "mtime": 1787810154.9166043,
     "ast_hash": "6600e89b789e0fd674ab822bca415ae8",
-    "semantic_hash": ""
+    "semantic_hash": "6600e89b789e0fd674ab822bca415ae8"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-128x24.png": {
     "mtime": 1787810154.916643,
     "ast_hash": "fda7083a5011f07a37435e5b5f41ecc7",
-    "semantic_hash": ""
+    "semantic_hash": "fda7083a5011f07a37435e5b5f41ecc7"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-16x3.png": {
     "mtime": 1787810154.9166877,
     "ast_hash": "bdee9eef2ba5a75d5c01de893a51cb5c",
-    "semantic_hash": ""
+    "semantic_hash": "bdee9eef2ba5a75d5c01de893a51cb5c"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-2000x370.png": {
     "mtime": 1787810154.916738,
     "ast_hash": "077eaa9de9d9ed66a77a2d5867c8df5d",
-    "semantic_hash": ""
+    "semantic_hash": "077eaa9de9d9ed66a77a2d5867c8df5d"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-200x37.png": {
     "mtime": 1787810154.9167845,
     "ast_hash": "fe0a281f40984a1c4f58628cd89310de",
-    "semantic_hash": ""
+    "semantic_hash": "fe0a281f40984a1c4f58628cd89310de"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-2048x379.png": {
     "mtime": 1787810154.9168525,
     "ast_hash": "5d058e63ca725ee8735d831b12b92220",
-    "semantic_hash": ""
+    "semantic_hash": "5d058e63ca725ee8735d831b12b92220"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-256x47.png": {
     "mtime": 1787810154.916901,
     "ast_hash": "6d012958e9545d9b9610a6fdb83791f8",
-    "semantic_hash": ""
+    "semantic_hash": "6d012958e9545d9b9610a6fdb83791f8"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-32x6.png": {
     "mtime": 1787810154.9171147,
     "ast_hash": "7a4a2fe3419940165b2962e57f4f414b",
-    "semantic_hash": ""
+    "semantic_hash": "7a4a2fe3419940165b2962e57f4f414b"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-4096x759.png": {
     "mtime": 1787810154.9172213,
     "ast_hash": "ef6b69cbe8b260223713baa21f763eee",
-    "semantic_hash": ""
+    "semantic_hash": "ef6b69cbe8b260223713baa21f763eee"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-5000x926.png": {
     "mtime": 1787810154.9173305,
     "ast_hash": "ca88e2724a010dcfde51c32384a5c1e6",
-    "semantic_hash": ""
+    "semantic_hash": "ca88e2724a010dcfde51c32384a5c1e6"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-500x93.png": {
     "mtime": 1787810154.9173994,
     "ast_hash": "878ce9da470e04e6e4c2f361f876dd71",
-    "semantic_hash": ""
+    "semantic_hash": "878ce9da470e04e6e4c2f361f876dd71"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-50x9.png": {
     "mtime": 1787810154.9174473,
     "ast_hash": "d1ed4eabd1f0a0fb467155b111b48dc6",
-    "semantic_hash": ""
+    "semantic_hash": "d1ed4eabd1f0a0fb467155b111b48dc6"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-512x95.png": {
     "mtime": 1787810154.9174943,
     "ast_hash": "baabc5e366b73abcff630ef17be6d17e",
-    "semantic_hash": ""
+    "semantic_hash": "baabc5e366b73abcff630ef17be6d17e"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-64x12.png": {
     "mtime": 1787810154.9175377,
     "ast_hash": "858a3b677a2376141b620aaa7d774218",
-    "semantic_hash": ""
+    "semantic_hash": "858a3b677a2376141b620aaa7d774218"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink-8192x1517.png": {
     "mtime": 1787810154.9178777,
     "ast_hash": "c94c5c5864917ac8ea44eec8eea8fb9b",
-    "semantic_hash": ""
+    "semantic_hash": "c94c5c5864917ac8ea44eec8eea8fb9b"
   },
   "remix/public/branding/generated/logo-pink/thingtime-logo-pink.svg": {
     "mtime": 1787810154.917943,
     "ast_hash": "03baab4b54aa993ec8848ad55b7d0cfe",
-    "semantic_hash": ""
+    "semantic_hash": "03baab4b54aa993ec8848ad55b7d0cfe"
   },
   "remix/public/branding/generated/logo/thingtime-logo-10000x1852.png": {
     "mtime": 1787810154.918058,
     "ast_hash": "f6a002415d568abd1044522b29f32bb3",
-    "semantic_hash": ""
+    "semantic_hash": "f6a002415d568abd1044522b29f32bb3"
   },
   "remix/public/branding/generated/logo/thingtime-logo-1000x185.png": {
     "mtime": 1787810154.918114,
     "ast_hash": "1dfaefd94ad830bae3e63dff667f23b2",
-    "semantic_hash": ""
+    "semantic_hash": "1dfaefd94ad830bae3e63dff667f23b2"
   },
   "remix/public/branding/generated/logo/thingtime-logo-100x19.png": {
     "mtime": 1787810154.9181566,
     "ast_hash": "038528186a75da5433c958e322732413",
-    "semantic_hash": ""
+    "semantic_hash": "038528186a75da5433c958e322732413"
   },
   "remix/public/branding/generated/logo/thingtime-logo-1024x190.png": {
     "mtime": 1787810154.9181988,
     "ast_hash": "fdf30c66f87700c58c0858ca03017fc8",
-    "semantic_hash": ""
+    "semantic_hash": "fdf30c66f87700c58c0858ca03017fc8"
   },
   "remix/public/branding/generated/logo/thingtime-logo-10x2.png": {
     "mtime": 1787810154.918246,
     "ast_hash": "a1a931b5115e06f01a3664906d031779",
-    "semantic_hash": ""
+    "semantic_hash": "a1a931b5115e06f01a3664906d031779"
   },
   "remix/public/branding/generated/logo/thingtime-logo-128x24.png": {
     "mtime": 1787810154.9182894,
     "ast_hash": "34f69f5af7e7feafe05f687f6c661a9c",
-    "semantic_hash": ""
+    "semantic_hash": "34f69f5af7e7feafe05f687f6c661a9c"
   },
   "remix/public/branding/generated/logo/thingtime-logo-16x3.png": {
     "mtime": 1787810154.91834,
     "ast_hash": "06887f47bc46ec91bf38d659d2bc28d9",
-    "semantic_hash": ""
+    "semantic_hash": "06887f47bc46ec91bf38d659d2bc28d9"
   },
   "remix/public/branding/generated/logo/thingtime-logo-2000x370.png": {
     "mtime": 1787810154.9183848,
     "ast_hash": "f088d7261a901c941b6e49720c671183",
-    "semantic_hash": ""
+    "semantic_hash": "f088d7261a901c941b6e49720c671183"
   },
   "remix/public/branding/generated/logo/thingtime-logo-200x37.png": {
     "mtime": 1787810154.9184344,
     "ast_hash": "d0db1a9fa937cd9c40bbe443dfd2fd75",
-    "semantic_hash": ""
+    "semantic_hash": "d0db1a9fa937cd9c40bbe443dfd2fd75"
   },
   "remix/public/branding/generated/logo/thingtime-logo-2048x379.png": {
     "mtime": 1787810154.9184978,
     "ast_hash": "5d63219c4d006a180f46dd561a775a48",
-    "semantic_hash": ""
+    "semantic_hash": "5d63219c4d006a180f46dd561a775a48"
   },
   "remix/public/branding/generated/logo/thingtime-logo-256x47.png": {
     "mtime": 1787810154.918546,
     "ast_hash": "5a5fc43bd0320da564f8efdf80b1c64e",
-    "semantic_hash": ""
+    "semantic_hash": "5a5fc43bd0320da564f8efdf80b1c64e"
   },
   "remix/public/branding/generated/logo/thingtime-logo-32x6.png": {
     "mtime": 1787810154.9185934,
     "ast_hash": "fd16b6e38203c3174ccff7bfa0c8d5a5",
-    "semantic_hash": ""
+    "semantic_hash": "fd16b6e38203c3174ccff7bfa0c8d5a5"
   },
   "remix/public/branding/generated/logo/thingtime-logo-4096x759.png": {
     "mtime": 1787810154.9186723,
     "ast_hash": "fe3b408941da25a02125e88bb36f5e2b",
-    "semantic_hash": ""
+    "semantic_hash": "fe3b408941da25a02125e88bb36f5e2b"
   },
   "remix/public/branding/generated/logo/thingtime-logo-5000x926.png": {
     "mtime": 1787810154.918721,
     "ast_hash": "37c579ce852c1dc7e8cf508a41775b15",
-    "semantic_hash": ""
+    "semantic_hash": "37c579ce852c1dc7e8cf508a41775b15"
   },
   "remix/public/branding/generated/logo/thingtime-logo-500x93.png": {
     "mtime": 1787810154.918775,
     "ast_hash": "5107a5f939b48b74f0777c7f90f7147e",
-    "semantic_hash": ""
+    "semantic_hash": "5107a5f939b48b74f0777c7f90f7147e"
   },
   "remix/public/branding/generated/logo/thingtime-logo-50x9.png": {
     "mtime": 1787810154.9188197,
     "ast_hash": "108b24f640473a3d295be78b84ae672a",
-    "semantic_hash": ""
+    "semantic_hash": "108b24f640473a3d295be78b84ae672a"
   },
   "remix/public/branding/generated/logo/thingtime-logo-512x95.png": {
     "mtime": 1787810154.9188619,
     "ast_hash": "cc56ad97892f4ac9dc27baa04946ada4",
-    "semantic_hash": ""
+    "semantic_hash": "cc56ad97892f4ac9dc27baa04946ada4"
   },
   "remix/public/branding/generated/logo/thingtime-logo-64x12.png": {
     "mtime": 1787810154.9189072,
     "ast_hash": "10b15bf5c8c93f0dd1e90e94d1f43d91",
-    "semantic_hash": ""
+    "semantic_hash": "10b15bf5c8c93f0dd1e90e94d1f43d91"
   },
   "remix/public/branding/generated/logo/thingtime-logo-8192x1517.png": {
     "mtime": 1787810154.9189768,
     "ast_hash": "3c2909f73a1323a175bc40a6fdeb2d6f",
-    "semantic_hash": ""
+    "semantic_hash": "3c2909f73a1323a175bc40a6fdeb2d6f"
   },
   "remix/public/branding/generated/logo/thingtime-logo.svg": {
     "mtime": 1787810154.9190342,
     "ast_hash": "e4b890d2f3fbee3c3099408aad63ea34",
-    "semantic_hash": ""
+    "semantic_hash": "e4b890d2f3fbee3c3099408aad63ea34"
   },
   "remix/public/branding/presskit/thingtime-app-tile-1024x1024.png": {
     "mtime": 1787810154.9191334,
     "ast_hash": "5df5d9e892cf17d38de404d4bfe17fa2",
-    "semantic_hash": ""
+    "semantic_hash": "5df5d9e892cf17d38de404d4bfe17fa2"
   },
   "remix/public/branding/presskit/thingtime-app-tile-dark-1024x1024.png": {
     "mtime": 1787810154.919198,
     "ast_hash": "e02bf132578f5c924fbef1383a3d1a65",
-    "semantic_hash": ""
+    "semantic_hash": "e02bf132578f5c924fbef1383a3d1a65"
   },
   "remix/public/branding/presskit/thingtime-banner-1500x500.png": {
     "mtime": 1787810154.919267,
     "ast_hash": "031cc371b6774c0a2f2e148600b8e755",
-    "semantic_hash": ""
+    "semantic_hash": "031cc371b6774c0a2f2e148600b8e755"
   },
   "remix/public/branding/presskit/thingtime-confetti-pattern-2048x2048.png": {
     "mtime": 1787810154.919377,
     "ast_hash": "5bbb6715c3c266de92b614779cb1f1ef",
-    "semantic_hash": ""
+    "semantic_hash": "5bbb6715c3c266de92b614779cb1f1ef"
   },
   "remix/public/branding/presskit/thingtime-linkedin-banner-1584x396.png": {
     "mtime": 1787810154.9194503,
     "ast_hash": "0521b3f9e11b3154635791b768ecbad9",
-    "semantic_hash": ""
+    "semantic_hash": "0521b3f9e11b3154635791b768ecbad9"
   },
   "remix/public/branding/presskit/thingtime-og-card-1200x630.png": {
     "mtime": 1787810154.919541,
     "ast_hash": "9f1d7ce8d147d511fa3aff77045fe0ec",
-    "semantic_hash": ""
+    "semantic_hash": "9f1d7ce8d147d511fa3aff77045fe0ec"
   },
   "remix/public/branding/presskit/thingtime-og-card-dark-1200x630.png": {
     "mtime": 1787810154.919601,
     "ast_hash": "9ed7157c3923caf4af17dbaa0973730a",
-    "semantic_hash": ""
+    "semantic_hash": "9ed7157c3923caf4af17dbaa0973730a"
   },
   "remix/public/branding/presskit/thingtime-social-square-1080x1080.png": {
     "mtime": 1787810154.9199622,
     "ast_hash": "cd6b4efe58698fad396fd07f5d50d5ba",
-    "semantic_hash": ""
+    "semantic_hash": "cd6b4efe58698fad396fd07f5d50d5ba"
   },
   "remix/public/branding/presskit/thingtime-wallpaper-1920x1080.png": {
     "mtime": 1787810154.9200532,
     "ast_hash": "310aacc4589181eb551f58a068b1213e",
-    "semantic_hash": ""
+    "semantic_hash": "310aacc4589181eb551f58a068b1213e"
   },
   "remix/public/branding/presskit/thingtime-wallpaper-4k-3840x2160.png": {
     "mtime": 1787810154.9201355,
     "ast_hash": "c9644ff29d6e698f859b52196a8de6e2",
-    "semantic_hash": ""
+    "semantic_hash": "c9644ff29d6e698f859b52196a8de6e2"
   },
   "remix/public/branding/presskit/thingtime-wallpaper-phone-1170x2532.png": {
     "mtime": 1787810154.9202046,
     "ast_hash": "d437430980d0df2392d5e98f0305a0fe",
+    "semantic_hash": "d437430980d0df2392d5e98f0305a0fe"
+  },
+  "remix/app/api/utils/things/searchRanking.test.ts": {
+    "mtime": 1787812544.472009,
+    "ast_hash": "191d3f90cfebcdcfa7974e0c445cd5c7",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/things/searchRanking.ts": {
+    "mtime": 1787812544.4718275,
+    "ast_hash": "3eec8613426244c7918c94f921cf820b",
     "semantic_hash": ""
   },
   "remix/app/components/Commander/commanderSearch.test.ts": {
@@ -7047,16 +7057,6 @@
   "remix/app/components/Search/commanderSearch.ts": {
     "mtime": 1787812513.9614627,
     "ast_hash": "1e8c40537fa979a37d05933454501d52",
-    "semantic_hash": ""
-  },
-  "remix/app/api/utils/things/searchRanking.test.ts": {
-    "mtime": 1787812544.472009,
-    "ast_hash": "191d3f90cfebcdcfa7974e0c445cd5c7",
-    "semantic_hash": ""
-  },
-  "remix/app/api/utils/things/searchRanking.ts": {
-    "mtime": 1787812544.4718275,
-    "ast_hash": "3eec8613426244c7918c94f921cf820b",
     "semantic_hash": ""
   },
   "PRs/427-codex-search-commander-overhaul-overhaul-web-search-and-commander-results.md": {
