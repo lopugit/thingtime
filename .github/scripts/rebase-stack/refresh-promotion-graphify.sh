@@ -287,7 +287,9 @@ fi
 
 # The workflow supplies only closed, validated controller outputs. Force the
 # selected provider's configured model; each provider's default sentinel
-# intentionally leaves Graphify unforced.
+# intentionally leaves Graphify unforced. A named Claude primary comes from the
+# widened Admin waterfall grammar, so it is re-validated against the closed
+# charset here before it reaches Graphify's API flag or the Claude CLI env.
 graphify_model_args=()
 case "$backend" in
   openai)
@@ -308,9 +310,14 @@ case "$backend" in
     unset GRAPHIFY_OPENAI_MODEL
     case "${PREFERRED_MODEL:-default}" in
       default) unset GRAPHIFY_CLAUDE_CLI_MODEL ;;
-      claude-fable-5|claude-opus-5)
-        graphify_model_args=(--model "$PREFERRED_MODEL")
-        export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+      claude-*)
+        if [[ "$PREFERRED_MODEL" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+          graphify_model_args=(--model "$PREFERRED_MODEL")
+          export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+        else
+          echo "::warning::Unexpected preferred Claude model; Graphify will use its built-in default."
+          unset GRAPHIFY_CLAUDE_CLI_MODEL
+        fi
         ;;
       *)
         echo "::warning::Unexpected preferred Claude model; Graphify will use its built-in default."
