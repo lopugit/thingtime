@@ -9,7 +9,7 @@ is fixed, and cite the checklist you ran in the PR description.
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-      /.well-known/oauth-authorization-server`, and the Thingtime capability
+    /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -390,7 +390,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -418,7 +418,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
       Lopu success toast (errors also route through Lopu, never `alert`).
 - [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
-      test:branding` passes (trim + padding + pixel-size unit tests).
+    test:branding` passes (trim + padding + pixel-size unit tests).
 - [ ] Press kit grid renders all generated marketing images; the portrait
       phone wallpaper previews as a centre crop and must not stretch its grid
       row (no giant empty gap beside it).
@@ -1000,7 +1000,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-      runner)`, while both required-context companion jobs have distinct
+    runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1266,7 +1266,7 @@ is fixed, and cite the checklist you ran in the PR description.
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
-      --self-test` in the `github-actions` control plane to prove both the
+    --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
       Anthropic request uses the first Anthropic-capable Admin entry — model
@@ -1438,6 +1438,31 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
+- [ ] Commander typeahead searches the live Things + people APIs after the
+      debounce: it shows contextual platform posts/data/schemas/people before
+      the bounded `Local paths` tier, arrow/Enter and click open the selected
+      result exactly once (without then falling through to the typed local
+      `/thing/:path` command), and `Search things for…` still opens the complete
+      `/search?q=…` result set. With ordinary text and NO highlighted row,
+      Enter defaults to that pinned full-search row; an explicitly highlighted
+      result still wins, and `path = value` setters still execute instead of
+      becoming searches. A failed typeahead leaves full search + local commands
+      usable.
+- [ ] Search results default to `Standard`: posts use the real interactive
+      post card and other Things use their native rendered `ThingView` (with
+      its rendered/tree toggle where supported). Switching to `Data` restores
+      the compact crystal-field cards, and every Data card's `Open thing` link
+      opens the ACL-aware canonical `/thing/:id` page. Toggle labels remain
+      visible and usable at desktop and mobile widths. A ranked text search
+      shows each Thing result's real server `rankScore` as tiny subdued
+      `ranked match · N` metadata in BOTH views; chronological/unranked results
+      never invent or display a score.
+- [ ] Open a post result's canonical `/thing/:id` page. It renders the full
+      interactive PostCard inline under `Post view`, keeps `Open post page` as
+      a permalink, and still shows the complete `Thing data` panel below it.
+      Non-post Things and private admin diagnostics do not show an empty post
+      section. Verify the inline card and JSON remain unclipped at desktop and
+      mobile widths and survive a full top-to-bottom scroll.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -1904,11 +1929,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       nsfw, and blocked uploads. `Run analysis sweep` reports
       analyzed/flagged/skipped counts and drains pending attachments plus
       verdicts whose flag write was interrupted.
-Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
-restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
-name already on the allowlist is refused, so register FIRST). One command
-re-checks the whole management plane end-to-end:
-`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+      Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+      restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+      name already on the allowlist is refused, so register FIRST). One command
+      re-checks the whole management plane end-to-end:
+      `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
@@ -2445,7 +2470,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       application entry; a `pageshow.persisted` restore immediately replaces
       the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
-      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+    must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
       hostile, and old failed-revival function tags, reload Feed and open

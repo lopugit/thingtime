@@ -6583,7 +6583,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
       'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
       'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
-      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
+      'The response carries things (generic projections; ranked text results include their query-relative rankScore), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
       'Handle 400 invalid grammar and 429 rate-limited.'
     ],
     requestExamples: [
@@ -6663,7 +6663,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               crystal: { type: 'text', text: 'Standing desk, walnut top, 60–130cm' },
               tags: ['furniture'],
               acl: ['tt:all'],
-              visibility: 'public'
+              visibility: 'public',
+              rankScore: 4.25
             }
           ],
           posts: { thing_123: { id: 'thing_123', type: 'text', text: 'Standing desk, walnut top, 60–130cm' } },
