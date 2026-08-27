@@ -4,6 +4,7 @@ import { removeAccounts } from '~/api/utils/auth/accounts';
 import { clearAuthCookie, getAuthToken } from '~/api/utils/auth/authCookie';
 import { verifyJwt } from '~/api/utils/auth/jwt';
 import { revokeSession } from '~/api/utils/auth/sessions';
+import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 
 // POST /api/v1/auth/logout — body optional: { all?: boolean }
 // Signs the ACTIVE account out: revokes its session and drops it from the
@@ -23,6 +24,10 @@ export const action = async ({ request }: { request: Request }) => {
     // clear the active credential; roster accounts stay signed in.
     return json({ ok: true, user: null }, { headers: { 'Set-Cookie': await clearAuthCookie() } });
   }
+
+	if (claims) {
+		await prepareUnboundAttachmentCleanupForSessionReplacement(claims.sub).catch(() => null);
+	}
 
   const result = await removeAccounts(request, all ? { all: true } : { userId: claims!.sub });
 

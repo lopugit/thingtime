@@ -24,12 +24,14 @@ import {
 	findLegacyUserStorageFieldsByIds,
 	fromBin,
 	packRecentReactions,
+	profileAttachmentRefsForUserRoot,
 	removeLegacyUserStorageFields,
 	toBin,
 	userEmailKey,
 	userUsernameKey
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
+import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
 import { themeAcl } from '../themes/themes';
 import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
 import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
@@ -71,6 +73,40 @@ import {
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+
+// Both the pending census and the real backfill must pass the complete stored
+// attachment envelope to thingStorageSizeBytes(). Projecting only the ordinary
+// Thing payload makes a legitimate attachment indistinguishable from a forged
+// attachment claim and correctly trips the fail-closed envelope validator.
+export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
+	_id: 1,
+	schemaVersion: 1,
+	ownerId: 1,
+	shareId: 1,
+	thingtime: 1,
+	crystal: 1,
+	extended: 1,
+	tags: 1,
+	storageClass: 1,
+	sandboxExpiresAt: 1,
+	sizeBytes: 1,
+	storageAccountingVersion: 1,
+	updatedAt: 1,
+	attachmentEnvelopeVersion: 1,
+	attachmentState: 1,
+	objectSizeBytes: 1,
+	objectKey: 1,
+	objectVersionId: 1,
+	attachmentRequestFingerprint: 1,
+	attachmentPurpose: 1,
+	attachmentProfileSlot: 1,
+	attachmentFinalizationLeaseId: 1,
+	attachmentPartsIssuedAt: 1,
+	attachmentObjectlessDelete: 1,
+	attachmentMpuEmptyVerifiedAt: 1,
+	uploadId: 1,
+	attachmentExpiresAt: 1
+} as const;
 
 export type MigrationReport = {
   dryRun: boolean;
@@ -724,10 +760,12 @@ const conversionSemanticFields = [
 	'secure',
 	'secureVersion',
 	'secureAdmin',
-	'secureRecentReactions'
+	'secureRecentReactions',
+	'avatarAttachmentId',
+	'bannerAttachmentId'
 ] as const;
 
-const conversionThingSemanticallyEquals = (actual: any, expected: any, ignoreShareId: boolean): boolean => {
+export const conversionThingSemanticallyEquals = (actual: any, expected: any, ignoreShareId: boolean): boolean => {
 	const project = (doc: any) =>
 		Object.fromEntries(conversionSemanticFields.filter((field) => !(ignoreShareId && field === 'shareId')).map((field) => [field, doc?.[field]]));
 	return JSON.stringify(stableMigrationValue(project(actual))) === JSON.stringify(stableMigrationValue(project(expected)));
@@ -1115,6 +1153,7 @@ const usersToThings = collectionToThingsMigration({
         acl: [ACL_ALL],
         targetId: null,
         tags: [],
+				...profileAttachmentRefsForUserRoot(doc),
         uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
         secure,
         secureVersion: 0, // matches insertUser — optimistic-concurrency token
@@ -1408,10 +1447,9 @@ const seedBuiltinSchemas: Migration = {
 							$set: { crystal: validated.crystal, storageClass: 'control', updatedAt: now }
 						});
           }
-          const repairs = [
-            crystalNeedsRefresh ? 'registry crystal' : null,
-            storageClassNeedsRefresh ? 'control-plane storage class' : null
-          ].filter(Boolean);
+					const repairs = [crystalNeedsRefresh ? 'registry crystal' : null, storageClassNeedsRefresh ? 'control-plane storage class' : null].filter(
+						Boolean
+					);
           notes.push(`schema ${schema.id}: ${dryRun ? 'would repair' : 'repaired'} ${repairs.join(' and ')}`);
           refreshed += 1;
           continue;
@@ -1896,19 +1934,7 @@ const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>)
 
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
-	const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-		schemaVersion: 1,
-		ownerId: 1,
-		shareId: 1,
-		thingtime: 1,
-		crystal: 1,
-		extended: 1,
-		tags: 1,
-		storageClass: 1,
-		sandboxExpiresAt: 1,
-		sizeBytes: 1,
-		storageAccountingVersion: 1
-	});
+	const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
 	let pending = 0;
 	for await (const doc of cursor) {
 		// Every data-kind service-quota claim is counted independently above. An
@@ -2281,20 +2307,7 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
-			const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-				_id: 1,
-				schemaVersion: 1,
-				ownerId: 1,
-				thingtime: 1,
-				crystal: 1,
-				extended: 1,
-				tags: 1,
-				storageClass: 1,
-				sandboxExpiresAt: 1,
-				sizeBytes: 1,
-				storageAccountingVersion: 1,
-				updatedAt: 1
-			});
+			const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
 				if (initialSandboxState === 'sandbox') continue;
@@ -2716,6 +2729,98 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
   return null;
 };
 
+// ---------------------------------------------------------------------------
+// Relationship uniqueKeys backfill. Relationship dedupe moved off the
+// kind-blind crystal-path unique indexes (squattable through free-form data
+// crystals — see KIND-BLIND HISTORY in collections.ts) onto the
+// server-only root uniqueKeys namespace. New docs stamp at insert
+// (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
+// docs so their create-race dedupe is structural again, and counts (never
+// touches) data things carrying a relationship-shaped name. Before phase 2
+// that is the squat census; after the namespace reopens it may be intentional
+// ordinary data and remains operator information only.
+
+const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
+	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
+
+const relationshipBackfillFilter = (kind: string, field: string) =>
+	({ thingtime: kind, [`crystal.${field}`]: { $type: 'string' }, uniqueKeys: { $exists: false } }) as any;
+
+const backfillRelationshipUniqueKeys: Migration = {
+	id: 'backfill-relationship-unique-keys',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote/passkey link)',
+	description:
+		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
+		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
+		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
+		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
+		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
+		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
+	pending: async () => {
+		const things = await getCollection('things');
+		let total = 0;
+		for (const { kind, field } of relationshipBackfillTargets()) {
+			total += await things.countDocuments(relationshipBackfillFilter(kind, field));
+		}
+		return total;
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const notes: string[] = [];
+		let matched = 0;
+		let migrated = 0;
+		let skipped = 0;
+		for (const { kind, field } of relationshipBackfillTargets()) {
+			const filter = relationshipBackfillFilter(kind, field);
+			const kindMatched = await things.countDocuments(filter);
+			matched += kindMatched;
+			if (dryRun || !kindMatched) continue;
+			let kindMigrated = 0;
+			while (true) {
+				await assertLease?.();
+				const batch = await things.find(filter).project({ shareId: 1, crystal: 1 }).limit(THINGS_BATCH).toArray();
+				if (!batch.length) break;
+				for (const doc of batch) {
+					const uniqueKeys = relationshipUniqueKeys(kind, doc.crystal);
+					if (!uniqueKeys) {
+						skipped += 1;
+						continue;
+					}
+					try {
+						await things.updateOne({ shareId: doc.shareId, uniqueKeys: { $exists: false } } as any, { $set: { uniqueKeys } } as any);
+						kindMigrated += 1;
+					} catch (err: any) {
+						if (err?.code !== 11000) throw err;
+						// The slot is already held by another doc — a twin from the
+						// pre-unique-index era. Leave it unstamped for operator review;
+						// guessing a winner here could delete a real relationship.
+						skipped += 1;
+						notes.push(`duplicate ${kind} ${field} slot left unstamped: ${doc.shareId}`);
+					}
+				}
+				if (batch.length < THINGS_BATCH) break;
+			}
+			migrated += kindMigrated;
+			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
+		}
+		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
+		for (const field of relationshipFields) {
+			await assertLease?.();
+			const count = await things.countDocuments({ thingtime: 'data', [`crystal.${field}`]: { $exists: true } } as any);
+			if (count) {
+				notes.push(
+					`${count} data thing(s) carry crystal.${field} at the root (operator census only — never modified; valid ordinary data after phase 2)`
+				);
+			}
+		}
+		return { dryRun, matched, migrated, created: 0, skipped, notes };
+	}
+};
+
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -2736,6 +2841,7 @@ export const migrations: Migration[] = [
   backfillAppNamespaceFields,
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
+	backfillRelationshipUniqueKeys,
   dropStaleCollectionGenerations
 ];
 
