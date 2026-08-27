@@ -2124,14 +2124,42 @@ jobs:
         run: |
           set -euo pipefail
 
+          # gh pr list uses GraphQL and can encounter a transient edge 5xx.
+          # Retry only read-only metadata commands and keep diagnostics off
+          # stdout so command-substitution JSON remains parseable.
+          gh_read_retry() {
+            local attempt delay output errors
+            output="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.out"
+            errors="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.err"
+            for attempt in 1 2 3 4; do
+              : >"$output"
+              : >"$errors"
+              if gh "$@" >"$output" 2>"$errors"; then
+                cat "$output"
+                rm -f "$output" "$errors"
+                return 0
+              fi
+              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                 && [ "$attempt" -lt 4 ]; then
+                delay="$((1 << attempt))"
+                echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
+                sleep "$delay"
+                continue
+              fi
+              sed -n '1,20p' "$errors" >&2
+              rm -f "$output" "$errors"
+              return 1
+            done
+          }
+
           if [ -n "$SELECTED_PR" ] && ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error::A Lopu review selector must use a positive pull-request number."
             exit 1
           fi
 
-          open="$(gh pr list --repo "$REPO" --state open --limit 500 \
+          open="$(gh_read_retry pr list --repo "$REPO" --state open --limit 500 \
             --json number,headRefName,baseRefName,headRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          default_ref="$(gh_read_retry api "repos/$REPO" --jq '.default_branch')"
           if [ -n "$SELECTED_PR" ]; then
             candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
           elif [ "$EVENT_NAME" = push ] && [ "$EVENT_REF" != github-actions ]; then
@@ -2710,6 +2738,31 @@ jobs:
         run: |
           set -euo pipefail
 
+          gh_read_retry() {
+            local attempt delay output errors
+            output="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.out"
+            errors="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.err"
+            for attempt in 1 2 3 4; do
+              : >"$output"
+              : >"$errors"
+              if gh "$@" >"$output" 2>"$errors"; then
+                cat "$output"
+                rm -f "$output" "$errors"
+                return 0
+              fi
+              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                 && [ "$attempt" -lt 4 ]; then
+                delay="$((1 << attempt))"
+                echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
+                sleep "$delay"
+                continue
+              fi
+              sed -n '1,20p' "$errors" >&2
+              rm -f "$output" "$errors"
+              return 1
+            done
+          }
+
           if [ -n "$SELECTED_PR" ] && ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error::Internal Lopu review handoff has an invalid PR number."
             exit 1
@@ -2732,9 +2785,9 @@ jobs:
           printf '[]\n' >"$manifest"
           printf '[]\n' >"$codeql_authority"
 
-          open="$(gh pr list --repo "$REPO" --state open --limit 500 \
+          open="$(gh_read_retry pr list --repo "$REPO" --state open --limit 500 \
             --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          default_ref="$(gh_read_retry api "repos/$REPO" --jq '.default_branch')"
           if [ -n "$SELECTED_PR" ]; then
             candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
           elif [ -n "$SELECTED_BRANCH" ]; then

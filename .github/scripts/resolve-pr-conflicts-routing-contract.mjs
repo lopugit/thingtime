@@ -441,6 +441,21 @@ function assertWorkflowSource() {
     /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal events and automatic rebase retries never launch a duplicate whole-PR review",
   );
+  for (const [name, block] of [
+    ["review selector", reviewDetectBlock],
+    ["review worktree preparation", reviewBlock],
+  ]) {
+    assert.match(
+      block,
+      /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)/u,
+      `${name} retries bounded transient GitHub metadata failures`,
+    );
+    assert.match(
+      block,
+      /open="\$\(gh_read_retry pr list[\s\S]*default_ref="\$\(gh_read_retry api/u,
+      `${name} routes both initial metadata reads through the retry helper`,
+    );
+  }
   assert.match(
     source,
     /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
@@ -986,6 +1001,16 @@ function assertAdminModelRouting(
     rebaseActionSource,
     /cp -pR "\$safe_trusted_abs\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$restored\/\.github\/actions\/lopu-agent\/"/u,
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
+  );
+  assert.match(
+    rebaseActionSource,
+    /cp -p[\s\S]*?"\$source_trusted\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$source_trusted\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$safe_trusted\/\.github\/scripts\/"/u,
+    "the safe round copy preserves the trusted Graphify helpers outside the model workspace",
+  );
+  assert.match(
+    rebaseActionSource,
+    /cp -p[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$restored\/\.github\/scripts\/"/u,
+    "round cleanup restores the trusted Graphify helpers needed after conflict replay",
   );
   assert.match(
     lopuActionSource,

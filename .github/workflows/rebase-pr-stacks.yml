@@ -1214,6 +1214,8 @@ jobs:
           for path in \
             .github/actions/lopu-agent/action.yml \
             .github/actions/rebase-conflict-round/action.yml \
+            .github/scripts/graphify-cas.mjs \
+            .github/scripts/stage-graphify-snapshots.mjs \
             .github/scripts/rebase-stack/start.sh \
             .github/scripts/rebase-stack/prepare-round.sh; do
             git -C trusted ls-files --error-unmatch -- "$path" >/dev/null
