@@ -322,6 +322,21 @@ function assertWorkflowSource() {
   assert.doesNotMatch(source, /ref:"develop"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*\.head == "sync\/main-into-develop" and \.base == "develop"[\s\S]*== \$priority_sync/u,
+    "the standing main-to-develop synchronizer is partitioned into the first conflict handoff",
+  );
+  assert.match(
+    source,
+    /priority main-to-develop synchronizer batch/u,
+    "priority synchronizer dispatches remain observable in the run log",
+  );
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*sort_by\(\.number\)[\s\S]*unique_by\(\.number\)[\s\S]*range\(0; length; 200\)/u,
+    "each priority partition remains a canonical, bounded, number-sorted batch",
+  );
   assert.equal(
     source.match(/pr_batch_b64:\$pr_batch_b64/g)?.length,
     2,

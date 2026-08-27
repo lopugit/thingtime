@@ -1906,50 +1906,71 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
-          selections="$(jq -cS '
-            [.[] | {manual_retry:(.manual_retry == true), number:.number}]
-            | sort_by(.number)
-            | unique_by(.number)
-          ' <<<"$PRS")"
-          total="$(jq 'length' <<<"$selections")"
-          [ "$total" -gt 0 ] || { echo "::error::Detector returned an empty handoff batch."; exit 1; }
+          # The standing main -> develop synchronizer is repository plumbing:
+          # when main advances it can become conflicting by design, and leaving
+          # it behind a large historical promotion batch stalls every later
+          # develop integration. Dispatch that automation-owned lane first,
+          # in its own canonical (number-sorted) batch. Every other conflict
+          # keeps the same deterministic numeric ordering and durable queue.
+          total=0
+          for priority_sync in true false; do
+            selections="$(jq -cS --argjson priority_sync "$priority_sync" '
+              [
+                .[]
+                | select(
+                    ((.head == "sync/main-into-develop" and .base == "develop"))
+                    == $priority_sync
+                  )
+                | {manual_retry:(.manual_retry == true), number:.number}
+              ]
+              | sort_by(.number)
+              | unique_by(.number)
+            ' <<<"$PRS")"
+            group_total="$(jq 'length' <<<"$selections")"
+            total="$((total + group_total))"
 
-          while IFS= read -r batch; do
-            [ -n "$batch" ] || continue
-            batch_b64="$(printf '%s' "$batch" | base64 -w0)"
-            count="$(jq 'length' <<<"$batch")"
-            first="$(jq -r '.[0].number' <<<"$batch")"
-            last="$(jq -r '.[-1].number' <<<"$batch")"
-            echo "Dispatching $count selected PR(s), #$first through #$last, to one fixed-control-plane worker."
-            jq -n \
-              --arg pr_batch_b64 "$batch_b64" \
-              --arg depth "$DEPTH" \
-              --arg execution_provider "$EXECUTION_PROVIDER" \
-              --arg runner_label "$RUNNER_LABEL" \
-              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
-              --arg routing_proof "$ROUTING_PROOF" \
-              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
-                {
-                  ref:"github-actions",
-                  inputs:{
-                    pr_number:"",
-                    pr_batch_b64:$pr_batch_b64,
-                    branch:"",
-                    detector_handoff:true,
-                    manual_retry:false,
-                    depth:$depth,
-                    execution_provider:$execution_provider,
-                    runner_label:$runner_label,
-                    control_dispatch_id:$control_dispatch_id,
-                    routing_proof:$routing_proof,
-                    routing_proof_issued_at:$routing_proof_issued_at
+            while IFS= read -r batch; do
+              [ -n "$batch" ] || continue
+              batch_b64="$(printf '%s' "$batch" | base64 -w0)"
+              count="$(jq 'length' <<<"$batch")"
+              first="$(jq -r '.[0].number' <<<"$batch")"
+              last="$(jq -r '.[-1].number' <<<"$batch")"
+              if [ "$priority_sync" = true ]; then
+                echo "Dispatching priority main-to-develop synchronizer batch ($count PR(s), #$first through #$last)."
+              else
+                echo "Dispatching $count selected PR(s), #$first through #$last, to one fixed-control-plane worker."
+              fi
+              jq -n \
+                --arg pr_batch_b64 "$batch_b64" \
+                --arg depth "$DEPTH" \
+                --arg execution_provider "$EXECUTION_PROVIDER" \
+                --arg runner_label "$RUNNER_LABEL" \
+                --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+                --arg routing_proof "$ROUTING_PROOF" \
+                --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
+                  {
+                    ref:"github-actions",
+                    inputs:{
+                      pr_number:"",
+                      pr_batch_b64:$pr_batch_b64,
+                      branch:"",
+                      detector_handoff:true,
+                      manual_retry:false,
+                      depth:$depth,
+                      execution_provider:$execution_provider,
+                      runner_label:$runner_label,
+                      control_dispatch_id:$control_dispatch_id,
+                      routing_proof:$routing_proof,
+                      routing_proof_issued_at:$routing_proof_issued_at
+                    }
                   }
-                }
-              ' \
-              | gh api --method POST \
-                  "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
-                  --input -
-          done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$selections")
+                ' \
+                | gh api --method POST \
+                    "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                    --input -
+            done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$selections")
+          done
+          [ "$total" -gt 0 ] || { echo "::error::Detector returned an empty handoff batch."; exit 1; }
 
   review_detect:
     name: Find PRs for Lopu repository review
