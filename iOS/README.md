@@ -8,8 +8,20 @@ pointed at a Vercel preview or branch deployment for TestFlight builds. A
 left-edge swipe opens the in-app web destination drawer, where production,
 the configured build URL, and deployments returned by
 `/api/v1/vercel/deployments` can be selected without rebuilding the app. It
+keeps the controls pinned while branch rows scroll lazily, and each branch can
+expand into its ten most recent deployments. A queued newest deployment does
+not block testing: the previous ready deployment is labelled as the last
+successful build and remains directly selectable. Long branch and deployment
+histories remain usable on every supported screen size. It
 does not include any LiDAR, ARKit,
 scanning, mesh, storage, or export functionality.
+
+The deployment list tries the configured `ThingtimeWebURL` origin when present,
+so preview-targeted TestFlight builds exercise the matching preview API and its
+deployment-history contract. If that preview is unavailable or still serves
+the legacy latest-only contract, the client falls back to
+`https://thingtime.com/api/v1/vercel/deployments`; production builds use that
+stable endpoint directly.
 
 ## Setup
 
