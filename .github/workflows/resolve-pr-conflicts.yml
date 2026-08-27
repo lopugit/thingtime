@@ -6618,7 +6618,13 @@ jobs:
           # model can enumerate and would inject nodes/edges into graph.json).
           # That would smuggle model-authored content past the verify step.
           git reset -q --hard HEAD
-          git clean -qffdx
+          # `trusted/` is an ignored nested checkout that supplies this job's
+          # local Lopu action.  Nested actions can have runner-managed post
+          # steps, so deleting their action.yml here makes an otherwise
+          # successful resolution finish with a post-action lifecycle error.
+          # Keep the fixed control plane while removing every other ignored or
+          # untracked model-created path before Graphify reads the repository.
+          git clean -qffdx -e trusted/
           # Belt: restore graphify-out from the commit outright.
           rm -rf graphify-out
           git checkout -q HEAD -- graphify-out/ 2>/dev/null || true

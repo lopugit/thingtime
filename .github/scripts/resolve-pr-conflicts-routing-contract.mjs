@@ -512,6 +512,16 @@ function assertWorkflowSource() {
   );
   assert.match(
     graphifyBlock,
+    /git clean -qffdx -e trusted\//u,
+    "Graphify cleanup preserves the local Lopu action until runner post steps finish",
+  );
+  assert.doesNotMatch(
+    graphifyBlock,
+    /git clean -qffdx\s*\n/u,
+    "Graphify cleanup cannot delete the protected local-action checkout",
+  );
+  assert.match(
+    graphifyBlock,
     /node "\$graphify_stager"/u,
     "only immutable portable snapshots and additive cache entries are staged",
   );

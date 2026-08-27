@@ -19,6 +19,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Fixed Lopu's post-resolution cleanup so its ignored `trusted/` controller
+  checkout survives the Graphify preflight. This keeps the local action
+  definition available for GitHub's registered post-run steps while every
+  other ignored or untracked model-created path is still removed.
+- Fixed Lopu's `all`-branch rebuild so generated `graphify-out/` state is
+  pinned to the primary-base snapshot after every PR merge, preventing legacy
+  cache/snapshot layouts from excluding real source changes or ballooning the
+  synthetic branch. A failed lazy promisor fetch now also triggers one
+  complete refetch of the exact live base and PR refs before retrying.
 - Fixed Lopu's stack-rebase prompt so the live rebase checkout is explicitly
   inspection-only and every bounded related edit is submitted as a verified
   scratch copy, preventing model-side writes from tripping the immutable real
