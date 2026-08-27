@@ -550,14 +550,17 @@ on:
     # workflow instead of a second rebase-specific product listener.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector runs are disposable; internal batch workers are not, and a detector
-# and the worker it spawns never share a namespace. Within each semantic
-# PR/branch namespace, GitHub keeps the active run plus the newest pending run;
-# the newest run re-derives live PR, comment, check, and branch state, so an
-# older pending snapshot is redundant. The model jobs below still use the
-# durable repository fleet queue because work for distinct PRs must not vanish,
-# and each queued matrix job revalidates its own immutable snapshot before it
-# spends checkout, secret, AI, or Graphify budget.
+# Detector runs are disposable, and a detector and the worker it spawns never
+# share a namespace. Within each semantic PR/branch namespace, GitHub keeps the
+# active run plus the newest pending run; the newest run re-derives live PR,
+# comment, check, and branch state, so an older pending snapshot is redundant.
+# Internal batch workers use unique run namespaces so a worker already draining
+# is never interrupted. Before a detector dispatches a replacement batch, the
+# handoff explicitly cancels only older workers that are still pending/queued
+# and waits for their capacity to be released. This bounds repository event
+# storms without dropping active work. The model jobs below still use the
+# durable repository fleet queue, and each admitted matrix job revalidates its
+# own immutable snapshot before checkout, secret, AI, or Graphify spend.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
@@ -1939,6 +1942,79 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+          # Every base push can produce several equivalent detector events
+          # (push, pull_request_target, check_run and workflow_run). Their
+          # immutable worker batches used to accumulate behind the one Lopu
+          # fleet until GitHub's pending-job capacity was exhausted; newer
+          # matrix jobs then failed before a runner or first step existed.
+          #
+          # Preserve every in-progress run. Coalesce only workers that GitHub
+          # still reports as pending/queued, immediately rechecking each run
+          # before cancellation. The new batch below re-derives live refs and
+          # mergeability, so those not-yet-admitted snapshots are obsolete.
+          pending_worker_ids="$(
+            for pending_status in pending queued; do
+              gh api --paginate \
+                "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$pending_status&per_page=100" \
+                --jq '
+                  .workflow_runs[]
+                  | select(.head_branch == "github-actions")
+                  | select(.display_title == "Lopu resolves a PR batch from the control plane")
+                  | .id
+                '
+            done | sort -un
+          )"
+
+          cancelled_worker_ids=""
+          while IFS= read -r pending_run_id; do
+            [ -n "$pending_run_id" ] || continue
+            live_status="$(
+              gh api "repos/$REPO/actions/runs/$pending_run_id" --jq '.status' \
+                2>/dev/null || printf 'unknown'
+            )"
+            case "$live_status" in
+              pending|queued)
+                if gh api --method POST \
+                    "repos/$REPO/actions/runs/$pending_run_id/cancel" \
+                    >/dev/null 2>&1
+                then
+                  echo "Coalescing obsolete pending Lopu worker run $pending_run_id."
+                  cancelled_worker_ids="${cancelled_worker_ids}${pending_run_id}"$'\n'
+                else
+                  echo "::notice::Pending worker $pending_run_id changed state before cancellation; preserving it."
+                fi
+                ;;
+              *)
+                echo "::notice::Worker $pending_run_id is now $live_status; preserving it."
+                ;;
+            esac
+          done <<<"$pending_worker_ids"
+
+          if [ -n "$cancelled_worker_ids" ]; then
+            remaining_pending=0
+            for wait_round in $(seq 1 12); do
+              remaining_pending=0
+              while IFS= read -r cancelled_run_id; do
+                [ -n "$cancelled_run_id" ] || continue
+                cancelled_status="$(
+                  gh api "repos/$REPO/actions/runs/$cancelled_run_id" --jq '.status' \
+                    2>/dev/null || printf 'completed'
+                )"
+                case "$cancelled_status" in
+                  pending|queued|requested|waiting)
+                    remaining_pending="$((remaining_pending + 1))"
+                    ;;
+                esac
+              done <<<"$cancelled_worker_ids"
+              [ "$remaining_pending" -eq 0 ] && break
+              [ "$wait_round" -lt 12 ] && sleep 5
+            done
+            if [ "$remaining_pending" -ne 0 ]; then
+              echo "::error::$remaining_pending obsolete Lopu worker run(s) did not release queue capacity within 60 seconds; a later detector will retry safely."
+              exit 1
+            fi
+          fi
+
           # The standing main -> develop synchronizer is repository plumbing:
           # when main advances it can become conflicting by design, and leaving
           # it behind a large historical promotion batch stalls every later

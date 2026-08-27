@@ -25,6 +25,7 @@ import {
   hydrateSemanticCache,
   ingestSemanticCache,
   listSnapshots,
+  prepareWorkingOutput,
   selectSnapshot,
   withRepositoryLock,
 } from "./graphify-cas.mjs"
@@ -275,6 +276,34 @@ test("byte-identical output deduplicates to one snapshot", () => {
 
     assert.equal(second.path, first.path)
     assert.equal(listSnapshots(root, fingerprint.sourceFingerprint).length, 1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("working output makes immutable snapshot files writable", () => {
+  const root = fixture()
+  try {
+    const fingerprint = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "immutable", 2), {
+      ...fingerprint,
+      version: "graphify test",
+    })
+    assert.equal(statSync(path.join(snapshot.path, "graph.json")).mode & 0o222, 0)
+
+    const working = prepareWorkingOutput(root, "b".repeat(64))
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md"]) {
+      assert.notEqual(
+        statSync(path.join(working, name)).mode & 0o200,
+        0,
+        `${name} is owner-writable in the private workspace`,
+      )
+    }
+    writeFileSync(path.join(working, "GRAPH_REPORT.md"), "# refreshed\n")
+    assert.equal(
+      readFileSync(path.join(working, "GRAPH_REPORT.md"), "utf8"),
+      "# refreshed\n",
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now coalesces obsolete pending conflict-worker batches before it
+  dispatches a fresh live snapshot**: repeated push, PR, check, and workflow
+  signals had accumulated fourteen not-yet-admitted batch runs behind the
+  single-agent fleet; GitHub then rejected newer matrix jobs before assigning a
+  runner or first step. The protected handoff lists only pending/queued Lopu
+  batch workers, rechecks each live status, preserves every in-progress run,
+  cancels stale waiters, waits for their capacity to release, and only then
+  dispatches the newest re-derived batch. Graphify's CAS router also makes
+  private working copies writable after copying 0444 immutable snapshots, so a
+  new source fingerprint can refresh without weakening stored snapshot
+  immutability. — Codex (AI), 2026-08-27
 - **Lopu now rejects poisoned Graphify snapshots at the single immutable CAS
   boundary**: every structural and semantic result is compared with the richest
   snapshot for the same source fingerprint. If Graphify's manifest says a file
