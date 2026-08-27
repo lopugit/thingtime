@@ -265,7 +265,13 @@ export const bootstrapBridge = () => {
 	createRoot(rootElement).render(
 		<React.StrictMode>
 			<ChakraProvider theme={theme}>
-				<ThingtimeProvider persistLocal={false} exposeGlobals={false} allowFunctionRevival={false}>
+				{/*
+				 * The popup holds a first-party session, so it keeps nothing locally and
+				 * publishes no window globals. Persisted functions need no switch here:
+				 * thingtimeSerialization always omits them on write and removes them on
+				 * read, for every provider.
+				 */}
+				<ThingtimeProvider persistLocal={false} exposeGlobals={false}>
 					<BridgeApp {...params} />
 				</ThingtimeProvider>
 			</ChakraProvider>

@@ -44,7 +44,6 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const storageKey = props?.storageKey || 'thingtime';
 	const persistLocal = props?.persistLocal !== false;
 	const exposeGlobals = props?.exposeGlobals !== false;
-	const allowFunctionRevival = props?.allowFunctionRevival !== false;
 
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
@@ -390,7 +389,10 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
 							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
 							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
-							await localforage.setItem('thingtime', repairedSerialized);
+							// Repair the blob this provider actually read. Writing the literal
+							// default key here would overwrite another provider's tree and
+							// leave this one unrepaired, so it would repair again every load.
+							await localforage.setItem(storageKey, repairedSerialized);
 							if (cancelled) return;
 						}
 					} else {
@@ -427,7 +429,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [allowFunctionRevival, flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey]);
 
 	// thingtime change listener
 	React.useEffect(() => {
