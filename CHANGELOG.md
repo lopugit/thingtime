@@ -21,14 +21,6 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
-- **Unrouted Lopu review events now fail closed instead of escalating to every
-  open PR**: exact PR, branch, operator-wide, and protected-controller-push
-  scopes retain their existing behavior, while any unknown event that carries
-  no derivable scope logs a notice and dispatches no model work. This removes
-  merge-order dependence between metadata-only product listeners and the
-  protected controller, preventing a newly activated trigger from saturating
-  the repository-wide Lopu fleet before its matching router lands. — Codex
-  (AI), 2026-08-27
 - **Lopu's historical CodeQL backfill now advances past completed PR
   snapshots instead of repeatedly dispatching safe no-ops**: inventory resolves
   each live synthetic merge ref and validates its exact base/head parents using
@@ -44,6 +36,14 @@ every entry is attributed the same way the app changelog attributes them.
   recorded base SHA predates the current target. Matching proposals for a
   shared repository alert are coalesced to one write; conflicting reasons leave
   the alert open without failing unrelated reviews. — Codex (AI), 2026-08-27
+- **Unrouted Lopu review events now fail closed instead of escalating to every
+  open PR**: exact PR, branch, operator-wide, and protected-controller-push
+  scopes retain their existing behavior, while any unknown event that carries
+  no derivable scope logs a notice and dispatches no model work. This removes
+  merge-order dependence between metadata-only product listeners and the
+  protected controller, preventing a newly activated trigger from saturating
+  the repository-wide Lopu fleet before its matching router lands. — Codex
+  (AI), 2026-08-27
 - **All-branch maintenance now coalesces before it reaches Lopu's durable model
   fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
   the same metadata-only handoff to the protected manager instead of attaching
