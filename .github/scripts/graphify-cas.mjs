@@ -369,11 +369,23 @@ function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) {
+      const target = path.join(to, name)
+      cpSync(source, target)
+      // Immutable snapshots are 0444 so legacy writers cannot mutate them
+      // through compatibility aliases. A private mutation workspace is the
+      // opposite boundary: Graphify must be able to replace every portable
+      // output while building the next content-addressed snapshot.
+      chmodSync(target, 0o644)
+    }
   }
   for (const name of [".graphify_analysis.json", ".graphify_labels.json"]) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) {
+      const target = path.join(to, name)
+      cpSync(source, target)
+      chmodSync(target, 0o644)
+    }
   }
 }
 
@@ -400,7 +412,7 @@ function graphifyVersion() {
   return (result.stdout || result.stderr || "unknown").trim()
 }
 
-function prepareWorkingOutput(root, sourceFingerprint) {
+export function prepareWorkingOutput(root, sourceFingerprint) {
   const workRoot = path.join(
     graphifyRoot(root),
     ".work",

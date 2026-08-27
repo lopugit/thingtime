@@ -116,9 +116,12 @@ The public manager coalesces event storms by semantic PR or branch key: GitHub
 keeps the active run plus the newest pending run, and
 `cancel-in-progress: false` prevents that newest signal from interrupting work
 already running. The survivor re-derives the complete live PR, comment, check,
-and branch state. Only the shared model fleet uses durable `queue: max`, because
-already-selected work for distinct PRs must not disappear while one Lopu is
-active.
+and branch state. Before a conflict detector publishes another repository
+batch, it also cancels only older batch runs that are still pending/queued and
+waits for their GitHub capacity to release; an in-progress worker is always
+preserved. Only the shared model fleet uses durable `queue: max`, so admitted
+work remains serialized while event storms cannot fill the pending-job limit
+with obsolete immutable snapshots.
 
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
