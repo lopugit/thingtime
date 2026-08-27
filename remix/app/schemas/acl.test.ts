@@ -113,6 +113,32 @@ test('sanitizeAcl: capability suffixes are accepted, deeper paths are refused', 
 	assert.deepEqual(entries(sanitizeAcl(['tt:user', 'tt:userFriends'])), ['tt:user', 'tt:userFriends']);
 });
 
+test('a capability word is still a usable username', () => {
+	// "write" and "comment" are ordinary, registerable usernames (only '/' and
+	// the env-admin allowlist are reserved), and the picker composes
+	// tt:user/<username> verbatim. Reading the '/write' tail as a capability
+	// whenever it appears would leave base 'tt:user' — the OWNER entry — so the
+	// picked account would silently get nothing while the acl grew a phantom
+	// owner grant. A capability suffix only counts over a non-empty subject.
+	for (const name of ['write', 'comment']) {
+		const picked = { id: `${name}-id`, username: name };
+		const acl = entries(sanitizeAcl(['tt:custom', 'tt:user', `tt:user/${name}`]));
+		assert.deepEqual(acl, ['tt:custom', 'tt:user', `tt:user/${name}`]);
+		assert.equal(aclAllows(acl, picked, OWNER), true, `${name} should be able to view`);
+		assert.equal(aclCapabilityFor(acl, picked, OWNER), 'read');
+		// …and they must not pick up the owner's rights either
+		assert.equal(aclAllows(acl, { id: 'someone-else', username: 'someone-else' }, OWNER), false);
+		// the same name WITH a real capability suffix still parses as one
+		const upgraded = entries(sanitizeAcl(['tt:custom', 'tt:user', `tt:user/${name}/write`]));
+		assert.equal(aclCapabilityFor(upgraded, picked, OWNER), 'write');
+	}
+	// a group whose id is a capability word behaves the same way
+	const member = { ...bob, groupIds: new Set(['write']) };
+	const groupAcl = ['tt:custom', 'tt:user', 'tt:group/write'];
+	assert.equal(aclAllows(groupAcl, member, OWNER), true);
+	assert.equal(aclCapabilityFor(groupAcl, member, OWNER), 'read');
+});
+
 test('sanitizeAcl: shape, dedup, and the entry cap still hold', () => {
 	assert.equal(rejected(sanitizeAcl('tt:all')).status, 400);
 	assert.equal(rejected(sanitizeAcl([])).status, 400);

@@ -61,16 +61,28 @@ export const parseCustomAcl = (
     if (raw.startsWith('-')) continue;
     if (raw === 'tt:all') baseline = 'public';
     if (raw === 'tt:hidden') baseline = 'hidden';
-    const capOf = (base: string): Cap => (base.endsWith('/write') ? 'write' : base.endsWith('/comment') ? 'comment' : 'read');
-    const strip = (base: string): string => base.replace(/\/(write|comment)$/, '');
+    // Mirror of registry.ts splitCapability: a '/write' or '/comment' tail is
+    // a capability only when a non-empty subject remains under it. Stripping
+    // unconditionally would swallow the whole subject of the account named
+    // "write" (tt:user/write → ''), silently dropping that person from the
+    // picker every time the audience is reopened.
+    const split = (entry: string, prefix: string): { subject: string; cap: Cap } => {
+      for (const [suffix, cap] of [
+        ['/write', 'write'],
+        ['/comment', 'comment']
+      ] as const) {
+        if (!entry.endsWith(suffix)) continue;
+        const subject = entry.slice(prefix.length, -suffix.length);
+        if (subject) return { subject, cap };
+      }
+      return { subject: entry.slice(prefix.length), cap: 'read' };
+    };
     if (raw.startsWith('tt:user/')) {
-      const cap = capOf(raw);
-      const username = strip(raw).slice('tt:user/'.length);
+      const { subject: username, cap } = split(raw, 'tt:user/');
       if (username) users.push({ username, cap });
     }
     if (raw.startsWith('tt:group/')) {
-      const cap = capOf(raw);
-      const id = strip(raw).slice('tt:group/'.length);
+      const { subject: id, cap } = split(raw, 'tt:group/');
       if (id) groups.push({ id, cap });
     }
   }

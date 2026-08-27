@@ -250,9 +250,25 @@ export type AclViewer = {
 export type AclCapability = 'none' | 'read' | 'comment' | 'write';
 const CAP_RANK: Record<AclCapability, number> = { none: 0, read: 1, comment: 2, write: 3 };
 
+// Only a SUBJECT grant carries a capability, and only over a non-empty
+// subject: 'tt:user/<name>' and 'tt:group/<id>'. Anchoring the strip is what
+// keeps `write` and `comment` usable as ordinary usernames — bare
+// `id.endsWith('/write')` reads the picker's own output for the account named
+// "write" (tt:user/write) as base 'tt:user', i.e. the OWNER entry, so that
+// account silently receives nothing and the acl gains a phantom owner grant.
+// Same ambiguity the '/'-in-username guard (auth/registerUser.ts) closes from
+// the other side; usernames are already '/'-free, so the base can never be a
+// deeper path here.
 const splitCapability = (id: string): { base: string; cap: 'read' | 'comment' | 'write' } => {
-  if (id.endsWith('/write')) return { base: id.slice(0, -6), cap: 'write' };
-  if (id.endsWith('/comment')) return { base: id.slice(0, -8), cap: 'comment' };
+  for (const [suffix, cap] of [
+    ['/write', 'write'],
+    ['/comment', 'comment']
+  ] as const) {
+    if (!id.endsWith(suffix)) continue;
+    const base = id.slice(0, -suffix.length);
+    const grantPrefix = [ACL_USER_PREFIX, ACL_GROUP_PREFIX].find((prefix) => base.startsWith(prefix));
+    if (grantPrefix && base.length > grantPrefix.length) return { base, cap };
+  }
   return { base: id, cap: 'read' };
 };
 
