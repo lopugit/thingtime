@@ -45,6 +45,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Graphify output is now conflict-free and content-addressed**: a repository
+  wrapper fingerprints the source tree without generated output, serializes
+  writers, validates Graphify's atomic graph/manifest/report set, and publishes
+  immutable snapshots whose identical artifacts deduplicate and whose valid
+  variants coexist. Mutable semantic-cache entries are also promoted into
+  immutable input-key/content-hash variants. Ignored root symlinks preserve ordinary query compatibility;
+  committed hooks select/build snapshots without committing or pushing, and
+  Lopu can regenerate a post-merge snapshot instead of line-merging generated
+  JSON. [PR #436 details](../PRs/436-codex-graphify-snapshot-routing--make-graphify-output-conflict-free.md).
+  — Codex (AI), 2026-08-27
 - **CodeQL keeps normal PR checks while covering arbitrary targets**: the thin
   listener now calls separate protected workflows for unprivileged analysis
   and the metadata-only `pull_request_target` handoff. Ordinary PR tokens no
