@@ -895,8 +895,8 @@
     "semantic_hash": "0a9c7d98ea5e3784c8f4799a8c84968d"
   },
   "remix/app/components/Commander/CommanderV2.tsx": {
-    "mtime": 1787810843.7180355,
-    "ast_hash": "3e9c7560f68a8f63f05103cfe7886752",
+    "mtime": 1787812513.9619133,
+    "ast_hash": "5d48f5f5a1f5a34d820f2ae696baeb97",
     "semantic_hash": ""
   },
   "remix/app/components/DevKit/DevKit.tsx": {
@@ -1740,8 +1740,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787810154.70474,
-    "ast_hash": "d2a83bda3ee427556644d2560d725e14",
+    "mtime": 1787812723.2570698,
+    "ast_hash": "bb37d62849791c3091efafac0666e671",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3200,9 +3200,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1787810154.7571564,
-    "ast_hash": "4e95c32beca8d46e964a07bed7867e48",
-    "semantic_hash": "4e95c32beca8d46e964a07bed7867e48"
+    "mtime": 1787812544.474188,
+    "ast_hash": "c8c43bc8d971ee0dc1c88c7d6b39fab9",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1787810154.7776806,
@@ -3895,9 +3895,9 @@
     "semantic_hash": "b55113784560241609a7b29a4a5a1fa5"
   },
   "remix/app/api/utils/things/search.ts": {
-    "mtime": 1787810154.7297518,
-    "ast_hash": "7004d26dc2c2a1a71f582e4d8c08d9e1",
-    "semantic_hash": "7004d26dc2c2a1a71f582e4d8c08d9e1"
+    "mtime": 1787812544.4726472,
+    "ast_hash": "28967118ae2c03834dfea05303ab7d0c",
+    "semantic_hash": ""
   },
   "remix/app/components/Feed/AdvancedFilters.tsx": {
     "mtime": 1787810154.7381897,
@@ -3935,8 +3935,8 @@
     "semantic_hash": "6f420a4cf10b31c78718dcd9f2f57451"
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1787811196.2428052,
-    "ast_hash": "b5fff86bbac3181830e9f6dfd1408db6",
+    "mtime": 1787812981.1391754,
+    "ast_hash": "0ceb069a927e54039351c209bfd7dd64",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchBuilder.tsx": {
@@ -3945,8 +3945,8 @@
     "semantic_hash": "5e302257dd8656adf068dfbb2d9b6ef5"
   },
   "remix/app/components/Search/searchTypes.ts": {
-    "mtime": 1787811117.389273,
-    "ast_hash": "ae16d22b380f15332faa80bf89f49e46",
+    "mtime": 1787812544.4730244,
+    "ast_hash": "188f071931fe36c38c2ce496259a2507",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingView.tsx": {
@@ -4145,8 +4145,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787810861.677702,
-    "ast_hash": "4c52032f890369865a0bf28901b61251",
+    "mtime": 1787812690.3902745,
+    "ast_hash": "e4330e6c973bfd11e4ab5b4121e256bb",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -4915,9 +4915,9 @@
     "semantic_hash": "027d2d8b048d90401548471688bf9051"
   },
   "remix/app/routes/thing.tsx": {
-    "mtime": 1787810154.7806504,
-    "ast_hash": "1ecbb1bca965a4ec08c83f5785e1f06a",
-    "semantic_hash": "1ecbb1bca965a4ec08c83f5785e1f06a"
+    "mtime": 1787812610.8325033,
+    "ast_hash": "9e8a5afe8c3c288bd558ff51d68de9b8",
+    "semantic_hash": ""
   },
   "PRs/195-codex-contextual-reaction-errors--contextual-reaction-and-migration-errors.md": {
     "mtime": 1787810154.4085164,
@@ -7040,13 +7040,28 @@
     "semantic_hash": ""
   },
   "remix/app/components/Commander/commanderSearch.test.ts": {
-    "mtime": 1787810508.4729471,
-    "ast_hash": "d9df158f19c69d7f5140167e8634e026",
+    "mtime": 1787812513.962239,
+    "ast_hash": "3e5c2adf61737c949f1b5b5c75f2c48a",
     "semantic_hash": ""
   },
   "remix/app/components/Search/commanderSearch.ts": {
-    "mtime": 1787810508.5437593,
-    "ast_hash": "2b2a6aa2c4920ab51fdc876d030c8f81",
+    "mtime": 1787812513.9614627,
+    "ast_hash": "1e8c40537fa979a37d05933454501d52",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/things/searchRanking.test.ts": {
+    "mtime": 1787812544.472009,
+    "ast_hash": "191d3f90cfebcdcfa7974e0c445cd5c7",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/things/searchRanking.ts": {
+    "mtime": 1787812544.4718275,
+    "ast_hash": "3eec8613426244c7918c94f921cf820b",
+    "semantic_hash": ""
+  },
+  "PRs/427-codex-search-commander-overhaul-overhaul-web-search-and-commander-results.md": {
+    "mtime": 1787813062.3799868,
+    "ast_hash": "6a67f6bb81ac7b4d1e0a7135ba9271de",
     "semantic_hash": ""
   }
 }
