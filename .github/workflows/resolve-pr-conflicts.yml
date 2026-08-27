@@ -21,6 +21,22 @@ on:
     types: [created, edited]
   check_run:
     types: [completed]
+  # check_run/check_suite events are suppressed for checks created by GitHub
+  # Actions itself. workflow_run closes that blind spot for first-party PR CI;
+  # the protected controller admits only PR-associated non-success conclusions
+  # and does not listen to Lopu PR manager, so review failures cannot recurse.
+  workflow_run:
+    workflows:
+      - API tests
+      - CI
+      - Lopu CodeQL all branches
+      - Workflow control-plane CI
+      - Develop S3 PR preview
+      - Signed Electron PR Release
+      - Electron App Release
+      - Web CI
+      - Build all branch
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
     - cron: "43 */6 * * *"
