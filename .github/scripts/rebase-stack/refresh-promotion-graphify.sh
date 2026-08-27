@@ -99,6 +99,11 @@ verify_derived_commit() {
     case "$changed_file" in
       graphify-out/graph.json|graphify-out/GRAPH_REPORT.md|\
       graphify-out/manifest.json|graphify-out/cost.json|\
+      graphify-out/snapshots/v1/*/graph.json|\
+      graphify-out/snapshots/v1/*/manifest.json|\
+      graphify-out/snapshots/v1/*/GRAPH_REPORT.md|\
+      graphify-out/snapshots/v1/*/cost.json|\
+      graphify-out/snapshots/v1/*/snapshot.json|\
       graphify-out/cache/semantic/*) ;;
       *) fail "Derived Graphify commit changed an unauthorized path: $changed_file" ;;
     esac
@@ -226,6 +231,11 @@ if (( install_status != 0 )); then
   exit 0
 fi
 export PATH="$HOME/.local/bin:$PATH"
+trusted_scripts="$(builtin cd -- "$(dirname "$0")/.." && pwd -P)"
+graphify_router="$trusted_scripts/graphify-cas.mjs"
+graphify_stager="$trusted_scripts/stage-graphify-snapshots.mjs"
+[[ -f "$graphify_router" && -f "$graphify_stager" ]] \
+  || fail "Trusted Graphify snapshot router is unavailable."
 
 select_claude_backend() {
   if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -328,9 +338,8 @@ if [ -n "$backend" ]; then
   concurrency=4
   [ "$backend" != claude-cli ] || concurrency=1
   semantic_status=0
-  graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+  node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
     --max-concurrency "$concurrency" --api-timeout 7200 \
-    && graphify cluster-only . --no-viz --no-label \
     && graph_not_collapsed || semantic_status=$?
   assert_tool_boundary
   if (( semantic_status == 0 )); then
@@ -346,7 +355,7 @@ emit semantic "$semantic"
 
 if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
   update_status=0
-  graphify update . || update_status=$?
+  node "$graphify_router" update . || update_status=$?
   assert_tool_boundary
   if (( update_status != 0 )); then
     echo "::warning::AST/text Graphify refresh failed; preserving the exact promotion-base graph."
@@ -357,17 +366,9 @@ if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
 fi
 assert_tool_boundary
 
-# Stage only portable, repo-tracked Graphify outputs.
-for file in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-  path="graphify-out/$file"
-  if [ -e "$path" ] || git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-    git add -A -- "$path"
-  fi
-done
-if [ -d graphify-out/cache/semantic ] \
-   || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-  git add -A -- graphify-out/cache/semantic/
-fi
+# Stage only portable immutable snapshots, additive semantic cache entries, and
+# legacy root artifacts while old branches remain in flight.
+node "$graphify_stager"
 
 if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
   echo "::error::Graphify modified source files; dropping the derived refresh."

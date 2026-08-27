@@ -467,8 +467,19 @@ function assertWorkflowSource() {
     "Graphify refresh is not limited to graph-tree conflicts",
   );
   assert.ok(
-    graphifyBlock.indexOf("graphify update .") < graphifyBlock.indexOf("graphify extract ."),
+    graphifyBlock.indexOf('node "$graphify_router" update .') <
+      graphifyBlock.indexOf('node "$graphify_router" extract .'),
     "structural Graphify extraction runs before LLM semantic extraction",
+  );
+  assert.match(
+    graphifyBlock,
+    /trusted\/\.github\/scripts\/graphify-cas\.mjs/u,
+    "privileged Graphify publication executes only the trusted router",
+  );
+  assert.match(
+    graphifyBlock,
+    /node "\$graphify_stager"/u,
+    "only immutable portable snapshots and additive cache entries are staged",
   );
   assert.match(
     graphifyBlock,
