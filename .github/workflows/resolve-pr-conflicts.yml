@@ -2008,8 +2008,22 @@ jobs:
             candidates="$(jq -c --arg branch "$EVENT_REF" '[.[] | select(.baseRefName == $branch or .headRefName == $branch)]' <<<"$open")"
           elif [ -n "$SELECTED_BRANCH" ]; then
             candidates="$(jq -c --arg branch "$SELECTED_BRANCH" '[.[] | select(.baseRefName == $branch or .headRefName == $branch)]' <<<"$open")"
-          else
+          elif [ "$EVENT_NAME" = workflow_dispatch ] \
+               || { [ "$EVENT_NAME" = push ] && [ "$EVENT_REF" = github-actions ]; }; then
+            # The only two signals that legitimately mean "every open PR": a
+            # blank operator/worker dispatch, and a control-plane push that
+            # publishes a new resolver revision worth re-applying everywhere.
             candidates="$open"
+          else
+            # Fail closed. A product-branch listener can activate a new event
+            # before this pinned controller learns to derive its exact scope —
+            # a thin listener is metadata-only and cannot know which revision
+            # of this file it calls. Falling through to every open PR would
+            # turn one unrouted signal into a repository-wide review, so an
+            # unscoped event does nothing and stays visible in the log.
+            echo "::notice::No Lopu review scope could be derived from $EVENT_NAME on $EVENT_REF; refusing to escalate an unrouted signal into a repository-wide review."
+            echo 'any=false' >>"$GITHUB_OUTPUT"
+            exit 0
           fi
           candidates="$(jq -c --arg default_ref "$default_ref" '
             [.[]
