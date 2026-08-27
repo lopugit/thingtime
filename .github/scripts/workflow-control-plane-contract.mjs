@@ -785,7 +785,14 @@ export function assertControlPlaneContract() {
   assert.match(codeqlBackfill, /backfill_listener_owned: "true"/u);
   assert.match(codeqlBackfill, /sort\(\(left, right\)[\s\S]*right\.updated_at/u);
   assert.match(codeqlBackfill, /ACTIVE_RUN_STATUSES/u);
-  assert.match(codeqlBackfill, /invalidMergeSnapshots/u);
+  assert.match(codeqlBackfill, /git\/ref\/pull\/\$\{number\}\/merge/u);
+  assert.match(codeqlBackfill, /parents\[0\] === baseSha[\s\S]*parents\[1\] === headSha/u);
+  assert.match(codeqlBackfill, /analysisSnapshots\.get\(number\)/u);
+  assert.doesNotMatch(
+    codeqlBackfill,
+    /pullRequest\.merge_commit_sha/u,
+    "CodeQL inventory never trusts the lagging pull-list synthetic merge SHA",
+  );
   assert.match(codeqlBackfill, /MAX_DISPATCHES must be an integer from 1 through 20/u);
   assert.doesNotMatch(
     codeqlBackfill,
@@ -1232,6 +1239,31 @@ export function assertControlPlaneContract() {
     /::error::Lopu proposed an invalid CodeQL disposition schema/u,
     "a malformed optional disposition never makes the repository-wide review job red",
   );
+  assert.doesNotMatch(
+    resolver,
+    /::error::CodeQL alert #\$alert_number was proposed more than once/u,
+    "one repository-level CodeQL alert appearing in several PR snapshots does not fail the review batch",
+  );
+  assert.match(
+    resolver,
+    /Coalescing CodeQL alert #\$alert_number across PR analysis snapshots with the same '\$proposed_reason' disposition/u,
+    "compatible CodeQL dispositions are coalesced to one repository-level write",
+  );
+  assert.match(
+    resolver,
+    /Leaving CodeQL alert #\$alert_number open because this Lopu session proposed conflicting disposition reasons/u,
+    "conflicting CodeQL dispositions fail closed per alert without failing unrelated reviews",
+  );
+  assert.match(
+    resolver,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "the isolated writer revalidates the exact reviewed PR alert instance",
+  );
+  assert.match(
+    resolver,
+    /live_base_ref=.*\.base\.ref[\s\S]*?git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "the isolated writer binds dispositions to the live target branch tip instead of the PR's historical base snapshot",
+  );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
     resolver.indexOf("\npermissions:\n"),
@@ -1272,6 +1304,7 @@ export function assertControlPlaneContract() {
     "resolver reasserts the exact immutable base Graphify subtree after model work and verifies the same snapshot",
   );
   for (const input of [
+    "pr_batch_b64",
     "maintenance_operation",
     "promotion_dry_run",
     "promotion_lookback",
