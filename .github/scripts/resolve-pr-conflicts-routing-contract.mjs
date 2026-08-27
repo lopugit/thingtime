@@ -631,6 +631,21 @@ function assertWorkflowSource() {
     /lopu-review:workflow-run:\{0\}:\{1\}/u,
     "failing-workflow handoffs preserve the triggering workflow-run id",
   );
+  assert.match(
+    reviewHandoffBlock,
+    /concurrency:[\s\S]*?group: lopu-review-handoff-\$\{\{ needs\.review_detect\.outputs\.pr_number \|\| needs\.review_detect\.outputs\.branch \|\| 'all' \}\}[\s\S]*?cancel-in-progress: false/u,
+    "review-event handoffs serialize by PR or branch without interrupting an admitted handoff",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /actions\/workflows\/resolve-pr-conflicts\.yml\/runs\?event=workflow_dispatch&per_page=100[\s\S]*?\.display_title == \$title[\s\S]*?\.status == "pending"[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "simultaneous check and PR events coalesce behind one unstarted Lopu review for the same scope",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /An already-running review is deliberately not suppressed/u,
+    "a head move during an active review retains one newest follow-up waiter",
+  );
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");

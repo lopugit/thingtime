@@ -2097,6 +2097,14 @@ jobs:
            && github.ref_name == 'github-actions')
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
+    # PR lifecycle, CodeQL/check, and first-party workflow events have distinct
+    # detector concurrency keys because they retain different evidence. Only
+    # their tiny review-dispatch step is serialized by review scope. GitHub's
+    # default one-pending behavior then keeps the newest waiter without ever
+    # interrupting a handoff that is already running.
+    concurrency:
+      group: lopu-review-handoff-${{ needs.review_detect.outputs.pr_number || needs.review_detect.outputs.branch || 'all' }}
+      cancel-in-progress: false
     permissions:
       actions: write
     steps:
@@ -2127,6 +2135,45 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+
+          if [ -n "$PR_NUMBER" ]; then
+            review_title="Lopu reviews PR #$PR_NUMBER from the control plane"
+          elif [ -n "$BRANCH" ]; then
+            review_title="Lopu reviews PRs matching $BRANCH from the control plane"
+          else
+            review_title='Lopu reviews all eligible PRs from the control plane'
+          fi
+
+          # A queued review has not snapshotted its worktree yet, so it will
+          # naturally inspect the newest live head and the complete check set
+          # when admitted to the repository-wide Lopu slot. Do not enqueue the
+          # same scope again merely because several checks completed together.
+          # An already-running review is deliberately not suppressed: a head
+          # move during that session needs one newest waiter behind it.
+          workflow_runs="$(gh api \
+            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&per_page=100")"
+          pending_review_url="$(jq -r --arg title "$review_title" '
+            [.workflow_runs[]
+              | select(.display_title == $title)
+              | select(.status == "pending"
+                       or .status == "queued"
+                       or .status == "waiting"
+                       or .status == "requested")]
+            | sort_by(.created_at)
+            | .[0].html_url // empty
+          ' <<<"$workflow_runs")"
+          if [ -n "$pending_review_url" ]; then
+            echo "::notice::Skipping duplicate Lopu review handoff; an unstarted review for this exact scope is already queued: $pending_review_url"
+            {
+              echo '## Coalesced Lopu review handoff'
+              echo
+              echo "A queued review already owns \`$review_title\`. It will read the newest PR head and complete live check state when admitted."
+              echo
+              echo "[Queued Lopu review]($pending_review_url)"
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           jq -n \
             --arg pr_number "$PR_NUMBER" \
             --arg branch "$BRANCH" \
