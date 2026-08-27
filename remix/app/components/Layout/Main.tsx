@@ -71,9 +71,15 @@ export const Main = (props) => {
 				>
 					{props.children}
 				</Flex>
-				<LopuuuPet />
 				{fullBleed ? null : <Footer></Footer>}
 			</Flex>
+			{/* The pet is position:fixed, so it must stay OUT of mainShiftContainer:
+			    a non-none transform there (mobile drawer shift) would make that
+			    element its containing block, and the pet would slide with the
+			    drawer and get clipped by the overflow:hidden ancestors. Full-bleed
+			    surfaces own the viewport and keep shell chrome off, so the pet
+			    stays off them too — otherwise it sits on the chat composer. */}
+			{fullBleed ? null : <LopuuuPet />}
 		</Flex>
 	);
 };

@@ -1,13 +1,33 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 
+import { useTtTheme } from '~/hooks/useTtTheme';
+
+import { petAnimation, petInset, petMotionEnabled } from './petCore';
+
+/**
+ * 🦄 Lopuuuuuuuuuu — an app-wide decorative pet, rendered by Main.
+ *
+ * Purely ornamental: `pointerEvents: none` and a low z-index keep it under all
+ * real chrome (nav 10050, DevKit 99999) and out of every interaction. Motion is
+ * opt-out twice over, per docs/design/DESIGN_LANGUAGE.md and the eggs.ts house
+ * rule that delight is "never annoying, always polite about motion":
+ *   - `prefers-reduced-motion` via CSS, so it lands on the first paint
+ *   - the theme's Motion switch (Settings → Motion), so it is user-controllable
+ * With motion off the pet stays put and simply doesn't animate.
+ */
 export const LopuuuPet = () => {
+	const { theme } = useTtTheme();
+	const motion = petMotionEnabled(theme?.general);
+
 	return (
 		<Box
 			aria-label="Lopuuuuuuuuuu, your rainbow brain unicorn pet"
-			bottom={{ base: 4, md: 6 }}
+			// bottom-anchored fixed chrome clears the home indicator / rounded
+			// corners, same as DevKit's bubble and the footer
+			bottom={{ base: petInset(16, 'bottom'), md: petInset(24, 'bottom') }}
 			pointerEvents="none"
 			position="fixed"
-			right={{ base: 3, md: 6 }}
+			right={{ base: petInset(12, 'right'), md: petInset(24, 'right') }}
 			role="img"
 			sx={{
 				'@keyframes lopuuu-float': {
@@ -21,11 +41,16 @@ export const LopuuuPet = () => {
 				'@keyframes lopuuu-rainbow': {
 					'0%': { filter: 'hue-rotate(0deg)' },
 					'100%': { filter: 'hue-rotate(360deg)' }
+				},
+				// first-paint correct, and covers the case where the OS setting
+				// changes mid-session without a re-render
+				'@media (prefers-reduced-motion: reduce)': {
+					'*': { animation: 'none !important' }
 				}
 			}}
 			zIndex={20}
 		>
-			<Flex alignItems="center" animation="lopuuu-float 4.8s ease-in-out infinite" flexDirection="column" gap={1}>
+			<Flex alignItems="center" animation={petAnimation('lopuuu-float 4.8s ease-in-out infinite', motion)} flexDirection="column" gap={1}>
 				<Flex
 					alignItems="center"
 					background="linear-gradient(135deg, rgba(255,255,255,0.94), rgba(255,240,253,0.86))"
@@ -48,7 +73,7 @@ export const LopuuuPet = () => {
 
 				<Box position="relative">
 					<Text
-						animation="lopuuu-rainbow 7s linear infinite"
+						animation={petAnimation('lopuuu-rainbow 7s linear infinite', motion)}
 						fontSize={{ base: '56px', md: '74px' }}
 						lineHeight="1"
 						textShadow="0 10px 28px rgba(120, 44, 255, 0.35)"
@@ -56,7 +81,7 @@ export const LopuuuPet = () => {
 						🦄
 					</Text>
 					<Text
-						animation="lopuuu-sparkle 1.8s ease-in-out infinite"
+						animation={petAnimation('lopuuu-sparkle 1.8s ease-in-out infinite', motion)}
 						fontSize={{ base: '18px', md: '24px' }}
 						left="-16px"
 						position="absolute"
@@ -65,7 +90,7 @@ export const LopuuuPet = () => {
 						✨
 					</Text>
 					<Text
-						animation="lopuuu-sparkle 2.3s ease-in-out infinite 0.35s"
+						animation={petAnimation('lopuuu-sparkle 2.3s ease-in-out infinite 0.35s', motion)}
 						fontSize={{ base: '18px', md: '24px' }}
 						position="absolute"
 						right="-18px"
@@ -74,7 +99,7 @@ export const LopuuuPet = () => {
 						🧠
 					</Text>
 					<Text
-						animation="lopuuu-sparkle 2s ease-in-out infinite 0.7s"
+						animation={petAnimation('lopuuu-sparkle 2s ease-in-out infinite 0.7s', motion)}
 						bottom="0"
 						fontSize={{ base: '18px', md: '22px' }}
 						position="absolute"
