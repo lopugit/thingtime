@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
+  A dedicated provider-double suite proves that a reasoning-starved decorated
+  Claude or OpenAI stream retries bare on the same model, never retries after
+  visible text, reads the durable waterfall once, emits no blank provider
+  metadata, and reaches the canned library only after both providers genuinely
+  starve. — Codex (AI), 2026-08-27
 - **Web search now exposes its real relevance signal and keeps post context
   inline.** Ranked Thing results carry the query-relative Mongo text score and
   show it as subdued metadata in both Standard and Data views; unselected
@@ -82,6 +88,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Unlimited AI workflow model waterfall**: Admin → System's model order now
+  accepts any number of unique entries from a 33-model Claude + OpenAI
+  catalog, each with a per-entry reasoning-effort tier and normal/fast mode
+  (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
+  instead of collapsing; direct Anthropic/OpenAI features resolve their own
+  provider's first entry). Lopu musings budget for the reasoning those entries
+  now pay for — the OpenAI call uses `max_completion_tokens` (the deprecated
+  `max_tokens` is rejected by o-series/GPT-5) and a provider that streams no
+  text falls through instead of rendering a blank musing. The github-actions
+  control plane still fail-closes to `["default"]` for non-legacy entries until
+  its closed grammar is widened
+  (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
+  — Claude (AI), 2026-08-24
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
