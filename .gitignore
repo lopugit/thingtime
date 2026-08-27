@@ -66,6 +66,7 @@ iOS/Thingtime/Resources/Info.plist
 
 # graphify - immutable portable snapshots + untracked compatibility aliases
 graphify-out/.graphify_*
+graphify-out/.rebuild.lock
 graphify-out/.vocab.txt
 # Mutable root files are symlinks created by scripts/graphify for compatibility
 # with ordinary `graphify query`; only content-addressed snapshots are tracked.
