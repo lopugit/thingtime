@@ -66,6 +66,25 @@ assert.match(musing, /max_tokens: MUSING_MAX_OUTPUT_TOKENS/);
 assert.match(musing, /max_completion_tokens: MUSING_MAX_OUTPUT_TOKENS/);
 assert.doesNotMatch(musing, /max_tokens:\s*\d/);
 
+// A ceiling alone is not enough: an attempt can still spend all of it on
+// reasoning and complete with zero text deltas. That is a failed attempt, not
+// an empty musing, so each provider must fall through to its own bare retry
+// (dropping the effort/fast knobs, keeping the admin's model) before the
+// provider loop gives up on it — and must never retry once text has been
+// emitted, which would duplicate the musing. Both providers carry the same
+// guard; pin the count so a refactor cannot quietly restore the plain `return`
+// that silently skipped the admin's preferred provider.
+assert.equal(
+  (musing.match(/if \(yielded \|\| attempt === attempts\.length - 1\) return;/g) || []).length,
+  2,
+  'streamClaude and streamOpenAI must each fall through to their bare retry on a starved (zero text delta) attempt'
+);
+
+// One durable waterfall read serves every provider attempt in a musing: the
+// read stays above the provider loop so a first-provider failure cannot cost a
+// second settings round-trip.
+assert.match(musing, /const choices = await getLopuModelChoices\(\);[\s\S]*?for \(const provider of providerOrder\(\)\)/);
+
 // This developer-only helper intentionally targets the local Codex proxy. It
 // is not a Thingtime runtime and cannot consume Claude model aliases; pin the
 // exception so it cannot silently become an ungoverned production entrypoint.
