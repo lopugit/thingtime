@@ -808,6 +808,11 @@ function assertWorkflowSource() {
     "CodeQL disposition validation cannot accept comments GitHub will reject",
   );
   assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
+  assert.match(
+    codeqlDispositionBlock,
+    /pull-requests: write/u,
+    "the isolated writer can publish its evidence-backed disposition report on the PR timeline",
+  );
   assert.doesNotMatch(
     codeqlDispositionBlock,
     /ANTHROPIC_API_KEY|OPENAI_API_KEY|claude-code-action|codex-action/u,
