@@ -336,9 +336,10 @@ runs:
           If a resolution is not high-confidence, leave its markers intact so
           verification stops for human review. A bare `=======` line outside a
           marker block can be legitimate Markdown and is not itself a conflict.
+        # Admin model-args carry their own --effort; only an empty input
+        # (no Admin waterfall loaded) falls back to the fixed max effort.
         claude-args: |
-          ${{ inputs.model-args }}
-          --effort max
+          ${{ inputs.model-args != '' && inputs.model-args || '--effort max' }}
           --max-turns 500
           --dangerously-skip-permissions
           --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
@@ -421,9 +422,11 @@ runs:
         fi
         session_id="$RESULT_SESSION"
 
-        model_args=()
+        # Admin model-args carry their own --effort; only an empty input
+        # (no Admin waterfall loaded) falls back to the fixed max effort.
+        model_args=(--effort max)
         if [ -n "$MODEL_ARGS" ]; then
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9-]{1,48})(\ --fallback-model\ (default|claude-[a-z0-9-]{1,48})(,(default|claude-[a-z0-9-]{1,48}))*)?\ --effort\ (low|medium|high|xhigh|max)$ ]] || {
             echo "::error::The trusted model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -440,7 +443,6 @@ runs:
           claude --resume "$session_id" --print \
             "Continue Lopu's conflict-resolution task from this session with full repository access. Finish the unresolved work while retaining the original task objective." \
             "${model_args[@]}" \
-            --effort max \
             --max-turns 500 \
             --output-format json \
             --dangerously-skip-permissions \
@@ -461,6 +463,27 @@ runs:
           fi
           session_id="$RESULT_SESSION"
         done
+
+    - name: Discard the temporary nested action before scratch verification
+      if: steps.prepare.outcome == 'success'
+      shell: bash
+      env:
+        SCRATCH_ABS: ${{ steps.prepare.outputs.scratch_abs }}
+        WORKSPACE_PATH: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        scratch_abs="$(builtin cd -- "$SCRATCH_ABS" && pwd -P)"
+        workspace_abs="$(builtin cd -- "$WORKSPACE_PATH" && pwd -P)"
+        [[ "$scratch_abs" == "$workspace_abs" ]] || {
+          echo "::error::The prepared conflict scratch is not the workflow workspace."
+          exit 1
+        }
+
+        # The runner needs this protected local action only while expanding the
+        # preceding step. It is not a conflict file and must never participate
+        # in the exact scratch allowlist comparison (including rounds whose
+        # conflicts were all handled deterministically and skipped the model).
+        rm -rf -- "$scratch_abs/trusted"
 
     # SECURITY: this post-model verifier is inline in action metadata parsed
     # before Claude starts. It executes no action/workspace script. The model

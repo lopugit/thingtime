@@ -215,7 +215,17 @@ function assertRoutingProofContract(providerRouter) {
 const ADMIN_MODEL_ENDPOINT =
   "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall";
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
-const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
+// Composed option ids (`<model>[:<effort>][:fast]`) from the expanded Admin
+// catalog. The loader stays a closed grammar: a charset that can never lead
+// with `-` or contain a space, a closed effort segment set, and a closed
+// Claude base-model pattern the CLI chain is rebuilt from.
+const ADMIN_MODEL_ID_CHARSET = "[a-z0-9][a-z0-9.:-]{0,63}";
+const ADMIN_MODEL_EFFORT_SEGMENTS = "none|minimal|low|medium|high|xhigh|max|ultra";
+const ADMIN_CLAUDE_BASE_PATTERN = "^claude-[a-z0-9-]{1,48}$";
+// Must stay identical to the promotion audit gate's own cap in
+// resolve-pr-conflicts.yml; the loader-side guard exists to fail closed
+// *before* that gate can hard-fail a finished resolution.
+const ADMIN_MODEL_ARGS_CAP = 2048;
 const AI_RUNTIME_YAML = [
   ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
@@ -239,7 +249,13 @@ function workflowBlock(source, start, end, label) {
   return source.slice(startIndex, endIndex);
 }
 
-function assertAdminLoader(block, label) {
+// One Admin dial drives every model-backed Lopu lane, so each copy of the
+// loader must enforce the identical grammar. A copy that quietly accepts an id
+// the others reject produces a split brain — the same setting routing one lane
+// to a named model and another to `default`. Pin the grammar on every copy,
+// including the build doctor's, which emits no `primary_model` and so cannot
+// use the fuller `assertAdminLoader` below.
+function assertAdminWaterfallGrammar(block, label) {
   assert.ok(
     block.includes(ADMIN_MODEL_ENDPOINT),
     `${label}: fetches Thingtime Admin endpoint`,
@@ -248,14 +264,92 @@ function assertAdminLoader(block, label) {
     block.includes(ADMIN_MODEL_KEY),
     `${label}: validates the exact Admin setting key`,
   );
-  for (const model of ALLOWED_MODELS) {
-    assert.ok(block.includes(model), `${label}: allowlists ${model}`);
-  }
+  assert.ok(
+    block.includes(ADMIN_MODEL_ID_CHARSET),
+    `${label}: validates the closed composed-id charset`,
+  );
+  assert.ok(
+    block.includes(ADMIN_MODEL_EFFORT_SEGMENTS),
+    `${label}: parses the closed effort segment set`,
+  );
+  assert.ok(
+    block.includes(ADMIN_CLAUDE_BASE_PATTERN),
+    `${label}: rebuilds Claude models from the closed base pattern`,
+  );
+  assert.ok(
+    block.includes('. + ["default"]'),
+    `${label}: appends the default hard fallback defensively`,
+  );
+  // A repeated segment (`model:fast:fast`, `model:high:low`) must fail the
+  // whole mapping closed rather than being silently absorbed by one copy.
+  assert.ok(
+    block.includes('[ "$fast" -eq 0 ] || segments_ok=0'),
+    `${label}: rejects a repeated fast segment`,
+  );
+  assert.ok(
+    block.includes('[ -z "$effort" ] || segments_ok=0'),
+    `${label}: rejects a repeated effort segment`,
+  );
+  assert.match(
+    block,
+    /--effort \$claude_effort/u,
+    `${label}: appends the validated session effort to the model args`,
+  );
   assert.match(
     block,
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,
     `${label}: exports validated model args`,
   );
+  assertAdminTransportCap(block, label);
+}
+
+// The promotion publish step rejects a `model_args` longer than
+// ADMIN_MODEL_ARGS_CAP characters, so a valid-but-oversized chain has to
+// collapse here rather than hard-fail after the resolution work is finished.
+// Widening the waterfall to 256 ids made that reachable, and the guard now
+// lives in three copies of the loader with the same split-brain risk as the
+// grammar above — so pin its cap, its ordering, and its fail-closed body.
+function assertAdminTransportCap(block, label) {
+  const guard = new RegExp(
+    `if \\[ "\\$\\{#(?:model_)?args\\}" -gt ${ADMIN_MODEL_ARGS_CAP} \\]; then\\n([\\s\\S]*?)\\n\\s*fi\\n`,
+    "u",
+  ).exec(block);
+  assert.ok(
+    guard,
+    `${label}: caps the assembled model args at the ${ADMIN_MODEL_ARGS_CAP}-character transport limit`,
+  );
+  const body = guard[1];
+  assert.match(
+    body,
+    /::warning::/u,
+    `${label}: warns when the transport cap collapses the chain`,
+  );
+  assert.match(
+    body,
+    /claude_effort="max"/u,
+    `${label}: transport-cap fallback resets the session effort`,
+  );
+  assert.match(
+    body,
+    /(?:model_)?args="--model \$\{?[a-z_]+.*--effort \$claude_effort"/u,
+    `${label}: transport-cap fallback rebuilds the chain from validated variables`,
+  );
+  // Measuring anything but the finished chain would let an oversized value
+  // through to the downstream gate, which is the failure this guard exists to
+  // prevent — so pin assembly < guard < export.
+  const assembled = block.search(
+    /(?:model_)?args="\$(?:model_)?args --effort \$claude_effort"/u,
+  );
+  const capped = block.indexOf(`-gt ${ADMIN_MODEL_ARGS_CAP}`);
+  const exported = block.search(/echo "model_args=/u);
+  assert.ok(
+    assembled >= 0 && assembled < capped && capped < exported,
+    `${label}: measures the finished chain after assembly and before export`,
+  );
+}
+
+function assertAdminLoader(block, label) {
+  assertAdminWaterfallGrammar(block, label);
   assert.match(
     block,
     /primary_model=.*>> "\$GITHUB_OUTPUT"/u,
@@ -263,7 +357,7 @@ function assertAdminLoader(block, label) {
   );
 }
 
-function assertAdminModelRouting(resolver, rebase) {
+function assertAdminModelRouting(resolver, rebase, allBranch) {
   const resolverLoader = workflowBlock(
     resolver,
     "  model_config:\n",
@@ -276,13 +370,38 @@ function assertAdminModelRouting(resolver, rebase) {
     "      - name: Isolate the real rebasing repository outside model workspace\n",
     "rebase model loader",
   );
+  const buildDoctorLoader = workflowBlock(
+    allBranch,
+    "      - name: Load the build-doctor model waterfall\n",
+    "      - name: Lopu build doctor round 1\n",
+    "build-doctor model loader",
+  );
 
   assertAdminLoader(resolverLoader, "resolver model loader");
   assertAdminLoader(rebaseLoader, "rebase model loader");
+  // The build doctor reuses the same Admin dial and hands its result to the
+  // same Claude CLI, so it is held to the same grammar even though the rest of
+  // all-branch.yml owns its bounded build-doctor policy separately.
+  assertAdminWaterfallGrammar(buildDoctorLoader, "build-doctor model loader");
   assert.doesNotMatch(
     rebaseLoader,
     /steps\.start\.outputs\.complete/u,
     "rebase model loader: runs for clean rebases so Graphify receives the Admin model",
+  );
+
+  // The loader-side cap is only useful while it matches the promotion audit
+  // gate it front-runs. If the two ever drift apart, an oversized chain is
+  // either rejected for no reason or reaches the gate the guard exists to
+  // keep it away from, so pin both ends of the shared constant.
+  assert.ok(
+    resolver.includes(`(( \${#MODEL_ARGS} <= ${ADMIN_MODEL_ARGS_CAP} ))`),
+    `promotion audit gate: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
+  );
+  assert.ok(
+    resolver.includes(
+      `value.model_args.length <= ${ADMIN_MODEL_ARGS_CAP}`,
+    ),
+    `promotion attestation replay: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
   );
 
   assert.ok(
@@ -660,6 +779,36 @@ export function assertControlPlaneContract() {
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
+  // The scope pre-flight samples ownership seconds after the push, so a branch
+  // pushed first and adopted by a PR moments later still reaches the analyzer
+  // believing it owns analysis. The resulting refs/heads analysis at a live PR
+  // head makes GHAS open that PR's CodeQL check against the branch snapshot and
+  // close it `timed_out` with only one of the two configurations present.
+  assert.match(
+    codeql,
+    /- name: Initialize CodeQL[\s\S]*?- name: Confirm this push still owns the analysis[\s\S]*?- name: Analyze the triggering revision/u,
+    "the ownership re-check sits after database init, so it absorbs the whole init window before the upload",
+  );
+  assert.match(
+    codeql,
+    /- name: Confirm this push still owns the analysis\n\s+id: ownership\n\s+if: github\.event_name == 'push' && needs\.scope\.outputs\.analysis_ref == ''/u,
+    "only a branch-ref push re-checks ownership; PR and centrally dispatched runs are untouched",
+  );
+  assert.match(
+    codeql,
+    /- name: Analyze the triggering revision\n\s+if: needs\.scope\.outputs\.analysis_ref == '' && steps\.ownership\.outputs\.upload != 'false'/u,
+    "the re-check suppresses only an adopted branch upload, and its skipped empty output still analyzes every other event",
+  );
+  assert.match(
+    codeql,
+    /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
+    "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
+  );
+  assert.match(
+    codeql,
+    /^      actions: read\n      contents: read\n      packages: read\n      pull-requests: read\n      security-events: write$/mu,
+    "the analyzer reads PR ownership without gaining any write beyond its security-events upload",
+  );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
   assert.match(
     codeql,
@@ -731,7 +880,14 @@ export function assertControlPlaneContract() {
   assert.match(codeqlBackfill, /backfill_listener_owned: "true"/u);
   assert.match(codeqlBackfill, /sort\(\(left, right\)[\s\S]*right\.updated_at/u);
   assert.match(codeqlBackfill, /ACTIVE_RUN_STATUSES/u);
-  assert.match(codeqlBackfill, /invalidMergeSnapshots/u);
+  assert.match(codeqlBackfill, /git\/ref\/pull\/\$\{number\}\/merge/u);
+  assert.match(codeqlBackfill, /parents\[0\] === baseSha[\s\S]*parents\[1\] === headSha/u);
+  assert.match(codeqlBackfill, /analysisSnapshots\.get\(number\)/u);
+  assert.doesNotMatch(
+    codeqlBackfill,
+    /pullRequest\.merge_commit_sha/u,
+    "CodeQL inventory never trusts the lagging pull-list synthetic merge SHA",
+  );
   assert.match(codeqlBackfill, /MAX_DISPATCHES must be an integer from 1 through 20/u);
   assert.doesNotMatch(
     codeqlBackfill,
@@ -1165,7 +1321,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /Every entry must contain exactly those three keys[\s\S]{0,220}40 through 1000 characters[\s\S]{0,220}`Lopu evidence: `/u,
+    /Every entry must contain exactly those three keys[\s\S]{0,260}40 through 280 characters \(GitHub's CodeQL API limit\)[\s\S]{0,220}`Lopu evidence: `/u,
     "the model prompt states the exact trusted CodeQL disposition schema",
   );
   assert.match(
@@ -1177,6 +1333,31 @@ export function assertControlPlaneContract() {
     resolver,
     /::error::Lopu proposed an invalid CodeQL disposition schema/u,
     "a malformed optional disposition never makes the repository-wide review job red",
+  );
+  assert.doesNotMatch(
+    resolver,
+    /::error::CodeQL alert #\$alert_number was proposed more than once/u,
+    "one repository-level CodeQL alert appearing in several PR snapshots does not fail the review batch",
+  );
+  assert.match(
+    resolver,
+    /Coalescing CodeQL alert #\$alert_number across PR analysis snapshots with the same '\$proposed_reason' disposition/u,
+    "compatible CodeQL dispositions are coalesced to one repository-level write",
+  );
+  assert.match(
+    resolver,
+    /Leaving CodeQL alert #\$alert_number open because this Lopu session proposed conflicting disposition reasons/u,
+    "conflicting CodeQL dispositions fail closed per alert without failing unrelated reviews",
+  );
+  assert.match(
+    resolver,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "the isolated writer revalidates the exact reviewed PR alert instance",
+  );
+  assert.match(
+    resolver,
+    /live_base_ref=.*\.base\.ref[\s\S]*?git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "the isolated writer binds dispositions to the live target branch tip instead of the PR's historical base snapshot",
   );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
@@ -1218,6 +1399,7 @@ export function assertControlPlaneContract() {
     "resolver reasserts the exact immutable base Graphify subtree after model work and verifies the same snapshot",
   );
   for (const input of [
+    "pr_batch_b64",
     "maintenance_operation",
     "promotion_dry_run",
     "promotion_lookback",
@@ -1250,7 +1432,7 @@ export function assertControlPlaneContract() {
   );
 
   assertUserControlledMergePause(resolver, rebase);
-  assertAdminModelRouting(resolver, rebase);
+  assertAdminModelRouting(resolver, rebase, readWorkflow("all-branch.yml"));
   assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
   assertBareControlPlaneTree();

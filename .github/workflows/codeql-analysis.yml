@@ -218,6 +218,7 @@ jobs:
       actions: read
       contents: read
       packages: read
+      pull-requests: read
       security-events: write
     strategy:
       fail-fast: false
@@ -244,8 +245,46 @@ jobs:
         with:
           languages: ${{ matrix.language }}
 
+      # The scope pre-flight samples `gh pr list` within seconds of the push,
+      # so a branch that is pushed FIRST and adopted by a PR moments later
+      # still reaches this job believing it owns analysis. Uploading a
+      # refs/heads analysis for a commit that is now an open PR head makes
+      # GitHub Advanced Security open that PR's CodeQL check against the
+      # branch snapshot and close it `timed_out` before the PR's own merge-ref
+      # analyses land. Re-check ownership at the last moment before upload.
+      - name: Confirm this push still owns the analysis
+        id: ownership
+        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          upload=true
+          # Every push to every branch reaches this step, so a rate-limited or
+          # transient lookup must not fail the job. Failing here would produce
+          # exactly the red CodeQL check this step exists to prevent, and would
+          # additionally discard a database that is already built. Preserve
+          # `gh`'s exit status the way the scope pre-flight does for its
+          # optional lookups — never `|| true` — and fall back to the prior
+          # behaviour of analyzing.
+          if open_prs="$(gh pr list --repo "$REPO" --state open \
+            --head "$GITHUB_REF_NAME" --limit 100 \
+            --json headRefOid)"; then
+            if jq -e --arg sha "$GITHUB_SHA" \
+                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+              upload=false
+              echo "::notice::An open PR adopted $GITHUB_REF_NAME@$GITHUB_SHA after this push started; its pull_request run is the single CodeQL analysis owner."
+            fi
+          else
+            echo "::warning::Could not re-confirm PR ownership of $GITHUB_REF_NAME@$GITHUB_SHA; analyzing this push rather than leaving the commit unscanned."
+          fi
+          echo "upload=$upload" >>"$GITHUB_OUTPUT"
+
       - name: Analyze the triggering revision
-        if: needs.scope.outputs.analysis_ref == ''
+        if: needs.scope.outputs.analysis_ref == '' && steps.ownership.outputs.upload != 'false'
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}

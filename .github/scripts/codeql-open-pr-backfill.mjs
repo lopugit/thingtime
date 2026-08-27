@@ -114,7 +114,7 @@ export function planBackfill({
   pullRequests,
   completeSnapshots,
   activeHeads,
-  invalidMergeSnapshots = new Set(),
+  analysisSnapshots = new Map(),
   maxDispatches,
 }) {
   const ordered = [...pullRequests].sort((left, right) =>
@@ -126,18 +126,17 @@ export function planBackfill({
     const number = Number(pullRequest.number);
     const headSha = String(pullRequest?.head?.sha || "");
     const baseSha = String(pullRequest?.base?.sha || "");
-    const mergeSha = String(pullRequest.merge_commit_sha || "");
     if (!Number.isSafeInteger(number) || number < 1) continue;
     if (!/^[0-9a-f]{40,64}$/u.test(headSha)) continue;
     if (!/^[0-9a-f]{40,64}$/u.test(baseSha)) continue;
     if (activeHeads.has(prHeadKey(number, headSha))) continue;
 
-    const mergeRef = `refs/pull/${number}/merge`;
-    const mergeSnapshot = analysisKey(mergeRef, mergeSha);
-    const useMerge = /^[0-9a-f]{40,64}$/u.test(mergeSha)
-      && !invalidMergeSnapshots.has(mergeSnapshot);
-    const analysisRef = useMerge ? mergeRef : `refs/pull/${number}/head`;
-    const analysisSha = useMerge ? mergeSha : headSha;
+    const resolved = analysisSnapshots.get(number);
+    const analysisRef = String(resolved?.analysisRef || `refs/pull/${number}/head`);
+    const analysisSha = String(resolved?.analysisSha || headSha);
+    if (analysisRef !== `refs/pull/${number}/head`
+        && analysisRef !== `refs/pull/${number}/merge`) continue;
+    if (!/^[0-9a-f]{40,64}$/u.test(analysisSha)) continue;
     if (completeSnapshots.has(analysisKey(analysisRef, analysisSha))) continue;
 
     selected.push({
@@ -180,36 +179,49 @@ function listActiveCodeqlRuns(repository) {
   return runs;
 }
 
-function validateCompletedMergeSnapshots(repository, pullRequests, completeSnapshots) {
-  const invalid = new Set();
+export function analysisSnapshotForPullRequest(pullRequest, mergeCommit = null) {
+  const number = Number(pullRequest?.number);
+  const headSha = String(pullRequest?.head?.sha || "");
+  const baseSha = String(pullRequest?.base?.sha || "");
+  const mergeSha = String(mergeCommit?.sha || "");
+  const parents = (mergeCommit?.parents || []).map((parent) => String(parent?.sha || ""));
+  const exactMerge = /^[0-9a-f]{40,64}$/u.test(mergeSha)
+    && parents.length === 2
+    && parents[0] === baseSha
+    && parents[1] === headSha;
+  return {
+    analysisRef: exactMerge ? `refs/pull/${number}/merge` : `refs/pull/${number}/head`,
+    analysisSha: exactMerge ? mergeSha : headSha,
+  };
+}
+
+function optionalPullMergeCommit(repository, number) {
+  let mergeRef;
+  try {
+    mergeRef = ghJson(["api", `repos/${repository}/git/ref/pull/${number}/merge`]);
+  } catch (error) {
+    if (/\b(?:404|409|422)\b/u.test(String(error?.message || ""))) return null;
+    throw error;
+  }
+  const mergeSha = String(mergeRef?.object?.sha || "");
+  if (!/^[0-9a-f]{40,64}$/u.test(mergeSha)) return null;
+  try {
+    return ghJson(["api", `repos/${repository}/git/commits/${mergeSha}`]);
+  } catch (error) {
+    if (/\b(?:404|409|422)\b/u.test(String(error?.message || ""))) return null;
+    throw error;
+  }
+}
+
+function resolveLiveAnalysisSnapshots(repository, pullRequests) {
+  const snapshots = new Map();
   for (const pullRequest of pullRequests) {
     const number = Number(pullRequest.number);
-    const mergeSha = String(pullRequest.merge_commit_sha || "");
-    const headSha = String(pullRequest?.head?.sha || "");
-    const baseSha = String(pullRequest?.base?.sha || "");
-    const ref = `refs/pull/${number}/merge`;
-    const snapshot = analysisKey(ref, mergeSha);
-    if (!mergeSha || !completeSnapshots.has(snapshot)) continue;
-
-    let commit;
-    try {
-      commit = ghJson(["api", `repos/${repository}/git/commits/${mergeSha}`]);
-    } catch (error) {
-      // GitHub may retire a synthetic merge object while this read-only
-      // inventory is in flight. Treat only that expected race as invalid;
-      // authentication/permission/API failures still stop the pass.
-      if (/\b(?:404|409|422)\b/u.test(String(error?.message || ""))) {
-        invalid.add(snapshot);
-        continue;
-      }
-      throw error;
-    }
-    const parents = (commit?.parents || []).map((parent) => parent.sha);
-    if (parents.length !== 2 || parents[0] !== baseSha || parents[1] !== headSha) {
-      invalid.add(snapshot);
-    }
+    if (!Number.isSafeInteger(number) || number < 1) continue;
+    const mergeCommit = optionalPullMergeCommit(repository, number);
+    snapshots.set(number, analysisSnapshotForPullRequest(pullRequest, mergeCommit));
   }
-  return invalid;
+  return snapshots;
 }
 
 function dispatchAnalysisWithInput(repository, candidate) {
@@ -313,14 +325,26 @@ function selfTest() {
       pull_requests: [],
     },
   ]);
-  const invalidMergeSnapshots = new Set([
-    analysisKey("refs/pull/4/merge", sha("d")),
+  const analysisSnapshots = new Map([
+    [1, analysisSnapshotForPullRequest(pullRequests[0], {
+      sha: sha("b"),
+      parents: [{ sha: sha("a") }, { sha: sha("1") }],
+    })],
+    [2, analysisSnapshotForPullRequest(pullRequests[1], {
+      sha: sha("c"),
+      parents: [{ sha: sha("a") }, { sha: sha("2") }],
+    })],
+    [3, analysisSnapshotForPullRequest(pullRequests[2], null)],
+    [4, analysisSnapshotForPullRequest(pullRequests[3], {
+      sha: sha("d"),
+      parents: [{ sha: sha("f") }, { sha: sha("4") }],
+    })],
   ]);
   const plan = planBackfill({
     pullRequests,
     completeSnapshots,
     activeHeads,
-    invalidMergeSnapshots,
+    analysisSnapshots,
     maxDispatches: 2,
   });
   assert.deepEqual(
@@ -332,6 +356,10 @@ function selfTest() {
   );
   assert.equal(completeSnapshots.has(analysisKey("refs/pull/1/merge", sha("b"))), true);
   assert.equal(activeHeads.has(prHeadKey(3, sha("3"))), true);
+  assert.deepEqual(analysisSnapshots.get(4), {
+    analysisRef: "refs/pull/4/head",
+    analysisSha: sha("4"),
+  });
   process.stdout.write("codeql-open-pr-backfill self-test: OK\n");
 }
 
@@ -365,16 +393,16 @@ async function main() {
   ]));
   const activeRuns = listActiveCodeqlRuns(repository);
   const completeSnapshots = completeAnalysisKeys(analyses);
-  const invalidMergeSnapshots = validateCompletedMergeSnapshots(
-    repository,
-    pullRequests,
-    completeSnapshots,
-  );
+  // The pull-list `merge_commit_sha` field can lag the live synthetic merge
+  // ref. Resolve and parent-check the same current ref used by the analyzer;
+  // otherwise a completed snapshot is selected forever as a safe no-op and
+  // starves older PRs from the bounded backfill window.
+  const analysisSnapshots = resolveLiveAnalysisSnapshots(repository, pullRequests);
   const selected = planBackfill({
     pullRequests,
     completeSnapshots,
     activeHeads: activePrHeadKeys(activeRuns),
-    invalidMergeSnapshots,
+    analysisSnapshots,
     maxDispatches,
   });
 

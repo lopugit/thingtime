@@ -1266,16 +1266,17 @@ jobs:
                --connect-timeout 5 --max-time 12 --retry 2 --retry-delay 1 \
                --max-filesize 65536 --output "$response" \
                "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"; then
+            # Unique 1..256 array of closed-charset composed option ids
+            # (`<model>[:<effort>][:fast]`); entries can never lead with `-`
+            # or contain a space, so no CLI flag can be smuggled through.
             configured="$(jq -cse '
               select(length == 1) | .[0]
               | select(.ok == true)
               | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
               | .waterfall
-              | select(type == "array" and length >= 1 and length <= 3)
-              | select(all(.[];
-                  . == "default"
-                  or . == "claude-fable-5"
-                  or . == "claude-opus-5"))
+              | select(type == "array" and length >= 1 and length <= 256)
+              | select(all(.[]; type == "string"))
+              | select(all(.[]; test("^[a-z0-9][a-z0-9.:-]{0,63}$")))
               | select(length == (unique | length))
             ' "$response" 2>/dev/null || true)"
             [ -z "$configured" ] || waterfall="$configured"
@@ -1283,11 +1284,93 @@ jobs:
           if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
             waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
           fi
-          primary="$(jq -r '.[0]' <<<"$waterfall")"
+          # Re-validate each entry against fixed patterns and rebuild the
+          # Claude chain only from matched tokens. Claude Code runs
+          # Claude-capable entries; another provider's entries (OpenAI ids)
+          # configure that provider's own consumers and are skipped here.
+          mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
+          models=()
+          claude_effort="max"
+          mapping_failed=0
+          for id in "${configured_ids[@]}"; do
+            if ! [[ "$id" =~ ^[a-z0-9][a-z0-9.:-]{0,63}$ ]] || [[ "$id" == *::* ]] || [[ "$id" == *: ]]; then
+              mapping_failed=1
+              break
+            fi
+            IFS=':' read -r -a segments <<<"$id"
+            base="${segments[0]}"
+            effort=""
+            # `fast` has no headless Claude Code flag, so it is dropped here —
+            # but it is still counted, so a repeated segment fails the mapping
+            # closed exactly as the resolver's copy of this grammar does.
+            fast=0
+            segments_ok=1
+            for segment in "${segments[@]:1}"; do
+              case "$segment" in
+                fast)
+                  [ "$fast" -eq 0 ] || segments_ok=0
+                  fast=1
+                  ;;
+                none|minimal|low|medium|high|xhigh|max|ultra)
+                  [ -z "$effort" ] || segments_ok=0
+                  effort="$segment"
+                  ;;
+                *) segments_ok=0 ;;
+              esac
+            done
+            if [ "$segments_ok" -ne 1 ]; then
+              mapping_failed=1
+              break
+            fi
+            if [ "$base" = "default" ]; then
+              model="default"
+            elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+              model="${BASH_REMATCH[0]}"
+            else
+              echo "Skipping waterfall entry '$id'; this Claude Code chain cannot run it."
+              continue
+            fi
+            duplicate=0
+            for existing in "${models[@]}"; do
+              if [ "$existing" = "$model" ]; then
+                duplicate=1
+                break
+              fi
+            done
+            [ "$duplicate" -eq 0 ] || continue
+            if [ "${#models[@]}" -eq 0 ]; then
+              case "$effort" in
+                low|medium|high|xhigh|max) claude_effort="$effort" ;;
+                *) : ;;
+              esac
+            fi
+            models+=("$model")
+          done
+          if [ "$mapping_failed" -eq 1 ] || [ "${#models[@]}" -eq 0 ]; then
+            models=("default")
+            claude_effort="max"
+          fi
+          has_default=0
+          for existing in "${models[@]}"; do
+            if [ "$existing" = "default" ]; then
+              has_default=1
+            fi
+          done
+          [ "$has_default" -eq 1 ] || models+=("default")
+          primary="${models[0]}"
           args="--model $primary"
-          if [ "$(jq 'length' <<<"$waterfall")" -gt 1 ]; then
-            fallbacks="$(jq -r '.[1:] | join(",")' <<<"$waterfall")"
+          if [ "${#models[@]}" -gt 1 ]; then
+            fallbacks="$(IFS=,; echo "${models[*]:1}")"
             args="$args --fallback-model $fallbacks"
+          fi
+          args="$args --effort $claude_effort"
+          # Fail closed at the loader if the chain exceeds the 2048-character
+          # transport cap enforced downstream, instead of erroring after work.
+          if [ "${#args}" -gt 2048 ]; then
+            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
+            primary="default"
+            claude_effort="max"
+            args="--model $primary --effort $claude_effort"
           fi
           echo "model_args=$args" >> "$GITHUB_OUTPUT"
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
@@ -1984,9 +2067,14 @@ jobs:
             default)
               unset GRAPHIFY_CLAUDE_CLI_MODEL
               ;;
-            claude-fable-5|claude-opus-5)
-              graphify_model_args=(--model "$PREFERRED_MODEL")
-              export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+            claude-*)
+              if [[ "$PREFERRED_MODEL" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+                graphify_model_args=(--model "$PREFERRED_MODEL")
+                export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+              else
+                echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
+                unset GRAPHIFY_CLAUDE_CLI_MODEL
+              fi
               ;;
             *)
               echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
@@ -2019,6 +2107,9 @@ jobs:
             exit 1
           fi
           export PATH="$HOME/.local/bin:$PATH"
+          graphify_router="$GITHUB_WORKSPACE/trusted/.github/scripts/graphify-cas.mjs"
+          graphify_stager="$GITHUB_WORKSPACE/trusted/.github/scripts/stage-graphify-snapshots.mjs"
+          test -f "$graphify_router" && test -f "$graphify_stager"
 
           select_claude_backend() {
             if [ -n "${ANTHROPIC_API_KEY:-}" ]; then printf 'claude\n'; fi
@@ -2067,85 +2158,27 @@ jobs:
             fi
           }
 
-          # A total-node count cannot see the failure AGENTS.md calls a poisoned
-          # pair: semantic extraction rebuilds graph.json from the files it
-          # treats as changed plus the tracked semantic cache, so a file whose
-          # content never moved but whose semantics are not cached comes back
-          # as a bare file node with every symbol dropped. The loss is per file
-          # and the run total can even rise while it happens, so compare per
-          # file and fall back to the AST/text refresh instead of committing a
-          # graph that silently lost symbols. One node of clustering jitter is
-          # tolerated; two or more is the collapse.
-          graph_pair_not_poisoned() {
-            local baseline poisoned
-            baseline="$(mktemp -d)"
-            if ! git show HEAD:graphify-out/graph.json >"$baseline/graph.json" 2>/dev/null \
-               || ! git show HEAD:graphify-out/manifest.json >"$baseline/manifest.json" 2>/dev/null \
-               || [ ! -r graphify-out/graph.json ] || [ ! -r graphify-out/manifest.json ]; then
-              rm -rf "$baseline"
-              return 0
-            fi
-            poisoned="$(jq -rn \
-              --slurpfile old_graph "$baseline/graph.json" \
-              --slurpfile new_graph graphify-out/graph.json \
-              --slurpfile old_manifest "$baseline/manifest.json" \
-              --slurpfile new_manifest graphify-out/manifest.json '
-              def counts: reduce (.nodes // [])[] as $node ({}; .[$node.source_file // "?"] += 1);
-              ($old_graph[0] | counts) as $before
-              | ($new_graph[0] | counts) as $after
-              | ($old_manifest[0] // {}) as $old
-              | ($new_manifest[0] // {}) as $new
-              | $old
-              | keys_unsorted[]
-              | select($new[.] != null)
-              | select($old[.].ast_hash == $new[.].ast_hash)
-              | select($old[.].semantic_hash == $new[.].semantic_hash)
-              | select((($before[.] // 0) - ($after[.] // 0)) >= 2)
-              | "\(.): \($before[.] // 0) -> \($after[.] // 0) nodes"
-            ' 2>/dev/null || true)"
-            rm -rf "$baseline"
-            [ -n "$poisoned" ] || return 0
-            echo "::warning::Semantic refresh dropped symbols for files whose content never changed — refusing the poisoned pair."
-            while IFS= read -r entry; do
-              [ -n "$entry" ] || continue
-              echo "  poisoned: $entry"
-            done <<<"$poisoned"
-            return 1
-          }
-
           semantic=none
           if [ -n "$backend" ]; then
             concurrency=4
             [ "$backend" != claude-cli ] || concurrency=1
-            if graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+            if node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
                  --max-concurrency "$concurrency" --api-timeout 240 \
-               && graphify cluster-only . --no-viz --no-label \
-               && graph_not_collapsed \
-               && graph_pair_not_poisoned; then
+               && graph_not_collapsed; then
               semantic="$backend"
             else
               semantic=failed
-              echo "::warning::Semantic graphify refresh failed or was refused; retrying AST/text-only."
+              echo "::warning::Semantic graphify refresh failed; retrying AST/text-only."
               git checkout -q HEAD -- graphify-out/ 2>/dev/null || true
               git clean -qffdx -- graphify-out/
             fi
           fi
 
           if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
-            graphify update .
+            node "$graphify_router" update .
           fi
 
-          for file in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-            path="graphify-out/$file"
-            if [ -e "$path" ] \
-               || git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-              git add -A -- "$path"
-            fi
-          done
-          if [ -d graphify-out/cache/semantic ] \
-             || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-            git add -A -- graphify-out/cache/semantic/
-          fi
+          node "$graphify_stager"
 
           if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
             echo "::error::graphify changed a tracked file outside graphify-out/."
@@ -2192,6 +2225,10 @@ jobs:
               -m "Refreshed by the rebase-pr-stacks workflow: $RUN_URL"
             refreshed=true
           fi
+          # The router may leave ignored aliases and derived HTML/analysis
+          # beside the committed portable snapshot. The pre-push fence requires
+          # an exactly clean checkout, so drop only untracked Graphify material.
+          git clean -qffdx -- graphify-out/
           {
             echo "refreshed=$refreshed"
             echo "semantic=$semantic"

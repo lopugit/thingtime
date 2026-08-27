@@ -55,6 +55,11 @@ jobs:
       - name: Verify patch hygiene
         run: git diff --check
 
+      - name: Validate content-addressed Graphify snapshots
+        run: |
+          node --test .github/scripts/graphify-cas.test.mjs
+          node .github/scripts/stage-graphify-snapshots.mjs --self-test
+
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
