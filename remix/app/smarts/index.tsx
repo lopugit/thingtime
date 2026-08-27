@@ -1169,10 +1169,6 @@ export const create = (obj1, obj2, opts) => {
   return ret;
 };
 
-// Keys that reach a prototype rather than the object itself. Thing data is
-// user-authored and arrives as parsed JSON, so these are never merged.
-const POLLUTING_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
 export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   if (seen.has(value1)) return seen.get(value1);
 
@@ -1223,8 +1219,13 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
     // enumerable key whenever value2 came from `JSON.parse`, so a thing
     // authored by someone else and merged into local state could otherwise
     // write straight onto `Object.prototype` (directly, or by recursing
-    // through `constructor.prototype`) for the whole page.
-    if (POLLUTING_KEYS.has(value2Property)) {
+    // through `constructor.prototype`) for the whole page. Spelled as literal
+    // comparisons (not a Set lookup) so CodeQL recognizes the barrier.
+    if (
+      value2Property === '__proto__' ||
+      value2Property === 'constructor' ||
+      value2Property === 'prototype'
+    ) {
       return;
     }
 
