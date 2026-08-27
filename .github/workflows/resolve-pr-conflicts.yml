@@ -556,9 +556,11 @@ on:
 # comment, check, and branch state, so an older pending snapshot is redundant.
 # Internal batch workers use unique run namespaces so a worker already draining
 # is never interrupted. Before a detector dispatches a replacement batch, the
-# handoff explicitly cancels only older workers that are still pending/queued
-# and waits for their capacity to be released. This bounds repository event
-# storms without dropping active work. The model jobs below still use the
+# handoff explicitly cancels only older workers that are still queued and have
+# not admitted any matrix work, then waits for their capacity to be released.
+# A workflow-level `pending` state is not disposable: GitHub can report a run
+# pending while one of its matrix jobs is actively resolving a PR. This bounds
+# repository event storms without dropping active work. The model jobs below still use the
 # durable repository fleet queue, and each admitted matrix job revalidates its
 # own immutable snapshot before checkout, secret, AI, or Graphify spend.
 concurrency:
@@ -1948,47 +1950,49 @@ jobs:
           # fleet until GitHub's pending-job capacity was exhausted; newer
           # matrix jobs then failed before a runner or first step existed.
           #
-          # Preserve every in-progress run. Coalesce only workers that GitHub
-          # still reports as pending/queued, immediately rechecking each run
-          # before cancellation. The new batch below re-derives live refs and
-          # mergeability, so those not-yet-admitted snapshots are obsolete.
-          pending_worker_ids="$(
-            for pending_status in pending queued; do
-              gh api --paginate \
-                "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$pending_status&per_page=100" \
-                --jq '
-                  .workflow_runs[]
-                  | select(.head_branch == "github-actions")
-                  | select(.display_title == "Lopu resolves a PR batch from the control plane")
-                  | .id
-                '
-            done | sort -un
+          # Preserve every pending or in-progress run. GitHub can label the
+          # workflow itself `pending` while one of its matrix jobs is already
+          # running, so treating that run as disposable interrupts real AI
+          # work. Coalesce only `queued` workers, which have not admitted any
+          # matrix work, and immediately recheck each run before cancellation.
+          # The new batch below re-derives live refs and mergeability, so those
+          # never-started snapshots are obsolete.
+          queued_worker_ids="$(
+            gh api --paginate \
+              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=queued&per_page=100" \
+              --jq '
+                .workflow_runs[]
+                | select(.head_branch == "github-actions")
+                | select(.display_title == "Lopu resolves a PR batch from the control plane")
+                | .id
+              ' \
+              | sort -un
           )"
 
           cancelled_worker_ids=""
-          while IFS= read -r pending_run_id; do
-            [ -n "$pending_run_id" ] || continue
+          while IFS= read -r queued_run_id; do
+            [ -n "$queued_run_id" ] || continue
             live_status="$(
-              gh api "repos/$REPO/actions/runs/$pending_run_id" --jq '.status' \
+              gh api "repos/$REPO/actions/runs/$queued_run_id" --jq '.status' \
                 2>/dev/null || printf 'unknown'
             )"
             case "$live_status" in
-              pending|queued)
+              queued)
                 if gh api --method POST \
-                    "repos/$REPO/actions/runs/$pending_run_id/cancel" \
+                    "repos/$REPO/actions/runs/$queued_run_id/cancel" \
                     >/dev/null 2>&1
                 then
-                  echo "Coalescing obsolete pending Lopu worker run $pending_run_id."
-                  cancelled_worker_ids="${cancelled_worker_ids}${pending_run_id}"$'\n'
+                  echo "Coalescing obsolete queued Lopu worker run $queued_run_id."
+                  cancelled_worker_ids="${cancelled_worker_ids}${queued_run_id}"$'\n'
                 else
-                  echo "::notice::Pending worker $pending_run_id changed state before cancellation; preserving it."
+                  echo "::notice::Queued worker $queued_run_id changed state before cancellation; preserving it."
                 fi
                 ;;
               *)
-                echo "::notice::Worker $pending_run_id is now $live_status; preserving it."
+                echo "::notice::Worker $queued_run_id is now $live_status; preserving it."
                 ;;
             esac
-          done <<<"$pending_worker_ids"
+          done <<<"$queued_worker_ids"
 
           if [ -n "$cancelled_worker_ids" ]; then
             remaining_pending=0
