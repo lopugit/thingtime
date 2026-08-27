@@ -976,7 +976,11 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Change a Markdown file and run semantic extraction through the local
       Codex LLM proxy. Confirm the wrapper clusters and exports after extraction,
       records the Graphify version and source tree in `snapshot.json`, keeps the
-      semantic cache shared, and never prints the proxy key.
+      mutable semantic cache private, ingests it into
+      `cache/semantic-cas/v1/<input-key>/<content-hash>.json`, and never prints
+      the proxy key. Write two valid responses to one input-key filename and
+      confirm both immutable variants survive while hydration selects the richer
+      response deterministically.
 - [ ] Corrupt a portable file at an existing artifact-hash path and attempt to
       finalize identical output. Confirm the wrapper rejects the violated hash
       invariant instead of overwriting or accepting it.

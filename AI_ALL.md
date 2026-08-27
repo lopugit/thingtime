@@ -292,7 +292,8 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - Use the repository wrapper, `scripts/graphify`, for queries and mutations. It
   routes Graphify through immutable content-addressed snapshots under
-  `graphify-out/snapshots/v1/`, preserves the shared semantic cache, and
+  `graphify-out/snapshots/v1/`, hydrates a private semantic cache from immutable
+  variants under `graphify-out/cache/semantic-cas/v1/`, and
   refreshes ignored root aliases so ordinary `graphify query` remains
   compatible. Do not invoke mutating commands through the bare binary in this
   repository.
@@ -303,7 +304,8 @@ Rules:
 - Never commit mutable `graphify-out/graph.json`, `manifest.json`,
   `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
   selected by the wrapper. Commit the immutable snapshot directory and any new
-  `graphify-out/cache/semantic/` entries instead.
+  `graphify-out/cache/semantic-cas/` variants instead; the upstream mutable
+  `graphify-out/cache/semantic/` directory stays ignored.
 - A commit SHA cannot name generated output included in that same commit.
   Thingtime therefore keys snapshots first by a source-only Git-tree
   fingerprint that excludes `graphify-out`, then by the Graphify version and
@@ -315,9 +317,9 @@ Rules:
   and run `scripts/graphify update .`. Do not hand-merge graph JSON or combine
   a graph from one run with a manifest from another.
 - `graphify-out/graph.html` and snapshot-local HTML are untracked derived viz.
-  The wrapper regenerates them with a high node limit. The semantic cache and
-  immutable portable snapshots are tracked; AST caches, stat indexes, locks,
-  work directories, and mutable aliases stay local.
+  The wrapper regenerates them with a high node limit. Immutable semantic-cache
+  variants and portable snapshots are tracked; hydrated semantic data, AST
+  caches, stat indexes, locks, work directories, and mutable aliases stay local.
 - The design, migration procedure, integrity rules, and research references
   live in `docs/graphify-content-addressed-snapshots.md`.
 

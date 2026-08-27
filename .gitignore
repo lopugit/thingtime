@@ -75,11 +75,12 @@ graphify-out/GRAPH_REPORT.md
 graphify-out/cost.json
 graphify-out/.work/
 graphify-out/.locks/
-# cache: semantic/ is tracked (content-addressed extractions -> merge-safe, makes
-# full rebuilds in fresh clones LLM-free); ast/ + stat-index.json stay local
-# (stat-index is keyed by absolute paths)
+# cache: Graphify's mutable semantic/ names are input keys and can be rewritten
+# with different valid bytes. Only immutable semantic-cas variants are tracked;
+# ast/ + stat-index.json stay local (stat-index uses absolute paths).
 graphify-out/cache/*
-!graphify-out/cache/semantic/
+!graphify-out/cache/semantic-cas/
+!graphify-out/cache/semantic-cas/**
 # derived 27MB viz - regenerate with `graphify export html`
 graphify-out/graph.html
 graphify-out/snapshots/**/graph.html

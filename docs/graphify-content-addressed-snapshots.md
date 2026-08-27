@@ -31,7 +31,8 @@ graphify-out/
     GRAPH_REPORT.md
     cost.json
     snapshot.json
-  cache/semantic/<content-hash>.json
+  cache/semantic-cas/v1/<input-key>/<content-hash>.json
+  .work/.../cache/semantic/<input-key>.json    # ignored private hydration
   graph.json -> snapshots/.../graph.json        # ignored compatibility alias
   manifest.json -> snapshots/.../manifest.json  # ignored compatibility alias
   GRAPH_REPORT.md -> snapshots/.../GRAPH_REPORT.md
@@ -48,6 +49,14 @@ or tool-version differences produce distinct valid outputs for identical
 source, both variants coexist without a merge conflict; the router
 deterministically prefers the valid variant with the most nodes and edges.
 
+Graphify's upstream semantic cache is keyed by an input/chunk fingerprint, but
+real semantic runs proved that a later model response can replace the bytes at
+that same filename. The wrapper therefore ingests each result into a second,
+immutable namespace keyed by both the upstream input key and the exact response
+bytes. Before a run it hydrates a private mutable cache with the richest valid
+variant; after a successful run it ingests new variants. A failed extraction
+cannot modify committed cache state.
+
 ## Commands
 
 Use the repository wrapper for mutations and queries:
@@ -59,10 +68,11 @@ scripts/graphify query "conflict resolver Graphify refresh"
 scripts/graphify ensure
 scripts/graphify fingerprint
 scripts/graphify snapshot
+scripts/graphify cache-migrate
 ```
 
-The wrapper sets Graphify's supported `GRAPHIFY_OUT` override, shares the
-content-addressed semantic cache, validates the graph/manifest pair, generates
+The wrapper sets Graphify's supported `GRAPHIFY_OUT` override, hydrates a
+private semantic cache from immutable variants, validates the graph/manifest pair, generates
 the report and HTML, finalizes an immutable snapshot, and refreshes ignored
 root aliases. Plain `graphify query` continues to work after activation because
 those aliases expose the selected snapshot at Graphify's conventional paths.
@@ -86,6 +96,7 @@ legacy generated directory and regenerates it under the immutable layout.
 
 Snapshots are portable build outputs, not source authority. A future garbage
 collector may remove snapshots that are unreachable from open PR heads and the
-protected branch tips while retaining the shared semantic cache. Garbage
+protected branch tips while retaining semantic-cache variants that remain
+reachable from retained snapshots. Garbage
 collection must run only after that reachability proof; normal branch work is
 append-only.

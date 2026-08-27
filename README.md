@@ -27,7 +27,8 @@ line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
 writers, validates each atomic output set, deduplicates identical artifacts,
-and regenerates the report/HTML. See
+regenerates the report/HTML, and converts Graphify's mutable semantic cache into
+coexisting immutable variants. See
 [`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
 for the rationale, layout, migration path, and retention model.
 

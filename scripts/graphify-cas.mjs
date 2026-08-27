@@ -45,7 +45,12 @@ const SNAPSHOT_FILES = new Set([
 ])
 
 const MUTATING_COMMANDS = new Set(["update", "extract", "cluster-only"])
-const INTERNAL_COMMANDS = new Set(["ensure", "fingerprint", "snapshot"])
+const INTERNAL_COMMANDS = new Set([
+  "cache-migrate",
+  "ensure",
+  "fingerprint",
+  "snapshot",
+])
 const DEFAULT_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000
 
 function fail(message) {
@@ -193,6 +198,116 @@ function safeJson(file) {
   }
 }
 
+function semanticCacheRoot(root) {
+  return path.join(graphifyRoot(root), "cache", "semantic")
+}
+
+function semanticCasRoot(root) {
+  return path.join(graphifyRoot(root), "cache", "semantic-cas", "v1")
+}
+
+function semanticRichness(value) {
+  if (!value || Array.isArray(value) || typeof value !== "object") return -1
+  const collections = ["nodes", "edges", "links", "hyperedges"]
+  return collections.reduce(
+    (total, key) => total + (Array.isArray(value[key]) ? value[key].length : 0),
+    0,
+  )
+}
+
+function semanticCacheEntries(cachePath) {
+  if (!existsSync(cachePath)) return []
+  return readdirSync(cachePath, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isFile() && /^[0-9a-f]{64}\.json$/.test(entry.name),
+    )
+    .map((entry) => ({
+      inputKey: entry.name.slice(0, -5),
+      path: path.join(cachePath, entry.name),
+    }))
+}
+
+/**
+ * Preserve Graphify's mutable input-keyed semantic cache as immutable variants.
+ *
+ * Upstream may write different valid bytes to the same input-key filename.
+ * Keying the committed copy by both input key and exact content hash makes
+ * concurrent branch results additive instead of merge-conflicting.
+ */
+export function ingestSemanticCache(
+  root,
+  mutableCache = semanticCacheRoot(root),
+) {
+  const stored = []
+  for (const entry of semanticCacheEntries(mutableCache)) {
+    const bytes = readFileSync(entry.path)
+    const parsed = safeJson(entry.path)
+    if (semanticRichness(parsed) < 0) {
+      fail(`Invalid Graphify semantic cache entry: ${entry.path}`)
+    }
+    const contentHash = sha256Parts([bytes])
+    const destination = path.join(
+      semanticCasRoot(root),
+      entry.inputKey,
+      `${contentHash}.json`,
+    )
+    if (existsSync(destination)) {
+      if (!readFileSync(destination).equals(bytes)) {
+        fail(`Semantic cache content-address invariant failed: ${destination}`)
+      }
+    } else {
+      mkdirSync(path.dirname(destination), { recursive: true })
+      writeFileSync(destination, bytes)
+    }
+    stored.push(destination)
+  }
+  return stored
+}
+
+/** Hydrate Graphify's mutable cache with the richest valid immutable variant. */
+export function hydrateSemanticCache(
+  root,
+  mutableCache = semanticCacheRoot(root),
+) {
+  const casRoot = semanticCasRoot(root)
+  mkdirSync(mutableCache, { recursive: true })
+  if (!existsSync(casRoot)) return []
+
+  const hydrated = []
+  for (const inputKey of readdirSync(casRoot).sort()) {
+    if (!/^[0-9a-f]{64}$/.test(inputKey)) continue
+    const inputRoot = path.join(casRoot, inputKey)
+    if (!statSync(inputRoot).isDirectory()) continue
+    const candidates = []
+    for (const name of readdirSync(inputRoot).sort()) {
+      if (!/^[0-9a-f]{64}\.json$/.test(name)) continue
+      const candidatePath = path.join(inputRoot, name)
+      const bytes = readFileSync(candidatePath)
+      const contentHash = sha256Parts([bytes])
+      if (name !== `${contentHash}.json`) {
+        fail(`Corrupt Graphify semantic cache variant: ${candidatePath}`)
+      }
+      const parsed = safeJson(candidatePath)
+      const richness = semanticRichness(parsed)
+      if (richness < 0) {
+        fail(`Invalid Graphify semantic cache variant: ${candidatePath}`)
+      }
+      candidates.push({ bytes, contentHash, richness })
+    }
+    candidates.sort(
+      (left, right) =>
+        right.richness - left.richness ||
+        left.contentHash.localeCompare(right.contentHash),
+    )
+    if (candidates.length === 0) continue
+    const destination = path.join(mutableCache, `${inputKey}.json`)
+    writeFileSync(destination, candidates[0].bytes)
+    hydrated.push(destination)
+  }
+  return hydrated
+}
+
 function snapshotRecord(snapshotPath) {
   const metadata = safeJson(path.join(snapshotPath, "snapshot.json"))
   if (
@@ -302,10 +417,23 @@ function prepareWorkingOutput(root, sourceFingerprint) {
     copyPortableFiles(graphifyRoot(root), workRoot)
   }
 
-  const sharedCache = path.join(graphifyRoot(root), "cache")
-  mkdirSync(sharedCache, { recursive: true })
-  const cacheLink = path.join(workRoot, "cache")
-  symlinkSync(path.relative(workRoot, sharedCache), cacheLink, "dir")
+  // A failed/partial semantic extraction must never mutate committed state.
+  // Hydrate a private work cache, then ingest only after Graphify succeeds.
+  ingestSemanticCache(root)
+  rmSync(semanticCacheRoot(root), { recursive: true, force: true })
+  const workCache = path.join(workRoot, "cache")
+  mkdirSync(workCache, { recursive: true })
+  hydrateSemanticCache(root, path.join(workCache, "semantic"))
+
+  // AST cache is deterministic and machine-local; sharing it avoids needless
+  // parsing without exposing the immutable semantic CAS to upstream writes.
+  const sharedAst = path.join(graphifyRoot(root), "cache", "ast")
+  mkdirSync(sharedAst, { recursive: true })
+  symlinkSync(
+    path.relative(workCache, sharedAst),
+    path.join(workCache, "ast"),
+    "dir",
+  )
   return workRoot
 }
 
@@ -483,6 +611,10 @@ function runMutation(root, args) {
         invokeGraphify(root, workingOutput, ["cluster-only", root])
       }
       invokeGraphify(root, workingOutput, ["export", "html"])
+      ingestSemanticCache(
+        root,
+        path.join(workingOutput, "cache", "semantic"),
+      )
       const snapshot = finalizeSnapshot(root, workingOutput, {
         ...fingerprint,
         minimumNodeCount,
@@ -523,6 +655,10 @@ function ensureSnapshot(root) {
     try {
       invokeGraphify(root, workingOutput, ["update", root])
       invokeGraphify(root, workingOutput, ["export", "html"])
+      ingestSemanticCache(
+        root,
+        path.join(workingOutput, "cache", "semantic"),
+      )
       const snapshot = finalizeSnapshot(root, workingOutput, {
         ...current,
         minimumNodeCount,
@@ -562,6 +698,16 @@ function runRouted(root, args) {
     const snapshot = selectSnapshot(root, fingerprint.sourceFingerprint)
     if (!snapshot) process.exitCode = 1
     else process.stdout.write(`${snapshot.path}\n`)
+    return
+  }
+  if (args[0] === "cache-migrate") {
+    const result = withRepositoryLock(root, () => {
+      const stored = ingestSemanticCache(root)
+      const legacyEntries = semanticCacheEntries(semanticCacheRoot(root)).length
+      rmSync(semanticCacheRoot(root), { recursive: true, force: true })
+      return { stored: stored.length, removed: legacyEntries }
+    })
+    process.stdout.write(`${JSON.stringify(result)}\n`)
     return
   }
 
