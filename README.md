@@ -26,6 +26,23 @@ Thingtime desktop profiles, then import projects, chats, and visible messages
 through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
 for both workflows and their privacy boundaries.
 
+## Conflict-free Graphify snapshots
+
+Thingtime does not ask every branch to modify the same generated Graphify JSON
+files. `scripts/graphify` stores portable output under the immutable,
+content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
+snapshot through ignored compatibility aliases at the conventional root
+paths. Independent branches therefore add different files instead of
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+
+Use `scripts/graphify query`, `scripts/graphify update .`, or
+`scripts/graphify extract . --backend openai`; the wrapper serializes local
+writers, validates each atomic output set, deduplicates identical artifacts,
+regenerates the report/HTML, and converts Graphify's mutable semantic cache into
+coexisting immutable variants. See
+[`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
+for the rationale, layout, migration path, and retention model.
+
 ## GitHub Actions control plane
 
 Thingtime keeps executable CI/CD behavior on the long-lived, protected

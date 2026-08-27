@@ -2215,16 +2215,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
     summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the closed model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. The list must contain 1 to 3 unique known model ids and include default as the hard fallback. Missing or corrupt stored settings resolve safely to ["default"].',
+      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique and include default as the hard fallback. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to read the current waterfall and closed model catalog.',
+      'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
-      'Use only default, claude-fable-5, and claude-opus-5; ids must be unique.',
+      'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
       'Always include default so the resolver has a final provider-selected fallback.'
     ],
     requestExamples: [
@@ -2234,24 +2234,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'GET'
       },
       {
-        name: 'Prefer Opus, then Fable, then default',
-        description: 'Replace the waterfall as an administrator.',
+        name: 'Prefer fast high-effort Opus, then Fable, then GPT-5.6 Sol, then default',
+        description: 'Replace the waterfall as an administrator; any number of unique entries is allowed.',
         method: 'POST',
-        body: { waterfall: ['claude-opus-5', 'claude-fable-5', 'default'] }
+        body: { waterfall: ['claude-opus-5:high:fast', 'claude-fable-5', 'gpt-5.6-sol:ultra', 'default'] }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Current public AI workflow settings.',
+        description: 'Current public AI workflow settings. models lists every base model; the sample below is truncated.',
         body: {
           ok: true,
           key: 'Thingtime.PRConflictAutoResolverModelWaterfall',
           waterfall: ['default'],
           models: [
-            { id: 'default', label: 'Default model', effort: 'max' },
-            { id: 'claude-fable-5', label: 'Claude Fable 5', effort: 'max' },
-            { id: 'claude-opus-5', label: 'Claude Opus 5', effort: 'max' }
+            { id: 'default', label: 'Default model', provider: 'default', efforts: [], speeds: ['normal'] },
+            {
+              id: 'claude-opus-5',
+              label: 'Claude Opus 5',
+              provider: 'anthropic',
+              efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+              speeds: ['normal', 'fast']
+            },
+            {
+              id: 'gpt-5.6-sol',
+              label: 'GPT-5.6 Sol',
+              provider: 'openai',
+              efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+              speeds: ['normal', 'fast']
+            }
           ]
         }
       },
@@ -6903,7 +6915,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
-      "GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
@@ -7262,7 +7274,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
       'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
       'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
-      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
+      'The response carries things (generic projections; ranked text results include their query-relative rankScore), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
       'Handle 400 invalid grammar and 429 rate-limited.'
     ],
     requestExamples: [
@@ -7342,7 +7354,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               crystal: { type: 'text', text: 'Standing desk, walnut top, 60–130cm' },
               tags: ['furniture'],
               acl: ['tt:all'],
-              visibility: 'public'
+              visibility: 'public',
+              rankScore: 4.25
             }
           ],
           posts: { thing_123: { id: 'thing_123', type: 'text', text: 'Standing desk, walnut top, 60–130cm' } },
@@ -7385,7 +7398,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
 			'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
       'The target thing (post or comment) must be visible to the current user.',
-			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
+			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card. A temporarily pending comment remains visible and counted for its author while moderation completes; other viewers do not see it until release.',
       'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [

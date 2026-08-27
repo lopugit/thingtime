@@ -1,1 +1,0 @@
-{"nodes": [{"id": "github_workflows_codeql_analysis", "label": "codeql-analysis.yml listener", "file_type": "code", "source_file": ".github/workflows/codeql-analysis.yml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
