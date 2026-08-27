@@ -1989,8 +1989,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
       unrestricted; mint 400s on unknown visibility values; /tokens/self and
       the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. Covered by section F
-      of `node scripts/verify-pat-tokens.mjs`.
+      restricted tokens; combines with the 🧸 sandbox. The fence also rides
+      /api/v1/things/user: a fenced token's profile pages AND postCount only
+      cover in-fence posts (regression: a stacked-branch restructure once
+      dropped this clause, leaking private-post counts to public-only
+      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
 - [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
       linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
       returns owner-only linkKey (never in non-owner projections); anonymous

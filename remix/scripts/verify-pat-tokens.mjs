@@ -521,6 +521,21 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
   });
   check('public-only reacts to a public post', pubReact.status === 200);
 
+  // Profile listing: the fence rides /api/v1/things/user too. postCount is
+  // computed from the same match, so an unfenced match would report the
+  // owner's private posts to a token that must never learn they exist.
+  const pubProfile = await api(`/api/v1/things/user?username=${owner.username}`, { token: pub.token });
+  check(
+    'public-only profile listing omits the owner’s private post',
+    pubProfile.status === 200 && !(pubProfile.body?.posts || []).some((p) => p.id === privatePostId),
+    `${pubProfile.status}`
+  );
+  check(
+    'public-only profile postCount excludes private posts',
+    pubProfile.body?.postCount === 1,
+    `postCount=${pubProfile.body?.postCount}`
+  );
+
   // --- private-only --------------------------------------------------------
   const priv = await mintPat(owner.cookie, { name: 'private-only', scopes: ['things'], visibility: 'private' });
   const privSeesPublic = await api(`/api/v1/things?id=${publicPostId}`, { token: priv.token });
@@ -583,6 +598,18 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
     body: { id: publicPostId, emoji: '🔒' }
   });
   check('private-only cannot react to a public post', privReactPublic.status === 404, `${privReactPublic.status}`);
+
+  const privProfile = await api(`/api/v1/things/user?username=${owner.username}`, { token: priv.token });
+  check(
+    'private-only profile listing omits the owner’s public post',
+    privProfile.status === 200 && !(privProfile.body?.posts || []).some((p) => p.id === publicPostId),
+    `${privProfile.status}`
+  );
+  check(
+    'private-only profile postCount excludes public posts',
+    privProfile.body?.postCount === 1,
+    `postCount=${privProfile.body?.postCount}`
+  );
 
   // --- unrestricted stays unrestricted ------------------------------------
   const all = await mintPat(owner.cookie, { name: 'both', scopes: ['things'] });
