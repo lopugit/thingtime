@@ -46,6 +46,7 @@ import {
   ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
+  ACL_USER_PREFIX,
   aclCapabilityFor,
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
@@ -2220,11 +2221,12 @@ const circleClause = (circle: PostVisibility) => {
     case 'family':
       return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
     case 'private':
-      // $nin on an array field means "contains none of these". ACL_HIDDEN is
-      // excluded too: hidden things carry no broad grant, so without it every
-      // unlisted thing would also answer the 'private' chip.
+      // $nin on an array field means "contains none of these". ACL_HIDDEN and
+      // ACL_CUSTOM are excluded too: neither carries a broad grant, so without
+      // them every unlisted 🕵️ and custom-audience 🎭 thing would ALSO answer
+      // the 'private' chip — each is its own circle below.
       return {
-        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN] } }, { visibility: 'private' }]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN, ACL_CUSTOM] } }, { visibility: 'private' }]
       };
     case 'hidden':
       // v2-only (no legacy enum era) — reachable only by explicit circle
@@ -2260,19 +2262,22 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id && viewer.friendIds?.size && wanted.includes('friends')) {
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
+  // The unnarrowed shortcut is only sound when the caller asked for NO filter,
+  // or asked for every circle they could ask for. A bare length comparison
+  // would also fire for a same-sized but different selection (say
+  // public+friends+family+hidden), silently pulling the viewer's private
+  // things back into a feed they filtered them out of — and covering only the
+  // DEFAULT set has the same shape of bug one circle over: ticking exactly
+  // public+friends+family+private (i.e. everything except 🕵️ Hidden) would
+  // take the shortcut and hand back the hidden things the caller just
+  // excluded. An omitted circle must always really be omitted, so only the two
+  // genuinely unfiltered cases skip narrowing (fleet review fix, extended for
+  // 🎭).
+  const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
+  const narrowToWanted = (clause: Record<string, any>) =>
+    unfiltered ? clause : { $and: [clause, { $or: wanted.map((circle) => circleClause(circle)) }] };
   if (viewer?.id) {
-    // The viewer's own things, optionally narrowed to the requested circles.
-    // The unnarrowed shortcut is only sound when the caller asked for NO
-    // filter, or asked for every circle they could ask for. A bare length
-    // comparison would also fire for a same-sized but different selection
-    // (say public+friends+family+hidden), silently pulling the viewer's
-    // private things back into a feed they filtered them out of — and
-    // covering only the DEFAULT set has the same shape of bug one circle
-    // over: ticking exactly public+friends+family+private (i.e. everything
-    // except 🕵️ Hidden) would take the shortcut and hand back the hidden
-    // things the caller just excluded. An omitted circle must always really
-    // be omitted, so only the two genuinely unfiltered cases skip narrowing.
-    const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
+    // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
       unfiltered ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
@@ -2283,19 +2288,22 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   // Gated on the circle filter like every other clause above: an unfiltered
   // feed carries grants, but once the caller narrows, grants ride the 🎭
   // Custom chip alone (every granted thing is a tt:custom thing), so omitting
-  // that circle really omits them instead of leaking them back in.
+  // that circle really omits them instead of leaking them back in. The clause
+  // that survives that gate is then narrowed to the requested circles for the
+  // same reason the own-things clause is: a grant must not smuggle a 🎭 thing
+  // into a 🌐-only filter.
   const grantsWanted = !circles.length || wanted.includes('custom');
   if (viewer?.id && grantsWanted && (viewer.username || viewer.groupIds?.size)) {
     const grantEntries: string[] = [];
     if (viewer.username) {
-      const base = `tt:user/${viewer.username.toLowerCase()}`;
+      const base = `${ACL_USER_PREFIX}${viewer.username.toLowerCase()}`;
       grantEntries.push(base, `${base}/comment`, `${base}/write`);
     }
     for (const groupId of viewer.groupIds || []) {
       const base = `${ACL_GROUP_PREFIX}${groupId}`;
       grantEntries.push(base, `${base}/comment`, `${base}/write`);
     }
-    if (grantEntries.length) clauses.push({ acl: { $in: grantEntries } });
+    if (grantEntries.length) clauses.push(narrowToWanted({ acl: { $in: grantEntries } }));
   }
   // nothing requested that the viewer could ever see
   if (!clauses.length) return null;
