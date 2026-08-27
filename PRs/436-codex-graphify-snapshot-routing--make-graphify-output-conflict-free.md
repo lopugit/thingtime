@@ -40,10 +40,13 @@ Concurrent semantic results therefore coexist too.
 
 ## Validation
 
-- nine deterministic CAS tests cover source/output separation, staged-index
+- eleven deterministic CAS tests cover source/output separation, staged-index
   preservation, deduplication, valid variants, collapse rejection, corruption
-  rejection, semantic-cache variants, writer serialization, and a clean
-  two-branch Git merge without a custom driver;
+  rejection, semantic-cache variants, repository ignore policy,
+  dangling-alias recovery, writer serialization, and a clean two-branch Git
+  merge without a custom driver;
+- the post-merge audit proves every immutable semantic CAS variant is tracked
+  while Graphify's mutable semantic cache remains ignored;
 - the real repository completed incremental semantic extraction through the
   local Codex proxy and then a final structural update;
 - ordinary `graphify query` succeeds through the selected root aliases;
