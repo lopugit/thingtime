@@ -13,7 +13,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { usePath } from '~/hooks/usePath';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
-import { commanderSearchResults } from '../Search/commanderSearch';
+import { commanderEnterSuggestionIndex, commanderSearchResults } from '../Search/commanderSearch';
 import type { CommanderSearchResult } from '../Search/commanderSearch';
 import type { SearchPerson, SearchResponse } from '../Search/searchTypes';
 import { CommanderClickAwayBoundary } from './commanderClickAway';
@@ -347,8 +347,14 @@ export const CommanderV2 = (props) => {
 			return;
 		}
 
-		// if selection is active then select it
-		const curSuggestionIdx = hoveredSuggestion;
+		// An explicit row wins. With no row selected, ordinary text defaults to
+		// the pinned "Search things for…" row; setter commands still execute.
+		const curSuggestionIdx = commanderEnterSuggestionIndex({
+			hoveredSuggestion,
+			showSuggestions: !!showSuggestions,
+			commandIsAction: !!commandIsAction,
+			inputValue
+		});
 		if (curSuggestionIdx !== null) {
 			selectSuggestion(curSuggestionIdx);
 			// Every suggestion owns its destination. Never also run the original
@@ -396,6 +402,7 @@ export const CommanderV2 = (props) => {
 		commandIsAction,
 		commandPath,
 		commandValue,
+		showSuggestions,
 		setThingtime,
 		setContextPath,
 		setShowContext,

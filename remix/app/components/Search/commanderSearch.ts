@@ -20,6 +20,21 @@ const primaryKind = (thing: SearchThing): string => thing.thingtime.find((kind) 
 
 export const thingDetailPath = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
+// Enter keeps explicit setter commands ("path = value") on the command path,
+// but ordinary text defaults to the pinned full-search row when no suggestion
+// has been arrowed/hovered. Keeping this pure makes the keyboard contract easy
+// to lock down without mounting the full Commander provider stack.
+export const commanderEnterSuggestionIndex = (input: {
+	hoveredSuggestion: number | null;
+	showSuggestions: boolean;
+	commandIsAction: boolean;
+	inputValue: string;
+}): number | null => {
+	if (input.hoveredSuggestion !== null) return input.hoveredSuggestion;
+	if (input.showSuggestions && !input.commandIsAction && input.inputValue.trim()) return 0;
+	return null;
+};
+
 export const commanderSearchResults = (input: {
 	things?: SearchThing[];
 	posts?: Record<string, SearchPost>;

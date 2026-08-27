@@ -1401,14 +1401,26 @@ is fixed, and cite the checklist you ran in the PR description.
       the bounded `Local paths` tier, arrow/Enter and click open the selected
       result exactly once (without then falling through to the typed local
       `/thing/:path` command), and `Search things for…` still opens the complete
-      `/search?q=…` result set. A failed typeahead leaves full search + local
-      commands usable.
+      `/search?q=…` result set. With ordinary text and NO highlighted row,
+      Enter defaults to that pinned full-search row; an explicitly highlighted
+      result still wins, and `path = value` setters still execute instead of
+      becoming searches. A failed typeahead leaves full search + local commands
+      usable.
 - [ ] Search results default to `Standard`: posts use the real interactive
       post card and other Things use their native rendered `ThingView` (with
       its rendered/tree toggle where supported). Switching to `Data` restores
       the compact crystal-field cards, and every Data card's `Open thing` link
       opens the ACL-aware canonical `/thing/:id` page. Toggle labels remain
-      visible and usable at desktop and mobile widths.
+      visible and usable at desktop and mobile widths. A ranked text search
+      shows each Thing result's real server `rankScore` as tiny subdued
+      `ranked match · N` metadata in BOTH views; chronological/unranked results
+      never invent or display a score.
+- [ ] Open a post result's canonical `/thing/:id` page. It renders the full
+      interactive PostCard inline under `Post view`, keeps `Open post page` as
+      a permalink, and still shows the complete `Thing data` panel below it.
+      Non-post Things and private admin diagnostics do not show an empty post
+      section. Verify the inline card and JSON remain unclipped at desktop and
+      mobile widths and survive a full top-to-bottom scroll.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims

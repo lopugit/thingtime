@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { commanderSearchResults, thingDetailPath } from '../Search/commanderSearch.ts';
+import {
+	commanderEnterSuggestionIndex,
+	commanderSearchResults,
+	thingDetailPath
+} from '../Search/commanderSearch.ts';
 
 const author = {
 	id: 'user-1',
@@ -79,6 +83,57 @@ test('Commander search combines broad Thing, post, and person results with conte
 
 test('Thing detail paths are canonical and URL-safe', () => {
 	assert.equal(thingDetailPath('hello/world ?'), '/thing/hello%2Fworld%20%3F');
+});
+
+test('Commander Enter defaults unselected text to the pinned full-search row', () => {
+	assert.equal(
+		commanderEnterSuggestionIndex({
+			hoveredSuggestion: null,
+			showSuggestions: true,
+			commandIsAction: false,
+			inputValue: 'bathroom window shelf'
+		}),
+		0
+	);
+	assert.equal(
+		commanderEnterSuggestionIndex({
+			hoveredSuggestion: 3,
+			showSuggestions: true,
+			commandIsAction: false,
+			inputValue: 'bathroom window shelf'
+		}),
+		3
+	);
+});
+
+test('Commander Enter preserves explicit setters and hidden/empty suggestion states', () => {
+	assert.equal(
+		commanderEnterSuggestionIndex({
+			hoveredSuggestion: null,
+			showSuggestions: true,
+			commandIsAction: true,
+			inputValue: 'settings.theme = dark'
+		}),
+		null
+	);
+	assert.equal(
+		commanderEnterSuggestionIndex({
+			hoveredSuggestion: null,
+			showSuggestions: false,
+			commandIsAction: false,
+			inputValue: 'hidden search'
+		}),
+		null
+	);
+	assert.equal(
+		commanderEnterSuggestionIndex({
+			hoveredSuggestion: null,
+			showSuggestions: true,
+			commandIsAction: false,
+			inputValue: '   '
+		}),
+		null
+	);
 });
 
 test('Commander result limits bound the suggestion surface', () => {

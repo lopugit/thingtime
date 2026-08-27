@@ -193,6 +193,27 @@ const previewValue = (value: unknown): string => {
   }
 };
 
+function RankedMatchScore({ score }: { score?: number }) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  const display = score.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  const label = `Ranked match score: ${display}`;
+  return (
+    <Text
+      aria-label={label}
+      color="var(--tt-muted, #9a9aa6)"
+      fontFamily="mono"
+      fontSize="10px"
+      fontWeight="500"
+      letterSpacing="0.02em"
+      opacity={0.72}
+      title={label}
+      whiteSpace="nowrap"
+    >
+      ranked match · {display}
+    </Text>
+  );
+}
+
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
   // schemaId is internal provenance (the schema thing's shareId) — the
   // human-readable `schema` chip already conveys the shape
@@ -263,10 +284,19 @@ const ThingResultCard = React.memo(function ThingResultCard({
             #{tag}
           </Badge>
         ))}
-        <Flex align="center" gap={2} marginLeft="auto">
-          <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
-            {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
-          </Text>
+        <Flex
+          align="center"
+          gap={2}
+          marginLeft={{ base: 0, sm: 'auto' }}
+          width={{ base: '100%', sm: 'auto' }}
+          wrap={{ base: 'wrap', sm: 'nowrap' }}
+        >
+          <Flex align="center" gap={2} justify="space-between" width={{ base: '100%', sm: 'auto' }}>
+            <RankedMatchScore score={thing.rankScore} />
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto" whiteSpace="nowrap">
+              {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+            </Text>
+          </Flex>
           <Flex
             as={RouterLink}
             align="center"
@@ -274,6 +304,7 @@ const ThingResultCard = React.memo(function ThingResultCard({
             color="var(--tt-text, #5a5a66)"
             fontSize="xs"
             gap={1}
+            marginLeft={{ base: 'auto', sm: 0 }}
             textDecoration="underline"
             to={thingDetailPath(thing.id)}
           >
@@ -313,7 +344,18 @@ const StandardThingResult = React.memo(function StandardThingResult({
     [onPostChanged, thing.id]
   );
 
-  if (post) return <PostCard post={post} onChanged={handlePostChanged} />;
+  if (post) {
+    return (
+      <Box>
+        {typeof thing.rankScore === 'number' ? (
+          <Flex justify="flex-end" mb={1} px={1}>
+            <RankedMatchScore score={thing.rankScore} />
+          </Flex>
+        ) : null}
+        <PostCard post={post} onChanged={handlePostChanged} />
+      </Box>
+    );
+  }
 
   const created = new Date(thing.createdAt);
   const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
@@ -334,6 +376,7 @@ const StandardThingResult = React.memo(function StandardThingResult({
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
           {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
         </Text>
+        <RankedMatchScore score={thing.rankScore} />
         <Flex
           as={RouterLink}
           align="center"

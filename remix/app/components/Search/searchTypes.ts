@@ -23,6 +23,8 @@ export type SearchThing = {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  // Present only when the server actually ran Mongo text relevance ranking.
+  rankScore?: number;
 };
 
 export type SearchPost = PublicPost;
