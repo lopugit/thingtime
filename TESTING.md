@@ -1015,8 +1015,55 @@ is fixed, and cite the checklist you ran in the PR description.
       real result, and the protected `github-actions` advisory updates one
       warning comment without producing a failing or required status.
 
+## Content-addressed Graphify snapshots (`scripts/graphify`)
+
+- [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
+      source fingerprint unchanged, source edits change it, and computing a
+      fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Finalize the same portable output twice and confirm it deduplicates to
+      one artifact path. Finalize two valid variants for one source fingerprint
+      and confirm both remain immutable while the deterministic selector picks
+      the richer graph.
+- [ ] Create two branches that each add a distinct
+      `graphify-out/snapshots/v1/<source>/<artifact>/` path. Merge them in a
+      fresh clone without installing a custom merge driver and confirm Git
+      reports no generated-file conflict and both snapshots remain present.
+- [ ] Start two local mutation commands together. Confirm the repository writer
+      lock serializes them, a live writer is never stolen during owner-file
+      creation, and a dead writer lock is recoverable.
+- [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
+      the four mutable root outputs from tracking, and run
+      `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
+      `scripts/graphify snapshot` matches the current source fingerprint, and
+      ordinary `graphify query` still succeeds through the aliases.
+- [ ] Change a Markdown file and run semantic extraction through the local
+      Codex LLM proxy. Confirm the wrapper clusters and exports after extraction,
+      records the Graphify version and source tree in `snapshot.json`, keeps the
+      mutable semantic cache private, ingests it into
+      `cache/semantic-cas/v1/<input-key>/<content-hash>.json`, and never prints
+      the proxy key. Write two valid responses to one input-key filename and
+      confirm both immutable variants survive while hydration selects the richer
+      response deterministically.
+- [ ] Corrupt a portable file at an existing artifact-hash path and attempt to
+      finalize identical output. Confirm the wrapper rejects the violated hash
+      invariant instead of overwriting or accepting it.
+- [ ] Delete the snapshot currently selected by a root compatibility symlink,
+      then activate a new valid snapshot. Confirm the dangling alias is replaced
+      without treating it as an unrelated filesystem object.
+- [ ] Merge a source branch, run the trusted Lopu Graphify publisher, and
+      confirm the post-merge source fingerprint has a valid immutable snapshot.
+      Confirm no controller job pushes mutable root aliases or cancels an
+      already-running Lopu/Graphify job.
+
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu PR
+      manager. Confirm `.github/workflows/all-branch.yml` is absent from the
+      product branch, no standalone **Build all branch** workflow run appears,
+      and both signals enter the protected `lopu-maintenance-build-all`
+      namespace. The active rebuild must finish without cancellation while
+      only one newest not-yet-started union snapshot waits for the shared Lopu
+      fleet slot.
 - [ ] Push a new commit to an older open PR whose head branch does not contain
       the current Lopu push listener, including one targeting a non-default
       branch. Confirm the default-branch `pull_request_target: synchronize`
@@ -1040,9 +1087,24 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] On the default branch, complete a check run and create/edit a normal PR
       comment. Confirm each `Lopu PR manager` run compiles and creates its
       controller jobs instead of failing at workflow startup with a nested
-      `security-events: none` permission error. Also confirm the scheduled and
-      all-branch push listeners create jobs, and that CodeQL alert mutations
-      occur only in the controller's separately fenced disposition writer.
+      `security-events: none` permission error. Also confirm scheduled and
+      push-driven all-branch signals enter that same Lopu manager (never a
+      standalone **Build all branch** listener), and that CodeQL alert
+      mutations occur only in the controller's separately fenced disposition
+      writer.
+- [ ] After changing a product-branch listener, compare the active default
+      `main` listener with the reviewed `develop` listener before calling the
+      rollout complete. PR synchronize/draft/edit/close signals, the hourly
+      all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
+      operations must already be present on `main`; a half-hour sweep is only
+      recovery coverage, not proof that every repository change wakes Lopu.
+- [ ] Fail or cancel one listed GitHub Actions PR workflow after the opening
+      review has finished. Confirm the default listener receives a completed
+      `workflow_run`, routes only the associated non-successful PR to one Lopu
+      review, preserves the exact source run id for log diagnosis, and never
+      listens to `Lopu PR manager` itself. External checks remain covered by
+      `check_run`; first-party Actions checks must not rely on that suppressed
+      event.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch

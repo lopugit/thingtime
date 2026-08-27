@@ -85,6 +85,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Graphify output is now conflict-free and content-addressed**: a repository
+  wrapper fingerprints the source tree without generated output, serializes
+  writers, validates Graphify's atomic graph/manifest/report set, and publishes
+  immutable snapshots whose identical artifacts deduplicate and whose valid
+  variants coexist. Mutable semantic-cache entries are also promoted into
+  immutable input-key/content-hash variants. Ignored root symlinks preserve ordinary query compatibility;
+  committed hooks select/build snapshots without committing or pushing, and
+  Lopu can regenerate a post-merge snapshot instead of line-merging generated
+  JSON. [PR #436 details](../PRs/436-codex-graphify-snapshot-routing--make-graphify-output-conflict-free.md).
+  — Codex (AI), 2026-08-27
 - **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
   Document.** The connector permits ChatGPT's current `oauth/client.json`
   client identifier, while retaining the previous fixed identifier for existing
@@ -183,6 +193,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu is the sole wildcard-union listener**: the legacy public **Build all
+  branch** workflow is retired from the product branch. PR lifecycle, branch
+  push, manual, and hourly union-build signals now enter the default-branch
+  **Lopu PR manager**, whose protected maintenance namespace preserves the
+  active build and coalesces only obsolete not-yet-started snapshots. The
+  listener contract now rejects any reintroduction of the competing workflow.
+  — Codex (AI), 2026-08-27
 - **CI Control repository maintenance now dispatches the unified Lopu
   workflow**: existing rebase, feature-promotion, standing-promotion, and sync
   operation keys translate to typed `Lopu PR manager` inputs instead of naming
