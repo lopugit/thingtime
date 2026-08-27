@@ -21,6 +21,16 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu rebase rounds now preserve validated related fixes instead of
+  discarding an otherwise-correct conflict resolution**: a live Commander
+  replay resolved all thirteen mechanically-derived conflicts but also updated
+  the existing Nitro API route registry required by Thingtime's endpoint
+  conventions, so the former exact-file-set guard rejected the whole round.
+  Every listed conflict remains mandatory, while up to 32 related edits may
+  now be admitted only when they are existing stage-0, non-executable regular
+  text files and pass the same path, size, binary, marker, credential, index,
+  aggregate-byte, and final staged-tree verification before import. — Codex
+  (AI), 2026-08-28
 - **Lopu now coalesces obsolete pending conflict-worker batches before it
   dispatches a fresh live snapshot**: repeated push, PR, check, and workflow
   signals had accumulated fourteen not-yet-admitted batch runs behind the

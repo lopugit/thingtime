@@ -999,8 +999,23 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
-    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch file set differs from the exact conflict allowlist/u,
-    "the temporary nested action is discarded before every exact scratch allowlist comparison",
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch omitted one or more required conflict files/u,
+    "the temporary nested action is discarded before every required-conflict scratch comparison",
+  );
+  assert.match(
+    rebaseActionSource,
+    /comm -23 "\$expected_ai_files" "\$actual_files"[\s\S]*?comm -13 "\$expected_ai_files" "\$actual_files"[\s\S]*?additional_file_count > 32 \|\| additional_path_bytes > 8192/u,
+    "the round requires every conflict while tightly bounding related scratch edits",
+  );
+  assert.match(
+    rebaseActionSource,
+    /git ls-files --stage -- ":\(literal\)\$path"[\s\S]*?"\$extra_mode" == 100644[\s\S]*?"\$extra_stage" == 0[\s\S]*?"\$extra_path" == "\$path"/u,
+    "related scratch edits are admitted only for exact existing stage-0 regular files",
+  );
+  assert.match(
+    rebaseActionSource,
+    /sort -u -- "\$expected_conflicts_full" "\$additional_files" >"\$allowed_staged_paths"[\s\S]*?is_listed "\$path" "\$allowed_staged_paths"/u,
+    "the final staged-tree guard includes only conflicts and validated related edits",
   );
   assert.match(
     rebaseActionSource,
