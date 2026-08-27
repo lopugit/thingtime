@@ -1022,6 +1022,24 @@ function assertAdminModelRouting(
     /cp -p[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$restored\/\.github\/scripts\/"/u,
     "round cleanup restores the trusted Graphify helpers needed after conflict replay",
   );
+  const roundCleanupBlock = rebaseActionSource.slice(
+    rebaseActionSource.indexOf("    - name: Wipe scratch and restore the local action for the next round"),
+  );
+  assert.match(
+    roundCleanupBlock,
+    /hash_trusted_tree\(\)[\s\S]*?find \.github\/scripts\/rebase-stack -type f -print0[\s\S]*?\.github\/scripts\/graphify-cas\.mjs[\s\S]*?\.github\/scripts\/stage-graphify-snapshots\.mjs/u,
+    "round cleanup fingerprints the same trusted Graphify helpers as bootstrap and verification",
+  );
+  const verifySafeCopyAt = roundCleanupBlock.indexOf(
+    '[[ "$safe_hash" == "$EXPECTED_TRUSTED_SHA256" ]]',
+  );
+  const clearWorkspaceAt = roundCleanupBlock.indexOf('clear_workspace "$workspace_abs"');
+  assert.ok(verifySafeCopyAt >= 0, "round cleanup verifies its immutable safe copy");
+  assert.ok(clearWorkspaceAt >= 0, "round cleanup clears model scratch after verification");
+  assert.ok(
+    verifySafeCopyAt < clearWorkspaceAt,
+    "round cleanup must verify the safe copy before clearing the parsed local action",
+  );
   assert.match(
     lopuActionSource,
     /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
