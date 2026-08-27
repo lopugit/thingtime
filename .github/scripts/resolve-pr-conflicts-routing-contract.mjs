@@ -928,6 +928,11 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseSource,
+    /name: Check out the exact PR head[\s\S]*?fetch-depth: 0[\s\S]*?filter: blob:none[\s\S]*?persist-credentials: false/u,
+    "rebase workers keep complete ancestry while lazily fetching historical blobs",
+  );
+  assert.match(
+    rebaseSource,
     /uses: \*thingtime_rebase_conflict_round_action/,
     "rebase retry step reuses the trusted local action anchor",
   );
