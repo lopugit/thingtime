@@ -146,6 +146,9 @@ runs:
               find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
+              printf '%s\0' \
+                .github/scripts/graphify-cas.mjs \
+                .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
         }
@@ -167,6 +170,13 @@ runs:
           echo "::error::The protected Lopu agent action is missing."
           exit 1
         }
+        for helper in graphify-cas.mjs stage-graphify-snapshots.mjs; do
+          [[ -f "$source_trusted/.github/scripts/$helper" \
+             && ! -L "$source_trusted/.github/scripts/$helper" ]] || {
+            echo "::error::Trusted Graphify helper is missing or not a regular file: $helper"
+            exit 1
+          }
+        done
 
         round_abs="$(mktemp -d "$runner_temp_abs/ai-rebase-round.XXXXXX")"
         safe_trusted="$round_abs/trusted"
@@ -179,6 +189,10 @@ runs:
         cp -pR "$action_abs/." "$safe_trusted/.github/actions/rebase-conflict-round/"
         cp -pR "$source_trusted/.github/scripts/rebase-stack/." \
           "$safe_trusted/.github/scripts/rebase-stack/"
+        cp -p \
+          "$source_trusted/.github/scripts/graphify-cas.mjs" \
+          "$source_trusted/.github/scripts/stage-graphify-snapshots.mjs" \
+          "$safe_trusted/.github/scripts/"
 
         source_hash="$(hash_trusted_tree "$source_trusted")"
         safe_hash="$(hash_trusted_tree "$safe_trusted")"
@@ -560,6 +574,9 @@ runs:
               find .github/actions/lopu-agent -type f -print0
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
+              printf '%s\0' \
+                .github/scripts/graphify-cas.mjs \
+                .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
         }
@@ -1007,6 +1024,10 @@ runs:
           "$restored/.github/actions/rebase-conflict-round/"
         cp -pR "$safe_trusted_abs/.github/scripts/rebase-stack/." \
           "$restored/.github/scripts/rebase-stack/"
+        cp -p \
+          "$safe_trusted_abs/.github/scripts/graphify-cas.mjs" \
+          "$safe_trusted_abs/.github/scripts/stage-graphify-snapshots.mjs" \
+          "$restored/.github/scripts/"
         [[ "$(hash_trusted_tree "$restored")" == "$EXPECTED_TRUSTED_SHA256" ]] || {
           echo "::error::Restored local action differs from the safe round copy."
           exit 1

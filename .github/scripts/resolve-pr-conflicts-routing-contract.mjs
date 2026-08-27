@@ -988,6 +988,16 @@ function assertAdminModelRouting(
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
   );
   assert.match(
+    rebaseActionSource,
+    /cp -p[\s\S]*?"\$source_trusted\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$source_trusted\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$safe_trusted\/\.github\/scripts\/"/u,
+    "the safe round copy preserves the trusted Graphify helpers outside the model workspace",
+  );
+  assert.match(
+    rebaseActionSource,
+    /cp -p[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$restored\/\.github\/scripts\/"/u,
+    "round cleanup restores the trusted Graphify helpers needed after conflict replay",
+  );
+  assert.match(
     lopuActionSource,
     /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
     "the protected Lopu action exposes an ordered secondary Anthropic account slot",
