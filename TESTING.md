@@ -972,6 +972,13 @@ is fixed, and cite the checklist you ran in the PR description.
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
+
+- [ ] On the landing page and a short authenticated route, scroll from top to
+      bottom at desktop and 375px widths. The shared footer follows content
+      with ordinary visual spacing, not a large blank/dead-scroll region; its
+      links and controls remain reachable without horizontal overflow.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
@@ -1252,13 +1259,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. `rebase-pr-stack-ai` must reach the
-      protected engine only through that one listener's `repository_dispatch`:
-      product branches must contain no separate `rebase-pr-stacks.yml` caller
-      that could create a competing run which Lopu's embedded rebase lane later
-      cancels. `Lopu PR manager` accepts both exact merge and rebase
-      repository-dispatch events, while the protected rebase engine is
-      `workflow_call`-only and cannot create a competing public run.
+      rebase, and stack detection. Product branches must contain no
+      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
+      rebase repository-dispatch events, so `rebase-pr-stack-ai` reaches the
+      protected engine only through that one listener's `repository_dispatch`.
+      The protected rebase engine is `workflow_call`-only and cannot create a
+      competing public run that later gets cancelled by Lopu's embedded rebase
+      lane.
 - [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
       disabled), feature promotion, standing promotion, and main/develop sync.
       Confirm each audit record names `resolve-pr-conflicts.yml`, the request

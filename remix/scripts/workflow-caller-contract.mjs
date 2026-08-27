@@ -94,6 +94,11 @@ assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must 
 assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit only the metadata-only trusted handoff to dispatch an unprivileged scan');
 assert.match(
   codeqlCaller,
+  /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
+  'the target-event token must never reach the analyzer job'
+);
+assert.match(
+  codeqlCaller,
   /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
   'CodeQL target events must call the isolated protected metadata handoff'
 );
@@ -101,11 +106,6 @@ assert.match(
   codeqlCaller,
   /^  control-plane:\n    if: github\.event_name != 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-analysis\.yml@github-actions$/m,
   'read-capped PR events must call only the unprivileged CodeQL analyzer'
-);
-assert.match(
-  codeqlCaller,
-  /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
-  'the target-event token must never reach the analyzer job'
 );
 assert.match(
   codeqlCaller,
