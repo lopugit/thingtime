@@ -1068,6 +1068,11 @@ export function assertControlPlaneContract() {
     /thingtime-control-plane-contract-advisories:v1/u,
     "automation contract warnings are surfaced through one PR comment",
   );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/rebase-related-edits\.test\.mjs/u,
+    "control-plane CI executes the real stopped-rebase related-edit verifier fixture",
+  );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /^name: Lopu internal develop promotion$/m);
