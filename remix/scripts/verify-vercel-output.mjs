@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 
 import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
+import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -66,12 +67,17 @@ if (previewFreshnessIndex === -1 || appEntryIndex === -1 || previewFreshnessInde
 	throw new Error('Vercel output does not load preview recovery before the application entry.');
 }
 
-if (!embedBundle.includes('Thingtime') || embedBundle.includes('sourceMappingURL=')) {
-  throw new Error('Vercel output is missing the standalone minified Thingtime embed bundle.');
+if (!embedBundle.includes('Thingtime')) {
+	throw new Error('Vercel output is missing the standalone minified Thingtime embed bundle.');
+}
+
+const embedSourceMapAnnotation = findSourceMapAnnotation(embedBundle);
+if (embedSourceMapAnnotation) {
+	throw new Error(`Deployed embed bundle must not reference a separate source map; found "${embedSourceMapAnnotation}".`);
 }
 
 if (!embedBridge.includes('/embed/thingtime.min.js')) {
-  throw new Error('Vercel output is missing the secure Thingtime popup bridge.');
+	throw new Error('Vercel output is missing the secure Thingtime popup bridge.');
 }
 
 const hasFilesystemRoute = config.routes?.some((route) => route.handle === 'filesystem');
