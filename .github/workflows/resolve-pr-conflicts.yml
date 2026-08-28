@@ -6640,6 +6640,12 @@ jobs:
           graphify_router="$GITHUB_WORKSPACE/trusted/.github/scripts/graphify-cas.mjs"
           graphify_stager="$GITHUB_WORKSPACE/trusted/.github/scripts/stage-graphify-snapshots.mjs"
           test -f "$graphify_router" && test -f "$graphify_stager"
+          # The trusted controller must remain in the workspace until GitHub
+          # runs every registered action post-step, but it is a second checkout
+          # of this repository rather than PR source. Explicitly exclude it
+          # from both Graphify phases so duplicate paths cannot collide with
+          # the product tree or poison semantic node preservation.
+          graphify_scope_args=(--exclude trusted/)
 
           select_claude_backend() {
             if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -6710,7 +6716,7 @@ jobs:
 
           # Phase 1 is unconditional after every completed base-into-head
           # merge. This is the source-of-truth code graph build and uses no LLM.
-          if ! node "$graphify_router" update . || ! graph_not_collapsed; then
+          if ! node "$graphify_router" update . "${graphify_scope_args[@]}" || ! graph_not_collapsed; then
             echo "::warning::Structural \`graphify update\` failed in CI — keeping the merged commit's existing graph as-is."
             echo "semantic=unavailable" >> "$GITHUB_OUTPUT"
             echo "refreshed=failed" >> "$GITHUB_OUTPUT"
@@ -6728,7 +6734,8 @@ jobs:
           if [ -n "$backend" ]; then
             conc=4
             if [ "$backend" = "claude-cli" ]; then conc=1; fi
-            if node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
+            if node "$graphify_router" extract . "${graphify_scope_args[@]}" \
+                 --backend "$backend" "${graphify_model_args[@]}" \
                  --max-concurrency "$conc" --api-timeout 240 \
                && graph_not_collapsed; then
               semantic="$backend"

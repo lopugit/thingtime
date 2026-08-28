@@ -92,6 +92,15 @@ assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,Web
 assert.doesNotMatch(workflow, /DISALLOWED_TOOLS/);
 assert.doesNotMatch(workflow, /Gate publication of AI-resolved workflow files before model spend/);
 assert.doesNotMatch(workflow, /Workflow-file promotion requires the review-gated publication token/);
+assert.match(workflow, /graphify_scope_args=\(--exclude trusted\/\)/);
+assert.match(
+  workflow,
+  /node "\$graphify_router" update \. "\$\{graphify_scope_args\[@\]\}"/,
+);
+assert.match(
+  workflow,
+  /node "\$graphify_router" extract \. "\$\{graphify_scope_args\[@\]\}"/,
+);
 
 assert.match(rebaseWorkflow, /^name: Lopu rebase engine$/m);
 assert.match(rebaseWorkflow, /workflow_dispatch\|workflow_call\)/);

@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Fixed Lopu's post-merge Graphify scan so the nested `trusted/` controller
+  checkout remains available for GitHub action post-steps without being
+  indexed as duplicate product source. Both structural and LLM-semantic phases
+  now exclude that checkout, preventing duplicate-node collisions and false
+  unchanged-file symbol-loss rejections. — Codex (AI), 2026-08-28
 - Fixed Lopu's Graphify snapshot stager on legacy product branches whose broad
   ignore rules predate the immutable CAS layout. The trusted stager now
   force-adds only allowlisted immutable snapshots and semantic-cache variants,
