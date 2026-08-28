@@ -21,6 +21,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { isWearingTryOn, restoredThemeSettings, shouldCaptureTryOnSnapshot, tryOnSnapshotFor } from './themeTryOnCore';
+import type { WornTheme } from './themeTryOnCore';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
@@ -33,8 +35,6 @@ import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUse
 export type ProfilePageProps = {
   username?: string;
 };
-
-type WornTheme = { id: string; name: string };
 
 type RemoteProfileState =
   | { status: 'idle' }
@@ -203,8 +203,13 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // as the revert target — the visitor's own look became unrecoverable from the
   // one control that advertises it. Deriving both from persisted state keeps
   // "click again to take it off" true across navigation and reloads.
-  const appliedShareId = thingtime?.settings?.theme?.appliedThemeShareId;
-  const tryingOn = !!wornTheme && appliedShareId === wornTheme.id;
+  //
+  // The held snapshot, not the applied share id, is what marks a run open —
+  // see themeTryOnCore for why the share id alone mislabels a visitor who
+  // simply wears the same theme as the owner.
+  const currentThemeSettings = thingtime?.settings?.theme;
+  const tryOnSnapshot = thingtime?.settings?.themeBeforeTryOn;
+  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, snapshot: tryOnSnapshot });
 
   const handleWornChipClick = React.useCallback(async () => {
     if (!wornTheme) return;
@@ -214,7 +219,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
     }
     if (tryingOn) {
       const snapshot = getThingtime('settings.themeBeforeTryOn');
-      setThingtime('settings.theme', snapshot && typeof snapshot === 'object' ? snapshot : { preset: 'Thingtime', overrides: {} }, {
+      setThingtime('settings.theme', restoredThemeSettings(snapshot, getThingtime('settings.theme')), {
         ignoreUndoRedo: true,
         namespace: 'theme'
       });
@@ -228,12 +233,13 @@ export const ProfilePage = (props: ProfilePageProps) => {
         lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
         return;
       }
-      // Only snapshot a look the visitor actually owns. Trying on a second
-      // profile's theme while already wearing one must not overwrite the
-      // original snapshot with the borrowed theme.
-      const current = getThingtime('settings.theme') ?? null;
-      if (!current?.appliedThemeShareId) {
-        setThingtime('settings.themeBeforeTryOn', current, { ignoreUndoRedo: true, namespace: 'theme' });
+      // Capture the visitor's look once per run. Trying on a second profile's
+      // theme while a run is open must not overwrite the original snapshot
+      // with the borrowed theme — but a visitor who arrived already wearing a
+      // shared theme (share link, gallery, cross-device pickup) still gets
+      // that look captured, so take-off returns them to it.
+      if (shouldCaptureTryOnSnapshot(getThingtime('settings.themeBeforeTryOn'))) {
+        setThingtime('settings.themeBeforeTryOn', tryOnSnapshotFor(getThingtime('settings.theme')), { ignoreUndoRedo: true, namespace: 'theme' });
       }
       applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
       lopuRef.current({

@@ -7312,7 +7312,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public profile returned.',
-        body: { ok: true, profile: { username: 'rick.deckard', displayName: 'Rick Deckard' }, postCount: 0 }
+        body: {
+          ok: true,
+          profile: { username: 'rick.deckard', displayName: 'Rick Deckard' },
+          postCount: 0,
+          wornTheme: { id: 'theme_123', name: 'Neon Noir' }
+        }
       },
       {
         status: 401,
