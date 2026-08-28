@@ -19,6 +19,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Stopped overlapping Lopu conflict detectors from queuing the same PR more
+  than once behind the durable repository fleet. Before dispatching a fresh
+  batch, the protected handoff now reads GitHub's live concurrency group and
+  removes PRs that already have a pending or in-progress merge/rebase owner;
+  immutable worker leases remain the fail-open correctness backstop if that
+  read-only inventory is temporarily unavailable. — Codex (AI), 2026-08-28
 - Allowed Lopu's isolated rebase rounds to resolve ordinary executable text
   conflicts. Scratch copies remain non-executable, while the trusted verifier
   restores the incoming replay side's exact `100644` or `100755` Git mode;
