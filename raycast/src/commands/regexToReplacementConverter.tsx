@@ -50,16 +50,15 @@ export const regexToReplacementConverter = async (props: any) => {
     newValue += item + `$${index + 1}`;
   });
 
-  // replace all escaped characters in newValue such as \{ \\ \[ and all others from the clipboard text with unescaped versions
-  // TODO: fix this so it's not hardcoded shit?
-  newValue = newValue.replace(/\\{/g, "{");
-  newValue = newValue.replace(/\\\[/g, "[");
-  newValue = newValue.replace(/\\\\/g, "\\");
-  newValue = newValue.replace(/\\]/g, "]");
-  newValue = newValue.replace(/\\}/g, "}");
-
-  // replace \. with just n
-  newValue = newValue.replace(/\\\./g, ".");
+  // Unescape \{ \[ \\ \] \} \. from the clipboard text.
+  //
+  // ONE left-to-right pass, not a chain of .replace() calls. Sequential passes
+  // double-unescape: `\\}` should unescape to `\}` (a literal backslash, then a
+  // brace), but the old `\\`->`\` pass produced a backslash that the following
+  // `\}`->`}` pass consumed again, silently eating it and yielding `}`. A
+  // single regex consumes each escape sequence exactly once, so a backslash
+  // this pass *produces* can never be re-read as the start of another escape.
+  newValue = newValue.replace(/\\([{}[\].\\])/g, "$1");
 
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");

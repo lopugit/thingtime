@@ -7,6 +7,20 @@
 
 export const REPEAT_HARD_CAP = 24;
 
+// Resolution can expand FAR beyond the stored template. The server render gate
+// (sanitizeSchemaRender) bounds the RAW template — 600 nodes, depth 24, 32KB —
+// but nested ttRepeat multiplies: ~11 nestings fit inside depth 24 and buy
+// 24^11 output nodes from a few hundred stored bytes. The catalog generator
+// already caps RESOLVED nodes (scripts/components-db/lib/validate.mjs), but
+// `component` is deliberately NOT in PROTECTED_THINGTIME — any signed-in user
+// can publish one, and /components, the detail page, and the `component` kind
+// renderer (feed/search/things) all resolve whatever they are handed. So the
+// live resolver carries its own ceiling: one budget shared across a whole
+// resolve, after which expansion stops and the partial tree is drawn (a
+// truncated preview beats a frozen tab). The full 2800-component catalog peaks
+// at 560 resolved values with args maxed out (mean 185) — ~7x headroom.
+export const MAX_RESOLVED_NODES = 4000;
+
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 export type ComponentArgScalar = string | number | boolean;
@@ -40,14 +54,22 @@ const truthy = (value: unknown): boolean => {
 	return !!value;
 };
 
-export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {}): unknown => {
+type ResolveBudget = { left: number };
+
+const resolveNode = (template: unknown, scope: ComponentArgValues, budget: ResolveBudget): unknown => {
+	// budget exhausted → drop this subtree (arrays skip undefined entries and
+	// the object branch skips undefined keys, so the partial tree stays valid)
+	if (budget.left <= 0) return undefined;
+	budget.left -= 1;
+
 	if (typeof template === 'string') {
 		return template.includes('{') ? substitute(template, scope) : template;
 	}
 	if (Array.isArray(template)) {
 		const out: unknown[] = [];
 		for (const entry of template) {
-			const resolved = resolveTemplate(entry, scope);
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(entry, scope, budget);
 			if (resolved === null || resolved === undefined) continue;
 			if (Array.isArray(resolved)) out.push(...resolved);
 			else out.push(resolved);
@@ -64,20 +86,21 @@ export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {
 		const key = String(scope[String(spec.arg)]);
 		const values = isPlainObject(spec.values) ? spec.values : {};
 		const picked = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : spec.default;
-		return resolveTemplate(picked, scope);
+		return resolveNode(picked, scope, budget);
 	}
 	if ('ttIf' in template) {
 		const spec = isPlainObject(template.ttIf) ? template.ttIf : {};
 		const value = scope[String(spec.arg)];
 		const hit = spec.equals !== undefined ? String(value) === String(spec.equals) : truthy(value);
 		const branch = hit ? spec.then : spec.else;
-		return branch === undefined ? undefined : resolveTemplate(branch, scope);
+		return branch === undefined ? undefined : resolveNode(branch, scope, budget);
 	}
 	if ('ttMerge' in template) {
 		const parts = Array.isArray(template.ttMerge) ? template.ttMerge : [];
 		const out: Record<string, unknown> = {};
 		for (const part of parts) {
-			const resolved = resolveTemplate(part, scope);
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(part, scope, budget);
 			if (isPlainObject(resolved)) Object.assign(out, resolved);
 		}
 		return out;
@@ -89,7 +112,8 @@ export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {
 		const n = Math.max(0, Math.min(Math.round(Number(raw) || 0), max));
 		const out: unknown[] = [];
 		for (let index = 0; index < n; index++) {
-			const resolved = resolveTemplate(spec.node, { ...scope, index, n: index + 1 });
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(spec.node, { ...scope, index, n: index + 1 }, budget);
 			if (resolved !== null && resolved !== undefined) out.push(resolved);
 		}
 		return out;
@@ -97,11 +121,17 @@ export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {
 
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(template)) {
-		const resolved = resolveTemplate(value, scope);
+		if (budget.left <= 0) break;
+		const resolved = resolveNode(value, scope, budget);
 		if (resolved !== undefined) out[key] = resolved;
 	}
 	return out;
 };
+
+// One budget per top-level resolve — nested ttRepeat shares it, so total output
+// is bounded no matter how the wrappers are nested.
+export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {}): unknown =>
+	resolveNode(template, scope, { left: MAX_RESOLVED_NODES });
 
 // ---------------------------------------------------------------------------
 

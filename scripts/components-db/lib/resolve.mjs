@@ -19,6 +19,13 @@
 
 export const REPEAT_HARD_CAP = 24;
 
+// Total resolved-value ceiling for ONE resolve, shared across every nested
+// wrapper. Nested ttRepeat multiplies (24^depth), so a template that clears the
+// server's raw-template caps can still explode on resolution — see the twin in
+// remix/app/components/ComponentsLibrary/componentTemplate.ts for the full
+// note. Once spent, expansion stops and the partial tree is returned.
+export const MAX_RESOLVED_NODES = 4000;
+
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -35,14 +42,20 @@ const truthy = (value) => {
 	return !!value;
 };
 
-export const resolveTemplate = (template, scope = {}) => {
+const resolveNode = (template, scope, budget) => {
+	// budget exhausted → drop this subtree (arrays skip undefined entries and
+	// the object branch skips undefined keys, so the partial tree stays valid)
+	if (budget.left <= 0) return undefined;
+	budget.left -= 1;
+
 	if (typeof template === 'string') {
 		return template.includes('{') ? substitute(template, scope) : template;
 	}
 	if (Array.isArray(template)) {
 		const out = [];
 		for (const entry of template) {
-			const resolved = resolveTemplate(entry, scope);
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(entry, scope, budget);
 			if (resolved === null || resolved === undefined) continue;
 			if (Array.isArray(resolved)) out.push(...resolved);
 			else out.push(resolved);
@@ -59,20 +72,21 @@ export const resolveTemplate = (template, scope = {}) => {
 		const key = String(scope[spec.arg]);
 		const values = isPlainObject(spec.values) ? spec.values : {};
 		const picked = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : spec.default;
-		return resolveTemplate(picked, scope);
+		return resolveNode(picked, scope, budget);
 	}
 	if ('ttIf' in template) {
 		const spec = template.ttIf || {};
 		const value = scope[spec.arg];
 		const hit = spec.equals !== undefined ? String(value) === String(spec.equals) : truthy(value);
 		const branch = hit ? spec.then : spec.else;
-		return branch === undefined ? undefined : resolveTemplate(branch, scope);
+		return branch === undefined ? undefined : resolveNode(branch, scope, budget);
 	}
 	if ('ttMerge' in template) {
 		const parts = Array.isArray(template.ttMerge) ? template.ttMerge : [];
 		const out = {};
 		for (const part of parts) {
-			const resolved = resolveTemplate(part, scope);
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(part, scope, budget);
 			if (isPlainObject(resolved)) Object.assign(out, resolved);
 		}
 		return out;
@@ -84,7 +98,8 @@ export const resolveTemplate = (template, scope = {}) => {
 		const n = Math.max(0, Math.min(Math.round(Number(raw) || 0), max));
 		const out = [];
 		for (let index = 0; index < n; index++) {
-			const resolved = resolveTemplate(spec.node, { ...scope, index, n: index + 1 });
+			if (budget.left <= 0) break;
+			const resolved = resolveNode(spec.node, { ...scope, index, n: index + 1 }, budget);
 			if (resolved !== null && resolved !== undefined) out.push(resolved);
 		}
 		return out;
@@ -92,11 +107,16 @@ export const resolveTemplate = (template, scope = {}) => {
 
 	const out = {};
 	for (const [key, value] of Object.entries(template)) {
-		const resolved = resolveTemplate(value, scope);
+		if (budget.left <= 0) break;
+		const resolved = resolveNode(value, scope, budget);
 		if (resolved !== undefined) out[key] = resolved;
 	}
 	return out;
 };
+
+// One budget per top-level resolve — nested ttRepeat shares it, so total output
+// is bounded no matter how the wrappers are nested.
+export const resolveTemplate = (template, scope = {}) => resolveNode(template, scope, { left: MAX_RESOLVED_NODES });
 
 // Default arg values → the scope the tester starts from.
 export const defaultsFromArgs = (args) => {
