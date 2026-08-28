@@ -1557,8 +1557,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   re-render repainted every card in the column. `PostCard`'s contract is now
   `onChanged(id, next)` and `PostList` passes the consumers'
   `useCallback`-stable `handlePostChanged` straight through (Feed and
-  ProfilePage already used that exact signature). Live-verified: reactions,
-  comments, and both consumers behave identically — Claude (AI), 2026-07-21.
+  ProfilePage reach PostCard through `PostList`, so they were already stable).
+  Live-verified: reactions, comments, and both consumers behave identically
+  — Claude (AI), 2026-07-21.
+
+  Every other `PostCard` consumer was migrated to the two-argument contract in
+  the same change: `routes/thing.tsx`, `routes/post.tsx`, `routes/media.tsx`
+  and `components/Search/SearchPage.tsx` each took `(change)` only, so after
+  the signature change they bound `change` to the post **id string** and wrote
+  it into state in place of the post — `/thing/:id`, `/post/:id`, `/media/:id`
+  and search results would have blanked out on any react/comment/share/delete.
+  `tsconfig` runs with `"strict": false`, so `strictFunctionTypes` is off and
+  parameter bivariance let the stale one-argument handlers keep type-checking;
+  nothing in CI could have caught it. The three route handlers now take
+  `(id, change)` and ignore changes addressed to a different post; SearchPage
+  drops its per-card wrapper and passes the already-stable `updateResultPost`
+  straight through, which extends the memo win to search — Lopu, 2026-08-28.
 
 ### Fixed
 
