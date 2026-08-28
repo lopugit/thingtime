@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Coalesced Lopu's conflict-resolution follow-up work at the batch boundary.
+  Bot-authored resolution pushes no longer enqueue one repository review and
+  one all-branch rebuild per PR ahead of the remaining conflict matrix; one
+  review and one rebuild are dispatched after the complete batch succeeds. —
+  Codex (AI), 2026-08-28
 - Fixed Lopu's post-merge Graphify scan so the nested `trusted/` controller
   checkout remains available for GitHub action post-steps without being
   indexed as duplicate product source. Both structural and LLM-semantic phases

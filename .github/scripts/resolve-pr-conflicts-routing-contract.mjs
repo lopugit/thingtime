@@ -280,6 +280,25 @@ function assertWorkflowSource() {
   // rather than flooding the durable fleet queue's pending-job limit.
   assert.match(resolveBlock, /max-parallel: 3/);
   assert.match(resolveBlock, /fail-fast: false/);
+  assert.equal(
+    source.match(/chore: refresh graphify outputs after PR branch merge/g)?.length,
+    3,
+    "the terminal commit and both per-event deferrals share one exact marker",
+  );
+  assert.match(source, /Deferring the all-branch rebuild to the conflict-batch finalizer/);
+  assert.match(source, /Bot-authored conflict resolution is reviewed once by the batch finalizer/);
+  const batchFinalizerBlock = source.slice(
+    source.indexOf("  finalize_conflict_batch_maintenance:"),
+  );
+  assert.match(batchFinalizerBlock, /needs: \[route, detect, resolve\]/);
+  assert.match(batchFinalizerBlock, /needs\.resolve\.result == 'success'/);
+  assert.match(batchFinalizerBlock, /lopu-internal-all-branch/);
+  assert.match(batchFinalizerBlock, /lopu-review:conflict-batch:\$BATCH_RUN_ID/);
+  assert.equal(
+    batchFinalizerBlock.match(/resolve-pr-conflicts\.yml\/dispatches/g)?.length,
+    2,
+    "one completed conflict batch dispatches exactly one maintenance pair",
+  );
   const handoffBlock = source.slice(
     source.indexOf("  handoff:"),
     source.indexOf("  review_detect:"),
@@ -604,8 +623,8 @@ function assertWorkflowSource() {
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
   assert.equal(
     dispatchCount,
-    7,
-    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, moving-ref retry, and both promotion continuations (stack resume, recoverable retry) use fixed workflow dispatch",
+    9,
+    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, moving-ref retry, both promotion continuations, and the post-conflict maintenance pair use fixed workflow dispatch",
   );
   assert.match(
     rebaseSource,
