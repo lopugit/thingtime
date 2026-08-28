@@ -18,7 +18,7 @@ import { validateThingtimeCrystal } from '~/schemas/registry';
 // kind-blind index in the shared develop database, so phase 1 must retire and
 // backfill that family before phase 2 reopens the crystal namespace.
 
-test('the relationship map covers exactly the seven retired unique-index families', () => {
+test('the relationship map covers exactly the retired unique-index families', () => {
 	assert.deepEqual(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, {
 		follow: 'followKey',
 		'chat-member': 'memberKey',
@@ -27,8 +27,19 @@ test('the relationship map covers exactly the seven retired unique-index familie
 		'community-invite': 'inviteCode',
 		'custom-emoji': 'emojiKey',
 		friend: 'friendKey',
-		vote: 'voteKey'
+		vote: 'voteKey',
+		// joined late: shipped with its own kind-blind crystal.linkKey unique
+		// index (PR #323, authored while this migration was in flight)
+		'passkey-app-link': 'linkKey'
 	});
+});
+
+test('passkey app links stamp through the shared helper (auth writer builds its own doc)', () => {
+	const stamped = relationshipUniqueKeys('passkey-app-link', { linkKey: 'passkey-1:origin:https://thingtime.com' });
+	assert.ok(stamped && stamped.length === 1);
+	assert.equal(fromBin(stamped![0]), 'linkKey:passkey-1:origin:https://thingtime.com');
+	// no key → no stamp, so a malformed link can never claim the empty slot
+	assert.equal(relationshipUniqueKeys('passkey-app-link', { linkKey: '' }), undefined);
 });
 
 test('stamps are `<field>:<key>` BinData and round-trip', () => {
