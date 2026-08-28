@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Made Graphify scope exclusions compatible with the pinned `graphify 0.9.4`
+  CLI. The immutable CAS wrapper now consumes and validates repository-local
+  `--exclude` paths itself, atomically hides the nested trusted controller only
+  while Graphify runs, and restores it on both success and failure instead of
+  forwarding an unsupported update/extract option. — Codex (AI), 2026-08-28
 - Moved post-rebase repository maintenance behind a verifiable rebase-fleet
   finalizer. Rewritten tips now carry one run/PR-bound Lopu trailer whose live
   controller run and exact rebase job must match before PR/push listeners defer
