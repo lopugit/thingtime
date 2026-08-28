@@ -43,11 +43,48 @@ let nextId = 1;
 let entries: ApiLogEntry[] = [];
 const listeners = new Set<() => void>();
 
+// The body is not the only place a credential can ride: query strings carry
+// them too (a PAT on ?token=, a one-time ?code= coming back from an OAuth
+// provider). Redacting only the body would leave the log — and any curl copied
+// out of it — holding a live credential, which is exactly what the contract
+// above promises it never does. Same key vocabulary as the body redactor, so
+// the two cannot drift.
+export const redactUrl = (url: string): string => {
+	const queryStart = url.indexOf('?');
+	if (queryStart === -1) return url;
+
+	const path = url.slice(0, queryStart);
+	const [query, ...fragmentParts] = url.slice(queryStart + 1).split('#');
+	const fragment = fragmentParts.length ? `#${fragmentParts.join('#')}` : '';
+
+	// Hand-parsed rather than via URLSearchParams so a relative URL needs no
+	// base and the surviving params keep their original encoding verbatim.
+	const redacted = query
+		.split('&')
+		.map((pair) => {
+			if (!pair) return pair;
+			const eq = pair.indexOf('=');
+			if (eq === -1) return pair;
+			const name = pair.slice(0, eq);
+			let decodedName = name;
+			try {
+				decodedName = decodeURIComponent(name.replace(/\+/g, ' '));
+			} catch {
+				// a malformed escape stays as written — still worth matching on
+			}
+			return SENSITIVE_KEY.test(decodedName) ? `${name}=${REDACTED}` : pair;
+		})
+		.join('&');
+
+	return `${path}?${redacted}${fragment}`;
+};
+
 export const recordApiCall = (entry: Omit<ApiLogEntry, 'id' | 'body'> & { body?: unknown }): void => {
 	try {
 		const stored: ApiLogEntry = {
 			...entry,
 			id: nextId++,
+			url: redactUrl(entry.url),
 			body: entry.body === undefined ? undefined : redactSensitive(entry.body)
 		};
 		entries = [stored, ...entries].slice(0, MAX_API_LOG_ENTRIES);

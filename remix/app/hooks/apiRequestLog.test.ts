@@ -71,3 +71,40 @@ test('buildCurlForEntry mirrors the docs curl shape', () => {
 	assert.ok(!getCurl.includes('--data'));
 	assert.ok(!getCurl.includes('Content-Type'));
 });
+
+test('sensitive query parameters are redacted out of the stored url', () => {
+	clearApiCalls();
+	const fakeToken = ['tt', 'not', 'a', 'real', 'pat'].join('_');
+	recordApiCall({
+		...baseEntry,
+		url: `/api/v1/get?token=${fakeToken}&op=list&limit=5`
+	});
+	const [logged] = getApiCalls();
+	assert.equal(logged.url, '/api/v1/get?token=•••&op=list&limit=5');
+	assert.ok(!logged.url.includes(fakeToken), 'the credential must not survive anywhere in the url');
+});
+
+test('url redaction leaves ordinary urls and non-sensitive params untouched', () => {
+	clearApiCalls();
+	recordApiCall({ ...baseEntry, url: '/api/v1/things/feed' });
+	recordApiCall({ ...baseEntry, url: '/api/v1/things/search?q=hello%20world&limit=20' });
+	const urls = getApiCalls().map((entry) => entry.url);
+	assert.ok(urls.includes('/api/v1/things/feed'));
+	assert.ok(urls.includes('/api/v1/things/search?q=hello%20world&limit=20'));
+});
+
+test('redaction survives fragments, valueless params, and encoded names', () => {
+	clearApiCalls();
+	const secret = ['also', 'fake'].join('-');
+	recordApiCall({ ...baseEntry, url: `/x?flag&api%5Fkey=${secret}&ok=1#frag` });
+	assert.equal(getApiCalls()[0].url, '/x?flag&api%5Fkey=•••&ok=1#frag');
+});
+
+test('a curl copied from the log carries no credential', () => {
+	clearApiCalls();
+	const fakeToken = ['tt', 'not', 'real'].join('_');
+	recordApiCall({ ...baseEntry, url: `/api/v1/get?token=${fakeToken}&op=self` });
+	const curl = buildCurlForEntry(getApiCalls()[0], 'https://thingtime.com');
+	assert.ok(!curl.includes(fakeToken), 'copy-as-curl must not leak the token');
+	assert.ok(curl.includes('token=•••'));
+});
