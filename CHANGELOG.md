@@ -19,6 +19,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Made every queued Lopu conflict owner immediately discoverable. Conflict
+  matrices now materialize completely inside a 90-member durable-fleet cap
+  instead of hiding later PRs behind `max-parallel: 3`; overflow stays
+  conflicting for the next event or scheduled scan, and an unavailable queue
+  inventory safely defers dispatch rather than risking GitHub dropping jobs at
+  its 100-pending-member limit. Pre-migration batches with unknowable latent
+  members drain under their distinct legacy title before the new dispatcher
+  admits replacements. — Codex (AI), 2026-08-28
 - Stopped overlapping Lopu conflict detectors from queuing the same PR more
   than once behind the durable repository fleet. Before dispatching a fresh
   batch, the protected handoff now reads GitHub's live concurrency group and

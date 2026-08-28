@@ -189,7 +189,7 @@ run-name: >-
       && inputs.pr_number == ''
       && inputs.pr_batch_b64 != ''
       && inputs.branch == ''
-      && 'Lopu resolves a PR batch from the control plane'
+      && 'Lopu resolves a fully materialized PR batch from the control plane'
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
@@ -1986,7 +1986,10 @@ jobs:
               --jq '
                 .workflow_runs[]
                 | select(.head_branch == "github-actions")
-                | select(.display_title == "Lopu resolves a PR batch from the control plane")
+                | select(
+                    .display_title == "Lopu resolves a PR batch from the control plane"
+                    or .display_title == "Lopu resolves a fully materialized PR batch from the control plane"
+                  )
                 | .id
               ' \
               | sort -un
@@ -2042,6 +2045,31 @@ jobs:
             fi
           fi
 
+          # Runs created before fully materialized matrices intentionally keep
+          # their historical generic title. Their later matrix members are not
+          # exposed by either the run or concurrency-group API, so no detector
+          # can prove which currently latent PRs they own. Preserve the active
+          # run and defer broad replacement dispatch until it drains; the next
+          # event or scheduled sweep then uses the discoverable matrix format.
+          legacy_worker_ids="$(
+            for legacy_status in pending in_progress; do
+              gh api --paginate \
+                "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$legacy_status&per_page=100" \
+                --jq '
+                  .workflow_runs[]
+                  | select(.head_branch == "github-actions")
+                  | select(.actor.login == "github-actions[bot]")
+                  | select(.display_title == "Lopu resolves a PR batch from the control plane")
+                  | .id
+                '
+            done | sort -un
+          )"
+          if [ -n "$legacy_worker_ids" ]; then
+            legacy_label="$(paste -sd, <<<"$legacy_worker_ids")"
+            echo "Legacy Lopu batch run(s) $legacy_label still own latent conflict selections; deferring replacement dispatch until they drain."
+            exit 0
+          fi
+
           # A durable `queue: max` fleet can already contain exact PR owners
           # from an earlier detector whose matrix has started draining. Those
           # workflow runs correctly report `pending`, so cancelling the whole
@@ -2049,9 +2077,12 @@ jobs:
           # again is also wasteful even though each worker's immutable lease
           # makes the duplicate a safe no-op. Read the live concurrency group
           # and remove only PRs that already have a pending/in-progress merge
-          # or rebase owner. If GitHub's read-only queue endpoint is transiently
-          # unavailable, fail open to the existing per-PR admission leases.
+          # or rebase owner. The same inventory also bounds each fresh matrix
+          # below GitHub's 100-pending-member group limit. Keeping ten slots in
+          # reserve absorbs near-simultaneous stack/review maintenance without
+          # silently dropping a conflict job before it reaches a runner.
           fleet_group="lopu-agent-fleet-$REPO"
+          fleet_capacity=90
           fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
           fleet_state=''
           if fleet_state="$(
@@ -2081,13 +2112,47 @@ jobs:
             fi
           else
             sed -n '1,12p' "$RUNNER_TEMP/lopu-fleet-read.err" >&2 || true
-            echo '::notice::Could not read the durable Lopu fleet queue; immutable worker admission will retain correctness.'
+            echo '::notice::Could not read the durable Lopu fleet queue; deferring conflict dispatch to a later repository scan.'
+            rm -f "$RUNNER_TEMP/lopu-fleet-read.err"
+            exit 0
           fi
           rm -f "$RUNNER_TEMP/lopu-fleet-read.err"
 
           if [ "$(jq 'length' <<<"$PRS")" -eq 0 ]; then
             echo 'Every detected conflict already has a durable Lopu merge/rebase owner; no replacement batch was dispatched.'
             exit 0
+          fi
+
+          # `max-parallel` delays matrix expansion: only that many jobs become
+          # visible to the concurrency-group API, leaving every later PR in the
+          # batch latent and therefore impossible for a new detector to dedupe.
+          # Instead, admit a capacity-bounded matrix whose complete membership
+          # materializes in the durable fleet immediately. Any overflow remains
+          # conflicting and is picked up by the next event/scheduled scan.
+          fleet_count="$(jq -r '.total_count // (.group_members | length)' <<<"$fleet_state")"
+          [[ "$fleet_count" =~ ^[0-9]+$ ]] || {
+            echo '::notice::The durable Lopu fleet returned an invalid member count; deferring conflict dispatch.'
+            exit 0
+          }
+          available_slots="$((fleet_capacity - fleet_count))"
+          if [ "$available_slots" -le 0 ]; then
+            echo "Durable Lopu fleet is at its ${fleet_capacity}-member admission cap; deferring all detected conflicts to the next scan."
+            exit 0
+          fi
+          PRS="$(jq -c '
+            sort_by(
+              if .head == "sync/main-into-develop" and .base == "develop"
+              then [0, .number]
+              else [1, .number]
+              end
+            )
+          ' <<<"$PRS")"
+          candidate_count="$(jq 'length' <<<"$PRS")"
+          if [ "$candidate_count" -gt "$available_slots" ]; then
+            deferred_count="$((candidate_count - available_slots))"
+            PRS="$(jq -c --argjson available_slots "$available_slots" \
+              '.[0:$available_slots]' <<<"$PRS")"
+            echo "Durable Lopu fleet has $available_slots admission slot(s); dispatching those PRs and deferring $deferred_count conflict(s) to the next scan."
           fi
 
           # The standing main -> develop synchronizer is repository plumbing:
@@ -5538,10 +5603,10 @@ jobs:
       cancel-in-progress: false
     strategy:
       fail-fast: false
-      # A batch handoff can select up to 200 PRs. Bounding how many matrix jobs
-      # are in flight keeps the durable fleet queue above from overflowing its
-      # pending-job limit, so no discovered PR is silently dropped.
-      max-parallel: 3
+      # The detector caps the complete matrix below the durable fleet's pending
+      # member limit. Do not add `max-parallel`: GitHub would keep later matrix
+      # entries latent and invisible to exact-owner deduplication until a slot
+      # opened, allowing equivalent detector events to queue them again.
       matrix:
         pr: ${{ fromJSON(needs.detect.outputs.prs) }}
     env:
