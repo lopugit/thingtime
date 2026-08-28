@@ -49,10 +49,11 @@ export const listCommunityChannels = async (viewerId: string, communityId: unkno
       : []
   ]);
   const joined = new Set(myMemberships.map((m: any) => String(m.targetId)));
-  const countById = new Map(counts.map((c: any) => [String(c._id), c.count]));
+	const countById = new Map<string, number>(counts.map((c: any) => [String(c._id), Number(c.count) || 0] as const));
   const channels = channelDocs
     .filter((doc: any) => joined.has(doc.shareId) || (doc.crystal?.channelVisibility || 'public') === 'public')
-    .map((doc: any): CommunityChannel => ({
+		.map(
+			(doc: any): CommunityChannel => ({
       id: doc.shareId,
       name: doc.crystal?.name ?? null,
       topic: doc.crystal?.topic ?? null,
@@ -61,6 +62,7 @@ export const listCommunityChannels = async (viewerId: string, communityId: unkno
       memberCount: countById.get(doc.shareId) || 0,
       joined: joined.has(doc.shareId),
       createdAt: new Date(doc.createdAt).toISOString()
-    }));
+			})
+		);
   return { ok: true, channels };
 };
