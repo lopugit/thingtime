@@ -21,7 +21,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
-import { isWearingTryOn, restoredThemeSettings, shouldCaptureTryOnSnapshot, tryOnSnapshotFor } from './themeTryOnCore';
+import { isWearingTryOn, nextTryOnRun, restoredThemeSettings } from './themeTryOnCore';
 import type { WornTheme } from './themeTryOnCore';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
@@ -204,12 +204,13 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // one control that advertises it. Deriving both from persisted state keeps
   // "click again to take it off" true across navigation and reloads.
   //
-  // The held snapshot, not the applied share id, is what marks a run open —
-  // see themeTryOnCore for why the share id alone mislabels a visitor who
-  // simply wears the same theme as the owner.
+  // An open RUN (the held look plus the share id it borrowed), not the applied
+  // share id alone, is what the chip reads — see themeTryOnCore for why the
+  // share id alone mislabels a visitor who simply wears the same theme as the
+  // owner, and why a run has to end once they adopt a look of their own.
   const currentThemeSettings = thingtime?.settings?.theme;
-  const tryOnSnapshot = thingtime?.settings?.themeBeforeTryOn;
-  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, snapshot: tryOnSnapshot });
+  const tryOnRun = thingtime?.settings?.themeBeforeTryOn;
+  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, run: tryOnRun });
 
   const handleWornChipClick = React.useCallback(async () => {
     if (!wornTheme) return;
@@ -218,8 +219,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
       return;
     }
     if (tryingOn) {
-      const snapshot = getThingtime('settings.themeBeforeTryOn');
-      setThingtime('settings.theme', restoredThemeSettings(snapshot, getThingtime('settings.theme')), {
+      const openRun = getThingtime('settings.themeBeforeTryOn');
+      setThingtime('settings.theme', restoredThemeSettings(openRun, getThingtime('settings.theme')), {
         ignoreUndoRedo: true,
         namespace: 'theme'
       });
@@ -233,14 +234,14 @@ export const ProfilePage = (props: ProfilePageProps) => {
         lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
         return;
       }
-      // Capture the visitor's look once per run. Trying on a second profile's
-      // theme while a run is open must not overwrite the original snapshot
-      // with the borrowed theme — but a visitor who arrived already wearing a
-      // shared theme (share link, gallery, cross-device pickup) still gets
-      // that look captured, so take-off returns them to it.
-      if (shouldCaptureTryOnSnapshot(getThingtime('settings.themeBeforeTryOn'))) {
-        setThingtime('settings.themeBeforeTryOn', tryOnSnapshotFor(getThingtime('settings.theme')), { ignoreUndoRedo: true, namespace: 'theme' });
-      }
+      // Open or continue the run, then borrow. Hopping to a second profile
+      // while a run is open advances only the borrowed id, so the original
+      // look stays the revert target — while a visitor who arrived already
+      // wearing a shared theme (share link, gallery, cross-device pickup), or
+      // who has since adopted a look of their own, gets THAT captured, so
+      // take-off returns them to what they were actually wearing.
+      const run = nextTryOnRun(getThingtime('settings.themeBeforeTryOn'), getThingtime('settings.theme'), resp.theme.id);
+      setThingtime('settings.themeBeforeTryOn', run, { ignoreUndoRedo: true, namespace: 'theme' });
       applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
       lopuRef.current({
         title: `Trying on "${resp.theme.name}" 🌈`,
