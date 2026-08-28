@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -z "$repo_root" ] || [ ! -x "$repo_root/scripts/graphify" ]; then
+  exit 0
+fi
+
+changed=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)
+non_graph=$(printf '%s\n' "$changed" | grep -v '^graphify-out/' || true)
+if [ -z "$non_graph" ]; then
+  exit 0
+fi
+
+log_path=$(git rev-parse --path-format=absolute --git-path graphify-cas.log)
+(
+  cd "$repo_root"
+  GRAPHIFY_VIZ_NODE_LIMIT=1000000 scripts/graphify ensure
+) >>"$log_path" 2>&1 &
+
+exit 0

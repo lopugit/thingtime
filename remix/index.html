@@ -14,41 +14,9 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <script>
-      // Pre-paint theme snapshot: apply the last computed --tt-* variables
-      // before React loads so custom themes never flash the defaults.
-      (() => {
-        try {
-          const raw = window.localStorage.getItem('tt-theme-vars');
-          if (!raw) return;
-          const vars = JSON.parse(raw);
-          if (!vars || typeof vars !== 'object') return;
-          for (const key in vars) {
-            if (/^--tt-[\w-]+$/.test(key) && typeof vars[key] === 'string') {
-              document.documentElement.style.setProperty(key, vars[key]);
-            }
-          }
-        } catch (error) {
-          // ignore — defaults from the stylesheet apply
-        }
-      })();
-    </script>
-    <script>
-      (() => {
-        const host = window.location.hostname;
-        const prefix = host === 'localhost' || host === '127.0.0.1'
-          ? '[LC]'
-          : host.endsWith('.vercel.app')
-            ? '[VC]'
-            : host.endsWith('.ts.net')
-              ? '[TS]'
-              : '';
-
-        if (prefix) {
-          document.title = `${prefix} Thingtime`;
-        }
-      })();
-    </script>
+    <!-- Render-blocking boot (theme snapshot + tab-title prefix). External file
+         so the CSP can stay `script-src 'self'` with no inline-script hashes. -->
+    <script src="/tt-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

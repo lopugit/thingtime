@@ -8,6 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 // /apps — browse everything each connected app stores in your account.
 // Left: the app roster (from things, so orphaned data stays visible).
@@ -19,7 +20,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 type PublicThingWire = {
   id: string;
   thingtime: string[];
-  author: { id: string; username: string } | null;
+  author: { id: string; username: string; displayName?: string | null; temporary?: boolean } | null;
   visibility: string;
   acl: string[];
   targetId: string | null;
@@ -67,7 +68,8 @@ const EntryCard = ({
         </Badge>
         {thing.author && !mine && (
           <Text fontSize="xs" opacity={0.7}>
-            by @{thing.author.username}
+            by {getUserDisplayName(thing.author)}
+            {thing.author.temporary ? ` · ${getUserIdentityDetail(thing.author)}` : ''}
           </Text>
         )}
         <Text fontSize="xs" opacity={0.55} ml="auto">
