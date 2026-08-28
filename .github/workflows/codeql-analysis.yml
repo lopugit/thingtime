@@ -1,22 +1,48 @@
-name: CodeQL all branches
+name: Lopu CodeQL all branches
 
 # Trigger-only listener. The reviewed executable implementation lives on the
 # protected github-actions branch.
 on:
   pull_request:
+  # This default-branch listener exists independently of the PR's base branch.
+  # The target-context lane executes only the protected metadata handoff: it
+  # never analyzes the base branch or checks out untrusted PR content with the
+  # target event's write-capable token. A separate workflow_dispatch run then
+  # analyzes the exact immutable PR head without secrets.
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
     branches: ["**"]
   schedule:
     - cron: "17 3 * * 1"
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open PR to scan; leave blank to scan the selected branch"
+        required: false
+        default: ""
+        type: string
+      expected_head_sha:
+        description: "Optional exact live head SHA for stale-dispatch rejection"
+        required: false
+        default: ""
+        type: string
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   packages: read
   pull-requests: read
   security-events: write
 
 jobs:
+  pr-handoff:
+    if: github.event_name == 'pull_request_target'
+    uses: lopugit/thingtime/.github/workflows/codeql-pr-handoff.yml@github-actions
+
   control-plane:
+    if: github.event_name != 'pull_request_target'
     uses: lopugit/thingtime/.github/workflows/codeql-analysis.yml@github-actions
+    with:
+      pr_number: ${{ inputs.pr_number || '' }}
+      expected_head_sha: ${{ inputs.expected_head_sha || '' }}

@@ -847,6 +847,10 @@ export const ensureIndexes = async () => {
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
         col('sessions').createIndex({ 'meta.clientId': 1 }, { partialFilterExpression: { purpose: 'app' } }),
+        // Rotating ChatGPT refresh grants are joined to their encrypted
+        // connection record by this opaque session id. Keep final disconnects
+        // bounded to that one connection rather than sweeping all sessions.
+        col('sessions').createIndex({ userId: 1, purpose: 1, 'meta.connectionSessionJti': 1 }),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         col('rosters').createIndex({ rosterId: 1 }, { unique: true }),
