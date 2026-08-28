@@ -5,7 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
-import { resolveAiPreferredClaudeModel } from '../settings/prConflictResolverModelWaterfallCore';
+import { resolveAiPreferredAnthropicChoice, toAnthropicEffort } from '../settings/prConflictResolverModelWaterfallCore';
 import type { ModerationVerdict } from './moderationCore';
 import { sanitizeModerationCategories } from './moderationCore';
 import type { ModerationProvider } from './providers';
@@ -57,10 +57,14 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 			return lastResolvedModel;
 		},
 		analyzeImage: async ({ bytes, contentType }) => {
-			const model = resolveAiPreferredClaudeModel(await getAiPreferredModelWaterfall(), providerDefaultModel);
-			lastResolvedModel = model;
+			const choice = resolveAiPreferredAnthropicChoice(await getAiPreferredModelWaterfall(), providerDefaultModel);
+			const effort = toAnthropicEffort(choice.effort);
+			lastResolvedModel = choice.model;
+			// Moderation is a background classifier: the Admin entry's model and
+			// effort apply, but fast mode (premium priced) is deliberately ignored.
 			const response = await client.messages.create({
-				model,
+				model: choice.model,
+				...(effort ? { output_config: { effort } } : {}),
 				max_tokens: 2048,
 				messages: [
 					{
@@ -101,7 +105,7 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 				// Unparseable answer: keep the attachment un-stamped (analysis error
 				// path) rather than inventing a verdict — the orchestrator leaves the
 				// doc pending so a sweep can retry.
-				throw new Error(`moderation: unparseable classifier response for model ${model}`);
+				throw new Error(`moderation: unparseable classifier response for model ${choice.model}`);
 			}
 			return verdict;
 		}
