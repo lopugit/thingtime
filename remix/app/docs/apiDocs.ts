@@ -1,3 +1,5 @@
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type ApiAuthMode = 'none' | 'optional' | 'session' | 'bearer' | 'session-or-bearer';
@@ -116,7 +118,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/ci/dispatch',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -176,6 +178,139 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           missing: ['THINGTIME_GITHUB_APP_PRIVATE_KEY']
         }
       }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-mcp',
+    group: 'integrations',
+    title: 'ChatGPT MCP gateway',
+    endpoint: CHATGPT_MCP_PATH,
+    summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
+    detail:
+      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. Initialization returns concise server-wide instructions that require explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
+    methods: ['POST'],
+    steps: [
+      'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
+      'POST JSON-RPC initialize, tools/list, and tools/call requests to this endpoint.',
+      'Use a write tool only after the person in the chat confirms the intended change.'
+    ],
+    requestExamples: [
+      {
+        name: 'List tools',
+        description: 'MCP JSON-RPC discovery after initialize.',
+        method: 'POST',
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }] } }
+      },
+      {
+        status: 401,
+        description: 'MCP OAuth challenge.',
+        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"' },
+        body: { jsonrpc: '2.0', id: 1, result: { isError: true, _meta: { 'mcp/www_authenticate': ['Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"'] } } }
+      }
+    ],
+    notes: [
+      'This route does not proxy arbitrary URLs or generic Thingtime API paths. Endpoint origins and operations are explicitly allowlisted.',
+      'The capability manifest names independently versioned features: chatgpt.mcp, chatgpt.oauth, chatgpt.connections, chatgpt.things.read, and chatgpt.things.write.'
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-authorize',
+    group: 'integrations',
+    title: 'ChatGPT OAuth authorization',
+    endpoint: CHATGPT_AUTHORIZE_PATH,
+    summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
+    detail:
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to the approved callback. POST submits that form; credentials are never included in the redirect, OAuth code, or client transcript.',
+    auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Create least-privilege personal access tokens in each Thingtime account.',
+      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the first-party browser page.',
+      'The browser redirects to ChatGPT with a short-lived code and original state.'
+    ],
+    requestExamples: [
+      {
+        name: 'Open the OAuth connection page',
+        description: 'ChatGPT uses a random state and S256 PKCE challenge.',
+        method: 'GET',
+        query: {
+          response_type: 'code',
+          client_id: 'https://chatgpt.com',
+          redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+          resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp',
+          code_challenge: '<S256-challenge>',
+          code_challenge_method: 'S256',
+          state: '<random-state-at-least-16-characters>',
+          scope: 'thingtime offline_access'
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'First-party form requesting named endpoint/token pairs.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
+      { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-register',
+    group: 'integrations',
+    title: 'ChatGPT OAuth dynamic client registration',
+    endpoint: CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
+    summary: 'Register a bounded loopback public client when a Codex client cannot use CIMD.',
+    detail:
+      'OAuth Dynamic Client Registration is a compatibility fallback for Codex clients that do not yet support ChatGPT Client ID Metadata Documents. The endpoint accepts one to eight exact http://127.0.0.1:<port>/callback loopback redirect URIs only, returns a signed opaque public client ID, and never accepts a custom scheme, localhost alias, web URL, query, fragment, or credentialed redirect. The resulting client remains bound to those same registered redirect URIs during authorization-code exchange.',
+    auth: { mode: 'none', description: 'Public-client registration is safe because every accepted callback is an exact local loopback URL.' },
+    methods: ['POST'],
+    steps: ['Register exact loopback callbacks before authorization.', 'Use the returned opaque client_id for the matching authorization-code flow.', 'Discard the client ID when the local client no longer needs the connection.'],
+    requestExamples: [
+      {
+        name: 'Register a Codex loopback client',
+        description: 'The client supplies its exact ephemeral local callback before authorization.',
+        method: 'POST',
+        body: { redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' }
+      }
+    ],
+    responseExamples: [
+      { status: 201, description: 'A signed public client ID bound to the supplied loopback callback.', body: { client_id: '<signed-opaque-client-id>', redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' } },
+      { status: 400, description: 'The client attempted an unsupported redirect URI.' }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-token',
+    group: 'integrations',
+    title: 'ChatGPT OAuth token exchange',
+    endpoint: CHATGPT_TOKEN_PATH,
+    summary: 'Exchange an OAuth code or rotate a refresh credential for an MCP-only bridge credential.',
+    detail:
+      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. Success always returns a 30-day bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token.',
+    auth: { mode: 'none', description: 'The one-time code, exact binding, and PKCE verifier are the public-client proof.' },
+    methods: ['POST'],
+    steps: ['Verify state and issuer at the callback.', 'Exchange with the original S256 verifier.', 'Store only the returned bridge credential and, when issued, replace the previous refresh credential atomically.'],
+    requestExamples: [
+      {
+        name: 'Exchange authorization code',
+        description: 'Standard OAuth form-encoded public client request.',
+        method: 'POST',
+        body: { grant_type: 'authorization_code', code: '<one-time-code>', client_id: 'https://chatgpt.com/oauth/client.json', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp', code_verifier: '<43-to-128-character-pkce-verifier>' }
+      },
+      {
+        name: 'Rotate an offline-access credential',
+        description: 'The former refresh token becomes invalid as this request succeeds.',
+        method: 'POST',
+        body: { grant_type: 'refresh_token', refresh_token: '<single-use-refresh-jwt>', client_id: 'https://chatgpt.com/oauth/client.json', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp' }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Revocable MCP-only bridge access token, plus a replacement refresh credential when offline access was granted.', body: { access_token: '<bridge-jwt>', token_type: 'Bearer', expires_in: 2592000, refresh_token: '<rotating-refresh-jwt>', scope: 'thingtime offline_access' } },
+      { status: 400, description: 'Invalid, expired, used, or mismatched authorization or refresh grant.', body: { error: 'invalid_grant' } }
     ]
   }),
   endpoint({
@@ -1474,16 +1609,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
     summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the closed model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. The list must contain 1 to 3 unique known model ids and include default as the hard fallback. Missing or corrupt stored settings resolve safely to ["default"].',
+      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique and include default as the hard fallback. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to read the current waterfall and closed model catalog.',
+      'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
-      'Use only default, claude-fable-5, and claude-opus-5; ids must be unique.',
+      'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
       'Always include default so the resolver has a final provider-selected fallback.'
     ],
     requestExamples: [
@@ -1493,24 +1628,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'GET'
       },
       {
-        name: 'Prefer Opus, then Fable, then default',
-        description: 'Replace the waterfall as an administrator.',
+        name: 'Prefer fast high-effort Opus, then Fable, then GPT-5.6 Sol, then default',
+        description: 'Replace the waterfall as an administrator; any number of unique entries is allowed.',
         method: 'POST',
-        body: { waterfall: ['claude-opus-5', 'claude-fable-5', 'default'] }
+        body: { waterfall: ['claude-opus-5:high:fast', 'claude-fable-5', 'gpt-5.6-sol:ultra', 'default'] }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Current public AI workflow settings.',
+        description: 'Current public AI workflow settings. models lists every base model; the sample below is truncated.',
         body: {
           ok: true,
           key: 'Thingtime.PRConflictAutoResolverModelWaterfall',
           waterfall: ['default'],
           models: [
-            { id: 'default', label: 'Default model', effort: 'max' },
-            { id: 'claude-fable-5', label: 'Claude Fable 5', effort: 'max' },
-            { id: 'claude-opus-5', label: 'Claude Opus 5', effort: 'max' }
+            { id: 'default', label: 'Default model', provider: 'default', efforts: [], speeds: ['normal'] },
+            {
+              id: 'claude-opus-5',
+              label: 'Claude Opus 5',
+              provider: 'anthropic',
+              efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+              speeds: ['normal', 'fast']
+            },
+            {
+              id: 'gpt-5.6-sol',
+              label: 'GPT-5.6 Sol',
+              provider: 'openai',
+              efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+              speeds: ['normal', 'fast']
+            }
           ]
         }
       },
@@ -5415,6 +5562,83 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'oauth-desktop-authorize',
+    group: 'embed',
+    title: 'Desktop authorize (issue PKCE code)',
+    endpoint: '/api/v1/oauth/desktop/authorize',
+    summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback callback.',
+    detail:
+      'POST from the first-party consent page with clientId, redirectUri, S256 codeChallenge, state, and approved scopes. The callback must be plain HTTP on 127.0.0.1 or [::1] with an explicit unprivileged port and an allowlisted exact origin. The response contains a five-minute code and echoed state; it cannot authenticate a normal Thingtime endpoint and is consumed once at /api/v1/oauth/token.',
+    auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
+    methods: ['POST'],
+    steps: [
+      'Bind the loopback listener before opening the system browser.',
+      'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, and state.',
+      'Verify the callback state before exchanging its code.'
+    ],
+    requestExamples: [
+      {
+        name: 'Issue one-time code',
+        description: 'Commander consent with private cloud settings storage.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          codeChallenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          codeChallengeMethod: 'S256',
+          state: 'opaque-request-state',
+          scope: 'profile.username app-data',
+          scopes: ['profile.username', 'app-data']
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Code issued; the consent page navigates to the local callback.',
+        body: { ok: true, redirectTo: 'http://127.0.0.1:45432/oauth/callback?code=<one-time-code>&state=opaque-request-state' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-token',
+    group: 'embed',
+    title: 'Desktop token exchange',
+    endpoint: '/api/v1/oauth/token',
+    summary: 'Exchange a one-time desktop authorization code with its S256 verifier.',
+    detail:
+      'POST { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native apps are public clients: an exact callback, five-minute one-time code, and PKCE verifier replace a client secret. Success returns the existing revocable, origin-bound app token.',
+    auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
+    methods: ['POST'],
+    steps: [
+      'Verify callback state.',
+      'Exchange the code with the original verifier and exact callback URI.',
+      'Store accessToken in the OS credential vault.'
+    ],
+    requestExamples: [
+      {
+        name: 'Exchange',
+        description: 'Consume the loopback code once.',
+        method: 'POST',
+        body: {
+          grantType: 'authorization_code',
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          code: '<one-time-code>',
+          codeVerifier: '<43-to-128-character-pkce-verifier>'
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'App token minted.', body: { ok: true, accessToken: '<app-scoped-jwt>', tokenType: 'Bearer' } },
+      {
+        status: 400,
+        description: 'Wrong verifier, mismatch, expiry, or replay.',
+        body: { ok: false, error: 'Authorization code is invalid, expired, already used, or does not match this request' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'oauth-sandbox',
     group: 'embed',
     title: 'Sandbox token (build before registering)',
@@ -6007,7 +6231,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
-      "GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
@@ -6366,7 +6590,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
       'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
       'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
-      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
+      'The response carries things (generic projections; ranked text results include their query-relative rankScore), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
       'Handle 400 invalid grammar and 429 rate-limited.'
     ],
     requestExamples: [
@@ -6446,7 +6670,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               crystal: { type: 'text', text: 'Standing desk, walnut top, 60–130cm' },
               tags: ['furniture'],
               acl: ['tt:all'],
-              visibility: 'public'
+              visibility: 'public',
+              rankScore: 4.25
             }
           ],
           posts: { thing_123: { id: 'thing_123', type: 'text', text: 'Standing desk, walnut top, 60–130cm' } },
@@ -6489,7 +6714,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
 			'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
       'The target thing (post or comment) must be visible to the current user.',
-			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
+			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card. A temporarily pending comment remains visible and counted for its author while moderation completes; other viewers do not see it until release.',
       'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [

@@ -7,7 +7,6 @@ import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
-import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
@@ -95,7 +94,9 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
-                    : baseTitle;
+                    : pathname === '/branding'
+                      ? `${baseTitle} - Brand resources`
+                      : baseTitle;
 
       document.title = routeTitle;
     }
@@ -110,7 +111,6 @@ export default function App() {
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
 
-  useIcons();
 
   return (
     <ChakraWrapper>
