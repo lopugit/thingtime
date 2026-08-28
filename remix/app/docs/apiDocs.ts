@@ -8147,6 +8147,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST { action: "<shareId or your actionKey>", inputs: { ... } }.',
+      'Add source: "component" when the run is DELEGATED — fired by a control inside rendered component markup rather than chosen from the ' +
+        'inspector. That narrows resolution to actions you own, so a template someone else authored cannot lend your authority to their ' +
+        'program by naming its id. Omit it for a deliberate run, which may also resolve any action you can read.',
       'Inputs are validated against the action’s typed descriptors (400 on mismatch).',
       'The executor runs the steps inside the budget; refs like "$input.name" and "$step.1.id" substitute whole values.',
       'Read status ("ok" | "error"), result, trace, and budget usage from the response.',

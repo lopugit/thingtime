@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 
+import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
@@ -790,11 +791,13 @@ export function useApi() {
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {
-      // execute one action inside its capability + budget envelope
-      run: useCallback(
-        async (args) => asyncFetcher.submit({ action: args?.action, inputs: args?.inputs }, { action: '/api/v1/actions/run' }),
-        [asyncFetcher]
-      ),
+      // execute one action inside its capability + budget envelope.
+      // The body comes from the shared pure builder rather than an inline key
+      // list: `source` is a security control (it narrows server-side
+      // resolution to actions the viewer owns — execute.ts ownedOnly), and an
+      // inline list silently dropped it, disarming the delegated ttAction
+      // path in every browser while the API-level battery stayed green.
+      run: useCallback(async (args) => asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }), [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })
