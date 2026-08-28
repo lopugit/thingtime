@@ -5,6 +5,8 @@ import {
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
 	MAX_ACTION_RUN_ERROR_CHARS,
+	MAX_ACTION_RUN_HISTORY,
+	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
 	MAX_ACTION_TRACE_ENTRIES,
 	parseActionRef,
@@ -43,7 +45,10 @@ import {
 //   a clear error before the budget even drains).
 // - Every run lands one protected action-run thing (targetId = the action),
 //   owner-private, storageClass 'control' like the CI event family —
-//   operational telemetry with hard size caps, not billable content.
+//   operational telemetry with hard size caps, not billable content. Because
+//   'control' also means "outside the storage ledger", the trail is bounded by
+//   COUNT as well as by bytes: writeRunRecord keeps the newest
+//   MAX_ACTION_RUNS_RETAINED per (owner, action).
 
 export type ActionRunTraceEntry = {
 	step: string;
@@ -583,6 +588,36 @@ const writeRunRecord = async (
 			storageClass: 'control'
 		} as any)
 		.catch(() => null); // a failed audit write must not mask the run result
+	// Bound accumulation (issueAppToken posture): keep the newest N records for
+	// this (owner, action) and drop the rest. The CI-event precedent this kind
+	// borrows its storageClass from is written by trusted webhook deliveries as
+	// ownerId 'system'; THIS one is minted by an authenticated user at up to
+	// actions.run's 60/min, and 'control' takes it out of the storage ledger
+	// entirely — so per-record byte caps alone leave the trail unbounded.
+	// Same scope, filter and sort as listActionRuns, so what survives is
+	// exactly what the history endpoint can still show.
+	//
+	// Best-effort like the insert: a failed prune must not mask the run result.
+	// Racing runs of one action can briefly overshoot N (each keeps its own
+	// newest-N view); the next run prunes the drift. Deleting directly is
+	// correct here for the same reason inserting directly is — these records
+	// were never ledger-accounted, so there is nothing to refund.
+	try {
+		const scope = { ownerId: viewer!.id, thingtime: 'action-run', targetId: actionId };
+		const keep = await things
+			.find(scope as any, { projection: { shareId: 1 } })
+			.sort({ createdAt: -1, shareId: 1 })
+			.limit(MAX_ACTION_RUNS_RETAINED)
+			.toArray();
+		// Never widen to "delete everything" on an empty read: $nin: [] matches
+		// every doc in scope, so a read that came back empty for any reason
+		// other than "there are none" would take the whole trail with it.
+		if (keep.length >= MAX_ACTION_RUNS_RETAINED) {
+			await things.deleteMany({ ...scope, shareId: { $nin: keep.map((doc: any) => doc.shareId) } } as any);
+		}
+	} catch {
+		// leave the surplus for the next run to prune
+	}
 	return runId;
 };
 
@@ -706,7 +741,7 @@ export const listActionRuns = async (
 	query: { action?: string | null; limit?: number }
 ): Promise<Fail | { ok: true; runs: ActionRunSummary[] }> => {
 	if (!viewer) return fail(401, 'Sign in to see your action runs');
-	const limit = Math.max(1, Math.min(Number(query.limit) || 20, 50));
+	const limit = Math.max(1, Math.min(Number(query.limit) || 20, MAX_ACTION_RUN_HISTORY));
 	const filter: Record<string, unknown> = { ownerId: viewer.id, thingtime: 'action-run' };
 	if (typeof query.action === 'string' && query.action.trim()) filter.targetId = query.action.trim();
 	const things = await getThingsCollection();

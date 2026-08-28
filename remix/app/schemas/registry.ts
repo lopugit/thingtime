@@ -1111,6 +1111,20 @@ export const MAX_ACTION_CONCAT_PARTS = 12;
 export const MAX_ACTION_SEARCH_LIMIT = 50;
 export const MAX_ACTION_TRACE_ENTRIES = 60;
 export const MAX_ACTION_RUN_ERROR_CHARS = 2000;
+// The most run records GET /api/v1/actions/runs will ever hand back in one
+// response — the ceiling the caller's `limit` is clamped to.
+export const MAX_ACTION_RUN_HISTORY = 50;
+// Retention for the run-record trail, per (owner, action). The records are
+// the ONE artifact of a run that is written outside createThing (protected
+// kind, direct insert) and stamped storageClass 'control', so they are
+// excluded from the storage ledger by isBillableStorageThing — neither
+// quota-admitted nor billed. Without a bound, `actions.run` (60/min) is a
+// standing 86k-records-per-day-per-account writer of unaccounted storage,
+// each record carrying up to maxInputBytes + maxResultBytes. The executor
+// therefore prunes to the newest N after each write. Keep this at or above
+// MAX_ACTION_RUN_HISTORY so retention can never drop a record the history
+// endpoint would still show.
+export const MAX_ACTION_RUNS_RETAINED = 50;
 export const ACTION_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // Server-enforced ceilings for the per-invocation envelope. Authors may lower
 // every knob; these are the hard caps the executor clamps against.
@@ -1239,7 +1253,9 @@ const actionRunSchema: ThingtimeSchema = {
 		'consumed (operations, depth, child actions), a size-capped echo of the inputs and ' +
 		'result, and a per-step trace — the inspectable "what actually happened" half of the ' +
 		'action contract. Direct create/update/delete through the generic things routes is ' +
-		'refused.',
+		'refused. Operational telemetry, so the trail is retained rather than kept forever: the ' +
+		`executor keeps the newest ${MAX_ACTION_RUNS_RETAINED} records per action per owner and ` +
+		'prunes older ones after each run.',
 	fields: [
 		{ name: 'status', type: 'enum', required: true, values: ['ok', 'error'], description: 'Whether the run completed or failed.' },
 		{ name: 'startedAt', type: 'date', required: true, description: 'When the invocation began.' },

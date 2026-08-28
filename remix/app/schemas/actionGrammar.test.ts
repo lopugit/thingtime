@@ -3,6 +3,8 @@ import { test } from 'node:test';
 
 import {
 	ACTION_LIMIT_CEILINGS,
+	MAX_ACTION_RUN_HISTORY,
+	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
 	deriveActionEffects,
 	parseActionRef,
@@ -234,4 +236,18 @@ test('input defaults must be congruent with their declared type', () => {
 		]
 	});
 	assert.equal(ok.ok, true, 'congruent defaults save');
+});
+
+// action-run records are the one artifact of a run written outside createThing
+// (protected kind, direct insert) and stamped storageClass 'control', which
+// takes them out of the storage ledger entirely — so the executor bounds the
+// trail by COUNT after each write. Retention must never cut below what the
+// history endpoint still serves, or /actions would list runs that the next run
+// silently deleted.
+test('run retention never drops a record the history endpoint would still show', () => {
+	assert.ok(
+		MAX_ACTION_RUNS_RETAINED >= MAX_ACTION_RUN_HISTORY,
+		`retention (${MAX_ACTION_RUNS_RETAINED}) must cover the history page size (${MAX_ACTION_RUN_HISTORY})`
+	);
+	assert.ok(Number.isInteger(MAX_ACTION_RUNS_RETAINED) && MAX_ACTION_RUNS_RETAINED > 0, 'retention is a positive integer');
 });

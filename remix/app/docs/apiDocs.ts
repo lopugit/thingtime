@@ -8192,7 +8192,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'action-run things are PROTECTED (executor-minted only, invisible to the generic thing reads), so run ' +
       'history has this dedicated read model: the signed-in caller’s own runs, optionally filtered to one action ' +
       'via action=<shareId>, newest first, limit ≤ 50. Each run carries status, startedAt, durationMs, budget ' +
-      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders.',
+      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders. ' +
+      'The trail is retained, not permanent: the executor keeps the newest 50 records per action per owner and ' +
+      'prunes older ones after each run, so treat run history as a rolling window rather than a permanent log.',
     auth: {
       mode: 'session',
       description: 'Session cookie required; you only ever see your own runs.'
