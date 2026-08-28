@@ -10,11 +10,14 @@ import {
   Select,
   Text
 } from '@chakra-ui/react';
-import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
+import { Braces, ExternalLink, Eye, Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'react-router';
 
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { PostCard } from '~/components/Feed/PostCard';
+import type { PostChange } from '~/components/Feed/feedTypes';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { useLopu } from '~/components/Lopu/useLopu';
 import {
   SEARCHABLE_CRYSTAL_KINDS,
@@ -27,6 +30,7 @@ import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localC
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import {
   ConditionRowsEditor,
   ROOT_FIELD_SUGGESTIONS,
@@ -42,6 +46,7 @@ import type {
   SearchResponse,
   SearchThing
 } from './searchTypes';
+import { thingDetailPath } from './commanderSearch';
 
 // The /search page — the Commander search bar, grown up. A ranked text search
 // (Google-style) over every visible thing, plus a minimalist query builder
@@ -144,14 +149,14 @@ function PersonCard({ person }: { person: SearchPerson }) {
         {person.avatarUrl ? (
           <img alt="" src={person.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <Text fontSize="sm">{(person.displayName || person.username).slice(0, 1).toUpperCase()}</Text>
+          <Text fontSize="sm">{getUserDisplayName(person).slice(0, 1).toUpperCase()}</Text>
         )}
       </Center>
       <Box minWidth={0}>
         <Text color="var(--tt-text, #33333c)" fontSize="sm" fontWeight="600" isTruncated>
-          {person.displayName || person.username}
+          {getUserDisplayName(person)}
           <Text as="span" color="var(--tt-muted, #9a9aa6)" fontWeight="400" ml={1.5}>
-            @{person.username}
+            {getUserIdentityDetail(person)}
           </Text>
         </Text>
         {person.bio ? (
@@ -187,6 +192,27 @@ const previewValue = (value: unknown): string => {
     return String(value);
   }
 };
+
+function RankedMatchScore({ score }: { score?: number }) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  const display = score.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  const label = `Ranked match score: ${display}`;
+  return (
+    <Text
+      aria-label={label}
+      color="var(--tt-muted, #9a9aa6)"
+      fontFamily="mono"
+      fontSize="10px"
+      fontWeight="500"
+      letterSpacing="0.02em"
+      opacity={0.72}
+      title={label}
+      whiteSpace="nowrap"
+    >
+      ranked match · {display}
+    </Text>
+  );
+}
 
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
   // schemaId is internal provenance (the schema thing's shareId) — the
@@ -258,9 +284,34 @@ const ThingResultCard = React.memo(function ThingResultCard({
             #{tag}
           </Badge>
         ))}
-        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
-          {thing.author ? `@${thing.author.username}` : 'unknown'} · {when}
-        </Text>
+        <Flex
+          align="center"
+          gap={2}
+          marginLeft={{ base: 0, sm: 'auto' }}
+          width={{ base: '100%', sm: 'auto' }}
+          wrap={{ base: 'wrap', sm: 'nowrap' }}
+        >
+          <Flex align="center" gap={2} justify="space-between" width={{ base: '100%', sm: 'auto' }}>
+            <RankedMatchScore score={thing.rankScore} />
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto" whiteSpace="nowrap">
+              {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+            </Text>
+          </Flex>
+          <Flex
+            as={RouterLink}
+            align="center"
+            aria-label={`Open ${title || thing.thingtime[0] || 'thing'}`}
+            color="var(--tt-text, #5a5a66)"
+            fontSize="xs"
+            gap={1}
+            marginLeft={{ base: 'auto', sm: 0 }}
+            textDecoration="underline"
+            to={thingDetailPath(thing.id)}
+          >
+            Open thing
+            <ExternalLink size={11} />
+          </Flex>
+        </Flex>
       </Flex>
       {title ? (
         <Text color="var(--tt-text, #33333c)" fontSize="md" mb={2} whiteSpace="pre-wrap">
@@ -275,6 +326,72 @@ const ThingResultCard = React.memo(function ThingResultCard({
           <Text>{post.shareCount} shares</Text>
         </Flex>
       ) : null}
+    </Box>
+  );
+});
+
+const StandardThingResult = React.memo(function StandardThingResult({
+  thing,
+  post,
+  onPostChanged
+}: {
+  thing: SearchThing;
+  post: SearchPost | null;
+  onPostChanged: (id: string, change: PostChange) => void;
+}) {
+  const handlePostChanged = React.useCallback(
+    (change: PostChange) => onPostChanged(thing.id, change),
+    [onPostChanged, thing.id]
+  );
+
+  if (post) {
+    return (
+      <Box>
+        {typeof thing.rankScore === 'number' ? (
+          <Flex justify="flex-end" mb={1} px={1}>
+            <RankedMatchScore score={thing.rankScore} />
+          </Flex>
+        ) : null}
+        <PostCard post={post} onChanged={handlePostChanged} />
+      </Box>
+    );
+  }
+
+  const created = new Date(thing.createdAt);
+  const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
+  const label =
+    (typeof thing.crystal?.name === 'string' && thing.crystal.name) ||
+    (typeof thing.crystal?.title === 'string' && thing.crystal.title) ||
+    thing.thingtime[0] ||
+    'Thing';
+
+  return (
+    <Box {...CARD_STYLES} p={4}>
+      <Flex align="center" gap={2} mb={3} wrap="wrap">
+        {thing.thingtime.map((id) => (
+          <Badge key={id} colorScheme="purple" fontFamily="mono" textTransform="none">
+            {id}
+          </Badge>
+        ))}
+        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
+          {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+        </Text>
+        <RankedMatchScore score={thing.rankScore} />
+        <Flex
+          as={RouterLink}
+          align="center"
+          aria-label={`Open ${label}`}
+          color="var(--tt-text, #5a5a66)"
+          fontSize="xs"
+          gap={1}
+          textDecoration="underline"
+          to={thingDetailPath(thing.id)}
+        >
+          Open thing
+          <ExternalLink size={11} />
+        </Flex>
+      </Flex>
+      <ThingView label={label} thing={thing.crystal} />
     </Box>
   );
 });
@@ -307,6 +424,7 @@ export const SearchPage = () => {
   const [rows, setRows] = React.useState<ConditionRow[]>(!freshFromUrl && cached?.rows?.length ? cached.rows : []);
   const [kind, setKind] = React.useState(freshFromUrl ? '' : cached?.kind || '');
   const [sort, setSort] = React.useState(freshFromUrl ? 'auto' : cached?.sort || 'auto');
+  const [presentation, setPresentation] = React.useState<'standard' | 'data'>('standard');
 
   // optimistic first paint: last-known results render instantly from
   // localStorage and simply stay — nothing refetches until the user (or a
@@ -711,6 +829,26 @@ export const SearchPage = () => {
     [runSearch]
   );
 
+  const updateResultPost = React.useCallback((id: string, change: PostChange) => {
+    if (change === null) {
+      setPosts((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setThings((prev) => prev.filter((thing) => thing.id !== id));
+      return;
+    }
+    setPosts((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+      const next = typeof change === 'function' ? change(current) : change;
+      if (!next) return prev;
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
   // the count is a visibility-superset approximation (private-to-others docs
   // can be counted but never shown), so present it as such
   const totalLabel =
@@ -969,13 +1107,51 @@ export const SearchPage = () => {
         />
 
         {/* results */}
-        <Flex align="baseline" gap={2}>
+        <Flex
+          align={{ base: 'stretch', sm: 'center' }}
+          gap={3}
+          justify="space-between"
+          direction={{ base: 'column', sm: 'row' }}
+        >
           {totalLabel ? (
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
               {totalLabel}
               {ranked ? ' · best match first' : sort === 'oldest' ? ' · oldest first' : ' · newest first'}
             </Text>
           ) : null}
+          <Flex
+            align="center"
+            aria-label="Search result view"
+            background="var(--tt-surface-alt, #f5f5f7)"
+            border="1px solid var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-sm, 9px)"
+            gap={1}
+            marginLeft={{ base: 0, sm: 'auto' }}
+            p={1}
+            role="group"
+            width={{ base: '100%', sm: 'auto' }}
+          >
+            <Button
+              aria-pressed={presentation === 'standard'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Eye size={13} />}
+              onClick={() => setPresentation('standard')}
+              size="xs"
+              variant={presentation === 'standard' ? 'solid' : 'ghost'}
+            >
+              Standard
+            </Button>
+            <Button
+              aria-pressed={presentation === 'data'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Braces size={13} />}
+              onClick={() => setPresentation('data')}
+              size="xs"
+              variant={presentation === 'data' ? 'solid' : 'ghost'}
+            >
+              Data
+            </Button>
+          </Flex>
         </Flex>
 
         {people.length ? (
@@ -992,9 +1168,18 @@ export const SearchPage = () => {
         ) : null}
 
         <Flex direction="column" gap={3}>
-          {things.map((thing) => (
-            <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
-          ))}
+          {things.map((thing) =>
+            presentation === 'standard' ? (
+              <StandardThingResult
+                key={thing.id}
+                onPostChanged={updateResultPost}
+                post={posts[thing.id] || null}
+                thing={thing}
+              />
+            ) : (
+              <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
+            )
+          )}
           {/* while a ?schema deep link resolves, neither copy is true yet —
               hold the box until its search settles (which strips ?schema) */}
           {!things.length && !people.length && !loading && !urlSchema ? (
