@@ -12,6 +12,8 @@ export type ApiLogEntry = {
 	/** HTTP status; 0 when the request never got a response (network error). */
 	status: number;
 	ok: boolean;
+	/** True when the caller aborted the request — a cancellation, not a failure. */
+	aborted?: boolean;
 	durationMs: number;
 	/** JSON request body, already redacted — only kept for curl generation. */
 	body?: unknown;
@@ -117,6 +119,24 @@ export const clearApiCalls = (): void => {
 			// ignore
 		}
 	});
+};
+
+export type ApiStatusTone = 'ok' | 'warn' | 'danger' | 'muted';
+
+/**
+ * How a logged call should read in the panel. A deliberate cancellation is not
+ * a failure: the app aborts in-flight GETs on unmount and on re-poll all over
+ * (thing.tsx, CIControlDashboard, SensitiveThingReveal, useLopu), and every one
+ * of those callers already treats AbortError as a non-event. Painting them the
+ * same red as a dead network would send a reader chasing a request that was
+ * fine — in the one panel whose whole job is to report honestly.
+ */
+export const describeApiStatus = (entry: Pick<ApiLogEntry, 'status' | 'aborted'>): { label: string; tone: ApiStatusTone } => {
+	if (entry.aborted) return { label: 'cancelled', tone: 'muted' };
+	if (entry.status === 0) return { label: '✕', tone: 'danger' };
+	if (entry.status >= 500) return { label: String(entry.status), tone: 'danger' };
+	if (entry.status >= 400) return { label: String(entry.status), tone: 'warn' };
+	return { label: String(entry.status), tone: 'ok' };
 };
 
 // same single-quote escaping the API docs' curl examples use

@@ -6,6 +6,7 @@ import {
 	MAX_API_LOG_ENTRIES,
 	buildCurlForEntry,
 	clearApiCalls,
+	describeApiStatus,
 	getApiCalls,
 	recordApiCall,
 	redactSensitive,
@@ -98,6 +99,24 @@ test('redaction survives fragments, valueless params, and encoded names', () => 
 	const secret = ['also', 'fake'].join('-');
 	recordApiCall({ ...baseEntry, url: `/x?flag&api%5Fkey=${secret}&ok=1#frag` });
 	assert.equal(getApiCalls()[0].url, '/x?flag&api%5Fkey=•••&ok=1#frag');
+});
+
+test('a cancelled request reads as cancelled, not as a network failure', () => {
+	clearApiCalls();
+	// what an unmounting poller produces: status 0, but deliberately aborted
+	recordApiCall({ ...baseEntry, url: '/api/v1/admin/ci', status: 0, ok: false, aborted: true });
+	const [logged] = getApiCalls();
+	assert.equal(logged.aborted, true);
+	assert.deepEqual(describeApiStatus(logged), { label: 'cancelled', tone: 'muted' });
+});
+
+test('describeApiStatus separates cancellation from the statuses that are real', () => {
+	assert.deepEqual(describeApiStatus({ status: 0 }), { label: '✕', tone: 'danger' });
+	assert.deepEqual(describeApiStatus({ status: 500 }), { label: '500', tone: 'danger' });
+	assert.deepEqual(describeApiStatus({ status: 404 }), { label: '404', tone: 'warn' });
+	assert.deepEqual(describeApiStatus({ status: 200 }), { label: '200', tone: 'ok' });
+	// an abort wins over the status it carries — it is not a 0-status failure
+	assert.deepEqual(describeApiStatus({ status: 0, aborted: true }), { label: 'cancelled', tone: 'muted' });
 });
 
 test('a curl copied from the log carries no credential', () => {

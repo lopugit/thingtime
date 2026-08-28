@@ -19,8 +19,17 @@ const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal });
   } catch (error) {
-    recordApiCall({ at: Date.now(), method: 'GET', url, status: 0, ok: false, durationMs: Math.round(performance.now() - started) });
-    if (error instanceof Error && error.name === 'AbortError') throw error;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    recordApiCall({
+      at: Date.now(),
+      method: 'GET',
+      url,
+      status: 0,
+      ok: false,
+      aborted,
+      durationMs: Math.round(performance.now() - started)
+    });
+    if (aborted) throw error;
     throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
   }
   recordApiCall({

@@ -46,16 +46,18 @@ export function useAsyncFetcher() {
           signal: nextOpts.signal
         });
       } catch (error) {
+        const aborted = error instanceof Error && error.name === 'AbortError';
         recordApiCall({
           at: Date.now(),
           method,
           url: nextOpts.action,
           status: 0,
           ok: false,
+          aborted,
           durationMs: Math.round(performance.now() - started),
           body: loggedBody
         });
-        if (error instanceof Error && error.name === 'AbortError') throw error;
+        if (aborted) throw error;
         throw createApiFailure({ cause: error, action: nextOpts.errorContext, method });
       }
       recordApiCall({
