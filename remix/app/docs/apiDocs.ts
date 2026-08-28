@@ -5215,7 +5215,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/algorithms/shared',
     summary: 'Reads the public preview of an explicitly shared feed algorithm ("try my feed brain").',
     detail:
-      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — never weights or interests, which stay private to the owner. Branch a copy by POSTing /api/v1/algorithms with branchFrom set to this id. Unknown, unshared, and private ids all 404 identically.',
+      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — this preview never exposes weights or interests, and the algorithm doc itself is never readable. Branching is the disclosure: POST /api/v1/algorithms with branchFrom set to this id copies the owner’s learned weights into your own algorithm, where they surface as its topInterests, and that copy is independent of any later unshare. Unknown, unshared, and private ids all 404 identically.',
     auth: {
       mode: 'none',
       description: 'Public and anonymous — possession of the share link plus the owner sharing flag is the gate.'

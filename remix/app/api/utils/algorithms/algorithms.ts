@@ -58,8 +58,12 @@ export type PublicAlgorithm = {
 };
 
 // What a share-link holder may see BEFORE branching: identity + training size
-// only. Never weights or topInterests — those are the owner's behavioral
-// profile, and the always-private invariant above stays intact.
+// only. Never weights or topInterests — the doc itself is never readable.
+// Note this bounds the PREVIEW, not the disclosure: branching copies the
+// weights into the caller's own algorithm (see createAlgorithm), where they
+// surface as that copy's topInterests. Flipping shared:true is therefore
+// consent to disclose the trained profile to link-holders, and the owner-facing
+// copy in AlgorithmManager says exactly that.
 export type SharedAlgorithmPreview = {
   id: string;
   name: string;
@@ -317,9 +321,11 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
     // own algorithms first; otherwise a share-link branch — allowed only when
-    // the parent's owner explicitly flipped shared:true. The copied weights
-    // land in the CALLER's own always-private algorithm; the parent stays
-    // untouched and unreadable.
+    // the parent's owner explicitly flipped shared:true. The parent doc stays
+    // untouched and unreadable, but its weights ARE copied here into the
+    // caller's own algorithm and become visible to them as topInterests — that
+    // disclosure is what shared:true consents to, and it survives a later
+    // unshare because the copy is independent from the moment it is made.
     const parent = (await findOwnedAlgorithm(ownerId, input.branchFrom)) || (await findSharedAlgorithm(input.branchFrom));
     if (!parent) return fail(404, 'Algorithm to branch from was not found');
     weights = {
