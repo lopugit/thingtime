@@ -6,7 +6,39 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## ChatGPT / Codex MCP connector
+
+- [ ] `GET /.well-known/oauth-protected-resource`, `GET
+    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      manifest return the deployed HTTPS origin and the MCP path exactly.
+- [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
+      page works at desktop and a 390px mobile viewport, requires `resource`,
+      state, and S256 PKCE, and never reflects a personal access token in the
+      redirect or an error page.
+- [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
+      list/select them in ChatGPT and verify reads use the selected account.
+      An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
+      authorization code, altered callback/resource, or altered verifier must
+      fail closed.
+- [ ] Confirm a read/search tool succeeds with `things.read`, while each write
+      tool asks for ChatGPT confirmation and the target API rejects a PAT that
+      lacks its exact Things scope. Disconnecting an account removes its bridge
+      access; removing the last account revokes the ChatGPT bridge session.
+
 ## Passkeys + cross-deployment auto-login
+
+- [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
+      unique index: `node scripts/verify-passkeys.mjs` covers it (two data
+      things may share one `crystal.linkKey`; the real link still dedupes to
+      one row and keeps counting). After deploying, re-run the
+      `backfill-relationship-unique-keys` migration from /admin so legacy
+      `passkey-app-link` rows get stamped — until then they dedupe through the
+      crystal-path fallback in the upsert filter.
+- [ ] `things_passkey_link_key_unique` is gone from the `things` collection
+      after a boot (`db.things_v2.getIndexes()`). On a dev machine running
+      several worktrees against ONE local mongod, a sibling checkout still on
+      pre-fix code re-creates it at its next boot — drop it again and update
+      that worktree; it is not a code regression.
 
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
       no platform sheet; correct password → the browser/1Password/iCloud sheet
@@ -196,6 +228,27 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
       a second fail-safe.
 
+## Lopu CodeQL all-branch listener
+
+- [ ] Open or update PRs targeting `main`, `develop`, `github-actions`, and an
+      older feature branch without the current listener. Confirm normal
+      `pull_request` runs own targets that carry the listener, while the
+      default-branch `pull_request_target` run performs only the protected
+      metadata handoff for missing listeners. Confirm no target-context job
+      checks out PR code, no redundant analyzer cancels an in-flight scan, and
+      both language contexts finish green for the latest immutable snapshot.
+
+## Lopu wildcard `all`-branch maintenance
+
+- [ ] Run `node remix/scripts/workflow-caller-contract.mjs` and confirm product
+      branches contain no `.github/workflows/all-branch.yml` or rebase-specific
+      listener. Push `develop` and `main`, exercise every PR lifecycle transition
+      including draft and close, wait for the `53 * * * *` backstop, and invoke
+      the `build-all` and `backfill-codeql` maintenance choices manually. Every
+      path must appear under **Lopu PR manager**, call the corresponding
+      protected implementation, and keep at most one model-backed Lopu job
+      active without cancelling it.
+
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
@@ -240,6 +293,28 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       remain automatic. CODEOWNERS presence alone is not an enforcement check;
       independent CODEOWNER approval is optional future hardening once a second
       trusted collaborator can review changes.
+- [ ] Enable `CODEQL_CENTRAL_PR_ENABLED` and update a PR targeting an older
+      feature or stack branch that does not contain the CodeQL listener. The
+      `pull_request_target` run must perform metadata-only handoff with no
+      checkout, CodeQL initialization, AI secret, or repository code execution;
+      its separate `workflow_dispatch` run must revalidate the live head and
+      upload both language categories against the exact merge ref. Repeat with
+      a conflicting PR whose old merge ref still exists: its parent mismatch
+      must be reported and the fallback must scan `refs/pull/<number>/head`.
+- [ ] Update a PR whose target already carries the normal listener. Its
+      `pull_request` run—not the target-context fallback—must remain the owner
+      of both Analyze job contexts required by branch protection. Confirm the
+      listener's `control-plane` call reaches the unprivileged analyzer without
+      the former nested `actions: write` workflow-validation error, while the
+      `pr-handoff` call is skipped.
+- [ ] On the corresponding `pull_request_target` event, confirm only
+      `pr-handoff` calls the protected metadata bridge and `control-plane` is
+      skipped. The bridge may dispatch the exact unprivileged scan but must not
+      check out repository code or receive an AI/provider credential.
+- [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
+      present: the protected scope job must report that analysis is complete and
+      skip initialization. Dispatch an older expected SHA and confirm it no-ops
+      rather than scanning or publishing against stale PR state.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain
@@ -352,7 +427,7 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -380,7 +455,7 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
       Lopu success toast (errors also route through Lopu, never `alert`).
 - [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
-      test:branding` passes (trim + padding + pixel-size unit tests).
+    test:branding` passes (trim + padding + pixel-size unit tests).
 - [ ] Press kit grid renders all generated marketing images; the portrait
       phone wallpaper previews as a centre crop and must not stretch its grid
       row (no giant empty gap beside it).
@@ -897,6 +972,16 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
+- [ ] MODERATION/PERMALINK: when comment moderation is temporarily pending,
+      the comment author still sees the new standalone comment and its count
+      after reloading `/post/:id`; another viewer does not see it until it is
+      released. The permalink projection and `GET ?target=…&thingtime=comment`
+      listing must agree (regression: the batch post projection filtered every
+      pending child, including the owner's own comment, and rendered zero).
+- [ ] COUNT LAYERS: a post with direct comments plus nested replies reports
+      viewer-relative `commentCounts.direct`, `replies`, `total`, and `loaded`;
+      legacy `commentCount` equals `total`. A viewer excluded from a comment
+      layer never learns that hidden row through any count.
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
       the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
       Comment rows mirror the pattern — reply icon then react control inline
@@ -1002,6 +1087,13 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
+
+- [ ] On the landing page and a short authenticated route, scroll from top to
+      bottom at desktop and 375px widths. The shared footer follows content
+      with ordinary visual spacing, not a large blank/dead-scroll region; its
+      links and controls remain reachable without horizontal overflow.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
@@ -1024,7 +1116,7 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-      runner)`, while both required-context companion jobs have distinct
+    runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1039,8 +1131,96 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       real result, and the protected `github-actions` advisory updates one
       warning comment without producing a failing or required status.
 
+## Content-addressed Graphify snapshots (`scripts/graphify`)
+
+- [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
+      source fingerprint unchanged, source edits change it, and computing a
+      fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Finalize the same portable output twice and confirm it deduplicates to
+      one artifact path. Finalize two valid variants for one source fingerprint
+      and confirm both remain immutable while the deterministic selector picks
+      the richer graph.
+- [ ] Create two branches that each add a distinct
+      `graphify-out/snapshots/v1/<source>/<artifact>/` path. Merge them in a
+      fresh clone without installing a custom merge driver and confirm Git
+      reports no generated-file conflict and both snapshots remain present.
+- [ ] Start two local mutation commands together. Confirm the repository writer
+      lock serializes them, a live writer is never stolen during owner-file
+      creation, and a dead writer lock is recoverable.
+- [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
+      the four mutable root outputs from tracking, and run
+      `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
+      `scripts/graphify snapshot` matches the current source fingerprint, and
+      ordinary `graphify query` still succeeds through the aliases.
+- [ ] Change a Markdown file and run semantic extraction through the local
+      Codex LLM proxy. Confirm the wrapper clusters and exports after extraction,
+      records the Graphify version and source tree in `snapshot.json`, keeps the
+      mutable semantic cache private, ingests it into
+      `cache/semantic-cas/v1/<input-key>/<content-hash>.json`, and never prints
+      the proxy key. Write two valid responses to one input-key filename and
+      confirm both immutable variants survive while hydration selects the richer
+      response deterministically.
+- [ ] Corrupt a portable file at an existing artifact-hash path and attempt to
+      finalize identical output. Confirm the wrapper rejects the violated hash
+      invariant instead of overwriting or accepting it.
+- [ ] Delete the snapshot currently selected by a root compatibility symlink,
+      then activate a new valid snapshot. Confirm the dangling alias is replaced
+      without treating it as an unrelated filesystem object.
+- [ ] Merge a source branch, run the trusted Lopu Graphify publisher, and
+      confirm the post-merge source fingerprint has a valid immutable snapshot.
+      Confirm no controller job pushes mutable root aliases or cancels an
+      already-running Lopu/Graphify job.
+
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu PR
+      manager. Confirm `.github/workflows/all-branch.yml` is absent from the
+      product branch, no standalone **Build all branch** workflow run appears,
+      and both signals enter the protected `lopu-maintenance-build-all`
+      namespace. The active rebuild must finish without cancellation while
+      only one newest not-yet-started union snapshot waits for the shared Lopu
+      fleet slot.
+- [ ] Push a new commit to an older open PR whose head branch does not contain
+      the current Lopu push listener, including one targeting a non-default
+      branch. Confirm the default-branch `pull_request_target: synchronize`
+      listener dispatches that exact PR to the protected controller, duplicate
+      push/target signals collapse to one live snapshot, and the repository
+      fleet still runs no more than one model-backed Lopu job at a time.
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu
+      listener — the `53 * * * *` backstop and a manual `build-all` dispatch.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
+- [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
+      manager** run containing the standing-promotion and per-feature-promotion
+      reusable jobs, with no separate **Promote develop to main** or **Promote
+      features to main** workflow run. Push once to `main` and confirm its Lopu
+      run contains the main→develop synchronization job with no standalone
+      sync workflow. Queue a second event while each component is active and
+      confirm the first run is not cancelled. Exercise each
+      `maintenance_operation` choice manually through Lopu and confirm the
+      removed workflow files do not reappear in Actions.
+- [ ] On the default branch, complete a check run and create/edit a normal PR
+      comment. Confirm each `Lopu PR manager` run compiles and creates its
+      controller jobs instead of failing at workflow startup with a nested
+      `security-events: none` permission error. Also confirm scheduled and
+      push-driven all-branch signals enter that same Lopu manager (never a
+      standalone **Build all branch** listener), and that CodeQL alert
+      mutations occur only in the controller's separately fenced disposition
+      writer.
+- [ ] After changing a product-branch listener, compare the active default
+      `main` listener with the reviewed `develop` listener before calling the
+      rollout complete. PR synchronize/draft/edit/close signals, the hourly
+      all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
+      operations must already be present on `main`; a half-hour sweep is only
+      recovery coverage, not proof that every repository change wakes Lopu.
+- [ ] Fail or cancel one listed GitHub Actions PR workflow after the opening
+      review has finished. Confirm the default listener receives a completed
+      `workflow_run`, routes only the associated non-successful PR to one Lopu
+      review, preserves the exact source run id for log diagnosis, and never
+      listens to `Lopu PR manager` itself. External checks remain covered by
+      `check_run`; first-party Actions checks must not rely on that suppressed
+      event.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
@@ -1131,6 +1311,11 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       must fail closed. A legitimate derived Graphify commit must be exactly
       one direct child of the already-verified source head and may change only
       the approved Graphify output paths.
+- [ ] Promote two independently green features that add the same workflow
+      caller contract at different source offsets. The combined promotion must
+      keep one declaration/assertion block, and
+      `node remix/scripts/workflow-caller-contract.mjs` must pass before the
+      promotion is considered release-clean.
 - [ ] Set `conflict-marker-size=10` for a planned text path and leave real
       10-character start/base/end markers after the model round; verification
       must reject them. A standalone Markdown `=======` divider must remain
@@ -1213,24 +1398,41 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
-      returns the public key, ordered waterfall, and curated model catalog;
-      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
-      admin can save a valid reordered waterfall.
+      returns the public key, ordered waterfall, and the base-model catalog
+      with per-model `provider`, `efforts`, and `speeds`; `POST` returns 401.
+      A signed-in non-admin `POST` returns 403, while an admin can save a
+      valid reordered waterfall.
 - [ ] Settings → Admin paints the last-known waterfall immediately, then
-      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
-      dedicated handle, use the Up/Down controls, remove a non-default row,
-      save, reload, and confirm the exact order persists. `default` stays
-      present and cannot be removed.
+      reconciles in the background. Via the Add-fallback picker, add a Claude
+      model with an explicit effort, an OpenAI model with effort + Fast, and
+      at least five total entries (more than the historical 3-entry cap);
+      drag a row by its dedicated handle, use the Up/Down controls, remove a
+      non-default row, save, reload, and confirm the exact order persists.
+      `default` stays present and cannot be removed. The effort select only
+      offers that model's tiers and the speed select only appears for models
+      with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
-      bottom of `/settings`: model names, Max-effort badges, handles, fallback
-      copy, and save/add/remove controls never clip, overlap, or create
-      horizontal scrolling.
-- [ ] Resolver workflow config parsing accepts only `default`,
-      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
-      appends `default` defensively. An unavailable endpoint, malformed JSON,
-      duplicate/unknown model, wrong key, or empty array emits a warning and
-      selects only `--model default`; no stored value can inject another CLI
-      flag.
+      bottom of `/settings`: model names, provider/effort/speed subtitles,
+      handles, the add-fallback picker row, and save/add/remove controls
+      never clip, overlap, or create horizontal scrolling.
+- [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
+      efforts a model does not support, `fast` on a model without a fast
+      lane, and duplicate segments are rejected on write; reads drop unknown
+      entries without discarding the rest of the order and always keep
+      `default` present.
+- [ ] Resolver workflow config parsing in the `github-actions` control plane
+      (PR #391) validates the widened-but-closed grammar: unique 1..256
+      entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
+      model/effort/fast segments. Claude Code runs `default` plus `claude-*`
+      bases (rebuilt from the closed pattern, variants collapse to one CLI
+      slot per base); OpenAI entries are skipped with a log line; the
+      primary entry's effort becomes the session `--effort` (default max)
+      and fast mode is logged as not applied headless. Malformed JSON,
+      unknown/duplicate/empty segments, oversized arrays, or an unavailable
+      endpoint fail closed to `--model default --effort max` with a warning;
+      `default` is appended defensively and no stored value can inject
+      another CLI flag. Control planes predating PR #391 fail closed to
+      `[default]` for any non-legacy entry.
 - [ ] Save a new Admin order, then issue GETs through separate warm app
       instances immediately (no 15-second wait): both must read the new
       home-DB value. With Mongo unavailable, a warm instance may return its
@@ -1242,43 +1444,75 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
-      --self-test` in the `github-actions` control plane to prove both the
+    --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
-      Anthropic request uses the same current Admin primary. Reorder from Opus
-      to Fable without restarting the app; the next musing must use Fable.
+      Anthropic request uses the first Anthropic-capable Admin entry — model
+      plus any explicit effort (`output_config.effort`) and fast mode.
+      Reorder from Opus to Fable without restarting the app; the next musing
+      must use Fable. An OpenAI entry ordered above the Claude entry must not
+      change the Anthropic request.
 - [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
       use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
-      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
-      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
-      Claude, that Claude call must still resolve the current Admin preference.
+      literal Claude Code `default` sentinel to Anthropic. With
+      `LOPU_PROVIDER=openai` and an OpenAI entry configured, the OpenAI call
+      must use that entry's model/`reasoning_effort`/priority tier; with no
+      OpenAI entry above `default` it must retain `LOPU_OPENAI_MODEL`. If it
+      falls through to Claude, that Claude call must still resolve the
+      current Admin preference. A rejected effort/fast knob retries once bare
+      on the same model before the provider is skipped.
+- [ ] Musing requests budget for reasoning: the OpenAI call sends
+      `max_completion_tokens` and never the deprecated `max_tokens` (o-series
+      and GPT-5 models reject it), and both providers leave enough output
+      headroom that a high/max-effort entry still streams visible text. Put a
+      reasoning entry first and confirm a real musing arrives, not an empty
+      one. If a decorated attempt finishes without a single text delta, it
+      must retry once bare on the same model before falling through to the
+      next provider and then the canned library — never emit a blank provider
+      meta event or render a blank message. Run `npm --prefix remix run
+      test:lopu-streaming` to exercise both provider request bodies and every
+      starvation/fallback transition with local SSE doubles.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
 
-## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+## Lopu internal PR/stack rebase engine (protected `github-actions` implementation)
 
+- [ ] Push one commit to a branch with PRs targeting and originating from it.
+      Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
+      rebase, and stack detection. Product branches must contain no
+      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
+      rebase repository-dispatch events, so `rebase-pr-stack-ai` reaches the
+      protected engine only through that one listener's `repository_dispatch`.
+      The protected rebase engine is `workflow_call`-only and cannot create a
+      competing public run that later gets cancelled by Lopu's embedded rebase
+      lane.
+- [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
+      disabled), feature promotion, standing promotion, and main/develop sync.
+      Confirm each audit record names `resolve-pr-conflicts.yml`, the request
+      retains its original allowlisted operation key, and the translated Lopu
+      inputs preserve the requested PR/branch, cascade, dry-run, and lookback.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
-      standalone replay failures were incorrectly force-rebased and could
-      ping-pong with a merge-resolver update.
+      confirm only the **Lopu PR manager** base-merge lane owns it. Regression
+      class: standalone replay failures were incorrectly force-rebased and
+      could ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
       without duplicating the parent's commits. Confirm a stack member with
       either `mergeable: false` or `rebaseable: false` remains rebase-owned,
       while a clean stack is left alone.
-- [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
-      every same-repo PR regardless of base branch, never dispatch a
-      standalone history rewrite, route standalone merge conflicts to the
-      merge workflow, do not race a blocked child ahead of its parent, and
+- [ ] Exercise detection through Lopu from a branch push, PR opened/reopened
+      event, the scheduled scan, and a manual PR-number dispatch. Automatic
+      scans evaluate every same-repo PR regardless of base branch, never
+      dispatch a standalone history rewrite, route standalone merge conflicts
+      to Lopu's base-merge lane, do not race a blocked child ahead of its parent, and
       terminate after resolution instead of looping on the workflow's own
       push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
@@ -1385,6 +1619,31 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
+- [ ] Commander typeahead searches the live Things + people APIs after the
+      debounce: it shows contextual platform posts/data/schemas/people before
+      the bounded `Local paths` tier, arrow/Enter and click open the selected
+      result exactly once (without then falling through to the typed local
+      `/thing/:path` command), and `Search things for…` still opens the complete
+      `/search?q=…` result set. With ordinary text and NO highlighted row,
+      Enter defaults to that pinned full-search row; an explicitly highlighted
+      result still wins, and `path = value` setters still execute instead of
+      becoming searches. A failed typeahead leaves full search + local commands
+      usable.
+- [ ] Search results default to `Standard`: posts use the real interactive
+      post card and other Things use their native rendered `ThingView` (with
+      its rendered/tree toggle where supported). Switching to `Data` restores
+      the compact crystal-field cards, and every Data card's `Open thing` link
+      opens the ACL-aware canonical `/thing/:id` page. Toggle labels remain
+      visible and usable at desktop and mobile widths. A ranked text search
+      shows each Thing result's real server `rankScore` as tiny subdued
+      `ranked match · N` metadata in BOTH views; chronological/unranked results
+      never invent or display a score.
+- [ ] Open a post result's canonical `/thing/:id` page. It renders the full
+      interactive PostCard inline under `Post view`, keeps `Open post page` as
+      a permalink, and still shows the complete `Thing data` panel below it.
+      Non-post Things and private admin diagnostics do not show an empty post
+      section. Verify the inline card and JSON remain unclipped at desktop and
+      mobile widths and survive a full top-to-bottom scroll.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -1475,6 +1734,10 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] When `merge-legacy-collections` reports `0 pending`, stale physical
+      generations remain visible in the Storage generations table without an
+      orange adoption warning. Make one legacy document genuinely pending and
+      confirm the warning returns until the merge converges again.
 - [ ] Against a disposable replica-set database, the first registered and
       sandbox app-storage counter can be created without MongoDB code 224:
       the ensure upsert uses only the deterministic `shareId`, while the
@@ -1928,11 +2191,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       nsfw, and blocked uploads. `Run analysis sweep` reports
       analyzed/flagged/skipped counts and drains pending attachments plus
       verdicts whose flag write was interrupted.
-Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
-restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
-name already on the allowlist is refused, so register FIRST). One command
-re-checks the whole management plane end-to-end:
-`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+      Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+      restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+      name already on the allowlist is refused, so register FIRST). One command
+      re-checks the whole management plane end-to-end:
+      `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
@@ -2469,7 +2732,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       application entry; a `pageshow.persisted` restore immediately replaces
       the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
-      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+    must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
       hostile, and old failed-revival function tags, reload Feed and open

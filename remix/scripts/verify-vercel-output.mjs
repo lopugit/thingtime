@@ -75,12 +75,19 @@ const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
-// the social-permalink routes share the /__server dest, so the final Nitro
-// fallback is the one that is NOT a permalink rewrite
+// the social-permalink and ChatGPT discovery routes share the /__server dest,
+// so the final Nitro fallback is the one that is neither of those rewrites
 const isPermalinkSrc = (src) => typeof src === 'string' && /^\^\/(?:post|profile)\//.test(src);
-const serverFallbackIndex = routes.findIndex((route) => route.dest === '/__server' && !isPermalinkSrc(route.src));
 const postPermalinkIndex = routes.findIndex((route) => route.src === '^/post/[^/]+/?$' && route.dest === '/__server');
 const profilePermalinkIndex = routes.findIndex((route) => route.src === '^/profile/[^/]+/?$' && route.dest === '/__server');
+const chatGptDiscoveryIndex = routes.findIndex(
+	(route) =>
+		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json)$' &&
+		route.dest === '/__server'
+);
+const serverFallbackIndex = routes.findIndex(
+	(route, index) => route.dest === '/__server' && index !== chatGptDiscoveryIndex && !isPermalinkSrc(route.src)
+);
 
 if (spaIndex === -1) {
 	throw new Error('Vercel output config does not route non-API app paths to /index.html.');
@@ -112,6 +119,14 @@ if (rootIndex > filesystemIndex) {
 
 if (filesystemIndex > spaIndex) {
 	throw new Error('Vercel output checks the SPA fallback before static filesystem assets.');
+}
+
+if (chatGptDiscoveryIndex === -1) {
+	throw new Error('Vercel output does not route ChatGPT OAuth and capability discovery to Nitro.');
+}
+
+if (chatGptDiscoveryIndex > filesystemIndex || chatGptDiscoveryIndex > spaIndex) {
+	throw new Error('Vercel output checks static or SPA fallbacks before ChatGPT discovery.');
 }
 
 if (apiIndex > spaIndex) {
@@ -219,5 +234,5 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, ChatGPT discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );

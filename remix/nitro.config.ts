@@ -1,10 +1,16 @@
 import { defineNitroConfig } from 'nitro/config';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
+import {
+  CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH,
+  CHATGPT_CAPABILITY_MANIFEST_PATH,
+  CHATGPT_PROTECTED_RESOURCE_METADATA_PATH
+} from './app/api/utils/chatgpt/pluginCore.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
 const apiHandler = './server/routes/api/[...].ts';
+const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 
 export default defineNitroConfig({
@@ -15,7 +21,12 @@ export default defineNitroConfig({
   // mount resolves to <rootDir>/assets (which does not exist here), so the page
   // catch-all reads the shell through this explicit assets:shell mount instead.
   serverAssets: [{ baseName: 'shell', dir: 'server/assets' }],
-  routes: Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
+  routes: {
+    ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
+    [CHATGPT_PROTECTED_RESOURCE_METADATA_PATH]: chatGptDiscoveryHandler,
+    [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
+    [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
+  },
   publicAssets: [
     {
       baseURL: '/',

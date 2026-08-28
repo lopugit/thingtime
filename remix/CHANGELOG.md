@@ -17,8 +17,168 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
+  A dedicated provider-double suite proves that a reasoning-starved decorated
+  Claude or OpenAI stream retries bare on the same model, never retries after
+  visible text, reads the durable waterfall once, emits no blank provider
+  metadata, and reaches the canned library only after both providers genuinely
+  starve. — Codex (AI), 2026-08-27
+- **Web search now exposes its real relevance signal and keeps post context
+  inline.** Ranked Thing results carry the query-relative Mongo text score and
+  show it as subdued metadata in both Standard and Data views; unselected
+  Commander Enter defaults to the full-search row without stealing setter
+  commands, and `/thing/:id` renders a post-shaped Thing with its interactive
+  post card above the raw data. — Codex (AI), 2026-08-27
+- **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
+  app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
+  tool scanning, draft testing from the tools menu/@mentions, publication,
+  frozen tool snapshots, Enterprise/Edu refresh controls, Business
+  recreate-and-republish release requirements, role/action controls, and the
+  current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
+
 ### Added
 
+- **Thingtime’s MCP initialization now supplies connector-wide interaction
+  instructions.** ChatGPT receives the account-selection, token-safety, and
+  confirmed-mutation contract before tools are called; the additive MCP feature
+  advances to `1.1.0`. — Codex (AI), 2026-08-26
+- **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
+  streamable-HTTP MCP gateway now connects multiple named, allowlisted
+  Thingtime API endpoints through encrypted, scoped and revocable PATs. The
+  bridge token cannot act as a Thingtime account session; tools are restricted
+  to account management plus Things reads and explicitly confirmed writes.
+  Protected-resource/auth-server discovery, an origin-scoped capability
+  manifest, API docs, and the distributable plugin package live together so
+  clients can negotiate the contract rather than route-probing. — Codex (AI),
+  2026-08-25
+
+### Security
+
+- **ChatGPT connections now survive secure refreshes without splitting account
+  state.** The optional `offline_access` scope issues one-time rotating refresh
+  credentials alongside the 30-day MCP bridge token. Every access and refresh
+  credential references one encrypted, origin-bound connection session, so an
+  account switch or final disconnect applies consistently across renewals; a
+  final disconnect revokes the connection and all of its bridge credentials.
+  The OAuth and connections capability features advance to `1.1.0`. — Codex
+  (AI), 2026-08-26
+- **ChatGPT tool annotations now match their actual effects.** Public-content
+  writes are marked as open-world actions, only irreversible writes retain the
+  destructive hint, and the MCP semantic feature advances to `1.0.2` for
+  review-safe metadata scanning. — Codex (AI), 2026-08-26
+- **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
+  catalog publishes standard per-tool OAuth metadata while returning no account
+  data, protected calls emit the model-readable OAuth challenge ChatGPT uses to
+  link an account, and bridge sessions are bound to the exact MCP origin that
+  issued them. — Codex (AI), 2026-08-26
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
+### Changed
+
+- **Graphify output is now conflict-free and content-addressed**: a repository
+  wrapper fingerprints the source tree without generated output, serializes
+  writers, validates Graphify's atomic graph/manifest/report set, and publishes
+  immutable snapshots whose identical artifacts deduplicate and whose valid
+  variants coexist. Mutable semantic-cache entries are also promoted into
+  immutable input-key/content-hash variants. Ignored root symlinks preserve ordinary query compatibility;
+  committed hooks select/build snapshots without committing or pushing, and
+  Lopu can regenerate a post-merge snapshot instead of line-merging generated
+  JSON. [PR #436 details](../PRs/436-codex-graphify-snapshot-routing--make-graphify-output-conflict-free.md).
+  — Codex (AI), 2026-08-27
+- **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
+  Document.** The connector permits ChatGPT's current `oauth/client.json`
+  client identifier, while retaining the previous fixed identifier for existing
+  developer-mode connections. — Codex (AI), 2026-08-26
+- **The develop Lopu listener exposes the complete maintenance contract**:
+  manual recovery now includes the protected controller's bounded
+  `backfill-codeql` operation alongside PR management, promotions, branch sync,
+  and the wildcard-all build. The caller contract and operational checklist
+  pin this menu so product-branch listeners cannot silently drift behind the
+  single `github-actions` implementation. — Codex (AI), 2026-08-26
+- **The wildcard `all`-branch workflow is folded into the one public Lopu
+  manager**: product branches no longer retain a separate all-branch listener.
+  Develop/main pushes, the full PR lifecycle including draft and close, the
+  hourly backstop, and manual `build-all` recovery all route through **Lopu PR
+  manager** to the protected reusable doctor. — Codex (AI), 2026-08-25
+- **The last duplicate public PR-maintenance Actions are retired on develop**:
+  promotion, main/develop synchronization, merge cascades, and rebase-stack
+  repository events all enter through the one visible Lopu PR manager. The
+  protected rebase engine remains implementation-only on `github-actions`;
+  develop no longer carries a second rebase listener that could duplicate
+  detection or cancellation ownership. — Codex (AI), 2026-08-25
+- **Lopu CodeQL target events now use the metadata-only handoff they describe**:
+  the default-branch listener sends PR number and exact head SHA through the
+  protected handoff, while only the separate unprivileged dispatch invokes the
+  analyzer. This prevents duplicate target-context base scans and the red
+  cancelled analyzer checks they could leave behind. — Codex (AI), 2026-08-25
+- **Lopu now receives every PR-head lifecycle update from the default branch**:
+  `pull_request_target` includes synchronize, ready-for-review, and edited
+  events, so old PR branches and non-default targets no longer depend on
+  carrying a current push listener themselves. The develop caller is also
+  aligned with the current principal-manager contract for comments, failed
+  checks, promotion/maintenance inputs, and the separately fenced CodeQL
+  disposition permission. The protected controller still deduplicates
+  immutable snapshots and admits at most one model-backed Lopu worker per
+  repository. — Codex (AI), 2026-08-25
+- **CodeQL keeps normal PR checks while covering arbitrary targets**: the thin
+  listener now calls separate protected workflows for unprivileged analysis
+  and the metadata-only `pull_request_target` handoff. Ordinary PR tokens no
+  longer fail workflow validation by inheriting the handoff's
+  `actions: write` request; normal PRs retain their branch-protection contexts,
+  while older target branches still receive exact-ref analysis through the
+  trusted dispatch hop. — Codex (AI), 2026-08-25
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work, and Lopu accepts immutable head or merge-ref findings only
+  after revalidating both the reviewed head and base revisions. The README
+  documents the ordered default-setup-to-advanced-setup activation and its two
+  repository variables, one of which prevents expected pre-activation upload
+  failures.
+  — Codex (AI), 2026-08-25
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+
+### Added
+
+- **Unlimited AI workflow model waterfall**: Admin → System's model order now
+  accepts any number of unique entries from a 33-model Claude + OpenAI
+  catalog, each with a per-entry reasoning-effort tier and normal/fast mode
+  (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
+  instead of collapsing; direct Anthropic/OpenAI features resolve their own
+  provider's first entry). Lopu musings budget for the reasoning those entries
+  now pay for — the OpenAI call uses `max_completion_tokens` (the deprecated
+  `max_tokens` is rejected by o-series/GPT-5) and a provider that streams no
+  text falls through instead of rendering a blank musing. The github-actions
+  control plane still fail-closes to `["default"]` for non-legacy entries until
+  its closed grammar is widened
+  (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
+  — Claude (AI), 2026-08-24
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -52,6 +212,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu is the sole wildcard-union listener**: the legacy public **Build all
+  branch** workflow is retired from the product branch. PR lifecycle, branch
+  push, manual, and hourly union-build signals now enter the default-branch
+  **Lopu PR manager**, whose protected maintenance namespace preserves the
+  active build and coalesces only obsolete not-yet-started snapshots. The
+  listener contract now rejects any reintroduction of the competing workflow.
+  — Codex (AI), 2026-08-27
+- **CI Control repository maintenance now dispatches the unified Lopu
+  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
+  operation keys translate to typed `Lopu PR manager` inputs instead of naming
+  retired workflow files. Rebase cascade and promotion dry-run/lookback values
+  remain intact for GitHub-hosted and Vercel-routed runs. The last product
+  rebase listener is removed; exact stack workers enter Lopu and then invoke
+  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
+- **Build all branch listener can dispatch its control-plane worker**: the
+  reusable workflow's push handoff requires `actions: write`; the main listener
+  now grants that inherited permission instead of failing at workflow startup.
+  — Codex (AI), 2026-08-24
 - **PR #299 Messenger membership durability**: unordered batched member writes
   now treat duplicate-key failures as benign only when the Mongo driver reports
   no accompanying write-concern failure. The check covers the current driver's
@@ -300,6 +506,58 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
 
 ### Added
 
