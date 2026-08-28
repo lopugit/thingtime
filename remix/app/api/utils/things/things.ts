@@ -668,8 +668,10 @@ export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | null =>
 // Fence check on a CONCRETE acl. tt:inherit means the audience lives on the
 // target chain — the inherit-aware paths (canViewInherited, the mutation-site
 // patVisibilityBlocksDoc) resolve it first; a direct hit on an unresolved
-// inherit acl fails closed.
-const patVisibilityBlocksAcl = (viewer: Viewer, acl: string[]): boolean => {
+// inherit acl fails closed. Exported for patVisibility.test.ts: this one
+// expression IS the fence, so its truth table is pinned rather than left to a
+// live stack (same reason visibleRelatedModerationClause is exported).
+export const patVisibilityBlocksAcl = (viewer: Viewer, acl: string[]): boolean => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return false;
   if (acl.includes(ACL_INHERIT)) return true;
@@ -2102,8 +2104,10 @@ const circleClause = (circle: PostVisibility) => {
 // every clause here (exact judgement stays with canView/canViewInherited on
 // the fetched page). Inherit-acl children pass the public fence explicitly so
 // their terminal can be judged in memory; they pass the private $nor
-// naturally (they never carry tt:all themselves).
-const patVisibilityMatchClause = (viewer: Viewer): Record<string, any> | null => {
+// naturally (they never carry tt:all themselves). Exported so the test can pin
+// the clause against patVisibilityBlocksAcl: if this coarse tier ever stops
+// covering what the exact tier admits, listings silently lose rows.
+export const patVisibilityMatchClause = (viewer: Viewer): Record<string, any> | null => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return null;
   return mode === 'public' ? { $or: [circleClause('public'), { acl: ACL_INHERIT }] } : { $nor: [circleClause('public')] };
