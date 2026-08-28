@@ -19,6 +19,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Moved post-rebase repository maintenance behind a verifiable rebase-fleet
+  finalizer. Rewritten tips now carry one run/PR-bound Lopu trailer whose live
+  controller run and exact rebase job must match before PR/push listeners defer
+  work. The last active stack worker queues one repository-wide review and
+  all-branch rebuild, while an already-draining conflict batch retains its own
+  single finalizer. — Codex (AI), 2026-08-28
 - Bound Lopu's per-resolution review and all-branch deferrals to durable
   controller provenance instead of GitHub's push actor alone. Repository-owner
   PAT pushes are now recognized through a run/PR commit trailer whose live

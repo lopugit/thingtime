@@ -2298,6 +2298,33 @@ jobs:
             echo "semantic=$semantic"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Stamp exact Lopu rebase provenance on the rewritten tip
+        if: steps.context.outputs.skip == 'false' && success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd -- "$REBASE_REPO"
+          trailer="Lopu-Rebase-Completion: run=$GITHUB_RUN_ID pr=$PR_NUMBER"
+          message="$RUNNER_TEMP/lopu-rebase-tip-message.txt"
+          git log -1 --format=%B \
+            | sed -E '/^Lopu-(Conflict-Resolution|Rebase-Completion): run=[1-9][0-9]* pr=[1-9][0-9]*$/d' \
+            | git interpret-trailers \
+                --if-exists replace \
+                --if-missing add \
+                --trailer "$trailer" \
+            > "$message"
+          markers="$(
+            sed -nE \
+              's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/\1 \2/p' \
+              "$message"
+          )"
+          marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
+          [ "$marker_count" = 1 ] \
+            || { echo "::error::Rewritten tip must contain exactly one Lopu rebase trailer."; exit 1; }
+          [ "$markers" = "$GITHUB_RUN_ID $PR_NUMBER" ] \
+            || { echo "::error::Rewritten tip contains the wrong Lopu rebase provenance."; exit 1; }
+          git commit --amend --no-verify -q -F "$message"
+
       - name: Revalidate live refs and final local state
         id: prepush
         if: steps.context.outputs.skip == 'false' && success()
@@ -2912,6 +2939,80 @@ jobs:
           } > "$body"
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || \
             echo "::warning::Rebase succeeded, but the PR comment could not be posted."
+
+      - name: Queue repository maintenance after the rebase fleet settles
+        if: steps.published.outcome == 'success' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Parent workers hold every direct child before dispatching it, and
+          # each worker releases its own label only after publication. The last
+          # successful worker therefore observes zero live rebase owners and
+          # becomes the fleet finalizer. Concurrent last siblings are harmless:
+          # the destination workflows have one shared, coalescing namespace.
+          live_rebase_owners="$(
+            gh api --paginate \
+              "repos/$REPO/issues?state=open&labels=ai-rebase-in-progress&per_page=100" \
+              --slurp | jq '[add // [] | .[] | select(has("pull_request"))] | length'
+          )"
+          if [ "$live_rebase_owners" -ne 0 ]; then
+            echo "::notice::$live_rebase_owners rebase worker(s) still own the cascade; the last worker will queue repository maintenance."
+            exit 0
+          fi
+
+          # A fully materialized conflict batch already owns one repository-
+          # wide review/build finalizer. Do not place a rebase-generated pair
+          # in front of its pending PR repairs.
+          runs="$(
+            gh api \
+              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?per_page=100" \
+              | jq -c '.workflow_runs'
+          )"
+          if jq -e '
+            any(.[];
+              .display_title == "Lopu resolves a PR batch from the control plane"
+              and .event == "workflow_dispatch"
+              and .head_branch == "github-actions"
+              and .actor.login == "github-actions[bot]"
+              and .path == ".github/workflows/resolve-pr-conflicts.yml"
+              and (.status == "queued"
+                   or .status == "in_progress"
+                   or .status == "pending"
+                   or .status == "waiting"
+                   or .status == "requested"))
+          ' >/dev/null <<<"$runs"; then
+            echo '::notice::An active conflict batch already owns the repository maintenance finalizer.'
+            exit 0
+          fi
+
+          jq -n '{
+            ref:"github-actions",
+            inputs:{
+              pr_number:"",
+              branch:"lopu-internal-all-branch",
+              maintenance_operation:"manage-prs"
+            }
+          }' | gh api --method POST \
+            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+            --input -
+
+          jq -n --arg dispatch_id "lopu-review:rebase-fleet:$GITHUB_RUN_ID" '{
+            ref:"github-actions",
+            inputs:{
+              pr_number:"",
+              branch:"",
+              detector_handoff:true,
+              manual_retry:false,
+              depth:"0",
+              control_dispatch_id:$dispatch_id
+            }
+          }' | gh api --method POST \
+            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+            --input -
+          echo 'Queued one repository-wide review and all-branch rebuild after the rebase fleet.'
 
       - name: Clean up after a pre-push failure
         if: >-
