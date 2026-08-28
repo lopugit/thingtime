@@ -163,11 +163,14 @@ The command writes exactly one generated asset:
 remix/dist/embed/thingtime.min.js
 ```
 
-`scripts/verify-embed-bundle.mjs` fails the build if an extra JavaScript, CSS,
-or source-map asset appears, if the file is not valid classic JavaScript, or if
-the expected SDK namespace is missing. The normal client/Vercel build includes
-the embed build and separately verifies that the bundle and secure bridge were
-copied into `.vercel/output/static/embed/`.
+`scripts/verify-embed-bundle.mjs` fails the build if the embed build *generates*
+an extra JavaScript, CSS, or source-map asset, if the file is not valid classic
+JavaScript, or if the expected SDK namespace is missing. It compares against the
+names in `remix/public/embed/`, because the preceding client build has already
+copied those into `dist/embed/` and they are hand-written pages, not chunks. The
+normal client/Vercel build includes the embed build and separately verifies that
+the bundle, the secure bridge, and the demo's external scripts were copied into
+`.vercel/output/static/embed/`.
 
 For local development, first build the SDK, then use the normal PM2 stack:
 
@@ -180,3 +183,13 @@ npm run web-pms
 Open `/embed/demo.html` on the printed local or Tailscale/Funnel origin. The
 demo mounts the same thing twice, opens the popup, and runs visible host-global,
 stored-XSS, and prototype-path safety canaries.
+
+The demo's own code lives in `/embed/demo-host.js` (canary globals, loaded
+before the SDK) and `/embed/demo-integrity.js` (the assertions, loaded after).
+Keep them external: deployed Thingtime paths are served under the strict
+application CSP (`script-src 'self'`, no `'unsafe-inline'` and no hash/nonce
+allowance), so an inline block is parsed into the page and then refused by the
+browser — the isolation verdict would sit on "Checking host isolation…" forever.
+The dev server uses `devCsp`, which *does* allow inline scripts, so this is
+invisible to local QA; `scripts/verify-vercel-output.mjs` asserts it at build
+time instead.

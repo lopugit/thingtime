@@ -8,14 +8,25 @@ import { join } from 'node:path';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 
 const outputDir = 'dist/embed';
+const publicDir = 'public/embed';
 const outputPath = join(outputDir, 'thingtime.min.js');
-const files = readdirSync(outputDir, { withFileTypes: true })
-	.filter((entry) => entry.isFile())
-	.map((entry) => entry.name);
-const generatedAssets = files.filter((file) => /\.(?:js|css|map)$/i.test(file));
+
+const fileNames = (dir) =>
+	readdirSync(dir, { withFileTypes: true })
+		.filter((entry) => entry.isFile())
+		.map((entry) => entry.name);
+
+// dist/embed holds two unrelated things: what `vite build --config
+// vite.embed.config.ts` generated, and the verbatim copies of public/embed/
+// that the preceding client build dropped there. Only the generated half has to
+// be a single file. The demo page's hand-written scripts are external (the
+// deployed CSP refuses inline ones) and are not extra chunks, so subtract the
+// copied names before asserting — otherwise adding one fails the whole build.
+const copiedAssets = new Set(fileNames(publicDir));
+const generatedAssets = fileNames(outputDir).filter((file) => /\.(?:js|css|map)$/i.test(file) && !copiedAssets.has(file));
 
 if (generatedAssets.length !== 1 || generatedAssets[0] !== 'thingtime.min.js') {
-	throw new Error(`Embed build must contain exactly one generated asset; found: ${generatedAssets.join(', ') || 'none'}`);
+	throw new Error(`Embed build must generate exactly one asset; found: ${generatedAssets.join(', ') || 'none'}`);
 }
 
 const source = readFileSync(outputPath, 'utf8');

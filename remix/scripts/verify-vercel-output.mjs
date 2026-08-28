@@ -11,6 +11,7 @@ const bootScript = readFileSync('.vercel/output/static/tt-boot.js', 'utf8');
 const previewFreshnessScript = readFileSync('.vercel/output/static/tt-preview-freshness.js', 'utf8');
 const embedBundle = readFileSync('.vercel/output/static/embed/thingtime.min.js', 'utf8');
 const embedBridge = readFileSync('.vercel/output/static/embed/bridge.html', 'utf8');
+const embedDemo = readFileSync('.vercel/output/static/embed/demo.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
 
 const getDirectiveSources = (policy, name) => {
@@ -38,13 +39,15 @@ for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
 // HTML but silently blocked by the browser.
-const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
-	if (/\bsrc\s*=/i.test(attributes)) return false;
-	const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-	const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
-	return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
-});
-if (inlineExecutableScripts.length > 0) {
+const inlineExecutableScripts = (html) =>
+	[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
+		if (/\bsrc\s*=/i.test(attributes)) return false;
+		const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+		const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
+		return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
+	});
+
+if (inlineExecutableScripts(indexHtml).length > 0) {
 	throw new Error('Vercel shell contains an inline executable script that the strict CSP must block.');
 }
 if (!indexHtml.includes('src="/tt-boot.js"') || bootScript.trim().length === 0) {
@@ -78,6 +81,24 @@ if (embedSourceMapAnnotation) {
 
 if (!embedBridge.includes('/embed/thingtime.min.js')) {
 	throw new Error('Vercel output is missing the secure Thingtime popup bridge.');
+}
+
+// The embed pages ship under the same strict application CSP as the shell
+// (patch-vercel-output stamps it on `/(?:.*)`), so an inline block here is
+// parsed into the page and then refused by the browser. It fails silently — the
+// demo's host-isolation verdict simply never resolves — and the dev server's
+// devCsp does allow inline scripts, so local QA cannot catch it.
+for (const [name, html] of [
+	['embed/demo.html', embedDemo],
+	['embed/bridge.html', embedBridge]
+]) {
+	if (inlineExecutableScripts(html).length > 0) {
+		throw new Error(`Deployed ${name} contains an inline executable script that the strict CSP will block.`);
+	}
+}
+
+if (!embedDemo.includes('src="/embed/demo-host.js"') || !embedDemo.includes('src="/embed/demo-integrity.js"')) {
+	throw new Error('Vercel output is missing the external Thingtime embed demo scripts.');
 }
 
 const hasFilesystemRoute = config.routes?.some((route) => route.handle === 'filesystem');
