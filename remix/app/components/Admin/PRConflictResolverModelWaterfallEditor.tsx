@@ -1,10 +1,16 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Text, VisuallyHidden } from '@chakra-ui/react';
+import { Box, Button, Flex, IconButton, Select, Text, VisuallyHidden } from '@chakra-ui/react';
 
 import {
+  AI_MODEL_EFFORT_LABELS,
+  AI_MODEL_PROVIDER_LABELS,
+  AI_WORKFLOW_BASE_MODELS,
   DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL,
-  PR_CONFLICT_RESOLVER_MODEL_OPTIONS,
+  describeAiWorkflowModelChoice,
   normalizePrConflictResolverModelWaterfall,
+  parseAiWorkflowModelOptionId,
+  type AiModelEffort,
+  type AiModelSpeed,
   type PRConflictResolverModelId
 } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -22,7 +28,29 @@ const eyebrow = {
   opacity: 0.45
 };
 
-const modelById = new Map(PR_CONFLICT_RESOLVER_MODEL_OPTIONS.map((model) => [model.id, model]));
+const baseModelById = new Map(AI_WORKFLOW_BASE_MODELS.map((model) => [model.id, model]));
+
+// Base models an admin can add from the picker; `default` is always present
+// in the waterfall (it cannot be removed), so it is never offered here.
+const PICKER_MODELS = AI_WORKFLOW_BASE_MODELS.filter((model) => model.provider !== 'default');
+// Derived from the catalog so a new provider's models appear in the picker
+// with no editor change — adding a model to the catalog stays the whole
+// registration.
+const PICKER_PROVIDERS = [...new Set(PICKER_MODELS.map((model) => model.provider))];
+
+// Full human name of one waterfall entry, for aria labels and live
+// announcements where the row subtitle is not read alongside the title.
+const entryName = (id: PRConflictResolverModelId): string => {
+  const choice = parseAiWorkflowModelOptionId(id);
+  if (!choice) return id;
+  const bits = [choice.label];
+  if (choice.effort) bits.push(AI_MODEL_EFFORT_LABELS[choice.effort]);
+  if (choice.speed === 'fast') bits.push('Fast');
+  return bits.join(' · ');
+};
+
+const composePickedId = (baseId: string, effort: '' | AiModelEffort, speed: AiModelSpeed) =>
+  [baseId, ...(effort ? [effort] : []), ...(speed === 'fast' ? ['fast'] : [])].join(':');
 
 const sameWaterfall = (left: PRConflictResolverModelId[], right: PRConflictResolverModelId[]) =>
   left.length === right.length && left.every((modelId, index) => modelId === right[index]);
@@ -41,6 +69,9 @@ export const PRConflictResolverModelWaterfallEditor = () => {
   const [refreshFailed, setRefreshFailed] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [moveAnnouncement, setMoveAnnouncement] = React.useState('');
+  const [pickedModelId, setPickedModelId] = React.useState('');
+  const [pickedEffort, setPickedEffort] = React.useState<'' | AiModelEffort>('');
+  const [pickedSpeed, setPickedSpeed] = React.useState<AiModelSpeed>('normal');
   const editGenerationRef = React.useRef(0);
   const saveGenerationRef = React.useRef(0);
 
@@ -93,8 +124,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
   }, []);
 
   const announceOrder = React.useCallback((next: PRConflictResolverModelId[]) => {
-    const labels = next.map((modelId) => modelById.get(modelId)?.label || modelId);
-    setMoveAnnouncement(`Model order updated: ${labels.join(', ')}.`);
+    setMoveAnnouncement(`Model order updated: ${next.map(entryName).join(', ')}.`);
   }, []);
 
   const moveModel = React.useCallback(
@@ -106,9 +136,8 @@ export const PRConflictResolverModelWaterfallEditor = () => {
       const next = [...waterfall];
       [next[from], next[to]] = [next[to], next[from]];
       updateWaterfall(next);
-      const label = modelById.get(modelId)?.label || modelId;
       const priority = to === 0 ? 'Primary' : `Fallback ${to}`;
-      setMoveAnnouncement(`${label} moved to ${priority}.`);
+      setMoveAnnouncement(`${entryName(modelId)} moved to ${priority}.`);
     },
     [updateWaterfall, waterfall]
   );
@@ -121,13 +150,22 @@ export const PRConflictResolverModelWaterfallEditor = () => {
     [updateWaterfall, waterfall]
   );
 
-  const addModel = React.useCallback(
-    (modelId: PRConflictResolverModelId) => {
-      if (waterfall.includes(modelId)) return;
-      updateWaterfall([...waterfall, modelId]);
-    },
-    [updateWaterfall, waterfall]
-  );
+  const pickedModel = baseModelById.get(pickedModelId);
+  const pickedId = pickedModel ? composePickedId(pickedModel.id, pickedEffort, pickedSpeed) : '';
+  const pickedAlreadyListed = !!pickedId && waterfall.includes(pickedId);
+
+  const pickModel = React.useCallback((nextModelId: string) => {
+    setPickedModelId(nextModelId);
+    // Effort tiers and fast mode are per-model: reset both on a model change.
+    setPickedEffort('');
+    setPickedSpeed('normal');
+  }, []);
+
+  const addPickedModel = React.useCallback(() => {
+    if (!pickedId || waterfall.includes(pickedId)) return;
+    updateWaterfall([...waterfall, pickedId]);
+    setMoveAnnouncement(`${entryName(pickedId)} added as Fallback ${waterfall.length}.`);
+  }, [pickedId, updateWaterfall, waterfall]);
 
   const save = async () => {
     if (!dirty || saving) return;
@@ -163,10 +201,10 @@ export const PRConflictResolverModelWaterfallEditor = () => {
     }
   };
 
-  const unusedModels = PR_CONFLICT_RESOLVER_MODEL_OPTIONS.filter((model) => !waterfall.includes(model.id));
-
   const items = waterfall.map((modelId, index) => {
-    const model = modelById.get(modelId)!;
+    const choice = parseAiWorkflowModelOptionId(modelId);
+    const label = choice?.label || modelId;
+    const name = entryName(modelId);
     const priority = index === 0 ? 'Primary' : `Fallback ${index}`;
 
     return {
@@ -207,7 +245,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
           <Box minWidth={0} flex="1 1 auto">
             <Flex alignItems="center" columnGap={2} flexWrap="wrap">
               <Text fontSize="sm" fontWeight={650} noOfLines={1}>
-                {model.label}
+                {label}
               </Text>
               <Text
                 as="span"
@@ -223,7 +261,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
               </Text>
             </Flex>
             <Text fontSize="xs" color="var(--tt-muted, #8a8a96)" noOfLines={1}>
-              {modelId === 'default' ? 'Provider-selected model · Max effort when supported · always included' : 'Max effort'}
+              {choice ? describeAiWorkflowModelChoice(choice) : 'Unknown entry'}
             </Text>
           </Box>
 
@@ -231,8 +269,8 @@ export const PRConflictResolverModelWaterfallEditor = () => {
             <IconButton
               size="xs"
               variant="ghost"
-              aria-label={`Move ${model.label} up`}
-              title={`Move ${model.label} up`}
+              aria-label={`Move ${name} up`}
+              title={`Move ${name} up`}
               icon={<Text aria-hidden="true">↑</Text>}
               isDisabled={saving || index === 0}
               onClick={() => moveModel(modelId, -1)}
@@ -240,8 +278,8 @@ export const PRConflictResolverModelWaterfallEditor = () => {
             <IconButton
               size="xs"
               variant="ghost"
-              aria-label={`Move ${model.label} down`}
-              title={`Move ${model.label} down`}
+              aria-label={`Move ${name} down`}
+              title={`Move ${name} down`}
               icon={<Text aria-hidden="true">↓</Text>}
               isDisabled={saving || index === waterfall.length - 1}
               onClick={() => moveModel(modelId, 1)}
@@ -263,8 +301,8 @@ export const PRConflictResolverModelWaterfallEditor = () => {
               <IconButton
                 size="xs"
                 variant="ghost"
-                aria-label={`Remove ${model.label}`}
-                title={`Remove ${model.label}`}
+                aria-label={`Remove ${name}`}
+                title={`Remove ${name}`}
                 icon={<Text aria-hidden="true">×</Text>}
                 isDisabled={saving}
                 onClick={() => removeModel(modelId)}
@@ -289,12 +327,14 @@ export const PRConflictResolverModelWaterfallEditor = () => {
       <Box>
         <Text sx={eyebrow}>AI workflow model order</Text>
         <Text marginTop={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
-          The first entry is preferred across Claude-backed Thingtime features: conflict resolution, stacked-PR rebases, semantic Graphify refreshes,
-          and Lopu musings.
+          The first entry is preferred across AI-backed Thingtime features: conflict resolution, stacked-PR rebases, semantic Graphify refreshes,
+          and Lopu musings. Add as many fallback entries as you like — every Claude and OpenAI model, with per-entry reasoning effort and
+          normal/fast mode.
         </Text>
         <Text marginTop={1} fontSize="xs" color="var(--tt-muted, #8a8a96)">
-          Workflow conflict edits try later entries only on eligible model failures. Direct Anthropic features use the preferred entry; their
-          provider-valid model is used when Default is primary. OpenAI fallbacks retain their own provider model. Default is always included.
+          Workflow conflict edits run Claude-capable entries and try later ones only on eligible model failures. Direct Anthropic features use the
+          first Anthropic entry; OpenAI-backed features use the first OpenAI entry; each falls back to its provider-valid model when Default comes
+          first. Fast mode maps to Anthropic fast mode or OpenAI priority processing. Default is always included.
         </Text>
       </Box>
 
@@ -312,24 +352,79 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 
       <VisuallyHidden aria-live="polite">{moveAnnouncement}</VisuallyHidden>
 
-      {unusedModels.length > 0 && (
-        <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
-          <Text fontSize="xs" color="var(--tt-muted, #8a8a96)">
+      <Flex alignItems="flex-end" columnGap={2} rowGap={2} flexWrap="wrap">
+        <Box>
+          <Text fontSize="xs" color="var(--tt-muted, #8a8a96)" marginBottom={1}>
             Add fallback
           </Text>
-          {unusedModels.map((model) => (
-            <Button
-              key={model.id}
-              size="xs"
-              variant="outline"
-              isDisabled={saving}
-              onClick={() => addModel(model.id)}
-            >
-              + {model.label}
-            </Button>
-          ))}
-        </Flex>
-      )}
+          <Select
+            size="xs"
+            width="auto"
+            maxWidth="240px"
+            aria-label="Model to add"
+            placeholder="Choose a model…"
+            value={pickedModelId}
+            isDisabled={saving}
+            onChange={(event) => pickModel(event.target.value)}
+          >
+            {PICKER_PROVIDERS.map((provider) => (
+              <optgroup key={provider} label={AI_MODEL_PROVIDER_LABELS[provider]}>
+                {PICKER_MODELS.filter((model) => model.provider === provider).map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        </Box>
+        {pickedModel && pickedModel.efforts.length > 0 && (
+          <Select
+            size="xs"
+            width="auto"
+            maxWidth="180px"
+            aria-label="Reasoning effort"
+            value={pickedEffort}
+            isDisabled={saving}
+            onChange={(event) => setPickedEffort(event.target.value as '' | AiModelEffort)}
+          >
+            <option value="">Default effort</option>
+            {pickedModel.efforts.map((effort) => (
+              <option key={effort} value={effort}>
+                {AI_MODEL_EFFORT_LABELS[effort]}
+              </option>
+            ))}
+          </Select>
+        )}
+        {pickedModel && pickedModel.speeds.includes('fast') && (
+          <Select
+            size="xs"
+            width="auto"
+            maxWidth="140px"
+            aria-label="Speed mode"
+            value={pickedSpeed}
+            isDisabled={saving}
+            onChange={(event) => setPickedSpeed(event.target.value as AiModelSpeed)}
+          >
+            <option value="normal">Normal</option>
+            <option value="fast">Fast</option>
+          </Select>
+        )}
+        <Button
+          size="xs"
+          variant="outline"
+          isDisabled={saving || !pickedId || pickedAlreadyListed}
+          title={pickedAlreadyListed ? 'Already in the model order' : undefined}
+          onClick={addPickedModel}
+        >
+          + Add
+        </Button>
+        {pickedAlreadyListed && (
+          <Text fontSize="xs" color="var(--tt-muted, #8a8a96)">
+            Already in the model order.
+          </Text>
+        )}
+      </Flex>
 
       <Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap">
         <Button size="xs" variant="outline" isLoading={saving} isDisabled={!dirty} onClick={save}>

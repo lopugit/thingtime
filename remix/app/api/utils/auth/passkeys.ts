@@ -9,6 +9,7 @@ import {
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import { Binary } from 'mongodb';
 
+import { relationshipUniqueKeys } from '../messenger/shared';
 import { getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -39,7 +40,8 @@ import {
 //     uniqueKeys 'passkeyCredential:<id>' (BinData, like user email keys).
 //   • `passkey-app-link` things — one per (passkey, app/origin) pair recording
 //     where the passkey has been used; upserted per login via
-//     crystal.linkKey (bounded by distinct apps — never per-use growth).
+//     crystal.linkKey, deduped through root uniqueKeys like every other
+//     relationship family (bounded by distinct apps — never per-use growth).
 // Both kinds are PROTECTED (registry.ts): a forged passkey doc would BE a
 // working credential, so only this module writes them — always through the
 // HOME things collection so a tt_mongo data-plane override can never capture
@@ -507,11 +509,28 @@ const upsertPasskeyAppLink = async (passkeyDoc: any, appKey: string, appName: st
 	const nowIso = new Date().toISOString();
 	const now = new Date();
 
+	// Dedupe AND lookup ride the server-only root uniqueKeys namespace (the
+	// relationship convention in messenger/shared.ts) — never the
+	// user-writable crystal path, which a free-form data thing could squat.
+	// Stamped through the shared helper so this writer can't drift from the
+	// family, and matched on the same value so the read is served by the
+	// uniqueKeys index — this kind needs no crystal-path index of its own.
+	const uniqueKeys = relationshipUniqueKeys('passkey-app-link', { linkKey });
+
 	const updateExisting = () =>
-		things.updateOne({ thingtime: 'passkey-app-link', 'crystal.linkKey': linkKey } as any, {
-			$set: { 'crystal.lastUsedAt': nowIso, ...(appName ? { 'crystal.appName': appName } : {}), updatedAt: now },
-			$inc: { 'crystal.usageCount': 1 }
-		} as any);
+		things.updateOne(
+			// legacy rows (written before the retirement) carry no stamp, so the
+			// crystal path stays in the filter as a fallback until the backfill
+			// migration stamps them
+			{
+				thingtime: 'passkey-app-link',
+				...(uniqueKeys ? { $or: [{ uniqueKeys: uniqueKeys[0] }, { 'crystal.linkKey': linkKey }] } : { 'crystal.linkKey': linkKey })
+			} as any,
+			{
+				$set: { 'crystal.lastUsedAt': nowIso, ...(appName ? { 'crystal.appName': appName } : {}), updatedAt: now },
+				$inc: { 'crystal.usageCount': 1 }
+			} as any
+		);
 
 	const updated = await updateExisting();
 	if (updated.matchedCount > 0) return;
@@ -522,6 +541,7 @@ const upsertPasskeyAppLink = async (passkeyDoc: any, appKey: string, appName: st
 			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 			thingtime: ['passkey-app-link'],
 			crystal: { linkKey, appKey, appName, firstUsedAt: nowIso, lastUsedAt: nowIso, usageCount: 1 },
+			...(uniqueKeys ? { uniqueKeys } : {}),
 			extended: null,
 			ownerId: String(passkeyDoc.ownerId),
 			acl: ['tt:user'],
