@@ -16,6 +16,7 @@ import {
   publicProviders,
   resolveYoutubeChannelQuery,
   sanitizeChannelList,
+  webLink,
   youtubeApiKey,
   FEED_FETCH_LIMIT,
   MAX_FEED_PAGES,
@@ -447,9 +448,19 @@ const upsertExternalPosts = async (
                 providerName: provider.name,
                 providerIcon: provider.icon,
                 externalId: item.externalId,
-                url: item.url,
+                // Every remote-supplied link is scheme-checked HERE, once, for
+                // every provider present and future: these values are rendered
+                // as real <a href>/<img src> targets, and a provider can be any
+                // RSS feed or Mastodon/Lemmy instance the user named, so an
+                // unchecked `javascript:` would be stored XSS. Doing it at the
+                // single write point beats trusting ~20 per-provider mappers.
+                url: webLink(item.url),
                 title: item.title,
-                author: item.author,
+                author: {
+                  ...item.author,
+                  url: webLink(item.author?.url),
+                  avatarUrl: webLink(item.author?.avatarUrl)
+                },
                 stats: item.stats,
                 publishedAt: publishedAt.toISOString()
               }

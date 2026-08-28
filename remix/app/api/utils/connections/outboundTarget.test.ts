@@ -1,0 +1,146 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { connectionProviderById, webLink } from './providers.ts';
+
+// The outbound-target guard (providers.ts). Feed sources are USER-SUPPLIED —
+// the RSS provider takes any feedUrl, Mastodon/Lemmy take an instance hostname
+// — so without this guard any signed-in account could aim the server at the
+// deployment's own private network (cloud metadata, internal admin ports,
+// databases) and read the answer back as feed content.
+//
+// The RSS provider is the sharpest expression of the rule (a whole URL, typed
+// by the user), so it is what these tests drive. Every provider shares the
+// same guarded fetch helpers underneath.
+//
+// `calls` is the real assertion: a refused target must never reach fetch() at
+// all. Checking only the returned error would still pass if the request went
+// out and we merely disliked the response.
+
+const rss: any = connectionProviderById('rss');
+
+let calls: string[] = [];
+const stubFetch = (impl: (url: string) => Response) => {
+  calls = [];
+  (globalThis as any).fetch = async (url: unknown) => {
+    calls.push(String(url));
+    return impl(String(url));
+  };
+};
+
+const RSS_BODY = `<?xml version="1.0"?><rss version="2.0"><channel><title>Example Feed</title>
+<link>https://example.com/</link>
+<item><title>Hello</title><link>https://example.com/1</link><guid>1</guid>
+<description>body</description><pubDate>Tue, 12 Aug 2025 10:00:00 GMT</pubDate></item>
+</channel></rss>`;
+
+const feedResponse = (body: string) => new Response(body, { status: 200, headers: { 'content-type': 'application/xml' } });
+
+// Spelling matters: WHATWG URL rewrites `[::ffff:127.0.0.1]` to `::ffff:7f00:1`
+// and keeps the brackets on `hostname`, so a guard written against the typed
+// form silently misses the address it was written to catch. Both shapes are
+// covered here on purpose.
+const BLOCKED_TARGETS: [string, string][] = [
+  ['cloud metadata (link-local)', 'https://169.254.169.254/latest/meta-data/iam/security-credentials/'],
+  ['loopback v4', 'https://127.0.0.1:9200/_cluster/health'],
+  ['loopback v6', 'https://[::1]:8080/'],
+  ['unspecified v6', 'https://[::]/'],
+  ['ipv4-mapped v6, dotted', 'https://[::ffff:127.0.0.1]/'],
+  ['ipv4-mapped v6, hex', 'https://[0:0:0:0:0:ffff:c0a8:0101]/'],
+  ['ipv4-mapped v6, metadata', 'https://[::ffff:169.254.169.254]/'],
+  ['private 10/8', 'https://10.0.0.5/admin'],
+  ['private 172.16/12', 'https://172.20.1.1/'],
+  ['private 192.168/16', 'https://192.168.1.1/'],
+  ['carrier-grade NAT 100.64/10', 'https://100.64.0.1/'],
+  ['this-network 0/8', 'https://0.0.0.0/'],
+  ['unique-local fc00::/7', 'https://[fd12:3456::1]/'],
+  ['link-local fe80::/10', 'https://[fe80::abcd]/'],
+  ['multicast ff00::/8', 'https://[ff02::1]/'],
+  ['localhost by name', 'https://localhost/feed.xml'],
+  ['*.internal', 'https://db.internal/feed.xml'],
+  ['*.local', 'https://printer.local/feed.xml'],
+  ['plaintext http', 'http://example.com/feed.xml']
+];
+
+for (const [label, feedUrl] of BLOCKED_TARGETS) {
+  test(`refuses ${label}`, async () => {
+    stubFetch(() => feedResponse(RSS_BODY));
+    const result = await rss.resolveAccount({ feedUrl });
+    assert.equal(result.ok, false, `${feedUrl} must be refused`);
+    assert.deepEqual(calls, [], `${feedUrl} must never reach fetch()`);
+  });
+}
+
+test('a public host cannot redirect the fetch into private space', async () => {
+  stubFetch((url) =>
+    url.startsWith('https://example.com')
+      ? new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data/' } })
+      : feedResponse('INTERNAL-ONLY-BODY')
+  );
+  const result = await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+  assert.equal(result.ok, false, 'a redirect into link-local space must be refused');
+  assert.deepEqual(calls, ['https://example.com/feed.xml'], 'only the first public hop may be fetched');
+});
+
+test('redirects between public hosts still work', async () => {
+  stubFetch((url) =>
+    url === 'https://example.com/feed.xml'
+      ? new Response(null, { status: 301, headers: { location: 'https://example.org/real.xml' } })
+      : feedResponse(RSS_BODY)
+  );
+  const result = await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+  assert.equal(result.ok, true, 'a public → public redirect must still connect');
+  assert.deepEqual(calls, ['https://example.com/feed.xml', 'https://example.org/real.xml']);
+});
+
+test('an ordinary public feed still connects', async () => {
+  stubFetch(() => feedResponse(RSS_BODY));
+  const result = await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+  assert.equal(result.ok, true, 'public feeds must be unaffected by the guard');
+  assert.equal(result.account.handle, 'example.com');
+  assert.equal(result.account.displayName, 'Example Feed');
+  assert.deepEqual(calls, ['https://example.com/feed.xml']);
+});
+
+test('a global-unicast IPv6 literal is not collateral damage', async () => {
+  stubFetch(() => feedResponse(RSS_BODY));
+  const result = await rss.resolveAccount({ feedUrl: 'https://[2606:4700:4700::1111]/feed.xml' });
+  assert.equal(result.ok, true, 'public v6 addresses must still be reachable');
+  assert.deepEqual(calls, ['https://[2606:4700:4700::1111]/feed.xml']);
+});
+
+// --- link scheme guard -------------------------------------------------------
+// A feed item's permalink and its third-party author URL are rendered as real
+// <a href> targets by PostCard. The provider behind them can be any RSS feed
+// or fediverse instance the user named, so a hostile source that returns
+// `javascript:` would otherwise store working XSS on a post that other
+// Thingtime accounts can open by permalink.
+
+test('webLink keeps real web links', () => {
+  assert.equal(webLink('https://example.com/post/1'), 'https://example.com/post/1');
+  assert.equal(webLink('http://example.com/post/1'), 'http://example.com/post/1');
+  assert.equal(webLink('  https://example.com/x  '), 'https://example.com/x');
+});
+
+test('webLink refuses script-bearing and non-web schemes', () => {
+  assert.equal(webLink('javascript:alert(document.cookie)'), null);
+  assert.equal(webLink('JavaScript:alert(1)'), null);
+  assert.equal(webLink('data:text/html,<script>alert(1)</script>'), null);
+  assert.equal(webLink('vbscript:msgbox(1)'), null);
+  assert.equal(webLink('file:///etc/passwd'), null);
+  assert.equal(webLink('/relative/path'), null);
+  assert.equal(webLink(''), null);
+  assert.equal(webLink(null), null);
+  assert.equal(webLink(42), null);
+});
+
+test('webLink decodes entity-escaped schemes before judging them', () => {
+  // RSS bodies routinely arrive entity-encoded; judging the raw string would
+  // let &#106;avascript: through as "not a javascript: URL".
+  assert.equal(webLink('&#106;avascript:alert(1)'), null);
+});
+
+test('webLink bounds the stored length', () => {
+  assert.equal(webLink(`https://example.com/${'a'.repeat(2000)}`), null);
+});

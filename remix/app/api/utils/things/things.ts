@@ -746,6 +746,21 @@ const thingtimeOf = (doc: ThingDoc): string[] => {
 
 export const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
 
+// Only http(s) links may be projected out of a synced external post's envelope
+// — those values become real <a href>/<img src> targets in the feed, and the
+// provider behind them can be any RSS feed or fediverse instance a user named.
+// Kept local (not imported from api/utils/connections) so the read path never
+// depends on the connections module.
+const safeExternalLink = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
 // Post-like for rendering/interaction surfaces (permalink projection, share
 // targets): native posts PLUS synced third-party posts. Deliberately NOT used
 // by feed queries — those match kinds explicitly, so external posts never
@@ -1944,13 +1959,13 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           username: String(external.author.handle || external.author.name || external.providerName || 'external'),
           displayName: external.author.name || external.author.handle || external.providerName || null,
           temporary: false,
-          avatarUrl: typeof external.author.avatarUrl === 'string' ? external.author.avatarUrl : null,
-          externalUrl:
-            typeof external.author.url === 'string' && external.author.url
-              ? external.author.url
-              : typeof external.url === 'string' && external.url
-                ? external.url
-                : null
+          // Scheme-checked on the way out as well as on the way in: the
+          // connections sync guards these (connections.ts), but this
+          // projection is what PostCard turns into <a href>/<img src>, so a
+          // row synced before that guard existed must not be able to render a
+          // `javascript:` target. Belt and braces on the boundary that matters.
+          avatarUrl: safeExternalLink(external.author.avatarUrl),
+          externalUrl: safeExternalLink(external.author.url) || safeExternalLink(external.url)
         }
       : null;
     const allComments = mergedCommentsOf(doc, related);

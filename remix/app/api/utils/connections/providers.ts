@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 import { fail, type Fail } from './shared';
 
@@ -217,6 +219,25 @@ const httpsImage = (value: unknown): string | null => {
   return /^https:\/\/[^\s"'<>]+$/.test(url) && url.length <= 1500 ? url : null;
 };
 
+// A remote-supplied link that is safe to render as a real <a href>. Feed items
+// and third-party authors carry permalinks straight from provider data, and
+// PostCard renders them as anchors — but "provider data" includes any RSS feed
+// or Mastodon/Lemmy instance the USER named, so an unchecked value lets a
+// hostile source store `javascript:` (or `data:`) and turn a synced post into
+// stored XSS. Only real web schemes survive; anything else becomes null, the
+// same shape every provider already uses for "no link".
+export const webLink = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const raw = decodeEntities(value.trim());
+  if (!raw || raw.length > 1500) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? raw : null;
+  } catch {
+    return null; // relative or unparseable — not a usable link target either
+  }
+};
+
 const boundedImages = (values: unknown[]): string[] => {
   const images: string[] = [];
   for (const value of values) {
@@ -238,24 +259,176 @@ const dateOrNull = (value: unknown): Date | null => {
 // that's malformed (a bad paging.next), so the naming must never throw.
 const hostOf = (url: string): string => {
   try {
-    return hostOf(url);
+    return new URL(url).host;
   } catch {
     return 'the provider';
   }
 };
 
+// --- outbound target guard (SSRF) -------------------------------------------
+//
+// Feed sources are USER-SUPPLIED: the RSS provider takes any feedUrl, and
+// Mastodon/Lemmy take an instance hostname. Unguarded, that lets any signed-in
+// account aim Thingtime's server at the deployment's own private network —
+// cloud metadata (169.254.169.254), internal admin ports, databases — and read
+// the answer back as feed content, or infer it from the distinct error strings
+// ("answered 401" vs "could not be reached" vs "does not look like a feed") is
+// already a working port scanner. So every outbound provider call resolves its
+// host first and refuses private/reserved space.
+//
+// Redirects are followed MANUALLY for the same reason: `redirect: 'follow'`
+// would let an attacker-owned public host 302 straight into private space,
+// bypassing any check made only on the URL the user typed. Each hop is
+// re-validated, and non-GET requests never follow a redirect at all so
+// credentials are never replayed to a new origin.
+//
+// Honest limitation: this validates the addresses the resolver returns and
+// then fetch() resolves again, so a DNS record that changes between the two
+// (rebinding) is not covered — closing that needs connection-level address
+// pinning via a custom undici dispatcher, which is a larger change than this
+// feature warrants. Every direct and redirect-based attempt is stopped.
+
+const MAX_REDIRECT_HOPS = 4;
+
+// Distinguishable so callers can surface the refusal instead of the generic
+// "could not be reached" — a blocked target is a user input problem (400),
+// not a provider outage (502).
+class BlockedTargetError extends Error {
+  readonly blocked = true;
+}
+
+const blockedFail = (err: unknown): Fail | null =>
+  err instanceof BlockedTargetError ? fail(400, `Thingtime will not fetch ${err.message}`) : null;
+
+const ipv4Blocked = (address: string): boolean => {
+  const parts = address.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) return true; // this-network, private, loopback
+  if (a === 169 && b === 254) return true; // link-local — cloud metadata lives here
+  if (a === 172 && b >= 16 && b <= 31) return true; // private
+  if (a === 192 && b === 168) return true; // private
+  if (a === 192 && b === 0) return true; // IETF protocol assignments
+  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+  if (a >= 224) return true; // multicast + reserved + broadcast
+  return false;
+};
+
+// Expand any textual IPv6 form to its 8 numeric groups, so the range checks
+// never depend on how the address happened to be spelled. This matters:
+// WHATWG URL renders `[::ffff:127.0.0.1]` as `::ffff:7f00:1`, so a check
+// written against the dotted spelling silently misses the very address it was
+// written to catch.
+const ipv6Groups = (value: string): number[] | null => {
+  let text = value;
+  const dotted = text.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (dotted) {
+    const octets = dotted[2].split('.').map((part) => Number(part));
+    if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return null;
+    text = `${dotted[1]}${(((octets[0] << 8) | octets[1]) >>> 0).toString(16)}:${(((octets[2] << 8) | octets[3]) >>> 0).toString(16)}`;
+  }
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const parseGroups = (part: string): number[] => (part ? part.split(':').map((group) => Number.parseInt(group, 16)) : []);
+  const head = parseGroups(halves[0]);
+  const tail = halves.length === 2 ? parseGroups(halves[1]) : [];
+  const groups =
+    halves.length === 2 ? [...head, ...new Array(Math.max(0, 8 - head.length - tail.length)).fill(0), ...tail] : head;
+  if (groups.length !== 8 || groups.some((group) => !Number.isInteger(group) || group < 0 || group > 0xffff)) return null;
+  return groups;
+};
+
+const ipv6Blocked = (address: string): boolean => {
+  const groups = ipv6Groups(address.toLowerCase().split('%')[0]); // drop any zone index
+  if (!groups) return true; // unparseable — refuse rather than guess
+  // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d) carry a v4
+  // address in the low 32 bits, and `::`/`::1` fall out of the same branch as
+  // 0.0.0.0/0.0.0.1 — both already blocked by the v4 rules.
+  if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
+    return ipv4Blocked(`${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`);
+  }
+  const head = groups[0];
+  if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((head & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((head & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+  if ((head & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  return false;
+};
+
+const addressBlocked = (address: string, family: number): boolean =>
+  family === 6 ? ipv6Blocked(address) : ipv4Blocked(address);
+
+const BLOCKED_HOST_SUFFIXES = ['.local', '.internal', '.localhost', '.home.arpa'];
+
+// null = allowed; a string = the refusal reason (deliberately generic to the
+// caller, so a probe learns nothing it did not already supply)
+const blockedTargetReason = async (raw: string): Promise<string | null> => {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return 'that URL could not be parsed';
+  }
+  if (url.protocol !== 'https:') return 'only https:// feed sources are supported';
+  // WHATWG `hostname` keeps the brackets around an IPv6 literal ("[::1]"),
+  // which isIP() does not recognise — strip them or every v6 address would
+  // fall through to the DNS branch, fail to resolve, and be allowed.
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!hostname) return 'that URL has no host';
+  if (hostname === 'localhost' || BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) {
+    return 'that host is not a public internet address';
+  }
+  const literal = isIP(hostname);
+  if (literal) {
+    return addressBlocked(hostname, literal) ? 'that host is not a public internet address' : null;
+  }
+  let resolved: { address: string; family: number }[];
+  try {
+    resolved = await lookup(hostname, { all: true });
+  } catch {
+    // Unresolvable here means unresolvable for fetch() too — let the real
+    // request fail with its own message rather than inventing a refusal.
+    return null;
+  }
+  if (resolved.some((entry) => addressBlocked(entry.address, entry.family))) {
+    return 'that host is not a public internet address';
+  }
+  return null;
+};
+
+// One guarded fetch for every outbound provider call: validates the target,
+// then walks redirects by hand re-validating each hop.
+const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
+  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const method = init.method || 'GET';
+  let target = url;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    const blocked = await blockedTargetReason(target);
+    if (blocked) throw new BlockedTargetError(blocked);
+    const resp = await fetch(target, { ...init, signal, redirect: 'manual' });
+    if (resp.status < 300 || resp.status > 399) return resp;
+    const location = resp.headers.get('location');
+    // Only idempotent GETs follow a redirect — a POST carrying client
+    // credentials or a Bearer token must never be replayed to a new origin.
+    if (!location || method !== 'GET') return resp;
+    target = new URL(location, target).toString();
+  }
+  throw new BlockedTargetError('that URL redirected too many times');
+};
+
 const fetchText = async (url: string, accept: string): Promise<{ ok: true; text: string } | Fail> => {
   try {
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: accept },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: 'follow'
+    const resp = await guardedFetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: accept }
     });
     if (!resp.ok) return fail(502, `The provider answered ${resp.status} for ${hostOf(url)}`);
     const text = await resp.text();
     if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
     return { ok: true, text };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
@@ -280,7 +453,7 @@ const postForm = async (
   opts: { basicAuth?: { user: string; pass: string } } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
-    const resp = await fetch(url, {
+    const resp = await guardedFetch(url, {
       method: 'POST',
       headers: {
         'User-Agent': USER_AGENT,
@@ -288,8 +461,7 @@ const postForm = async (
         Accept: 'application/json',
         ...(opts.basicAuth ? { Authorization: `Basic ${Buffer.from(`${opts.basicAuth.user}:${opts.basicAuth.pass}`).toString('base64')}` } : {})
       },
-      body: new URLSearchParams(form).toString(),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      body: new URLSearchParams(form).toString()
     });
     const text = await resp.text();
     if (text.length > 1_000_000) return fail(502, 'The provider response was too large to process');
@@ -305,6 +477,8 @@ const postForm = async (
     }
     return { ok: true, data };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
@@ -318,7 +492,7 @@ const authedJson = async (
   opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
-    const resp = await fetch(url, {
+    const resp = await guardedFetch(url, {
       method: opts.method || 'GET',
       headers: {
         'User-Agent': USER_AGENT,
@@ -328,8 +502,7 @@ const authedJson = async (
         // provider-specific extras (Twitch helix requires a Client-Id header)
         ...(opts.headers || {})
       },
-      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
     const text = await resp.text();
     if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
@@ -346,6 +519,8 @@ const authedJson = async (
     }
     return { ok: true, data };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
