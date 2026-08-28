@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   cpSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -119,7 +120,7 @@ function copyTrustedTree(destination) {
   }
 }
 
-function makeStoppedRebase(root) {
+function makeStoppedRebase(root, { executableConflict = false } = {}) {
   const repo = path.join(root, "repo");
   mkdirSync(repo);
   runGit(repo, ["init", "-q"]);
@@ -127,6 +128,7 @@ function makeStoppedRebase(root) {
   runGit(repo, ["config", "user.email", "lopu-fixture@example.invalid"]);
   runGit(repo, ["config", "merge.conflictStyle", "zdiff3"]);
   writeFileSync(path.join(repo, "conflict.txt"), "base\n");
+  if (executableConflict) chmodSync(path.join(repo, "conflict.txt"), 0o755);
   writeFileSync(path.join(repo, "related.txt"), "related base\n");
   runGit(repo, ["add", "."]);
   runGit(repo, ["commit", "-qm", "base"]);
@@ -153,9 +155,9 @@ function makeStoppedRebase(root) {
   return { repo, head, rebaseHead, base };
 }
 
-function runVerifier({ addNewFile = false } = {}) {
+function runVerifier({ addNewFile = false, executableConflict = false } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "thingtime-rebase-related-"));
-  const fixture = makeStoppedRebase(root);
+  const fixture = makeStoppedRebase(root, { executableConflict });
   const scratch = path.join(root, "scratch");
   const trusted = path.join(root, "trusted");
   mkdirSync(scratch);
@@ -205,6 +207,32 @@ function runVerifier({ addNewFile = false } = {}) {
   return { root, fixture, result, output };
 }
 
+function runPrepareExecutableConflict() {
+  const root = mkdtempSync(path.join(tmpdir(), "thingtime-rebase-executable-"));
+  const fixture = makeStoppedRebase(root, { executableConflict: true });
+  const scratch = path.join(root, "scratch");
+  const round = path.join(root, "round");
+  const output = path.join(root, "github-output");
+  mkdirSync(scratch);
+  mkdirSync(round);
+  writeFileSync(output, "");
+  const result = spawnSync(
+    path.join(repositoryRoot, ".github/scripts/rebase-stack/prepare-round.sh"),
+    [fixture.repo, scratch, round],
+    {
+      cwd: fixture.repo,
+      env: {
+        ...process.env,
+        RUNNER_TEMP: root,
+        GITHUB_OUTPUT: output,
+        GITHUB_WORKSPACE: scratch,
+      },
+      encoding: "utf8",
+    },
+  );
+  return { root, fixture, scratch, result, output };
+}
+
 test("verifier imports a bounded related edit and completes the stopped rebase", () => {
   const run = runVerifier();
   try {
@@ -232,6 +260,34 @@ test("verifier rejects an invented related file before importing scratch bytes",
     );
     assert.equal(runGit(run.fixture.repo, ["rev-parse", "HEAD"]).trim(), run.fixture.head);
     assert.equal(readFileSync(path.join(run.fixture.repo, "related.txt"), "utf8"), "related base\n");
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("verifier preserves an executable text conflict's incoming Git mode", () => {
+  const run = runVerifier({ executableConflict: true });
+  try {
+    assert.equal(run.result.status, 0, run.result.stderr || run.result.stdout);
+    assert.equal(
+      runGit(run.fixture.repo, ["ls-tree", "HEAD", "conflict.txt"]).split(/\s+/)[0],
+      "100755",
+    );
+    assert.equal(statSync(path.join(run.fixture.repo, "conflict.txt")).mode & 0o777, 0o755);
+    assert.match(readFileSync(run.output, "utf8"), /^complete=true$/m);
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("prepare admits executable regular text without exposing executable scratch", () => {
+  const run = runPrepareExecutableConflict();
+  try {
+    assert.equal(run.result.status, 0, run.result.stderr || run.result.stdout);
+    assert.equal(statSync(path.join(run.scratch, "conflict.txt")).mode & 0o777, 0o644);
+    const output = readFileSync(run.output, "utf8");
+    assert.match(output, /^needs_ai=true$/m);
+    assert.match(output, /^conflict\.txt$/m);
   } finally {
     rmSync(run.root, { recursive: true, force: true });
   }

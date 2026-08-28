@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Allowed Lopu's isolated rebase rounds to resolve ordinary executable text
+  conflicts. Scratch copies remain non-executable, while the trusted verifier
+  restores the incoming replay side's exact `100644` or `100755` Git mode;
+  symlinks, submodules, non-regular entries, and binaries remain excluded. —
+  Codex (AI), 2026-08-28
 - Coalesced Lopu's conflict-resolution follow-up work at the batch boundary.
   Bot-authored resolution pushes no longer enqueue one repository review and
   one all-branch rebuild per PR ahead of the remaining conflict matrix; one
