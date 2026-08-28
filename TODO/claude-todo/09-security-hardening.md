@@ -1,7 +1,7 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🔴 Not started · raised 2026-07-08 by a multi-agent review, each
-finding adversarially verified against the source.
+**Status:** 🟡 Final §§C–D reconciliation in PR #99; §§A–B already closed on
+`develop` · raised 2026-07-08 by a multi-agent review.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
@@ -71,34 +71,34 @@ service-account token lifetime regardless.
   no attempt counter, lockout, or IP throttle; the dispatcher adds no middleware.
   Only friction is bcrypt cost 10 (skipped for unknown usernames). Credentials are
   brute-forceable at full speed.
-- `POST /api/v1/auth/register` (`_register.tsx` L10–14): no rate limit, no body
-  cap before `request.json()`, and `meta` is persisted verbatim as
-  `Record<string, any>` (`registerUser.ts` L72, `meta: input.meta ?? {}`).
+- `POST /api/v1/auth/register` (`_register.tsx`): the shared IP-based
+  `auth.register` limiter landed in PR #167. Before PR #99, the route still had
+  no body cap before `request.json()`; its public action already whitelisted
+  fields and never forwarded caller-controlled `meta`.
 - `POST /api/v1/auth/resend-verification`: mints unlimited verification tokens per
   request (email cost currently masked only by the dev console stub in
   `remix/app/api/utils/auth/email.ts`).
 
-**Fix:** reuse the existing per-IP fixed-window quota
-(`consumeJoinQuota` in `remix/app/api/utils/waitlist/waitlist.ts` L23–41, or
-`consumeLopuMusingQuota` in `remix/app/api/utils/lopu/rateLimit.ts`, both backed
-by the `lopuMusingRateLimits` TTL collection) to return 429 after N failed
-attempts per IP (and per username for login) per window. Cap register/login body
-size (use `readJsonBody(request, 64*1024)` like the things/algorithms routes
-already do). Whitelist known `meta` keys or enforce a serialized-size ceiling.
+**Fix:** reuse the shared `enforceRateLimit` path for per-IP auth quotas rather
+than adding another registration limiter. Cap register/login body size with
+`readJsonBody`; public registration must continue to whitelist accepted fields
+instead of forwarding caller-controlled `meta`.
 
 ## C. Persisted-state `eval` → arbitrary code execution + no CSP
 
-- File: `remix/app/Providers/ThingtimeProvider.tsx`.
-- The `flatted` reviver runs `eval(value.code)` (L39) for any parsed value with
-  `ttype:'function'`, plus a second scoped `eval` embedding `value.code` (L53)
-  when a `ttScope` is present. The paired replacer serialises every function into
-  `{ttype:'function', code, ttScope}` (L71–87). The provider persists the entire
+- Current implementation before PR #99 reconciliation:
+  `remix/app/Providers/thingtimeSerialization.ts`, called by
+  `ThingtimeProvider.tsx`.
+- Its `flatted` hydration path compiled every persisted
+  `{ttype:'function', code, ttScope}` payload with `Function`. The paired
+  replacer serialised every runtime function back to source. The provider
+  persists the entire
   `thingtime` object to IndexedDB via
   `localforage.setItem('thingtime', stringify(state))` on **every** state change
   (L435–438) and revives it on every load (`getItem` L374 → `parse` L381 →
   reviver). It wraps the whole app in `root.tsx`.
-- No Content-Security-Policy exists anywhere in the repo, so `unsafe-eval` is
-  effectively allowed. Anything able to write same-origin storage (an XSS, a
+- Before PR #99, no application Content-Security-Policy enforced this boundary.
+  Anything able to write same-origin storage (an XSS, a
   browser extension, another tab) can plant a `ttype:'function'` payload that
   becomes **persistent arbitrary code execution on every subsequent load**. It
   also breaks the moment a strict CSP ships.
@@ -122,13 +122,35 @@ revive only tagged values.
 
 ## Done when
 
-- [ ] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
-      any that remain apply visibility filtering.
-- [ ] Login / register / resend-verification return 429 past a per-IP (and
+- [x] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
+      any that remain apply visibility filtering. _(A1 raw-results + A2 populate
+      became admin-only + rate-limited fail-closed in earlier PRs; A3
+      service-account provisioning stays public by design — "anyone can
+      provision a service account, so accountKind confers no trust" — but is now
+      rate-limited fail-closed per IP (`auth.serviceAccount`), body-capped at
+      16 KiB, and field-whitelisted. 2026-07-21.)_
+- [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
-- [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
-- [ ] Function values are no longer revived via `eval`; a CSP without
-      `unsafe-eval` is in place and the app still hydrates.
-- [ ] The `Date.parse` reviver no longer coerces plain strings (verified by a
-      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string).
-- [ ] Regression coverage added to `remix/app/tests/api/apiTests.ts`.
+      Login + resend already enforced the shared `enforceRateLimit`; the
+      IP-based `auth.register` rule (10/15min) landed separately in PR #167.
+- [x] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+      Register now reads via `readJsonBody(request, 16 KiB)` (413 over cap); the
+      route already whitelists fields and never passes `meta`. — PR #99
+- [x] Function values are no longer revived via `eval`; the application CSP
+      omits `unsafe-eval` and the app still hydrates. Repo-controlled generated
+      design prototypes keep a path-scoped compatibility exception. — PR #99
+- [x] The `Date.parse` reviver no longer coerces plain strings (verified by a
+      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string). — PR #99
+- [x] Regression coverage added — `remix/app/Providers/thingtimeSerialization.test.ts`
+      (`npm run test:persist`). The codec is client-side, so coverage lives beside
+      it rather than in the fetch-based `apiTests.ts`. — PR #99
+
+**§B's IP-based register rate limit shipped in PR #167. PR #99 keeps that
+single implementation and supplies the remaining register body cap, plus §C
+(persisted-state `eval` + CSP) and §D (Date.parse corruption).** The persist
+codec is the current `remix/app/Providers/thingtimeSerialization.ts` path
+(pure/React-free). The older parallel `thingtimePersistCodec.ts` from the
+original PR diff was intentionally dropped after `develop` superseded that
+architecture; its invariants and tests were folded into the active serializer.
+§A (unauth admin/data endpoints — raw-results, populate, service-account) closed
+separately on `develop` (2026-07-21) — see the §A note above.

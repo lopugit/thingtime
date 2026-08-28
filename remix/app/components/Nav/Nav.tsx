@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { PanelLeft, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -11,6 +11,7 @@ import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
 import { motionOK, partyConfetti } from '~/eggs/eggs';
+import { getUserDisplayName } from '~/utils/userIdentity';
 
 // 🥚 Easter egg: rapid 7-click streak on the nav 🦄 makes it gallop.
 const GALLOP_STREAK = 7;
@@ -48,8 +49,9 @@ export const Nav = (props) => {
 	const { thingtime } = useThingtime();
 
 	const user = useCurrentUser();
+	const claimedUser = user?.temporary ? null : user;
 
-	const { loading, open, toggleOpen, direction, openSearch } = useDrawer();
+	const { loading, open, direction, openSearch } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
 
@@ -185,31 +187,6 @@ export const Nav = (props) => {
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
 					<Center
-						className="nav-native-drawer-button"
-						as="button"
-						type="button"
-						position="absolute"
-						left={0}
-						top={0}
-						bottom={0}
-						width="56px"
-						display="none"
-						cursor="pointer"
-						opacity={0.75}
-						aria-label={open ? 'Close menu' : 'Open menu'}
-						title={open ? 'Close menu' : 'Open menu'}
-						sx={{
-							WebkitTapHighlightColor: 'transparent',
-							touchAction: 'manipulation',
-							'html.thingtime-native-webview &': {
-								display: 'flex'
-							}
-						}}
-						onClick={toggleOpen}
-					>
-						<PanelLeft size={16} strokeWidth={1.9} />
-					</Center>
-					<Center
 						className="nav-left-section"
 						display={['none', 'flex']}
 						height="100%"
@@ -288,17 +265,17 @@ export const Nav = (props) => {
 								></Icon>
 							</Center>
 						)}
-						{user && (
+						{claimedUser && (
 							<Center>
 								<NotificationsBell />
 							</Center>
 						)}
 						<Center cursor="pointer">
-							{user ? (
+							{claimedUser ? (
 								<Link to="/profile">
 									<Flex flexDir={'row'} gap={2} alignItems="center">
 										<Box fontSize="xs" fontWeight="600">
-											{user.displayName || user.username}
+											{getUserDisplayName(claimedUser)}
 										</Box>
 										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
 									</Flex>
