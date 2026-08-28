@@ -24,11 +24,18 @@
    Largely done before this pass: `resolveTrustedOrigin`
    (`remix/app/api/utils/auth/appOrigin.ts`) already prefers `APP_URL` and all
    four email-link routes use it. Finished on
-   `claude/todo2-verification-link-origin-s3`: the APP_URL-unset fallback now
-   only trusts deploy hosts (localhost/127.0.0.1, `*.thingtime.com`,
-   `*.vercel.app`, `*.ts.net`); any other Host header gets the canonical
-   `https://thingtime.com` instead — spoofed hosts can no longer steer emailed
-   token links. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
+   `claude/todo2-verification-link-origin-s3`: when `APP_URL` is unset the
+   origin is resolved from the platform rather than the caller. On Vercel the
+   Host header is not consulted at all — `VERCEL_BRANCH_URL`/`VERCEL_URL` (or
+   `VERCEL_PROJECT_PRODUCTION_URL` on a production target) name the deployment,
+   and those are server-injected. Off-platform (local dev) a narrow Host
+   allowlist still applies — `localhost`, `127.0.0.1`, `[::1]`,
+   `*.thingtime.com`, `*.ts.net` — and every other Host gets the canonical
+   `https://thingtime.com`. `*.vercel.app` is deliberately NOT a trusted Host
+   pattern: that namespace is multi-tenant, so trusting it would have left the
+   spoof open to anyone willing to deploy a free project. Covered by
+   `npm run test:auth-origin` and the `TESTING.md` "Emailed-link origin trust"
+   checklist. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 
