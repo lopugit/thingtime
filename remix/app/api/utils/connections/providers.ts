@@ -412,6 +412,12 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
     // Only idempotent GETs follow a redirect — a POST carrying client
     // credentials or a Bearer token must never be replayed to a new origin.
     if (!location || method !== 'GET') return resp;
+    // Release the hop we are abandoning. Only `location` is used from a 3xx,
+    // so its body is dead weight — and an undrained body holds its connection
+    // open for the whole fetch window. Same threat model readBoundedBody was
+    // added for: the host on the other end is user-supplied and may be
+    // hostile, and it gets one of these per hop.
+    await resp.body?.cancel().catch(() => {});
     target = new URL(location, target).toString();
   }
   throw new BlockedTargetError('that URL redirected too many times');

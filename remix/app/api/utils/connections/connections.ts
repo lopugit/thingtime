@@ -721,12 +721,33 @@ export const readConnectionsFeed = async (
       // the message is the server's, never the caught error's — a thrown
       // driver/provider error can carry hosts, queries, or token material
       console.error(`[connections] sync failed for ${String(account?.crystal?.provider || 'unknown')}:`, err?.message || err);
+      const message = 'That connection could not be synced just now — showing what was already saved';
+      // Stamp the cooldown, exactly like the provider-Fail branch above. The
+      // cooldown is what bounds outbound fan-out, and only a stamp advances it:
+      // a connection that throws DETERMINISTICALLY (the upsert-error and
+      // unfamiliar-shape cases this catch was added for) would otherwise never
+      // move lastSyncedAt, so the gate above re-fetches from the provider on
+      // EVERY ordinary feed read. Ordinary reads sit in the generous
+      // connections.read bucket (120/min) rather than connections.provider
+      // (20/min) precisely BECAUSE the cooldown is assumed to hold — so an
+      // unstamped failure quietly buys a 6× sustained amplification against a
+      // third party. Swallowing the throw must not also swallow the brake:
+      // before this catch existed the request 500'd and the client stopped;
+      // now it succeeds, so the client keeps polling. `sync=force` still
+      // bypasses the cooldown for a deliberate retry, on the tight bucket.
+      try {
+        if (account?.shareId) await markAccountSync(String(account.shareId), message);
+      } catch (stampErr: any) {
+        // best-effort: markAccountSync is itself a home-DB write, and a DB
+        // fault is one of the things that can land us in this catch
+        console.error('[connections] could not record the sync failure:', stampErr?.message || stampErr);
+      }
       synced.push({
         connectionId,
         provider: String(account?.crystal?.provider || ''),
         fetched: 0,
         skipped: false,
-        error: 'That connection could not be synced just now — showing what was already saved'
+        error: message
       });
     }
   };
