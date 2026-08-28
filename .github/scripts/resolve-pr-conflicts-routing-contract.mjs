@@ -276,9 +276,9 @@ function assertWorkflowSource() {
   assert.match(source, /format\('resolve-detect-pr\{0\}'/);
   assert.match(source, /format\('resolve-worker-\{0\}', github\.run_id\)/);
   assert.match(resolveBlock, /queue: max/);
-  // A batch handoff can select up to 200 PRs, so the matrix must stay bounded
-  // rather than flooding the durable fleet queue's pending-job limit.
-  assert.match(resolveBlock, /max-parallel: 3/);
+  // The detector bounds the fully materialized matrix below the durable fleet
+  // limit. `max-parallel` would hide latent jobs from exact-owner deduplication.
+  assert.doesNotMatch(resolveBlock, /max-parallel:/);
   assert.match(resolveBlock, /fail-fast: false/);
   assert.equal(
     source.match(/chore: refresh graphify outputs after PR branch merge/g)?.length,
@@ -304,6 +304,13 @@ function assertWorkflowSource() {
     source.indexOf("  review_detect:"),
   );
   assert.match(handoffBlock, /status=queued/);
+  assert.match(source, /Lopu resolves a fully materialized PR batch from the control plane/);
+  assert.match(
+    handoffBlock,
+    /\.display_title == "Lopu resolves a PR batch from the control plane"[\s\S]*?Legacy Lopu batch run\(s\) \$legacy_label still own latent conflict selections/u,
+    "pre-migration generic batch runs drain without receiving unknowable duplicate replacements",
+  );
+  assert.match(handoffBlock, /\.actor\.login == "github-actions\[bot\]"/);
   assert.doesNotMatch(
     handoffBlock,
     /status=\$pending_status|status=pending/,
@@ -330,8 +337,16 @@ function assertWorkflowSource() {
   );
   assert.match(
     handoffBlock,
-    /Could not read the durable Lopu fleet queue; immutable worker admission will retain correctness/u,
-    "a transient queue-inventory failure falls back to immutable worker admission",
+    /Could not read the durable Lopu fleet queue; deferring conflict dispatch to a later repository scan/u,
+    "a transient queue-inventory failure defers rather than risking an over-capacity matrix",
+  );
+  assert.match(handoffBlock, /fleet_capacity=90/);
+  assert.match(handoffBlock, /\.total_count \/\/ \(\.group_members \| length\)/);
+  assert.match(handoffBlock, /\.'\?\[0:\$available_slots\]|'\.\[0:\$available_slots\]'/);
+  assert.match(
+    handoffBlock,
+    /deferring \$deferred_count conflict\(s\) to the next scan/u,
+    "only capacity-bounded conflict matrices are dispatched; overflow remains discoverable",
   );
   assert.ok(
     handoffBlock.indexOf("Coalescing obsolete queued Lopu worker run") <
