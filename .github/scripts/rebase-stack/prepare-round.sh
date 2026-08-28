@@ -136,11 +136,17 @@ assert_safe_regular_text_conflict() {
   while IFS=' ' read -r mode oid _; do
     [[ -n "$mode" ]] || continue
     ((stage_count += 1))
-    if [[ "$mode" != 100644 ]]; then
-      echo "::error::Symlink, submodule, executable, or non-regular conflict requires human review: $path (mode $mode)"
-      rm -f -- "$blob_tmp"
-      return "$TERMINAL_REVIEW_EXIT"
-    fi
+    case "$mode" in
+      # Executability is repository metadata, not executable behavior in the
+      # repo-less scratch. Copy the bytes there as 0644 and let the trusted
+      # verifier restore the incoming rebase side's exact 100644/100755 mode.
+      100644|100755) ;;
+      *)
+        echo "::error::Symlink, submodule, or non-regular conflict requires human review: $path (mode $mode)"
+        rm -f -- "$blob_tmp"
+        return "$TERMINAL_REVIEW_EXIT"
+        ;;
+    esac
     stage_size="$(git cat-file -s "$oid")"
     if (( stage_size > MAX_SOURCE_BYTES )); then
       echo "::error::Conflict source blob is too large for AI resolution: $path ($stage_size bytes)"
