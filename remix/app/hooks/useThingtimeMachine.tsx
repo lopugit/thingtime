@@ -180,7 +180,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo
@@ -255,7 +254,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo
@@ -305,7 +303,7 @@ export interface TimelineScaffold {
 export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold) => {
 	const timeline: Timeline = {
 		key: key,
-		uuid: Math.random().toString(36).substring(2, 15), // generate a random UUID
+		uuid: crypto.randomUUID(), // generate a random UUID
 		past: [],
 		present: null,
 		future: [],
