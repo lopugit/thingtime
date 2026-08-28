@@ -1,4 +1,4 @@
-# 15 — Custom schema presentation: extend the declarative vocabulary
+# 21 — Custom schema presentation: extend the declarative vocabulary
 
 Owner request (2026-07-18, from the PR #73 schema-converter consolidation
 discussion):
