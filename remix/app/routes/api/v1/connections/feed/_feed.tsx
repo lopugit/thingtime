@@ -3,6 +3,7 @@ import { json } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { readConnectionsFeed } from '~/api/utils/connections/connections';
 import { applyFeedFilters } from '~/api/utils/connections/filters';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/connections/feed — sync + read the caller's connected
 // third-party feeds as Thingtime posts (comments/reactions attach natively).
@@ -15,6 +16,18 @@ export const loader = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
   const url = new URL(request.url);
+
+  // `sync=force` deliberately bypasses the per-account sync cooldown, so it is
+  // the one read here that can fan out to every connected provider on demand.
+  // Without a bound, repeating it is unlimited outbound calls on a shared
+  // third-party quota — so a forced sync spends the tight provider budget while
+  // ordinary (stored-page) reads use the generous read budget.
+  const forced = url.searchParams.get('sync') === 'force';
+  const limit = await enforceRateLimit(request, forced ? 'connections.provider' : 'connections.read', `user:${user.id}`);
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'Refreshing connected feeds very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
+  }
+
   const result = await readConnectionsFeed(user, {
     connectionId: url.searchParams.get('connection'),
     cursor: url.searchParams.get('cursor'),
