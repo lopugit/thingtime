@@ -1588,13 +1588,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   invisible to the type checker. Parameter bivariance does not apply here —
   neither `string` nor `PostChange` is assignable to the other, so `tsc` rejects
   the swap even with `"strict": false` (verified against the repo's exact
-  compiler flags). CI genuinely saw all six: the run for this head logged
+  compiler flags). CI genuinely saw all six: the run for the superseded head
+  `4f44384` logged
   `PostCard.tsx(1180|1185|1199|1203|1208|1566): error TS2554: Expected 2
   arguments, but got 1` and summarised `Typecheck ratchet WARNING: 144 tsc
   errors vs baseline 143 (+1). This check is non-blocking.` The gap is that the
   ratchet is deliberately advisory (`ci: make typecheck ratchet warning-only`),
   so a real regression annotates and still goes green — worth revisiting as its
   own change, not silently here — Lopu, 2026-08-28.
+
+  Those six are fixed as of `c8cbab7`, whose CI run reports `Typecheck ratchet:
+  138 errors, DOWN from baseline 143 🎉`; base `261072a` measures the same 138
+  with a byte-identical error set, so this change is exactly type-neutral. That
+  comparison also sharpens the point above: the superseded head's true
+  regression was **+6**, not the +1 the ratchet printed — develop had
+  independently dropped 5 errors and the stale 143 baseline netted the two off.
+  The confirmed number is now locked in
+  (`node scripts/typecheck-ratchet.mjs --update-baseline`, 143 → 138), so that
+  masking headroom is gone; a ratchet that diffed error *identities* instead of
+  totals would close the remaining gap and stays worth doing as its own change,
+  not here — Lopu, 2026-08-28.
+
+  Both halves of the fix are now pinned by `test:feed-contract`
+  (`app/components/Feed/postCardChangeContract.test.ts`): every post-level
+  `onChanged?.()` call must address `post.id` (and every comment-level
+  `onChanged()` call `comment.id`), and no PostCard consumer may bind
+  `onChanged` to an inline closure. tsc covers the arity but not which id a call
+  addresses — a wrong id compiles, matches no post in any consumer and silently
+  drops the update — and nothing at all caught a consumer re-introducing the
+  per-card arrow, which is the original TODO #12 regression. Verified by
+  mutation: reverting the prop to one argument, mis-addressing a call site, and
+  restoring PostList's closure each fail the suite — Lopu, 2026-08-28.
 
 ### Fixed
 
