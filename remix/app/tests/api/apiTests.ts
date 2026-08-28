@@ -1820,6 +1820,35 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'apps-desktop-authorize-guarded',
+    name: 'Desktop authorization requires a session and complete PKCE request',
+    description:
+      'POST /api/v1/oauth/desktop/authorize is registered and rejects anonymous or incomplete installed-app consent requests before issuing a code.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/desktop/authorize',
+    body: {},
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop authorize rejected an unauthenticated/incomplete request with the bounded error envelope.'
+    )
+  },
+  {
+    id: 'apps-desktop-token-grant-type',
+    name: 'Desktop token exchange rejects unsupported grants',
+    description: 'POST /api/v1/oauth/token is registered and accepts only the authorization_code grant.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/token',
+    body: { grantType: 'client_credentials' },
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop token endpoint rejected an unsupported grant with the bounded error envelope.'
+    )
+  },
+  {
     id: 'apps-sandbox-mint',
     name: 'Sandbox token mint',
     description:

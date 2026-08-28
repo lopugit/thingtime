@@ -2,7 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import {
-  PR_CONFLICT_RESOLVER_MODEL_OPTIONS,
+  AI_WORKFLOW_BASE_MODELS,
   PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
   type PRConflictResolverModelId,
   validatePrConflictResolverModelWaterfall
@@ -12,14 +12,23 @@ import {
   setPrConflictResolverModelWaterfall
 } from '~/api/utils/settings/prConflictResolverModelWaterfall';
 
-const MAX_BODY_BYTES = 16 * 1024;
+// A full-catalog waterfall of composed variant ids is a few tens of KB; keep
+// generous headroom while still bounding the admin mutation body.
+const MAX_BODY_BYTES = 64 * 1024;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 const responseBody = (waterfall: PRConflictResolverModelId[]) => ({
   ok: true,
   key: PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
   waterfall: [...waterfall],
-  models: PR_CONFLICT_RESOLVER_MODEL_OPTIONS.map((model) => ({ ...model }))
+  // Base models only; waterfall entries compose them as `<id>[:effort][:fast]`.
+  models: AI_WORKFLOW_BASE_MODELS.map((model) => ({
+    id: model.id,
+    label: model.label,
+    provider: model.provider,
+    efforts: [...model.efforts],
+    speeds: [...model.speeds]
+  }))
 });
 
 type HandlerDependencies = {
