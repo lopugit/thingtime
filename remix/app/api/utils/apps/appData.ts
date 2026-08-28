@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { findUserById } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { sandboxDisplayName } from './sandbox';
 import { scopeCovers } from './scopes';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
+import { thirdPartyProfileMediaUrl } from './profileMedia';
 import {
   appAclEntry,
   appNamespaceStamp,
@@ -342,7 +345,12 @@ export const setAppData = async (
 				const delta = nextSize - oldSize;
 
 				// One global lock order for every registered content mutation.
-				await applyUserStorageDelta(ownerId, delta, session);
+				// Account quota meters HOME-hosted bytes only: with an endpoint
+				// override active this write lands on the user's own MongoDB, so it
+				// must not (and cannot — sessions are client-bound and the ledger is
+				// home-pinned) touch the home subscription ledger. App ledgers still
+				// self-account on the active plane either way.
+				if (!isCustomMongoEndpointActive()) await applyUserStorageDelta(ownerId, delta, session);
 				await applyAppStorageDeltaTransaction(scope, delta, session);
 
 				const now = new Date();
@@ -454,7 +462,9 @@ export const deleteAppData = async (
 				if (!existing) return null;
 
 				const bytes = registeredStorageSize(existing);
-				await applyUserStorageDelta(ownerId, -bytes, session);
+				// Same home-plane rule as setAppData: foreign-plane deletes never
+				// touch the home account ledger.
+				if (!isCustomMongoEndpointActive()) await applyUserStorageDelta(ownerId, -bytes, session);
 				await applyAppStorageDeltaTransaction(scope, -bytes, session);
 
 				const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
@@ -647,7 +657,7 @@ export const listSharedAppData = async (
         id: String(user._id),
         username: user.username,
         ...(scopeCovers(scopes, 'profile.displayName') ? { displayName: user.displayName ?? null } : {}),
-        ...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: user.avatarUrl ?? null } : {})
+				...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(effectiveProfileMediaUrl(user, 'avatar')) } : {})
       });
     });
   }

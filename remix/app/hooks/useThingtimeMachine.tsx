@@ -303,7 +303,7 @@ export interface TimelineScaffold {
 export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold) => {
 	const timeline: Timeline = {
 		key: key,
-		uuid: Math.random().toString(36).substring(2, 15), // generate a random UUID
+		uuid: crypto.randomUUID(), // generate a random UUID
 		past: [],
 		present: null,
 		future: [],

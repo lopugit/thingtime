@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 
+import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
+import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -9,9 +12,23 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
-  const response = await fetch(url, { credentials: 'include', signal: options?.signal });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw data;
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
+  }
+  const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
+  if (!response.ok) {
+    throw createApiFailure({
+      payload: data,
+      status: response.status,
+      retryAfter: response.headers.get('Retry-After'),
+      action: 'load Thingtime data',
+      method: 'GET'
+    });
+  }
   return data;
 };
 
@@ -78,6 +95,7 @@ export function useApi() {
       },
       logout: useCallback(
         async (args?: { all?: boolean }) => {
+					await flushAttachmentDraftCleanups();
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -90,6 +108,7 @@ export function useApi() {
         list: useCallback(async () => getJson('/api/v1/auth/accounts'), []),
         switch: useCallback(
           async (args) => {
+						await flushAttachmentDraftCleanups();
             const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/switch' });
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -107,10 +126,75 @@ export function useApi() {
         owned: useCallback(async () => getJson('/api/v1/auth/accounts/owned'), []),
         assume: useCallback(
           async (args: { accountId: string }) => {
+						await flushAttachmentDraftCleanups();
             const ret = asyncFetcher.submit({ accountId: args?.accountId }, { action: '/api/v1/auth/accounts/assume' });
             ret.then(refreshRootData).catch(() => {});
             return ret;
           },
+          [asyncFetcher]
+        )
+      },
+      // Accounts this browser is signed into on OTHER Thingtime deployments
+      // (cross-deployment auto-login suggestions). Read-only.
+      accountHints: useCallback(async () => getJson('/api/v1/auth/account-hints'), []),
+      // Cross-origin session handoff (Login with Thingtime anywhere): mint a
+      // code for a target origin / redeem one minted for THIS origin.
+      ssoHandoff: useCallback(
+        async (args: { origin: string }) => asyncFetcher.submit({ origin: args?.origin }, { action: '/api/v1/auth/sso-handoff' }),
+        [asyncFetcher]
+      ),
+      ssoSession: useCallback(
+        async (args: { code: string }) => {
+          const ret = asyncFetcher.submit({ code: args?.code }, { action: '/api/v1/auth/sso-session' });
+          ret.then(refreshRootData).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      passkeys: {
+        list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
+        registerOptions: useCallback(
+          async (args: { password: string }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options' }),
+          [asyncFetcher]
+        ),
+        register: useCallback(
+          async (args: { response: unknown; nickname?: string; description?: string }) =>
+            asyncFetcher.submit(
+              { response: args?.response, nickname: args?.nickname, description: args?.description },
+              { action: '/api/v1/auth/passkeys/register' }
+            ),
+          [asyncFetcher]
+        ),
+        loginOptions: useCallback(async () => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options' }), [asyncFetcher]),
+        // Finishing a passkey login changes the active user — refresh root data
+        // exactly like password login does.
+        login: useCallback(
+          async (args: { response: unknown; clientId?: string }) => {
+            const ret = asyncFetcher.submit(
+              { response: args?.response, ...(args?.clientId ? { clientId: args.clientId } : {}) },
+              { action: '/api/v1/auth/passkeys/login' }
+            );
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        ),
+        update: useCallback(
+          async (args: { id: string; nickname?: string; description?: string }) =>
+            asyncFetcher.submit(
+              { id: args?.id, ...(args?.nickname !== undefined ? { nickname: args.nickname } : {}), ...(args?.description !== undefined ? { description: args.description } : {}) },
+              { action: '/api/v1/auth/passkeys/update' }
+            ),
+          [asyncFetcher]
+        ),
+        revoke: useCallback(
+          async (args: { id: string; password: string }) =>
+            asyncFetcher.submit({ id: args?.id, password: args?.password }, { action: '/api/v1/auth/passkeys/revoke' }),
+          [asyncFetcher]
+        ),
+        delete: useCallback(
+          async (args: { id: string; password: string }) =>
+            asyncFetcher.submit({ id: args?.id, password: args?.password }, { action: '/api/v1/auth/passkeys/delete' }),
           [asyncFetcher]
         )
       }
@@ -118,18 +202,29 @@ export function useApi() {
     settings: {
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-      prConflictResolverModelWaterfall: useCallback(
-        async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'),
-        []
-      )
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
+      ciControl: useCallback(
+				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
+        []
+      ),
+      reconcileCiControl: useCallback(
+        async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
+        [asyncFetcher]
+      ),
+      dispatchCiWorkflow: useCallback(
+        async (args: { workflow: string; ref?: string; inputs?: Record<string, unknown> }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
+        [asyncFetcher]
+      ),
+      setCiAutomationPolicy: useCallback(
+        async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
-        async (waterfall) =>
-          asyncFetcher.submit(
-            { waterfall },
-            { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }
-          ),
+				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
@@ -139,12 +234,44 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
       ),
+      setUserPublicUploads: useCallback(
+        async (args: { userId: string; enabled: boolean; scope?: 'public' | 'private' | 'all' }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, enabled: args?.enabled, scope: args?.scope ?? 'public' },
+            {
+              action: '/api/v1/admin/users/public-uploads',
+              errorContext: `${args?.enabled ? 'approve' : 'withhold'} ${args?.scope ?? 'public'} uploads`
+            }
+          ),
+        [asyncFetcher]
+      ),
+      moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), []),
+      moderationReview: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { action: 'review', attachmentId: args?.attachmentId, verdict: args?.verdict, targetKind: args?.targetKind },
+            { action: '/api/v1/admin/moderation' }
+          ),
+        [asyncFetcher]
+      ),
+      moderationSweep: useCallback(async () => asyncFetcher.submit({ action: 'sweep' }, { action: '/api/v1/admin/moderation' }), [asyncFetcher]),
+      moderationSettings: useCallback(
+        async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
+        [asyncFetcher]
+      ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+			migrationDiagnostic: useCallback(
+				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
+				[]
+			),
       migrationsRun: useCallback(
         async (args) =>
           asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
-            { action: '/api/v1/admin/migrations/run' }
+            {
+              action: '/api/v1/admin/migrations/run',
+              errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
+            }
           ),
         [asyncFetcher]
       ),
@@ -240,8 +367,114 @@ export function useApi() {
         )
       }
     },
+		attachments: {
+			uploads: {
+				create: useCallback(
+					async (
+						args: {
+							requestId: string;
+							filename: string;
+							contentType: string;
+							sizeBytes: number;
+							purpose?: AttachmentUploadPurpose;
+						},
+						options?: { signal?: AbortSignal }
+					) => {
+						const ret = asyncFetcher.submit(
+							{
+								requestId: args?.requestId,
+								filename: args?.filename,
+								contentType: args?.contentType,
+								sizeBytes: args?.sizeBytes,
+								...(args?.purpose ? { purpose: args.purpose } : {})
+							},
+							{
+								action: '/api/v1/attachments/uploads',
+								signal: options?.signal,
+								errorContext: 'prepare a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				),
+				parts: useCallback(
+					async (args: { uploadId: string; parts: Array<{ partNumber: number; checksumSha256: string }> }, options?: { signal?: AbortSignal }) =>
+						asyncFetcher.submit(
+							{ uploadId: args?.uploadId, parts: args?.parts },
+							{
+								action: '/api/v1/attachments/uploads/parts',
+								signal: options?.signal,
+								errorContext: 'prepare file upload parts'
+							}
+						),
+					[asyncFetcher]
+				),
+				complete: useCallback(
+					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+						const ret = asyncFetcher.submit(
+							{ uploadId: args?.uploadId },
+							{
+								action: '/api/v1/attachments/uploads/complete',
+								signal: options?.signal,
+								errorContext: 'verify a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				),
+				abort: useCallback(
+					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+						const ret = asyncFetcher.submit(
+							{ uploadId: args?.uploadId },
+							{
+								action: '/api/v1/attachments/uploads/abort',
+								signal: options?.signal,
+								errorContext: 'cancel a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				)
+			},
+			remove: useCallback(
+				async (args: { id: string }) => {
+					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/attachments/delete', errorContext: 'remove a draft file' });
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			),
+			// owner title/description on a ready attachment (media page + lightbox
+			// text) — omit a field to keep it, null/'' clears it
+			annotate: useCallback(
+				async (args: { id: string; title?: string | null; description?: string | null }) =>
+					asyncFetcher.submit(
+						{
+							id: args?.id,
+							...(args && 'title' in args ? { title: args.title } : {}),
+							...(args && 'description' in args ? { description: args.description } : {})
+						},
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
+					),
+				[asyncFetcher]
+			)
+		},
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+			reveal: useCallback(
+				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
+					asyncFetcher.submit(
+						{ thingId: args?.thingId, reference: args?.reference, password: args?.password },
+						{ action: '/api/v1/things/reveal', signal: options?.signal, errorContext: 'reveal a protected value' }
+					),
+				[asyncFetcher]
+			),
       // structured search — POST carries the condition tree (read-only despite
       // the verb); see /docs/api things-search. Anonymous simple searches
       // (anon flag set, no condition tree) go over the GET form instead so
@@ -259,13 +492,14 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-      get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
+			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
       list: useCallback(
         async (args) =>
           getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
               thingtime: args?.thingtime,
+              folder: args?.folder,
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
@@ -283,9 +517,31 @@ export function useApi() {
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
-              tokenAcl: args?.tokenAcl
+              tokenAcl: args?.tokenAcl,
+              // move support — only send folderId when the caller provides it
+              // (undefined must stay "leave it where it is", null = root)
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
+              // attachment reorder — only send when the caller provides it
+              // (the ids must be a permutation of the post's bound set)
+              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      bulk: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              op: args?.op,
+              ids: args?.ids,
+              folderId: args?.folderId ?? null,
+              // share op only — omitted entirely for move/copy/delete
+              ...(args && 'acl' in args ? { acl: args.acl } : {}),
+              ...(args?.recursive ? { recursive: true } : {})
+            },
+            { action: '/api/v1/things/bulk' }
           ),
         [asyncFetcher]
       ),
@@ -309,27 +565,39 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl } = args;
+					const { type, text, images, listing, thing, mediaLayout, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl }
-            : { type, text, images, listing, thing, acl, visibility, tags };
-          return asyncFetcher.submit(payload, { action: '/api/v1/things' });
+						? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
+						: { type, text, images, listing, thing, mediaLayout, acl, visibility, tags, attachmentIds, shareId };
+					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
+					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+						ret.then(refreshRootData).catch(() => {});
+					}
+					return ret;
         },
         [asyncFetcher]
       ),
       react: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react' }),
+        async (args) =>
+					asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' }),
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
-        // type/images/listing/thing/tags — comments share the post schema
+				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-          const { id, text, type, images, listing, thing, tags } = args || {};
-          return asyncFetcher.submit({ id, text, type, images, listing, thing, tags }, { action: '/api/v1/things/comment' });
+					const { id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds } = args || {};
+					const ret = asyncFetcher.submit(
+						{ id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds },
+						{ action: '/api/v1/things/comment' }
+					);
+					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+						ret.then(refreshRootData).catch(() => {});
+					}
+					return ret;
         },
         [asyncFetcher]
       ),
@@ -338,7 +606,14 @@ export function useApi() {
           asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
         [asyncFetcher]
       ),
-      remove: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }), [asyncFetcher])
+			remove: useCallback(
+				async (args) => {
+					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' });
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			)
     },
     // "Login with Thingtime" grants — the user's connected apps
     oauth: {
@@ -437,14 +712,46 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    social: {
+      // counts + viewer relationship state for a profile ({ username | userId })
+      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), []),
+      // paged lists: { username | userId, type: followers|following|friends|requests, limit, before }
+      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), []),
+      // toggle (or explicitly set with follow: boolean) a one-way follow
+      follow: useCallback(
+        async (args) =>
+					asyncFetcher.submit({ userId: args?.userId, username: args?.username, follow: args?.follow }, { action: '/api/v1/users/follow' }),
+        [asyncFetcher]
+      ),
+      // friendship state machine: intent request|cancel|accept|decline|unfriend
+      friend: useCallback(
+        async (args) =>
+					asyncFetcher.submit({ userId: args?.userId, username: args?.username, intent: args?.intent }, { action: '/api/v1/users/friend' }),
+        [asyncFetcher]
+      )
+    },
+    notifications: {
+      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      markRead: useCallback(
+				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
+        [asyncFetcher]
+      ),
+      settings: {
+        get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
+				set: useCallback(async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }), [asyncFetcher])
+      }
+    },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
       // public people search (the /search People rail)
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(
         async (args) => {
-          const { displayName, bio, avatarUrl, bannerUrl } = args;
-          const ret = asyncFetcher.submit({ displayName, bio, avatarUrl, bannerUrl }, { action: '/api/v1/users/profile' });
+					const body: Record<string, unknown> = {};
+					for (const key of ['displayName', 'bio', 'avatarUrl', 'bannerUrl', 'avatarAttachmentId', 'bannerAttachmentId'] as const) {
+						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
+					}
+					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },

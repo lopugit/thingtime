@@ -1,48 +1,51 @@
-import {
-  createBrowserRouter,
-  redirect,
-  type LoaderFunctionArgs
-} from 'react-router';
+import type { ComponentType } from 'react';
+import { createBrowserRouter, redirect, type LoaderFunctionArgs } from 'react-router';
 
 import App from './root';
 import type { RootLoaderData } from './root-data.server';
-import AppsRoute from './routes/apps';
-import AppsManageRoute from './routes/apps-manage';
+// Eager: the root shell plus the screens on the primary path — the landing
+// page, the authenticated home, auth entry points, permalinks and the
+// catch-all tree viewer. These are either the first paint or one click from
+// it, so a separate chunk fetch would cost more than it saves.
 import Authorize from './routes/authorize';
-import Branding from './routes/branding/_index';
-import BrandingOld from './routes/branding_old';
-import CryptoPage from './routes/crypto';
-import DocsLayout from './routes/docs/DocsLayout';
-import DocsApi from './routes/docs/api';
-import DocsEmbed from './routes/docs/embed';
-import DocsConcepts from './routes/docs/concepts/index';
-import DocsDesign from './routes/docs/design';
-import DocsDesignSystem from './routes/docs/design-system/index';
-import DocsIndex from './routes/docs/index';
-import MigrationsRoute from './routes/migrations';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
-import AdminRoute from './routes/admin';
-import SettingsRoute from './routes/settings';
-import MongoStatusPage from './routes/mongodb-status';
-import Ode from './routes/ode';
+import MediaPage from './routes/media';
 import PostPage from './routes/post';
 import Profile from './routes/profile';
-import Rainbow from './routes/rainbow.$';
-import Raw from './routes/raw';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
-import SchemasRoute from './routes/schemas';
-import DocsSchemas from './routes/docs/schemas';
-import SearchRoute from './routes/search';
-import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
-import TestsPage from './routes/tests';
-import Themes from './routes/themes';
-import VercelPage from './routes/vercel';
+import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
+import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
+
+// Everything else is code-split. Statically importing every route put the
+// admin dashboard, the migrations console and the whole API-docs registry into
+// the single entry chunk, so an anonymous visitor to the landing page
+// downloaded and parsed all of it before first paint.
+//
+// React Router resolves `lazy` when the route is first matched and caches the
+// module, so a screen costs one chunk fetch on first visit and nothing after.
+// Routes that declare a `loader` here keep it static — the loader fetch and
+// the chunk fetch then overlap instead of queueing.
+const lazyRoute = (load: () => Promise<{ default: ComponentType<any> }>) => async () => ({
+  Component: (await load()).default
+});
+
+// Rendered while the router resolves the initial navigation — the root
+// loader's /api/root-data fetch, and on a direct visit to a split route, its
+// chunk. React Router warns when this is missing and renders nothing, which
+// is a white flash on a themed page.
+//
+// Deliberately an empty surface rather than a spinner or skeleton: the
+// optimistic-render house rule says never flash a loading state, so this only
+// holds the page background steady until the real screen takes over.
+const HydrateFallback = () => (
+  <div style={{ minHeight: '100vh', background: 'var(--chakra-colors-chakra-body-bg, transparent)' }} />
+);
 
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
@@ -63,7 +66,21 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
 
 const rootLoader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  return fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+  const rootData = await fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+
+  if (!shouldBootstrapTemporaryUser(url.pathname, rootData.user)) {
+    return rootData;
+  }
+
+  try {
+    const temporary = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/temporary', { method: 'POST' });
+    return temporary.user ? { ...rootData, user: temporary.user } : rootData;
+  } catch {
+    // Authentication remains recoverable through the existing login UI when
+    // the bootstrap service is unavailable; never replace the whole route
+    // with an error boundary for an optional first-session convenience.
+    return rootData;
+  }
 };
 
 const currentUserLoader = async () => {
@@ -72,7 +89,8 @@ const currentUserLoader = async () => {
 };
 
 const requireGuest = (redirectTo: string) => async () => {
-  if (await currentUserLoader()) {
+  const user = await currentUserLoader();
+  if (user && !user.temporary) {
     throw redirect(redirectTo);
   }
 
@@ -97,6 +115,7 @@ export const router = createBrowserRouter([
     id: 'root',
     path: '/',
     element: <App />,
+    HydrateFallback,
     loader: rootLoader,
     children: [
       { index: true, element: <Index /> },
@@ -105,46 +124,53 @@ export const router = createBrowserRouter([
       { path: 'authorize', element: <Authorize /> },
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
-      { path: 'admin', element: <AdminRoute /> },
+      { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },
       // browse everything each connected app stores for you — no guard: it
       // renders its own signed-out quiet state, like /settings
-      { path: 'apps', element: <AppsRoute /> },
-      { path: 'apps/manage', element: <AppsManageRoute /> },
-      { path: 'branding', element: <Branding /> },
-      { path: 'branding_old', element: <BrandingOld /> },
-      { path: 'crypto', element: <CryptoPage /> },
+      { path: 'apps', lazy: lazyRoute(() => import('./routes/apps')) },
+      { path: 'apps/manage', lazy: lazyRoute(() => import('./routes/apps-manage')) },
+      { path: 'branding', lazy: lazyRoute(() => import('./routes/branding/_index')) },
+      { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
+      { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',
-        element: <DocsLayout />,
+        lazy: lazyRoute(() => import('./routes/docs/DocsLayout')),
         children: [
-          { index: true, element: <DocsIndex /> },
-          { path: 'embed', element: <DocsEmbed /> },
-          { path: 'api', element: <DocsApi /> },
-          { path: 'api/:group', element: <DocsApi /> },
-          { path: 'api/:group/:docId', element: <DocsApi /> },
-          { path: 'design', element: <DocsDesign /> },
-          { path: 'design-system', element: <DocsDesignSystem /> },
-          { path: 'concepts', element: <DocsConcepts /> },
-          { path: 'schemas', element: <DocsSchemas /> }
+          { index: true, lazy: lazyRoute(() => import('./routes/docs/index')) },
+          { path: 'embed', lazy: lazyRoute(() => import('./routes/docs/embed')) },
+          { path: 'api', lazy: lazyRoute(() => import('./routes/docs/api')) },
+          { path: 'api/:group', lazy: lazyRoute(() => import('./routes/docs/api')) },
+          { path: 'api/:group/:docId', lazy: lazyRoute(() => import('./routes/docs/api')) },
+          { path: 'design', lazy: lazyRoute(() => import('./routes/docs/design')) },
+          { path: 'design-system', lazy: lazyRoute(() => import('./routes/docs/design-system/index')) },
+          { path: 'concepts', lazy: lazyRoute(() => import('./routes/docs/concepts/index')) },
+          { path: 'schemas', lazy: lazyRoute(() => import('./routes/docs/schemas')) }
         ]
       },
       { path: 'feed', element: <Feed /> },
+      { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
-      { path: 'migrations', element: <MigrationsRoute /> },
+      { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
       {
         path: 'mongodb-status',
-        element: <MongoStatusPage />,
+        lazy: lazyRoute(() => import('./routes/mongodb-status')),
         loader: () => fetchJson('/api/v1/mongodb/status-data')
       },
-      { path: 'ode', element: <Ode /> },
+      { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// every attachment is a Thing — its own page with comments/reactions
+			// (post lightbox + file rows deeplink here)
+			{ path: 'media/:id', element: <MediaPage /> },
+			// authenticated permalink for generic Things; protected migration
+			// diagnostics switch to their current-admin, home-plane read endpoint
+			{ path: 'thing/:id', element: <ThingPage /> },
       { path: 'profile', element: <Profile /> },
       { path: 'profile/:username', element: <Profile /> },
-      { path: 'rainbow/*', element: <Rainbow /> },
-      { path: 'raw', element: <Raw /> },
+      { path: 'rainbow/*', lazy: lazyRoute(() => import('./routes/rainbow.$')) },
+      { path: 'raw', lazy: lazyRoute(() => import('./routes/raw')) },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
       // password-reset + verification landing pages work logged-out by design
       // (the emailed token/link is the credential, not the session)
@@ -152,21 +178,24 @@ export const router = createBrowserRouter([
       { path: 'verify-email', element: <VerifyEmail /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
-      { path: 'schemas', element: <SchemasRoute /> },
-      { path: 'search', element: <SearchRoute /> },
+      { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
+      { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
       {
         path: 'status',
-        element: <StatusPage />,
+        lazy: lazyRoute(() => import('./routes/status')),
         loader: () => fetchJson('/api/v1/vercel/status')
       },
       {
         path: 'vercel',
-        element: <VercelPage />,
+        lazy: lazyRoute(() => import('./routes/vercel')),
         loader: vercelDeploymentsLoader
       },
-      { path: 'settings', element: <SettingsRoute /> },
-      { path: 'tests', element: <TestsPage /> },
-      { path: 'themes', element: <Themes /> },
+      { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
+      { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
+      { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
+      // the unified Things browser claims EXACTLY /things; deeper /things/*
+      // paths still reach the ThingtimeUrl tree viewer via the catch-all
+      { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

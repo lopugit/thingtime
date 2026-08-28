@@ -2,6 +2,7 @@ export type ApiTestGroup =
   | 'admin'
   | 'algorithms'
   | 'apps'
+  | 'attachments'
   | 'auth'
   | 'crypto'
   | 'docs'
@@ -9,9 +10,11 @@ export type ApiTestGroup =
   | 'health'
   | 'lopu'
   | 'mongodb'
+  | 'notifications'
   | 'profile'
   | 'root'
   | 'schemas'
+  | 'social'
   | 'template'
   | 'themes'
   | 'things'
@@ -58,6 +61,13 @@ export type ApiTestDefinition = {
   // sends real email — the runner sleeps before these when the SES sandbox is
   // active so the 1 msg/sec sandbox limit is respected
   emailSend?: boolean;
+  // auth-guard tests that must reach the API with NO ambient session: the
+  // suite runs sequentially through one cookie state (register → session →
+  // later tests), so once registration succeeds every later request carries a
+  // session unless it opts out. credentials:'omit' strips cookies in the
+  // browser /tests page; the preset empty Cookie header stops the Node
+  // runner's jar from injecting one (browsers ignore it — forbidden header).
+  anonymous?: boolean;
   timeoutMs?: number;
   body?: unknown | ((context: ApiTestContext) => unknown);
   headers?: Record<string, string>;
@@ -220,11 +230,12 @@ export const runApiTest = async (
     const url = context.origin ? new URL(test.path, context.origin).toString() : test.path;
     const response = await fetchImpl(url, {
       method: test.method,
-      credentials: 'include',
+      credentials: test.anonymous ? 'omit' : 'include',
       redirect: 'follow',
       headers: {
         Accept: 'application/json, application/x-ndjson, text/plain, text/html',
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(test.anonymous ? { Cookie: '' } : {}),
         ...(test.headers ?? {})
       },
       body: body === undefined ? undefined : JSON.stringify(body),

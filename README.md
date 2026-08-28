@@ -15,6 +15,193 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## Conflict-free Graphify snapshots
+
+Thingtime does not ask every branch to modify the same generated Graphify JSON
+files. `scripts/graphify` stores portable output under the immutable,
+content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
+snapshot through ignored compatibility aliases at the conventional root
+paths. Independent branches therefore add different files instead of
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+
+Use `scripts/graphify query`, `scripts/graphify update .`, or
+`scripts/graphify extract . --backend openai`; the wrapper serializes local
+writers, validates each atomic output set, deduplicates identical artifacts,
+regenerates the report/HTML, and converts Graphify's mutable semantic cache into
+coexisting immutable variants. See
+[`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
+for the rationale, layout, migration path, and retention model.
+
+## GitHub Actions control plane
+
+Thingtime keeps executable CI/CD behavior on the long-lived, protected
+`github-actions` branch. Product branches (`main`, `develop`, feature branches,
+and promotion branches) retain only a small set of thin event listeners in
+`.github/workflows/`: GitHub must be able to discover a workflow file on the
+ref/default branch that receives a native `push`, `pull_request_target`,
+`schedule`, `repository_dispatch`, or `workflow_dispatch` event. Each listener
+contains triggers, caller permissions, and typed inputs only; its sole job calls
+the matching reusable workflow at
+`lopugit/thingtime/.github/workflows/<name>.yml@github-actions`.
+
+All runner selection, shell commands, third-party actions, AI/model routing,
+Git operations, Graphify refreshes, and workflow scripts live only on
+`github-actions`. The product branches intentionally contain no `.github/actions`
+or `.github/scripts` behavior. `remix/scripts/workflow-caller-contract.mjs`
+fails if executable behavior leaks back into a listener or one stops pinning the
+control-plane ref.
+
+Protect `github-actions` with a ruleset: require pull-request review for changes,
+block force pushes and deletion, and restrict direct updates. A push to that
+branch runs its own control-plane contract CI. Updating the implementation no
+longer requires separately merging the same behavior into `develop` and `main`;
+the thin listeners on both branches call the same reviewed revision immediately.
+
+### CodeQL coverage for every PR target and branch
+
+Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
+default-setup branch scope. The thin `.github/workflows/codeql-analysis.yml`
+listener has an unfiltered `pull_request` trigger and a `push` trigger for
+`"**"`; therefore every PR whose target carries the listener and every direct
+branch push receives analysis. A default-branch `pull_request_target` listener
+also covers PRs whose target branch predates the listener. That privileged run
+calls a dedicated protected metadata-only handoff, checks out no code, and
+receives no AI credential. The handoff forwards only the PR number and immutable
+event head SHA into a separate
+`workflow_dispatch` run, which revalidates live state and analyzes the exact PR
+merge ref—or the head ref while a conflict prevents GitHub from creating one.
+Lopu validates both merge parents against the live base and head before using
+that ref, because GitHub can retain an obsolete merge ref after a conflict.
+`main` and `develop` carry the normal listener, and new feature and stack
+branches inherit it from their base, while the protected implementation
+directly handles PRs targeting and pushes to `github-actions`; the central
+handoff closes the remaining arbitrary-target gap. A PR whose target already
+carries the listener keeps its normal `pull_request` run as owner, preserving
+branch-protection check contexts; when that PR already owns a branch head, the
+matching push run stands down. When the selected ref already has both language
+snapshots, Lopu exits before CodeQL initialization instead of paying for a
+duplicate scan.
+
+The analysis and metadata handoff use separate protected reusable workflows.
+That split is required by GitHub's permission model: ordinary `pull_request`
+tokens are capped at `actions: read`, while only the metadata-only
+`pull_request_target` bridge needs `actions: write` to dispatch the exact PR
+scan. The split preserves normal PR check contexts without granting analysis a
+write-capable Actions token.
+
+The first rollout has one ordered repository-administration step. Do not turn
+off default setup until this listener has reached the default branch, because
+GitHub rejects advanced-workflow result uploads while default setup remains
+configured and disabling it early would create a coverage gap. Once the
+listener is present on the default branch, an administrator with repository
+Administration write access should run:
+
+```sh
+gh variable set CODEQL_CENTRAL_PR_ENABLED --repo OWNER/REPOSITORY --body true
+gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
+  -f state=not-configured
+gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
+```
+
+The absent/false variable deliberately makes the staged advanced jobs skip
+cleanly instead of failing every PR while default setup still owns uploads.
+After setting them, manually run **Lopu CodeQL all branches**, confirm both
+language jobs upload results, and verify the repository reports default setup
+as `not-configured`. Then update a PR targeting an older feature/stack branch
+that does not contain the listener and confirm its metadata-only target event
+creates a separate exact-head scan.
+
+After activation, an empty Lopu CodeQL snapshot means no current matching
+head-or-merge findings (or a failed/unavailable analysis), not merely that the
+PR targets `develop` or `github-actions`.
+
+The Admin → CI Control dashboard adds the external observation/operation layer:
+signed GitHub and Vercel webhooks project repositories, features/stacks,
+branches, pull requests, Actions runs, deployments, previews, audited dispatches,
+and append-only status history into protected Things. The GitHub App is also
+used for explicit reconciliation, allowlisted workflow dispatch, and ephemeral
+self-hosted runner registration. Native listeners remain the automatic trigger
+path, so a webhook outage cannot silently turn off conflict resolution or CI;
+the dashboard makes drift and stale delivery state visible. Administrator
+dispatches always enter the reviewed `github-actions` implementation; neither
+the UI nor API can load workflow YAML from an arbitrary feature branch.
+The existing CI Control operation keys remain stable, but rebase, feature
+promotion, standing promotion, and main/develop synchronization are translated
+to typed **Lopu PR manager** inputs instead of dispatching retired workflow
+files.
+
+For supported automations, an administrator can choose **GitHub Actions** or
+**Vercel Sandbox** independently. The native listener first runs a tiny provider
+router on GitHub. A GitHub selection continues normally. A Vercel selection
+starts a durable Vercel Workflow, creates an ephemeral Vercel Sandbox, registers
+that Sandbox as a uniquely labelled GitHub self-hosted runner, and dispatches the
+same protected reusable workflow back onto that runner. GitHub therefore remains
+the workflow/event control plane while the expensive compute runs on Vercel. If
+the signed router, App, Workflow, or Sandbox is unavailable, the trigger records
+the fallback and continues on GitHub-hosted compute instead of dropping the
+automation. Web CI remains GitHub-only while its API test job requires a Docker
+MongoDB service; Electron release remains GitHub-only because it needs native
+platform runners.
+
+Configure the server-side integration with private environment variables only
+(never `PUBLIC_*`):
+
+```sh
+THINGTIME_GITHUB_REPOSITORY="owner/repository"
+THINGTIME_GITHUB_APP_ID="123456"
+THINGTIME_GITHUB_APP_INSTALLATION_ID="12345678"
+THINGTIME_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+THINGTIME_GITHUB_WEBHOOK_SECRET="replace-with-a-long-random-secret"
+THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
+THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
+```
+
+Create a repository-installed GitHub App with repository metadata read,
+Actions read/write (workflow dispatch and run/job observation), Administration
+read/write (short-lived self-hosted runner registration and deletion), Contents
+read (branches), Pull requests read, and Deployments read. Install it only on
+the intended repository. Subscribe its webhook to `push`, branch create/delete,
+pull request, workflow run, workflow job, deployment, and deployment status
+events, using:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/github/webhook
+```
+
+Create a project-scoped Vercel webhook for deployment created/ready/error/
+canceled/deleted events at:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/vercel/webhook
+```
+
+The signed compute-provider route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/route
+```
+
+Store each secret directly in the deployment environment. Also add the same
+`THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
+repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
+router secret is deliberately independent of both webhook secrets. Vercel's
+system-provided OIDC identity authenticates Sandbox creation in deployed
+functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
+`VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
+`WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
+replay. The Admin API reports only whether an integration is configured; it
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
+
+After deployment and App installation, create both provider webhooks and click
+**Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
+open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
+projection current. Until that first successful reconcile, an empty dashboard
+with zero counts is expected.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -26,6 +213,122 @@ https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon
 https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
+
+Thingtime has one public **Lopu PR manager** Action. It owns repository review,
+failed-check and CodeQL repair, stale-branch merges, conflict resolution,
+rebases and stack cascades for every same-repository PR regardless of its
+target branch, promotions, main/develop synchronization, release analysis,
+wildcard `all`-branch repair, and post-merge Graphify refresh. Deterministic
+implementations remain protected reusable components; they have no competing
+push, schedule, or manual triggers of their own, so a branch push never starts
+a second standalone rebase, promotion, or branch-synchronization workflow.
+
+Lopu listens to pushes on `"**"`, every PR-head lifecycle update, PR and inline
+review comments, failed check completions, and bounded maintenance schedules.
+It checks open PRs both targeting and originating from the changed branch. All
+signals revalidate immutable PR snapshots and enter one repository-wide
+model-worker queue with `cancel-in-progress: false`, so a burst can neither
+spawn parallel Lopu sessions nor discard in-flight work.
+
+Inside Lopu, merge and rebase ownership remains deliberately disjoint.
+Standalone merge conflicts and clean-but-behind branches go to the base-merge
+lane. Genuine stack members whose history needs replay go to the rebase lane;
+adding `no-ai-rebase` opts a merge-conflicting stack member back into the
+merge-based lane. The protected rebase engine still accepts the manager's
+exact `repository_dispatch` worker handoff through **Lopu PR manager**, but it
+has no public listener of its own. It is a `workflow_call`-only implementation;
+no product branch contains or exposes a second rebase workflow.
+
+Lopu's rebase/stack lane covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
+commits onto its base stops at a conflict. A detected stack is rebased
+root-to-leaf, so each child is replayed onto the rewritten parent rather than
+onto the parent's old SHA.
+
+For manual recovery, open **Actions → Lopu PR manager → Run workflow** on the
+default branch. Enter an exact PR number, a base/head branch selector, or leave
+both blank to scan every open eligible PR. The same entry point deliberately
+retries a reviewed paused merge/rebase snapshot, so failed immutable snapshots
+stay auditable without reviving a separate public Action; the internal rebase
+handoff is not a second user-facing workflow. The `maintenance_operation`
+choice also exposes the standing develop promotion, per-feature promotion
+(including dry-run and reverse-lane options), main→develop synchronization, the
+wildcard `all`-branch rebuild, and bounded CodeQL backfill without restoring
+separate Actions entries.
+
+Broad scans are API-only detectors; they hand off one trusted default-branch
+run per conflicted base, so unrelated bases do not share one AI job. A failed
+merge run reports itself but never auto-pauses: `ai-merge-paused` is a
+user-controlled stop signal that automation never adds or removes, so add it
+yourself to keep the scheduled sweep from spending more AI budget on the same
+PR. The rebase lane's automatic `ai-rebase-paused` hold is bound instead to the
+exact owner, refs, SHAs, and topology recorded in a bot-only hidden marker: a
+changed snapshot is eligible again automatically, while the same snapshot
+requires review and a named-base manual retry.
+
+Lopu's merge lane also snapshots the exact live head and base SHAs, repeats
+its PR/ref/label/stack/protection checks immediately before publication, and
+uses an exact head lease. If either branch moves while Claude is working, the
+resolved merge is discarded rather than overwriting the newer work.
+
+Detection is patient and audible: GitHub computes a PR's mergeability lazily
+after its base moves and verdicts can take minutes to settle, so the merge
+detector re-queries until every scanned PR has a verdict (time-budgeted via
+`MERGEABLE_POLL_SECONDS`, default 500 seconds — a little over eight minutes)
+instead of sampling once at push time. When it must leave a conflicted-looking PR alone — a fork PR it
+cannot push to, or a verdict that never settled — it upserts one status
+comment on the PR saying exactly that, so a silent PR means "nothing needed
+doing", never "nobody looked". Conflicts that are handed off announce
+themselves through the resolve job's "Auto-resolve running" comment.
+
+Lopu's rebase/stack lane rewrites PR history, so its force push has
+stricter boundaries:
+
+- It operates only on branches in this repository. Fork PRs, the repository's
+  default branch, and protected branches are refused.
+- Lopu receives the repository context and its configured development tools so
+  it can act as the principal codebase manager. Publication credentials are
+  injected only into the final fenced push step; deterministic trusted code
+  independently validates the conflict set, index, completed operation, and
+  exact branch lease before anything is published.
+- Nothing is pushed until the complete rebase succeeds. The final update uses
+  an exact `--force-with-lease` against the head SHA inspected at the start, so
+  a concurrent human or bot push makes the run fail instead of being erased.
+- Add `no-ai-rebase` to opt a PR out of automatic rebasing. A failed automatic
+  run adds `ai-rebase-paused` for that exact owner/ref/SHA/topology snapshot,
+  preventing a retry loop while the failure is reviewed. A changed snapshot or
+  resolver owner invalidates the hold automatically; retry the unchanged
+  snapshot with a deliberate manual PR-number run.
+  `ai-rebase-in-progress` is the only cross-workflow mutex. Pause labels do not
+  decide ownership: a queued retry re-proves the exact refs and owner before
+  clearing its specific stale pause. Publication requires pauses to be absent,
+  and post-push cleanup preserves any fresh hold created for the new snapshot.
+  An orphaned `ai-rebase-in-progress` lock is recovered after 90 minutes, while
+  paused, active, or not-yet-computed parents—and protected or opted-out
+  parents that still need a rewrite—keep stacked children from running ahead.
+- A rewrite authenticated by `GITHUB_TOKEN` explicitly dispatches **Web CI**
+  against the new branch SHA when the final PR diff touches `remix/` or its CI
+  workflow, because token-authored pushes do not create ordinary Actions runs.
+
+For a fork of Thingtime, enable **Settings → Actions → General → Workflow
+permissions → Read and write permissions**, then add one of these repository
+Actions secrets:
+
+- `ANTHROPIC_API_KEY`, or
+- `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+Optional ordered fallback credentials are `ANTHROPIC_API_KEY_FALLBACK` or
+`CLAUDE_CODE_OAUTH_TOKEN_FALLBACK`. Lopu changes slots only for provider
+capacity, quota, credit, or authentication failures; a max-turn continuation
+stays on the selected account and session.
+
+`CONFLICT_RESOLVER_PAT` is optional. Add it only if the resolver must rewrite a
+branch whose rebase changes files under `.github/workflows/`; the token needs
+repository contents access plus permission to update workflows. Keep all
+tokens in Actions secrets, scope them to the fork, and never put them in an
+environment file or commit. Automatic runs still skip PRs originating from
+another repository; the contributor's fork must run its own trusted workflow
+if it wants equivalent automation.
 
 # Setup for Forks
 
@@ -88,17 +391,26 @@ secrets. These files are optional for normal app usage; set them only when you
 want to override the default production-backed API fallback or run the backend
 self-sufficiently against your own services.
 
-Build and verify the Vercel output with:
+Build and verify the repository-root Vercel output with:
 
 ```sh
-cd remix
-corepack pnpm run build
+npm run build:vercel
 ```
 
-The build runs `vite build`, copies the Vite shell into Nitro's server assets,
-builds Nitro with `NITRO_PRESET=vercel`, and checks that
-`.vercel/output/static/index.html` contains the React shell before trusting the
-deployment artifact.
+The root `vercel.json` deliberately installs only `remix/`; it never runs the
+legacy repository-level `postinstall`. The build runs the existing Remix Vite +
+Nitro pipeline, validates `remix/.vercel/output`, then stages and revalidates it
+at the repository-root `.vercel/output` expected by Vercel's Build Output API.
+
+In the Vercel project, set **Root Directory** to the repository root (clear the
+old `remix` value), use the **Other** framework preset, and clear dashboard
+overrides for Build Command, Install Command, Output Directory, and Ignored
+Build Step so the tracked root config is authoritative. The root config also
+sets `outputDirectory: null`: the build emits `.vercel/output` itself. The
+product config disables Git deployments for the exact `github-actions` branch;
+the thin control-plane branch carries its own root config with all Git
+deployments disabled, so branches created from it never try to build an absent
+app.
 
 ## Electron desktop app
 
@@ -142,6 +454,64 @@ step-by-step usage, payload and response examples, and generated curl, wget,
 Node.js, Python, and Ruby snippets. The browser reference lives at
 `/docs/api`, and the docs smoke tests live in the `/tests` page under the
 `Docs` group.
+
+## ChatGPT / Codex plugin
+
+Thingtime exposes a public HTTPS, OAuth 2.1 + S256 PKCE MCP endpoint at
+`/api/v1/integrations/chatgpt/mcp`. It is packaged at
+[`integrations/ChatGPT/plugin/thingtime-chatgpt`](integrations/ChatGPT/plugin/thingtime-chatgpt)
+for ChatGPT/Codex distribution. The plugin connection page can securely attach
+several named Thingtime accounts and explicitly allowlisted Thingtime API
+origins. It accepts only scoped Personal Access Tokens (PATs), validates them
+with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
+gives ChatGPT only a revocable MCP-only bridge token. When ChatGPT requests the
+optional `offline_access` scope, the 30-day bridge access token is renewed with
+a rotating refresh credential; every credential refers to one encrypted
+connection record, so account selection and disconnects take effect across the
+entire connection. Do not paste a PAT into a chat. The public `tools/list`
+response exposes only tool metadata and its per-tool OAuth requirements; all
+account data and tool calls require the bridge token and are origin-bound to
+this MCP URL.
+
+Set these sensitive server-side deployment variables (for example in Vercel)
+before enabling the connector. Values below are placeholders only:
+
+```sh
+# Exactly 32 random bytes, base64 encoded. Generate/store as a deployment secret.
+THINGTIME_CHATGPT_CREDENTIAL_KEY="<base64-encoded-32-byte-key>"
+
+# Optional. Exact comma-separated HTTPS origins only; no wildcard or paths.
+# Defaults to https://thingtime.com when unset.
+THINGTIME_CHATGPT_ALLOWED_ENDPOINTS="https://thingtime.com,https://dev.thingtime.com"
+
+# Optional. Defaults to ChatGPT's stable Client ID Metadata Document plus the
+# legacy https://chatgpt.com identifier. Set only if the connection page gives
+# you an additional exact OAuth client id.
+THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com/oauth/client.json,https://chatgpt.com"
+```
+
+The MCP protected-resource and authorization-server discovery documents are at
+`/.well-known/oauth-protected-resource` and
+`/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
+is `/.well-known/thingtime-chatgpt-capabilities.json`.
+
+For the supported ChatGPT workspace path, use ChatGPT **on the web** with a
+Business or Enterprise/Edu workspace. An admin or owner enables Developer Mode
+from Workspace Settings → Apps → Create, supplies this remote MCP URL, selects
+OAuth, and uses **Scan Tools**. ChatGPT then opens Thingtime’s first-party
+account form; its advertised `offline_access` scope allows the rotating refresh
+flow. Create the draft, test it from the tools menu or by @mentioning it in a
+new chat, then have an admin/owner publish it from Workspace Settings → Apps.
+Full write/modify MCP access is currently a Business/Enterprise/Edu beta;
+Pro-only connections are limited to read/fetch. ChatGPT custom MCP apps are
+currently web-only, so iOS ChatGPT chats cannot invoke this connector. After
+approval, tool definitions are a frozen snapshot. Enterprise/Edu admins must
+review and enable a refresh before action changes are available; Business
+workspaces currently need to recreate and republish the app to change its
+tools or metadata. Public Plugins Directory
+distribution remains a separate process requiring a fixed production origin,
+verified publisher identity, legal URLs, test cases, and OpenAI review; see
+the package's `SUBMISSION.md`.
 
 ## Extensible data — `extended` + schema-less crystals
 
@@ -212,7 +582,9 @@ the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
 Admins get the `/admin` dashboard (also under the drawer's Account section):
-Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+Users, Apps, Tiers, CI Control, and System management. CI Control presents the
+feature/branch/PR/Actions/deployment topology and signed status history, with
+allowlisted reconciliation and retry controls. The Tiers tab manages protected,
 versioned `subscription-tier` Things in separate Live, Draft / not live, and
 Archived sections. Admins can create a tier or draft a new revision, edit its
 name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
@@ -351,13 +723,425 @@ AWS_SES_CONFIGURATION_SET=""            # or THINGTIME_EMAIL_CONFIGURATION_SET
 THINGTIME_EMAIL_FAIL_CLOSED="false"     # fail-open unless "true"
 SES_SANDBOX="1"                         # test throttle (1 msg/sec) for /tests
 THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
+THINGTIME_ADMIN_NOTIFICATION_EMAIL="admin@thingtime.com"  # "new user" ops mail
 ```
+
+`THINGTIME_ADMIN_NOTIFICATION_EMAIL` is where the internal **new user**
+notification lands when a freshly registered account finishes email
+verification (`templateKey` `admin.new_user`). It defaults to
+`admin@thingtime.com`; point a fork or a preview/staging stack at its own inbox
+so real admin mail is never generated by test signups. That mail is the cue to
+grant the account public file and media uploads, which new signups do **not**
+receive automatically — see
+[Public upload approval](#public-upload-approval) below.
+
+### Public upload approval
+
+New accounts start **without** permission to upload files or media, and
+verifying the email address does not grant it. The permission has two
+independent scopes, so an administrator can approve the **public**, **private**,
+or **all** variation per user:
+
+| Scope | Covers | Flag |
+| --- | --- | --- |
+| `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
+| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `all` | both of the above in one write | both flags |
+
+The account carries `meta.publicUploads: false` and `meta.privateUploads:
+false` from registration; `POST /api/v1/attachments/uploads` answers
+`403 public_uploads_not_approved` or `403 private_uploads_not_approved`
+(depending on the requested purpose) until an administrator approves that
+scope from the **/admin → Users** tab's per-row **Approve** menu
+(`POST /api/v1/admin/users/public-uploads { userId, enabled, scope }`; scope
+defaults to `public` for pre-scope callers).
+
+Each flag is deliberately tri-state, so nothing here needs a data migration:
+
+| flag value | Meaning |
+| --- | --- |
+| absent | account predates the change — uploads stay enabled |
+| `false` | withheld, awaiting admin approval (every new signup) |
+| `true` | granted by an administrator |
+
+Administrators bypass the flags entirely, so the account that grants the
+permission can never be locked out of the surface that grants it.
 
 Use the SES **API** with an IAM key scoped to `ses:SendEmail` — do not create
 SES SMTP credentials for the app path. `GET /api/v1/email/config` returns the
 sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
+
+### Private S3 media and attachments
+
+Uploaded images are moderated asynchronously after upload: attachment
+completion atomically stamps protected `moderation.status: pending` before the
+upload can be projected or served publicly. Pending media stays available only
+to its owner and admins as evidence; other callers receive not found until a
+provider-pluggable NSFW/TOS analysis releases it. NSFW media then renders
+heavily blurred behind a "Show Anyway" click; TOS/illegal verdicts remain
+quarantined and log a protected `moderationFlag` for the `/admin` → Moderation
+review queue. Provider failures leave the item pending rather than fabricating
+a clear verdict, and the bounded retry sweep recovers both missed analysis and
+missed flag writes.
+
+The recommended production provider is the tiered `openai+claude` pipeline:
+OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
+clean images stamp `clear` at $0, and only flagged/borderline images escalate
+to a paid Claude vision call for the policy-nuanced verdict (see
+`docs/ai-api-cost-analysis.md`). Note the free screen cannot detect CSAM in
+images (OpenAI's `sexual/minors` category is text-only) and cannot apply
+Thingtime's "artistic nudity still blurs" rule — that is exactly why flagged
+and borderline images always escalate, and why omni alone never stamps
+`blocked`. If Claude is unreachable, omni-flagged images fail safe to `nsfw`
+(blurred + flagged for admin review); if OpenAI is unreachable, every image
+goes straight to Claude.
+
+```sh
+THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered') | 'claude' | 'openai' | 'test' | 'off'
+                                               # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
+                                               # OPENAI only → openai; neither → off
+ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
+OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
+TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
+                                         # image-category score meets this 0..1 threshold
+```
+
+Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+feature — their presence alone activates image moderation when
+`THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
+environments that carry the keys for musing but must not moderate. An
+unrecognized provider value warns and falls back to the key-based default
+rather than silently disabling moderation.
+
+Admins control which AI runs each moderation surface from `/admin` →
+Moderation → "AI moderation settings": media uploads (default / tiered
+openai+claude / free openai-only / claude / off) and post/comment text
+(default / free openai / off). Admin choices are stored in the settings
+collection and override the env default; "default" delegates back to the
+env/key logic above. Post and comment text is screened by the free
+omni-moderation endpoint whenever an OpenAI key exists: block-worthy
+categories (sexual/minors, threatening harassment/hate, violent-illicit,
+self-harm instructions) quarantine the post/comment — it vanishes from every
+feed, thread, and search for everyone — while other flagged categories queue
+an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
+the admin review queue without hiding the content. Edited text is re-screened;
+admin review verdicts are final until an admin changes them.
+
+Post creation is FAIL-CLOSED while text moderation is on: the free omni
+screen races a bounded time budget (`TT_TEXT_SCREEN_BUDGET_MS`, default
+600ms) BEFORE the insert, and a verdict in time means the post is born
+stamped — blocked content never renders anywhere. When no verdict can be
+obtained (omni outage, circuit breaker open, or `TT_TEXT_SCREEN_BUDGET_MS=0`
+async-release mode) the post is born **pending: visible only to its owner**
+until the async queue or the hourly cron screens and releases it — its
+creation notifications fire at release, when followers can actually see it.
+No post-family content ever goes public unscreened while the surface is on;
+turning the surface off publishes normally (and the sweep releases any
+stranded pending docs so an off flip can't orphan them). The budget is
+measured entirely server→OpenAI (client speed is irrelevant), and the
+per-instance breaker (3 failures → open 60s) skips the omni call during
+confirmed outages so posting stays fast — posts just arrive born-pending.
+Edits stay async.
+
+Text screening covers every omni-judgeable public surface of a post-family
+thing in one free combined request: prose (`crystal.text`), marketplace
+listing text (title/location/category/condition), tags, and the legacy
+external image URLs (`crystal.images`, capped at 8/post — omni fetches the
+URLs itself, so the multi-URL photos flow is moderated too; URL images follow
+the same image-blind `sexual/minors` limitation as omni-only media, so they
+flag/advisory rather than auto-block). Known coverage gaps, deliberate for
+now: video and non-image file CONTENTS (needs frame-extraction/AV infra) and
+profile bio/display-name (different write path).
+
+A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
+29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
+cron) retries moderation the fire-and-forget kickoffs lost: post-family things
+with real text and no moderation stamp (process death between the post write
+and the verdict stamp, provider outages), pending attachments, and verdicts
+whose protected moderation flag still needs to be written. Because the omni
+screen is free, the same job also gradually drains any
+backlog from periods when text moderation was off; it no-ops while the text
+surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
+the same batches on demand and shows the text backlog count.
+
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
+
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
+				}
+			}
+		}
+	]
+}
+```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivateAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
+
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<environment-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
+
+### Notification emails (SES notification stream)
+
+Activity notifications (friend requests, new followers, comments, replies,
+reactions, shares — plus an optional weekly summary digest) can also email the
+recipient. They ride the same emit calls as the in-app bell, are always
+fire-and-forget, only go to verified addresses, and honor the per-user channel
+matrix from Settings → Notifications (`/api/v1/notifications/settings`: per
+type × channel switches plus a master switch per channel; the two high-volume
+post types are email-opt-in). Sends are capped per recipient per hour, and
+every email footer carries a manage link plus a one-click unsubscribe link
+(`GET /api/v1/notifications/email/unsubscribe?uid=…&token=…`, an HMAC token —
+no session needed).
+
+```sh
+THINGTIME_EMAIL_NOTIFICATIONS_FROM="Thingtime <no-reply@thingtime.com>"
+                                        # optional; falls back to the
+                                        # transactional from-address
+THINGTIME_EMAIL_UNSUB_SECRET=""         # optional HMAC secret for unsubscribe
+                                        # links; falls back to JWT_SECRET /
+                                        # JWT_PRIVATE_KEY
+CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
+                                        # weekly digest run
+APP_URL="https://your-deployment.com"   # absolute links in emails
+```
+
+The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
+`GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
+`Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
+Signed-in admins can run the same endpoint manually (`?dryRun=1` or
+`POST { dryRun: true }` previews without sending), and the run is idempotent —
+a six-day per-recipient lookback in the `email_messages` outbox prevents
+double-sends.
 
 ### Service account provisioning
 
@@ -409,10 +1193,111 @@ OPENAI_API_KEY="<openai-api-key>"
 LOPU_PROVIDER="claude"
 ```
 
+Every Claude-backed musing reads the current Admin → AI workflow model order
+from `Thingtime.PRConflictAutoResolverModelWaterfall`; a named preference wins
+over `LOPU_CLAUDE_MODEL`. When the Admin primary is `default`,
+`LOPU_CLAUDE_MODEL` remains the Anthropic-valid provider default. OpenAI is a
+separate provider and continues to use `LOPU_OPENAI_MODEL` (or its documented
+built-in default), including when it is selected first with `LOPU_PROVIDER`.
+
 When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Branch automation: develop → main promotion
+
+`develop` is the integration branch; `main` is the release branch. The one
+public **Lopu PR manager** workflow owns the branch events and invokes these
+protected, non-cancelling maintenance components, giving two complementary ways
+to ship:
+
+- **Lopu's per-feature promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-features-to-main.yml`)
+  scans PRs merged into `develop` and opens one promotion PR per feature
+  against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
+  change can get a second, release-focused review on its own. PRs that share a
+  feature group (a `Promotion-Group: <key>` body line, a `stack:<key>`/
+  `group:<key>`/`feature:<key>` label, a `feature/<key>/...` branch, or a
+  `feat(<key>): ...` title) are opened as a stacked chain in merge order —
+  review and merge bottom-up, deleting each branch on merge. Label a develop
+  PR `no-promote` to keep it out of the train; close a promotion PR to reject
+  that change for `main` permanently.
+- **Lopu's standing develop promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-develop-to-main.yml`)
+  keeps one standing all-or-nothing PR open (head `develop`, base `main`).
+  When everything on `develop` is deemed mergeable, merge it instead of
+  merging every feature individually. The two trains never fight: after an
+  omnibus merge the per-feature workflow sees the content already on `main`,
+  skips it, and automatically closes any open promotion PRs whose diff has
+  become empty.
+- **Lopu's main→develop synchronization component** back-merges `main` after
+  promotions land. Any conflicted candidate is published through the
+  automation-owned `sync/main-into-develop` head; Lopu resolves that branch and
+  never mutates protected `main` as a PR head.
+- Lopu's conflict/rebase lanes keep promotion PRs and stacks mergeable.
+
+A `develop` push starts both promotion components inside its single Lopu run;
+a `main` push starts synchronization there; and the six-hour maintenance
+schedule enters through Lopu too. The old product-branch promotion/sync
+workflow files are removed, so none can compete with or cancel Lopu. Use the
+manager's `maintenance_operation` input for explicit recovery.
+
+Lopu's wildcard `all`-branch rebuild lane is likewise concurrency-free at the
+listener. Its protected implementation owns the durable `queue: max` namespace;
+putting `cancel-in-progress` on the thin caller would cancel the entire
+reusable call before that worker queue can retain it.
+
+Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
+PRs it creates will not trigger CI, and promotion branches touching
+`.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`
+repository secret (fine-grained token with Contents + Pull requests +
+Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
+`SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
+
+## Branch automation: the `all` wildcard branch
+
+`all` is a generated everything-branch: `develop` + `main` + every open PR
+(stacked branch → branch PRs included) merged together, so all in-progress
+work can be tried in one place. The one public **Lopu PR manager** calls its
+protected internal all-branch implementation to rebuild it from scratch and
+force-push the result after pushes to `develop`/`main`, every open-PR lifecycle
+change, and the hourly backstop. There is no second product-branch workflow:
+
+- Rebuilds start from `develop`, merge `main`, then merge open PR heads in
+  stack order (parents before children, ascending PR number within a layer)
+  with `-X theirs` plus a matching theirs-biased fallback for modify/delete
+  conflicts — later PRs win contested hunks, and a conflict never stops the
+  train. A PR whose merge cannot complete at all is skipped, not fatal.
+- `ALL_BRANCH.md` at the branch root records exactly what went in (base tips,
+  every merged PR and how it merged, every skipped PR with its reason). The
+  rebuild is deterministic, so the branch is only force-pushed when the
+  resulting tree actually changed.
+- Never base work on `all`, never open PRs from it, and expect
+  `git reset --hard origin/all` when tracking it locally — history is
+  rewritten on every rebuild.
+- Fork PRs are excluded (their unreviewed code would otherwise reach this
+  repo's Vercel builds without the usual fork-authorization step). Label any
+  PR `no-all` to keep it out of the union.
+- Semantic collisions — two PRs adding the same helper merge textually clean,
+  so no git conflict ever exists, yet the union build breaks — are handled by
+  the AI **build doctor**: after each input-changed rebuild the union build
+  runs (install, then the full Vercel-parity remix build, with a mechanical
+  lockfile repair first), and on failure up to three guarded, edit-files-only Claude
+  rounds (the conflict resolver's action pin, model waterfall, and security
+  posture) repair the tree. Out-of-scope edits are reverted, commits are
+  credential-scanned, and the build is re-verified mechanically. Doctor
+  fixups ride on `all` and are cherry-pick-replayed onto the next rebuild,
+  dropping silently once the source PRs heal for real; an exhausted doctor
+  leaves a marker commit and retries once before waiting for input movement.
+  Needs the resolver's `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
+  secret; without it the union is pushed unhealed.
+- `.github` on `all` is pinned to `develop`'s copy (workflows never execute on
+  `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
+  powers). If a rebuild still trips GitHub's workflow-file push restriction,
+  the builder re-pins `.github` to the previous `all` state and retries.
+- Vercel builds `all` like any other product branch, so it doubles as a living
+  everything-preview.
 
 ## Vercel deployment status
 
@@ -455,6 +1340,187 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
+### Trusted `develop`-target PR deployments
+
+A pull request's base branch does not select its Vercel environment. A feature
+branch targeting `develop` is therefore still an ordinary Preview unless the
+trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
+deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
+also assigns the current `develop` runtime variables to generic Preview, so an
+ordinary newly built Preview shares the development data/services even without
+the controller. The controller remains responsible for the stable
+`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
+comment, and marker-scoped cleanup.
+
+The workflow deliberately uses two stages. The product branches retain only a
+thin event listener pinned to the reusable implementation on the protected
+`github-actions` branch. Its `pull_request_target` job has no environment or
+Vercel secret, checks out no code, and emits only a bounded
+`repository_dispatch` payload. The privileged dispatch job runs in the trusted
+default-branch event context behind the `vercel-develop-pr-control` environment
+while checking out the controller from `github-actions`. It proves the
+source workflow path/run, repository, same-repository PR, head SHA, action, and
+triggering actor through GitHub's API, then re-reads the live PR. Both the PR
+author and triggering actor must be explicitly allowlisted, currently hold
+write/admin permission, and the non-draft PR must still target `develop`.
+Neither GitHub job checks out or executes PR-head code; Vercel performs the
+remote build only after those gates pass.
+
+The reusable implementation and controller script must first merge to the
+protected `github-actions` branch. The thin listener must then reach the
+repository's default `main` branch through the normal `develop` promotion path.
+`pull_request_target` loads the listener from the default branch, so merely
+adding it to a feature branch does not activate the controller. Thingtime's
+active `main` `Basic Protection` ruleset
+has no bypass: it requires a pull request, resolved review threads, strict Web
+CI and CodeQL status checks, and blocks branch deletion and force-pushes. The
+tracked CODEOWNERS file requests owner review, but independent CODEOWNER
+approval is optional future hardening once a second trusted collaborator can
+review controller changes. The controller Environment intentionally has no
+required reviewer because that would pause event cleanup and every six-hour
+scheduled reconciliation instead of letting them run automatically.
+
+Thingtime's protected GitHub Environment `vercel-develop-pr-control` allows only
+the `main` deployment branch. It contains the nine controller variables and a
+dedicated 90-day Vercel token scoped to the owning team. Vercel does not offer
+a project-scoped PAT for this API surface, so the protected Environment and the
+controller's exact project/team checks are the project boundary. The masked
+unsigned S3 CORS probe secret is also installed. The secret-free
+`pull_request_target` stage hands off to a `repository_dispatch` run in the
+default-branch context; scheduled runs also use the default branch, and the
+workflow refuses a manual dispatch from any other ref. Forks must use values
+from their own Vercel project; the examples are placeholders and must not be
+committed with live credentials or identifiers:
+
+```sh
+# GitHub Environment secrets
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
+THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<exact-develop-bucket>.s3.<region>.amazonaws.com/<probe-object>"
+
+# GitHub Environment variables
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_TEAM_SLUG="<Vercel-team-slug>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<Vercel-develop-custom-environment-id>"
+DEVELOP_PREVIEW_TRUSTED_ACTORS="<trusted-GitHub-login>[,<trusted-GitHub-login>]"
+PREVIEW_ALIAS_SUFFIX="<preview-alias-suffix>"
+STABLE_DEVELOP_DOMAIN="<stable-develop-domain>"
+```
+
+`VERCEL_CUSTOM_ENVIRONMENT_ID` must contain the exact immutable ID returned for
+the `develop` Custom Environment, not the display slug `develop`. The author and
+triggering actor must both appear in `DEVELOP_PREVIEW_TRUSTED_ACTORS` and
+still hold current write/admin repository permission. Keep the Vercel
+environment's branch matcher on the literal `develop` branch. Bind
+`dev.thingtime.com` to that Git branch (`gitBranch: develop` and no
+`customEnvironmentId` on the domain), not to the entire Custom Environment,
+and keep the Custom Environment's own domain list empty. The controller assigns
+only the verified PR wildcard alias explicitly. This leaves the stable
+development hostname on the real `develop` branch while PRs receive only
+`https://pr-<number>.previews.dev.thingtime.com`.
+
+Generic Preview intentionally receives every runtime variable currently
+assigned to the `develop` Custom Environment, while retaining its existing
+Preview-only filesystem, CI, repository, webhook, and workflow variables. This
+includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
+the AI, SES/email, and Vercel API values that `develop` intentionally shares
+with Production. Production MongoDB, JWT, and S3 settings remain separate and
+are not assigned to Preview.
+
+For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
+`STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
+domains they control. The masked Environment secret
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` is required and must be a credential-free
+HTTPS object URL on the exact develop bucket, with no query string or presigned
+parameters. The controller sends only an unauthenticated CORS `OPTIONS` probe
+and fail-closes alias publication if it is not accepted.
+
+`*.previews.dev.thingtime.com` is registered, verified, and detached from
+both Git branches and Custom Environments in Vercel. Its remaining Thingtime
+DNS setup keeps Cloudflare authoritative for the apex. The **DNS only**
+(grey-cloud) CNAME from `*.previews.dev` to `cname.vercel-dns.com` routes wildcard
+traffic, while wildcard TLS issuance and renewal require two narrow NS
+delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
+`ns2.vercel-dns.com`. Do not move the `thingtime.com` apex to Vercel nameservers
+or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
+preview wildcard, because that delegation gives Vercel control of certificate
+validation for the subtree and can prevent another provider from issuing there.
+Vercel may still label this externally managed arrangement `DNS Change
+Recommended` or return `misconfigured: true`; that advisory asks to move the
+apex nameservers and is not the publication gate. The controller instead
+requires the live probe hostname to resolve to Vercel's currently recommended
+CNAME target, then verifies HTTPS on the exact alias after assigning it.
+Making Vercel authoritative for the domain would normally remove the advisory,
+but Thingtime intentionally keeps Cloudflare authoritative and delegates only
+the two narrow ACME validation subtrees.
+See Vercel's official
+[wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
+Forks should first add their own wildcard to Vercel and copy every CNAME or
+verification record Vercel currently displays for that domain; do not copy
+another project's account-specific targets.
+
+The develop S3 bucket permits browser upload CORS from the stable development
+origin, the controller-managed PR aliases, and Thingtime's generated Vercel
+Preview hostnames. Downloads remain same-origin through Thingtime and the
+bucket stays private:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com", "https://thingtime-*-lopugits-projects.vercel.app"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Environment, nine controller variables, dedicated 90-day Vercel token, masked
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
+scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
+wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
+are complete for `*.previews.dev.thingtime.com`. The first live dispatch
+authenticated successfully and exposed the external-DNS advisory mismatch.
+The corrected implementation must merge to `github-actions`, and this thin
+listener must reach `main` through `develop`; a successful post-fix exact-SHA
+deployment, alias publication, CORS probe, and attachment upload/removal check
+then complete the activation checklist.
+
+CORS is not authorization. The bucket remains private, while the development
+AWS role explicitly trusts both Thingtime's `environment:develop` and
+`environment:preview` OIDC subjects. Every new ordinary Preview can therefore
+read or mutate the same development MongoDB/S3/data plane and use the same
+private integration values as `dev.thingtime.com`. Treat all branches Vercel is
+allowed to build as trusted development code, use disposable data, and keep
+production MongoDB/JWT/S3 credentials out of Preview.
+
+`*.previews.thingtime.com` is reserved for a separate future production-preview
+controller. Do not point the develop controller at that suffix, copy the
+production S3 role into generic Preview, or let ordinary Vercel feature/fork
+previews assume the production AWS role. A production-preview controller must have its
+own trusted actors, protected control environment, exact production OIDC trust,
+deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
+activated.
+
+Every generic Preview and eligible controller deployment intentionally shares
+the same development MongoDB, S3 bucket, quotas, and other runtime state as
+`dev.thingtime.com`. It is a trusted integration surface, not an isolated
+sandbox: use disposable test accounts/data and do not allow Vercel to build
+untrusted code in this project. The controller updates one marker comment with
+deploying/ready/failure state, moves
+the PR alias only after the exact SHA is ready and revalidated, and deletes only
+its marker-tagged superseded resources. Close/retarget/draft handling removes
+the alias, inactivates the transient GitHub Deployment, and deletes its tagged
+Vercel deployments. A six-hour scheduled reconciliation repeats marker-scoped
+cleanup after an interrupted or missed event without touching the stable
+`develop` deployment; manual dispatch safely revalidates one supplied PR.
+See `VERCEL_DEPLOYMENTS.md` and the Develop-target checklist in `TESTING.md` for
+the operator runbook.
+
 The footer environment selector can compare public origins for this tab, local,
 development, staging, and production. These values are browser-visible
 `THINGTIME_` values, so use public origins only and never include tokens,
@@ -472,10 +1538,18 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 ## Public env exposure rule
 
-Only variables with the `THINGTIME_` prefix are intentionally copied into the
-browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Browser-visible loader data uses an explicit allowlist. It includes only the
+public local/development/staging/production status origins plus derived branch,
+Vercel deployment, and status-display labels. Every other environment variable
+remains server-only — including all `THINGTIME_*` webhook, router, email,
+credential, token, password, and private-key values. Never add a new public
+value by prefix convention; add and review its exact key in
+`remix/app/root-data.server.ts`.
+
+Naming still matters for reviewability even though it no longer decides
+exposure: use the `THINGTIME_PRIVATE_` namespace for server-only Thingtime
+integrations such as S3, and keep secrets such as MongoDB passwords and Vercel
+API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 

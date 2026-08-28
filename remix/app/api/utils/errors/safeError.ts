@@ -16,8 +16,17 @@ export class PublicError extends Error {
   }
 }
 
-const asCodeString = (value: unknown): string | null =>
-  typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+const SAFE_ERROR_TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
+
+const asCodeString = (value: unknown): string | null => {
+	const code = typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+	return SAFE_ERROR_TOKEN.test(code) ? code : null;
+};
+
+const safeErrorName = (value: unknown, fallback: string): string => {
+	const name = typeof value === 'string' ? value.trim() : '';
+	return SAFE_ERROR_TOKEN.test(name) ? name : fallback;
+};
 
 // Mongo server errors carry codeName ("FailedToParse"); node/undici network
 // errors carry code on the error or its cause ("ECONNREFUSED").
@@ -38,7 +47,7 @@ export const safeErrorText = (err: unknown, context: string, fallback = 'Unexpec
 
   if (err instanceof Error) {
     const code = errorCode(err);
-    const name = err.name || fallback;
+		const name = safeErrorName(err.name, fallback);
     return code ? `${name} (${code})` : name;
   }
 

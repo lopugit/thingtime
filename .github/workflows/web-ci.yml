@@ -1,17 +1,16 @@
 name: Web CI
 
-# One workflow for the remix/ web app (TODO 15 DX ratchet), consolidated from
-# PRs #119 / #121 / #123 / #126:
-#   build      — Vite client build + typecheck ratchet + node --test unit suites
-#   api-tests  — the same suite as the interactive /tests page, run headlessly
-#                against a real dev stack (Vite + Nitro) and a real MongoDB —
-#                no mocks, per FUNDAMENTALS.md (seed and test via the real API).
-
+# Stable event listener only. The build/test implementation is versioned once
+# on github-actions, while checkout inside that implementation still tests the
+# exact PR/push commit that triggered this caller.
+# Pull requests stay path-filter-free: required checks from a filtered-out
+# workflow remain pending forever. The protected implementation's scope job
+# gives the stable required-context names to either the full jobs (Vite client
+# build + warning-only typecheck ratchet + unit suites, and the headless /tests
+# API suite against a real dev stack and MongoDB) or the lightweight
+# companions, so non-Remix PRs remain mergeable without masking real failures.
 on:
   pull_request:
-    paths:
-      - remix/**
-      - .github/workflows/web-ci.yml
   push:
     branches: [main]
     paths:
@@ -19,103 +18,13 @@ on:
       - .github/workflows/web-ci.yml
   workflow_dispatch:
 
-# CI only reads the repo — never grant the default write token.
 permissions:
   contents: read
-
-concurrency:
-  group: web-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # The protected reusable workflow uses this only from its no-checkout
+  # warning-comment job; build/test jobs keep read-only job permissions.
+  pull-requests: write
 
 jobs:
-  build:
-    name: Build + typecheck ratchet + unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: remix
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: remix/package.json
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: remix/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build client shell
-        run: pnpm run build:client
-
-      # Fails only when the tsc error count grows past
-      # scripts/typecheck-baseline.json; shrinking the count is celebrated and
-      # locked in with --update-baseline.
-      - name: Typecheck ratchet
-        run: pnpm run typecheck:ratchet
-
-      - name: Unit tests
-        run: pnpm run test:unit
-
-  api-tests:
-    name: API suite (headless /tests runner)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: remix
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-    env:
-      MONGODB_CONNECTION_STRING: mongodb://127.0.0.1:27017/
-      # CI-only HS256 secret; the suite never needs the production ES256 keys
-      JWT_SECRET: ci-only-api-tests-secret
-      TT_WEB_PORT: '9999'
-      TT_HMR_PORT: '9998'
-      TT_API_PORT: '10000'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: remix/package.json
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: remix/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Start dev stack
-        run: |
-          nohup npm run dev > /tmp/tt-dev.log 2>&1 &
-          echo "started dev stack"
-
-      - name: Wait for the API to come up
-        run: |
-          for i in $(seq 1 60); do
-            if curl -sf "http://127.0.0.1:${TT_WEB_PORT}/api/v1/mongodb/status" > /dev/null; then
-              echo "API is up"; exit 0
-            fi
-            sleep 2
-          done
-          echo "API did not come up in time"; tail -100 /tmp/tt-dev.log; exit 1
-
-      - name: Run API test suite
-        run: pnpm exec tsx scripts/run-api-tests.mts --base "http://127.0.0.1:${TT_WEB_PORT}"
-
-      - name: Dev stack logs on failure
-        if: failure()
-        run: tail -200 /tmp/tt-dev.log
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/web-ci.yml@github-actions
+    secrets: inherit
