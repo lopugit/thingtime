@@ -1,5 +1,18 @@
 # TODO
 
+## Priority 1 — Fundamental product behavior
+
+- **Preserve and revisit any meaningful app, search, or generated-feed state.**
+
+  Thingtime should automatically retain timestamped, versioned experience
+  snapshots so a user can return to a remembered moment instead of losing a
+  useful search, feed generation, recommendation set, navigation context, or
+  scroll position when they leave the app. Restoring history must be
+  non-destructive, privacy-aware, and able to distinguish an exact historical
+  replay from a fresh rerun of the same query or algorithm.
+  Full spec and Bambu Studio reference screenshot:
+  `claude-todo/20-versioned-experience-history.md`.
+
 1. **URGENT HIGH PRIORITY: Make true `hydrateRoot(document, ...)` merge-ready.**
 
    Rollback checkpoint before deeper hydrate experiments: `61c234a` (`Fix Remix Emotion hydration styling`).
