@@ -101,6 +101,9 @@ export class ThingtimeEmbedRuntime {
 	private bridgeReady = false;
 	private bridgeReadyPromise: Promise<void> | null = null;
 	private resolveBridgeReady: (() => void) | null = null;
+	// In-flight popup handshake, so concurrent openSecureWindow() callers share
+	// one popup instead of racing to open several.
+	private bridgeConnect: Promise<void> | null = null;
 	private pendingBridge = new Map<
 		string,
 		{ resolve: (value: any) => void; reject: (error: Error) => void; timeout: number; closePoll: number }
@@ -312,6 +315,25 @@ export class ThingtimeEmbedRuntime {
 			return;
 		}
 
+		// A second call while the first popup is still connecting must JOIN that
+		// attempt. Minting a new channel would window.open() under a new window
+		// name — a second popup — and strand the first: its bridge-ready still
+		// carries the old channel, so onWindowMessage drops it forever, and the
+		// first caller's ready promise (whose resolver was just overwritten) only
+		// settles at the 15s timeout with "popup did not connect". The chrome shows
+		// Save and "Full editor ↗" side by side while a ~1.7 MB bundle loads, so
+		// double-clicking either one was enough.
+		if (!this.bridgeConnect) {
+			this.bridgeConnect = this.connectSecureWindow().finally(() => {
+				this.bridgeConnect = null;
+			});
+		}
+		await this.bridgeConnect;
+		this.postBridge('init', this.createBridgePayload());
+		this.bridgeWindow?.focus();
+	}
+
+	private async connectSecureWindow() {
 		this.bridgeChannel = randomChannel();
 		this.bridgeReady = false;
 		this.bridgeReadyPromise = new Promise((resolve) => {
@@ -349,8 +371,6 @@ export class ThingtimeEmbedRuntime {
 				resolve();
 			});
 		});
-		this.postBridge('init', this.createBridgePayload());
-		this.bridgeWindow.focus();
 	}
 
 	destroy() {

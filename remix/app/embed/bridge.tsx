@@ -8,6 +8,7 @@ import { Thingtime } from '~/components/Thingtime/Thingtime';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useLopu } from '~/components/Lopu/useLopu';
 
+import { readBridgeThingIdentity } from './bridgeIdentity';
 import { errorMessage, sanitizeJson, type JsonValue } from './json';
 import { EMBED_PROTOCOL, type ThingDocument, type ThingVisibility } from './runtime';
 
@@ -120,12 +121,14 @@ const BridgeApp = ({ channel, parentOrigin }: BridgeParams) => {
 				const value = sanitizeJson(message.payload?.value);
 				applyingRemote.current = true;
 				setThingtime(BRIDGE_PATH, value, { ignoreUndoRedo: true, namespace: 'embed-bridge' });
-				const thing = message.payload?.thing || {};
-				setName(typeof thing.name === 'string' && thing.name.trim() ? thing.name.slice(0, 120) : 'Embedded thing');
-				setVisibility(thing.visibility === 'private' ? 'private' : 'public');
-				setDocumentMeta(
-					typeof thing.id === 'string' && Number.isSafeInteger(Number(thing.version)) ? { id: thing.id, version: Number(thing.version) } : null
-				);
+				// `state` syncs the value only and names no thing — keep the identity
+				// established by init/request-save/the last save (see bridgeIdentity.ts).
+				const identity = readBridgeThingIdentity(message.payload);
+				if (identity) {
+					setName(identity.name);
+					setVisibility(identity.visibility);
+					setDocumentMeta(identity.documentMeta);
+				}
 				setInitialized(true);
 				setStatusError(false);
 				if (message.type === 'request-save') {
