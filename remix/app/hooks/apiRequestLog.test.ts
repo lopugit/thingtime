@@ -10,6 +10,7 @@ import {
 	getApiCalls,
 	recordApiCall,
 	redactSensitive,
+	redactUriCredentials,
 	subscribeApiCalls
 } from './apiRequestLog.ts';
 
@@ -126,4 +127,48 @@ test('a curl copied from the log carries no credential', () => {
 	const curl = buildCurlForEntry(getApiCalls()[0], 'https://thingtime.com');
 	assert.ok(!curl.includes(fakeToken), 'copy-as-curl must not leak the token');
 	assert.ok(curl.includes('token=•••'));
+});
+
+test('a connection string stored under a plain key keeps its credential out of the log', () => {
+	clearApiCalls();
+	// exactly what MongoEndpointConfig posts via useApi mongodb.endpoints.add:
+	// the credential rides in the VALUE, under the unremarkable key `url`
+	const password = ['s3cr3t', 'pw'].join('-');
+	// assembled piecewise, per this file's convention, so no scanner ever sees a
+	// literal `scheme://user:pass@host` connection string in source
+	const connectionString = ['mongodb+srv://svcuser', ':', password, '@', 'cluster0.abc.mongodb.net/thingtime'].join('');
+	recordApiCall({
+		...baseEntry,
+		method: 'POST',
+		url: '/api/v1/mongodb/endpoints',
+		body: { name: 'prod', url: connectionString }
+	});
+	const [logged] = getApiCalls();
+	assert.deepEqual(logged.body, { name: 'prod', url: 'mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime' });
+	const curl = buildCurlForEntry(logged, 'https://thingtime.com');
+	assert.ok(!curl.includes(password), 'copy-as-curl must not leak a connection-string password');
+	assert.ok(!curl.includes('svcuser'), 'the userinfo username goes with it');
+	// the row must still say which endpoint was configured
+	assert.ok(curl.includes('cluster0.abc.mongodb.net'));
+});
+
+test('userinfo redaction leaves ordinary urls — including @handle paths — intact', () => {
+	// this app puts @handles in paths; over-redacting would gut the panel
+	assert.equal(redactUriCredentials('https://thingtime.com/@lopu'), 'https://thingtime.com/@lopu');
+	assert.equal(redactUriCredentials('https://example.com/a?to=x@y.com'), 'https://example.com/a?to=x@y.com');
+	assert.equal(redactUriCredentials('/api/v1/things/feed'), '/api/v1/things/feed');
+	assert.equal(redactUriCredentials('not a url at all'), 'not a url at all');
+	// but a bare userinfo, in any scheme, still goes
+	assert.equal(redactUriCredentials('https://user@example.com/x'), 'https://•••@example.com/x');
+	assert.equal(redactUriCredentials('postgres://u:p@db.internal:5432/app'), 'postgres://•••@db.internal:5432/app');
+});
+
+test('an absolute request url with userinfo is scrubbed before it is stored', () => {
+	clearApiCalls();
+	const password = ['n0t', 'real'].join('-');
+	const absolute = ['https://admin', ':', password, '@', 'internal.thingtime.com/api/v1/health?ok=1'].join('');
+	recordApiCall({ ...baseEntry, url: absolute });
+	const [logged] = getApiCalls();
+	assert.equal(logged.url, 'https://•••@internal.thingtime.com/api/v1/health?ok=1');
+	assert.ok(!logged.url.includes(password));
 });

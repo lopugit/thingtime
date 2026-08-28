@@ -28,6 +28,20 @@ const SENSITIVE_KEY = /pass|token|secret|authorization|code|challenge|apikey|api
 const REDACTED = '•••';
 const MAX_REDACT_DEPTH = 6;
 
+// A credential does not only ride under a telling key — it also rides inside a
+// value, as URI userinfo (`scheme://user:password@host`). The case that forced
+// this: MongoEndpointConfig posts a connection string under the key `url`
+// (useApi mongodb.endpoint.set / endpoints.add), and `url` is deliberately not
+// in the key vocabulary above — ordinary non-secret urls are exactly what this
+// panel exists to show. api/utils/mongodb/endpoint.ts keeps that URI
+// "SERVER-SIDE ONLY, never echo it ... back to a client" and scrubs it from its
+// own error text; a log that stored it verbatim would hand it straight back
+// through copy-as-curl. Only the userinfo is replaced, so the row still reads
+// (scheme + host survive) while the credential cannot be copied out.
+const URI_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)[^/?#@]*@/i;
+
+export const redactUriCredentials = (value: string): string => value.replace(URI_USERINFO, `$1${REDACTED}@`);
+
 export const redactSensitive = (value: unknown, depth = 0): unknown => {
 	if (depth > MAX_REDACT_DEPTH) return REDACTED;
 	if (Array.isArray(value)) return value.map((entry) => redactSensitive(entry, depth + 1));
@@ -38,6 +52,7 @@ export const redactSensitive = (value: unknown, depth = 0): unknown => {
 		}
 		return out;
 	}
+	if (typeof value === 'string') return redactUriCredentials(value);
 	return value;
 };
 
@@ -52,11 +67,14 @@ const listeners = new Set<() => void>();
 // above promises it never does. Same key vocabulary as the body redactor, so
 // the two cannot drift.
 export const redactUrl = (url: string): string => {
-	const queryStart = url.indexOf('?');
-	if (queryStart === -1) return url;
+	// userinfo sits in the authority, ahead of any query — scrub it first so an
+	// absolute request url is covered by the same rule request bodies are
+	const safe = redactUriCredentials(url);
+	const queryStart = safe.indexOf('?');
+	if (queryStart === -1) return safe;
 
-	const path = url.slice(0, queryStart);
-	const [query, ...fragmentParts] = url.slice(queryStart + 1).split('#');
+	const path = safe.slice(0, queryStart);
+	const [query, ...fragmentParts] = safe.slice(queryStart + 1).split('#');
 	const fragment = fragmentParts.length ? `#${fragmentParts.join('#')}` : '';
 
 	// Hand-parsed rather than via URLSearchParams so a relative URL needs no
