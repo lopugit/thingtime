@@ -1,14 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
+import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
+import {
+  type AiWorkflowModelChoice,
+  resolveAiPreferredAnthropicChoice,
+  resolveAiPreferredOpenAiChoice,
+  toAnthropicEffort,
+  toOpenAiReasoningEffort
+} from '../settings/prConflictResolverModelWaterfallCore';
 import { pickFallbackMusing } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
 // context (approximate location + current weather + local time of day).
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY → Claude (model: LOPU_CLAUDE_MODEL, default claude-opus-4-8)
-//   - OPENAI_API_KEY    → ChatGPT (model: LOPU_OPENAI_MODEL, default gpt-4o-mini)
+//   - ANTHROPIC_API_KEY → Claude (first Anthropic-capable Thingtime Admin
+//     waterfall entry, with its effort/fast knobs; LOPU_CLAUDE_MODEL is the
+//     provider-valid fallback when the Admin preference resolves to `default`)
+//   - OPENAI_API_KEY    → ChatGPT (first OpenAI Admin waterfall entry with its
+//     knobs; LOPU_OPENAI_MODEL, default gpt-4o-mini, when none is configured)
 // Preference order via LOPU_PROVIDER = "claude" | "openai" (default: claude first).
 //
 // For variety, each request picks a "mode": a weather/place musing, a fresh
@@ -108,35 +119,148 @@ export const fetchWeather = async (lat: string, lon: string): Promise<{ tempC?: 
 
 // --- Streaming providers (each yields text chunks, or throws to fall through) -
 
-async function* streamClaude(system: string, user: string): AsyncGenerator<string> {
+const getDefaultLopuClaudeModel = () => process.env.LOPU_CLAUDE_MODEL?.trim() || 'claude-opus-4-8';
+
+export type LopuModelChoices = {
+  claude: AiWorkflowModelChoice;
+  openai: AiWorkflowModelChoice | null; // null = keep LOPU_OPENAI_MODEL
+};
+
+type LopuModelChoicesResolverDependencies = {
+  getPreferredModelWaterfall: typeof getAiPreferredModelWaterfall;
+  getProviderDefaultModel: () => string;
+};
+
+// One durable waterfall read resolves both provider preferences: the first
+// Anthropic-capable entry for Claude calls and the first OpenAI entry for
+// ChatGPT calls, each stopping at the `default` sentinel.
+export const createLopuModelChoicesResolver =
+  (dependencies: LopuModelChoicesResolverDependencies) => async (): Promise<LopuModelChoices> => {
+    const waterfall = await dependencies.getPreferredModelWaterfall();
+    return {
+      claude: resolveAiPreferredAnthropicChoice(waterfall, dependencies.getProviderDefaultModel()),
+      openai: resolveAiPreferredOpenAiChoice(waterfall)
+    };
+  };
+
+const getLopuModelChoices = createLopuModelChoicesResolver({
+  getPreferredModelWaterfall: getAiPreferredModelWaterfall,
+  getProviderDefaultModel: getDefaultLopuClaudeModel
+});
+
+// Output ceiling for one musing. The visible answer is one or two sentences,
+// but both providers bill internal reasoning against this same budget —
+// Anthropic counts thinking tokens inside `max_tokens`, OpenAI counts
+// reasoning tokens inside `max_completion_tokens`. Now that an Admin entry can
+// pin any catalog model, including reasoning models and explicit effort tiers,
+// a text-sized cap is spent thinking and the musing streams back empty. Keep a
+// hard ceiling for cost, with headroom for the text to survive the reasoning.
+const MUSING_MAX_OUTPUT_TOKENS = 4096;
+
+// Yield the text deltas of one Claude attempt. The Admin-selected effort and
+// fast-mode knobs are applied when present; if the decorated request fails
+// before producing any text (e.g. a knob the model rejects), one bare retry
+// with just the model keeps the admin's model preference alive.
+async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice): AsyncGenerator<string> {
   const client = new Anthropic();
-  const stream = client.messages.stream({
-    model: process.env.LOPU_CLAUDE_MODEL || 'claude-opus-4-8',
-    max_tokens: 200, // intentionally short — a musing is one or two sentences
+  const base = {
+    model: choice.model,
+    max_tokens: MUSING_MAX_OUTPUT_TOKENS,
     system,
-    messages: [{ role: 'user', content: user }]
-  });
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      yield event.delta.text;
+    messages: [{ role: 'user' as const, content: user }]
+  };
+
+  const effort = toAnthropicEffort(choice.effort);
+  const decorated = choice.speed === 'fast' || effort;
+  const attempts =
+    choice.speed === 'fast'
+      ? [
+          // Fast mode is beta-gated and needs the beta stream surface.
+          () =>
+            client.beta.messages.stream({
+              ...base,
+              ...(effort ? { output_config: { effort } } : {}),
+              speed: 'fast',
+              betas: ['fast-mode-2026-02-01']
+            }),
+          () => client.messages.stream(base)
+        ]
+      : effort
+        ? [() => client.messages.stream({ ...base, output_config: { effort } }), () => client.messages.stream(base)]
+        : [() => client.messages.stream(base)];
+
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    let yielded = false;
+    try {
+      for await (const event of attempts[attempt]()) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          yielded = true;
+          yield event.delta.text;
+        }
+      }
+      // A decorated attempt that completes WITHOUT a single text delta starved
+      // its output budget on reasoning — treat it like a failure and fall
+      // through to the bare retry, so the admin's Claude preference is not
+      // silently skipped in favor of the next provider.
+      if (yielded || attempt === attempts.length - 1) return;
+    } catch (err) {
+      // Never retry after emitting text (it would duplicate the musing), and
+      // never swallow the final attempt's failure — the provider loop needs it.
+      if (yielded || !decorated || attempt === attempts.length - 1) throw err;
     }
   }
 }
 
-async function* streamOpenAI(system: string, user: string): AsyncGenerator<string> {
+async function* streamOpenAI(
+  system: string,
+  user: string,
+  choice: AiWorkflowModelChoice | null
+): AsyncGenerator<string> {
   const client = new OpenAI();
-  const stream = await client.chat.completions.create({
-    model: process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
-    max_tokens: 200,
-    stream: true,
+  const base = {
+    model: choice?.model || process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
+    // Never `max_tokens`: it is deprecated and outright incompatible with the
+    // o-series/GPT-5 reasoning models an admin can now put first, which would
+    // reject both the decorated call and its bare retry.
+    max_completion_tokens: MUSING_MAX_OUTPUT_TOKENS,
+    stream: true as const,
     messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user }
+      { role: 'system' as const, content: system },
+      { role: 'user' as const, content: user }
     ]
-  });
-  for await (const chunk of stream) {
-    const text = chunk.choices?.[0]?.delta?.content;
-    if (text) yield text;
+  };
+
+  const effort = toOpenAiReasoningEffort(choice?.effort ?? null);
+  const decorated = choice && (choice.speed === 'fast' || effort);
+  const attempts = decorated
+    ? [
+        () =>
+          client.chat.completions.create({
+            ...base,
+            ...(effort ? { reasoning_effort: effort } : {}),
+            // 'fast' maps to OpenAI priority processing.
+            ...(choice.speed === 'fast' ? { service_tier: 'priority' as const } : {})
+          }),
+        () => client.chat.completions.create(base)
+      ]
+    : [() => client.chat.completions.create(base)];
+
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    let yielded = false;
+    try {
+      for await (const chunk of await attempts[attempt]()) {
+        const text = chunk.choices?.[0]?.delta?.content;
+        if (text) {
+          yielded = true;
+          yield text;
+        }
+      }
+      // Same starvation rule as the Claude side: an empty decorated completion
+      // falls through to the bare retry before the provider is given up on.
+      if (yielded || attempt === attempts.length - 1) return;
+    } catch (err) {
+      if (yielded || attempt === attempts.length - 1) throw err;
+    }
   }
 }
 
@@ -182,14 +306,27 @@ export async function* streamLopuMusing(
   const base = mode === 'commented' ? pickFallback() : '';
   const user = buildUserPrompt(mode, ctx, base);
 
+  // One durable read serves every provider attempt in this musing;
+  // getWaterfall catches internally and never throws.
+  const choices = await getLopuModelChoices();
+
   for (const provider of providerOrder()) {
     const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
     if (!key) continue;
     try {
-      const gen = provider === 'claude' ? streamClaude(SYSTEM_PROMPT, user) : streamOpenAI(SYSTEM_PROMPT, user);
+      const gen =
+        provider === 'claude'
+          ? streamClaude(SYSTEM_PROMPT, user, choices.claude)
+          : streamOpenAI(SYSTEM_PROMPT, user, choices.openai);
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();
+      // A provider that finishes without a single text delta is a failed
+      // attempt, not an empty musing — a reasoning entry can burn its whole
+      // output budget thinking. Fall through to the next provider (and
+      // ultimately the canned library) instead of committing to a blank
+      // message the user can never see.
+      if (first.done) continue;
       yield { type: 'meta', source: provider, mode };
       // "commented" prepends the chosen library line before the AI's comment.
       if (base) {
@@ -198,7 +335,7 @@ export async function* streamLopuMusing(
           await tick();
         }
       }
-      if (!first.done && first.value) yield { type: 'delta', text: first.value };
+      if (first.value) yield { type: 'delta', text: first.value };
       for await (const text of gen) yield { type: 'delta', text };
       yield { type: 'done' };
       return;

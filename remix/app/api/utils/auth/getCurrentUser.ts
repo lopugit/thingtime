@@ -1,9 +1,11 @@
+import { getSubscription } from '../subscriptions/subscriptions';
 import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
 import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
-import { findUserById, toPublicUserWithStorage } from './users';
+import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
+import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 
 const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -26,9 +28,24 @@ export type ResolvedTokenUser = { user: PublicUser; claims: JwtClaims };
 // a session is either valid everywhere or nowhere. Verifies: session is still
 // live in Mongo → it belongs to the expected user → the user exists.
 export const resolveSessionUser = async (jti: string, expectedUserId: string): Promise<PublicUser | null> => {
+  // All three reads are keyed off values the caller already holds — jti and
+  // expectedUserId both come from the verified JWT — so none of them needs to
+  // wait on another. Issuing them together turns the three sequential round
+  // trips every authenticated request used to pay into one.
+  //
+  // Every rejection below still happens, in the same order, on the same data:
+  // fetching concurrently changes only WHEN the documents arrive, never which
+  // requests are allowed. The cost is two speculative reads on the reject
+  // paths (dead session, wrong user, scoped-token purpose), which are the rare
+  // case — a valid session is the norm.
+  const [session, user, subscription] = await Promise.all([
+    getLiveSession(jti),
+    findUserById(expectedUserId),
+    getSubscription('user', expectedUserId)
+  ]);
+
   // Revocation check: the jti must map to a live session for the same user.
   // Without the userId binding, any live jti could claim a different user.
-  const session = await getLiveSession(jti);
   if (!session) return null;
   if (String(session.userId) !== expectedUserId) return null;
   // App-scoped tokens (third-party "Login with Thingtime" grants) are never
@@ -40,15 +57,17 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
   // sessions — they only resolve through resolveThingsActor and the token
   // introspection endpoint, never here, so a PAT can never mint more tokens,
   // change auth settings, or reach unscoped surfaces.
-  if (session.purpose === 'app' || session.purpose === 'app-sandbox' || session.purpose === 'pat') return null;
+  if (!sessionPurposeCanActAsAccount(session.purpose)) return null;
 
-  const user = await findUserById(expectedUserId);
   if (!user) return null;
   if (!serviceAccountAuthenticationAllowed(user)) {
     return null;
   }
 
-	return toPublicUserWithStorage(user);
+  // findUserById(expectedUserId) guarantees String(user._id) === expectedUserId,
+  // so the subscription fetched above is this user's — the same pairing
+  // toPublicUserWithStorage would have made.
+  return toPublicUser(user, subscription);
 };
 
 // Resolve a signed JWT to its live user, or null. Verifies the signature + exp,
