@@ -47,10 +47,15 @@ function filesUnder(directory) {
   return result
 }
 
-function addExisting(root, paths) {
+function addExisting(root, paths, { force = false } = {}) {
   const relative = paths.map((file) => path.relative(root, file))
   for (let index = 0; index < relative.length; index += 100) {
-    git(root, ["add", "--", ...relative.slice(index, index + 100)])
+    git(root, [
+      "add",
+      ...(force ? ["--force"] : []),
+      "--",
+      ...relative.slice(index, index + 100),
+    ])
   }
 }
 
@@ -86,7 +91,12 @@ export function stageGraphifySnapshots(root) {
       }
     },
   )
-  addExisting(root, [...snapshots, ...semantic, ...legacy])
+  // Legacy product branches may still carry broad graphify-out/cache or
+  // graphify-out/snapshots ignore rules. These paths are already constrained
+  // to the trusted immutable allowlists above, so force-add only that CAS
+  // material. Keep legacy mutable root outputs on normal Git semantics.
+  addExisting(root, [...snapshots, ...semantic], { force: true })
+  addExisting(root, legacy)
   // Product branches predating the CAS migration may still track Graphify's
   // mutable input-key cache. The trusted wrapper ingests and removes it before
   // building so it cannot contaminate extraction. Restore those generated
@@ -111,8 +121,15 @@ function selfTest() {
     const oldCache = path.join(root, "graphify-out/cache/semantic/old.json")
     mkdirSync(path.dirname(oldCache), { recursive: true })
     writeFileSync(oldCache, "{}\n")
+    writeFileSync(
+      path.join(root, ".gitignore"),
+      "graphify-out/cache/\ngraphify-out/snapshots/\n",
+    )
     writeFileSync(path.join(root, "source.txt"), "source\n")
-    git(root, ["add", "."])
+    git(root, ["add", ".gitignore", "source.txt"])
+    // Reproduce a legacy branch that tracked mutable semantic cache before a
+    // later broad ignore rule covered both old cache and the new CAS layout.
+    git(root, ["add", "--force", "graphify-out/cache/semantic/old.json"])
     git(root, ["commit", "-qm", "base"])
     rmSync(oldCache)
 

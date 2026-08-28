@@ -19,6 +19,10 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Fixed Lopu's Graphify snapshot stager on legacy product branches whose broad
+  ignore rules predate the immutable CAS layout. The trusted stager now
+  force-adds only allowlisted immutable snapshots and semantic-cache variants,
+  while mutable legacy root outputs retain ordinary Git ignore semantics.
 - Fixed Lopu's post-resolution cleanup so its ignored `trusted/` controller
   checkout survives the Graphify preflight. This keeps the local action
   definition available for GitHub's registered post-run steps while every
