@@ -1620,6 +1620,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   mutation: reverting the prop to one argument, mis-addressing a call site, and
   restoring PostList's closure each fail the suite — Lopu, 2026-08-28.
 
+  That guard had a gap in the one place this change actually regressed. Both
+  call-site checks read the id out of `onChanged(<id>, …)`, so they only ever
+  saw calls that *have* a second argument: a site reverting to the old
+  one-argument shape stopped being counted rather than failing, and the
+  remaining sites still all said `post.id`. That is precisely the shape of the
+  six regressions above, and the only thing that catches it — tsc's TS2554 — is
+  reported by the deliberately non-blocking ratchet, so it ships green. Each
+  test now also counts raw `onChanged` call sites and asserts every one is
+  addressed. Verified by mutation on top of the existing cases: dropping the id
+  from a post-level call (17 sites, 16 addressed) and from a comment-level one
+  (5 sites, 3 addressed) each failed, where both passed before
+  — Lopu, 2026-08-28.
+
 ### Fixed
 
 - **PR #99 persisted-state, CSP, and registration-body hardening**: persisted

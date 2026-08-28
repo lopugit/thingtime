@@ -28,6 +28,15 @@ const read = (...segments: string[]) => readFileSync(resolve(feedDir, ...segment
 
 const postCard = read('PostCard.tsx');
 
+// The `,` in each call regex below only matches a call that HAS a second
+// argument, so a call site that reverts to the old one-argument shape is
+// invisible to `calls` — it just quietly stops being counted. tsc does flag
+// that one (TS2554), but the typecheck ratchet is deliberately non-blocking, so
+// it annotates and still goes green: exactly how the six one-argument calls
+// below shipped on this change's superseded head. Count the raw call sites too
+// and require every one of them to be addressed.
+const countCalls = (pattern: RegExp) => [...postCard.matchAll(pattern)].length;
+
 test('PostCard keeps the two-argument onChanged contract', () => {
   assert.match(postCard, /onChanged\?:\s*\(id: string, next: PostChange\) => void;/);
 });
@@ -38,12 +47,22 @@ test('every post-level onChanged call addresses post.id', () => {
   // (`onChanged(`), so `onChanged\(` cannot match a post-level call.
   const calls = [...postCard.matchAll(/onChanged\?\.\(\s*([^,)]+),/g)].map((match) => match[1].trim());
   assert.ok(calls.length >= 10, `expected PostCard to still bubble changes through onChanged?.() — found ${calls.length}`);
+  assert.equal(
+    calls.length,
+    countCalls(/onChanged\?\.\(/g),
+    'every post-level onChanged?.() call must pass an id AND a change — a one-argument call only warns'
+  );
   assert.deepEqual([...new Set(calls)], ['post.id']);
 });
 
 test('every comment-level onChanged call addresses comment.id', () => {
   const calls = [...postCard.matchAll(/(?:^|[^.\w])onChanged\(\s*([^,)]+),/gm)].map((match) => match[1].trim());
   assert.ok(calls.length >= 3, `expected CommentRow to still bubble changes through onChanged() — found ${calls.length}`);
+  assert.equal(
+    calls.length,
+    countCalls(/(?:^|[^.\w])onChanged\(/gm),
+    'every comment-level onChanged() call must pass an id AND a change — a one-argument call only warns'
+  );
   assert.deepEqual([...new Set(calls)], ['comment.id']);
 });
 
