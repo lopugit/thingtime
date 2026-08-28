@@ -1,8 +1,12 @@
 import React from 'react';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
+import { PostCard } from '~/components/Feed/PostCard';
+import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
+import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
+import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { useLopu } from '~/components/Lopu/useLopu';
 import {
 	SensitiveThingReveal,
@@ -30,7 +34,9 @@ type MigrationDiagnostic = {
 	revealables: SensitiveThingRevealDescriptor[];
 };
 
-type ThingViewData = { kind: 'diagnostic'; diagnostic: MigrationDiagnostic } | { kind: 'thing'; thing: Record<string, any> };
+type ThingViewData =
+	| { kind: 'diagnostic'; diagnostic: MigrationDiagnostic }
+	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null };
 
 type ThingLoadState = {
 	key: string;
@@ -97,11 +103,13 @@ const readableDate = (value: string) => {
 // every other id rides the normal ACL-aware Things API.
 export default function ThingPage() {
 	const { id = '' } = useParams();
+	const navigate = useNavigate();
 	const { v1 } = useApi();
 	const currentUser = useCurrentUser();
 	const lopu = useLopu();
 	const loadDiagnostic = v1.admin.migrationDiagnostic;
 	const loadThing = v1.things.get;
+	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
 	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}`;
 	const [loadState, setLoadState] = React.useState<ThingLoadState>({
@@ -133,6 +141,7 @@ export default function ThingPage() {
 			return () => controller.abort();
 		}
 
+		const startedAt = Date.now();
 		const request = diagnosticRoute
 			? loadDiagnostic({ id }, { signal: controller.signal }).then((response: any) => ({
 					kind: 'diagnostic' as const,
@@ -140,7 +149,8 @@ export default function ThingPage() {
 			  }))
 			: loadThing({ id }, { signal: controller.signal }).then((response: any) => ({
 					kind: 'thing' as const,
-					thing: thingFromResponse(response)
+					thing: thingFromResponse(response),
+					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null
 			  }));
 
 		request
@@ -164,6 +174,7 @@ export default function ThingPage() {
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
+	const post = visibleState.data?.kind === 'thing' ? visibleState.data.post : null;
 	const { error, loading } = visibleState;
 	const genericDetail = thing
 		? JSON.stringify(
@@ -193,6 +204,21 @@ export default function ThingPage() {
 			lopu({ title: 'Could not copy this Thing', description: 'Select the text and copy it manually.', status: 'error' });
 		}
 	};
+
+	const handlePostChanged = React.useCallback(
+		(change: PostChange) => {
+			setLoadState((current) => {
+				if (current.key !== requestKey || current.data?.kind !== 'thing' || !current.data.post) return current;
+				const next = typeof change === 'function' ? change(current.data.post) : change;
+				if (!next) {
+					navigate('/feed');
+					return current;
+				}
+				return { ...current, data: { ...current.data, post: next } };
+			});
+		},
+		[navigate, requestKey]
+	);
 
 	return (
 		<Flex
@@ -276,16 +302,33 @@ export default function ThingPage() {
 							</Flex>
 						</Box>
 
+						{post ? (
+							<Stack spacing={3} minW={0}>
+								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
+									<Heading as="h2" fontSize="md">
+										Post view
+									</Heading>
+									<Button
+										as={Link}
+										to={`/post/${encodeURIComponent(post.id)}`}
+										size="xs"
+										variant="ghost"
+										rightIcon={<ExternalLink size={13} />}
+									>
+										Open post page
+									</Button>
+								</Flex>
+								<Box ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
+									<PostCard post={post} onChanged={handlePostChanged} />
+								</Box>
+							</Stack>
+						) : null}
+
 						<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
 							<Flex align="center" justify="space-between" gap={3} mb={3}>
 								<Heading as="h2" fontSize="md">
 									{diagnostic ? 'Full redacted error' : 'Thing data'}
 								</Heading>
-								{Array.isArray(thing?.thingtime) && thing.thingtime.includes('post') ? (
-									<Button as={Link} to={`/post/${encodeURIComponent(thing.id)}`} size="xs" variant="ghost" rightIcon={<ExternalLink size={13} />}>
-										Post view
-									</Button>
-								) : null}
 							</Flex>
 							<Box
 								as="pre"

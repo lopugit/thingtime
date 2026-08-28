@@ -10,6 +10,19 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  // Private attachment storage: start and completion mutate both S3 and the
+  // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
+  // short-lived private redirects. Every surface stays bounded per account/IP.
+  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
+  'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
+  // owner title/description edits (POST /api/v1/attachments/annotate) — small
+  // crystal-only writes, same shape as delete
+  'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
+  'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
+  // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
+  'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
@@ -108,12 +121,38 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // passkey ceremonies: options endpoints only mint signed challenge cookies
+  // (cheap, but unauthenticated), verify endpoints do signature checks + at
+  // most one session mint — bound both like login. Management (register/
+  // rename/revoke/delete) is session-authed and keyed by user.
+  'auth.passkeyOptions': { limit: 60, windowMs: 60_000, enabled: true },
+  'auth.passkeyLogin': { limit: 30, windowMs: 60_000, enabled: true },
+  'auth.passkeyManage': { limit: 30, windowMs: 60_000, enabled: true },
+  // cross-deployment auto-login suggestions: resolves at most a handful of
+  // roster/session docs per call, unauthenticated, so bound per IP
+  'auth.accountHints': { limit: 60, windowMs: 60_000, enabled: true },
+  // federated flavor of the above: other Thingtime deployments' pages read it
+  // cross-origin (same-site credentials), so it gets its own IP bucket
+  'auth.hintsResolve': { limit: 60, windowMs: 60_000, enabled: true },
+  // cross-origin session handoff: minting is session-authed (user-keyed) and
+  // each code is single-use + 2-minute TTL; redemption is anonymous (IP)
+  'auth.ssoHandoff': { limit: 20, windowMs: 60_000, enabled: true },
+  'auth.ssoSession': { limit: 20, windowMs: 60_000, enabled: true },
+  // FedCM: browser-mediated fetches (Sec-Fetch-Dest: webidentity). Accounts
+  // reads are roster lookups; assertions mint at most one code/token each.
+  'fedcm.accounts': { limit: 120, windowMs: 60_000, enabled: true },
+  'fedcm.assertion': { limit: 20, windowMs: 60_000, enabled: true },
   // public sign-up: anonymous bcrypt + user-doc writes, every success emails
   // the supplied address (mail-bomb + enumeration surface like the other auth
   // mailers), and it's an awaited ensureIndexes bootstrap caller — throttling
   // keeps retries from re-running the index battery too. Keyed by IP; roomy
   // enough for a human fumbling taken usernames, tight for account farming.
   'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // First-session /things bootstrap: every success creates a durable user,
+  // session, roster entry, and subscription ledger. Reuse is checked before
+  // this bucket, so five creations per IP/day is generous for cookie loss and
+  // deliberately tight against anonymous account farming. Fail-closed route.
+  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
   // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
   // each mint writes a session doc, so bound accumulation beyond the per-user
   // token cap
@@ -149,8 +188,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // follow/unfollow toggles (also classifies messenger requests)
-  'users.follow': { limit: 60, windowMs: 60_000, enabled: true }
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
