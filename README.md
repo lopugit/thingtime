@@ -14,6 +14,14 @@ Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
 `AGENTS.md` and `CLAUDE.md` as symlinks to it), because agents work on this
 branch too.
 
+Graphify output is stored as immutable content-addressed snapshots. Use
+`.github/scripts/graphify`; it fingerprints the source tree without generated
+output, serializes writers, validates each atomic graph set, converts mutable
+semantic responses into immutable input-key/content-hash variants, and keeps
+mutable root aliases out of Git. The same trusted router is copied into Lopu
+workspaces, so post-merge Graphify publication never executes a PR-head script
+with repository credentials.
+
 The root `vercel.json` is the one deliberate non-CI runtime file. Vercel now
 uses the repository root for product deployments, so this branch must keep a
 config at that same location. It sets `git.deploymentEnabled` to `false` for
@@ -108,9 +116,12 @@ The public manager coalesces event storms by semantic PR or branch key: GitHub
 keeps the active run plus the newest pending run, and
 `cancel-in-progress: false` prevents that newest signal from interrupting work
 already running. The survivor re-derives the complete live PR, comment, check,
-and branch state. Only the shared model fleet uses durable `queue: max`, because
-already-selected work for distinct PRs must not disappear while one Lopu is
-active.
+and branch state. Before a conflict detector publishes another repository
+batch, it also cancels only older batch runs that are still pending/queued and
+waits for their GitHub capacity to release; an in-progress worker is always
+preserved. Only the shared model fleet uses durable `queue: max`, so admitted
+work remains serialized while event storms cannot fill the pending-job limit
+with obsolete immutable snapshots.
 
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep

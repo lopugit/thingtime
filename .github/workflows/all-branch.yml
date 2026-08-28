@@ -169,6 +169,9 @@ jobs:
             --max-filesize 65536 \
             --output "$response_file" \
             "$endpoint"; then
+            # Unique 1..256 array of closed-charset composed option ids
+            # (`<model>[:<effort>][:fast]`); entries can never lead with `-`
+            # or contain a space, so no CLI flag can be smuggled through.
             if configured="$(jq -cse '
               select(length == 1)
               | .[0]
@@ -177,12 +180,9 @@ jobs:
               | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
               | .waterfall
               | select(type == "array")
-              | select(length >= 1 and length <= 3)
+              | select(length >= 1 and length <= 256)
               | select(all(.[]; type == "string"))
-              | select(all(.[];
-                  . == "default"
-                  or . == "claude-fable-5"
-                  or . == "claude-opus-5"))
+              | select(all(.[]; test("^[a-z0-9][a-z0-9.:-]{0,63}$")))
               | select(length == (unique | length))
             ' "$response_file" 2>/dev/null)"; then
               waterfall="$configured"
@@ -197,23 +197,87 @@ jobs:
             echo "::warning::Thingtime model waterfall is unavailable; using [default]."
           fi
 
-          # Never interpolate API strings into claude_args. Rebuild the chain
-          # from fixed literals after validation.
+          # Never interpolate API strings into claude_args. Re-validate each
+          # entry against fixed patterns and rebuild the Claude chain only
+          # from matched tokens. Claude Code runs Claude-capable entries;
+          # another provider's entries (OpenAI ids) configure that provider's
+          # own consumers and are skipped here without failing the chain.
           mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
           models=()
+          claude_effort="max"
+          mapping_failed=0
           for id in "${configured_ids[@]}"; do
-            case "$id" in
-              default) models+=("default") ;;
-              claude-fable-5) models+=("claude-fable-5") ;;
-              claude-opus-5) models+=("claude-opus-5") ;;
-              *)
-                echo "::warning::Validated waterfall mapping failed closed; using [default]."
-                models=("default")
-                source="built-in default"
+            if ! [[ "$id" =~ ^[a-z0-9][a-z0-9.:-]{0,63}$ ]] || [[ "$id" == *::* ]] || [[ "$id" == *: ]]; then
+              mapping_failed=1
+              break
+            fi
+            IFS=':' read -r -a segments <<<"$id"
+            base="${segments[0]}"
+            effort=""
+            # `fast` has no headless Claude Code flag, so it is dropped here —
+            # but it is still counted, so a repeated segment fails the mapping
+            # closed exactly as the resolver's copy of this grammar does.
+            fast=0
+            segments_ok=1
+            for segment in "${segments[@]:1}"; do
+              case "$segment" in
+                fast)
+                  [ "$fast" -eq 0 ] || segments_ok=0
+                  fast=1
+                  ;;
+                none|minimal|low|medium|high|xhigh|max|ultra)
+                  [ -z "$effort" ] || segments_ok=0
+                  effort="$segment"
+                  ;;
+                *) segments_ok=0 ;;
+              esac
+            done
+            if [ "$segments_ok" -ne 1 ]; then
+              mapping_failed=1
+              break
+            fi
+            if [ "$base" = "default" ]; then
+              model="default"
+            elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+              model="${BASH_REMATCH[0]}"
+            else
+              echo "Skipping waterfall entry '$id'; this Claude Code chain cannot run it."
+              continue
+            fi
+            duplicate=0
+            for existing in "${models[@]}"; do
+              if [ "$existing" = "$model" ]; then
+                duplicate=1
                 break
-                ;;
-            esac
+              fi
+            done
+            [ "$duplicate" -eq 0 ] || continue
+            if [ "${#models[@]}" -eq 0 ]; then
+              case "$effort" in
+                low|medium|high|xhigh|max) claude_effort="$effort" ;;
+                *) : ;;
+              esac
+            fi
+            models+=("$model")
           done
+          if [ "$mapping_failed" -eq 1 ]; then
+            echo "::warning::Validated waterfall mapping failed closed; using [default]."
+            models=("default")
+            claude_effort="max"
+            source="built-in default"
+          fi
+          if [ "${#models[@]}" -eq 0 ]; then
+            echo "::warning::No Claude-capable waterfall entries; using [default]."
+            models=("default")
+            claude_effort="max"
+          fi
+          has_default=0
+          for existing in "${models[@]}"; do
+            if [ "$existing" = "default" ]; then
+              has_default=1
+            fi
+          done
+          [ "$has_default" -eq 1 ] || models+=("default")
 
           primary="${models[0]}"
           model_args="--model $primary"
@@ -221,9 +285,18 @@ jobs:
             fallbacks="$(IFS=,; echo "${models[*]:1}")"
             model_args="$model_args --fallback-model $fallbacks"
           fi
+          model_args="$model_args --effort $claude_effort"
+          # Fail closed at the loader if the chain exceeds the 2048-character
+          # transport cap enforced downstream, instead of erroring after work.
+          if [ "${#model_args}" -gt 2048 ]; then
+            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
+            models=("default")
+            claude_effort="max"
+            model_args="--model ${models[0]} --effort $claude_effort"
+          fi
 
           echo "Model waterfall source: $source"
-          echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}")"
+          echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}") · effort $claude_effort"
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
 
       - name: Lopu build doctor round 1
@@ -290,7 +363,6 @@ jobs:
               network, dependency installation), make NO edits at all.
           claude-args: |
             ${{ steps.models.outputs.model_args }}
-            --effort max
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
@@ -355,7 +427,6 @@ jobs:
             fixable by editing app source, make NO edits.
           claude-args: |
             ${{ steps.models.outputs.model_args }}
-            --effort max
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
@@ -422,7 +493,6 @@ jobs:
             fixable by editing app source, make NO edits.
           claude-args: |
             ${{ steps.models.outputs.model_args }}
-            --effort max
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
