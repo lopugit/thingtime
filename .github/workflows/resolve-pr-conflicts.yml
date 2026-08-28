@@ -21,6 +21,22 @@ on:
     types: [created, edited]
   check_run:
     types: [completed]
+  # check_run/check_suite events are suppressed for checks created by GitHub
+  # Actions itself. workflow_run closes that blind spot for first-party PR CI;
+  # the protected controller admits only PR-associated non-success conclusions
+  # and does not listen to Lopu PR manager, so review failures cannot recurse.
+  workflow_run:
+    workflows:
+      - API tests
+      - CI
+      - Lopu CodeQL all branches
+      - Workflow control-plane CI
+      - Develop S3 PR preview
+      - Signed Electron PR Release
+      - Electron App Release
+      - Web CI
+      - Build all branch
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
     - cron: "43 */6 * * *"
@@ -68,6 +84,11 @@ on:
         required: false
         default: ""
         type: string
+      rebase_cascade:
+        description: "Continue through PRs stacked on an updated branch"
+        required: false
+        default: true
+        type: boolean
       detector_handoff:
         description: "Internal trusted worker routing flag (leave false)"
         required: false
@@ -112,6 +133,7 @@ jobs:
       promotion_source_branch: ${{ inputs.promotion_source_branch || '' }}
       promotion_target_branch: ${{ inputs.promotion_target_branch || '' }}
       promotion_path_prefix: ${{ inputs.promotion_path_prefix || '' }}
+      rebase_cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.rebase_cascade }}
       detector_handoff: ${{ inputs.detector_handoff || false }}
       manual_retry: ${{ inputs.manual_retry || false }}
       depth: ${{ inputs.depth || '0' }}

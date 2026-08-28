@@ -26,6 +26,23 @@ Thingtime desktop profiles, then import projects, chats, and visible messages
 through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
 for both workflows and their privacy boundaries.
 
+## Conflict-free Graphify snapshots
+
+Thingtime does not ask every branch to modify the same generated Graphify JSON
+files. `scripts/graphify` stores portable output under the immutable,
+content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
+snapshot through ignored compatibility aliases at the conventional root
+paths. Independent branches therefore add different files instead of
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+
+Use `scripts/graphify query`, `scripts/graphify update .`, or
+`scripts/graphify extract . --backend openai`; the wrapper serializes local
+writers, validates each atomic output set, deduplicates identical artifacts,
+regenerates the report/HTML, and converts Graphify's mutable semantic cache into
+coexisting immutable variants. See
+[`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
+for the rationale, layout, migration path, and retention model.
+
 ## GitHub Actions control plane
 
 Thingtime keeps executable CI/CD behavior on the long-lived, protected
@@ -59,8 +76,9 @@ listener has an unfiltered `pull_request` trigger and a `push` trigger for
 `"**"`; therefore every PR whose target carries the listener and every direct
 branch push receives analysis. A default-branch `pull_request_target` listener
 also covers PRs whose target branch predates the listener. That privileged run
-checks out no code and receives no AI credential: the protected worker forwards
-only the PR number and immutable event head SHA into a separate
+calls a dedicated protected metadata-only handoff, checks out no code, and
+receives no AI credential. The handoff forwards only the PR number and immutable
+event head SHA into a separate
 `workflow_dispatch` run, which revalidates live state and analyzes the exact PR
 merge ref—or the head ref while a conflict prevents GitHub from creating one.
 Lopu validates both merge parents against the live base and head before using
@@ -74,6 +92,13 @@ branch-protection check contexts; when that PR already owns a branch head, the
 matching push run stands down. When the selected ref already has both language
 snapshots, Lopu exits before CodeQL initialization instead of paying for a
 duplicate scan.
+
+The analysis and metadata handoff use separate protected reusable workflows.
+That split is required by GitHub's permission model: ordinary `pull_request`
+tokens are capped at `actions: read`, while only the metadata-only
+`pull_request_target` bridge needs `actions: write` to dispatch the exact PR
+scan. The split preserves normal PR check contexts without granting analysis a
+write-capable Actions token.
 
 The first rollout has one ordered repository-administration step. Do not turn
 off default setup until this listener has reached the default branch, because
@@ -111,6 +136,10 @@ path, so a webhook outage cannot silently turn off conflict resolution or CI;
 the dashboard makes drift and stale delivery state visible. Administrator
 dispatches always enter the reviewed `github-actions` implementation; neither
 the UI nor API can load workflow YAML from an arbitrary feature branch.
+The existing CI Control operation keys remain stable, but rebase, feature
+promotion, standing promotion, and main/develop synchronization are translated
+to typed **Lopu PR manager** inputs instead of dispatching retired workflow
+files.
 
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
@@ -216,8 +245,9 @@ Standalone merge conflicts and clean-but-behind branches go to the base-merge
 lane. Genuine stack members whose history needs replay go to the rebase lane;
 adding `no-ai-rebase` opts a merge-conflicting stack member back into the
 merge-based lane. The protected rebase engine still accepts the manager's
-exact `repository_dispatch` worker handoff, but it has no public listener of
-its own.
+exact `repository_dispatch` worker handoff through **Lopu PR manager**, but it
+has no public listener of its own. It is a `workflow_call`-only implementation;
+no product branch contains or exposes a second rebase workflow.
 
 Lopu's rebase/stack lane covers the case GitHub reports as `mergeable: true` but
 `rebaseable: false`: a plain merge needs no help, yet replaying the branch's

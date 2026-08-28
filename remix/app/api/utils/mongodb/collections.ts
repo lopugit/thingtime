@@ -3,6 +3,7 @@ import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } 
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
 import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { thingUniqueKey } from './uniqueKeys';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -328,8 +329,13 @@ let indexesEnsured: Promise<void> | null = null;
 // Promise.all, so on the boot that performs an index swap a legacy-name drop
 // can race a sibling index build and get rejected (observed live: the first
 // swap run left crystal.clientId_1 behind while its replacement built).
-// Absent index (IndexNotFound 27) is success; anything else backs off and
-// retries, then gives up quietly — the next boot's run re-prunes.
+// Absent index (IndexNotFound 27) is success, and so is an absent collection
+// (NamespaceNotFound 26): a `things` collection that does not exist yet cannot
+// be holding a stale index, so there is nothing to retry for. Treating 26 as a
+// transient error instead cost every FRESH database ~2s of pure backoff sleep
+// per pruned name on the awaited bootstrap path (5 retired names = ~10s added
+// to the first write). Anything else backs off and retries, then gives up
+// quietly — the next boot's run re-prunes.
 const dropIndexRetrying = async (collection: any, name: string, attempts = 5) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
@@ -337,6 +343,7 @@ const dropIndexRetrying = async (collection: any, name: string, attempts = 5) =>
       return;
     } catch (err: any) {
       if (err?.code === 27 || err?.codeName === 'IndexNotFound') return;
+      if (err?.code === 26 || err?.codeName === 'NamespaceNotFound') return;
       if (attempt === attempts - 1) return;
       await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
     }
@@ -414,15 +421,73 @@ const LEGACY_DEVICE_TTL_INDEXES = [
 	'things_device_approval_ttl'
 ] as const;
 
+const CONSOLIDATED_THING_UNIQUE_INDEXES = [
+	'things_ai_connection_key_unique',
+	'things_external_community_key_unique',
+	'things_external_conversation_key_unique',
+	'things_external_message_key_unique',
+	'things_device_unique_keys'
+] as const;
+
+const CONSOLIDATED_THING_UNIQUE_FIELDS = [
+	{ crystalField: 'aiConnectionKey', uniqueField: 'aiConnectionKey', array: false },
+	{ crystalField: 'externalCommunityKey', uniqueField: 'externalCommunityKey', array: false },
+	{ crystalField: 'externalConversationKey', uniqueField: 'externalConversationKey', array: false },
+	{ crystalField: 'externalMessageKey', uniqueField: 'externalMessageKey', array: false },
+	{ crystalField: 'deviceUniqueKeys', uniqueField: 'deviceUniqueKey', array: true }
+] as const;
+
+export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
+	const cursor = raw.find(
+		{
+			$or: CONSOLIDATED_THING_UNIQUE_FIELDS.map(({ crystalField, array }) => ({
+				[`crystal.${crystalField}`]: { $type: array ? 'array' : 'string' }
+			}))
+		},
+		{
+			projection: Object.fromEntries([
+				['_id', 1],
+				...CONSOLIDATED_THING_UNIQUE_FIELDS.map(({ crystalField }) => [`crystal.${crystalField}`, 1])
+			])
+		}
+	).batchSize(500);
+	let operations: any[] = [];
+	const flush = async () => {
+		if (!operations.length) return;
+		await raw.bulkWrite(operations, { ordered: false });
+		operations = [];
+	};
+	for await (const doc of cursor) {
+		const keys = CONSOLIDATED_THING_UNIQUE_FIELDS.flatMap(({ crystalField, uniqueField, array }) => {
+			const rawValue = doc.crystal?.[crystalField];
+			const values = array ? (Array.isArray(rawValue) ? rawValue : []) : [rawValue];
+			return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))).map((value) =>
+				thingUniqueKey(uniqueField, value)
+			);
+		});
+		if (!keys.length) continue;
+		operations.push({ updateOne: { filter: { _id: doc._id }, update: { $addToSet: { uniqueKeys: { $each: keys } } } } });
+		if (operations.length >= 500) await flush();
+	}
+	await flush();
+};
+
 // Indexes installed by superseded Things-era implementations. None of these
 // names is part of the current index plan: their query paths are now served by
 // the general thingtime/owner indexes, protected uniqueKeys, or migrated v2
 // fields. Prune them before creating anything so a database already sitting at
 // MongoDB's 64-index ceiling can still converge instead of failing every
 // bootstrap and blocking unrelated schema migrations.
+// NOTE: `notification_unread` and `shareOfId_1` are deliberately NOT listed.
+// Both are still created by createThingsDataIndexes below and still serve live
+// hot query paths — the unread badge count polled by every session
+// (notifications.ts `countDocuments({thingtime:'notification', ownerId,
+// readAt:null})`) and the share-count $or that runs on every feed/profile/
+// search/post read and reaction toggle (things.ts `$or: [{thingtime:'share',
+// targetId}, {shareOfId}]`). Listing them here would drop and immediately
+// rebuild both on EVERY bootstrap, leaving those two aggregations on a
+// collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
-	'notification_unread',
-	'shareOfId_1',
 	'sourceIds_1_createdAt_-1_shareId_1',
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1'
 ] as const;
@@ -457,6 +522,14 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 	];
 	await raw.updateMany(
 		{
+			// Only rows that predate the root `uniqueKeys` stamp need the legacy
+			// crystal mirror. `newDeviceThing` now stamps root keys and deliberately
+			// leaves `crystal.deviceUniqueKeys` unset, so without this guard every
+			// device row written since the last cold start matches again and the
+			// bootstrap resurrects the field the consolidation removed — an
+			// unaccounted `raw` write (it bypasses the storage ledger) on the
+			// hottest collection, on a filter that never converges.
+			uniqueKeys: { $exists: false },
 			'crystal.deviceUniqueKeys': { $exists: false },
 			$or: keyFields.map((field) => ({ [field.slice(1)]: { $type: 'string' } }))
 		},
@@ -479,6 +552,11 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 			}
 		]
 	);
+	// Fold the five pre-release uniqueness families into the existing protected
+	// root uniqueKeys index before removing their one-index-per-field copies.
+	// One cursor covers all affected rows and adds Binary domain keys in bounded
+	// batches; $addToSet makes repeated bootstraps idempotent.
+	await backfillConsolidatedThingUniqueKeys(raw);
 	await raw.updateMany(
 		{
 			thingtime: { $in: ['device-command', 'device-command-event'] },
@@ -497,14 +575,6 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 	);
 	for (const name of LEGACY_DEVICE_TTL_INDEXES) await dropIndexRetrying(col, name);
 	await col.createIndex(
-		{ 'crystal.deviceUniqueKeys': 1 },
-		{
-			name: 'things_device_unique_keys',
-			unique: true,
-			partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
-		}
-	);
-	await col.createIndex(
 		{ 'crystal.deviceTtlAt': 1 },
 		{
 			name: 'things_device_ttl',
@@ -512,6 +582,7 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 			partialFilterExpression: { 'crystal.deviceTtlAt': { $type: 'date' } }
 		}
 	);
+	for (const name of CONSOLIDATED_THING_UNIQUE_INDEXES) await dropIndexRetrying(col, name);
 	for (const name of LEGACY_DEVICE_UNIQUE_INDEXES) await dropIndexRetrying(col, name);
 };
 
@@ -553,7 +624,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
     // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
-    // linkKey: — stamped by
+    // linkKey:, AI import hashes, and device idempotency hashes — stamped by
     // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
     // element unique across the collection; sparse so ordinary things skip
     // the index entirely. Root field + BinData = no user input can ever
@@ -868,41 +939,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
-    // Desktop AI imports: stable server hashes make repeat/resume safe without
-    // exposing provider ids in public projections. Each key namespace is
-    // structurally unique across the shared things collection.
-    col.createIndex(
-      { 'crystal.aiConnectionKey': 1 },
-      { name: 'things_ai_connection_key_unique', unique: true, partialFilterExpression: { 'crystal.aiConnectionKey': { $type: 'string' } } }
-    ),
-    col.createIndex(
-      { 'crystal.externalCommunityKey': 1 },
-      { name: 'things_external_community_key_unique', unique: true, partialFilterExpression: { 'crystal.externalCommunityKey': { $type: 'string' } } }
-    ),
-    col.createIndex(
-      { 'crystal.externalConversationKey': 1 },
-			{
-				name: 'things_external_conversation_key_unique',
-				unique: true,
-				partialFilterExpression: { 'crystal.externalConversationKey': { $type: 'string' } }
-			}
-    ),
-    col.createIndex(
-      { 'crystal.externalMessageKey': 1 },
-      { name: 'things_external_message_key_unique', unique: true, partialFilterExpression: { 'crystal.externalMessageKey': { $type: 'string' } } }
-    ),
-		// Thingtime mesh entities carry one or more domain-separated server
-		// hashes in a single multikey field. One unique index therefore enforces
-		// every device/state/connector/command/event/approval/screen idempotency
-		// invariant without exhausting MongoDB's per-collection index budget.
-		col.createIndex(
-			{ 'crystal.deviceUniqueKeys': 1 },
-			{
-				name: 'things_device_unique_keys',
-				unique: true,
-				partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
-			}
-		),
+		// AI-import and device idempotency hashes ride the protected root
+		// uniqueKeys index above. Do not reintroduce per-crystal unique indexes:
+		// they consume five slots and place plain hashes in the wildcard text
+		// index instead of its Binary-safe namespace.
 		col.createIndex(
 			{ ownerId: 1, targetId: 1, 'crystal.approvalPendingSlot': 1 },
 			{
@@ -992,7 +1032,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;
-	const run = migrateDeviceIndexLayout(db).then(() => Promise.all(createThingsDataIndexes(db))).then(
+	const run = Promise.all(createThingsDataIndexes(db)).then(
     () => undefined,
     (err) => {
       customIndexesEnsured.delete(uri);

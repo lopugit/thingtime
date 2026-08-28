@@ -1,4 +1,5 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
+import { thingUniqueKey, thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
 import { deleteMessengerThings, updateMessengerThing, withMessengerStorageTransaction } from '../messenger/storage';
 import { chatMemberKey, fail, newThingDoc, type Fail } from '../messenger/shared';
 import type { AiSourceProvider } from '../messenger/externalAi';
@@ -223,13 +224,17 @@ const ensureLiveConnection = async (
 	const base = newThingDoc('ai-connection', {
 		shareId: stableShareId('ai-live-connection', key),
 		ownerId,
+		uniqueKeys: [thingUniqueKey('aiConnectionKey', key)],
 		crystal: {}
 	});
+	// `uniqueKeys` stays inside `$setOnInsert`: the filter is an equality on that
+	// field, so MongoDB seeds the upserted document with the scalar key and
+	// `$addToSet` would fail with "Cannot apply $addToSet to non-array field".
 	const { crystal: _crystal, updatedAt: _updatedAt, ...root } = base;
 	const now = new Date();
 	await updateMessengerThing(
 		things,
-		{ 'crystal.aiConnectionKey': key } as any,
+		thingUniqueKeyFilter('aiConnectionKey', key) as any,
 		{
 			$setOnInsert: root,
 			$set: {
@@ -302,7 +307,7 @@ const upsertLiveSessions = async (
 	session: any
 ): Promise<Extract<DeviceNodeLiveSyncResponse, { op: 'sessions.upsert' }>> => {
 	const keys = summaries.map((summary) => liveChatKey(ownerId, deviceId, connector.connectorId, summary.sessionId));
-	const existing = await things.find({ 'crystal.externalConversationKey': { $in: keys } } as any, { session }).toArray();
+	const existing = await things.find(thingUniqueKeysFilter('externalConversationKey', keys) as any, { session }).toArray();
 	const existingByKey = new Map(existing.map((doc: any) => [String(doc.crystal?.externalConversationKey), doc]));
 	const decisions = summaries.map((summary, index) => {
 		const key = keys[index];
@@ -338,13 +343,14 @@ const upsertLiveSessions = async (
 		const base = newThingDoc('chat', {
 			shareId: stableShareId('ai-live-chat', key),
 			ownerId,
+			uniqueKeys: [thingUniqueKey('externalConversationKey', key)],
 			crystal: {}
 		});
 		base.createdAt = createdAt;
 		const { crystal: _crystal, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
 		await updateMessengerThing(
 			things,
-			{ 'crystal.externalConversationKey': key } as any,
+			thingUniqueKeyFilter('externalConversationKey', key) as any,
 			{
 				$setOnInsert: root,
 				$set: {
@@ -363,7 +369,7 @@ const upsertLiveSessions = async (
 			} as any,
 			{ messengerPlane: 'home', upsert: true, session }
 		);
-		const chat = await things.findOne({ 'crystal.externalConversationKey': key } as any, { session });
+		const chat = await things.findOne(thingUniqueKeyFilter('externalConversationKey', key) as any, { session });
 		if (!chat) throw new DeviceLiveSyncError(500, 'Live session materialization failed');
 		await ensureLiveMembership(things, ownerId, String(chat.shareId), session);
 		accepted += 1;
@@ -386,7 +392,7 @@ const reconcileLiveMessages = async (
 ): Promise<{ accepted: number; idempotent: number; segments: number }> => {
 	if (!messages.length) return { accepted: 0, idempotent: 0, segments: 0 };
 	const chatKey = liveChatKey(ownerId, deviceId, connector.connectorId, sessionId);
-	const chat = await things.findOne({ 'crystal.externalConversationKey': chatKey } as any, { session });
+	const chat = await things.findOne(thingUniqueKeyFilter('externalConversationKey', chatKey) as any, { session });
 	if (!chat) throw new DeviceLiveSyncError(409, 'The live session summary must be synced before its transcript');
 	const chatId = String(chat.shareId);
 	let accepted = 0;
@@ -427,6 +433,7 @@ const reconcileLiveMessages = async (
 				shareId: stableShareId('ai-live-message', segmentKey),
 				ownerId,
 				targetId: chatId,
+				uniqueKeys: [thingUniqueKey('externalMessageKey', segmentKey)],
 				crystal: {}
 			});
 			base.createdAt = createdAt;
@@ -434,7 +441,7 @@ const reconcileLiveMessages = async (
 			const { crystal: _crystal, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
 			await updateMessengerThing(
 				things,
-				{ 'crystal.externalMessageKey': segmentKey } as any,
+				thingUniqueKeyFilter('externalMessageKey', segmentKey) as any,
 				{
 					$setOnInsert: root,
 					$set: {
@@ -472,7 +479,7 @@ const reconcileLiveMessages = async (
 			.map((doc: any) => String(doc.crystal?.externalMessageKey || ''))
 			.filter(Boolean);
 		if (staleKeys.length) {
-			await deleteMessengerThings(things, { 'crystal.externalMessageKey': { $in: staleKeys } } as any, { messengerPlane: 'home', session });
+			await deleteMessengerThings(things, thingUniqueKeysFilter('externalMessageKey', staleKeys) as any, { messengerPlane: 'home', session });
 		}
 		accepted += 1;
 		segments += parts.length;
@@ -515,7 +522,7 @@ const recordLiveTranscriptProgress = async (
 	session: any
 ): Promise<void> => {
 	const key = liveChatKey(ownerId, deviceId, connectorId, sessionId);
-	const chat = await things.findOne({ 'crystal.externalConversationKey': key } as any, { session });
+	const chat = await things.findOne(thingUniqueKeyFilter('externalConversationKey', key) as any, { session });
 	if (!chat) throw new DeviceLiveSyncError(409, 'The live session summary must be synced before its transcript');
 	const source = chat.crystal?.externalSource;
 	const prior = preservedHistoryProgress(source);
@@ -569,7 +576,7 @@ const reconcileLiveActivities = async (
 ): Promise<{ accepted: number; idempotent: number }> => {
 	if (!activities.length) return { accepted: 0, idempotent: 0 };
 	const chatKey = liveChatKey(ownerId, deviceId, connectorId, sessionId);
-	const chat = await things.findOne({ 'crystal.externalConversationKey': chatKey } as any, { session });
+	const chat = await things.findOne(thingUniqueKeyFilter('externalConversationKey', chatKey) as any, { session });
 	if (!chat) throw new DeviceLiveSyncError(409, 'The live session summary must be synced before its activity');
 	let accepted = 0;
 	let idempotent = 0;
@@ -583,7 +590,7 @@ const reconcileLiveActivities = async (
 			activity.activityId
 		);
 		const hash = liveTranscriptActivityRevisionHash(activity);
-		const existing = await things.findOne({ 'crystal.deviceUniqueKeys': eventKey } as any, { session });
+		const existing = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', eventKey) as any, { session });
 		const currentRevision = Number.isSafeInteger(existing?.crystal?.revision) ? Number(existing.crystal.revision) : null;
 		const currentHash = typeof existing?.crystal?.liveActivityHash === 'string' ? existing.crystal.liveActivityHash : null;
 		const decision = decideLiveTranscriptActivityRevision(currentRevision, currentHash, activity);
@@ -698,7 +705,7 @@ const appendLiveEvents = async (
 	materializableEvents: DeviceLiveConnectorEvent[];
 }> => {
 	const stateKey = deviceHash('ai-live-state', ownerId, deviceId, connectorId, sessionId);
-	const state = await things.findOne({ 'crystal.deviceUniqueKeys': stateKey } as any, { session });
+	const state = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any, { session });
 	const initialLast = Number.isSafeInteger(state?.crystal?.lastSequence) ? Number(state.crystal.lastSequence) : 0;
 	let deltaGuardTails: DeviceLiveDeltaGuardTail[];
 	if (state && Object.prototype.hasOwnProperty.call(state.crystal ?? {}, 'deltaGuardTails')) {
@@ -721,7 +728,7 @@ const appendLiveEvents = async (
 		const eventKey = deviceHash('event', ownerId, deviceId, `ai:${connectorId}:${sessionId}:${event.eventId}`);
 		const sequenceKey = deviceHash('ai-live-sequence', ownerId, deviceId, connectorId, sessionId, String(event.sequence));
 		if (event.sequence <= initialLast) {
-			const prior = await things.findOne({ 'crystal.deviceUniqueKeys': { $in: [eventKey, sequenceKey] } } as any, {
+			const prior = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey]) as any, {
 				session
 			});
 			const receipt = !prior
@@ -746,7 +753,7 @@ const appendLiveEvents = async (
 		if (event.sequence !== expected) {
 			throw new DeviceLiveSyncError(409, `Live event sequence ${expected} is required before ${event.sequence}`);
 		}
-		const conflict = await things.findOne({ 'crystal.deviceUniqueKeys': { $in: [eventKey, sequenceKey] } } as any, {
+		const conflict = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey]) as any, {
 			session
 		});
 		if (conflict) throw new DeviceLiveSyncError(409, `Live event ${event.eventId} conflicts with accepted history`);

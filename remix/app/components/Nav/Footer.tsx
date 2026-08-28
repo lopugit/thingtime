@@ -58,7 +58,9 @@ export const Footer = (props) => {
     <Center
       className="thingtimeFooter"
       width="100%"
-      paddingTop="900px"
+      // Keep a deliberate visual break after page content without creating
+      // a route-wide dead-scroll area before the shared footer.
+      paddingTop={['48px', '64px']}
       paddingBottom={[
         'calc(128px + var(--thingtime-safe-area-bottom))',
         'calc(72px + var(--thingtime-safe-area-bottom))'

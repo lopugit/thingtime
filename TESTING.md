@@ -9,7 +9,7 @@ is fixed, and cite the checklist you ran in the PR description.
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-      /.well-known/oauth-authorization-server`, and the Thingtime capability
+    /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -303,7 +303,14 @@ is fixed, and cite the checklist you ran in the PR description.
       must be reported and the fallback must scan `refs/pull/<number>/head`.
 - [ ] Update a PR whose target already carries the normal listener. Its
       `pull_request` run—not the target-context fallback—must remain the owner
-      of both Analyze job contexts required by branch protection.
+      of both Analyze job contexts required by branch protection. Confirm the
+      listener's `control-plane` call reaches the unprivileged analyzer without
+      the former nested `actions: write` workflow-validation error, while the
+      `pr-handoff` call is skipped.
+- [ ] On the corresponding `pull_request_target` event, confirm only
+      `pr-handoff` calls the protected metadata bridge and `control-plane` is
+      skipped. The bridge may dispatch the exact unprivileged scan but must not
+      check out repository code or receive an AI/provider credential.
 - [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
       present: the protected scope job must report that analysis is complete and
       skip initialization. Dispatch an older expected SHA and confirm it no-ops
@@ -420,7 +427,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -906,6 +913,16 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
+- [ ] MODERATION/PERMALINK: when comment moderation is temporarily pending,
+      the comment author still sees the new standalone comment and its count
+      after reloading `/post/:id`; another viewer does not see it until it is
+      released. The permalink projection and `GET ?target=…&thingtime=comment`
+      listing must agree (regression: the batch post projection filtered every
+      pending child, including the owner's own comment, and rendered zero).
+- [ ] COUNT LAYERS: a post with direct comments plus nested replies reports
+      viewer-relative `commentCounts.direct`, `replies`, `total`, and `loaded`;
+      legacy `commentCount` equals `total`. A viewer excluded from a comment
+      layer never learns that hidden row through any count.
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
       the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
       Comment rows mirror the pattern — reply icon then react control inline
@@ -1002,6 +1019,13 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
+
+- [ ] On the landing page and a short authenticated route, scroll from top to
+      bottom at desktop and 375px widths. The shared footer follows content
+      with ordinary visual spacing, not a large blank/dead-scroll region; its
+      links and controls remain reachable without horizontal overflow.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
@@ -1013,7 +1037,7 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-runner)`, while both required-context companion jobs have distinct
+    runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1028,8 +1052,55 @@ runner)`, while both required-context companion jobs have distinct
       real result, and the protected `github-actions` advisory updates one
       warning comment without producing a failing or required status.
 
+## Content-addressed Graphify snapshots (`scripts/graphify`)
+
+- [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
+      source fingerprint unchanged, source edits change it, and computing a
+      fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Finalize the same portable output twice and confirm it deduplicates to
+      one artifact path. Finalize two valid variants for one source fingerprint
+      and confirm both remain immutable while the deterministic selector picks
+      the richer graph.
+- [ ] Create two branches that each add a distinct
+      `graphify-out/snapshots/v1/<source>/<artifact>/` path. Merge them in a
+      fresh clone without installing a custom merge driver and confirm Git
+      reports no generated-file conflict and both snapshots remain present.
+- [ ] Start two local mutation commands together. Confirm the repository writer
+      lock serializes them, a live writer is never stolen during owner-file
+      creation, and a dead writer lock is recoverable.
+- [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
+      the four mutable root outputs from tracking, and run
+      `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
+      `scripts/graphify snapshot` matches the current source fingerprint, and
+      ordinary `graphify query` still succeeds through the aliases.
+- [ ] Change a Markdown file and run semantic extraction through the local
+      Codex LLM proxy. Confirm the wrapper clusters and exports after extraction,
+      records the Graphify version and source tree in `snapshot.json`, keeps the
+      mutable semantic cache private, ingests it into
+      `cache/semantic-cas/v1/<input-key>/<content-hash>.json`, and never prints
+      the proxy key. Write two valid responses to one input-key filename and
+      confirm both immutable variants survive while hydration selects the richer
+      response deterministically.
+- [ ] Corrupt a portable file at an existing artifact-hash path and attempt to
+      finalize identical output. Confirm the wrapper rejects the violated hash
+      invariant instead of overwriting or accepting it.
+- [ ] Delete the snapshot currently selected by a root compatibility symlink,
+      then activate a new valid snapshot. Confirm the dangling alias is replaced
+      without treating it as an unrelated filesystem object.
+- [ ] Merge a source branch, run the trusted Lopu Graphify publisher, and
+      confirm the post-merge source fingerprint has a valid immutable snapshot.
+      Confirm no controller job pushes mutable root aliases or cancels an
+      already-running Lopu/Graphify job.
+
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Queue two all-branch rebuild signals through the default `main` Lopu PR
+      manager. Confirm `.github/workflows/all-branch.yml` is absent from the
+      product branch, no standalone **Build all branch** workflow run appears,
+      and both signals enter the protected `lopu-maintenance-build-all`
+      namespace. The active rebuild must finish without cancellation while
+      only one newest not-yet-started union snapshot waits for the shared Lopu
+      fleet slot.
 - [ ] Push a new commit to an older open PR whose head branch does not contain
       the current Lopu push listener, including one targeting a non-default
       branch. Confirm the default-branch `pull_request_target: synchronize`
@@ -1053,9 +1124,24 @@ runner)`, while both required-context companion jobs have distinct
 - [ ] On the default branch, complete a check run and create/edit a normal PR
       comment. Confirm each `Lopu PR manager` run compiles and creates its
       controller jobs instead of failing at workflow startup with a nested
-      `security-events: none` permission error. Also confirm the scheduled and
-      all-branch push listeners create jobs, and that CodeQL alert mutations
-      occur only in the controller's separately fenced disposition writer.
+      `security-events: none` permission error. Also confirm scheduled and
+      push-driven all-branch signals enter that same Lopu manager (never a
+      standalone **Build all branch** listener), and that CodeQL alert
+      mutations occur only in the controller's separately fenced disposition
+      writer.
+- [ ] After changing a product-branch listener, compare the active default
+      `main` listener with the reviewed `develop` listener before calling the
+      rollout complete. PR synchronize/draft/edit/close signals, the hourly
+      all-branch rebuild cadence, and the `build-all`/`backfill-codeql` manual
+      operations must already be present on `main`; a half-hour sweep is only
+      recovery coverage, not proof that every repository change wakes Lopu.
+- [ ] Fail or cancel one listed GitHub Actions PR workflow after the opening
+      review has finished. Confirm the default listener receives a completed
+      `workflow_run`, routes only the associated non-successful PR to one Lopu
+      review, preserves the exact source run id for log diagnosis, and never
+      listens to `Lopu PR manager` itself. External checks remain covered by
+      `check_run`; first-party Actions checks must not rely on that suppressed
+      event.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
@@ -1233,24 +1319,41 @@ runner)`, while both required-context companion jobs have distinct
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
-      returns the public key, ordered waterfall, and curated model catalog;
-      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
-      admin can save a valid reordered waterfall.
+      returns the public key, ordered waterfall, and the base-model catalog
+      with per-model `provider`, `efforts`, and `speeds`; `POST` returns 401.
+      A signed-in non-admin `POST` returns 403, while an admin can save a
+      valid reordered waterfall.
 - [ ] Settings → Admin paints the last-known waterfall immediately, then
-      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
-      dedicated handle, use the Up/Down controls, remove a non-default row,
-      save, reload, and confirm the exact order persists. `default` stays
-      present and cannot be removed.
+      reconciles in the background. Via the Add-fallback picker, add a Claude
+      model with an explicit effort, an OpenAI model with effort + Fast, and
+      at least five total entries (more than the historical 3-entry cap);
+      drag a row by its dedicated handle, use the Up/Down controls, remove a
+      non-default row, save, reload, and confirm the exact order persists.
+      `default` stays present and cannot be removed. The effort select only
+      offers that model's tiers and the speed select only appears for models
+      with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
-      bottom of `/settings`: model names, Max-effort badges, handles, fallback
-      copy, and save/add/remove controls never clip, overlap, or create
-      horizontal scrolling.
-- [ ] Resolver workflow config parsing accepts only `default`,
-      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
-      appends `default` defensively. An unavailable endpoint, malformed JSON,
-      duplicate/unknown model, wrong key, or empty array emits a warning and
-      selects only `--model default`; no stored value can inject another CLI
-      flag.
+      bottom of `/settings`: model names, provider/effort/speed subtitles,
+      handles, the add-fallback picker row, and save/add/remove controls
+      never clip, overlap, or create horizontal scrolling.
+- [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
+      efforts a model does not support, `fast` on a model without a fast
+      lane, and duplicate segments are rejected on write; reads drop unknown
+      entries without discarding the rest of the order and always keep
+      `default` present.
+- [ ] Resolver workflow config parsing in the `github-actions` control plane
+      (PR #391) validates the widened-but-closed grammar: unique 1..256
+      entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
+      model/effort/fast segments. Claude Code runs `default` plus `claude-*`
+      bases (rebuilt from the closed pattern, variants collapse to one CLI
+      slot per base); OpenAI entries are skipped with a log line; the
+      primary entry's effort becomes the session `--effort` (default max)
+      and fast mode is logged as not applied headless. Malformed JSON,
+      unknown/duplicate/empty segments, oversized arrays, or an unavailable
+      endpoint fail closed to `--model default --effort max` with a warning;
+      `default` is appended defensively and no stored value can inject
+      another CLI flag. Control planes predating PR #391 fail closed to
+      `[default]` for any non-legacy entry.
 - [ ] Save a new Admin order, then issue GETs through separate warm app
       instances immediately (no 15-second wait): both must read the new
       home-DB value. With Mongo unavailable, a warm instance may return its
@@ -1262,16 +1365,34 @@ runner)`, while both required-context companion jobs have distinct
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
---self-test` in the `github-actions` control plane to prove both the
+    --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
-      Anthropic request uses the same current Admin primary. Reorder from Opus
-      to Fable without restarting the app; the next musing must use Fable.
+      Anthropic request uses the first Anthropic-capable Admin entry — model
+      plus any explicit effort (`output_config.effort`) and fast mode.
+      Reorder from Opus to Fable without restarting the app; the next musing
+      must use Fable. An OpenAI entry ordered above the Claude entry must not
+      change the Anthropic request.
 - [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
       use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
-      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
-      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
-      Claude, that Claude call must still resolve the current Admin preference.
+      literal Claude Code `default` sentinel to Anthropic. With
+      `LOPU_PROVIDER=openai` and an OpenAI entry configured, the OpenAI call
+      must use that entry's model/`reasoning_effort`/priority tier; with no
+      OpenAI entry above `default` it must retain `LOPU_OPENAI_MODEL`. If it
+      falls through to Claude, that Claude call must still resolve the
+      current Admin preference. A rejected effort/fast knob retries once bare
+      on the same model before the provider is skipped.
+- [ ] Musing requests budget for reasoning: the OpenAI call sends
+      `max_completion_tokens` and never the deprecated `max_tokens` (o-series
+      and GPT-5 models reject it), and both providers leave enough output
+      headroom that a high/max-effort entry still streams visible text. Put a
+      reasoning entry first and confirm a real musing arrives, not an empty
+      one. If a decorated attempt finishes without a single text delta, it
+      must retry once bare on the same model before falling through to the
+      next provider and then the canned library — never emit a blank provider
+      meta event or render a blank message. Run `npm --prefix remix run
+      test:lopu-streaming` to exercise both provider request bodies and every
+      starvation/fallback transition with local SSE doubles.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
@@ -1281,11 +1402,18 @@ runner)`, while both required-context companion jobs have distinct
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. `rebase-pr-stack-ai` must reach the
-      protected engine only through that one listener's
-      `repository_dispatch`: no separate `rebase-pr-stacks.yml` caller may
-      exist to create a competing run that later gets cancelled by Lopu's
-      embedded rebase lane.
+      rebase, and stack detection. Product branches must contain no
+      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
+      rebase repository-dispatch events, so `rebase-pr-stack-ai` reaches the
+      protected engine only through that one listener's `repository_dispatch`.
+      The protected rebase engine is `workflow_call`-only and cannot create a
+      competing public run that later gets cancelled by Lopu's embedded rebase
+      lane.
+- [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
+      disabled), feature promotion, standing promotion, and main/develop sync.
+      Confirm each audit record names `resolve-pr-conflicts.yml`, the request
+      retains its original allowlisted operation key, and the translated Lopu
+      inputs preserve the requested PR/branch, cascade, dry-run, and lookback.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
@@ -1391,6 +1519,15 @@ runner)`, while both required-context companion jobs have distinct
       notes also census (never modify) data things carrying relationship
       names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] Desktop AI import hashes and device idempotency hashes also ride root
+      Binary `uniqueKeys`, never one unique index per crystal field. Run
+      `npm --prefix remix run test:collections`, `test:devices`, and
+      `test:messenger`; the complete home Things plan must remain at or below
+      60/64, repeated device/import writes must reuse the original row, and a
+      home bootstrap must backfill then retire the five
+      `things_{ai_connection,external_*,device_unique_keys}` generations.
+      A custom data endpoint must receive only the current additive index plan:
+      it must never run Thingtime's home-only backfill/drop migration.
 - [ ] The data-crystal namespace reserves NO names: a data thing carrying
       `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
       `friendKey`, or `voteKey` at its crystal root (any nesting, any value
@@ -1416,6 +1553,31 @@ runner)`, while both required-context companion jobs have distinct
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
+- [ ] Commander typeahead searches the live Things + people APIs after the
+      debounce: it shows contextual platform posts/data/schemas/people before
+      the bounded `Local paths` tier, arrow/Enter and click open the selected
+      result exactly once (without then falling through to the typed local
+      `/thing/:path` command), and `Search things for…` still opens the complete
+      `/search?q=…` result set. With ordinary text and NO highlighted row,
+      Enter defaults to that pinned full-search row; an explicitly highlighted
+      result still wins, and `path = value` setters still execute instead of
+      becoming searches. A failed typeahead leaves full search + local commands
+      usable.
+- [ ] Search results default to `Standard`: posts use the real interactive
+      post card and other Things use their native rendered `ThingView` (with
+      its rendered/tree toggle where supported). Switching to `Data` restores
+      the compact crystal-field cards, and every Data card's `Open thing` link
+      opens the ACL-aware canonical `/thing/:id` page. Toggle labels remain
+      visible and usable at desktop and mobile widths. A ranked text search
+      shows each Thing result's real server `rankScore` as tiny subdued
+      `ranked match · N` metadata in BOTH views; chronological/unranked results
+      never invent or display a score.
+- [ ] Open a post result's canonical `/thing/:id` page. It renders the full
+      interactive PostCard inline under `Post view`, keeps `Open post page` as
+      a permalink, and still shows the complete `Thing data` panel below it.
+      Non-post Things and private admin diagnostics do not show an empty post
+      section. Verify the inline card and JSON remain unclipped at desktop and
+      mobile widths and survive a full top-to-bottom scroll.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2788,7 +2950,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       application entry; a `pageshow.persisted` restore immediately replaces
       the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
-must-revalidate`, while `/assets/*` remains outside the HTML no-store
+    must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
       hostile, and old failed-revival function tags, reload Feed and open

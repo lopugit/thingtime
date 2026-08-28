@@ -17,8 +17,47 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Consolidated uniqueness lookups no longer collection-scan `things`.** The
+  post-consolidation helpers queried `$or: [{uniqueKeys}, {crystal.<field>}]`,
+  but the five `crystal.*Key` indexes had just been dropped and MongoDB only
+  unions an `$or` when *every* branch is indexed — so each lookup degraded to a
+  full scan (measured on a live MongoDB 8 replica set: 50,001 docs examined vs
+  1), once per synced live event, message segment, command and approval. The
+  fallback arm could never match anyway: all five key families are introduced
+  by this branch, so no row predates the root stamp. Lookups are now a single
+  indexed `uniqueKeys` predicate, and the key rides `$setOnInsert` rather than
+  `$addToSet`, which an equality filter makes illegal on upsert.
+  — Lopu, 2026-08-28
+- **The device bootstrap stopped resurrecting `crystal.deviceUniqueKeys`.**
+  `newDeviceThing` deliberately no longer writes that mirror, so every device
+  row created since the last cold start re-matched the legacy backfill and had
+  it written back — an unaccounted `raw` write that bypasses the storage ledger,
+  on a filter that never converged. The backfill is now scoped to rows that
+  predate the root `uniqueKeys` stamp. — Lopu, 2026-08-28
+
 ### Changed
 
+- **Desktop AI and device idempotency now share Thingtime's protected
+  uniqueness namespace.** Five one-off crystal-path unique indexes were
+  consolidated into the existing Binary root `uniqueKeys` index, restoring
+  five MongoDB slots (57/64 in the complete home plan), keeping domain hashes
+  out of the wildcard text index's uniqueness mechanism, and preserving
+  compatibility through a home-only backfill. The migration no longer rewrites
+  or drops indexes in user-owned custom data endpoints. — Codex (AI), 2026-08-28
+- **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
+  A dedicated provider-double suite proves that a reasoning-starved decorated
+  Claude or OpenAI stream retries bare on the same model, never retries after
+  visible text, reads the durable waterfall once, emits no blank provider
+  metadata, and reaches the canned library only after both providers genuinely
+  starve. — Codex (AI), 2026-08-27
+- **Web search now exposes its real relevance signal and keeps post context
+  inline.** Ranked Thing results carry the query-relative Mongo text score and
+  show it as subdued metadata in both Standard and Data views; unselected
+  Commander Enter defaults to the full-search row without stealing setter
+  commands, and `/thing/:id` renders a post-shaped Thing with its interactive
+  post card above the raw data. — Codex (AI), 2026-08-27
 - **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
   app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
   tool scanning, draft testing from the tools menu/@mentions, publication,
@@ -88,6 +127,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Graphify output is now conflict-free and content-addressed**: a repository
+  wrapper fingerprints the source tree without generated output, serializes
+  writers, validates Graphify's atomic graph/manifest/report set, and publishes
+  immutable snapshots whose identical artifacts deduplicate and whose valid
+  variants coexist. Mutable semantic-cache entries are also promoted into
+  immutable input-key/content-hash variants. Ignored root symlinks preserve ordinary query compatibility;
+  committed hooks select/build snapshots without committing or pushing, and
+  Lopu can regenerate a post-merge snapshot instead of line-merging generated
+  JSON. [PR #436 details](../PRs/436-codex-graphify-snapshot-routing--make-graphify-output-conflict-free.md).
+  — Codex (AI), 2026-08-27
 - **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
   Document.** The connector permits ChatGPT's current `oauth/client.json`
   client identifier, while retaining the previous fixed identifier for existing
@@ -123,6 +172,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   disposition permission. The protected controller still deduplicates
   immutable snapshots and admits at most one model-backed Lopu worker per
   repository. — Codex (AI), 2026-08-25
+- **CodeQL keeps normal PR checks while covering arbitrary targets**: the thin
+  listener now calls separate protected workflows for unprivileged analysis
+  and the metadata-only `pull_request_target` handoff. Ordinary PR tokens no
+  longer fail workflow validation by inheriting the handoff's
+  `actions: write` request; normal PRs retain their branch-protection contexts,
+  while older target branches still receive exact-ref analysis through the
+  trusted dispatch hop. — Codex (AI), 2026-08-25
 - **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
   listener, all-branch push listener, scheduled backstop, and protected reusable
   implementation replace default-branch-only scanning. A metadata-only
@@ -152,6 +208,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   2026-08-24
 
 ### Added
+
+- **Unlimited AI workflow model waterfall**: Admin → System's model order now
+  accepts any number of unique entries from a 33-model Claude + OpenAI
+  catalog, each with a per-entry reasoning-effort tier and normal/fast mode
+  (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
+  instead of collapsing; direct Anthropic/OpenAI features resolve their own
+  provider's first entry). Lopu musings budget for the reasoning those entries
+  now pay for — the OpenAI call uses `max_completion_tokens` (the deprecated
+  `max_tokens` is rejected by o-series/GPT-5) and a provider that streams no
+  text falls through instead of rendering a blank musing. The github-actions
+  control plane still fail-closes to `["default"]` for non-legacy entries until
+  its closed grammar is widened
+  (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
+  — Claude (AI), 2026-08-24
 
 - **Explicit UNSIGNED desktop-release fallback**: the owner-approved PR release
   worker now publishes an ad-hoc-only Electron and Recovery pair when all six
@@ -311,6 +381,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu is the sole wildcard-union listener**: the legacy public **Build all
+  branch** workflow is retired from the product branch. PR lifecycle, branch
+  push, manual, and hourly union-build signals now enter the default-branch
+  **Lopu PR manager**, whose protected maintenance namespace preserves the
+  active build and coalesces only obsolete not-yet-started snapshots. The
+  listener contract now rejects any reintroduction of the competing workflow.
+  — Codex (AI), 2026-08-27
+- **CI Control repository maintenance now dispatches the unified Lopu
+  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
+  operation keys translate to typed `Lopu PR manager` inputs instead of naming
+  retired workflow files. Rebase cascade and promotion dry-run/lookback values
+  remain intact for GitHub-hosted and Vercel-routed runs. The last product
+  rebase listener is removed; exact stack workers enter Lopu and then invoke
+  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
 - **The default-branch all-builder listener no longer cancels its protected
   worker before the durable queue starts**: `main` now matches `develop` by
   leaving concurrency ownership entirely to the `github-actions`
