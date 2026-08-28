@@ -205,7 +205,17 @@ const validateRunInputs = (
 	for (const descriptor of descriptors) {
 		const name = String(descriptor.name);
 		const type = String(descriptor.type);
-		let value = raw[name];
+		// Own-property gate, same posture as resolvePath above. Input NAMES are
+		// only pattern-checked (COMPONENT_ARG_NAME_PATTERN), so an action may
+		// declare one that collides with an Object.prototype member. A bare
+		// `raw[name]` then reads through the prototype chain of the caller's JSON
+		// object: an omitted `constructor` arrives as the native Object function
+		// rather than undefined, so the descriptor's default never applies, the
+		// "is required" refusal never fires (the type check rejects it first with
+		// a misleading message), and `$input.<name>` hands a native function to a
+		// step value. $step paths are already gated both ways (banned segments in
+		// parseActionRef + hasOwnProperty in resolvePath); $input is now too.
+		let value = Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : undefined;
 		if (value === undefined || value === null || value === '') {
 			if (descriptor.default !== undefined) value = descriptor.default;
 			else if (descriptor.required === true) return fail(400, `Input ${name} is required`);
@@ -262,7 +272,14 @@ const resolveValue = (value: unknown, scope: StepScope): unknown => {
 		if (isFail(ref)) return runError(ref.error);
 		if (!ref) return value;
 		if (ref.kind === 'now') return new Date().toISOString();
-		if (ref.kind === 'input') return scope.inputs[ref.name];
+		// hasOwnProperty-gated like resolvePath: validateRunInputs builds this
+		// object literal, so an unsupplied input whose name collides with an
+		// Object.prototype member (notably a boolean `__proto__`, whose own-key
+		// assignment is a silent no-op) must read as undefined, never as the
+		// inherited member.
+		if (ref.kind === 'input') {
+			return Object.prototype.hasOwnProperty.call(scope.inputs, ref.name) ? scope.inputs[ref.name] : undefined;
+		}
 		const stepResult = scope.steps[ref.step - 1];
 		if (stepResult === undefined) return runError(`$step.${ref.step} has no result yet`);
 		return ref.path.length ? resolvePath(stepResult, ref.path) : stepResult;

@@ -200,6 +200,68 @@ const run = async () => {
 	const unknownInput = await runAction(alice.cookie, { action: createCustomerId, inputs: { name: 'Ada', nope: 1 } });
 	check('unknown input is 400', unknownInput.status === 400 && /Unknown input/.test(unknownInput.body?.error || ''));
 
+	// ---- input names that collide with Object.prototype ---------------------
+	// Input names are only pattern-checked, so an action may legally declare one
+	// called `constructor`/`toString`/`__proto__`. Both halves of $input
+	// resolution are hasOwnProperty-gated (execute.ts validateRunInputs +
+	// resolveValue), so an OMITTED one reads as undefined — its declared default
+	// applies, its "is required" refusal fires — instead of resolving to the
+	// inherited member through the caller's JSON object.
+	const protoInputs = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Prototype-named inputs',
+			actionKey: `proto-inputs-${suffix}`,
+			inputs: [
+				{ name: 'constructor', type: 'string', default: 'fallback' },
+				{ name: 'toString', type: 'string', required: true }
+			],
+			steps: [
+				{ op: 'things.create', schema: CUSTOMER, values: { name: '$input.toString', note: '$input.constructor' } },
+				{ op: 'return', value: '$step.1' }
+			],
+			capabilities: [{ capability: 'things.create', schemas: [CUSTOMER] }]
+		}
+	});
+	check('prototype-named inputs save', protoInputs.status === 200, JSON.stringify(protoInputs.body).slice(0, 200));
+
+	const protoMissing = await runAction(alice.cookie, { action: `proto-inputs-${suffix}`, inputs: {} });
+	check(
+		'omitted prototype-named required input reports "is required"',
+		protoMissing.status === 400 && /toString is required/.test(protoMissing.body?.error || ''),
+		JSON.stringify(protoMissing.body).slice(0, 200)
+	);
+
+	const protoDefault = await runAction(alice.cookie, { action: `proto-inputs-${suffix}`, inputs: { toString: 'Grace Hopper' } });
+	check(
+		'omitted prototype-named input falls back to its declared default',
+		protoDefault.status === 200 && protoDefault.body?.status === 'ok' && protoDefault.body?.result?.crystal?.note === 'fallback',
+		JSON.stringify(protoDefault.body).slice(0, 300)
+	);
+
+	// A boolean input named __proto__ can never hold an own key (the assignment
+	// hits the accessor and is a silent no-op), so $input.__proto__ must read as
+	// undefined — never as Object.prototype leaking into a step value.
+	const protoLeak = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Proto leak probe',
+			actionKey: `proto-leak-${suffix}`,
+			inputs: [{ name: '__proto__', type: 'boolean' }],
+			steps: [{ op: 'return', value: '$input.__proto__' }]
+		}
+	});
+	check('__proto__-named input saves', protoLeak.status === 200, JSON.stringify(protoLeak.body).slice(0, 200));
+	const protoLeakRun = await runAction(alice.cookie, {
+		action: `proto-leak-${suffix}`,
+		inputs: JSON.parse('{"__proto__":true}')
+	});
+	check(
+		'$input.__proto__ resolves to nothing, not Object.prototype',
+		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result == null,
+		JSON.stringify(protoLeakRun.body).slice(0, 300)
+	);
+
 	const run1 = await runAction(alice.cookie, { action: `create-customer-${suffix}`, inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 	check('run by actionKey succeeds', run1.status === 200 && run1.body?.ok === true && run1.body?.status === 'ok', JSON.stringify(run1.body).slice(0, 300));
 	check('run returns the created thing', typeof run1.body?.result?.id === 'string');
