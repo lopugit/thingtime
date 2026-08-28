@@ -25,8 +25,10 @@ import {
   hydrateSemanticCache,
   ingestSemanticCache,
   listSnapshots,
+  normalizeGraphifyScopeArgs,
   prepareWorkingOutput,
   selectSnapshot,
+  withHiddenGraphifyPaths,
   withRepositoryLock,
 } from "./graphify-cas.mjs"
 
@@ -89,6 +91,69 @@ function writeDetailedOutput(root, name, files) {
   writeFileSync(path.join(output, "GRAPH_REPORT.md"), `# ${name}\n`)
   return output
 }
+
+test("wrapper-local exclusions never reach Graphify 0.9.4", () => {
+  const root = fixture()
+  try {
+    const scope = normalizeGraphifyScopeArgs(root, [
+      "update",
+      root,
+      "--exclude",
+      "trusted/",
+      "--exclude=trusted/nested-copy",
+      "--exclude=generated-copy",
+      "--force",
+    ])
+    assert.deepEqual(scope.args, ["update", root, "--force"])
+    assert.deepEqual(
+      scope.exclusions.map(({ relative }) => relative),
+      ["trusted", "generated-copy"],
+    )
+    assert.throws(
+      () => normalizeGraphifyScopeArgs(root, ["update", root, "--exclude", "../outside"]),
+      /must stay inside the repository/,
+    )
+    assert.throws(
+      () => normalizeGraphifyScopeArgs(root, ["extract", root, "--exclude=graphify-out/cache"]),
+      /cannot exclude its own graphify-out state/,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("excluded nested checkout is hidden only while Graphify runs", () => {
+  const root = fixture()
+  const trusted = path.join(root, "trusted")
+  mkdirSync(trusted)
+  writeFileSync(path.join(trusted, "sentinel"), "preserve me\n")
+  try {
+    const { exclusions } = normalizeGraphifyScopeArgs(root, [
+      "update",
+      root,
+      "--exclude",
+      "trusted/",
+    ])
+    const value = withHiddenGraphifyPaths(root, exclusions, () => {
+      assert.equal(existsSync(trusted), false)
+      return "updated"
+    })
+    assert.equal(value, "updated")
+    assert.equal(readFileSync(path.join(trusted, "sentinel"), "utf8"), "preserve me\n")
+
+    assert.throws(
+      () =>
+        withHiddenGraphifyPaths(root, exclusions, () => {
+          assert.equal(existsSync(trusted), false)
+          throw new Error("child failed")
+        }),
+      /child failed/,
+    )
+    assert.equal(readFileSync(path.join(trusted, "sentinel"), "utf8"), "preserve me\n")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 test("source fingerprint excludes every graphify-out change", () => {
   const root = fixture()

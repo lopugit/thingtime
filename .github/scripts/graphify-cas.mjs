@@ -58,6 +58,100 @@ function fail(message) {
   throw new Error(message)
 }
 
+export function normalizeGraphifyScopeArgs(root, args) {
+  const forwarded = []
+  const exclusions = []
+  const seen = new Set()
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    let requested = null
+    if (arg === "--exclude") {
+      index += 1
+      requested = args[index]
+      if (!requested) fail("graphify-cas --exclude requires a repository-relative path")
+    } else if (arg.startsWith("--exclude=")) {
+      requested = arg.slice("--exclude=".length)
+      if (!requested) fail("graphify-cas --exclude requires a repository-relative path")
+    } else {
+      forwarded.push(arg)
+      continue
+    }
+
+    if (path.isAbsolute(requested)) {
+      fail("graphify-cas --exclude paths must be repository-relative")
+    }
+    const absolute = path.resolve(root, requested)
+    const relative = path.relative(root, absolute)
+    if (
+      !relative ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      fail("graphify-cas --exclude paths must stay inside the repository")
+    }
+    if (
+      relative === "graphify-out" ||
+      relative.startsWith(`graphify-out${path.sep}`)
+    ) {
+      fail("graphify-cas cannot exclude its own graphify-out state")
+    }
+    if (seen.has(relative)) continue
+    seen.add(relative)
+    exclusions.push({ absolute, relative })
+  }
+
+  const minimalExclusions = exclusions.filter(
+    (candidate) =>
+      !exclusions.some(
+        (other) =>
+          other !== candidate &&
+          candidate.relative.startsWith(`${other.relative}${path.sep}`),
+      ),
+  )
+  return { args: forwarded, exclusions: minimalExclusions }
+}
+
+export function withHiddenGraphifyPaths(root, exclusions, callback) {
+  const present = exclusions.filter(({ absolute }) => existsSync(absolute))
+  if (present.length === 0) return callback()
+
+  // Graphify 0.9.4 has no update/extract --exclude option. Move only the
+  // explicitly validated paths to an atomic sibling directory for the child
+  // process, then restore them before this trusted wrapper returns. A sibling
+  // keeps rename on the same filesystem and outside Graphify's scan root.
+  const hiddenRoot = mkdtempSync(
+    path.join(path.dirname(root), ".thingtime-graphify-excluded-"),
+  )
+  const moved = []
+  let restoreConflict = null
+  try {
+    for (const [index, exclusion] of present.entries()) {
+      const hidden = path.join(hiddenRoot, String(index))
+      renameSync(exclusion.absolute, hidden)
+      moved.push({ ...exclusion, hidden })
+    }
+    return callback()
+  } finally {
+    for (const entry of moved.reverse()) {
+      if (existsSync(entry.absolute)) {
+        const unexpected = path.join(
+          hiddenRoot,
+          `unexpected-${path.basename(entry.relative)}-${randomUUID()}`,
+        )
+        renameSync(entry.absolute, unexpected)
+        restoreConflict =
+          restoreConflict ??
+          `Graphify recreated excluded path ${entry.relative}; preserved unexpected output at ${unexpected}`
+      }
+      renameSync(entry.hidden, entry.absolute)
+    }
+    if (restoreConflict) fail(restoreConflict)
+    rmSync(hiddenRoot, { recursive: true, force: true })
+  }
+}
+
 function runGit(root, args, options = {}) {
   return execFileSync("git", ["-C", root, ...args], {
     encoding: "utf8",
@@ -724,35 +818,38 @@ export function activateSnapshot(root, snapshot) {
 
 function runMutation(root, args) {
   return withRepositoryLock(root, () => {
+    const scoped = normalizeGraphifyScopeArgs(root, args)
     const fingerprint = computeSourceFingerprint(root)
-    const minimumNodeCount = args.includes("--force")
+    const minimumNodeCount = scoped.args.includes("--force")
       ? 0
       : baselineNodeCount(root, fingerprint.sourceFingerprint)
-    const workingOutput = prepareWorkingOutput(
-      root,
-      fingerprint.sourceFingerprint,
-    )
-    try {
-      invokeGraphify(root, workingOutput, args)
-      if (args[0] === "extract") {
-        invokeGraphify(root, workingOutput, ["cluster-only", root])
-      }
-      invokeGraphify(root, workingOutput, ["export", "html"])
-      ingestSemanticCache(
+    return withHiddenGraphifyPaths(root, scoped.exclusions, () => {
+      const workingOutput = prepareWorkingOutput(
         root,
-        path.join(workingOutput, "cache", "semantic"),
+        fingerprint.sourceFingerprint,
       )
-      const snapshot = finalizeSnapshot(root, workingOutput, {
-        ...fingerprint,
-        minimumNodeCount,
-      })
-      activateSnapshot(root, snapshot)
-      process.stdout.write(`${snapshot.path}\n`)
-      return snapshot
-    } catch (error) {
-      rmSync(workingOutput, { recursive: true, force: true })
-      throw error
-    }
+      try {
+        invokeGraphify(root, workingOutput, scoped.args)
+        if (scoped.args[0] === "extract") {
+          invokeGraphify(root, workingOutput, ["cluster-only", root])
+        }
+        invokeGraphify(root, workingOutput, ["export", "html"])
+        ingestSemanticCache(
+          root,
+          path.join(workingOutput, "cache", "semantic"),
+        )
+        const snapshot = finalizeSnapshot(root, workingOutput, {
+          ...fingerprint,
+          minimumNodeCount,
+        })
+        activateSnapshot(root, snapshot)
+        process.stdout.write(`${snapshot.path}\n`)
+        return snapshot
+      } catch (error) {
+        rmSync(workingOutput, { recursive: true, force: true })
+        throw error
+      }
+    })
   })
 }
 
