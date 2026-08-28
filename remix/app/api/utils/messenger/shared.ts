@@ -32,7 +32,7 @@ export const emojiScopeKey = (scope: string, name: string) => `${scope}:${name}`
 // sparse unique multikey index in collections.ts that already holds
 // username/email/schema/waitlist slots) — NOT kind-blind crystal-path unique
 // indexes: crystal paths are user-writable in free-form data things (the
-// squat class RESERVED_CRYSTAL_ROOT_KEYS guards during the transition), root
+// squat class — see KIND-BLIND HISTORY in collections.ts), root
 // fields are not reachable by any user input. One map keyed by kind, stamped
 // inside newThingDoc so no writer can forget; the friend writer (users/
 // social.ts) and the backfill migration stamp through the same helper.
@@ -41,6 +41,11 @@ export const emojiScopeKey = (scope: string, name: string) => `${scope}:${name}`
 // reason as user keys: plain strings would tokenize into the $** text index.
 // The chat entry covers DMs only — group/channel chats carry dmKey null and
 // skip the stamp (relationshipUniqueKeys returns undefined for them).
+// passkey-app-link joined the family after the fact: it shipped (PR #323)
+// while this migration was in flight and briefly carried its own kind-blind
+// crystal.linkKey unique index — the exact squat class retired here — so its
+// dedupe now rides the same root namespace, and auth/passkeys.ts stamps
+// through this helper even though it builds its doc outside newThingDoc.
 export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> = {
 	follow: 'followKey',
 	'chat-member': 'memberKey',
@@ -49,7 +54,8 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 	'community-invite': 'inviteCode',
 	'custom-emoji': 'emojiKey',
 	friend: 'friendKey',
-	vote: 'voteKey'
+	vote: 'voteKey',
+	'passkey-app-link': 'linkKey'
 };
 
 export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {

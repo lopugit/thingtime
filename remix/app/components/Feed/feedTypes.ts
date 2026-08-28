@@ -3,6 +3,9 @@
 // the API utils are the source of truth; keep this file in sync with them.
 
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import type { PostMediaLayout } from '~/schemas/registry';
+
+export type { PostMediaLayout };
 
 export type PublicProfile = {
   id: string;
@@ -51,6 +54,8 @@ export type PostComment = {
   text: string;
   images: string[];
 	attachments: PublicAttachment[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
@@ -79,6 +84,8 @@ export type PublicPost = {
   // Stable metadata only. Content always resolves through the authenticated
   // attachment endpoint; feed payloads never carry S3 keys or signed URLs.
   attachments: PublicAttachment[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing (crystal.thing)
   thing: Record<string, any> | null;
@@ -87,6 +94,9 @@ export type PublicPost = {
   // every reaction token the viewer has toggled on this post (multi-react)
   viewerReactions: string[];
   commentCount: number;
+  // Viewer-relative count layers. Optional while older deployments roll out;
+  // commentCount remains the backward-compatible total.
+  commentCounts?: { direct: number; replies: number; total: number; loaded: number };
   // latest comments (≤ 20), oldest → newest
   comments: PostComment[];
   shareCount: number;

@@ -400,35 +400,27 @@ const thingsCollection = (db: any) => db.collection(physicalCollectionName('thin
 //
 // everything in `things` is a thing (see api/utils/things + app/schemas);
 // shareId is included so the (createdAt desc, shareId asc) page sort is
-// fully index-provided instead of an in-memory sort per request. The
+// fully index-provided instead of an in-memory sort per request. That
+// holds only while EVERY branch of a query can provide the sort: the
+// dual-era post match is an $or over thingtime and kind, and a branch
+// with no matching index forces the planner to fetch the whole $or
+// result and sort it in memory — see the kind/createdAt index below. The
 // kind-prefixed indexes serve v1-era docs until the things migration
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
-// Crystal ROOT keys whose kind-blind partial unique indexes are RETIRED in
-// favor of the server-only root uniqueKeys namespace (see the uniqueKeys
-// index below + messenger/shared.ts relationshipUniqueKeys). The old filters
-// saw only `crystal.<key>` — no kind scoping — so a free-form data thing
-// could occupy another user's slot (crystal.followKey
-// '<followerId>:<followeeId>' blocked the victim's real follow with E11000).
-// Each key is still banned at the free-form data-crystal root
-// (RESERVED_CRYSTAL_ROOT_KEYS in schemas/registry.ts, pinned by
-// schemas/reservedCrystalRootKeys.test.ts) as the TRANSITION guard: a
-// deployment DB keeps its old unique indexes until its boot-time ensure runs
-// the swap below, and the reservation must outlive those indexes everywhere
-// before it can be deleted. Never add a new crystal-path unique index — put
-// dedupe in uniqueKeys (or, where a crystal index is truly needed, use the
-// thingtime-scoped filter pattern of things_app_data_unique: partial-filter
-// equality on the multikey thingtime array verifiedly includes
-// array-contains matches on MongoDB 8.0).
-export const KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS: readonly string[] = [
-	'friendKey', // was things_friend_unique → lookup + uniqueKeys 'friendKey:<min>~<max>'
-	'memberKey', // was things_member_key_unique → lookup + uniqueKeys 'memberKey:<container>:<user>'
-	'dmKey', // was things_dm_key_unique → lookup + uniqueKeys 'dmKey:<a>:<b>'
-	'inviteCode', // was things_invite_code_unique → lookup + uniqueKeys 'inviteCode:<code>'
-	'emojiKey', // was things_emoji_key_unique → lookup + uniqueKeys 'emojiKey:<scope>:<name>'
-	'followKey', // was things_follow_key_unique → lookup + uniqueKeys 'followKey:<follower>:<followee>'
-	'voteKey' // was things_vote_key_unique → lookup + uniqueKeys 'voteKey:<poll>~<user>'
-];
+// KIND-BLIND HISTORY (the unique-slot squat class): the relationship key
+// indexes below were once UNIQUE with filters that saw only `crystal.<key>`
+// — no kind scoping — so a free-form data thing carrying e.g.
+// crystal.followKey '<followerId>:<followeeId>' entered the index and
+// permanently blocked the victim's real follow with E11000. Their
+// uniqueness now rides the server-only root uniqueKeys namespace (index
+// below + messenger/shared.ts relationshipUniqueKeys), the crystal-path
+// indexes are plain lookups, and data crystals reserve no names. NEVER add
+// a new unique index over a crystal path reachable by free-form data
+// crystals: put dedupe in uniqueKeys, or — where a crystal-path unique
+// index is truly needed — use the thingtime-scoped filter pattern of
+// things_app_data_unique (partial-filter equality on the multikey thingtime
+// array verifiedly includes array-contains matches on MongoDB 8.0).
 
 const createThingsDataIndexes = (db: any): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
@@ -438,7 +430,8 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
-    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey: — stamped by
+    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
+    // linkKey: — stamped by
     // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
     // element unique across the collection; sparse so ordinary things skip
     // the index entirely. Root field + BinData = no user input can ever
@@ -453,6 +446,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // The feed and profile matches are $or over BOTH eras
+    // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
+    // thingtime side had its (createdAt desc, shareId asc) index above; the
+    // kind side had one only when also filtered by visibility or ownerId, so
+    // a plain chronological feed left that branch sortless. The planner then
+    // could not push the limit into the scan: it fetched EVERY post the
+    // viewer can see and sorted them in memory, scaling linearly with the
+    // visible-post count.
+    //
+    // Purely additive — no query changes, both eras stay correct, and
+    // dropping the kind branch instead would silently hide v1-era posts
+    // (custom data-plane endpoints may still hold unmigrated docs).
+    // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
+    // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
+    // no blocking sort (38 examined).
+    col.createIndex({ kind: 1, createdAt: -1, shareId: 1 }),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
@@ -463,6 +472,23 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
+    // The unread-notification badge counts (thingtime, ownerId, readAt: null).
+    // The general (thingtime, ownerId, createdAt, shareId) index above narrows
+    // to the user's notifications, but readAt is not a key in it, so the count
+    // landed in a FETCH stage that pulled EVERY notification that user had
+    // ever received just to test one field — cost grew with history, on a
+    // badge polled by every session.
+    //
+    // Partial on readAt: null so the index holds only the unread set, which is
+    // normally a handful and empty for a caught-up user. Verified against a
+    // local dataset: the planner selects this index (isPartial) and the same
+    // query drops from fetching every notification to examining none when
+    // there is nothing unread, with counts identical to a collection scan
+    // across every owner.
+    col.createIndex(
+      { thingtime: 1, ownerId: 1 },
+      { name: 'notification_unread', partialFilterExpression: { thingtime: 'notification', readAt: null } }
+    ),
     // Canonical account-storage reconciliation: content allocations are
     // grouped by owner and summed from their exact versioned byte stamps.
     // Control-plane Things never enter this partial index.
@@ -471,6 +497,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    // Live share counts are an $or of the v2 shape ({thingtime:'share',
+    // targetId}) and the v1 shape (a post carrying shareOfId). shareOfId had
+    // no index, and one unindexed branch drags the whole $or down: the
+    // aggregation ran as a full COLLSCAN of `things` on EVERY feed page,
+    // profile page, search page, single-post read, post/comment create,
+    // thing update AND every reaction toggle (resolveRelated runs it for the
+    // reaction's target). Measured locally: 4,846 documents examined and 0
+    // index keys to produce share counts for 20 posts; with this index the
+    // same aggregation examines 6 documents and 6 keys.
+    //
+    // sparse rather than a $type partial filter: sparse is provably usable
+    // for the $in over non-null strings, while $type subsumption proving is
+    // more fragile across server versions. Additive — dropping the v1 branch
+    // instead would be faster still but would silently stop counting
+    // un-migrated v1 shares (thingtimeOf/targetIdOf still read that shape).
+    col.createIndex({ shareOfId: 1 }, { sparse: true }),
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
@@ -668,9 +710,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // legacy docs by the backfill-relationship-unique-keys migration. The
     // crystal-path indexes here serve the findOne/$in query shapes only;
     // their old kind-blind UNIQUE ancestors were squattable through
-    // free-form data crystals (KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS above)
-    // and are retired by each swap, create-then-drop, so a lookup index
-    // stays live throughout:
+    // free-form data crystals (see KIND-BLIND HISTORY above) and are
+    // retired by each swap, create-then-drop, so a lookup index stays
+    // live throughout:
     createIndexReplacing(
       col,
       { 'crystal.memberKey': 1 },
@@ -713,6 +755,19 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
+    // One passkey app link per (passkey, app/origin): dedupe AND the
+    // per-login upsert's read both ride root uniqueKeys
+    // (`linkKey:<passkeyId>:<appKey>`, stamped in auth/passkeys.ts and served
+    // by the uniqueKeys_1 index above), so this family needs no crystal-path
+    // index at all. PR #323 briefly gave it a kind-blind unique index here —
+    // the squat class retired above, and one a free-form data crystal could
+    // duplicate to fail this whole battery on E11000. Retired outright rather
+    // than swapped to a lookup index like its siblings: those exist because
+    // their kinds are READ by crystal path, while this one's only read is the
+    // dedupe itself, which now matches the stamped root value. One less index
+    // on the collection with the most of them (MongoDB caps a collection at
+    // 64) and one less write to amplify on every login.
+    dropIndexRetrying(col, 'things_passkey_link_key_unique'),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(
@@ -792,6 +847,10 @@ export const ensureIndexes = async () => {
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
         col('sessions').createIndex({ 'meta.clientId': 1 }, { partialFilterExpression: { purpose: 'app' } }),
+        // Rotating ChatGPT refresh grants are joined to their encrypted
+        // connection record by this opaque session id. Keep final disconnects
+        // bounded to that one connection rather than sweeping all sessions.
+        col('sessions').createIndex({ userId: 1, purpose: 1, 'meta.connectionSessionJti': 1 }),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         col('rosters').createIndex({ rosterId: 1 }, { unique: true }),

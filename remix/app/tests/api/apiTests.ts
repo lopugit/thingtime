@@ -900,19 +900,19 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
-    id: 'things-data-reserved-crystal-root',
-    name: 'Data crystals reject reserved root keys',
+    id: 'things-data-relationship-names-open',
+    name: 'Data crystals may carry relationship key names',
     description:
-      'A free-form data thing cannot claim a crystal root key backing the kind-blind unique indexes (followKey & friends) — that would squat another user\'s follow/membership/DM/invite/emoji slot. Rejected 400 with a session, 401 without; never persisted.',
+      'Relationship dedupe rides the server-only root uniqueKeys namespace, so a data thing carrying followKey (or memberKey, dmKey, …) at its crystal root is ordinary user data: it enters no unique index, squats nothing, and saves normally (401 anonymous).',
     group: 'things',
     method: 'POST',
     path: '/api/v1/things',
     mutates: true,
-    body: { thingtime: ['data'], crystal: { followKey: 'squatter:victim' } },
+    body: { thingtime: ['data'], crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' }, visibility: 'private' },
     expect: expectJson(
-      [400, 401],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Reserved crystal root key was rejected, never persisted.'
+      [200, 401],
+      (body) => (body?.ok === true && (body?.thing?.id || body?.post?.id)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Relationship names saved as ordinary data (or 401 anonymous).'
     )
   },
   {
@@ -1804,6 +1804,35 @@ export const apiTests: ApiTestDefinition[] = [
       [200, 429],
       (body) => body?.ok === true || typeof body?.error === 'string',
       'Waitlist join succeeded (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'apps-desktop-authorize-guarded',
+    name: 'Desktop authorization requires a session and complete PKCE request',
+    description:
+      'POST /api/v1/oauth/desktop/authorize is registered and rejects anonymous or incomplete installed-app consent requests before issuing a code.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/desktop/authorize',
+    body: {},
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop authorize rejected an unauthenticated/incomplete request with the bounded error envelope.'
+    )
+  },
+  {
+    id: 'apps-desktop-token-grant-type',
+    name: 'Desktop token exchange rejects unsupported grants',
+    description: 'POST /api/v1/oauth/token is registered and accepts only the authorization_code grant.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/token',
+    body: { grantType: 'client_credentials' },
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop token endpoint rejected an unsupported grant with the bounded error envelope.'
     )
   },
   {

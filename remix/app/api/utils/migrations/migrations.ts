@@ -73,6 +73,40 @@ import {
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
+// Both the pending census and the real backfill must pass the complete stored
+// attachment envelope to thingStorageSizeBytes(). Projecting only the ordinary
+// Thing payload makes a legitimate attachment indistinguishable from a forged
+// attachment claim and correctly trips the fail-closed envelope validator.
+export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
+	_id: 1,
+	schemaVersion: 1,
+	ownerId: 1,
+	shareId: 1,
+	thingtime: 1,
+	crystal: 1,
+	extended: 1,
+	tags: 1,
+	storageClass: 1,
+	sandboxExpiresAt: 1,
+	sizeBytes: 1,
+	storageAccountingVersion: 1,
+	updatedAt: 1,
+	attachmentEnvelopeVersion: 1,
+	attachmentState: 1,
+	objectSizeBytes: 1,
+	objectKey: 1,
+	objectVersionId: 1,
+	attachmentRequestFingerprint: 1,
+	attachmentPurpose: 1,
+	attachmentProfileSlot: 1,
+	attachmentFinalizationLeaseId: 1,
+	attachmentPartsIssuedAt: 1,
+	attachmentObjectlessDelete: 1,
+	attachmentMpuEmptyVerifiedAt: 1,
+	uploadId: 1,
+	attachmentExpiresAt: 1
+} as const;
+
 export type MigrationReport = {
   dryRun: boolean;
   matched: number;
@@ -1740,19 +1774,7 @@ const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>)
 
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
-	const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-		schemaVersion: 1,
-		ownerId: 1,
-		shareId: 1,
-		thingtime: 1,
-		crystal: 1,
-		extended: 1,
-		tags: 1,
-		storageClass: 1,
-		sandboxExpiresAt: 1,
-		sizeBytes: 1,
-		storageAccountingVersion: 1
-	});
+	const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
 	let pending = 0;
 	for await (const doc of cursor) {
 		// Every data-kind service-quota claim is counted independently above. An
@@ -2125,20 +2147,7 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
-			const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-				_id: 1,
-				schemaVersion: 1,
-				ownerId: 1,
-				thingtime: 1,
-				crystal: 1,
-				extended: 1,
-				tags: 1,
-				storageClass: 1,
-				sandboxExpiresAt: 1,
-				sizeBytes: 1,
-				storageAccountingVersion: 1,
-				updatedAt: 1
-			});
+			const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
 				if (initialSandboxState === 'sandbox') continue;
@@ -2563,12 +2572,13 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
 // ---------------------------------------------------------------------------
 // Relationship uniqueKeys backfill. Relationship dedupe moved off the
 // kind-blind crystal-path unique indexes (squattable through free-form data
-// crystals — KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS in collections.ts) onto the
+// crystals — see KIND-BLIND HISTORY in collections.ts) onto the
 // server-only root uniqueKeys namespace. New docs stamp at insert
 // (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
 // docs so their create-race dedupe is structural again, and counts (never
-// touches) data things carrying a reserved key from before the sanitizer
-// reservation — the squat census.
+// touches) data things carrying a relationship-shaped name. Before phase 2
+// that is the squat census; after the namespace reopens it may be intentional
+// ordinary data and remains operator information only.
 
 const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
 	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
@@ -2581,13 +2591,15 @@ const backfillRelationshipUniqueKeys: Migration = {
 	collection: 'things',
 	fromVersion: THINGS_VERSION,
 	toVersion: THINGS_VERSION,
-	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote)',
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote/passkey link)',
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
 		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
-		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a reserved key ' +
-		'at the crystal root: pre-reservation squats or legacy user data to review.',
+		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
+		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
+		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
 	pending: async () => {
 		const things = await getCollection('things');
 		let total = 0;
@@ -2635,12 +2647,14 @@ const backfillRelationshipUniqueKeys: Migration = {
 			migrated += kindMigrated;
 			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
 		}
-		const reservedFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
-		for (const field of reservedFields) {
+		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
+		for (const field of relationshipFields) {
 			await assertLease?.();
 			const count = await things.countDocuments({ thingtime: 'data', [`crystal.${field}`]: { $exists: true } } as any);
 			if (count) {
-				notes.push(`${count} data thing(s) carry crystal.${field} at the root (pre-reservation legacy/squats — review, not modified)`);
+				notes.push(
+					`${count} data thing(s) carry crystal.${field} at the root (operator census only — never modified; valid ordinary data after phase 2)`
+				);
 			}
 		}
 		return { dryRun, matched, migrated, created: 0, skipped, notes };
