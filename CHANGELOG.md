@@ -19,6 +19,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Bound Lopu's per-resolution review and all-branch deferrals to durable
+  controller provenance instead of GitHub's push actor alone. Repository-owner
+  PAT pushes are now recognized through a run/PR commit trailer whose live
+  workflow run must belong to the protected `github-actions` resolver; ordinary
+  collaborator messages cannot suppress maintenance. Clean merges, AI-resolved
+  merges, and terminal Graphify commits all carry the same marker. — Codex
+  (AI), 2026-08-28
 - Made every queued Lopu conflict owner immediately discoverable. Conflict
   matrices now materialize completely inside a 90-member durable-fleet cap
   instead of hiding later PRs behind `max-parallel: 3`; overflow stays

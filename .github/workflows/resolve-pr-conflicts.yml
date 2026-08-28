@@ -791,26 +791,75 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_ACTOR: ${{ github.actor }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # A conflict worker publishes this exact terminal Graphify commit.
-          # Its whole matrix gets one all-branch rebuild in the batch finalizer
-          # below, so a bot synchronize event must not enqueue one fleet waiter
-          # per resolved PR ahead of the conflicts that remain.
+
+          verified_lopu_resolution() {
+            local message="$1" markers marker_count run_id pr_number run_json
+            case "$EVENT_ACTOR" in
+              'github-actions[bot]'|"$REPOSITORY_OWNER") ;;
+              *) return 1 ;;
+            esac
+            case "$EVENT_NAME:$EVENT_ACTION" in
+              push:*|pull_request_target:synchronize) ;;
+              *) return 1 ;;
+            esac
+
+            markers="$(
+              sed -nE \
+                's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/\1 \2/p' \
+                <<<"$message"
+            )"
+            marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
+            [ "$marker_count" = 1 ] || return 1
+            read -r run_id pr_number <<<"$markers"
+
+            if [ "$EVENT_NAME" = pull_request_target ]; then
+              [ -n "$EVENT_PR_NUMBER" ] && [ "$pr_number" = "$EVENT_PR_NUMBER" ] \
+                || return 1
+            fi
+
+            run_json="$(
+              gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
+            )" || return 1
+            jq -e '
+              .event == "workflow_dispatch"
+              and .head_branch == "github-actions"
+              and .actor.login == "github-actions[bot]"
+              and .path == ".github/workflows/resolve-pr-conflicts.yml"
+              and (
+                .status == "queued"
+                or .status == "in_progress"
+                or .status == "pending"
+                or .status == "waiting"
+                or .status == "requested"
+                or (.status == "completed" and .conclusion == "success")
+              )
+            ' >/dev/null <<<"$run_json"
+          }
+
+          # Conflict workers publish a run/PR-bound trailer on both their merge
+          # and optional terminal Graphify commits. CONFLICT_RESOLVER_PAT pushes
+          # are attributed to the repository owner, not github-actions[bot], so
+          # actor alone is not a durable identity signal. Require the closed
+          # trusted-principal set plus live provenance from the controller run.
           if [ "$EVENT_NAME" = pull_request_target ] \
              && [ "$EVENT_ACTION" = synchronize ] \
-             && [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
              && [ -n "$PR_HEAD_SHA" ]; then
             head_message="$(
               gh api "repos/$REPO/commits/$PR_HEAD_SHA" --jq '.commit.message' \
                 2>/dev/null || true
             )"
-            if [ "${head_message%%$'\n'*}" = \
-                 'chore: refresh graphify outputs after PR branch merge' ]; then
+            if verified_lopu_resolution "$head_message" \
+               || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
+                    && [ "${head_message%%$'\n'*}" = \
+                         'chore: refresh graphify outputs after PR branch merge' ]; }; then
               echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
               exit 0
             fi
@@ -2245,6 +2294,7 @@ jobs:
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
@@ -2261,30 +2311,76 @@ jobs:
           EVENT_REF: ${{ github.ref_name }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_ACTOR: ${{ github.actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
           EVENT_HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
           SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
         run: |
           set -euo pipefail
 
+          verified_lopu_resolution() {
+            local message="$1" markers marker_count run_id pr_number run_json
+            case "$EVENT_ACTOR" in
+              'github-actions[bot]'|"$REPOSITORY_OWNER") ;;
+              *) return 1 ;;
+            esac
+            case "$EVENT_NAME:$EVENT_ACTION" in
+              push:*|pull_request_target:synchronize) ;;
+              *) return 1 ;;
+            esac
+
+            markers="$(
+              sed -nE \
+                's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/\1 \2/p' \
+                <<<"$message"
+            )"
+            marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
+            [ "$marker_count" = 1 ] || return 1
+            read -r run_id pr_number <<<"$markers"
+
+            if [ "$EVENT_NAME" = pull_request_target ]; then
+              [ -n "$EVENT_PR_NUMBER" ] && [ "$pr_number" = "$EVENT_PR_NUMBER" ] \
+                || return 1
+            fi
+
+            run_json="$(
+              gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
+            )" || return 1
+            jq -e '
+              .event == "workflow_dispatch"
+              and .head_branch == "github-actions"
+              and .actor.login == "github-actions[bot]"
+              and .path == ".github/workflows/resolve-pr-conflicts.yml"
+              and (
+                .status == "queued"
+                or .status == "in_progress"
+                or .status == "pending"
+                or .status == "waiting"
+                or .status == "requested"
+                or (.status == "completed" and .conclusion == "success")
+              )
+            ' >/dev/null <<<"$run_json"
+          }
+
           resolution_message="$EVENT_HEAD_MESSAGE"
           if [ "$EVENT_NAME" = pull_request_target ] \
              && [ "$EVENT_ACTION" = synchronize ] \
-             && [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
              && [ -n "$PR_HEAD_SHA" ]; then
             resolution_message="$(
               gh api "repos/$REPO/commits/$PR_HEAD_SHA" --jq '.commit.message' \
                 2>/dev/null || true
             )"
           fi
-          if [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
-             && { [ "$EVENT_NAME" = push ] \
-                  || { [ "$EVENT_NAME" = pull_request_target ] \
-                       && [ "$EVENT_ACTION" = synchronize ]; }; } \
-             && [ "${resolution_message%%$'\n'*}" = \
-                  'chore: refresh graphify outputs after PR branch merge' ]; then
-            echo 'Bot-authored conflict resolution is reviewed once by the batch finalizer.'
+          if verified_lopu_resolution "$resolution_message" \
+             || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
+                  && { [ "$EVENT_NAME" = push ] \
+                       || { [ "$EVENT_NAME" = pull_request_target ] \
+                            && [ "$EVENT_ACTION" = synchronize ]; }; } \
+                  && [ "${resolution_message%%$'\n'*}" = \
+                       'chore: refresh graphify outputs after PR branch merge' ]; }; then
+            echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
             echo 'any=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
@@ -5621,6 +5717,7 @@ jobs:
       RECOVER_REBASE_PAUSE: ${{ matrix.pr.recover_rebase_pause }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RESOLUTION_TRAILER: "Lopu-Conflict-Resolution: run=${{ github.run_id }} pr=${{ matrix.pr.number }}"
       RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=${{ github.run_id }} -->'
       # True when CONFLICT_RESOLVER_PAT exists (a boolean, never the secret
       # itself — the secret is scoped to the push step only, so it is not in
@@ -5952,7 +6049,7 @@ jobs:
             local status
             set +e
             git merge --no-edit \
-              -m "Merge branch '$BASE_REF' into $HEAD_REF" \
+              -m "$(printf "Merge branch '%s' into %s\n\n%s" "$BASE_REF" "$HEAD_REF" "$RESOLUTION_TRAILER")" \
               "$base" \
               > >(tee -a "$merge_log") \
               2> >(tee -a "$merge_log" >&2)
@@ -6688,6 +6785,7 @@ jobs:
             -m "Merge $BASE_REF into $HEAD_REF (AI-resolved conflicts)" \
             -m "Conflicted paths: $conflicted_list" \
             -m "Resolved by the resolve-pr-conflicts workflow: $RUN_URL" \
+            -m "$RESOLUTION_TRAILER" \
             -m "Co-Authored-By: Lopu <github-actions[bot]@users.noreply.github.com>"
 
       # Runs ONLY after the base-into-head merge has completed (and any conflict
@@ -6966,7 +7064,8 @@ jobs:
             git commit -q \
               -m "chore: refresh graphify outputs after PR branch merge" \
               -m "$detail" \
-              -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL"
+              -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL" \
+              -m "$RESOLUTION_TRAILER"
             echo "refreshed=true" >> "$GITHUB_OUTPUT"
           fi
           git clean -qffdx -- graphify-out/

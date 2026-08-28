@@ -285,8 +285,49 @@ function assertWorkflowSource() {
     3,
     "the terminal commit and both per-event deferrals share one exact marker",
   );
+  assert.match(
+    resolveBlock,
+    /RESOLUTION_TRAILER: "Lopu-Conflict-Resolution: run=\$\{\{ github\.run_id \}\} pr=\$\{\{ matrix\.pr\.number \}\}"/,
+    "every resolver commit carries a controller-run and PR-bound trailer",
+  );
+  assert.equal(
+    resolveBlock.match(/-m "\$RESOLUTION_TRAILER"/g)?.length,
+    2,
+    "AI-resolved and terminal Graphify commits preserve the resolver trailer",
+  );
+  assert.match(
+    resolveBlock,
+    /git merge --no-edit[\s\S]*?printf "Merge branch '%s' into %s\\n\\n%s"[\s\S]*?\$RESOLUTION_TRAILER/u,
+    "clean and marker-free merge commits preserve the resolver trailer",
+  );
+  const allBranchDeferralBlock = source.slice(
+    source.indexOf("  handoff_all_branch_event:"),
+    source.indexOf("  maintain_all_branch:"),
+  );
+  const reviewDeferralBlock = source.slice(
+    source.indexOf("  review_detect:"),
+    source.indexOf("  review_dispatch:"),
+  );
+  for (const [name, block] of [
+    ["all-branch", allBranchDeferralBlock],
+    ["review", reviewDeferralBlock],
+  ]) {
+    assert.match(block, /REPOSITORY_OWNER: \$\{\{ github\.repository_owner \}\}/);
+    assert.match(block, /'github-actions\[bot\]'\|"\$REPOSITORY_OWNER"/);
+    assert.match(block, /actions\/runs\/\$run_id/);
+    assert.match(block, /\.event == "workflow_dispatch"/);
+    assert.match(block, /\.head_branch == "github-actions"/);
+    assert.match(block, /\.actor\.login == "github-actions\[bot\]"/);
+    assert.match(block, /\.path == "\.github\/workflows\/resolve-pr-conflicts\.yml"/);
+    assert.match(block, /\[ "\$pr_number" = "\$EVENT_PR_NUMBER" \]/);
+    assert.match(
+      block,
+      /Lopu-Conflict-Resolution: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral requires an exact run/PR trailer`,
+    );
+  }
   assert.match(source, /Deferring the all-branch rebuild to the conflict-batch finalizer/);
-  assert.match(source, /Bot-authored conflict resolution is reviewed once by the batch finalizer/);
+  assert.match(source, /Verified Lopu conflict resolution is reviewed once by the batch finalizer/);
   const batchFinalizerBlock = source.slice(
     source.indexOf("  finalize_conflict_batch_maintenance:"),
   );
