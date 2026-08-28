@@ -5274,11 +5274,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 409,
         description: 'Another client saved a newer version.',
         body: { ok: false, error: 'Thing changed somewhere else. Load it before saving again.' }
+      },
+      {
+        status: 429,
+        description: 'Read budget exhausted (anonymous cross-origin callers are counted per IP).',
+        body: { ok: false, error: 'Too many embed reads — take a breather 🌸' }
+      },
+      {
+        status: 429,
+        description: 'Save budget exhausted for this account.',
+        body: { ok: false, error: 'Saving embeds very enthusiastically — take a breather 🌸' }
       }
     ],
     notes: [
       'Cross-origin public reads use CORS. Do not put a full-account bearer token in publicly served browser source.',
-      'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.'
+      'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.',
+      'Both verbs are rate limited (embed.read / embed.write). A 429 sends Retry-After, and the read 429 keeps its CORS headers so a host page can read the status instead of seeing an opaque network error.'
     ]
   }),
   endpoint({

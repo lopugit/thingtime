@@ -1,5 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { getEmbeddedThing, listEmbeddedThings, saveEmbeddedThing } from '~/api/utils/things/embeddedThings';
 
 const MAX_BODY_BYTES = 300 * 1024;
@@ -26,6 +27,17 @@ export const loader = async ({ request }: { request: Request }) => {
 	// Cross-site callers receive the anonymous public projection only. Private
 	// reads and owner lists stay first-party in the Thingtime popup/app.
 	const user = isCrossOrigin ? null : await getCurrentUser(request);
+
+	// This is the one anonymous cross-origin read in the API, so it must be
+	// bounded like the other public reads (things.search / schemas.browse).
+	// Anonymous callers key by IP; signed-in first-party callers by user. The
+	// 429 keeps its CORS headers so a host page sees a real status instead of an
+	// opaque network error it cannot report.
+	const limit = await enforceRateLimit(request, 'embed.read', user ? `user:${user.id}` : null);
+	if (!limit.allowed) {
+		const limited = json({ ok: false, error: 'Too many embed reads — take a breather 🌸' }, rateLimitedResponseInit(limit));
+		return isCrossOrigin ? withPublicReadCors(limited) : limited;
+	}
 
 	if (id) {
 		const response = resultResponse(await getEmbeddedThing(user?.id || null, id));
@@ -63,6 +75,15 @@ export const action = async ({ request }: { request: Request }) => {
 
 	const user = await getCurrentUser(request);
 	if (!user) return resultResponse({ ok: false, status: 401, error: 'Unauthorized' });
+
+	// MAX_THINGS_PER_OWNER bounds how many embeds exist, not how fast they
+	// churn — each save costs a count + find + CAS update, so throttle the rate
+	// too. Rate-limited before the body is read so a flood cannot force the
+	// 300 KB body parse.
+	const limit = await enforceRateLimit(request, 'embed.write', `user:${user.id}`);
+	if (!limit.allowed) {
+		return json({ ok: false, error: 'Saving embeds very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
+	}
 
 	const body = await readJsonBody(request, MAX_BODY_BYTES);
 	return resultResponse(await saveEmbeddedThing(user.id, body));
