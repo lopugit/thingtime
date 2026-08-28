@@ -38,15 +38,52 @@ assert.deepEqual(
 // TT_MODERATION_MODEL is only the provider default for the 'default' slot.
 const moderation = readFileSync(join(remixRoot, 'app/api/utils/moderation/claudeProvider.ts'), 'utf8');
 assert.match(moderation, /getAiPreferredModelWaterfall/);
-assert.match(moderation, /resolveAiPreferredClaudeModel/);
-assert.match(moderation, /resolveAiPreferredClaudeModel\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
+assert.match(moderation, /resolveAiPreferredAnthropicChoice/);
+assert.match(moderation, /resolveAiPreferredAnthropicChoice\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
 assert.doesNotMatch(moderation, /model:\s*env\.TT_MODERATION_MODEL/);
 
+// Lopu musings resolve BOTH provider preferences from one waterfall read:
+// Claude runs the first Anthropic-capable entry, ChatGPT the first OpenAI
+// entry; LOPU_*_MODEL env values are only the 'default'-slot fallbacks.
 const musing = readFileSync(join(remixRoot, directClientFiles[0]), 'utf8');
 assert.match(musing, /getAiPreferredModelWaterfall/);
-assert.match(musing, /resolveAiPreferredClaudeModel/);
-assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, await getLopuClaudeModel\(\)\)/);
+assert.match(musing, /resolveAiPreferredAnthropicChoice/);
+assert.match(musing, /resolveAiPreferredOpenAiChoice/);
+assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude\)/);
+assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
+assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
+
+// An admin entry can pin a reasoning model or an explicit effort tier, and
+// both providers bill that reasoning against the request's output budget:
+// Anthropic counts thinking tokens inside `max_tokens`, OpenAI counts
+// reasoning tokens inside `max_completion_tokens`. `max_tokens` is also
+// deprecated and outright incompatible with OpenAI's reasoning models, so the
+// OpenAI call must never use it. One shared ceiling keeps the visible musing
+// from being starved by the reasoning it now pays for.
+assert.match(musing, /const MUSING_MAX_OUTPUT_TOKENS = \d{4,}/);
+assert.match(musing, /max_tokens: MUSING_MAX_OUTPUT_TOKENS/);
+assert.match(musing, /max_completion_tokens: MUSING_MAX_OUTPUT_TOKENS/);
+assert.doesNotMatch(musing, /max_tokens:\s*\d/);
+
+// A ceiling alone is not enough: an attempt can still spend all of it on
+// reasoning and complete with zero text deltas. That is a failed attempt, not
+// an empty musing, so each provider must fall through to its own bare retry
+// (dropping the effort/fast knobs, keeping the admin's model) before the
+// provider loop gives up on it — and must never retry once text has been
+// emitted, which would duplicate the musing. Both providers carry the same
+// guard; pin the count so a refactor cannot quietly restore the plain `return`
+// that silently skipped the admin's preferred provider.
+assert.equal(
+  (musing.match(/if \(yielded \|\| attempt === attempts\.length - 1\) return;/g) || []).length,
+  2,
+  'streamClaude and streamOpenAI must each fall through to their bare retry on a starved (zero text delta) attempt'
+);
+
+// One durable waterfall read serves every provider attempt in a musing: the
+// read stays above the provider loop so a first-provider failure cannot cost a
+// second settings round-trip.
+assert.match(musing, /const choices = await getLopuModelChoices\(\);[\s\S]*?for \(const provider of providerOrder\(\)\)/);
 
 // This developer-only helper intentionally targets the local Codex proxy. It
 // is not a Thingtime runtime and cannot consume Claude model aliases; pin the

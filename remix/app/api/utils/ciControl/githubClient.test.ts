@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveCiWorkflowEntryRef } from './githubClient';
+import { resolveCiWorkflowDispatch, resolveCiWorkflowEntryRef } from './githubClient';
 
 test('workflow dispatches enter only through reviewed product branches', () => {
   assert.equal(resolveCiWorkflowEntryRef('resolve-conflicts'), 'develop');
@@ -26,4 +26,40 @@ test('workflow dispatches reject arbitrary feature and control-plane refs', () =
     () => resolveCiWorkflowEntryRef('web-ci', 'github-actions'),
     /must enter through develop/
   );
+});
+
+test('repository maintenance dispatches through the one Lopu manager', () => {
+  assert.deepEqual(resolveCiWorkflowDispatch('rebase-stack', {
+    pr_number: 202,
+    branch: 'feature/example',
+    cascade: false,
+    unexpected: 'discarded'
+  }), {
+    workflowFile: 'resolve-pr-conflicts.yml',
+    inputs: {
+      maintenance_operation: 'manage-prs',
+      pr_number: '202',
+      branch: 'feature/example',
+      rebase_cascade: false
+    }
+  });
+  assert.deepEqual(resolveCiWorkflowDispatch('promote-features', {
+    dry_run: true,
+    lookback: 25
+  }), {
+    workflowFile: 'resolve-pr-conflicts.yml',
+    inputs: {
+      maintenance_operation: 'promote-features',
+      promotion_dry_run: true,
+      promotion_lookback: '25'
+    }
+  });
+  assert.deepEqual(resolveCiWorkflowDispatch('promote-develop'), {
+    workflowFile: 'resolve-pr-conflicts.yml',
+    inputs: { maintenance_operation: 'promote-develop' }
+  });
+  assert.deepEqual(resolveCiWorkflowDispatch('sync-main'), {
+    workflowFile: 'resolve-pr-conflicts.yml',
+    inputs: { maintenance_operation: 'sync-main-develop' }
+  });
 });
