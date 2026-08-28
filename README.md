@@ -573,12 +573,14 @@ through the sanitising allowlist renderers) plus arg descriptors the page
 turns into a live tester. "Save version" stores the current tester state as a
 user-owned component thing in your Things.
 
-The 1000-component platform catalog (styled after Ant Design, Bootstrap, MUI,
+The 2800-component platform catalog (styled after Ant Design, Bootstrap, MUI,
 shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
 lives in the repo as a folder database: one JSON file per component under
 `components-db/components/<library>/<slug>.json` plus an `index.json`
 manifest, produced deterministically by `scripts/components-db/generate.mjs`
-from archetype builders in `scripts/components-db/lib/archetypes/`.
+from archetype builders in `scripts/components-db/lib/archetypes/`. The
+manifest's `count`/`target` are the source of truth for the catalog size —
+tranche 2 grew it to 70 archetypes / 350 families / 2800 components.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 
