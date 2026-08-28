@@ -417,14 +417,57 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
   throw new BlockedTargetError('that URL redirected too many times');
 };
 
+// Response-size caps. FEED covers feed/data bodies, TOKEN the much smaller
+// OAuth token responses.
+const MAX_FEED_RESPONSE_BYTES = 3_000_000;
+const MAX_TOKEN_RESPONSE_BYTES = 1_000_000;
+
+// Read at most `max` bytes of a body; null means "over the cap, give up".
+//
+// The cap has to be enforced WHILE reading. `resp.text()` buffers the entire
+// body first, so checking its length afterwards is a check the attacker has
+// already won: feed sources are user-supplied (the RSS provider takes any
+// typed URL, Mastodon/Lemmy any instance host), so a hostile host can answer
+// a signed-in user's connect with an endless body and spend the whole fetch
+// timeout streaming it into the server's heap — gigabytes on a fast link, on
+// a serverless runtime sized in hundreds of megabytes. Content-Length is
+// honoured as the cheap early out, but never trusted as the only bound: it is
+// absent on chunked responses and the sender picks it.
+const readBoundedBody = async (resp: Response, max: number): Promise<string | null> => {
+  const body = resp.body;
+  if (!body) return '';
+  const declared = Number(resp.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > max) {
+    await body.cancel().catch(() => {});
+    return null;
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      // stop the transfer as well as the buffering — an abandoned reader
+      // would leave the hostile host streaming into a socket we still hold
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+};
+
 const fetchText = async (url: string, accept: string): Promise<{ ok: true; text: string } | Fail> => {
   try {
     const resp = await guardedFetch(url, {
       headers: { 'User-Agent': USER_AGENT, Accept: accept }
     });
     if (!resp.ok) return fail(502, `The provider answered ${resp.status} for ${hostOf(url)}`);
-    const text = await resp.text();
-    if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     return { ok: true, text };
   } catch (err: any) {
     const blocked = blockedFail(err);
@@ -463,8 +506,8 @@ const postForm = async (
       },
       body: new URLSearchParams(form).toString()
     });
-    const text = await resp.text();
-    if (text.length > 1_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_TOKEN_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     let data: any = null;
     try {
       data = JSON.parse(text);
@@ -504,8 +547,8 @@ const authedJson = async (
       },
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
-    const text = await resp.text();
-    if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     let data: any = null;
     try {
       data = JSON.parse(text);

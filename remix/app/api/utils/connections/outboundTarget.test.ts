@@ -73,8 +73,14 @@ for (const [label, feedUrl] of BLOCKED_TARGETS) {
 }
 
 test('a public host cannot redirect the fetch into private space', async () => {
+  // Exact match, not a prefix: only the first hop is a legitimate fetch here,
+  // so anything else must fall to the INTERNAL-ONLY branch the assertions
+  // below are looking for. A `startsWith` prefix would also swallow
+  // `https://example.com.attacker.test/…`, quietly weakening the test (and
+  // reading as URL sanitization to a scanner that cannot tell a stub from a
+  // guard) — the sibling redirect test below matches exactly for the same reason.
   stubFetch((url) =>
-    url.startsWith('https://example.com')
+    url === 'https://example.com/feed.xml'
       ? new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data/' } })
       : feedResponse('INTERNAL-ONLY-BODY')
   );
@@ -108,6 +114,57 @@ test('a global-unicast IPv6 literal is not collateral damage', async () => {
   const result = await rss.resolveAccount({ feedUrl: 'https://[2606:4700:4700::1111]/feed.xml' });
   assert.equal(result.ok, true, 'public v6 addresses must still be reachable');
   assert.deepEqual(calls, ['https://[2606:4700:4700::1111]/feed.xml']);
+});
+
+// --- response size cap -------------------------------------------------------
+// The same reason the target guard exists applies to the response: the feed
+// host is whatever the user typed, so it can answer with an endless body. The
+// cap therefore has to bound what is READ. Measuring `await resp.text()`
+// afterwards is a check the attacker has already won — the bytes are in the
+// heap by then. `served`/`cancelled` are the real assertions: the transfer
+// must stop near the cap rather than being drained and then rejected.
+
+const endlessBody = (chunkBytes: number) => {
+  const chunk = new Uint8Array(chunkBytes).fill(0x61); // 'a'
+  let served = 0;
+  let cancelled = false;
+  const stream = new ReadableStream({
+    pull(controller) {
+      served += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+    cancel() {
+      cancelled = true;
+    }
+  });
+  return { stream, served: () => served, cancelled: () => cancelled };
+};
+
+test('refuses a body past the response cap, and stops reading it', async () => {
+  const endless = endlessBody(256 * 1024);
+  stubFetch(() => new Response(endless.stream, { status: 200, headers: { 'content-type': 'application/xml' } }));
+  const result = await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+  assert.equal(result.ok, false, 'an oversized feed body must be refused');
+  assert.ok(endless.cancelled(), 'the transfer must be cancelled, not drained');
+  // the cap is 3MB; allow generous slack for stream buffering, but nothing
+  // like the unbounded read a whole-body buffer would have performed
+  assert.ok(endless.served() < 8_000_000, `the read must stop near the cap (served ${endless.served()} bytes)`);
+});
+
+test('refuses an oversized body on its declared content-length, without draining it', async () => {
+  const chunk = 256 * 1024;
+  const endless = endlessBody(chunk);
+  stubFetch(
+    () => new Response(endless.stream, { status: 200, headers: { 'content-type': 'application/xml', 'content-length': '9000000' } })
+  );
+  const result = await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+  assert.equal(result.ok, false, 'a body that declares itself oversized must be refused');
+  assert.ok(endless.cancelled(), 'the transfer must be cancelled');
+  // A ReadableStream pre-buffers one chunk of its own accord (highWaterMark),
+  // so "never pulled" is not observable — but the cap path above needs ~12
+  // chunks to reach 3MB, so staying inside two proves this one short-circuited
+  // on the header instead of streaming up to the cap.
+  assert.ok(endless.served() <= chunk * 2, `content-length must short-circuit the read (served ${endless.served()} bytes)`);
 });
 
 // --- link scheme guard -------------------------------------------------------

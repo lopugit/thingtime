@@ -2700,10 +2700,15 @@ const relationalExternalPostSources: Migration = {
 		let created = 0;
 		let skipped = 0;
 		if (dryRun || !matched) return { dryRun, matched, migrated, created, skipped, notes };
+		// Progress comes from `$unset: sourceIds` taking each converted doc out of
+		// the filter, so a doc the loop SKIPS would be handed back by every
+		// subsequent page — a full batch of them spins forever, holding the
+		// migration lease. Skips are carried out of the filter explicitly instead.
+		const skippedIds: unknown[] = [];
 		while (true) {
 			await assertLease?.();
 			const batch = await things
-				.find(legacyExternalSourceFilter)
+				.find(skippedIds.length ? ({ ...legacyExternalSourceFilter, _id: { $nin: skippedIds } } as any) : legacyExternalSourceFilter)
 				.project({ shareId: 1, sourceIds: 1, acl: 1, crystal: 1, createdAt: 1 })
 				.limit(THINGS_BATCH)
 				.toArray();
@@ -2719,6 +2724,7 @@ const relationalExternalPostSources: Migration = {
 				);
 				if (!postShareId) {
 					skipped += 1;
+					skippedIds.push(doc._id);
 					continue;
 				}
 				const now = new Date();

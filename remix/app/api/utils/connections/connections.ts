@@ -601,6 +601,55 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Pro
   return refreshed;
 };
 
+// Reduce a fetched page of membership ROWS to the distinct posts it yields
+// plus the cursor that resumes exactly after the last row consumed. Pure, and
+// separated from the query so the paging contract is unit-testable: it is the
+// one place a viewer's feed history can be silently cut short.
+//
+// `rowLimit` is the caller's fetch limit (the 2× over-fetch plus one), and it
+// is load-bearing, not decoration — see `moreRows`.
+export const pageFromSourceRows = (
+  rows: { targetId?: unknown; shareId?: unknown; createdAt?: unknown }[],
+  limit: number,
+  rowLimit: number
+): { postIds: string[]; nextCursor: string | null } => {
+  // de-dupe by post, preserving row order; the cursor rides the last ROW we
+  // actually consumed so the next page resumes exactly after it
+  const seen = new Set<string>();
+  const consumed: typeof rows = [];
+  const postIds: string[] = [];
+  // set only by the deliberate stop below — NOT inferred from
+  // `consumed.length < rows.length`, which a skipped orphan row also satisfies
+  let stoppedEarly = false;
+  for (const row of rows) {
+    const postId = String(row?.targetId || '');
+    if (!postId) continue;
+    if (!seen.has(postId)) {
+      if (postIds.length >= limit) {
+        stoppedEarly = true;
+        break;
+      }
+      seen.add(postId);
+      postIds.push(postId);
+    }
+    consumed.push(row);
+  }
+  const lastRow = consumed[consumed.length - 1];
+  const lastMs = lastRow ? new Date(lastRow.createdAt as any).getTime() : NaN;
+  // More rows exist if EITHER the loop stopped early (a full page of distinct
+  // posts with rows still behind it) OR the fetch itself came back full. Both
+  // are needed: the over-fetch is only 2×, so a viewer whose connections
+  // overlap heavily (the same posts sourced by three accounts) can consume
+  // every fetched row without ever reaching `limit` distinct posts — reading
+  // "consumed everything we fetched" as "reached the end" ends the feed at
+  // that page and buries everything older than it.
+  const moreRows = stoppedEarly || rows.length >= rowLimit;
+  // never mint a cursor the parser would reject (dates are clamped at
+  // upsert, but pre-clamp rows must not wedge pagination into a loop)
+  const nextCursor = moreRows && lastRow && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${String(lastRow.shareId)}` : null;
+  return { postIds, nextCursor };
+};
+
 export const readConnectionsFeed = async (
   user: SessionUser,
   query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean; deepen?: boolean; deferSync?: boolean }
@@ -621,48 +670,68 @@ export const readConnectionsFeed = async (
   const linkedPairs = pairs.filter(({ account }) => !!account);
   const syncTargets = query.deferSync ? [] : linkedPairs;
   const CONCURRENCY = 4;
-  for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
-    await Promise.all(
-      syncTargets.slice(start, start + CONCURRENCY).map(async ({ link, account }) => {
-        const provider = connectionProviderById(account?.crystal?.provider);
-        const connectionId = String(link.shareId);
-        if (!provider) {
-          synced.push({ connectionId, provider: String(account?.crystal?.provider || ''), fetched: 0, skipped: true, error: 'Unknown provider' });
-          return;
-        }
-        const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
-        // deepening only bypasses the cooldown while it can actually go
-        // deeper — at the cap it degrades to a normal cooldown-gated read so
-        // a scroll-happy client can't hammer providers
-        const canDeepen = !!query.deepen && storedDepth < MAX_FEED_PAGES;
-        const pages = canDeepen ? storedDepth + 1 : storedDepth;
-        const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
-        if (!query.forceSync && !canDeepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
-          synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
-          return;
-        }
-        const tokens = await liveTokensFor(provider, account);
-        const fetched = await provider.fetchFeed(
-          { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
-          { limit: FEED_FETCH_LIMIT, tokens, pages }
+  // One connection's sync must never take down the read. The provider helpers
+  // already turn network trouble into a Fail, but everything else in a sync —
+  // an upsert write error, a token refresh, a mapper meeting a shape its
+  // provider has never sent before — can still throw, and inside Promise.all a
+  // single throw rejects the whole batch and 500s a request that could have
+  // served every OTHER connection's already-stored posts. `synced[]` carries a
+  // per-connection `error` for exactly this: report the failure against the
+  // connection that caused it and let the read pass run.
+  const syncOne = async ({ link, account }: { link: any; account: any }) => {
+    const connectionId = String(link.shareId);
+    try {
+      const provider = connectionProviderById(account?.crystal?.provider);
+      if (!provider) {
+        synced.push({ connectionId, provider: String(account?.crystal?.provider || ''), fetched: 0, skipped: true, error: 'Unknown provider' });
+        return;
+      }
+      const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
+      // deepening only bypasses the cooldown while it can actually go
+      // deeper — at the cap it degrades to a normal cooldown-gated read so
+      // a scroll-happy client can't hammer providers
+      const canDeepen = !!query.deepen && storedDepth < MAX_FEED_PAGES;
+      const pages = canDeepen ? storedDepth + 1 : storedDepth;
+      const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
+      if (!query.forceSync && !canDeepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
+        synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
+        return;
+      }
+      const tokens = await liveTokensFor(provider, account);
+      const fetched = await provider.fetchFeed(
+        { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
+        { limit: FEED_FETCH_LIMIT, tokens, pages }
+      );
+      if (fetched.ok === false) {
+        await markAccountSync(String(account.shareId), fetched.error);
+        synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: false, error: fetched.error });
+        return;
+      }
+      const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items);
+      await markAccountSync(String(account.shareId), null);
+      if (canDeepen) {
+        const home = await getHomeThingsCollection();
+        await home.updateOne(
+          { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
+          { $set: { 'crystal.syncDepth': pages } }
         );
-        if (fetched.ok === false) {
-          await markAccountSync(String(account.shareId), fetched.error);
-          synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: false, error: fetched.error });
-          return;
-        }
-        const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items);
-        await markAccountSync(String(account.shareId), null);
-        if (canDeepen) {
-          const home = await getHomeThingsCollection();
-          await home.updateOne(
-            { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
-            { $set: { 'crystal.syncDepth': pages } }
-          );
-        }
-        synced.push({ connectionId, provider: provider.id, fetched: written, skipped: false, error: null });
-      })
-    );
+      }
+      synced.push({ connectionId, provider: provider.id, fetched: written, skipped: false, error: null });
+    } catch (err: any) {
+      // the message is the server's, never the caught error's — a thrown
+      // driver/provider error can carry hosts, queries, or token material
+      console.error(`[connections] sync failed for ${String(account?.crystal?.provider || 'unknown')}:`, err?.message || err);
+      synced.push({
+        connectionId,
+        provider: String(account?.crystal?.provider || ''),
+        fetched: 0,
+        skipped: false,
+        error: 'That connection could not be synced just now — showing what was already saved'
+      });
+    }
+  };
+  for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
+    await Promise.all(syncTargets.slice(start, start + CONCURRENCY).map(syncOne));
   }
 
   // read pass — membership (the link) IS the authorization: only linked
@@ -696,27 +765,9 @@ export const readConnectionsFeed = async (
       .limit(rowLimit)
       .toArray();
 
-    // de-dupe by post, preserving row order; the cursor rides the last ROW we
-    // actually consumed so the next page resumes exactly after it
-    const seen = new Set<string>();
-    const consumed: any[] = [];
-    const postIds: string[] = [];
-    for (const row of rows) {
-      const postId = String(row?.targetId || '');
-      if (!postId) continue;
-      if (!seen.has(postId)) {
-        if (postIds.length >= limit) break;
-        seen.add(postId);
-        postIds.push(postId);
-      }
-      consumed.push(row);
-    }
-    const lastRow = consumed[consumed.length - 1];
-    const lastMs = lastRow ? new Date(lastRow.createdAt).getTime() : NaN;
-    const exhausted = consumed.length >= rows.length;
-    // never mint a cursor the parser would reject (dates are clamped at
-    // upsert, but pre-clamp rows must not wedge pagination into a loop)
-    nextCursor = !exhausted && lastRow && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${lastRow.shareId}` : null;
+    const paged = pageFromSourceRows(rows, limit, rowLimit);
+    const postIds = paged.postIds;
+    nextCursor = paged.nextCursor;
 
     const postsById = new Map<string, any>();
     if (postIds.length) {
