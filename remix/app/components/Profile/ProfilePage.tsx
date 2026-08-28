@@ -193,9 +193,18 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // it again restores the snapshot. A toast-button flow would expire in
   // seconds — the chip itself is the keep/revert control.
   const { applyThemeDoc } = useTtTheme();
-  const { setThingtime, getThingtime } = useThingtime();
-  const [tryingOn, setTryingOn] = React.useState(false);
-  const preTryThemeRef = React.useRef<any>(null);
+  const { thingtime, setThingtime, getThingtime } = useThingtime();
+
+  // Both halves of the try-on live in persisted `settings.*`, not component
+  // state: `settings.theme` is written through to localforage, so a try-on
+  // survives navigating away, but a React ref does not. With the snapshot in a
+  // ref, leaving the profile and coming back showed the chip in its "try on"
+  // state again, and a second click snapshotted the ALREADY-WORN foreign theme
+  // as the revert target — the visitor's own look became unrecoverable from the
+  // one control that advertises it. Deriving both from persisted state keeps
+  // "click again to take it off" true across navigation and reloads.
+  const appliedShareId = thingtime?.settings?.theme?.appliedThemeShareId;
+  const tryingOn = !!wornTheme && appliedShareId === wornTheme.id;
 
   const handleWornChipClick = React.useCallback(async () => {
     if (!wornTheme) return;
@@ -204,13 +213,12 @@ export const ProfilePage = (props: ProfilePageProps) => {
       return;
     }
     if (tryingOn) {
-      const snapshot = preTryThemeRef.current;
+      const snapshot = getThingtime('settings.themeBeforeTryOn');
       setThingtime('settings.theme', snapshot && typeof snapshot === 'object' ? snapshot : { preset: 'Thingtime', overrides: {} }, {
         ignoreUndoRedo: true,
         namespace: 'theme'
       });
-      preTryThemeRef.current = null;
-      setTryingOn(false);
+      setThingtime('settings.themeBeforeTryOn', null, { ignoreUndoRedo: true, namespace: 'theme' });
       lopuRef.current({ title: 'Back to your own look ✨', status: 'success' });
       return;
     }
@@ -220,9 +228,14 @@ export const ProfilePage = (props: ProfilePageProps) => {
         lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
         return;
       }
-      preTryThemeRef.current = getThingtime('settings.theme') ?? null;
+      // Only snapshot a look the visitor actually owns. Trying on a second
+      // profile's theme while already wearing one must not overwrite the
+      // original snapshot with the borrowed theme.
+      const current = getThingtime('settings.theme') ?? null;
+      if (!current?.appliedThemeShareId) {
+        setThingtime('settings.themeBeforeTryOn', current, { ignoreUndoRedo: true, namespace: 'theme' });
+      }
       applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
-      setTryingOn(true);
       lopuRef.current({
         title: `Trying on "${resp.theme.name}" 🌈`,
         description: 'Click the chip again to take it off, or keep it and tweak in /themes.',
