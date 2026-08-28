@@ -1,6 +1,5 @@
 import React from 'react';
-import ClickAwayListener from 'react-click-away-listener';
-import { Center, Flex, Input } from '@chakra-ui/react';
+import { Center, Flex, Input, Spinner, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
 
@@ -10,12 +9,18 @@ import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
+import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { usePath } from '~/hooks/usePath';
 import { useTtTheme } from '~/hooks/useTtTheme';
-import { getParentPath } from '~/smarts';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
+import { commanderEnterSuggestionIndex, commanderSearchResults } from '../Search/commanderSearch';
+import type { CommanderSearchResult } from '../Search/commanderSearch';
+import type { SearchPerson, SearchResponse } from '../Search/searchTypes';
+import { CommanderClickAwayBoundary } from './commanderClickAway';
 import { matchCommanderCommands, runCommanderCommand } from './commanderCommands';
 import type { CommanderCommandContext } from './commanderCommands';
+import { parseCommanderLiteral } from './commanderLiteral';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -27,6 +32,8 @@ export const CommanderV2 = (props) => {
 
 	const navigate = useNavigate();
 	const lopu = useLopu();
+	const api = useApi();
+	const user = useCurrentUser();
 	const { setPreset: setThemePreset, builtinThemes } = useTtTheme();
 
 	// ⌨️ `>` command registry (claude-todo/10). Side effects are injected so the
@@ -48,7 +55,7 @@ export const CommanderV2 = (props) => {
 		return props?.id || 'global';
 	}, [props?.id]);
 
-	const inputRef = React.useRef();
+	const inputRef = React.useRef<HTMLInputElement | null>(null);
 
 	const global = props?.global;
 
@@ -56,9 +63,9 @@ export const CommanderV2 = (props) => {
 
 	const [inputValue, setInputValue] = React.useState('');
 	const [virtualValue, setVirtualValue] = React.useState('');
-	const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
+	const [hoveredSuggestion, setHoveredSuggestion] = React.useState<number | null>(null);
 	const [active, setActive] = React.useState(false);
-	const [contextPath, setContextPath] = React.useState();
+	const [contextPath, setContextPath] = React.useState<string | undefined>();
 
 	const commanderMode = React.useMemo(() => {
 		return props?.mode || 'value';
@@ -98,7 +105,9 @@ export const CommanderV2 = (props) => {
 		if (commanderActive) {
 			inputRef?.current?.focus?.();
 		} else {
-			document.activeElement.blur();
+			// Closing Commander after an outside focus must not blur the input the
+			// user just reached. Only release Commander's own input.
+			if (document.activeElement === inputRef.current) inputRef.current?.blur?.();
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
 				setInputValue('');
@@ -159,30 +168,14 @@ export const CommanderV2 = (props) => {
 		return command?.[1];
 	}, [command]);
 
-	const validQuotations = React.useMemo(() => {
-		return ['"', "'"];
-	}, []);
-
-	const escapedCommandValue = React.useMemo(() => {
-		// replace quotations with escaped quoations except for first and last quotation
-		const startingQuotation = commandValue?.[0];
-		const endingQuotation = commandValue?.[commandValue?.length - 1];
-		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
-		const ret = `"${escaped}"`;
-		return ret;
-	}, [commandValue, validQuotations]);
-
 	const commandIsAction = React.useMemo(() => {
 		return commandPath && commandValue;
 	}, [commandPath, commandValue]);
 
+	const pathFuse = React.useMemo(() => new Fuse(paths || []), [paths]);
 	const suggestions = React.useMemo(() => {
 		try {
-			const fuse = new Fuse(paths);
-
-			const results = fuse.search(inputValue);
+			const results = pathFuse.search(inputValue, { limit: 6 });
 
 			const mappedResults = results?.map((result) => {
 				return result?.item;
@@ -192,10 +185,10 @@ export const CommanderV2 = (props) => {
 		} catch (err) {
 			console.error('fuse error', err);
 		}
-	}, [inputValue, paths]);
+	}, [inputValue, pathFuse]);
 
 	// `>` prefix = command mode: the dropdown lists matching registry commands
-	// instead of the search row + fuzzy paths
+	// instead of the search row + live/fuzzy results
 	const commandMode = React.useMemo(() => {
 		return (inputValue || '').trim().startsWith('>');
 	}, [inputValue]);
@@ -204,9 +197,69 @@ export const CommanderV2 = (props) => {
 		return commandMode ? matchCommanderCommands(inputValue) : [];
 	}, [commandMode, inputValue]);
 
-	// dropdown rows: index 0 is the pinned "Search things" row (→ /search), the
-	// fuzzy path suggestions follow at index 1+. In command mode the rows are
-	// the matching commands, indexed from 0.
+	// Commander is a live platform search, not just a fuzzy index over the
+	// persisted local Thingtime tree. Debounce the same ACL-aware Things +
+	// profile APIs used by /search, keep stale responses from repainting a newer
+	// query, and leave local path commands available as a clearly separate tier.
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const remoteRequestRef = React.useRef(0);
+	const [remoteSearch, setRemoteSearch] = React.useState<{ query: string; results: CommanderSearchResult[] }>({
+		query: '',
+		results: []
+	});
+	const [remoteLoadingQuery, setRemoteLoadingQuery] = React.useState('');
+	const trimmedInput = inputValue.trim();
+
+	React.useEffect(() => {
+		const query = trimmedInput;
+		// `>` command mode is a local registry lookup — never spend a search
+		// request on it
+		if (!commanderActive || commandMode || query.length < 2) {
+			remoteRequestRef.current += 1;
+			setRemoteLoadingQuery('');
+			return;
+		}
+
+		const seq = ++remoteRequestRef.current;
+		setRemoteLoadingQuery(query);
+		const timer = window.setTimeout(async () => {
+			try {
+				const [thingsResponse, peopleResponse] = (await Promise.all([
+					apiRef.current.v1.things.search({
+						q: query,
+						limit: 8,
+						anon: user?.id ? undefined : 1
+					}),
+					apiRef.current.v1.profile.search({ q: query, limit: 4 }).catch(() => null)
+				])) as [SearchResponse, { users?: SearchPerson[] } | null];
+				if (seq !== remoteRequestRef.current) return;
+				setRemoteSearch({
+					query,
+					results: commanderSearchResults({
+						things: thingsResponse?.things,
+						posts: thingsResponse?.posts,
+						people: peopleResponse?.users
+					})
+				});
+			} catch {
+				// Typeahead search is progressive enhancement: keep local commands
+				// and the full /search link usable when the network is unavailable.
+				if (seq === remoteRequestRef.current) setRemoteSearch({ query, results: [] });
+			} finally {
+				if (seq === remoteRequestRef.current) setRemoteLoadingQuery('');
+			}
+		}, 250);
+
+		return () => window.clearTimeout(timer);
+	}, [commanderActive, commandMode, trimmedInput, user?.id]);
+
+	const remoteResults = remoteSearch.query === trimmedInput ? remoteSearch.results : [];
+	const remoteLoading = remoteLoadingQuery === trimmedInput;
+
+	// dropdown rows: index 0 is the pinned full-search row; live platform
+	// results follow; local fuzzy paths remain the final command tier. In `>`
+	// command mode the rows are the matching commands instead, indexed from 0.
 	const showSuggestions = React.useMemo(() => {
 		if (commandMode) {
 			return commandMatches.length > 0 && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
@@ -227,8 +280,8 @@ export const CommanderV2 = (props) => {
 		if (commandMode) {
 			return commandMatches.length;
 		}
-		return (suggestions?.length || 0) + 1;
-	}, [suggestions, commandMode, commandMatches]);
+		return 1 + remoteResults.length + (suggestions?.length || 0);
+	}, [commandMode, commandMatches, remoteResults.length, suggestions]);
 
 	const selectSuggestion = React.useCallback(
 		(suggestionIdx) => {
@@ -260,7 +313,20 @@ export const CommanderV2 = (props) => {
 				closeCommander();
 				return;
 			}
-			const suggestion = suggestions?.[suggestionIdx - 1];
+			const remoteSuggestion = remoteResults[suggestionIdx - 1];
+			if (remoteSuggestion) {
+				navigate(remoteSuggestion.href);
+				setShowContext(false, 'Platform search result');
+				setInputValue('');
+				setHoveredSuggestion(null);
+				setContextPath(undefined);
+				closeCommander();
+				return;
+			}
+
+			const localSuggestionIndex = suggestionIdx - 1 - remoteResults.length;
+			const suggestion = suggestions?.[localSuggestionIndex];
+			if (!suggestion) return;
 
 			const previewMode = false;
 
@@ -284,7 +350,19 @@ export const CommanderV2 = (props) => {
 		},
 		// closeCommander is declared below — referenced in the closure body only
 		// (calling it at select time is fine; naming it in deps would hit the TDZ)
-		[setInputValue, setContextPath, setShowContext, suggestions, inputValue, navigate, changePath, commandMode, commandMatches, commandContext]
+		[
+			setInputValue,
+			setContextPath,
+			setShowContext,
+			suggestions,
+			remoteResults,
+			inputValue,
+			navigate,
+			changePath,
+			commandMode,
+			commandMatches,
+			commandContext
+		]
 	);
 
 	const commandContainsPath = React.useMemo(() => {
@@ -301,17 +379,10 @@ export const CommanderV2 = (props) => {
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
-			console.log('Closing commander if conditions met');
-			if (!e?.defaultPrevented) {
-				console.log('Event default not prevented, closing commander. commanderId:', commanderId);
-				setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
-				// if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-				// }
-			} else {
-				console.log('Event default prevented, not closing commander');
-			}
+			if (e?.defaultPrevented || !commanderActive) return;
+			setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
 		},
-		[setThingtime, commanderId, commanderSettings?.commanderActive, thingtime?.settings?.commander]
+		[setThingtime, commanderId, commanderActive]
 	);
 
 	const toggleCommander = React.useCallback(() => {
@@ -362,50 +433,26 @@ export const CommanderV2 = (props) => {
 			return;
 		}
 
-		// if selection is active then select it
-		const curSuggestionIdx = hoveredSuggestion;
+		// An explicit row wins. With no row selected, ordinary text defaults to
+		// the pinned "Search things for…" row; setter commands still execute.
+		const curSuggestionIdx = commanderEnterSuggestionIndex({
+			hoveredSuggestion,
+			showSuggestions: !!showSuggestions,
+			commandIsAction: !!commandIsAction,
+			inputValue
+		});
 		if (curSuggestionIdx !== null) {
 			selectSuggestion(curSuggestionIdx);
-			// the pinned search row navigates to /search — never also run the
-			// input through the path/setter command path below
-			if (curSuggestionIdx === 0) {
-				return;
-			}
+			// Every suggestion owns its destination. Never also run the original
+			// input through the local path/setter command path after selecting it.
+			return;
 		}
 		if (commanderActive) {
 			try {
 				if (commandIsAction) {
-					// nothing
-					const prevVal = getThingtime(commandPath);
-					const parentPath = getParentPath(commandPath) || 'thingtime';
-					try {
-						// first try to execute literal javscript
-						const fn = `() => { return ${commandValue} }`;
-						const tt = thingtime;
-						const evalFn = eval(fn);
-						const realVal = evalFn();
-						setThingtime(commandPath, realVal, {
-							namespace: 'user'
-						});
-					} catch (err) {
-						console.log('Caught error after trying to execute literal javascript', err);
-
-						// likely literaly javascript wasn't valid
-						try {
-							const fn = `() => { return ${escapedCommandValue} }`;
-							const tt = thingtime;
-							const evalFn = eval(fn);
-							const realVal = evalFn();
-							const prevVal = getThingtime(commandPath);
-							const parentPath = getParentPath(commandPath);
-							setThingtime(commandPath, realVal, {
-								namespace: 'user'
-							});
-						} catch {
-							// something very bad went wrong
-							console.log('Caught error after trying to execute escaped literal javascript', err);
-						}
-					}
+					setThingtime(commandPath, parseCommanderLiteral(commandValue), {
+						namespace: 'user'
+					});
 					// if (!prevVal) {
 					setContextPath(commandPath);
 					setShowContext(true, 'commandIsAction check');
@@ -436,15 +483,12 @@ export const CommanderV2 = (props) => {
 	}, [
 		hoveredSuggestion,
 		selectSuggestion,
-		mode,
 		changePath,
 		commanderActive,
 		commandIsAction,
 		commandPath,
-		thingtime,
 		commandValue,
-		escapedCommandValue,
-		getThingtime,
+		showSuggestions,
 		setThingtime,
 		setContextPath,
 		setShowContext,
@@ -511,7 +555,18 @@ export const CommanderV2 = (props) => {
 				}
 			}
 		},
-		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, showSuggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
+		[
+			closeCommander,
+			toggleCommander,
+			hoveredSuggestion,
+			suggestions,
+			suggestionRowCount,
+			showSuggestions,
+			thingtime,
+			thingtimeRef,
+			commanderActive,
+			executeCommand
+		]
 	);
 
 	React.useEffect(() => {
@@ -544,14 +599,16 @@ export const CommanderV2 = (props) => {
 	}, [global, toggleCommander]);
 
 	React.useEffect(() => {
-		// row 0 is the pinned search row — it previews the raw input, not a path.
-		// command mode never previews rows into the input either.
-		if (!commandMode && typeof hoveredSuggestion === 'number' && hoveredSuggestion > 0) {
-			setVirtualValue(suggestions?.[hoveredSuggestion - 1]);
+		// Only local path rows preview a virtual command value. The full-search
+		// row and remote results preserve exactly what the user typed, and
+		// command mode never previews a row into the input either.
+		const localIndex = !commandMode && typeof hoveredSuggestion === 'number' ? hoveredSuggestion - 1 - remoteResults.length : -1;
+		if (localIndex >= 0) {
+			setVirtualValue(suggestions?.[localIndex]);
 		} else {
 			setVirtualValue(inputValue);
 		}
-	}, [hoveredSuggestion, inputValue, suggestions, commandMode]);
+	}, [commandMode, hoveredSuggestion, inputValue, remoteResults.length, suggestions]);
 
 	React.useEffect(() => {
 		setVirtualValue(inputValue);
@@ -577,7 +634,7 @@ export const CommanderV2 = (props) => {
 	);
 
 	return (
-		<ClickAwayListener onClickAway={closeCommander}>
+		<CommanderClickAwayBoundary onClickAway={closeCommander}>
 			<Flex
 				className="commanderHost"
 				data-commander-active={commanderActive ? 'true' : 'false'}
@@ -696,12 +753,71 @@ export const CommanderV2 = (props) => {
 									🔍 Search things for “{inputValue}”
 								</Flex>
 							)}
+							{!commandMode && remoteLoading ? (
+								<Flex align="center" color="var(--tt-muted, #9a9aa6)" fontSize="11px" gap={2} px={4} py={2}>
+									<Spinner size="xs" />
+									Searching across Thingtime…
+								</Flex>
+							) : null}
+							{!commandMode && remoteResults.length ? (
+								<Text
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="mono"
+									fontSize="10px"
+									fontWeight="700"
+									px={4}
+									pb={1}
+									pt={2}
+									textTransform="uppercase"
+								>
+									Across Thingtime
+								</Text>
+							) : null}
+							{!commandMode &&
+								remoteResults.map((result, i) => {
+									const suggestionIndex = i + 1;
+									return (
+										<Flex
+											key={`${result.resultType}-${result.id}`}
+											background={hoveredSuggestion === suggestionIndex ? 'var(--tt-surface-hover, #ececee)' : null}
+											_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+											cursor="pointer"
+											flexDirection="column"
+											onClick={() => selectSuggestion(suggestionIndex)}
+											onMouseEnter={() => setHoveredSuggestion(suggestionIndex)}
+											paddingX={4}
+											paddingY={1.5}
+										>
+											<Text color="var(--tt-text, #5a5a66)" fontSize="13px" fontWeight="600" noOfLines={1}>
+												{result.resultType === 'person' ? '👤' : '🌀'} {result.title}
+											</Text>
+											<Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px" noOfLines={1}>
+												{result.context}
+											</Text>
+										</Flex>
+									);
+								})}
+							{!commandMode && suggestions?.length ? (
+								<Text
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="mono"
+									fontSize="10px"
+									fontWeight="700"
+									px={4}
+									pb={1}
+									pt={2}
+									textTransform="uppercase"
+								>
+									Local paths
+								</Text>
+							) : null}
 							{!commandMode &&
 								suggestions?.map((suggestion, i) => {
+									const suggestionIndex = i + 1 + remoteResults.length;
 									return (
 										<Flex
 											key={i}
-											background={hoveredSuggestion === i + 1 ? 'var(--tt-surface-hover, #ececee)' : null}
+											background={hoveredSuggestion === suggestionIndex ? 'var(--tt-surface-hover, #ececee)' : null}
 											_hover={{
 												background: 'var(--tt-surface-hover, #ececee)'
 											}}
@@ -709,8 +825,8 @@ export const CommanderV2 = (props) => {
 											fontFamily="mono"
 											fontSize="13px"
 											color="var(--tt-text, #5a5a66)"
-											onClick={() => selectSuggestion(i + 1)}
-											onMouseEnter={() => setHoveredSuggestion(i + 1)}
+											onClick={() => selectSuggestion(suggestionIndex)}
+											onMouseEnter={() => setHoveredSuggestion(suggestionIndex)}
 											paddingX={4}
 											paddingY={1}
 										>
@@ -833,6 +949,6 @@ export const CommanderV2 = (props) => {
 					)}
 				</Center>
 			</Flex>
-		</ClickAwayListener>
+		</CommanderClickAwayBoundary>
 	);
 };
