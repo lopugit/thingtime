@@ -1,6 +1,7 @@
 import { defineHandler } from 'nitro/h3';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -28,6 +29,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/users/overview': () => import('../../../app/routes/api/v1/admin/users/overview/_overview'),
   'v1/admin/users/public-uploads': () => import('../../../app/routes/api/v1/admin/users/public-uploads/_public-uploads'),
   'v1/integrations/github/webhook': () => import('../../../app/routes/api/v1/integrations/github/webhook/_webhook'),
+  [CHATGPT_MCP_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/mcp/_mcp'),
+  [CHATGPT_AUTHORIZE_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/authorize/_authorize'),
+  [CHATGPT_TOKEN_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/token/_token'),
+  [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
@@ -136,9 +141,11 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
+  'v1/oauth/desktop/authorize': () => import('../../../app/routes/api/v1/oauth/desktop/authorize/_authorize'),
   'v1/oauth/grants': () => import('../../../app/routes/api/v1/oauth/grants/_grants'),
   'v1/oauth/grants/revoke': () => import('../../../app/routes/api/v1/oauth/grants/revoke/_revoke'),
   'v1/oauth/sandbox': () => import('../../../app/routes/api/v1/oauth/sandbox/_sandbox'),
+  'v1/oauth/token': () => import('../../../app/routes/api/v1/oauth/token/_token'),
   'v1/oauth/scopes': () => import('../../../app/routes/api/v1/oauth/scopes/_scopes'),
   'v1/oauth/shared': () => import('../../../app/routes/api/v1/oauth/shared/_shared'),
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
