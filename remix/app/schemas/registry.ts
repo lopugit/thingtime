@@ -2257,9 +2257,17 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
       description: '{ types, tags, authors } weight maps — open keys, so the shape stays a record.'
     },
     { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
-    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' }
+    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' },
+    {
+      name: 'shared',
+      type: 'boolean',
+      required: false,
+      description:
+        'Owner-granted branch invitation ("try my feed brain"). Never changes the acl — it only lets ' +
+        '/feed?algorithm=<shareId> holders read the name/emoji/eventCount preview and branch their own copy.'
+    }
   ],
-  example: { name: 'Chronological+', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 0 }
+  example: { name: 'Chronological+', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 0, shared: false }
 };
 
 const waitlistThingSchema: ThingtimeSchema = {
@@ -3279,7 +3287,11 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
       parentId: boundedString(input.parentId, 128),
       weights: input.weights,
       eventCount: Number.isFinite(eventCount) && eventCount >= 0 ? Math.floor(eventCount) : 0,
-      lastTrainedAt: boundedString(input.lastTrainedAt, 40)
+      lastTrainedAt: boundedString(input.lastTrainedAt, 40),
+      // carried, not dropped: this allowlist rebuilds the crystal from scratch,
+      // so an omitted `shared` would unshare the algorithm. Strict === true
+      // matches updateAlgorithm's boolean-only gate.
+      shared: input.shared === true
     }
   };
 };

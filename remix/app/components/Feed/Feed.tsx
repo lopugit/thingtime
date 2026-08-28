@@ -81,19 +81,22 @@ export const FeedPage = () => {
     getSharedAlgorithm({ id: sharedAlgorithmParam })
       .then((resp: any) => {
         if (cancelled) return;
-        if (resp?.ok && resp?.algorithm) {
-          setSharedPreview(resp.algorithm);
-        } else {
-          setSharedPreview(null);
+        setSharedPreview(resp?.ok && resp?.algorithm ? resp.algorithm : null);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setSharedPreview(null);
+        // getJson REJECTS on a non-2xx, so the revoked/unknown/private link —
+        // the one case worth explaining — arrives here as a 404, never as a
+        // resolved { ok: false } body. Stay quiet on anything else: a transient
+        // network blip must not accuse the owner of unsharing.
+        if (err?.status === 404) {
           lopuRef.current({
             title: 'That feed brain is no longer shared 🌫️',
             description: 'The link may have been turned off by its owner.',
             status: 'info'
           });
         }
-      })
-      .catch(() => {
-        if (!cancelled) setSharedPreview(null);
       });
     return () => {
       cancelled = true;
@@ -130,14 +133,25 @@ export const FeedPage = () => {
         branchFrom: sharedPreview.id
       });
       if (!created?.algorithm) throw created;
-      await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
-      setAlgorithmId(created.algorithm.id);
+      // The copy exists from here on. Activation is a second call that can fail
+      // on its own, so retire the invitation either way — reporting "Branch
+      // failed" for a branch that landed would invite a retry that silently
+      // creates a duplicate algorithm.
       setSharedPreview(null);
       clearSharedParam();
+      let activated = true;
+      try {
+        await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
+        setAlgorithmId(created.algorithm.id);
+      } catch {
+        activated = false;
+      }
       lopuRef.current({
         title: `Branched "${created.algorithm.name}" ${created.algorithm.emoji} 🌿`,
-        description: 'It is now your active algorithm — it trains as you scroll and is yours alone.',
-        status: 'success',
+        description: activated
+          ? 'It is now your active algorithm — it trains as you scroll and is yours alone.'
+          : 'Your copy is saved and yours alone — activate it from Settings ▸ Algorithms.',
+        status: activated ? 'success' : 'info',
         duration: 8000
       });
     } catch (err: any) {
