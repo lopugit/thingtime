@@ -14,6 +14,7 @@ import {
   appShapeProjections,
   appVisiblePage,
   asViewer,
+  batchedThingLookup,
   canViewInherited,
   chronoCursorClause,
   fail,
@@ -36,6 +37,7 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { attachRankScores, type RankedSearchSource } from './searchRanking';
 
 // Structured search over the things collection — the API behind /search.
 //
@@ -142,7 +144,7 @@ export type SearchQuery = {
 
 export type SearchResult = {
   ok: true;
-  things: PublicThing[];
+  things: Array<PublicThing & { rankScore?: number }>;
   // post projections for result things that are posts, keyed by thing id, so
   // the UI can render full post cards without a second round-trip
   posts: Record<string, PublicPost>;
@@ -371,7 +373,7 @@ const projectVisiblePage = async (
   page: ThingDoc[],
   viewer: Viewer,
   app: AppLens = null
-): Promise<{ things: PublicThing[]; posts: Record<string, PublicPost> }> => {
+): Promise<{ things: Array<PublicThing & { rankScore?: number }>; posts: Record<string, PublicPost> }> => {
   // App lens: namespace verdict + author-liveness batch replace the acl walk,
   // authors/acl are consent-shaped, and the PublicPost projection (scope-blind
   // child aggregation) never rides an app response — generic things only.
@@ -379,16 +381,22 @@ const projectVisiblePage = async (
     const visible = await appVisiblePage(app, page);
     const things = await toPublicThings(visible, viewer);
     await appShapeProjections(app, visible, things);
-    return { things, posts: {} };
+    return { things: attachRankScores(things, visible as RankedSearchSource[]), posts: {} };
   }
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  // One shared batched lookup for the whole page, matching listThings: a page
+  // of attached things (comments, reactions, shares — anything carrying
+  // tt:inherit) then costs one round trip per chain LEVEL instead of one per
+  // doc. Unbatched, a 50-result page of depth-1 comments issued 50 findOnes
+  // against a 10-connection pool, draining as 5 serial pool waves.
+  const lookup = batchedThingLookup();
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));
   const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
   const posts: Record<string, PublicPost> = {};
   for (const post of postProjections) posts[post.id] = post;
-  return { things, posts };
+  return { things: attachRankScores(things, visible as RankedSearchSource[]), posts };
 };
 
 export const searchThings = async (
@@ -565,6 +573,7 @@ export const searchThings = async (
         {
           $project: {
             shareId: 1,
+            ...(ranked ? { score: { $meta: 'textScore' } } : {}),
             embeddedComments: { $size: { $ifNull: ['$comments', []] } },
             embeddedReactions: {
               $sum: {
@@ -578,7 +587,12 @@ export const searchThings = async (
           }
         }
       ])
-      .toArray()) as any as { shareId: string; embeddedComments: number; embeddedReactions: number }[];
+      .toArray()) as any as {
+        shareId: string;
+        score?: number;
+        embeddedComments: number;
+        embeddedReactions: number;
+      }[];
 
     const ids = candidates.map((candidate) => candidate.shareId);
     const [v2Counts, legacyCounts] = ids.length
@@ -633,7 +647,15 @@ export const searchThings = async (
       ? ((await things.find({ shareId: { $in: pageIds } } as any).toArray()) as any as ThingDoc[])
       : [];
     const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
-    const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
+    const scoreById = new Map(candidates.map((candidate) => [candidate.shareId, candidate.score]));
+    const page = pageIds
+      .map((id) => {
+        const doc = docsById.get(id);
+        if (!doc) return null;
+        const score = scoreById.get(id);
+        return typeof score === 'number' ? ({ ...doc, score } as ThingDoc) : doc;
+      })
+      .filter(Boolean) as ThingDoc[];
 
     const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
 

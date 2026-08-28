@@ -108,13 +108,25 @@ export const NotificationsBell = () => {
     };
     setUnread(cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0);
     refresh();
-    const interval = window.setInterval(refresh, POLL_MS);
+    // Poll only while the tab is actually being looked at — every other poller
+    // in the app (MessengerPage, MessengerNotifications, ChatView) gates on
+    // visibilityState, and without it a backgrounded tab keeps counting
+    // notifications forever. visibilitychange re-reconciles on return, so
+    // hiding the tab costs freshness for exactly as long as it stays hidden.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, POLL_MS);
     const onFocus = () => refresh();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
     };
     // per-user: switcher swaps identity under the same mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
