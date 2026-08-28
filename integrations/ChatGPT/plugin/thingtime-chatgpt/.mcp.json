@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "thingtime": {
+      "type": "http",
+      "url": "https://thingtime.com/api/v1/integrations/chatgpt/mcp"
+    }
+  }
+}
