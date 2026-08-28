@@ -10,6 +10,7 @@ import { useApi } from '~/hooks/useApi';
 import { buildCurlForEntry, getApiCalls, subscribeApiCalls, type ApiLogEntry } from '~/hooks/apiRequestLog';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW, RAINBOW_CONIC } from '~/theme/rainbow';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
 const spin = keyframes`from { transform: rotate(0deg) } to { transform: rotate(360deg) }`;
 const DEVKIT_TRIGGER_STORAGE_KEY = 'thingtime.devKit.triggerPosition';
@@ -563,12 +564,14 @@ export const DevKit = (_props) => {
               color="var(--tt-muted, #9a9aa6)"
               textTransform="uppercase"
             >
-              Account {user ? `· ${user.username}` : ''}
+              Account {user ? `· ${getUserDisplayName(user)}` : ''}
             </Text>
             {user ? (
               <>
-                {!user.emailVerified && <DevAction onClick={verifyEmailDev}>✉️ Verify my email (dev)</DevAction>}
-                <DevAction onClick={() => navigate('/profile')}>🌈 Profile</DevAction>
+                {!user.emailVerified && !user.temporary && <DevAction onClick={verifyEmailDev}>✉️ Verify my email (dev)</DevAction>}
+                <DevAction onClick={() => navigate(user.temporary ? '/login' : '/profile')}>
+                  {user.temporary ? `→ ${LOGIN_TO_CLAIM_LABEL}` : '🌈 Profile'}
+                </DevAction>
                 <DevAction onClick={() => navigate('/welcome')}>🎉 Welcome page</DevAction>
                 <DevAction onClick={handleLogout}>🗝️ Log out</DevAction>
               </>
