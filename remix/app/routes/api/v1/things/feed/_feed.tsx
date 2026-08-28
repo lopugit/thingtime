@@ -28,15 +28,24 @@ const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
 // then depends only on the URL, so it is safe to cache on Vercel's edge (which
 // keys by URL, not Cookie). Clients send it only when no viewer is present;
 // authed requests never share these URLs, so a cached anon body can never be
-// served to a logged-in viewer.
+// served to a logged-in viewer. A Bearer credential is the one exception: it
+// is answered as itself, so a scoped token can never read past its own rules
+// by asking for the anon view.
 export const loader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const params = url.searchParams;
-  const anonCacheable = params.get('anon') === '1';
-  // `anon=1` forces the logged-out, edge-cacheable view. Otherwise resolve the
-  // things actor (cookie/Bearer session or a scoped PAT) — unknown/stale
-  // credentials degrade to an anonymous null user, so logged-out browsers keep
-  // the public feed; only PAT-specific failures (missing scope, exhausted) 4xx.
+  // Cookies are deliberately ignored (a logged-in browser may still ask for
+  // the cacheable public feed — the web client never sends Authorization), but
+  // a BEARER credential is not: `anon=1` would otherwise skip actor resolution
+  // entirely and hand the asker the logged-out view past every per-credential
+  // rule — today a visibility-fenced token's audience fence, which is supposed
+  // to cover reads. Answering the token as itself also keeps the shared anon
+  // URL's cache entry honest: a fenced body never carries ANON_CACHE_CONTROL.
+  const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
+  // Otherwise resolve the things actor (cookie/Bearer session or a scoped PAT)
+  // — unknown/stale credentials degrade to an anonymous null user, so
+  // logged-out browsers keep the public feed; only PAT-specific failures
+  // (missing scope, exhausted) 4xx.
   let user = null;
   let pat: PatContext | null = null;
   if (!anonCacheable) {

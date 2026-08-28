@@ -534,6 +534,31 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
     privFeed.status === 200 && !(privFeed.body?.posts || []).some((p) => p.id === publicPostId),
     `${privFeed.status}`
   );
+  // anon=1 asks the feed/search loaders for the logged-out, edge-cacheable
+  // view. It ignores cookies by design, but must NOT ignore a Bearer token:
+  // skipping actor resolution would hand a fenced token the whole public
+  // sphere its fence exists to keep it out of, one query parameter deep.
+  const privFeedAnon = await api('/api/v1/things/feed?anon=1', { token: priv.token });
+  check(
+    'private-only cannot reach public posts through the anon feed view',
+    privFeedAnon.status === 200 && !(privFeedAnon.body?.posts || []).some((p) => p.id === publicPostId),
+    `${privFeedAnon.status}`
+  );
+  const privSearchAnon = await api('/api/v1/things/search?anon=1&q=public%20fixture', { token: priv.token });
+  check(
+    'private-only cannot reach public posts through the anon search view',
+    privSearchAnon.status === 200 &&
+      ![...(privSearchAnon.body?.posts || []), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
+    `${privSearchAnon.status}`
+  );
+  // a genuinely credential-less anon=1 call still gets the cacheable public
+  // view — the fence must not have cost logged-out traffic its edge cache
+  const anonFeed = await api('/api/v1/things/feed?anon=1');
+  check(
+    'anon=1 without a credential still serves the public feed',
+    anonFeed.status === 200 && (anonFeed.body?.posts || []).some((p) => p.id === publicPostId),
+    `${anonFeed.status}`
+  );
 
   const privCreate = await api('/api/v1/things', {
     token: priv.token,
