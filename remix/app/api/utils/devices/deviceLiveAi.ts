@@ -227,14 +227,16 @@ const ensureLiveConnection = async (
 		uniqueKeys: [thingUniqueKey('aiConnectionKey', key)],
 		crystal: {}
 	});
-	const { crystal: _crystal, uniqueKeys: _uniqueKeys, updatedAt: _updatedAt, ...root } = base;
+	// `uniqueKeys` stays inside `$setOnInsert`: the filter is an equality on that
+	// field, so MongoDB seeds the upserted document with the scalar key and
+	// `$addToSet` would fail with "Cannot apply $addToSet to non-array field".
+	const { crystal: _crystal, updatedAt: _updatedAt, ...root } = base;
 	const now = new Date();
 	await updateMessengerThing(
 		things,
 		thingUniqueKeyFilter('aiConnectionKey', key) as any,
 		{
 			$setOnInsert: root,
-			$addToSet: { uniqueKeys: thingUniqueKey('aiConnectionKey', key) },
 			$set: {
 				'crystal.aiConnectionKey': key,
 				'crystal.sourceType': 'live',
@@ -345,13 +347,12 @@ const upsertLiveSessions = async (
 			crystal: {}
 		});
 		base.createdAt = createdAt;
-		const { crystal: _crystal, uniqueKeys: _uniqueKeys, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
+		const { crystal: _crystal, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
 		await updateMessengerThing(
 			things,
 			thingUniqueKeyFilter('externalConversationKey', key) as any,
 			{
 				$setOnInsert: root,
-				$addToSet: { uniqueKeys: thingUniqueKey('externalConversationKey', key) },
 				$set: {
 					targetId: null,
 					'crystal.chatType': 'group',
@@ -437,13 +438,12 @@ const reconcileLiveMessages = async (
 			});
 			base.createdAt = createdAt;
 			base.updatedAt = safeDate(message.completedAt, createdAt);
-			const { crystal: _crystal, uniqueKeys: _uniqueKeys, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
+			const { crystal: _crystal, targetId: _targetId, updatedAt: _updatedAt, ...root } = base;
 			await updateMessengerThing(
 				things,
 				thingUniqueKeyFilter('externalMessageKey', segmentKey) as any,
 				{
 					$setOnInsert: root,
-					$addToSet: { uniqueKeys: thingUniqueKey('externalMessageKey', segmentKey) },
 					$set: {
 						targetId: chatId,
 						'crystal.text': text,
@@ -590,7 +590,7 @@ const reconcileLiveActivities = async (
 			activity.activityId
 		);
 		const hash = liveTranscriptActivityRevisionHash(activity);
-		const existing = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', eventKey, 'deviceUniqueKeys') as any, { session });
+		const existing = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', eventKey) as any, { session });
 		const currentRevision = Number.isSafeInteger(existing?.crystal?.revision) ? Number(existing.crystal.revision) : null;
 		const currentHash = typeof existing?.crystal?.liveActivityHash === 'string' ? existing.crystal.liveActivityHash : null;
 		const decision = decideLiveTranscriptActivityRevision(currentRevision, currentHash, activity);
@@ -705,7 +705,7 @@ const appendLiveEvents = async (
 	materializableEvents: DeviceLiveConnectorEvent[];
 }> => {
 	const stateKey = deviceHash('ai-live-state', ownerId, deviceId, connectorId, sessionId);
-	const state = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey, 'deviceUniqueKeys') as any, { session });
+	const state = await things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any, { session });
 	const initialLast = Number.isSafeInteger(state?.crystal?.lastSequence) ? Number(state.crystal.lastSequence) : 0;
 	let deltaGuardTails: DeviceLiveDeltaGuardTail[];
 	if (state && Object.prototype.hasOwnProperty.call(state.crystal ?? {}, 'deltaGuardTails')) {
@@ -728,7 +728,7 @@ const appendLiveEvents = async (
 		const eventKey = deviceHash('event', ownerId, deviceId, `ai:${connectorId}:${sessionId}:${event.eventId}`);
 		const sequenceKey = deviceHash('ai-live-sequence', ownerId, deviceId, connectorId, sessionId, String(event.sequence));
 		if (event.sequence <= initialLast) {
-			const prior = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey], 'deviceUniqueKeys') as any, {
+			const prior = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey]) as any, {
 				session
 			});
 			const receipt = !prior
@@ -753,7 +753,7 @@ const appendLiveEvents = async (
 		if (event.sequence !== expected) {
 			throw new DeviceLiveSyncError(409, `Live event sequence ${expected} is required before ${event.sequence}`);
 		}
-		const conflict = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey], 'deviceUniqueKeys') as any, {
+		const conflict = await things.findOne(thingUniqueKeysFilter('deviceUniqueKey', [eventKey, sequenceKey]) as any, {
 			session
 		});
 		if (conflict) throw new DeviceLiveSyncError(409, `Live event ${event.eventId} conflicts with accepted history`);

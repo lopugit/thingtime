@@ -523,6 +523,14 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 	];
 	await raw.updateMany(
 		{
+			// Only rows that predate the root `uniqueKeys` stamp need the legacy
+			// crystal mirror. `newDeviceThing` now stamps root keys and deliberately
+			// leaves `crystal.deviceUniqueKeys` unset, so without this guard every
+			// device row written since the last cold start matches again and the
+			// bootstrap resurrects the field the consolidation removed — an
+			// unaccounted `raw` write (it bypasses the storage ledger) on the
+			// hottest collection, on a filter that never converges.
+			uniqueKeys: { $exists: false },
 			'crystal.deviceUniqueKeys': { $exists: false },
 			$or: keyFields.map((field) => ({ [field.slice(1)]: { $type: 'string' } }))
 		},

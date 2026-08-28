@@ -269,14 +269,16 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
       externalSource: sourceProjection(source, { groupKind: group.kind })
     }
   });
-	const { crystal: _groupCrystal, uniqueKeys: _groupUniqueKeys, updatedAt: _groupUpdatedAt, ...groupRoot } = base;
+	// `uniqueKeys` rides `$setOnInsert`, never `$addToSet`: the filter is an
+	// equality on that field, so MongoDB seeds the upserted document with the
+	// scalar key and `$addToSet` would fail on a non-array field.
+	const { crystal: _groupCrystal, updatedAt: _groupUpdatedAt, ...groupRoot } = base;
 	return withSourceStorageTransaction(source, async (session) => {
 		await updateMessengerThing(
 			things,
 			thingUniqueKeyFilter('externalCommunityKey', key) as any,
 			{
 				$setOnInsert: groupRoot,
-				$addToSet: { uniqueKeys: thingUniqueKey('externalCommunityKey', key) },
 				$set: {
 					'crystal.name': group.name,
 					'crystal.description': `${source.label} ${group.kind}`,
@@ -328,7 +330,6 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 		base.updatedAt = safeDate(conversation.updatedAt, createdAt);
 		const {
 			crystal: _conversationCrystal,
-			uniqueKeys: _conversationUniqueKeys,
 			targetId: _conversationTargetId,
 			updatedAt: _conversationUpdatedAt,
 			...conversationRoot
@@ -338,7 +339,6 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 			thingUniqueKeyFilter('externalConversationKey', key) as any,
 			{
 				$setOnInsert: conversationRoot,
-				$addToSet: { uniqueKeys: thingUniqueKey('externalConversationKey', key) },
 				$set: {
 					targetId: communityId,
 					'crystal.name': conversation.title,
@@ -408,7 +408,6 @@ const upsertMessages = async (
       base.updatedAt = createdAt;
 			const {
 				crystal: _ignoredCrystal,
-				uniqueKeys: _messageUniqueKeys,
 				targetId: _messageTargetId,
 				updatedAt: _messageUpdatedAt,
 				...root
@@ -418,7 +417,6 @@ const upsertMessages = async (
           filter: thingUniqueKeyFilter('externalMessageKey', key),
           update: {
             $setOnInsert: root,
-						$addToSet: { uniqueKeys: thingUniqueKey('externalMessageKey', key) },
             $set: {
               targetId: chatId,
               'crystal.text': part,
@@ -611,13 +609,12 @@ export const syncAiConnections = async (ownerId: string, input: unknown, context
   const connectors = Array.from(
     new Set([...(Array.isArray(existing?.crystal?.connectors) ? existing.crystal.connectors : []), source.connector])
   ).slice(0, 8);
-	const { crystal: _ignoredCrystal, uniqueKeys: _connectionUniqueKeys, updatedAt: _connectionUpdatedAt, ...root } = base;
+	const { crystal: _ignoredCrystal, updatedAt: _connectionUpdatedAt, ...root } = base;
   await updateMessengerThing(
 		things,
     thingUniqueKeyFilter('aiConnectionKey', connectionKey) as any,
     {
       $setOnInsert: root,
-			$addToSet: { uniqueKeys: thingUniqueKey('aiConnectionKey', connectionKey) },
       $set: {
         'crystal.aiConnectionKey': connectionKey,
 				'crystal.sourceType': 'imported',

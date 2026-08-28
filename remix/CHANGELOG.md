@@ -17,6 +17,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Consolidated uniqueness lookups no longer collection-scan `things`.** The
+  post-consolidation helpers queried `$or: [{uniqueKeys}, {crystal.<field>}]`,
+  but the five `crystal.*Key` indexes had just been dropped and MongoDB only
+  unions an `$or` when *every* branch is indexed — so each lookup degraded to a
+  full scan (measured on a live MongoDB 8 replica set: 50,001 docs examined vs
+  1), once per synced live event, message segment, command and approval. The
+  fallback arm could never match anyway: all five key families are introduced
+  by this branch, so no row predates the root stamp. Lookups are now a single
+  indexed `uniqueKeys` predicate, and the key rides `$setOnInsert` rather than
+  `$addToSet`, which an equality filter makes illegal on upsert.
+  — Lopu, 2026-08-28
+- **The device bootstrap stopped resurrecting `crystal.deviceUniqueKeys`.**
+  `newDeviceThing` deliberately no longer writes that mirror, so every device
+  row created since the last cold start re-matched the legacy backfill and had
+  it written back — an unaccounted `raw` write that bypasses the storage ledger,
+  on a filter that never converged. The backfill is now scoped to rows that
+  predate the root `uniqueKeys` stamp. — Lopu, 2026-08-28
+
 ### Changed
 
 - **Desktop AI and device idempotency now share Thingtime's protected
@@ -24,9 +44,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   consolidated into the existing Binary root `uniqueKeys` index, restoring
   five MongoDB slots (57/64 in the complete home plan), keeping domain hashes
   out of the wildcard text index's uniqueness mechanism, and preserving
-  compatibility through a home-only backfill plus legacy query fallbacks. The
-  migration no longer rewrites or drops indexes in user-owned custom data
-  endpoints. — Codex (AI), 2026-08-28
+  compatibility through a home-only backfill. The migration no longer rewrites
+  or drops indexes in user-owned custom data endpoints. — Codex (AI), 2026-08-28
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
   A dedicated provider-double suite proves that a reasoning-starved decorated
   Claude or OpenAI stream retries bare on the same model, never retries after

@@ -732,7 +732,7 @@ export const updateDeviceState = async (
 	const stateKey = deviceHash('state', ownerId, deviceId);
 	const connectorKeys = connectors.map((connector) => deviceHash('connector', ownerId, deviceId, connector.id));
 	const [existingState, existingConnectors] = await Promise.all([
-		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey, 'deviceUniqueKeys') as any),
+		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any),
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
