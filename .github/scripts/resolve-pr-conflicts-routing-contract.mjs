@@ -313,6 +313,26 @@ function assertWorkflowSource() {
   assert.match(handoffBlock, /actions\/runs\/\$queued_run_id\/cancel/);
   assert.match(handoffBlock, /changed state before cancellation; preserving it/);
   assert.match(handoffBlock, /did not release queue capacity within 60 seconds/);
+  assert.match(
+    handoffBlock,
+    /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*?\.group_members\[\]\?[\s\S]*?Resolve\|Rebase[\s\S]*?owned_numbers/u,
+    "new conflict detectors read pending and in-progress exact PR owners from the durable Lopu fleet queue",
+  );
+  assert.match(
+    handoffBlock,
+    /\[\.\[\] \| select\(\.number as \$number \| \$owned \| index\(\$number\) == null\)\]/u,
+    "already-owned merge and rebase PRs are removed before replacement batch dispatch",
+  );
+  assert.match(
+    handoffBlock,
+    /Every detected conflict already has a durable Lopu merge\/rebase owner; no replacement batch was dispatched/u,
+    "an entirely owned detector result exits successfully without creating an empty or duplicate worker batch",
+  );
+  assert.match(
+    handoffBlock,
+    /Could not read the durable Lopu fleet queue; immutable worker admission will retain correctness/u,
+    "a transient queue-inventory failure falls back to immutable worker admission",
+  );
   assert.ok(
     handoffBlock.indexOf("Coalescing obsolete queued Lopu worker run") <
       handoffBlock.indexOf("for priority_sync in true false"),

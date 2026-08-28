@@ -2042,6 +2042,54 @@ jobs:
             fi
           fi
 
+          # A durable `queue: max` fleet can already contain exact PR owners
+          # from an earlier detector whose matrix has started draining. Those
+          # workflow runs correctly report `pending`, so cancelling the whole
+          # run would interrupt admitted work; dispatching the same numbers
+          # again is also wasteful even though each worker's immutable lease
+          # makes the duplicate a safe no-op. Read the live concurrency group
+          # and remove only PRs that already have a pending/in-progress merge
+          # or rebase owner. If GitHub's read-only queue endpoint is transiently
+          # unavailable, fail open to the existing per-PR admission leases.
+          fleet_group="lopu-agent-fleet-$REPO"
+          fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
+          fleet_state=''
+          if fleet_state="$(
+            gh api "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded" \
+              2>"$RUNNER_TEMP/lopu-fleet-read.err"
+          )"; then
+            owned_numbers="$(jq -c '
+              [
+                .group_members[]?
+                | select(.status == "pending" or .status == "in_progress")
+                | .job_name
+                | (try capture("(^| / )(Resolve|Rebase) PR #(?<number>[0-9]+)$") catch empty)
+                | .number
+                | tonumber
+              ]
+              | sort
+              | unique
+            ' <<<"$fleet_state")"
+            if [ "$(jq 'length' <<<"$owned_numbers")" -gt 0 ]; then
+              owned_label="$(jq -r 'map("#" + tostring) | join(", ")' <<<"$owned_numbers")"
+              before_count="$(jq 'length' <<<"$PRS")"
+              PRS="$(jq -c --argjson owned "$owned_numbers" '
+                [.[] | select(.number as $number | $owned | index($number) == null)]
+              ' <<<"$PRS")"
+              after_count="$(jq 'length' <<<"$PRS")"
+              echo "Durable Lopu owners already cover $owned_label; removed $((before_count - after_count)) duplicate detector selection(s)."
+            fi
+          else
+            sed -n '1,12p' "$RUNNER_TEMP/lopu-fleet-read.err" >&2 || true
+            echo '::notice::Could not read the durable Lopu fleet queue; immutable worker admission will retain correctness.'
+          fi
+          rm -f "$RUNNER_TEMP/lopu-fleet-read.err"
+
+          if [ "$(jq 'length' <<<"$PRS")" -eq 0 ]; then
+            echo 'Every detected conflict already has a durable Lopu merge/rebase owner; no replacement batch was dispatched.'
+            exit 0
+          fi
+
           # The standing main -> develop synchronizer is repository plumbing:
           # when main advances it can become conflicting by design, and leaving
           # it behind a large historical promotion batch stalls every later
