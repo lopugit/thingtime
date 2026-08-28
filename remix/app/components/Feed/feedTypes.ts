@@ -97,6 +97,9 @@ export type PublicPost = {
   // every reaction token the viewer has toggled on this post (multi-react)
   viewerReactions: string[];
   commentCount: number;
+  // Viewer-relative count layers. Optional while older deployments roll out;
+  // commentCount remains the backward-compatible total.
+  commentCounts?: { direct: number; replies: number; total: number; loaded: number };
   // latest comments (≤ 20), oldest → newest
   comments: PostComment[];
   shareCount: number;

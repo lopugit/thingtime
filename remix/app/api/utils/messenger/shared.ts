@@ -41,6 +41,11 @@ export const emojiScopeKey = (scope: string, name: string) => `${scope}:${name}`
 // reason as user keys: plain strings would tokenize into the $** text index.
 // The chat entry covers DMs only — group/channel chats carry dmKey null and
 // skip the stamp (relationshipUniqueKeys returns undefined for them).
+// passkey-app-link joined the family after the fact: it shipped (PR #323)
+// while this migration was in flight and briefly carried its own kind-blind
+// crystal.linkKey unique index — the exact squat class retired here — so its
+// dedupe now rides the same root namespace, and auth/passkeys.ts stamps
+// through this helper even though it builds its doc outside newThingDoc.
 export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> = {
 	follow: 'followKey',
 	'chat-member': 'memberKey',
@@ -50,6 +55,7 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 	'custom-emoji': 'emojiKey',
 	friend: 'friendKey',
 	vote: 'voteKey',
+	'passkey-app-link': 'linkKey',
 	// connections: one membership row per (external post, sourcing account).
 	// Stamped directly by the sync writer (connections/connections.ts), which
 	// bulk-upserts rather than going through newThingDoc; listed here so the
