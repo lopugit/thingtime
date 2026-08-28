@@ -63,7 +63,7 @@ These patterns show up again and again — default to them when unsure:
 - **Unverified login:** allowed — `emailVerified` is just flagged; gate
   sensitive actions later. Prioritises smooth onboarding over hard gating.
 
-**App platform (full-power app namespaces — `claude-todo/16`, 2026-07-29)**
+**App platform (full-power app namespaces — `TODO/claude-todo/16-full-power-app-namespaces.md`, 2026-07-29)**
 - **Namespace = server-stamped scalar root `appId`, NOT the acl.** Users can
   already hand-write `tt:app/<x>` acl entries through the site API
   (`sanitizeAcl` accepts them), so an acl-derived namespace is spoofable INTO

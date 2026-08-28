@@ -258,7 +258,7 @@ ephemeral namespace plus the global windowed brake. The end user owns
 every namespace doc and can browse (`GET /api/v1/things?appId=`,
 `/api/v1/apps/data-summary`) and delete
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
-`claude-todo/16-full-power-app-namespaces.md`.
+`TODO/claude-todo/16-full-power-app-namespaces.md`.
 
 ## 4. One MongoDB connection source
 

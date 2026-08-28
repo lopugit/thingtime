@@ -634,7 +634,8 @@ const thingsMigration: Migration = {
 };
 
 // ---------------------------------------------------------------------------
-// Collection → things migrations (claude-todo/12: everything is a thing).
+// Collection → things migrations (everything is a thing —
+// TODO/claude-todo/16-everything-is-a-thing-collections.md).
 // users, themes, feedAlgorithms, and waitlist collapse into the things
 // collection. The destination shapes are EXACTLY what the new-write paths
 // produce (auth/users insertUser, themes saveTheme, algorithms
@@ -1441,11 +1442,11 @@ const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
 };
 
 // ---------------------------------------------------------------------------
-// Full-power app namespaces (claude-todo/16): pre-namespace app-data things
-// carry only crystal.appId. Stamp the scalar root appId (the namespace
-// marker every app-lens query keys on) + sizeBytes (the storage ledger's
-// unit), then reconcile each (user, app) ledger to the $sum of its
-// namespace — absolute writes, so re-running is always safe. Sandbox docs
+// Full-power app namespaces (TODO/claude-todo/16-full-power-app-namespaces.md):
+// pre-namespace app-data things carry only crystal.appId. Stamp the scalar
+// root appId (the namespace marker every app-lens query keys on) + sizeBytes
+// (the storage ledger's unit), then reconcile each (user, app) ledger to the
+// $sum of its namespace — absolute writes, so re-running is always safe. Sandbox docs
 // get stamped too but never enter a standing ledger (they TTL away).
 
 const appNamespaceBackfillFilter = {
