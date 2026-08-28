@@ -1567,12 +1567,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the signature change they bound `change` to the post **id string** and wrote
   it into state in place of the post — `/thing/:id`, `/post/:id`, `/media/:id`
   and search results would have blanked out on any react/comment/share/delete.
-  `tsconfig` runs with `"strict": false`, so `strictFunctionTypes` is off and
-  parameter bivariance let the stale one-argument handlers keep type-checking;
-  nothing in CI could have caught it. The three route handlers now take
-  `(id, change)` and ignore changes addressed to a different post; SearchPage
-  drops its per-card wrapper and passes the already-stable `updateResultPost`
-  straight through, which extends the memo win to search — Lopu, 2026-08-28.
+  The three route handlers now take `(id, change)` and ignore changes addressed
+  to a different post; SearchPage drops its per-card wrapper and passes the
+  already-stable `updateResultPost` straight through, which extends the memo
+  win to search — Lopu, 2026-08-28.
+
+  Six `onChanged` call sites *inside* `PostCardImpl` were still on the old
+  one-argument contract and were fixed in the same pass: `handleEditSave`'s
+  optimistic text write and its failure revert (L1180/L1185),
+  `handleVisibilityChange`'s optimistic flip, server reconcile and revert
+  (L1199/L1203/L1208), and the full-composer edit's `onPosted` (L1566). Each
+  passed the change into the `id` slot, so every consumer compared an id string
+  against a function/post object, matched nothing and dropped the update: on
+  feed, profile, search and the three routes, **editing a post's text or
+  changing its privacy showed a success toast while the card kept rendering
+  stale content** until the next refetch. Now all 17 card-level calls address
+  `post.id` — Lopu, 2026-08-28.
+
+  Correction to an earlier note in this entry: the stale handlers were *not*
+  invisible to the type checker. Parameter bivariance does not apply here —
+  neither `string` nor `PostChange` is assignable to the other, so `tsc` rejects
+  the swap even with `"strict": false` (verified against the repo's exact
+  compiler flags). CI genuinely saw all six: the run for this head logged
+  `PostCard.tsx(1180|1185|1199|1203|1208|1566): error TS2554: Expected 2
+  arguments, but got 1` and summarised `Typecheck ratchet WARNING: 144 tsc
+  errors vs baseline 143 (+1). This check is non-blocking.` The gap is that the
+  ratchet is deliberately advisory (`ci: make typecheck ratchet warning-only`),
+  so a real regression annotates and still goes green — worth revisiting as its
+  own change, not silently here — Lopu, 2026-08-28.
 
 ### Fixed
 

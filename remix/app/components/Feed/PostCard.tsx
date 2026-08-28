@@ -1177,12 +1177,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       return;
     }
     setEditing(false);
-    onChanged?.((prev) => ({ ...prev, text }));
+    onChanged?.(post.id, (prev) => ({ ...prev, text }));
     try {
       await api.v1.things.update({ id: post.id, crystal: { text } });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      onChanged?.(post.id, (prev) => ({ ...prev, text: prevText }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
@@ -1196,16 +1196,16 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
-    onChanged?.((prev) => ({ ...prev, visibility: next }));
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next }));
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
       }
       const meta = CIRCLE_META[next];
       lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
@@ -1563,7 +1563,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostComposer
             editPost={post}
             onPosted={(updated) => {
-              onChanged?.(updated);
+              // the composer edits this exact post, so address the change to
+              // post.id — `updated` replaces it wholesale
+              onChanged?.(post.id, updated);
               setEditing(false);
             }}
             onClose={() => setEditing(false)}
