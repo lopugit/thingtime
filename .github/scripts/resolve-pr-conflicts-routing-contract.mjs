@@ -233,6 +233,14 @@ function assertWorkflowSource() {
     rebaseSource.indexOf("      - name: Force-push the fully verified rewritten history once"),
     rebaseSource.indexOf("      - name: Requeue after a moving-ref rebase race"),
   );
+  const rebaseProvenanceBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Stamp exact Lopu rebase provenance on the rewritten tip"),
+    rebaseSource.indexOf("      - name: Revalidate live refs and final local state"),
+  );
+  const rebaseMaintenanceBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Queue repository maintenance after the rebase fleet settles"),
+    rebaseSource.indexOf("      - name: Clean up after a pre-push failure"),
+  );
   const rebaseHandoffBlock = rebaseSource.slice(
     rebaseSource.indexOf("\n  handoff:"),
     rebaseSource.indexOf("\n  rebase:"),
@@ -325,9 +333,48 @@ function assertWorkflowSource() {
       /Lopu-Conflict-Resolution: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
       `${name} deferral requires an exact run/PR trailer`,
     );
+    assert.match(
+      block,
+      /Lopu-Rebase-Completion: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral recognizes the exact rebase run/PR trailer`,
+    );
+    assert.match(block, /\.event == "repository_dispatch"/);
+    assert.match(block, /actions\/runs\/\$run_id\/jobs\?per_page=100/);
+    assert.match(block, /expected_job=" \/ Rebase PR #\$pr_number"/);
+    assert.match(block, /endswith\(\$expected_job\)/);
   }
   assert.match(source, /Deferring the all-branch rebuild to the conflict-batch finalizer/);
+  assert.match(source, /Deferring the all-branch rebuild to the rebase-fleet finalizer/);
   assert.match(source, /Verified Lopu conflict resolution is reviewed once by the batch finalizer/);
+  assert.match(source, /Verified Lopu rebase is reviewed once by the rebase-fleet finalizer/);
+  assert.match(
+    rebaseProvenanceBlock,
+    /trailer="Lopu-Rebase-Completion: run=\$GITHUB_RUN_ID pr=\$PR_NUMBER"/,
+  );
+  assert.match(
+    rebaseProvenanceBlock,
+    /Lopu-\(Conflict-Resolution\|Rebase-Completion\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
+    "a new rebase replaces stale Lopu publication provenance on the rewritten tip",
+  );
+  assert.match(rebaseProvenanceBlock, /git interpret-trailers/);
+  assert.match(rebaseProvenanceBlock, /--if-exists replace/);
+  assert.match(rebaseProvenanceBlock, /--if-missing add/);
+  assert.match(rebaseProvenanceBlock, /git commit --amend --no-verify -q -F "\$message"/);
+  assert.match(rebaseMaintenanceBlock, /labels=ai-rebase-in-progress/);
+  assert.match(
+    rebaseMaintenanceBlock,
+    /\.display_title == "Lopu resolves a PR batch from the control plane"/,
+  );
+  assert.match(rebaseMaintenanceBlock, /\.event == "workflow_dispatch"/);
+  assert.match(rebaseMaintenanceBlock, /\.head_branch == "github-actions"/);
+  assert.match(rebaseMaintenanceBlock, /\.actor\.login == "github-actions\[bot\]"/);
+  assert.match(rebaseMaintenanceBlock, /lopu-internal-all-branch/);
+  assert.match(rebaseMaintenanceBlock, /lopu-review:rebase-fleet:\$GITHUB_RUN_ID/);
+  assert.equal(
+    rebaseMaintenanceBlock.match(/resolve-pr-conflicts\.yml\/dispatches/g)?.length,
+    2,
+    "the last rebase worker dispatches exactly one repository maintenance pair",
+  );
   const batchFinalizerBlock = source.slice(
     source.indexOf("  finalize_conflict_batch_maintenance:"),
   );

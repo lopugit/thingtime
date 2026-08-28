@@ -800,8 +800,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          verified_lopu_resolution() {
-            local message="$1" markers marker_count run_id pr_number run_json
+          verified_lopu_publication() {
+            local message="$1" markers marker_count marker_kind run_id pr_number run_json jobs_json expected_job
             case "$EVENT_ACTOR" in
               'github-actions[bot]'|"$REPOSITORY_OWNER") ;;
               *) return 1 ;;
@@ -813,12 +813,13 @@ jobs:
 
             markers="$(
               sed -nE \
-                's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/\1 \2/p' \
+                -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
+                -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
             [ "$marker_count" = 1 ] || return 1
-            read -r run_id pr_number <<<"$markers"
+            read -r marker_kind run_id pr_number <<<"$markers"
 
             if [ "$EVENT_NAME" = pull_request_target ]; then
               [ -n "$EVENT_PR_NUMBER" ] && [ "$pr_number" = "$EVENT_PR_NUMBER" ] \
@@ -828,20 +829,57 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            jq -e '
-              .event == "workflow_dispatch"
-              and .head_branch == "github-actions"
-              and .actor.login == "github-actions[bot]"
-              and .path == ".github/workflows/resolve-pr-conflicts.yml"
-              and (
-                .status == "queued"
-                or .status == "in_progress"
-                or .status == "pending"
-                or .status == "waiting"
-                or .status == "requested"
-                or (.status == "completed" and .conclusion == "success")
-              )
-            ' >/dev/null <<<"$run_json"
+            if [ "$marker_kind" = conflict ]; then
+              jq -e '
+                .event == "workflow_dispatch"
+                and .head_branch == "github-actions"
+                and .actor.login == "github-actions[bot]"
+                and .path == ".github/workflows/resolve-pr-conflicts.yml"
+                and (
+                  .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "pending"
+                  or .status == "waiting"
+                  or .status == "requested"
+                  or (.status == "completed" and .conclusion == "success")
+                )
+              ' >/dev/null <<<"$run_json" || return 1
+            else
+              jq -e --arg owner "$REPOSITORY_OWNER" '
+                .path == ".github/workflows/resolve-pr-conflicts.yml"
+                and ((.event == "repository_dispatch"
+                      and .actor.login == "github-actions[bot]")
+                     or (.event == "workflow_dispatch"
+                         and .head_branch == "github-actions"
+                         and (.actor.login == "github-actions[bot]"
+                              or .actor.login == $owner)))
+                and (
+                  .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "pending"
+                  or .status == "waiting"
+                  or .status == "requested"
+                  or (.status == "completed" and .conclusion == "success")
+                )
+              ' >/dev/null <<<"$run_json" || return 1
+              jobs_json="$(
+                gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+                  2>/dev/null
+              )" || return 1
+              expected_job=" / Rebase PR #$pr_number"
+              jq -e --arg expected_job "$expected_job" '
+                [.jobs[]?
+                  | select(.name | endswith($expected_job))
+                  | select(.status == "queued"
+                           or .status == "in_progress"
+                           or .status == "pending"
+                           or .status == "waiting"
+                           or .status == "requested"
+                           or (.status == "completed" and .conclusion == "success"))]
+                | length == 1
+              ' >/dev/null <<<"$jobs_json" || return 1
+            fi
+            LOPU_PUBLICATION_KIND="$marker_kind"
           }
 
           # Conflict workers publish a run/PR-bound trailer on both their merge
@@ -856,11 +894,15 @@ jobs:
               gh api "repos/$REPO/commits/$PR_HEAD_SHA" --jq '.commit.message' \
                 2>/dev/null || true
             )"
-            if verified_lopu_resolution "$head_message" \
+            if verified_lopu_publication "$head_message" \
                || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
                     && [ "${head_message%%$'\n'*}" = \
                          'chore: refresh graphify outputs after PR branch merge' ]; }; then
-              echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
+              if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
+                echo '::notice::Deferring the all-branch rebuild to the rebase-fleet finalizer.'
+              else
+                echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
+              fi
               exit 0
             fi
           fi
@@ -2320,8 +2362,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          verified_lopu_resolution() {
-            local message="$1" markers marker_count run_id pr_number run_json
+          verified_lopu_publication() {
+            local message="$1" markers marker_count marker_kind run_id pr_number run_json jobs_json expected_job
             case "$EVENT_ACTOR" in
               'github-actions[bot]'|"$REPOSITORY_OWNER") ;;
               *) return 1 ;;
@@ -2333,12 +2375,13 @@ jobs:
 
             markers="$(
               sed -nE \
-                's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/\1 \2/p' \
+                -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
+                -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
             [ "$marker_count" = 1 ] || return 1
-            read -r run_id pr_number <<<"$markers"
+            read -r marker_kind run_id pr_number <<<"$markers"
 
             if [ "$EVENT_NAME" = pull_request_target ]; then
               [ -n "$EVENT_PR_NUMBER" ] && [ "$pr_number" = "$EVENT_PR_NUMBER" ] \
@@ -2348,20 +2391,57 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            jq -e '
-              .event == "workflow_dispatch"
-              and .head_branch == "github-actions"
-              and .actor.login == "github-actions[bot]"
-              and .path == ".github/workflows/resolve-pr-conflicts.yml"
-              and (
-                .status == "queued"
-                or .status == "in_progress"
-                or .status == "pending"
-                or .status == "waiting"
-                or .status == "requested"
-                or (.status == "completed" and .conclusion == "success")
-              )
-            ' >/dev/null <<<"$run_json"
+            if [ "$marker_kind" = conflict ]; then
+              jq -e '
+                .event == "workflow_dispatch"
+                and .head_branch == "github-actions"
+                and .actor.login == "github-actions[bot]"
+                and .path == ".github/workflows/resolve-pr-conflicts.yml"
+                and (
+                  .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "pending"
+                  or .status == "waiting"
+                  or .status == "requested"
+                  or (.status == "completed" and .conclusion == "success")
+                )
+              ' >/dev/null <<<"$run_json" || return 1
+            else
+              jq -e --arg owner "$REPOSITORY_OWNER" '
+                .path == ".github/workflows/resolve-pr-conflicts.yml"
+                and ((.event == "repository_dispatch"
+                      and .actor.login == "github-actions[bot]")
+                     or (.event == "workflow_dispatch"
+                         and .head_branch == "github-actions"
+                         and (.actor.login == "github-actions[bot]"
+                              or .actor.login == $owner)))
+                and (
+                  .status == "queued"
+                  or .status == "in_progress"
+                  or .status == "pending"
+                  or .status == "waiting"
+                  or .status == "requested"
+                  or (.status == "completed" and .conclusion == "success")
+                )
+              ' >/dev/null <<<"$run_json" || return 1
+              jobs_json="$(
+                gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+                  2>/dev/null
+              )" || return 1
+              expected_job=" / Rebase PR #$pr_number"
+              jq -e --arg expected_job "$expected_job" '
+                [.jobs[]?
+                  | select(.name | endswith($expected_job))
+                  | select(.status == "queued"
+                           or .status == "in_progress"
+                           or .status == "pending"
+                           or .status == "waiting"
+                           or .status == "requested"
+                           or (.status == "completed" and .conclusion == "success"))]
+                | length == 1
+              ' >/dev/null <<<"$jobs_json" || return 1
+            fi
+            LOPU_PUBLICATION_KIND="$marker_kind"
           }
 
           resolution_message="$EVENT_HEAD_MESSAGE"
@@ -2373,14 +2453,18 @@ jobs:
                 2>/dev/null || true
             )"
           fi
-          if verified_lopu_resolution "$resolution_message" \
+          if verified_lopu_publication "$resolution_message" \
              || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
                   && { [ "$EVENT_NAME" = push ] \
                        || { [ "$EVENT_NAME" = pull_request_target ] \
                             && [ "$EVENT_ACTION" = synchronize ]; }; } \
                   && [ "${resolution_message%%$'\n'*}" = \
                        'chore: refresh graphify outputs after PR branch merge' ]; }; then
-            echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
+            if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
+              echo 'Verified Lopu rebase is reviewed once by the rebase-fleet finalizer.'
+            else
+              echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
+            fi
             echo 'any=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
