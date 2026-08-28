@@ -1,4 +1,25 @@
-import { exec, execSync, spawn } from "child_process";
+import { execSync, spawn } from "child_process";
+
+const REPLACEMENT_ESCAPES = new Set(["{", "[", "\\", "]", "}", "."]);
+
+export const unescapeRegexReplacementText = (value: string): string => {
+  let result = "";
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    const escapedCharacter = value[index + 1];
+
+    if (character === "\\" && escapedCharacter !== undefined && REPLACEMENT_ESCAPES.has(escapedCharacter)) {
+      result += escapedCharacter;
+      index += 1;
+      continue;
+    }
+
+    result += character;
+  }
+
+  return result;
+};
 
 export const regexToReplacementConverter = async (props: any) => {
   // open a new finder window in the current mac desktop
@@ -50,16 +71,10 @@ export const regexToReplacementConverter = async (props: any) => {
     newValue += item + `$${index + 1}`;
   });
 
-  // replace all escaped characters in newValue such as \{ \\ \[ and all others from the clipboard text with unescaped versions
-  // TODO: fix this so it's not hardcoded shit?
-  newValue = newValue.replace(/\\{/g, "{");
-  newValue = newValue.replace(/\\\[/g, "[");
-  newValue = newValue.replace(/\\\\/g, "\\");
-  newValue = newValue.replace(/\\]/g, "]");
-  newValue = newValue.replace(/\\}/g, "}");
-
-  // replace \. with just n
-  newValue = newValue.replace(/\\\./g, ".");
+  // Decode only escapes that were present in the original input. A single
+  // pass prevents a decoded backslash from being decoded again by a later
+  // replacement.
+  newValue = unescapeRegexReplacementText(newValue);
 
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");

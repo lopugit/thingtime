@@ -452,6 +452,13 @@ environment.
   verification. The GitHub build intentionally uses ad-hoc signing until
   notarization credentials are configured, and its release notes say so.
 
+## CodeQL follow-up
+
+- Replaced the Raycast regex replacement converter's ordered replacement chain
+  with a single-pass escape decoder. Each original supported escape is decoded
+  exactly once, unknown escapes remain intact, and focused Vitest coverage now
+  guards against backslash double-unescaping.
+
 ## Follow-up coverage
 
 - Add database-backed OAuth exchange integration tests for concurrent replay,

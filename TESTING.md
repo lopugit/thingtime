@@ -1721,6 +1721,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Commander desktop launcher
 
+- [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
+      regex replacement escapes are decoded once, unsupported escapes remain
+      intact, and decoded backslashes are not decoded a second time.
+
 - [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
       begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
