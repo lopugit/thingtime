@@ -26,6 +26,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🟢 Built (phase 1), live-tested locally | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
 | 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
 | 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
+| 20 | Versioned experience history — revisit any app/search/feed state | 🔴 P1 fundamental · not started | [20-versioned-experience-history.md](./20-versioned-experience-history.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
