@@ -48,7 +48,12 @@ import {
 //   operational telemetry with hard size caps, not billable content. Because
 //   'control' also means "outside the storage ledger", the trail is bounded by
 //   COUNT as well as by bytes: writeRunRecord keeps the newest
-//   MAX_ACTION_RUNS_RETAINED per (owner, action).
+//   MAX_ACTION_RUNS_RETAINED per (owner, action). That prune only fires during
+//   a run OF THAT ACTION, so the other end of the lifecycle is the delete
+//   cascade — action-run rides CASCADE_CHILD_THINGTIME, so deleting an action
+//   takes its trail with it instead of stranding unaccounted records that
+//   nothing would prune again (and that the owner could never remove, the kind
+//   being protected).
 
 export type ActionRunTraceEntry = {
 	step: string;

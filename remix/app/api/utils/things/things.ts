@@ -44,6 +44,7 @@ import {
   ACL_INHERIT,
   ACL_OWNER,
 	APP_STORAGE_RESERVED_ID_PREFIX,
+	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
@@ -3224,7 +3225,7 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			targetId: { $in: parentIds },
 			// A malformed multi-kind Thing must never turn a share into cascade
 			// garbage: shares intentionally survive their original disappearing.
-			thingtime: { $in: ['attachment', 'comment', 'reaction', 'save'], $nin: ['share'] }
+			thingtime: { $in: [...CASCADE_CHILD_THINGTIME], $nin: ['share'] }
 		},
 		{
 			parentId: { $in: parentIds },
@@ -3248,7 +3249,7 @@ const cascadeParentIdsOf = (doc: ThingDoc): string[] => {
 	const parents = new Set<string>();
 	const thingtime = Array.isArray(doc.thingtime) ? doc.thingtime : [];
 	if (
-		thingtime.some((entry) => entry === 'attachment' || entry === 'comment' || entry === 'reaction' || entry === 'save') &&
+		thingtime.some((entry) => (CASCADE_CHILD_THINGTIME as readonly string[]).includes(entry)) &&
 		!thingtime.includes('share') &&
 		typeof doc.targetId === 'string' &&
 		doc.targetId

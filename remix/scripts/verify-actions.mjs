@@ -5,7 +5,8 @@
 // scoped capabilities, ref validity, return placement, limits), the executor
 // (create/get/search/update/invoke/return, $refs, $$ escape, ttConcat, $now),
 // the budget envelope (ops exhaustion, recursion refusal — direct and A→B→A),
-// run records (protected kind, owner-private history), and the auth gates.
+// run records (protected kind, owner-private history, deleted with their
+// action), and the auth gates.
 import { randomBytes } from 'node:crypto';
 
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:17052';
@@ -453,6 +454,35 @@ const run = async () => {
 	check('anonymous runs list is 401', anonRuns.status === 401);
 	const bellaRuns = await api(`/api/v1/actions/runs?action=${encodeURIComponent(createCustomerId)}`, { cookie: bella.cookie });
 	check('run history is owner-private', bellaRuns.status === 200 && (bellaRuns.body?.runs || []).length === 0);
+
+	// ---- the trail dies with its action (Lopu review finding) ----------------
+	// action-run is PROTECTED (no route lets its owner delete one) and
+	// storageClass 'control' (outside the storage ledger), and the retention
+	// prune only ever fires during a run OF THAT ACTION. So if deleting an
+	// action left its records behind, create/run/delete cycles would strand
+	// unaccounted documents that nothing would ever prune — and the owner could
+	// never remove their own run history. The cascade closes both.
+	const disposable = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: { name: 'Disposable', actionKey: `disposable-${suffix}`, steps: [{ op: 'return', value: 'bye' }] }
+	});
+	const disposableId = disposable.body?.thing?.id;
+	check('disposable action saves', disposable.status === 200 && !!disposableId);
+	const disposableRun = await runAction(alice.cookie, { action: disposableId });
+	check('disposable action runs', disposableRun.status === 200 && disposableRun.body?.status === 'ok');
+	const beforeDelete = await api(`/api/v1/actions/runs?action=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie });
+	check('its run is in history before the delete', beforeDelete.status === 200 && (beforeDelete.body?.runs || []).length === 1);
+	const deleted = await api(`/api/v1/things?id=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie, method: 'DELETE' });
+	check('deleting an action succeeds', deleted.status === 200, `status ${deleted.status} ${JSON.stringify(deleted.body || {}).slice(0, 140)}`);
+	const afterDelete = await api(`/api/v1/actions/runs?action=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie });
+	check(
+		'deleting an action deletes its run records (no stranded trail)',
+		afterDelete.status === 200 && (afterDelete.body?.runs || []).length === 0,
+		`${(afterDelete.body?.runs || []).length} record(s) survived`
+	);
+	// the neighbours' trails are untouched — the cascade is scoped to targetId
+	const neighbourRuns = await api(`/api/v1/actions/runs?action=${encodeURIComponent(createCustomerId)}`, { cookie: alice.cookie });
+	check('another action keeps its own runs', neighbourRuns.status === 200 && (neighbourRuns.body?.runs || []).length > 0);
 
 	// ---- action privacy ------------------------------------------------------
 	const privateAction = await createThing(alice.cookie, {

@@ -3,9 +3,11 @@ import { test } from 'node:test';
 
 import {
 	ACTION_LIMIT_CEILINGS,
+	CASCADE_CHILD_THINGTIME,
 	MAX_ACTION_RUN_HISTORY,
 	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
+	PROTECTED_THINGTIME,
 	deriveActionEffects,
 	parseActionRef,
 	sanitizeActionCrystal
@@ -250,4 +252,23 @@ test('run retention never drops a record the history endpoint would still show',
 		`retention (${MAX_ACTION_RUNS_RETAINED}) must cover the history page size (${MAX_ACTION_RUN_HISTORY})`
 	);
 	assert.ok(Number.isInteger(MAX_ACTION_RUNS_RETAINED) && MAX_ACTION_RUNS_RETAINED > 0, 'retention is a positive integer');
+});
+
+// The retention prune only ever runs DURING a run of that same action, so it
+// cannot bound a trail whose action is gone. action-run is also PROTECTED (no
+// route lets its owner delete it) and storageClass 'control' (outside the
+// storage ledger), so if deleting an action did not take its records with it,
+// create/run/delete cycles would strand unaccounted documents that nothing
+// would ever prune or bill — and the owner would have no way to remove their
+// own run history. The cascade is what closes that, so both halves of the
+// reasoning are pinned here.
+test('a deleted action takes its run records with it', () => {
+	assert.ok(
+		(CASCADE_CHILD_THINGTIME as readonly string[]).includes('action-run'),
+		'action-run must cascade with the action its targetId names'
+	);
+	assert.ok(
+		(PROTECTED_THINGTIME as readonly string[]).includes('action-run'),
+		'action-run stays protected — the cascade, not a delete route, is how the trail goes away'
+	);
 });

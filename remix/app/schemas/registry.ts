@@ -1255,7 +1255,7 @@ const actionRunSchema: ThingtimeSchema = {
 		'action contract. Direct create/update/delete through the generic things routes is ' +
 		'refused. Operational telemetry, so the trail is retained rather than kept forever: the ' +
 		`executor keeps the newest ${MAX_ACTION_RUNS_RETAINED} records per action per owner and ` +
-		'prunes older ones after each run.',
+		'prunes older ones after each run, and deleting the action deletes its run records with it.',
 	fields: [
 		{ name: 'status', type: 'enum', required: true, values: ['ok', 'error'], description: 'Whether the run completed or failed.' },
 		{ name: 'startedAt', type: 'date', required: true, description: 'When the invocation began.' },
@@ -2478,6 +2478,23 @@ export const PROTECTED_THINGTIME = [
   'action-run'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+// Kinds that exist ONLY as a child of the thing their targetId names, and are
+// therefore deleted with it (things.ts cascade machinery). One list, because
+// the cascade needs the same set twice — to FIND the children of a doomed
+// parent and to order child-before-parent inside the delete transaction — and
+// two hand-maintained copies would silently drift.
+//
+// action-run belongs here for a reason worth stating: it is PROTECTED, so its
+// owner cannot delete it through any route, and it is stamped storageClass
+// 'control', so it is outside the storage ledger — neither quota-admitted nor
+// billed. The executor bounds the live trail (MAX_ACTION_RUNS_RETAINED per
+// owner+action), but that prune only ever runs during a run OF THAT ACTION.
+// Without the cascade, deleting an action strands its records permanently:
+// unreachable, unaccounted, and never pruned again — so create/run/delete
+// cycles would re-open exactly the unbounded accumulation the retention cap
+// closes. Cascading is also the only way an owner can ever remove them.
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
