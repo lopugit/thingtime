@@ -26,6 +26,10 @@ import { Server } from 'socket.io';
 
 // Cross-origin access is an explicit allowlist, never '*'.
 //
+// Comma-separated, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// Defaults to the local dev origin. A wildcard origin would let any site read this API's
+// authenticated responses, so it is deliberately not the fallback.
+//
 // Nothing builds or runs this package any more — it moved under deprecated/ in
 // the repo consolidation, its pm2 entry is commented out in
 // ecosystem.config.js, the root `npm run api` script points at a directory that
@@ -33,16 +37,15 @@ import { Server } from 'socket.io';
 // unexploitable TODAY, but it is still a genuinely permissive configuration
 // sitting in the tree: it re-flags on every scan, and it would be a live
 // world-readable API the moment anyone revived the server. A closed default is
-// the honest resolution — set THINGTIME_API_ALLOWED_ORIGINS (comma separated)
-// to whatever a revival actually needs.
-const ALLOWED_ORIGINS = (process.env.THINGTIME_API_ALLOWED_ORIGINS || 'http://localhost:3000')
+// the honest resolution — set CORS_ORIGINS to whatever a revival actually needs.
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
 	.split(',')
-	.map((origin) => origin.trim())
+	.map(origin => origin.trim())
 	.filter(Boolean)
 
 const io = new Server(server, {
 	cors: {
-		origin: ALLOWED_ORIGINS,
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -55,7 +58,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware — same allowlist as the socket.io server above
 	app.use(cors({
-		origin: ALLOWED_ORIGINS,
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {
