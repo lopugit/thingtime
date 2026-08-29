@@ -1991,6 +1991,14 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the mint response report the fence; the settings row badges 🌐/🔒
       restricted tokens; combines with the 🧸 sandbox. Covered by section F
       of `node scripts/verify-pat-tokens.mjs`.
+- [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
+      as the Bearer credential rather than anonymously, the fenced answer
+      carries `private, no-store`, and the credential-less cacheable answer
+      carries `Vary: Authorization` — `public, s-maxage` is exactly what
+      licenses a shared cache to replay a stored response to an
+      Authorization-carrying request, so without the Vary a warm anon entry
+      reaches a fenced token without the origin ever being asked. Same
+      section F.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,

@@ -1,4 +1,4 @@
-# 20 — Index budget: reconcile the `things` indexes under MongoDB's 64 cap
+# 21 — Index budget: reconcile the `things` indexes under MongoDB's 64 cap
 
 MongoDB allows **64 indexes per collection**, hard. `things` (physically
 `things_v2`) carries by far the most of any Thingtime collection and gains a

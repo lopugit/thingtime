@@ -11,8 +11,12 @@ import { viewerOf } from '~/api/utils/things/things';
 const MAX_BODY_BYTES = 32 * 1024;
 
 // Matches the feed's anon edge-cache policy: one minute fresh, five minutes
-// serve-stale-while-revalidating at the nearest Vercel PoP.
+// serve-stale-while-revalidating at the nearest Vercel PoP — and, for the same
+// reason spelled out there, keyed on Authorization so a warm anon entry can
+// never be replayed to the Bearer credential the loader below would have
+// resolved and fenced.
 const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
+const ANON_CACHE_VARY = 'Authorization';
 
 const respond = async (request: Request, actor: Actor, query: SearchQuery, anonCacheable = false) => {
   const user = actorUser(actor);
@@ -55,7 +59,12 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
       totalCapped: result.totalCapped,
       ranked: result.ranked
     },
-    anonCacheable ? { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL } } : { headers: cors }
+    anonCacheable
+      ? // cors is {} on this path (the loader hands `respond` an anonymous
+        // actor), but compose rather than clobber so an app actor ever
+        // reaching it keeps its Vary: Origin
+        { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL, Vary: [cors.Vary, ANON_CACHE_VARY].filter(Boolean).join(', ') } }
+      : { headers: cors }
   );
 };
 
