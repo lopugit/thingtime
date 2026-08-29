@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { actorCors, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
+import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import type { Actor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -39,7 +39,9 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
   // engagement windows) — the audience superset is swapped for the namespace
   // conjunction inside searchThings, server-side and inexpressible from the
   // client grammar.
-  const result = await searchThings(viewerOf(user), query, app);
+  // pat context rides along so a visibility-restricted token's audience fence
+  // applies to search results too
+  const result = await searchThings(viewerOf(user, actorPat(actor)), query, app);
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
@@ -61,13 +63,18 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
 // simple shareable-URL form: ranked text search plus csv filters. `anon=1`
 // forces the logged-out view regardless of cookies so the response depends
 // only on the URL and can be cached at Vercel's edge (see feed loader for the
-// full safety argument). Clients send it only when no viewer is present.
+// full safety argument). Clients send it only when no viewer is present; a
+// Bearer credential is answered as itself rather than anonymously.
 export const loader = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
-  // anon=1 forces the logged-out view regardless of cookies/tokens, so the
-  // response depends only on the URL and can be edge-cached; otherwise resolve
-  // the acting credential (cookie session, first-party Bearer, or app token).
-  const anonCacheable = params.get('anon') === '1';
+  // anon=1 forces the logged-out view regardless of cookies, so the response
+  // depends only on the URL and can be edge-cached; otherwise resolve the
+  // acting credential (cookie session, first-party Bearer, or app token). A
+  // BEARER credential opts out of the shortcut (same rule as the feed loader):
+  // skipping actor resolution would hand a visibility-fenced token the public
+  // sphere its audience fence exists to keep it out of, and a fenced body must
+  // never carry the shared anon URL's cache policy.
+  const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
   // Non-anon calls resolve the acting credential: cookie session, first-party
   // Bearer, app token, or a scoped PAT (things.read) — unknown/stale
   // credentials degrade to anonymous; PAT-specific failures (missing scope,

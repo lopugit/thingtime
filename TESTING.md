@@ -1975,6 +1975,22 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
       settings list row shows "🧸 its own things only" + a "Grant 🆔"
       copy button (copies tt:token/<id>).
+- [ ] Visibility fence ("Visibility 🌗" toggles, `meta.visibility`
+      'all'|'public'|'private'): a public-only token sees ONLY world-visible
+      things — a private thing 404s on GET ?id= even for its owner, listings/
+      feed/search omit private things, creating with a private acl 403s, the
+      no-acl create default stays public, and PATCHing a public thing's acl
+      to private 403s (boundary locked both directions). A private-only token
+      mirrors it: public posts 404, the feed shows only non-public things,
+      no-acl creates default to acl ['tt:user'] (private), creating/patching
+      to tt:all 403s, and reacting/commenting on a public post 404s (target
+      invisible). Inherited audiences resolve through the target chain — a
+      public-only token CAN comment on a public post and list its comments
+      (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
+      unrestricted; mint 400s on unknown visibility values; /tokens/self and
+      the mint response report the fence; the settings row badges 🌐/🔒
+      restricted tokens; combines with the 🧸 sandbox. Covered by section F
+      of `node scripts/verify-pat-tokens.mjs`.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
