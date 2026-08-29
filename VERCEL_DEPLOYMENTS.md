@@ -281,17 +281,20 @@ scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
 are complete for `*.previews.dev.thingtime.com`. The protected implementation
 from #239 has merged to `github-actions`, and the thin listener from #233 has
-reached `develop`. The default `main` branch still contains the previous direct
-workflow and awaits the `develop` promotion path in #188.
+reached `develop`.
 
 The stable-domain binding now matches the protected controller's invariant and
-no longer blocks its configuration gate. Promotion of the thin listener to
-`main` through #188 must happen before final live proof because
-`pull_request_target` loads its workflow from the default branch. Until that
-promotion, eligible PRs still run `main`'s previous direct controller, whose
-obsolete requirement for a literal `misconfigured: false` can reject healthy
-externally managed wildcard DNS before deployment. Once #188 reaches `main`, a
-fresh eligible run exercises the protected #239 implementation's exact-SHA
+no longer blocks its configuration gate. Because `pull_request_target` loads its
+workflow from the default branch, the thin listener also had to reach `main`
+before a live run could exercise the protected implementation. **That promotion
+has since landed** (#188 merged 2026-08-17):
+`.github/workflows/develop-pr-preview.yml` on `main` is now the thin listener
+delegating to
+`lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`.
+`main`'s previous direct controller — whose obsolete requirement for a literal
+`misconfigured: false` could reject healthy externally managed wildcard DNS
+before deployment — is therefore no longer in the path. What remains is a fresh
+eligible run exercising the protected #239 implementation's exact-SHA
 deployment, alias publication, CORS probe, and attachment upload/removal checks.
 
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate

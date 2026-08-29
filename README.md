@@ -1513,22 +1513,26 @@ scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
 are complete for `*.previews.dev.thingtime.com`. The protected controller from
 #239 is now on `github-actions`, and the thin listener from #233 is on
-`develop`; the default `main` branch still has the previous direct workflow and
-is waiting for the `develop` promotion path in #188.
+`develop`.
 
-Live Vercel inspection on 2026-08-12 now confirms the intended stable-domain
+Live Vercel inspection on 2026-08-12 confirms the intended stable-domain
 invariant: `dev.thingtime.com` is verified with `gitBranch: develop` and
 `customEnvironmentId: null`; the `develop` Custom Environment retains its
 literal branch matcher and has an empty domain list. This resolves the earlier
-stable-domain configuration-gate failure. Because `pull_request_target` loads
-its workflow from the default branch, promote the thin listener to `main`
-through #188 before using a fresh eligible develop-target PR run as final live
-proof. Until then, eligible runs still execute `main`'s previous direct
-controller, whose obsolete requirement for a literal `misconfigured: false`
-can reject healthy externally managed wildcard DNS before deployment. After
-the listener promotion, a fresh run exercises the protected #239 implementation
-and its exact-SHA deployment, alias publication, CORS probe, and attachment
-upload/removal checks.
+stable-domain configuration-gate failure.
+
+Because `pull_request_target` loads its workflow from the default branch, the
+thin listener had to reach `main` before a live run could exercise the
+protected implementation. **That promotion has since landed** (#188 merged
+2026-08-17): `.github/workflows/develop-pr-preview.yml` on `main` is now the
+thin listener delegating to
+`lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`, so
+`main`'s previous direct controller — whose obsolete requirement for a literal
+`misconfigured: false` could reject healthy externally managed wildcard DNS
+before deployment — is no longer in the path. The remaining step is a fresh
+eligible develop-target PR run as final live proof, exercising the protected
+#239 implementation's exact-SHA deployment, alias publication, CORS probe, and
+attachment upload/removal checks.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and
