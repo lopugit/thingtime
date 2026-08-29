@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
 
-import { isVercelWebhookConfigured, parseVercelWebhookEvent, verifyVercelSignature } from './webhookStore';
+import { isVercelWebhookConfigured, parseVercelWebhookEvent, shouldReplaceBranchStatus, verifyVercelSignature } from './webhookStore';
 
 // Both the configured-check and the verifier read process.env at CALL time, so
 // tests can set the secret per case without module-mocking.
@@ -240,4 +240,78 @@ test('deployment id falls back to uid, and identity fields are carried through',
     envelope({ payload: { deployment: { uid: 'dpl_uid', meta: { githubCommitRef: 'main' } } } })
   );
   assert.equal(byUid?.next.deploymentId, 'dpl_uid');
+});
+
+// ------------------------------------------------------------ ordering guard
+
+// The out-of-order guard is the subtlest logic here and was previously
+// unreachable from tests (it sat inline in the Mongo-backed writer). It is now
+// a pure decision, so these run in the existing harness with no module mocks.
+
+const at = (ms: number) => new Date(ms).toISOString();
+const T = 1752986400000;
+
+test('a newer event for the same deployment replaces the older one', () => {
+  assert.equal(
+    shouldReplaceBranchStatus(
+      { deploymentId: 'dpl_1', eventAt: at(T), state: 'building' },
+      { deploymentId: 'dpl_1', eventAt: at(T + 1000), state: 'ready' }
+    ),
+    true
+  );
+});
+
+test('a late event for a superseded deployment is ignored', () => {
+  assert.equal(
+    shouldReplaceBranchStatus(
+      { deploymentId: 'dpl_2', eventAt: at(T + 1000), state: 'ready' },
+      { deploymentId: 'dpl_1', eventAt: at(T), state: 'ready' }
+    ),
+    false
+  );
+  // ...but a NEWER event for a different deployment is the new current build
+  assert.equal(
+    shouldReplaceBranchStatus(
+      { deploymentId: 'dpl_1', eventAt: at(T), state: 'ready' },
+      { deploymentId: 'dpl_2', eventAt: at(T + 1000), state: 'building' }
+    ),
+    true
+  );
+});
+
+test('a terminal state beats building for the same deployment, whatever the clocks say', () => {
+  // regression: an undated deployment.created falls back to `now`, so it dates
+  // itself NEWER than the ready event it follows — it must still not win
+  for (const state of ['ready', 'error', 'canceled'] as const) {
+    assert.equal(
+      shouldReplaceBranchStatus(
+        { deploymentId: 'dpl_1', eventAt: at(T), state },
+        { deploymentId: 'dpl_1', eventAt: at(T + 60_000), state: 'building' }
+      ),
+      false,
+      `${state} must survive a later-dated building event`
+    );
+  }
+  // and a terminal state still lands on a building row even when back-dated
+  assert.equal(
+    shouldReplaceBranchStatus(
+      { deploymentId: 'dpl_1', eventAt: at(T + 60_000), state: 'building' },
+      { deploymentId: 'dpl_1', eventAt: at(T), state: 'ready' }
+    ),
+    true
+  );
+});
+
+test('an older terminal event never overwrites a newer terminal one', () => {
+  assert.equal(
+    shouldReplaceBranchStatus(
+      { deploymentId: 'dpl_1', eventAt: at(T + 1000), state: 'ready' },
+      { deploymentId: 'dpl_1', eventAt: at(T), state: 'error' }
+    ),
+    false
+  );
+});
+
+test('the first event for a branch is always recorded', () => {
+  assert.equal(shouldReplaceBranchStatus(undefined, { deploymentId: 'dpl_1', eventAt: at(T), state: 'building' }), true);
 });

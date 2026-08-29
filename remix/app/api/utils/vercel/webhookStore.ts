@@ -105,10 +105,34 @@ export const parseVercelWebhookEvent = (
 
 const loadDoc = async () => (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
 
-// Persist one event. Out-of-order guard: an event for a DIFFERENT deployment is
-// ignored when it's older than what we already have (late delivery for a
-// superseded build); for the SAME deployment, terminal states always win over
-// 'building' regardless of timestamps.
+// Out-of-order guard, kept pure so it is testable without a Mongo stand-in.
+//
+// An event for a DIFFERENT deployment is ignored when it is older than what we
+// already hold (late delivery for a superseded build). For the SAME deployment,
+// a terminal state always beats 'building'.
+//
+// That last rule must NOT be conditioned on the timestamp:
+// parseVercelWebhookEvent falls back to `now` whenever an envelope carries no
+// usable numeric createdAt, so a late-delivered deployment.created dates itself
+// NEWER than the ready event it actually follows — and would then clobber a
+// ready deployment back to 'building'. Decide on state first, clocks only as
+// the tiebreaker.
+export const shouldReplaceBranchStatus = (
+  existing: Pick<VercelWebhookBranchStatus, 'deploymentId' | 'eventAt' | 'state'> | undefined,
+  next: Pick<VercelWebhookBranchStatus, 'deploymentId' | 'eventAt' | 'state'>
+): boolean => {
+  if (!existing) return true;
+  const older = Date.parse(next.eventAt) < Date.parse(existing.eventAt);
+  const sameDeployment = Boolean(existing.deploymentId) && existing.deploymentId === next.deploymentId;
+  if (!sameDeployment) return !older;
+
+  const nextIsBuilding = next.state === 'building';
+  const existingIsBuilding = existing.state === 'building';
+  if (existingIsBuilding !== nextIsBuilding) return existingIsBuilding;
+  return !older;
+};
+
+// Persist one event, subject to the guard above.
 export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWebhookBranchStatus | null> => {
   const parsed = parseVercelWebhookEvent(envelope);
   if (!parsed) return null;
@@ -119,12 +143,7 @@ export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWeb
     doc?.branches && typeof doc.branches === 'object' ? { ...doc.branches } : {};
   const existing = branches[branch];
 
-  if (existing) {
-    const sameDeployment = existing.deploymentId && existing.deploymentId === next.deploymentId;
-    const older = Date.parse(next.eventAt) < Date.parse(existing.eventAt);
-    if (!sameDeployment && older) return existing;
-    if (sameDeployment && older && existing.state !== 'building') return existing;
-  }
+  if (existing && !shouldReplaceBranchStatus(existing, next)) return existing;
 
   const entry: VercelWebhookBranchStatus = {
     ...next,
