@@ -7,9 +7,15 @@
 // Pure logic, DOM-free: side effects arrive via the context object so the
 // registry is unit-testable in Node and CommanderV2 stays thin.
 
+// The Lopu toast statuses (`useLopu`'s LopuStatus). Mirrored here rather than
+// widened to `string`: a loose type let an invalid 'warning' status through,
+// which the toast silently rendered as neutral.
+export type CommanderLopuStatus = 'success' | 'error' | 'info';
+
 export type CommanderCommandContext = {
 	navigate: (to: string) => void;
-	lopu: (opts: { title: string; description?: string; status?: string }) => void;
+	/** `useLopu()` — returns a toast id, which command handlers ignore. */
+	lopu: (opts: { title: string; description?: string; status?: CommanderLopuStatus; duration?: number }) => unknown;
 	/** Switch the builtin theme preset (useTtTheme().setPreset). */
 	setThemePreset: (name: string) => void;
 	/** Builtin preset names, for validation + discoverability. */
@@ -62,7 +68,7 @@ export const COMMANDER_COMMANDS: CommanderCommand[] = [
 				ctx.lopu({
 					title: wanted ? `🎨 No theme called “${args.trim()}”` : '🎨 Which theme?',
 					description: `Try: ${ctx.builtinThemeNames.join(' · ')}`,
-					status: wanted ? 'warning' : 'info'
+					status: wanted ? 'error' : 'info'
 				});
 				return;
 			}
@@ -166,7 +172,7 @@ export const runCommanderCommand = (input: string, ctx: CommanderCommandContext)
 		ctx.lopu({
 			title: parsed.name ? `🤷‍♂️ Unknown command “>${parsed.name}”` : '⌨️ Type a command',
 			description: 'Try >help for the list',
-			status: 'warning'
+			status: 'error'
 		});
 		return true;
 	}
