@@ -1369,6 +1369,60 @@ jobs:
             fi
           }
 
+          # First-human-signal contract: the instant this detector has proved
+          # an eligible, immutable PR/base snapshot, announce the work on the
+          # PR itself. The marker includes both SHAs so an older admitted run
+          # can never overwrite a newer attempt after either branch moves.
+          # Repeated detector events for the same exact snapshot are
+          # idempotent; the worker-side progress monitor owns later phase and
+          # ten-minute timeline updates.
+          ensure_progress_comment() {
+            local number="$1" head="$2" base="$3" head_sha="$4" base_sha="$5" mode="$6"
+            local marker comments comment_id body detected eta title event
+            marker="<!-- thingtime-lopu-progress:v1 pr=$number head=$head_sha base=$base_sha -->"
+            comments="$RUNNER_TEMP/lopu-progress-$number.json"
+            if ! gh_read_retry --paginate \
+                "repos/$REPO/issues/$number/comments?per_page=100" --slurp >"$comments"; then
+              return 1
+            fi
+            # `$marker` below is jq syntax inside the quoted filter.
+            # shellcheck disable=SC2016
+            comment_id="$(jq -r --arg marker "$marker" '
+              add // []
+              | [.[]
+                  | select(.user.login == "github-actions[bot]")
+                  | select(.body | contains($marker))
+                  | .id]
+              | last // empty
+            ' "$comments")"
+            rm -f "$comments"
+            [ -z "$comment_id" ] || return 0
+
+            detected="$(date -u '+%H:%M UTC')"
+            eta="$(date -u -d '+20 minutes' '+%H:%M UTC')"
+            if [ "$mode" = outdated ]; then
+              title='Lopu detected an out-of-date PR branch'
+              event="Detected that \`$base\` needs to be merged into \`$head\`; assigning the exact snapshot to the resolver queue."
+            else
+              title='Lopu detected merge conflicts'
+              event="Detected conflicts between \`$base\` and \`$head\`; assigning the exact snapshot to the resolver queue."
+            fi
+            body="$RUNNER_TEMP/lopu-progress-$number.md"
+            {
+              printf '## 🤖 %s\n\n' "$title"
+              printf '**Status:** Work detected — Lopu is taking ownership.\n\n'
+              printf '**Current phase:** Entering Lopu\047s serialized PR-resolution queue.\n\n'
+              printf '**Estimated completion:** around **%s** (~20 minutes; this adjusts as the queue moves).\n\n' "$eta"
+              printf '_Next automatic check-in: within **10 minutes** while work remains active. You can stay on this PR; there is no need to find the Actions run._\n\n'
+              printf '### Timeline\n'
+              printf '<!-- thingtime-lopu-progress-timeline:start -->\n'
+              printf -- '- %s — %s\n' "$detected" "$event"
+              printf '<!-- thingtime-lopu-progress-timeline:end -->\n\n'
+              printf '%s\n' "$marker"
+            } >"$body"
+            gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+          }
+
           all_open_prs() {
             local owner name response inventory
             owner="${REPO%%/*}"
@@ -1678,6 +1732,19 @@ jobs:
             snapshots="$(jq -c --argjson item "$candidate" '. + [$item]' <<<"$snapshots")"
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           conflicting="$snapshots"
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            candidate="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$candidate")"
+            ensure_progress_comment \
+              "$number" \
+              "$(jq -r '.head' <<<"$candidate")" \
+              "$(jq -r '.base' <<<"$candidate")" \
+              "$(jq -r '.head_sha' <<<"$candidate")" \
+              "$(jq -r '.base_sha' <<<"$candidate")" \
+              "$(jq -r '.mode' <<<"$candidate")" \
+              || echo "::warning::Could not post Lopu's immediate progress comment on #$number."
+          done < <(jq -r '.[] | @base64' <<<"$conflicting")
           if [ "$HUMAN_EXPLICIT" = true ] \
              && [ "${matched_open:-0}" -gt 0 ] \
              && [ "$(jq 'length' <<<"$conflicting")" -eq 0 ]; then
@@ -5735,6 +5802,313 @@ jobs:
             gh api --method POST "repos/$REPO/issues/$SOURCE_PR/labels" \
               --input <(jq -n '{labels:["ai-promotion-paused"]}') >/dev/null
           fi
+  progress:
+    name: Keep PR reviewers updated every 10 minutes
+    needs: [route, detect]
+    if: >-
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.any == 'true'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
+      && github.actor == 'github-actions[bot]'
+      && (github.ref_name == 'github-actions'
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
+      && ((inputs.pr_number != '' && inputs.pr_batch_b64 == '')
+          || (inputs.pr_number == '' && inputs.pr_batch_b64 != ''))
+      && inputs.branch == ''
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 360
+    # Progress visibility is useful but must never turn a valid merge into a
+    # failed workflow if GitHub's comment or job-status API has a transient
+    # problem. The resolver itself remains authoritative.
+    continue-on-error: true
+    permissions:
+      actions: read
+      pull-requests: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PRS: ${{ needs.detect.outputs.prs }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      HEARTBEAT_SECONDS: "600"
+      POLL_SECONDS: "60"
+    steps:
+      # One monitor covers the entire materialized batch. Do not turn this
+      # into a matrix: that would bill one idle heartbeat runner per PR and
+      # undermine the unified Lopu fleet's serialization/cost controls.
+      - name: Append live phase and ETA updates to each selected PR
+        run: |
+          set -uo pipefail
+
+          read_jobs() {
+            local attempt output errors delay
+            output="$RUNNER_TEMP/lopu-progress-jobs.json"
+            errors="$RUNNER_TEMP/lopu-progress-jobs.err"
+            for attempt in 1 2 3 4; do
+              : >"$output"
+              : >"$errors"
+              if gh api --paginate \
+                   "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+                   --slurp >"$output" 2>"$errors" \
+                 && jq -ce '[.[].jobs[]?]' "$output"; then
+                rm -f "$output" "$errors"
+                return 0
+              fi
+              delay="$((attempt * 2))"
+              [ "$attempt" -eq 4 ] || sleep "$delay"
+            done
+            echo "::warning::Could not read sibling resolver jobs after four attempts."
+            sed -n '1,12p' "$errors" >&2 || true
+            rm -f "$output" "$errors"
+            return 1
+          }
+
+          update_progress() {
+            local item="$1" status_label="$2" phase_label="$3" eta_minutes="$4" active="$5" event="$6"
+            local number head base head_sha base_sha marker comments comment_id existing_body
+            local timeline_file trimmed_file body now eta_at eta_text
+            number="$(jq -r '.number' <<<"$item")"
+            head="$(jq -r '.head' <<<"$item")"
+            base="$(jq -r '.base' <<<"$item")"
+            head_sha="$(jq -r '.head_sha' <<<"$item")"
+            base_sha="$(jq -r '.base_sha' <<<"$item")"
+            marker="<!-- thingtime-lopu-progress:v1 pr=$number head=$head_sha base=$base_sha -->"
+            comments="$RUNNER_TEMP/lopu-progress-comments-$number.json"
+            if ! gh api --paginate \
+                "repos/$REPO/issues/$number/comments?per_page=100" --slurp >"$comments"; then
+              echo "::warning::Could not read progress comments for PR #$number."
+              return 1
+            fi
+            # `$marker` below is jq syntax inside the quoted filter.
+            # shellcheck disable=SC2016
+            comment_id="$(jq -r --arg marker "$marker" '
+              add // []
+              | [.[]
+                  | select(.user.login == "github-actions[bot]")
+                  | select(.body | contains($marker))]
+              | last
+              | .id // empty
+            ' "$comments")"
+            # shellcheck disable=SC2016
+            existing_body="$(jq -r --arg marker "$marker" '
+              add // []
+              | [.[]
+                  | select(.user.login == "github-actions[bot]")
+                  | select(.body | contains($marker))]
+              | last
+              | .body // ""
+            ' "$comments")"
+            rm -f "$comments"
+
+            timeline_file="$RUNNER_TEMP/lopu-progress-timeline-$number.txt"
+            trimmed_file="$RUNNER_TEMP/lopu-progress-timeline-trimmed-$number.txt"
+            awk '
+              /thingtime-lopu-progress-timeline:start/ { capture=1; next }
+              /thingtime-lopu-progress-timeline:end/ { capture=0 }
+              capture { print }
+            ' <<<"$existing_body" >"$timeline_file"
+            now="$(date -u '+%H:%M UTC')"
+            printf -- '- %s — %s\n' "$now" "$event" >>"$timeline_file"
+            # A 360-minute ceiling produces at most 36 heartbeats plus phase
+            # transitions. Keep a little headroom while bounding the comment.
+            tail -n 60 "$timeline_file" >"$trimmed_file"
+
+            if [[ "$eta_minutes" =~ ^[1-9][0-9]*$ ]]; then
+              eta_at="$(date -u -d "+$eta_minutes minutes" '+%H:%M UTC')"
+              eta_text="around **$eta_at** (~$eta_minutes minutes; adjusted as work moves)"
+            else
+              eta_text='Done — no further active-work ETA'
+            fi
+            body="$RUNNER_TEMP/lopu-progress-body-$number.md"
+            {
+              echo '## 🤖 Lopu live PR update'
+              echo
+              printf '**Status:** %s\n\n' "$status_label"
+              printf '**Current phase:** %s\n\n' "$phase_label"
+              printf '**Estimated completion:** %s.\n\n' "$eta_text"
+              if [ "$active" = true ]; then
+                echo '_Next automatic check-in: within **10 minutes**, or sooner when the phase changes. You can stay on this PR; there is no need to find the Actions run._'
+                echo
+              fi
+              # Literal Markdown backticks, not shell command substitution.
+              # shellcheck disable=SC2016
+              printf 'Lopu is merging `%s` into `%s` for this exact branch snapshot.\n\n' "$base" "$head"
+              echo '### Timeline'
+              echo '<!-- thingtime-lopu-progress-timeline:start -->'
+              cat "$trimmed_file"
+              echo '<!-- thingtime-lopu-progress-timeline:end -->'
+              echo
+              echo "[Technical run details]($RUN_URL) — optional; this comment is the human-facing source of truth."
+              echo
+              echo "$marker"
+            } >"$body"
+
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" \
+                -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
+          }
+
+          declare -A last_phase=()
+          declare -A last_post=()
+          declare -A completion_wait_started=()
+          while :; do
+            jobs="$(read_jobs || true)"
+            if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$jobs"; then
+              sleep "$POLL_SECONDS"
+              continue
+            fi
+
+            all_done=true
+            now_epoch="$(date +%s)"
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              item="$(base64 --decode <<<"$encoded")"
+              number="$(jq -r '.number' <<<"$item")"
+              job_name="Resolve PR #$number"
+              job="$(jq -c --arg name "$job_name" \
+                '[.[] | select(.name == $name)] | last // empty' <<<"$jobs")"
+
+              status_label='🕒 Resolver reserved'
+              phase_label='Waiting for the worker job to materialize'
+              eta_minutes=25
+              active=true
+              event='The immutable head/base selection is reserved; waiting for its worker job to enter the serialized lane.'
+              phase_key='materializing'
+              if [ -n "$job" ]; then
+                job_status="$(jq -r '.status // "queued"' <<<"$job")"
+                conclusion="$(jq -r '.conclusion // ""' <<<"$job")"
+                step="$(jq -r '[.steps[]? | select(.status == "in_progress") | .name] | last // ""' <<<"$job")"
+                case "$job_status" in
+                  queued|pending|requested|waiting)
+                    status_label='🕒 Resolver queued'
+                    phase_label="Waiting in Lopu's serialized PR-management lane"
+                    eta_minutes=20
+                    event='Still safely queued behind earlier admitted Lopu work; no duplicate resolver was spawned.'
+                    ;;
+                  in_progress)
+                    status_label='🛠️ Lopu is actively working'
+                    case "$step" in
+                      'Honor user-controlled ai-merge-paused'|'Revalidate queued PR snapshot before expensive work'|'Comment on PR (resolution starting)')
+                        phase_label='Revalidating the exact PR and branch snapshot'; eta_minutes=18 ;;
+                      'Check out PR head'|'Check out the fixed trusted github-actions control plane'|'Keep the trusted control plane outside PR publication'|'Clear deliberately retried rebase ownership pauses')
+                        phase_label='Preparing the isolated repository environment'; eta_minutes=15 ;;
+                      'Merge base into head')
+                        phase_label='Merging the target branch into the PR branch'; eta_minutes=14 ;;
+                      'Require an AI credential'|'Resolve conflicts with Lopu'|'Continue the exact conflict-resolution session until it finishes')
+                        phase_label='Using repository context to resolve the conflict semantics'; eta_minutes=20 ;;
+                      'Regenerate a lone pinned pnpm lockfile without credentials')
+                        phase_label='Regenerating the lockfile deterministically'; eta_minutes=12 ;;
+                      'Verify resolution and commit')
+                        phase_label='Running deterministic resolution checks and committing'; eta_minutes=10 ;;
+                      'Rebuild Graphify structure, then LLM semantics')
+                        phase_label='Rebuilding Graphify structure and semantic context'; eta_minutes=10 ;;
+                      'Push merge commit'|'Requeue after a moving-ref race')
+                        phase_label='Publishing the verified branch update'; eta_minutes=5 ;;
+                      'Comment on PR (resolved)'|'Cascade to PRs stacked on this head'|'Collect residual conflicts for failure reporting'|'Comment on PR (needs attention)')
+                        phase_label='Finalizing the PR result and any stack cascade'; eta_minutes=3 ;;
+                      *)
+                        phase_label='Working inside the isolated resolver environment'; eta_minutes=15 ;;
+                    esac
+                    event="$phase_label."
+                    ;;
+                  completed)
+                    active=false
+                    eta_minutes=0
+                    case "$conclusion" in
+                      success)
+                        pr="$(gh api "repos/$REPO/pulls/$number" 2>/dev/null || true)"
+                        pr_json="$pr"
+                        [ -n "$pr_json" ] || pr_json='{}'
+                        pr_state="$(jq -r '.state // "unknown"' <<<"$pr_json" 2>/dev/null || echo unknown)"
+                        pr_mergeable="$(jq -r 'if .mergeable == true then "true" elif .mergeable == false then "false" else "unknown" end' <<<"$pr_json" 2>/dev/null || echo unknown)"
+                        if [ "$pr_state" = closed ]; then
+                          status_label='✅ Lopu finished — this PR is closed or merged'
+                          phase_label='The resolver branch work is complete'
+                          event='The resolver worker completed successfully and the PR is no longer open.'
+                        elif [ "$pr_mergeable" = true ]; then
+                          status_label='✅ Lopu finished — this PR is mergeable'
+                          phase_label='GitHub verified the published branch result'
+                          event='The resolver worker completed successfully and GitHub now reports this PR as mergeable.'
+                        elif [ "$pr_mergeable" = false ]; then
+                          status_label='↪️ Resolver finished; a newer conflict remains'
+                          phase_label='The next detector event will own the current branch state'
+                          event='The worker published its verified result, but GitHub reports the latest PR state as conflicting again; Lopu will rediscover it automatically.'
+                        else
+                          wait_started="${completion_wait_started[$number]:-$now_epoch}"
+                          completion_wait_started[$number]="$wait_started"
+                          wait_elapsed="$((now_epoch - wait_started))"
+                          if [ "$wait_elapsed" -lt 180 ]; then
+                            status_label='🔄 Resolver finished; GitHub is refreshing'
+                            phase_label='Waiting for GitHub to publish the final mergeability verdict'
+                            eta_minutes=2
+                            active=true
+                            all_done=false
+                            event='The resolver worker completed successfully; waiting briefly for GitHub to recompute mergeability.'
+                          else
+                            status_label='✅ Resolver attempt finished'
+                            phase_label='GitHub mergeability refresh is still pending; the detailed result is posted'
+                            event='The resolver worker completed successfully; GitHub did not publish a final mergeability verdict within three minutes.'
+                          fi
+                        fi
+                        ;;
+                      skipped)
+                        status_label='↪️ Resolver attempt superseded'
+                        phase_label='A newer PR snapshot or ownership decision now applies'
+                        event='This queued snapshot was skipped safely; a fresh detector event owns any remaining work.'
+                        ;;
+                      cancelled)
+                        status_label='↪️ Resolver attempt ended'
+                        phase_label='The next detector event will re-check current PR state'
+                        event='This attempt ended before publication; current PR state will be rediscovered automatically.'
+                        ;;
+                      *)
+                        status_label='⚠️ Resolver needs attention'
+                        phase_label='The detailed Lopu result explains the stopped phase'
+                        event="The resolver worker finished with ${conclusion:-an unsuccessful result}; its detailed result is posted on this PR."
+                        ;;
+                    esac
+                    ;;
+                  *)
+                    all_done=false
+                    ;;
+                esac
+                phase_key="$job_status|$phase_label|$conclusion"
+                [ "$job_status" = completed ] || all_done=false
+              else
+                all_done=false
+              fi
+
+              previous_phase="${last_phase[$number]:-}"
+              previous_post="${last_post[$number]:-0}"
+              elapsed="$((now_epoch - previous_post))"
+              if [ "$phase_key" != "$previous_phase" ] \
+                 || [ "$elapsed" -ge "$HEARTBEAT_SECONDS" ]; then
+                if [ "$phase_key" = "$previous_phase" ] && [ "$active" = true ]; then
+                  event="10-minute check-in: still working — $phase_label."
+                fi
+                update_progress "$item" "$status_label" "$phase_label" \
+                  "$eta_minutes" "$active" "$event" \
+                  || echo "::warning::Could not publish a progress update for PR #$number."
+                last_phase[$number]="$phase_key"
+                last_post[$number]="$now_epoch"
+              fi
+            done < <(jq -r '.[] | @base64' <<<"$PRS")
+
+            [ "$all_done" = true ] && break
+            sleep "$POLL_SECONDS"
+          done
+
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: [route, detect, model_config]
