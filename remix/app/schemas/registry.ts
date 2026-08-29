@@ -2044,7 +2044,8 @@ const followSchema: ThingtimeSchema = {
 		"ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
     'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
     'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
-    'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
+    'Follows are one-directional and grant no read access: the tt:userFriends acl circle ' +
+    'resolves against the mutual `friend` graph, never this one.',
   createdVia: 'POST /api/v1/users/follow',
 	fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
   example: { followKey: '5eed…:c0ffee…' }
