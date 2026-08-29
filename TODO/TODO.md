@@ -76,8 +76,10 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    > `raw-results` (`_raw-results.tsx`) now requires admin (`requireAdmin`) +
    > fail-closed rate limiting and only executes bounded read-only queries via
    > `runMongoQuery`; `populate` (`_populate.tsx`) is admin-only + fail-closed
-   > rate-limited. A3 (service-account minting) hardening is in flight in
-   > PRs #100/#103. Do not re-claim A1/A2.
+   > rate-limited. A3 (service-account minting) is partially fixed: PR #100
+   > (merged 2026-08-12) added the fail-closed per-IP limiter, 16 KiB body cap,
+   > and field whitelist, so only the non-expiring token lifetime / 5 GiB
+   > default allowance remain open. Do not re-claim A1/A2 or A3's throttle.
 
    Three live, prod-registered endpoints have **no auth, no rate limit, no env
    gate**:

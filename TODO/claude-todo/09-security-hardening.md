@@ -20,8 +20,16 @@ second one (single source of truth).
 > ✅ **A1 + A2 shipped (verified on main 2026-07-21):** both routes now call
 > `requireAdmin` (401/403) and `enforceRateLimit(..., { failClosed: true })`;
 > `raw-results` additionally runs only bounded read-only queries through
-> `runMongoQuery` (no raw `find().toArray()` dump). A3 is being hardened in
-> PRs #100/#103 — check those before claiming.
+> `runMongoQuery` (no raw `find().toArray()` dump).
+>
+> 🟡 **A3 partially shipped (PR #100, merged 2026-08-12):**
+> `_service-account.tsx` now applies the fail-closed per-IP
+> `auth.serviceAccount` limiter, a 16 KiB body cap, and an explicit field
+> whitelist, so unauthenticated mass-minting is throttled. Still open: the
+> minted token is non-expiring (`serviceAccounts.ts` — `signJwt` with
+> `expiresIn: null`, `createSession` with `expiresAt: null`) and still carries
+> the 5 GiB `storageAllowanceBytes` default. Bound the token lifetime before
+> closing A3. (PR #103 was closed unmerged and covered signup/item 8, not A3.)
 
 Three endpoints are registered in the **production** Nitro dispatcher
 (`remix/server/routes/api/[...].ts` L32–33) with no `getCurrentUser` check, no
