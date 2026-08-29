@@ -469,9 +469,21 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // newest first. Without `tags` as a key the tag is a post-scan residual —
     // the pager walks every post in createdAt order until it fills a page, so a
     // rare tag reads the whole post history on an unauthenticated endpoint.
-    // `tags` is the only array field here (acl keeps its own index below), so
-    // this stays a legal single-multikey compound.
-    col.createIndex({ thingtime: 1, tags: 1, createdAt: -1, shareId: 1 }),
+    //
+    // `thingtime` must NOT be a key here: it is itself multikey on every
+    // things-era doc (`thingtime: ['post']`, `['waitlist']`, …), so pairing it
+    // with `tags` is a parallel-array compound. Mongo then rejects EVERY
+    // things insert with `cannot index parallel arrays [tags] [thingtime]`
+    // (code 171) — even `tags: []` counts as an array — taking down post
+    // creation and waitlist signup alike. Post-ness stays a cheap residual on
+    // a set already narrowed to the one tag; it cannot be a partial filter
+    // either, because postMatch() spells post-ness as an $or over
+    // thingtime/kind that the planner cannot prove subsumed (measured: the
+    // partial variant is not selected and examines the whole corpus).
+    //
+    // Verified on a 10k-post local dataset: this query goes from 10,000 keys
+    // and 10,000 docs examined to return 3, down to 3 keys and 3 docs.
+    col.createIndex({ tags: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
