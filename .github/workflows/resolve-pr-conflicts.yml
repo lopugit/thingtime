@@ -1088,32 +1088,9 @@ jobs:
       any: ${{ steps.scan.outputs.any }}
     steps:
       - name: Check out the trusted Lopu PR-status helper
-        id: trusted_status_helper
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
-          fetch-depth: 1
-          persist-credentials: false
-          sparse-checkout: .github/scripts/lopu-pr-status.mjs
-          sparse-checkout-cone-mode: false
-
-      # Bootstrap only: the introducing PR necessarily runs before the fixed
-      # controller branch contains this helper. Once merged, the trusted
-      # checkout above always supplies it and this fallback never executes.
-      - name: Detect an absent pre-merge status helper
-        id: status_helper_bootstrap
-        run: |
-          if [ -f .github/scripts/lopu-pr-status.mjs ]; then
-            echo 'required=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'required=true' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Bootstrap the introducing revision's status helper
-        if: steps.status_helper_bootstrap.outputs.required == 'true'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           sparse-checkout: .github/scripts/lopu-pr-status.mjs
@@ -1710,6 +1687,8 @@ jobs:
           done
 
           all_open="$(complete_large_pr_files "$all_open")"
+          all_open_file="$RUNNER_TEMP/lopu-all-open-prs.json"
+          printf '%s\n' "$all_open" >"$all_open_file"
           prs="$(query)"
 
           if [ "$SCAN_ALL" = "true" ]; then
@@ -1784,7 +1763,9 @@ jobs:
           done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | @base64' <<<"$prs")
           rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
-          stacked_owned="$(jq -r --argjson all "$all_open" --arg default_ref "$default_ref" '
+          stacked_owned="$(jq -r --slurpfile all_open_inventory "$all_open_file" --arg default_ref "$default_ref" '
+            ($all_open_inventory[0]) as $all
+            |
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -1828,8 +1809,10 @@ jobs:
             --arg only "${ONLY_PR:-}" \
             --argjson manual_retry "$MANUAL_RETRY" \
             --argjson batch "$BATCH_JSON" \
-            --argjson all "$all_open" \
+            --slurpfile all_open_inventory "$all_open_file" \
             --arg default_ref "$default_ref" '
+            ($all_open_inventory[0]) as $all
+            |
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -1926,7 +1909,7 @@ jobs:
                     }
                   })
           ' <<<"$conflicting")"
-          rm -f "$classification_file"
+          rm -f "$classification_file" "$all_open_file"
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
             candidate="$(base64 --decode <<<"$encoded")"
@@ -6034,32 +6017,9 @@ jobs:
       STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
     steps:
       - name: Check out the trusted Lopu PR-status helper
-        id: trusted_status_helper
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
-          fetch-depth: 1
-          persist-credentials: false
-          sparse-checkout: .github/scripts/lopu-pr-status.mjs
-          sparse-checkout-cone-mode: false
-
-      # Same one-time bootstrap as the detector. The progress job cannot run
-      # for the introducing PR unless that PR is itself admitted, but keeping
-      # both consumers symmetric makes the missing-helper state explicit.
-      - name: Detect an absent pre-merge status helper
-        id: status_helper_bootstrap
-        run: |
-          if [ -f .github/scripts/lopu-pr-status.mjs ]; then
-            echo 'required=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'required=true' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Bootstrap the introducing revision's status helper
-        if: steps.status_helper_bootstrap.outputs.required == 'true'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           sparse-checkout: .github/scripts/lopu-pr-status.mjs

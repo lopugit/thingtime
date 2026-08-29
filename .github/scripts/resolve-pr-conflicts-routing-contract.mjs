@@ -708,11 +708,6 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
-    /Detect an absent pre-merge status helper[\s\S]*Bootstrap the introducing revision's status helper[\s\S]*steps\.status_helper_bootstrap\.outputs\.required == 'true'[\s\S]*ref: \$\{\{ github\.sha \}\}/u,
-    "the introducing PR has a one-time helper bootstrap that becomes unreachable after merge",
-  );
-  assert.match(
-    detectBlock,
     /files\(first: 100\)[\s\S]*totalCount[\s\S]*nodes \{ path \}/u,
     "one open-PR inventory includes changed paths for overlap classification",
   );
@@ -723,13 +718,18 @@ function assertWorkflowSource() {
   );
   assert.doesNotMatch(
     detectBlock,
-    /--argjson (?:files|classification)/u,
-    "large changed-path and classification arrays never cross the process argument-size boundary",
+    /--argjson (?:files|classification|all)\b/u,
+    "large changed-path, classification, and repository arrays never cross the process argument-size boundary",
   );
   assert.match(
     detectBlock,
     /--slurpfile classifications "\$classification_file"/u,
     "relationship metadata is joined from a file instead of a process argument",
+  );
+  assert.match(
+    detectBlock,
+    /lopu-all-open-prs\.json[\s\S]*--slurpfile all_open_inventory "\$all_open_file"/u,
+    "stack ownership joins use the same file-backed repository inventory",
   );
   assert.match(
     detectBlock,
@@ -779,11 +779,6 @@ function assertWorkflowSource() {
     "the monitor derives live resolving, waiting, and finished batch counts",
   );
   assert.match(progressBlock, /read_live_stats/u, "repository PR counts refresh while a batch is active");
-  assert.match(
-    progressBlock,
-    /Detect an absent pre-merge status helper[\s\S]*Bootstrap the introducing revision's status helper[\s\S]*ref: \$\{\{ github\.sha \}\}/u,
-    "the progress consumer has the same explicit one-time helper bootstrap",
-  );
   assert.match(progressBlock, /sync_progress_labels/u, "queue and resolving labels follow the real worker phase");
   assert.match(progressBlock, /render-context/u, "every progress update includes time, queue, and relationship tables");
   assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
