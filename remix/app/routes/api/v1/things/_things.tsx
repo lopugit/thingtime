@@ -89,7 +89,9 @@ export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
-  const viewer = viewerOf(user);
+  // pat context rides reads too: a visibility-restricted token (public-only /
+  // private-only) must have its audience fence applied to everything it lists
+  const viewer = viewerOf(user, actorPat(actor));
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
