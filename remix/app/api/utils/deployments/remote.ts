@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { fail, isFail } from '../things/things';
 import type { Fail } from '../things/things';
 
@@ -29,6 +31,23 @@ const isLocalHostname = (hostname: string): boolean => {
   );
 };
 
+// Non-public targets a linked *deployment* could never legitimately live at.
+// Without this, a signed-in user can point a link at any https host the server
+// can reach — private VPC ranges, link-local, cloud metadata — and read the
+// outcome back through the sync report. The https-only rule already blocks the
+// plain-HTTP metadata services, but it does not block internal HTTPS.
+//
+// Localhost-shaped hosts are exempt on purpose: they are the supported
+// dev-against-dev path, and reaching them needs a URL the operator typed.
+export const isBlockedDeploymentHostname = (hostname: string): boolean => {
+  if (isLocalHostname(hostname)) return false;
+  const host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+  // a real deployment is reached by name; an IP literal is either an internal
+  // address or an attempt to sidestep name-based vetting
+  if (isIP(host) !== 0) return true;
+  return host === 'metadata.google.internal' || host.endsWith('.internal') || host.endsWith('.local');
+};
+
 // Normalize + vet a user-supplied deployment URL down to a bare origin.
 export const normalizeDeploymentBaseUrl = (value: unknown): string | Fail => {
   if (typeof value !== 'string' || !value.trim()) return fail(400, 'Deployment URL is required');
@@ -49,6 +68,9 @@ export const normalizeDeploymentBaseUrl = (value: unknown): string | Fail => {
   }
   if ((url.pathname && url.pathname !== '/') || url.search || url.hash) {
     return fail(400, 'Deployment URLs are origins only — drop the path/query');
+  }
+  if (isBlockedDeploymentHostname(url.hostname)) {
+    return fail(400, 'That host isn’t reachable as a deployment — link to a public deployment hostname');
   }
   return url.origin;
 };

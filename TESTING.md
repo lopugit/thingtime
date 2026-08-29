@@ -2453,6 +2453,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Linked deployments (Settings → Linked deployments, `api/utils/deployments/*`, `/api/v1/deployment-links*`)
 
+- [ ] SSRF fence on the link URL (`normalizeDeploymentBaseUrl`): linking to an
+      IP literal (`https://10.0.0.5`, `https://169.254.169.254`,
+      `https://[fd00::1]`) or an internal-only name
+      (`https://metadata.google.internal`, `*.internal`, `*.local`) is refused
+      with a 400 — the server must never be steerable at its own network by a
+      signed-in user. `http://localhost:<port>` stays allowed for the
+      dev-against-dev flow above. Covered by `npm run test:deployments`
+      (`app/api/utils/deployments/remote.test.ts`); this row is the live check
+      that the route surfaces the refusal instead of attempting the fetch.
 - [ ] Two isolated stacks for testing: second mongod (`mongod --port 27018
       --dbpath <tmp> --fork ...`) + second dev stack (`TT_WEB_PORT=11120
       TT_HMR_PORT=11121 TT_API_PORT=11122
