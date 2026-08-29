@@ -1,8 +1,9 @@
 import { json } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
+import type { PatContext } from '~/api/utils/auth/patTokens';
 import { getOwnedAlgorithmWeights } from '~/api/utils/algorithms/algorithms';
-import { getFeed, type PostType, type PostVisibility } from '~/api/utils/things/things';
+import { getFeed, viewerOf, type PostType, type PostVisibility } from '~/api/utils/things/things';
 
 const csv = (value: string | null): string[] =>
   (value || '')
@@ -27,22 +28,33 @@ const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
 // then depends only on the URL, so it is safe to cache on Vercel's edge (which
 // keys by URL, not Cookie). Clients send it only when no viewer is present;
 // authed requests never share these URLs, so a cached anon body can never be
-// served to a logged-in viewer.
+// served to a logged-in viewer. A Bearer credential is the one exception: it
+// is answered as itself, so a scoped token can never read past its own rules
+// by asking for the anon view.
 export const loader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const params = url.searchParams;
-  const anonCacheable = params.get('anon') === '1';
-  // `anon=1` forces the logged-out, edge-cacheable view. Otherwise resolve the
-  // things actor (cookie/Bearer session or a scoped PAT) — unknown/stale
-  // credentials degrade to an anonymous null user, so logged-out browsers keep
-  // the public feed; only PAT-specific failures (missing scope, exhausted) 4xx.
+  // Cookies are deliberately ignored (a logged-in browser may still ask for
+  // the cacheable public feed — the web client never sends Authorization), but
+  // a BEARER credential is not: `anon=1` would otherwise skip actor resolution
+  // entirely and hand the asker the logged-out view past every per-credential
+  // rule — today a visibility-fenced token's audience fence, which is supposed
+  // to cover reads. Answering the token as itself also keeps the shared anon
+  // URL's cache entry honest: a fenced body never carries ANON_CACHE_CONTROL.
+  const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
+  // Otherwise resolve the things actor (cookie/Bearer session or a scoped PAT)
+  // — unknown/stale credentials degrade to an anonymous null user, so
+  // logged-out browsers keep the public feed; only PAT-specific failures
+  // (missing scope, exhausted) 4xx.
   let user = null;
+  let pat: PatContext | null = null;
   if (!anonCacheable) {
     const auth = await resolveThingsActor(request, 'things.read');
     if (auth.ok === false) {
       return json({ ok: false, error: auth.error }, { status: auth.status });
     }
     user = auth.actor.user;
+    pat = auth.actor.pat;
   }
 
   const algorithmParam = (params.get('algorithm') || '').trim();
@@ -57,7 +69,9 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
-  const result = await getFeed(user ? { id: user.id, username: user.username } : null, {
+  // pat context rides along so a visibility-restricted token's audience fence
+  // applies to the feed query and the per-doc checks
+  const result = await getFeed(viewerOf(user, pat), {
     types: csv(params.get('types')) as PostType[],
     circles: csv(params.get('circles')) as PostVisibility[],
     from: isoDate(params.get('from')),
