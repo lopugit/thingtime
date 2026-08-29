@@ -25,6 +25,19 @@ is fixed, and cite the checklist you ran in the PR description.
       lacks its exact Things scope. Disconnecting an account removes its bridge
       access; removing the last account revokes the ChatGPT bridge session.
 
+## Admin integration vault + policy proxy
+
+- [ ] Sign in as an admin and open **/admin → External integrations**. Without
+      `THINGTIME_ADMIN_VAULT_KEY`, the visible warning explains setup and
+      **Save secret** is disabled; no browser request reveals a credential.
+- [ ] With a disposable 32-byte base64url vault key, save a labelled Vercel
+      token. Refresh and confirm its row shows only label/id/date—not masked or
+      plaintext value. Deletion is blocked while an endpoint references it.
+- [ ] Save a Vercel endpoint with read + **Create new items only**, then verify
+      an existing environment key is blocked before POST and the redacted audit
+      contains only operation, path, status, and outcome—never body, token, or
+      secret value. Generic endpoints cannot claim create-only semantics.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
@@ -1975,6 +1988,30 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
       settings list row shows "🧸 its own things only" + a "Grant 🆔"
       copy button (copies tt:token/<id>).
+- [ ] Visibility fence ("Visibility 🌗" toggles, `meta.visibility`
+      'all'|'public'|'private'): a public-only token sees ONLY world-visible
+      things — a private thing 404s on GET ?id= even for its owner, listings/
+      feed/search omit private things, creating with a private acl 403s, the
+      no-acl create default stays public, and PATCHing a public thing's acl
+      to private 403s (boundary locked both directions). A private-only token
+      mirrors it: public posts 404, the feed shows only non-public things,
+      no-acl creates default to acl ['tt:user'] (private), creating/patching
+      to tt:all 403s, and reacting/commenting on a public post 404s (target
+      invisible). Inherited audiences resolve through the target chain — a
+      public-only token CAN comment on a public post and list its comments
+      (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
+      unrestricted; mint 400s on unknown visibility values; /tokens/self and
+      the mint response report the fence; the settings row badges 🌐/🔒
+      restricted tokens; combines with the 🧸 sandbox. Covered by section F
+      of `node scripts/verify-pat-tokens.mjs`.
+- [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
+      as the Bearer credential rather than anonymously, the fenced answer
+      carries `private, no-store`, and the credential-less cacheable answer
+      carries `Vary: Authorization` — `public, s-maxage` is exactly what
+      licenses a shared cache to replay a stored response to an
+      Authorization-carrying request, so without the Vary a warm anon entry
+      reaches a fenced token without the origin ever being asked. Same
+      section F.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
