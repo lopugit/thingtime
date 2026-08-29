@@ -96,7 +96,19 @@ not directly open SMTP connections. The worker owns delivery.
 
 ### Mongo Collections
 
-Initial collections:
+**Most of this already exists — extend it, do not rebuild it.** Seven of the
+collections below are already registered in
+`remix/app/api/utils/mongodb/collections.ts` (with indexes in `ensureIndexes()`)
+and documented in `FUNDAMENTALS.md` §3: `email_messages`, `email_events`,
+`email_templates`, `email_subscriptions`, `email_suppression_list`,
+`email_unsubscribes`, and `email_identities`. Only **`email_inbound_messages`**
+and **`email_delivery_limits`** are new. Likewise, the send-API surface above is
+a proposed refinement of the existing `sendEmail()` in
+`remix/app/api/utils/email/service.ts` — not a second, parallel email path.
+Reach every collection through the named getters, never a raw name string
+(`FUNDAMENTALS.md` §3).
+
+Collections, with the two new ones marked:
 
 - `email_messages`: durable send records, stream, recipient, template version,
   idempotency key, status, retry counters, provider/MTA ids, and metadata.
@@ -112,9 +124,9 @@ Initial collections:
   bounces, complaints, manual blocks, and unsubscribe-all.
 - `email_unsubscribes`: tokenized unsubscribe requests, one-click requests, and
   body-link preference changes.
-- `email_inbound_messages`: inbound/reply metadata, routing target, parsed
+- `email_inbound_messages` **(new)**: inbound/reply metadata, routing target, parsed
   participants, spam verdict, and raw MIME pointer.
-- `email_delivery_limits`: per-domain, per-stream, per-IP, and global throttles.
+- `email_delivery_limits` **(new)**: per-domain, per-stream, per-IP, and global throttles.
 
 Raw MIME can exceed MongoDB's normal document limits. Store large raw MIME in
 object storage or Mongo GridFS and keep a content hash plus storage pointer in
