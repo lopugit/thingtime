@@ -718,8 +718,18 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
-    /complete_large_pr_files[\s\S]*pulls\/\$number\/files\?per_page=100/u,
-    "large PRs receive an exact paginated changed-file inventory",
+    /complete_large_pr_files[\s\S]*pulls\/\$number\/files\?per_page=100[\s\S]*--slurpfile response "\$pages"/u,
+    "large PRs receive an exact file-backed paginated changed-file inventory",
+  );
+  assert.doesNotMatch(
+    detectBlock,
+    /--argjson (?:files|classification)/u,
+    "large changed-path and classification arrays never cross the process argument-size boundary",
+  );
+  assert.match(
+    detectBlock,
+    /--slurpfile classifications "\$classification_file"/u,
+    "relationship metadata is joined from a file instead of a process argument",
   );
   assert.match(
     detectBlock,

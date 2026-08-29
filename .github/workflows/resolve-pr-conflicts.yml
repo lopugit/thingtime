@@ -1426,7 +1426,7 @@ jobs:
           }
 
           sync_lopu_fact_labels() {
-            local classification="$1" managed encoded metadata number desired current
+            local classification_file="$1" managed encoded metadata number desired current
             managed="$(node "$STATUS_HELPER" labels --scope fact | jq -c '[.[].name]')" || return 1
             while IFS= read -r encoded; do
               [ -n "$encoded" ] || continue
@@ -1436,7 +1436,7 @@ jobs:
               current="$(jq -c '.labels' <<<"$metadata")"
               sync_lopu_label_subset "$number" "$managed" "$desired" "$current" \
                 || echo "::warning::Could not reconcile Lopu fact labels for #$number."
-            done < <(jq -r '.prs[] | @base64' <<<"$classification")
+            done < <(jq -r '.prs[] | @base64' "$classification_file")
           }
 
           # Detection visibility: reviewers otherwise see only GitHub's
@@ -1614,7 +1614,7 @@ jobs:
           # inventory. Fetch the uncommon larger diffs once, after mergeability
           # polling settles, so overlap labels never silently miss path 101+.
           complete_large_pr_files() {
-            local inventory="$1" encoded pr number pages files
+            local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
               [ -n "$encoded" ] || continue
               pr="$(base64 --decode <<<"$encoded")"
@@ -1626,14 +1626,14 @@ jobs:
                 echo "::warning::Could not complete the changed-file inventory for #$number."
                 continue
               fi
-              files="$(jq -c '[.[].[]?.filename] | unique' "$pages")"
-              rm -f "$pages"
               inventory="$(jq -c \
                 --argjson number "$number" \
-                --argjson files "$files" \
-                'map(if .number == $number
-                     then . + {files:$files, filesTotal:($files | length)}
-                     else . end)' <<<"$inventory")"
+                --slurpfile response "$pages" \
+                '($response[0] | add // [] | map(.filename) | unique) as $files
+                 | map(if .number == $number
+                       then . + {files:$files, filesTotal:($files | length)}
+                       else . end)' <<<"$inventory")"
+              rm -f "$pages"
             done < <(jq -r '.[] | select(.filesTotal > (.files | length)) | @base64' <<<"$inventory")
             printf '%s\n' "$inventory"
           }
@@ -1735,10 +1735,12 @@ jobs:
           # A reverse synchronization/promotion PR headed by the default branch
           # is not a stack parent for ordinary PRs based on that branch.
           default_ref="$(gh_read_retry "repos/$REPO" --jq '.default_branch')"
-          classification="$(node "$STATUS_HELPER" classify --default-ref "$default_ref" <<<"$all_open")"
+          classification_file="$RUNNER_TEMP/lopu-pr-classification.json"
+          node "$STATUS_HELPER" classify --default-ref "$default_ref" \
+            <<<"$all_open" >"$classification_file"
           ensure_lopu_label_definitions \
             || echo "::warning::Could not fully initialize the managed Lopu label namespace."
-          sync_lopu_fact_labels "$classification" \
+          sync_lopu_fact_labels "$classification_file" \
             || echo "::warning::Could not fully refresh Lopu fact labels for the open PR inventory."
 
           # This is an operator-controlled hard stop, not a failed-snapshot
@@ -1904,7 +1906,9 @@ jobs:
             snapshots="$(jq -c --argjson item "$candidate" '. + [$item]' <<<"$snapshots")"
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           conflicting="$snapshots"
-          conflicting="$(jq -c --argjson classification "$classification" '
+          conflicting="$(jq -c --slurpfile classifications "$classification_file" '
+            ($classifications[0]) as $classification
+            |
             . as $items
             | ($items | length) as $queue_total
             | map(. as $item
@@ -1922,6 +1926,7 @@ jobs:
                     }
                   })
           ' <<<"$conflicting")"
+          rm -f "$classification_file"
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
             candidate="$(base64 --decode <<<"$encoded")"
