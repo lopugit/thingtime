@@ -25,9 +25,11 @@
    `createRoot(document.getElementById('root'))` — there is no server-rendered
    document and no hydration pass anywhere, so document-hydration mismatch
    warnings can no longer occur. The original symptom (unstyled-content jump)
-   is handled by the static shell plus the pre-paint theme snapshot script in
-   `index.html`. If SSR is ever reintroduced, write a fresh spec against that
-   architecture instead of resurrecting this item.
+   is handled by the static shell plus the pre-paint theme snapshot in
+   `remix/public/tt-boot.js` (a render-blocking external script loaded from
+   `index.html`'s `<head>` — external so the CSP can stay `script-src 'self'`).
+   If SSR is ever reintroduced, write a fresh spec against that architecture
+   instead of resurrecting this item.
 
 2. **Tighten verification-link origin trust.**
 
