@@ -565,6 +565,11 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
+root `vercel.json`). For how that becomes region-local latency worldwide without
+splitting the database or the URL, see
+`docs/architecture/geo-distribution.md` — a proposal, not shipped behaviour.
+
 ## Admin access
 
 Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
