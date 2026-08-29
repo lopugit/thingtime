@@ -6256,7 +6256,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
-      'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
+      'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
@@ -7185,7 +7185,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		endpoint: '/api/v1/tokens',
 		summary: 'Mint and list scoped API tokens — hand one to an AI or script so it can work your things.',
 		detail:
-			'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope catalog; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
+			'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private" }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
 		auth: {
 			mode: 'session',
 			description: 'Full session (cookie or service-account Bearer) required — a personal access token can never mint or list tokens.'
@@ -7217,6 +7217,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Full verbs, but only over things this token itself creates.',
 				method: 'POST',
 				body: { name: 'Sandboxed agent', scopes: ['things'], expiresInMs: 604800000, onlyCreatedThings: true }
+			},
+			{
+				name: 'Mint a public-only agent',
+				description: 'Full verbs over public things only — private things stay invisible to it.',
+				method: 'POST',
+				body: { name: 'Public-sphere agent', scopes: ['things'], expiresInMs: 604800000, visibility: 'public' }
+			},
+			{
+				name: 'Mint a private-only agent',
+				description: 'Works your private things only — it can never see or touch anything public.',
+				method: 'POST',
+				body: { name: 'Private vault agent', scopes: ['things.read', 'things.create', 'things.update'], expiresInMs: 604800000, visibility: 'private' }
 			}
 		],
 		responseExamples: [
@@ -7231,6 +7243,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 						id: 'jti-uuid',
 						name: 'Claude research agent',
 						scopes: ['things'],
+						visibility: 'all',
 						expiresAt: '2026-08-05T00:00:00.000Z',
 						maxUses: null,
 						usesRemaining: null,
@@ -7246,6 +7259,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Scope catalog: things, things.read, things.create, things.update, things.delete, things.comment, things.react, things.save, things.share.',
 			'Expiry is enforced at millisecond precision server-side; the sessions TTL index reaps expired tokens, so they eventually disappear from the list.',
 			'onlyCreatedThings sandbox: scopes say WHAT verbs, tokenAcl grants say ON WHICH things. A sandboxed token needs its tt:token/<id> entry on the thing — its own creations carry it automatically, the owner (or any credential that can update the thing) layers more tokens on by editing tokenAcl, and removing an entry revokes that token’s reach immediately. Re-sharing a token-created share of a foreign post still blocks (shares attach to the root).',
+			'visibility fence: the third axis — scopes say WHAT verbs, tokenAcl says WHICH things, visibility says WHICH AUDIENCE. "public" and "private" partition things by whether their (inherit-resolved) acl carries tt:all; both directions of the boundary are locked (a public-only token cannot make a public thing private, a private-only token cannot publish). Tokens minted before this field behave as "all". Combines freely with onlyCreatedThings.',
 			'tokenAcl entries for revoked or unknown tokens are inert (the credential can’t authenticate), so grant lists never need cleanup to stay safe.',
 			'At most 200 tokens per user — revoke old ones to make room.'
 		]
@@ -7278,7 +7292,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		endpoint: '/api/v1/tokens/self',
 		summary: 'Ask a token who it is and what it can do — without spending a use.',
 		detail:
-			'GET with the personal access token as Authorization: Bearer <token> returns the token record (name, scopes, expiresAt, maxUses, usesRemaining, status) plus a minimal owner identity { id, username, displayName }. Deliberately free: introspection never consumes a use, so a 1-use token can check its powers before spending its only call. If you are an AI that has just been handed a token — call this first, then fetch /api/docs for the full API reference.',
+			'GET with the personal access token as Authorization: Bearer <token> returns the token record (name, scopes, visibility, onlyCreatedThings, expiresAt, maxUses, usesRemaining, status) plus a minimal owner identity { id, username, displayName }. Deliberately free: introspection never consumes a use, so a 1-use token can check its powers before spending its only call. If you are an AI that has just been handed a token — call this first, then fetch /api/docs for the full API reference.',
 		auth: { mode: 'bearer', description: 'Personal access token as a Bearer header — full sessions and app tokens are rejected here.' },
 		methods: ['GET'],
 		steps: [

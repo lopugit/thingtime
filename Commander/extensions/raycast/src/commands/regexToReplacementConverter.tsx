@@ -71,9 +71,10 @@ export const regexToReplacementConverter = async (props: any) => {
     newValue += item + `$${index + 1}`;
   });
 
-  // Decode only escapes that were present in the original input. A single
-  // pass prevents a decoded backslash from being decoded again by a later
-  // replacement.
+  // Decode only escapes that were present in the original input: \{ \\ \[ \] \} \.
+  // One left-to-right pass consumes each backslash together with the character it
+  // escapes, so a backslash produced by unescaping \\ is never unescaped a second
+  // time (\\] stays \], not ]).
   newValue = unescapeRegexReplacementText(newValue);
 
   // const regex = /([\s\r]+)/g;
