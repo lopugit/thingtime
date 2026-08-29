@@ -30,6 +30,9 @@ body { background:#f7f7f8; color:#18181b; font-family:Inter,ui-sans-serif,system
 .ttb-input:focus { border-color:#a1a1aa; box-shadow:0 0 0 3px rgba(24,24,27,.08); }
 .ttb-status { color:#52525b; font-size:12px; min-height:24px; padding:12px 20px 0; }
 .ttb-status[data-error="true"] { color:#b42318; }
+.ttb-target { color:#52525b; font-size:12px; line-height:1.5; padding:10px 20px 0; }
+.ttb-target[data-update="true"] { color:#92400e; }
+.ttb-target code { font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
 .ttb-editor { min-height:280px; overflow:auto; padding:14px 12px 22px; }
 .ttb-actions { align-items:center; border-top:1px solid #ededf0; display:flex; flex-wrap:wrap; gap:9px; padding:14px 20px; }
 .ttb-button { background:#f4f4f5; border:1px solid #e4e4e7; border-radius:10px; color:#27272a; cursor:pointer; font:750 13px/1 ui-sans-serif,system-ui; padding:10px 13px; }
@@ -150,13 +153,17 @@ const BridgeApp = ({ channel, parentOrigin }: BridgeParams) => {
 	const value = initialized && !loading ? getThingtime(BRIDGE_PATH) : undefined;
 	React.useEffect(() => {
 		if (!initialized || loading || value === undefined) return;
+		// Clear the echo guard before anything that can throw. Sanitizing first left
+		// the flag set whenever the editor round-tripped a value sanitizeJson
+		// rejects (a dotted or `$`-prefixed key is the easy one to type), and the
+		// next *genuine* local edit then consumed the stale flag and was dropped
+		// instead of posted — one silent divergence from the host page per failure.
+		if (applyingRemote.current) {
+			applyingRemote.current = false;
+			return;
+		}
 		try {
-			const safeValue = sanitizeJson(value);
-			if (applyingRemote.current) {
-				applyingRemote.current = false;
-				return;
-			}
-			post('state', { value: safeValue });
+			post('state', { value: sanitizeJson(value) });
 		} catch {
 			// The safe bridge never sends non-JSON Thingtime state to its opener.
 		}
@@ -236,6 +243,27 @@ const BridgeApp = ({ channel, parentOrigin }: BridgeParams) => {
 
 				<div className="ttb-status" data-error={statusError ? 'true' : 'false'} role="status">
 					{status}
+				</div>
+
+				{/*
+				 * The opener names the save target: `documentMeta` is whatever id and
+				 * version the host page put in its init/request-save payload, and the
+				 * server authorizes that write by ownerId alone. So a page that knows a
+				 * *public* embed's id — which is exactly the id it was shared under —
+				 * can aim this confirmation at an existing thing on the signed-in
+				 * owner's account, under that thing's real name. Confirming is still the
+				 * user's call, but they can only make it if the window says which call
+				 * it is: replacing something they already have, or making something new.
+				 */}
+				<div className="ttb-target" data-update={documentMeta ? 'true' : 'false'} role="note">
+					{documentMeta ? (
+						<>
+							⚠︎ Saving <strong>replaces</strong> a thing already on your account — “{name}”, version {documentMeta.version},{' '}
+							<code>{documentMeta.id}</code>. {parentOrigin} chose it. Its current contents are overwritten.
+						</>
+					) : (
+						<>Saving creates a new thing on your Thingtime account.</>
+					)}
 				</div>
 				<section className="ttb-editor" aria-label="Thing editor">
 					{initialized && !loading ? <Thingtime path={BRIDGE_PATH} edit codeView safeEmbed pathPl={0} /> : <div>Connecting to the website…</div>}

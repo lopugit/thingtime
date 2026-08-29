@@ -12,9 +12,22 @@ const withPublicReadCors = (response: Response) => {
 	return response;
 };
 
+// A GET body depends on who is asking: a cross-site caller gets the anonymous
+// public projection, a first-party one may get its own private thing. Say so, so
+// a shared cache cannot serve one audience's variant to the other. no-store is
+// the belt here and Vary the braces — errors carry it too, because a 404 is the
+// "does this id exist" answer and it is equally auth-dependent.
+const withOriginVariance = (response: Response) => {
+	response.headers.append('Vary', 'Origin');
+	return response;
+};
+
 const resultResponse = (result: any) =>
 	result.ok === false
-		? json({ ok: false, error: result.error, ...(result.thing ? { thing: result.thing } : {}) }, { status: result.status })
+		? json(
+				{ ok: false, error: result.error, ...(result.thing ? { thing: result.thing } : {}) },
+				{ status: result.status, headers: { 'Cache-Control': 'no-store' } }
+		  )
 		: json(result, { headers: { 'Cache-Control': 'no-store' } });
 
 // GET /api/v1/embed/things?id=<share-id> — public things are readable from
@@ -36,15 +49,15 @@ export const loader = async ({ request }: { request: Request }) => {
 	const limit = await enforceRateLimit(request, 'embed.read', user ? `user:${user.id}` : null);
 	if (!limit.allowed) {
 		const limited = json({ ok: false, error: 'Too many embed reads — take a breather 🌸' }, rateLimitedResponseInit(limit));
-		return isCrossOrigin ? withPublicReadCors(limited) : limited;
+		return withOriginVariance(isCrossOrigin ? withPublicReadCors(limited) : limited);
 	}
 
 	if (id) {
 		const response = resultResponse(await getEmbeddedThing(user?.id || null, id));
-		return isCrossOrigin ? withPublicReadCors(response) : response;
+		return withOriginVariance(isCrossOrigin ? withPublicReadCors(response) : response);
 	}
-	if (!user) return resultResponse({ ok: false, status: 401, error: 'Unauthorized' });
-	return resultResponse(await listEmbeddedThings(user.id));
+	if (!user) return withOriginVariance(resultResponse({ ok: false, status: 401, error: 'Unauthorized' }));
+	return withOriginVariance(resultResponse(await listEmbeddedThings(user.id)));
 };
 
 // POST /api/v1/embed/things — create or version-safely update an embedded

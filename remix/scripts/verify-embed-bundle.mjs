@@ -44,4 +44,31 @@ if (syntaxCheck.status !== 0) {
 
 const bytes = statSync(outputPath).size;
 const gzipBytes = gzipSync(source).byteLength;
-console.log(`[verify] Single-file embed ready: ${outputPath} (${bytes.toLocaleString()} bytes, ${gzipBytes.toLocaleString()} gzip).`);
+
+// Weight is a product constraint here, not a build detail: every third-party
+// host page downloads this whole file just to render a JSON tree. The one IIFE
+// also carries the first-party popup editor (React, Chakra, Emotion, the legacy
+// smarts module) because bridge.html loads the same asset, which is why the
+// ceiling is this high — see docs/THINGTIME_EMBED.md. Without a budget that
+// cost grows silently on someone else's homepage; the asset-count check above
+// only catches an extra *file*, never a bigger one. Raise these deliberately,
+// in a commit that says why.
+const MAX_GZIP_BYTES = 700 * 1024;
+const MAX_BYTES = 2_500 * 1024;
+
+for (const [label, actual, budget] of [
+	['gzip', gzipBytes, MAX_GZIP_BYTES],
+	['raw', bytes, MAX_BYTES]
+]) {
+	if (actual > budget) {
+		throw new Error(
+			`Embed bundle ${label} size is ${actual.toLocaleString()} bytes, over its ${budget.toLocaleString()} byte budget. ` +
+				'Trim what the host page downloads, or raise the budget in scripts/verify-embed-bundle.mjs on purpose.'
+		);
+	}
+}
+
+console.log(
+	`[verify] Single-file embed ready: ${outputPath} (${bytes.toLocaleString()} bytes, ${gzipBytes.toLocaleString()} gzip; ` +
+		`budget ${MAX_BYTES.toLocaleString()} / ${MAX_GZIP_BYTES.toLocaleString()} gzip).`
+);
