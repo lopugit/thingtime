@@ -24,19 +24,19 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// CORS is an explicit allowlist, never `*` (CWE-942). `origin: '*'` let any
-// site on the internet read every response this service produces, including
-// the authenticated `/v1/*` reads below. This app is retired, but it still
-// runs from `npm run dev`, so keep the safe shape rather than the wildcard.
-// Widen it deliberately via THINGTIME_ALLOWED_ORIGINS (comma-separated).
-const allowedOrigins = (process.env.THINGTIME_ALLOWED_ORIGINS || 'http://localhost:3000')
+// Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// Defaults to the local dev origin. CORS is an explicit allowlist, never `*` (CWE-942): a wildcard
+// origin let any site on the internet read every response this service produces, including the
+// authenticated `/v1/*` reads below, so it is deliberately not the fallback. This app is retired,
+// but it still runs from `npm run dev`, so keep the safe shape rather than the wildcard.
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
 
 const io = new Server(server, {
 	cors: {
-		origin: allowedOrigins,
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -49,7 +49,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: allowedOrigins,
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {
