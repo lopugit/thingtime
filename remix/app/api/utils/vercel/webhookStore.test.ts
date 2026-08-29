@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
 
-import { isVercelWebhookConfigured, parseVercelWebhookEvent, shouldReplaceBranchStatus, verifyVercelSignature } from './webhookStore';
+import {
+  isVercelWebhookConfigured,
+  parseVercelWebhookEvent,
+  persistedStatusIsForDeployment,
+  shouldReplaceBranchStatus,
+  verifyVercelSignature
+} from './webhookStore';
 
 // Both the configured-check and the verifier read process.env at CALL time, so
 // tests can set the secret per case without module-mocking.
@@ -314,4 +320,49 @@ test('an older terminal event never overwrites a newer terminal one', () => {
 
 test('the first event for a branch is always recorded', () => {
   assert.equal(shouldReplaceBranchStatus(undefined, { deploymentId: 'dpl_1', eventAt: at(T), state: 'building' }), true);
+});
+
+// --------------------------------------------------------- deployment identity
+
+// One branch can have concurrent sibling deployments sharing the single stored
+// slot (generic Preview + the `develop` Custom Environment build the same head
+// SHA). The status fast path uses this to refuse to report a sibling's failure
+// as its own — see status.ts.
+
+test('the running deployment URL identifies the entry, so same-SHA siblings are told apart', () => {
+  const running = { commitSha: 'abc1234', deploymentUrl: 'https://thingtime-mine.vercel.app' };
+  assert.equal(
+    persistedStatusIsForDeployment({ commitSha: 'abc1234', deploymentUrl: 'https://thingtime-mine.vercel.app' }, running),
+    true
+  );
+  // the sibling built from the SAME commit is a different deployment
+  assert.equal(
+    persistedStatusIsForDeployment(
+      { commitSha: 'abc1234', deploymentUrl: 'https://thingtime-sibling.vercel.app' },
+      running
+    ),
+    false
+  );
+});
+
+test('the commit SHA identifies the entry only when a URL is missing on either side', () => {
+  assert.equal(persistedStatusIsForDeployment({ commitSha: 'abc1234' }, { commitSha: 'abc1234' }), true);
+  assert.equal(persistedStatusIsForDeployment({ commitSha: 'abc1234' }, { commitSha: 'def5678' }), false);
+  // a stored URL cannot decide anything when the running deployment has none
+  assert.equal(
+    persistedStatusIsForDeployment(
+      { commitSha: 'abc1234', deploymentUrl: 'https://thingtime-other.vercel.app' },
+      { commitSha: 'abc1234' }
+    ),
+    true
+  );
+});
+
+test('an unidentifiable entry is never claimed as this deployment', () => {
+  assert.equal(persistedStatusIsForDeployment(null, { commitSha: 'abc1234' }), false);
+  assert.equal(persistedStatusIsForDeployment(undefined, { commitSha: 'abc1234' }), false);
+  // nothing known on either side is not a match — it must not default to true
+  assert.equal(persistedStatusIsForDeployment({}, {}), false);
+  assert.equal(persistedStatusIsForDeployment({ commitSha: 'abc1234' }, {}), false);
+  assert.equal(persistedStatusIsForDeployment({}, { commitSha: 'abc1234' }), false);
 });

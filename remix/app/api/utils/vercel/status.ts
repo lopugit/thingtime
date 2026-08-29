@@ -1,5 +1,5 @@
 import { PublicError, safeErrorText } from '../errors/safeError';
-import { getPersistedBranchStatus, isVercelWebhookConfigured } from './webhookStore';
+import { getPersistedBranchStatus, isVercelWebhookConfigured, persistedStatusIsForDeployment } from './webhookStore';
 
 export { isVercelStatusEnabled } from './environment';
 
@@ -901,9 +901,21 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     // persisted doc without spending Vercel API calls — a ready deployment
     // stays ready until the next webhook event says otherwise. Mid-build
     // states still fall through to the live poll for phase/progress detail.
+    //
+    // A failure is only served from the store when the entry provably belongs
+    // to THIS deployment. One branch can have concurrent sibling deployments
+    // sharing the single stored slot, and a sibling's `ready` is harmless while
+    // a sibling's `error`/`canceled` would paint a healthy instance red — and
+    // this feeds /api/v1/health/vercel, so it would also report the deployment
+    // as failed — until the next event for that branch arrives. Unproven
+    // failures fall through to the live poll: exactly the pre-webhook path.
     if (isVercelWebhookConfigured()) {
       const persisted = await getPersistedBranchStatus(branch);
-      if (persisted && (persisted.state === 'ready' || persisted.state === 'error' || persisted.state === 'canceled')) {
+      const isFailureState = persisted?.state === 'error' || persisted?.state === 'canceled';
+      const servable =
+        persisted?.state === 'ready' ||
+        (isFailureState && persistedStatusIsForDeployment(persisted, { commitSha, deploymentUrl }));
+      if (persisted && servable) {
         const lastReadyAtMs = persisted.lastReadyAt ? Date.parse(persisted.lastReadyAt) : undefined;
         return {
           ...fallback,

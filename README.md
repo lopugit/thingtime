@@ -1352,9 +1352,17 @@ https://<your-thingtime-origin>/api/v1/vercel/webhook
 
 While `VERCEL_WEBHOOK_SECRET` is unset the endpoint answers `404` and
 `/api/v1/vercel/status` behaves exactly as before (live API polling). Once it is
-set, the latest event per git branch is persisted server-side and terminal
-states (ready/error/canceled) are served from that record with no Vercel API
-calls; mid-build states still poll for phase and progress.
+set, the latest event per git branch is persisted server-side and a `ready`
+state is served from that record with no Vercel API calls; mid-build states
+still poll for phase and progress.
+
+A recorded `error`/`canceled` is only served when the record demonstrably
+belongs to the deployment answering the request (matched on `VERCEL_URL`, or on
+`VERCEL_GIT_COMMIT_SHA` when no URL is available). One branch can have several
+concurrent deployments sharing that single record — Thingtime builds one head
+SHA into both generic Preview and the `develop` Custom Environment — and a
+sibling's failure must not mark a healthy deployment as failed, since this also
+backs `/api/v1/health/vercel`. Unattributable failures fall back to polling.
 
 This is a **separate** webhook from the CI Control receiver at
 `/api/v1/integrations/vercel/webhook` (`THINGTIME_VERCEL_WEBHOOK_SECRET`)

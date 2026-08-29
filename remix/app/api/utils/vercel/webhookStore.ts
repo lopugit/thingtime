@@ -132,6 +132,28 @@ export const shouldReplaceBranchStatus = (
   return !older;
 };
 
+// Does a persisted entry describe the deployment that is serving THIS request?
+//
+// The store holds exactly one entry per branch, but a branch legitimately has
+// several concurrent deployments: Thingtime builds one head SHA into both the
+// generic Preview environment and the `develop` Custom Environment (see
+// VERCEL_DEPLOYMENTS.md, "Develop-target PR previews"). Those siblings share
+// this slot, so the last event to arrive wins regardless of which deployment
+// the caller is running on.
+//
+// VERCEL_URL is unique per deployment, so it is the only signal that separates
+// same-SHA siblings — prefer it, and fall back to the commit SHA only when a
+// URL is missing on either side. Unknown on both counts is not identity.
+export const persistedStatusIsForDeployment = (
+  persisted: Pick<VercelWebhookBranchStatus, 'commitSha' | 'deploymentUrl'> | null | undefined,
+  running: { commitSha?: string; deploymentUrl?: string }
+): boolean => {
+  if (!persisted) return false;
+  if (running.deploymentUrl && persisted.deploymentUrl) return persisted.deploymentUrl === running.deploymentUrl;
+  if (running.commitSha && persisted.commitSha) return persisted.commitSha === running.commitSha;
+  return false;
+};
+
 // Persist one event, subject to the guard above.
 export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWebhookBranchStatus | null> => {
   const parsed = parseVercelWebhookEvent(envelope);
