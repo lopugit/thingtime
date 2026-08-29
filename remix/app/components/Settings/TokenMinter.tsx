@@ -18,7 +18,8 @@ import { RainbowButton } from './SettingsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { PAT_SCOPE_CATALOG } from '~/api/utils/auth/patScopes';
+import { PAT_SCOPE_CATALOG, PAT_VISIBILITY_CATALOG } from '~/api/utils/auth/patScopes';
+import type { PatVisibilityMode } from '~/api/utils/auth/patScopes';
 
 // Settings → Token minter: mint scoped, revocable API tokens to hand to an AI
 // agent or script (push a new thing, update a thing, scan your things) without
@@ -45,6 +46,7 @@ type PatTokenRow = {
   name: string;
   scopes: string[];
   onlyCreatedThings?: boolean;
+  visibility?: PatVisibilityMode;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -119,6 +121,14 @@ const USES_PRESETS: Array<{ label: string; uses: number | null }> = [
 
 const SCOPES_BY_ID = new Map(PAT_SCOPE_CATALOG.map((scope) => [scope.id, scope]));
 const LEAF_SCOPES = PAT_SCOPE_CATALOG.filter((scope) => scope.id !== 'things');
+const VISIBILITY_BY_ID = new Map(PAT_VISIBILITY_CATALOG.map((mode) => [mode.id, mode]));
+
+// list-row badge for restricted tokens ('all' shows nothing — it's the default)
+const summarizeVisibility = (visibility: PatVisibilityMode | undefined): string => {
+  if (visibility !== 'public' && visibility !== 'private') return '';
+  const mode = VISIBILITY_BY_ID.get(visibility);
+  return mode ? ` · ${mode.emoji} ${mode.title.toLowerCase()}` : '';
+};
 
 const summarizeScopes = (scopes: string[]): string => {
   if (scopes.includes('things')) return '🗝️ full things access';
@@ -161,6 +171,7 @@ export const TokenMinter = (props: { userId: string }) => {
   const [name, setName] = React.useState('');
   const [selectedScopes, setSelectedScopes] = React.useState<string[]>(['things']);
   const [onlyCreatedThings, setOnlyCreatedThings] = React.useState(false);
+  const [visibility, setVisibility] = React.useState<PatVisibilityMode>('all');
   const [expiresInMs, setExpiresInMs] = React.useState<number | null>(30 * 24 * 60 * 60 * 1000);
   const [customValue, setCustomValue] = React.useState('30');
   const [customUnit, setCustomUnit] = React.useState('d');
@@ -270,7 +281,8 @@ export const TokenMinter = (props: { userId: string }) => {
         scopes,
         expiresInMs,
         maxUses,
-        onlyCreatedThings
+        onlyCreatedThings,
+        visibility
       });
       setMinted({ token: resp.token, example: resp.example, docs: resp.docs });
       if (resp.tokenInfo) saveTokens((prev) => [resp.tokenInfo, ...prev.filter((t) => t.id !== resp.tokenInfo.id)]);
@@ -386,6 +398,32 @@ export const TokenMinter = (props: { userId: string }) => {
           <Box marginLeft="auto" flexShrink={0}>
             <Switch isChecked={onlyCreatedThings} onChange={(e) => setOnlyCreatedThings(e.target.checked)}></Switch>
           </Box>
+        </Flex>
+
+        {/* visibility fence: the third axis — WHAT (permission chips), WHICH
+            things (sandbox switch), and WHICH AUDIENCE (these toggles) */}
+        <Flex flexDirection="column" rowGap={1} paddingTop={1}>
+          <FieldLabel>Visibility 🌗</FieldLabel>
+          <Flex columnGap={1} rowGap={1} flexWrap="wrap">
+            {PAT_VISIBILITY_CATALOG.map((mode) => (
+              <Button
+                key={mode.id}
+                size="xs"
+                variant={chipVariant(visibility === mode.id)}
+                title={mode.description}
+                onClick={() => setVisibility(mode.id)}
+              >
+                {mode.emoji} {mode.title}
+              </Button>
+            ))}
+          </Flex>
+          <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
+            {visibility === 'public'
+              ? 'Public only — the token can only see and touch public things. Your private things stay invisible to it, and everything it creates must be public.'
+              : visibility === 'private'
+                ? 'Private only — the token can only see and touch private (non-public) things. It can’t read the public feed, post publicly, or engage with public things; its creations default to private.'
+                : 'Public & private — no audience fence. The token reaches everything its permissions above allow.'}
+          </Text>
         </Flex>
       </Flex>
 
@@ -588,6 +626,7 @@ export const TokenMinter = (props: { userId: string }) => {
                   <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {summarizeScopes(token.scopes)}
                     {token.onlyCreatedThings ? ' · 🧸 its own things only' : ''}
+                    {summarizeVisibility(token.visibility)}
                   </Text>
                   <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {meta.join(' · ')}
