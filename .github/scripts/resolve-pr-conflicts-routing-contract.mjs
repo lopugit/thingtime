@@ -474,9 +474,21 @@ function assertWorkflowSource() {
     /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
     "read-only GitHub API calls retry a bounded set of transient failures with backoff",
   );
+  // A mid-response HTTP/2 reset carries no status line, so status-only
+  // classification made a retryable edge blip fatal (run 33262097171).
+  assert.equal(
+    source.match(/^\s*transport='stream error\|/gmu)?.length,
+    3,
+    "every gh_read_retry copy also treats transport-level resets as retryable",
+  );
+  assert.doesNotMatch(
+    source,
+    /if grep -Eq 'HTTP \(408\|429\|500\|502\|503\|504\)\(\[\^0-9\]\|\$\)' "\$errors"; then/u,
+    "no gh_read_retry copy classifies transience by HTTP status alone",
+  );
   assert.match(
     source,
-    /gh_read_retry graphql --paginate --slurp[\s\S]*successful but malformed PR inventory response/u,
+    /if ! gh_read_retry graphql --paginate --slurp[\s\S]*Could not read the open PR inventory from GitHub[\s\S]*successful but malformed PR inventory response/u,
     "the GraphQL PR inventory is parsed only after transport success and response-shape validation",
   );
   assert.match(
