@@ -81,6 +81,46 @@ const CATALOG_BY_ID = new Map(PAT_SCOPE_CATALOG.map((scope) => [scope.id, scope]
 
 export const PAT_SCOPE_IDS = PAT_SCOPE_CATALOG.map((scope) => scope.id);
 
+// Visibility restriction — WHICH audience of things the token may see and
+// touch, orthogonal to the verb scopes above and to the onlyCreatedThings
+// sandbox. 'public' fences the token to things whose (inherit-resolved) acl
+// is world-visible (tt:all); 'private' fences it to everything that is NOT
+// public (owner-only, circles, specific grants); 'all' (the default, and what
+// legacy tokens without the field mean) is unrestricted.
+export type PatVisibilityMode = 'all' | 'public' | 'private';
+
+export type PatVisibilityDescriptor = {
+  id: PatVisibilityMode;
+  title: string;
+  description: string;
+  emoji: string;
+};
+
+// Ordered as the settings visibility selector lists them.
+export const PAT_VISIBILITY_CATALOG: PatVisibilityDescriptor[] = [
+  {
+    id: 'all',
+    title: 'Public & private',
+    description: 'No audience fence — the token reaches everything its permissions allow.',
+    emoji: '🌗'
+  },
+  {
+    id: 'public',
+    title: 'Public only',
+    description: 'Only world-visible things — your private things stay invisible and untouchable to this token.',
+    emoji: '🌐'
+  },
+  {
+    id: 'private',
+    title: 'Private only',
+    description: 'Only non-public things — the token cannot see, create, or engage with anything public.',
+    emoji: '🔒'
+  }
+];
+
+export const isKnownPatVisibility = (value: unknown): value is PatVisibilityMode =>
+  value === 'all' || value === 'public' || value === 'private';
+
 export const isKnownPatScope = (value: unknown): value is string =>
   typeof value === 'string' && CATALOG_BY_ID.has(value);
 
