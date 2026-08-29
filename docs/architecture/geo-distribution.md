@@ -92,7 +92,7 @@ From [FUNDAMENTALS.md](../../FUNDAMENTALS.md) and
 | Per-URI client cache with serverless-tuned options | collections.ts (`maxPoolSize: 10`, 5s fail-fast, `appName`) | Multiple regional clients per instance are already safe |
 | Boot-time index/connection warmup | [server/plugins/mongo-warmup.ts](../../remix/server/plugins/mongo-warmup.ts) | Cold instances in ANY region warm themselves without user-visible cost |
 | Optimistic rendering house rule | CLAUDE.md, reactionOverlay, provisional comments | The UX layer that makes eventual consistency invisible: users see their own actions instantly regardless of replication lag |
-| Cross-deployment sync (develop branch, PR #175) | secure-blob tokens, shareId-level sync | Related but different axis: it syncs *separate* deployments (envs/forks). Geo-distribution below stays one logical cluster — but if we ever wanted federated regional deployments instead, this is the primitive that grows into it. |
+| Cross-deployment sync — ⚠️ **proposed, not owned yet** | PR #175, still **open** against `develop`; `remix/app/api/utils/deployments/` exists only on its branch, not on `develop` | Related but different axis: it syncs *separate* deployments (envs/forks). Geo-distribution below stays one logical cluster — but if we ever wanted federated regional deployments instead, this is the primitive that would grow into it, once it lands. |
 
 ## 4. The shape of the problem: reads vs writes, own-data vs global-data
 
@@ -296,12 +296,12 @@ reads, zones localize content writes.
 ### 5.4 Rejected: per-region independent databases with app-level sync
 
 Two full deployments (thingtime-au, thingtime-us) syncing each other via the
-cross-deployment sync feature. Rejected as the *primary* architecture because
-it forfeits constraint §2.1 — conflict resolution, sync lag, and split-brain
-uniqueness (same username registered in both regions simultaneously) all move
-into app code, which is the hardest version of this problem. The sync feature
-remains the right tool for what it was built for (branch/env data flows,
-federated forks) — not for intra-product geo.
+cross-deployment sync feature proposed in PR #175. Rejected as the *primary*
+architecture because it forfeits constraint §2.1 — conflict resolution, sync
+lag, and split-brain uniqueness (same username registered in both regions
+simultaneously) all move into app code, which is the hardest version of this
+problem. If that sync feature lands it stays the right tool for what it was
+built for (branch/env data flows, federated forks) — not for intra-product geo.
 
 ## 6. Recommendation + staged plan
 

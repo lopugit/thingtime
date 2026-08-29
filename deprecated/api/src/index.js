@@ -23,9 +23,20 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
+
+// Cross-origin access is opt-in: set CORS_ORIGINS to a comma-separated origin
+// list. This used to be a hardcoded '*', which let any page a browser happened
+// to be on read this server's responses — including a locally running instance
+// on a developer's machine. An empty list means same-origin only; non-browser
+// clients (curl, native socket.io) are unaffected either way.
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+	.split(',')
+	.map(origin => origin.trim())
+	.filter(Boolean)
+
 const io = new Server(server, {
 	cors: {
-		origin: '*',
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -38,7 +49,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: '*',
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {
