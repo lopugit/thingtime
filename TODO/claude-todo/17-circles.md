@@ -126,10 +126,24 @@ Two places must agree (test == live):
 3. **Enrichment completeness is the real failure mode.** `Viewer` gains
    `familyIds`, and every path that currently calls `withFriendIds` must load
    it too — extend that helper (`withCircleIds`) rather than adding a second
-   one, so a path cannot enrich one circle and forget the other. There are
-   ~9 call sites in `api/utils/things/things.ts` plus
-   `routes/api/v1/things/views/_views.tsx`. A missed site fails *closed*
-   (owner-only), which is safe but silent — hence the live proof below.
+   one, so a path cannot enrich one circle and forget the other. That covers
+   its **6 call sites, all inside `api/utils/things/things.ts`** — no other
+   file calls the helper.
+
+   **Extending the helper is not sufficient.** Two paths bypass it and call
+   `friendIdsOf` directly, so they will keep compiling and keep resolving
+   family to owner-only unless the family set is threaded by hand:
+
+   - `routes/api/v1/things/views/_views.tsx` loads the set itself and passes
+     it as the `friendIds` argument of `recordPostViews`, which assembles its
+     own `AclViewer` literal (`api/utils/things/views.ts`). Miss it and views
+     on family-only posts silently stop counting.
+   - the notification fan-out in `things.ts` (`friendIdsOf(actor.id)`), which
+     gates `post-from-friend`. Whether family-only posts fan out at all is a
+     product decision — make it deliberately rather than by omission.
+
+   A missed site fails *closed* (owner-only), which is safe but silent — hence
+   the live proof below.
 
 **Index caution:** `acl` and `thingtime` are both arrays on every things-era
 doc, so they cannot be keys in the same compound index — Mongo rejects every
