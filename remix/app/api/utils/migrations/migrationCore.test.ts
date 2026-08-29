@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	builtinSchemaSeedNeedsRefresh,
 	bulkWriteErrorCodesByOp,
+	conversionBuildOutcomes,
 	exactDocumentSnapshotMatch,
 	storageMigrationOwnership,
 	upsertedOpIndexes
@@ -96,4 +97,49 @@ test('a lone write error object fails closed to the rethrow', () => {
 	// as an empty map: that would mark a conflicting insert as successful and
 	// let the consume phase delete its legacy source.
 	assert.equal(bulkWriteErrorCodesByOp({ writeErrors: { index: 0, code: 11000 } }), null);
+});
+
+// --------------------------------------------------------------------------
+// Build phase of the same page loop. The per-doc conversion this batching
+// replaced built inside its try/catch, so a corrupt legacy row cost one skip.
+// Batching the page put the build in a bare loop, where the same throw escapes
+// run() before skippedIds records the row — every re-run then re-reads the same
+// page and aborts identically, wedging the migration on one document.
+
+test('a page of buildable docs converts in order, with no skips', () => {
+	const outcomes = conversionBuildOutcomes([{ id: 'a' }, { id: 'b' }], (doc) => ({ ok: true as const, thing: { shareId: doc.id } }));
+	assert.deepEqual(outcomes, [
+		{ ok: true, doc: { id: 'a' }, thing: { shareId: 'a' } },
+		{ ok: true, doc: { id: 'b' }, thing: { shareId: 'b' } }
+	]);
+});
+
+test('a declared conversion failure keeps its own reason for the admin note', () => {
+	const outcomes = conversionBuildOutcomes([{ id: 'a' }], () => ({ ok: false as const, reason: 'missing passwordHash' }));
+	assert.deepEqual(outcomes, [{ ok: false, doc: { id: 'a' }, reason: 'missing passwordHash' }]);
+	// a spec that reports failure without a reason still yields a usable note
+	assert.deepEqual(conversionBuildOutcomes([{ id: 'b' }], () => ({ ok: false as const })), [
+		{ ok: false, doc: { id: 'b' }, reason: 'conversion failed' }
+	]);
+});
+
+test('a THROWING conversion is isolated to its own doc, never propagated', () => {
+	// the real shape: users.ts buildUserSecure calls .toISOString() on a legacy
+	// emailVerificationRequiredBy, so a truthy unparseable value raises
+	// RangeError instead of returning { ok: false }
+	const poison = { id: 'poison', emailVerificationRequiredBy: 'soon' };
+	const outcomes = conversionBuildOutcomes<any, Record<string, any>>([{ id: 'a' }, poison, { id: 'c' }], (doc: any) => {
+		if (doc.emailVerificationRequiredBy) return { ok: true as const, thing: { at: new Date(doc.emailVerificationRequiredBy).toISOString() } };
+		return { ok: true as const, thing: { shareId: doc.id } };
+	});
+	// every other doc on the page still converted — the throw did not abort the page
+	assert.deepEqual(
+		outcomes.map((o) => o.ok),
+		[true, false, true]
+	);
+	assert.equal(outcomes[1].ok, false);
+	// generic reason only: err.message could embed a doc field value, and this
+	// note goes into the admin-visible migration report
+	assert.equal((outcomes[1] as any).reason, 'conversion error');
+	assert.equal((outcomes[1] as any).doc, poison);
 });

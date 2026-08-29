@@ -234,6 +234,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Validated with a dry-run + real run against seeded legacy users (3 pages), the
   race-guard rebuild path, foreign-collision skip, waitlist dedup, and idempotent
   re-runs — Claude (AI), 2026-07-18.
+  Follow-up: the batched BUILD phase now runs each `spec.toThing` through
+  `conversionBuildOutcomes`, restoring the per-doc `try/catch` the per-doc loop
+  had. A legacy `users` row whose `emailVerificationRequiredBy` is truthy but
+  unparseable makes `buildUserSecure` raise `RangeError: Invalid time value`
+  rather than returning `{ ok: false }`; in a bare page loop that escapes `run()`
+  before the row reaches `skippedIds`, so every re-run re-reads the same page and
+  aborts identically — one corrupt document wedges the whole migration instead of
+  costing it a single skip. Pinned by a regression test — Lopu (AI), 2026-08-29.
+  [PR #74 details](../PRs/74-claude-batch-collection-things-migration--batch-collection-to-things-migration-per-page.md).
 
 ### Fixed
 

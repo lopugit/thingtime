@@ -65,3 +65,41 @@ export const bulkWriteErrorCodesByOp = (error: any): Map<number, number> | null 
 // re-claimed on the next run. Ops that MATCHED an existing doc are absent by
 // design — those are prior-run twins and have to pass the genuine check.
 export const upsertedOpIndexes = (result: any): number[] => Object.keys(result?.upsertedIds ?? {}).map(Number);
+
+// --------------------------------------------------------------------------
+// Building a page of destination things — phase 1 of collectionToThingsMigration.
+//
+// `toThing` is pure, but it is also arbitrary conversion code running over
+// LEGACY documents, which is precisely where corrupt values survive: a users
+// row whose `emailVerificationRequiredBy` is truthy but unparseable reaches
+// buildUserSecure's `new Date(...).toISOString()` and raises RangeError rather
+// than returning { ok: false }. The per-doc loop this batching replaced ran the
+// build inside the same try/catch as its I/O, so one poisoned row was skipped
+// and noted while the rest of the page converted.
+//
+// That isolation has to survive the batching, and it matters more here than it
+// did per-doc: an exception escaping the page loop aborts run() BEFORE the row
+// is recorded in skippedIds, so the next run re-reads the same page, hits the
+// same row, and aborts identically — one bad document wedges the migration
+// permanently instead of costing it a single skip.
+//
+// Outcomes are returned in batch order so the caller emits its skip notes in
+// the order the per-doc path did.
+export type ConversionBuildOutcome<D, T> = { ok: true; doc: D; thing: T } | { ok: false; doc: D; reason: string };
+
+export const conversionBuildOutcomes = <D, T>(
+	batch: readonly D[],
+	toThing: (doc: D) => { ok: true; thing: T } | { ok: false; reason?: string }
+): ConversionBuildOutcome<D, T>[] =>
+	batch.map((doc) => {
+		let built;
+		try {
+			built = toThing(doc);
+		} catch {
+			// generic reason only — never echo err.message, which could embed a doc
+			// field value into the admin-visible migration report
+			return { ok: false as const, doc, reason: 'conversion error' };
+		}
+		if (built.ok) return { ok: true as const, doc, thing: built.thing };
+		return { ok: false as const, doc, reason: 'reason' in built && built.reason ? built.reason : 'conversion failed' };
+	});

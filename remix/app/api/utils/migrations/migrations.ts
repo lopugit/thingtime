@@ -36,6 +36,7 @@ import { themeAcl } from '../themes/themes';
 import {
 	builtinSchemaSeedNeedsRefresh,
 	bulkWriteErrorCodesByOp,
+	conversionBuildOutcomes,
 	exactDocumentSnapshotMatch,
 	storageMigrationOwnership,
 	upsertedOpIndexes
@@ -868,16 +869,20 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
       if (!batch.length) break;
 
       // Phase 1 — BUILD every destination thing (pure, no I/O). A malformed doc
-      // is skipped + noted exactly as the per-doc path did.
+      // is skipped + noted exactly as the per-doc path did, and so is one whose
+      // conversion THROWS: the per-doc loop built inside its try/catch, and
+      // losing that isolation would let a single corrupt legacy row abort the
+      // whole run before it ever reaches skippedIds (see conversionBuildOutcomes).
       const candidates: { doc: any; thing: Record<string, any> }[] = [];
-      for (const doc of batch) {
-        const built = spec.toThing(doc);
-        if (!built.ok) {
-          const reason = 'reason' in built ? built.reason : 'conversion failed';
-          skip(doc, `${reason} — left for a later re-run`);
+      for (const outcome of conversionBuildOutcomes(batch, spec.toThing)) {
+        // `=== false`, not `!outcome.ok`: this tsconfig runs with
+        // strictNullChecks off, where truthiness does NOT narrow a boolean
+        // discriminant (the same reason the old build read `'reason' in built`)
+        if (outcome.ok === false) {
+          skip(outcome.doc, `${outcome.reason} — left for a later re-run`);
           continue;
         }
-        candidates.push({ doc, thing: built.thing });
+        candidates.push({ doc: outcome.doc, thing: outcome.thing });
       }
       // Every doc on this page was malformed → all now in skippedIds; the next
       // page query excludes them and eventually returns empty. Guard against a
