@@ -1,7 +1,8 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🟡 Final §§C–D reconciliation in PR #99; §§A–B already closed on
-`develop` · raised 2026-07-08 by a multi-agent review.
+**Status:** 🟡 Final §§C–D reconciliation in PR #99; §B and §A's A1/A2 closed on
+`develop`; §A's A3 is throttled but its token lifetime is still unbounded (see
+§A3 "Still open") · raised 2026-07-08 by a multi-agent review.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
@@ -15,7 +16,7 @@ second one (single source of truth).
 
 ---
 
-## A. Unauthenticated admin / data endpoints (highest priority)
+## A. Admin / data endpoint exposure (originally unauthenticated — A1/A2 closed, A3 partial)
 
 > ✅ **A1 + A2 shipped (verified on main 2026-07-21):** both routes now call
 > `requireAdmin` (401/403) and `enforceRateLimit(..., { failClosed: true })`;
@@ -31,47 +32,63 @@ second one (single source of truth).
 > the 5 GiB `storageAllowanceBytes` default. Bound the token lifetime before
 > closing A3. (PR #103 was closed unmerged and covered signup/item 8, not A3.)
 
-Three endpoints are registered in the **production** Nitro dispatcher
-(`remix/server/routes/api/[...].ts` L32–33) with no `getCurrentUser` check, no
-rate limit, and no `NODE_ENV` gate.
+All three endpoints are still registered in the **production** Nitro dispatcher
+(`remix/server/routes/api/[...].ts`). They are no longer ungated: the per-route
+gating below is what makes them safe, so it must survive any move or refactor of
+these routes. Each subsection records the original 2026-07-08 finding (past
+tense) and the current state.
 
-### A1. `POST /api/v1/mongodb/raw-results` — full data exfiltration
-- File: `remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx` L21–44.
-- The action calls `getCollection()` → `db('thingtime').collection('things')` and
-  runs `thingsCollection.find().toArray()` (≈L35), returning **every** `things`
-  doc to any anonymous caller.
-- This is the same collection `createPost` writes `friends` / `family` / `private`
-  posts to (`remix/app/api/utils/things/things.ts` L182–234), so it bypasses the
-  `canView` / `visibilityQueryFor` gating (`things.ts` L338–348). Every private
-  post in the system is readable by anyone who POSTs here.
+### A1. `POST /api/v1/mongodb/raw-results` — ✅ FIXED
+- File: `remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`.
+- **Originally:** the action called `getCollection()` →
+  `db('thingtime').collection('things')` and ran `thingsCollection.find().toArray()`,
+  returning **every** `things` doc to any anonymous caller. That is the same
+  collection `createPost` writes `friends` / `family` / `private` posts to
+  (`remix/app/api/utils/things/things.ts`), so it bypassed the `canView` /
+  `visibilityQueryFor` gating — every private post was readable by anyone.
+- **Now:** both `loader` and `action` gate on `requireAdmin` (401/403), then a
+  fail-closed `enforceRateLimit(request, 'mongodb.query', …, { failClosed: true })`,
+  and the action executes only bounded read-only queries through
+  `runMongoQuery` under `MONGO_QUERY_LIMITS`. There is no raw
+  `find().toArray()` dump left. Responses are `private, no-store`.
 
-### A2. `POST /api/v1/mongodb/populate` — unauth seeding / DoS amplification
-- File: `remix/app/routes/api/v1/mongodb/populate/_populate.tsx` L24 →
+### A2. `POST /api/v1/mongodb/populate` — ✅ FIXED
+- File: `remix/app/routes/api/v1/mongodb/populate/_populate.tsx` →
   `remix/app/scripts/mongodb/setup.ts`.
-- Any anonymous caller triggers DB seeding: demo users created with **repo-known
-  seed passwords**, plus dozens of Mongo round-trips and bcrypt hashes per request
-  (amplification / DoS). Idempotency bounds row growth but not the per-request
-  work. Docs say "dev only" but nothing enforces it.
+- **Originally:** any anonymous caller triggered DB seeding — demo users created
+  with **repo-known seed passwords**, plus dozens of Mongo round-trips and bcrypt
+  hashes per request (amplification / DoS). Idempotency bounded row growth but
+  not per-request work; docs said "dev only" but nothing enforced it.
+- **Now:** `requireAdmin` plus a fail-closed
+  `enforceRateLimit(request, 'mongodb.populate', …, { failClosed: true })`, and
+  the seed run is time-boxed by a clamped `budgetMs` with a whitelisted `stages`
+  filter.
 
-### A3. `POST /api/v1/auth/service-account` — unauth minting of permanent 5 GB tokens
-- File: `remix/app/routes/api/v1/auth/service-account/_service-account.tsx` L8 →
-  `remix/app/api/utils/auth/serviceAccounts.ts` L48–109.
-- `provisionServiceAccount` mints a **non-expiring** bearer token
-  (`signJwt` with `expiresIn:null` omits the `exp` claim — `jwt.ts` L113;
-  `createSession` with `expiresAt:null` never expires per `sessions.ts` L51) and
-  grants `storageAllowanceBytes` = **5 GB**, with no caller identity check and no
-  throttle. Anyone can mass-create accounts to exhaust rows/storage and keep
-  permanent tokens.
-- Partial existing mitigation: `getCurrentUser` (`getCurrentUser.ts` L35–41)
-  disables an **unverified** service token after a 7-day grace — but that leaves a
-  7-day live window, does not stop unauth creation, and does not bound tokens once
-  the supplied email is verified.
+### A3. `POST /api/v1/auth/service-account` — 🟡 THROTTLED, NOT YET BOUNDED
+- File: `remix/app/routes/api/v1/auth/service-account/_service-account.tsx` →
+  `remix/app/api/utils/auth/serviceAccounts.ts`.
+- **Originally:** `provisionServiceAccount` minted a **non-expiring** bearer token
+  and granted `storageAllowanceBytes` = **5 GiB** with no caller identity check
+  and **no throttle**, so anyone could mass-create accounts to exhaust
+  rows/storage and keep permanent tokens.
+- **Now (PR #100, merged 2026-08-12):** the route stays public self-service by
+  design, but applies a fail-closed per-IP
+  `enforceRateLimit(request, 'auth.serviceAccount', null, { failClosed: true })`,
+  a 16 KiB body cap (`MAX_BODY_BYTES`), and an explicit field whitelist that
+  never spreads the raw body. Unauthenticated mass-minting is throttled.
+- **Still open:** the minted token is non-expiring — `signJwt` with
+  `expiresIn: null` omits the `exp` claim, and `createSession` with
+  `expiresAt: null` never expires — and still carries the 5 GiB
+  `DEFAULT_SERVICE_STORAGE_ALLOWANCE_BYTES`. `getCurrentUser` disables an
+  **unverified** service token after a 7-day grace, which does not bound a token
+  once the supplied email is verified. **Bound the token lifetime before closing
+  A3.** (PR #103 was closed unmerged and covered signup/item 8, not A3.)
 
-**Fix for A1–A3:** require an authenticated admin / service-account / existing
-session (or an explicit setup token), or dev-gate behind a non-production env
-check and drop them from the prod dispatcher. Any that stay must apply visibility
-filtering (A1) and the shared rate limiter (A2/A3). Consider bounding
-service-account token lifetime regardless.
+**Remaining fix for A3:** give service-account tokens a finite lifetime (with a
+documented refresh/rotation path) and reconsider the 5 GiB default allowance for
+self-service provisioning. A1/A2 need no further work — keep their
+`requireAdmin` + fail-closed limiter gating if those routes are ever moved or
+rewritten.
 
 ## B. Auth-endpoint rate limiting + input caps
 
@@ -160,5 +177,6 @@ codec is the current `remix/app/Providers/thingtimeSerialization.ts` path
 (pure/React-free). The older parallel `thingtimePersistCodec.ts` from the
 original PR diff was intentionally dropped after `develop` superseded that
 architecture; its invariants and tests were folded into the active serializer.
-§A (unauth admin/data endpoints — raw-results, populate, service-account) closed
-separately on `develop` (2026-07-21) — see the §A note above.
+§A's A1 (raw-results) and A2 (populate) closed separately on `develop`
+(2026-07-21); A3 (service-account) is throttled but its token lifetime is still
+unbounded — see the §A notes above.
