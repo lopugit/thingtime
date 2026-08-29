@@ -118,7 +118,11 @@ export const COMMANDER_COMMANDS: CommanderCommand[] = [
 	},
 	navCommand('feed', '/feed', 'Open the feed', '🌀'),
 	navCommand('things', '/things', 'Open your things', '📦'),
-	navCommand('editor', '/editor', 'Open the editor', '💻', ['edit']),
+	// NOTE: no `>editor`. claude-todo/10 lists it as an example, but there is no
+	// `/editor` route in routes.tsx — it fell through to the `*` catch-all tree
+	// viewer at the empty Thingtime path `editor` while toasting "Open the
+	// editor" as a success. Re-add this one line the day an editor page lands —
+	// commanderCommands.test.ts checks every target against routes.tsx.
 	navCommand('themes', '/themes', 'Open the Theme Studio', '🎨'),
 	navCommand('settings', '/settings', 'Open settings', '⚙️'),
 	navCommand('profile', '/profile', 'Open your profile', '🌈'),

@@ -50,16 +50,11 @@ export const regexToReplacementConverter = async (props: any) => {
     newValue += item + `$${index + 1}`;
   });
 
-  // replace all escaped characters in newValue such as \{ \\ \[ and all others from the clipboard text with unescaped versions
-  // TODO: fix this so it's not hardcoded shit?
-  newValue = newValue.replace(/\\{/g, "{");
-  newValue = newValue.replace(/\\\[/g, "[");
-  newValue = newValue.replace(/\\\\/g, "\\");
-  newValue = newValue.replace(/\\]/g, "]");
-  newValue = newValue.replace(/\\}/g, "}");
-
-  // replace \. with just n
-  newValue = newValue.replace(/\\\./g, ".");
+  // Unescape \\ \{ \} \[ \] \. in ONE left-to-right pass. The sequential
+  // replaces this used to do unescaped their own output: `\\}` first became
+  // `\}` (via /\\\\/) and then `}` (via /\\}/), so an escaped backslash before
+  // a brace vanished from the result.
+  newValue = newValue.replace(/\\([\\[\]{}.])/g, "$1");
 
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");

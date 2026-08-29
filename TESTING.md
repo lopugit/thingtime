@@ -1501,6 +1501,42 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Profile panels are locked to the profile's user (no By-user field) and
       the header post count stays the profile total, not the filtered count.
 
+## Commander palette (`remix/app/components/Commander/CommanderV2.tsx`, `commanderCommands.ts`)
+
+The `>` registry is unit-tested headlessly (`npm run test:commander`, including a
+route contract that every `>command` navigation target is a route the router
+declares). These are the browser-only halves.
+
+- [ ] `Cmd/Ctrl+K` from anywhere on the page (nothing focused, a button focused,
+      mid-scroll) opens AND focuses the nav Commander; pressing it again closes
+      it. Exactly one Commander reacts — the nav instance — with a second
+      Commander mounted on the page.
+- [ ] `Cmd/Ctrl+K` while the caret is inside an Editor.js block, the post
+      composer, a comment box and the login form: decide and record which wins.
+      Editor.js binds `CMD+K` to its own link tool, and the palette listener is
+      an unguarded window `keydown` that `preventDefault()`s — so today the link
+      tool can open *and* the Commander steals focus. Contrast with the
+      Cmd/Ctrl+Z listener, which bails on editable targets via
+      `shouldIgnoreGlobalKeydown`.
+- [ ] Typing `>` flips the dropdown to command rows (usage + description) and
+      fires NO search request (check the network tab). Backspacing back to
+      ordinary text restores the pinned `Search things for…` row and the live
+      results.
+- [ ] Highlight a row (arrow keys or mouse), then edit the input across the `>`
+      boundary in BOTH directions. The highlight must never carry over onto an
+      unrelated row of the new list — Enter must not run a command the user
+      never selected (`>undo` sits at row index 2).
+- [ ] Enter runs the typed command even with no row highlighted: `>theme
+      Midnight` applies the preset, `>theme neon` lists the presets without
+      switching, `>undo`/`>redo` walk the timeline, `>help` toasts every
+      command, and an unknown `>xyz` toasts a pointer to `>help` instead of
+      falling through to the path/setter machinery.
+- [ ] Selecting a row: argument-less commands run and close the palette;
+      argument-taking rows (`>theme`, `>search`, `>docs`) complete to `>name `
+      and keep the palette open and focused.
+- [ ] Mobile (375×812): the command dropdown is full width with no overflow or
+      clipping, and the usage/description columns stay readable.
+
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
 - [ ] Commander typeahead searches the live Things + people APIs after the

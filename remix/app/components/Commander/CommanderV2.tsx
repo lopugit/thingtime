@@ -197,6 +197,15 @@ export const CommanderV2 = (props) => {
 		return commandMode ? matchCommanderCommands(inputValue) : [];
 	}, [commandMode, inputValue]);
 
+	// A hovered row index only means anything against the row list that produced
+	// it, and `>` mode swaps that list for a different one indexed from 0. Typing
+	// `>` while row 2 was highlighted (arrowed or just moused over) would leave
+	// row 2 pointing at `>undo`, so Enter silently undid the user's last change
+	// instead of opening the palette. Drop the selection when the mode flips.
+	React.useEffect(() => {
+		setHoveredSuggestion(null);
+	}, [commandMode]);
+
 	// Commander is a live platform search, not just a fuzzy index over the
 	// persisted local Thingtime tree. Debounce the same ACL-aware Things +
 	// profile APIs used by /search, keep stale responses from repainting a newer

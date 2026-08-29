@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
@@ -60,8 +61,6 @@ test('navigation commands navigate and confirm', () => {
 	const expectations: Array<[string, string]> = [
 		['>feed', '/feed'],
 		['>things', '/things'],
-		['>editor', '/editor'],
-		['>edit', '/editor'],
 		['>themes', '/themes'],
 		['>settings', '/settings'],
 		['>docs', '/docs'],
@@ -102,5 +101,40 @@ test('matchCommanderCommands filters by prefix and shows all for a bare ">"', ()
 		themeMatches.map((command) => command.name),
 		['theme', 'themes']
 	);
-	assert.deepEqual(matchCommanderCommands('>edit').map((command) => command.name), ['editor']);
+	// aliases match by prefix too — `commands` is an alias of `help`
+	assert.deepEqual(
+		matchCommanderCommands('>comm').map((command) => command.name),
+		['help']
+	);
+});
+
+// Every `>` command that navigates must land on a route the router actually
+// declares. `>editor` shipped pointing at `/editor`, which has no route: it fell
+// through to the `*` catch-all tree viewer while toasting success. A registry
+// entry is one line, so this class of dead command is easy to reintroduce and
+// invisible without a browser — pin it here instead.
+test('every navigation target resolves to a declared route', () => {
+	const routesSource = readFileSync(new URL('../../routes.tsx', import.meta.url), 'utf8');
+	const declaredPaths = new Set(
+		[...routesSource.matchAll(/path:\s*'([^']+)'/g)].flatMap((match) => match[1].split('/').filter(Boolean))
+	);
+	// the parse must find the router, not silently match nothing and pass
+	assert.ok(declaredPaths.size > 10, `expected routes.tsx to declare many paths, parsed ${declaredPaths.size}`);
+
+	const { ctx, calls } = makeContext();
+	for (const command of COMMANDER_COMMANDS) {
+		command.run('', ctx);
+	}
+	// argument-taking navigations reach their own subtrees
+	for (const section of ['api', 'embed', 'concepts', 'schemas', 'design', 'design-system']) {
+		runCommanderCommand(`>docs ${section}`, ctx);
+	}
+
+	const targets = calls.filter((call) => call.kind === 'navigate').map((call) => call.payload as string);
+	assert.ok(targets.length > 0, 'expected the registry to navigate somewhere');
+	for (const target of targets) {
+		for (const segment of target.split('?')[0].split('/').filter(Boolean)) {
+			assert.ok(declaredPaths.has(segment), `>command navigates to ${target}, but no route declares '${segment}'`);
+		}
+	}
 });
