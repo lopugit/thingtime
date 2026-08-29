@@ -82,7 +82,7 @@ by a stale tab writing its old in-memory tree.
 
 ## Validation
 
-- `npm run test:autosave`: 32/32 pass, including safe-codec Date/string/cycle
+- `npm run test:autosave`: 33/33 pass, including safe-codec Date/string/cycle
   round-tripping, function stripping, malformed messages, self-echo, close,
   explicit `undefined`, tab-local timeline metadata, and the
   no-`BroadcastChannel` fallback.

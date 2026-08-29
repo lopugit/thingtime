@@ -41,7 +41,7 @@ There is no second persistence codec or storage mechanism.
 
 ## Validation
 
-- `npm run test:autosave`: 32/32 passed, including the active safe codec,
+- `npm run test:autosave`: 33/33 passed, including the active safe codec,
   malformed/self messages, lifecycle fallback, and tab-local timeline guard.
 - `npm run test:unit`: passed (the repository's complete unit/contract suite).
 - `npm run build`: passed, including client, Nitro/Vercel output patching, and
