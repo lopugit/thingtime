@@ -326,14 +326,16 @@ export type PublicThing = {
 // internal callers may only have an id (username-specific acl exclusions
 // simply can't match then). Plain string ids are accepted for compat.
 // When the actor is a personal access token, `pat` rides along: tokenId
-// stamps everything the token creates (createdByTokenId), and
-// onlyCreatedThings sandboxes its mutations to those stamped things.
+// stamps everything the token creates (createdByTokenId), onlyCreatedThings
+// sandboxes its mutations to those stamped things, and visibility fences it
+// to one audience of things ('public' = world-visible only, 'private' = the
+// rest only; 'all'/absent = unrestricted).
 // friendIds is the viewer's accepted-friend set, loaded once per request path
 // by withFriendIds so sync acl checks can resolve tt:userFriends.
 export type Viewer = {
   id: string;
   username?: string | null;
-  pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
+  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' } | null;
   friendIds?: ReadonlySet<string>;
   // external-account shareIds the viewer holds connections links to — serves
   // LEGACY tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only
@@ -661,12 +663,23 @@ export const isFail = (value: unknown): value is Fail => !!value && typeof value
 // expects. Shared so every route passes the same shape. Routes resolving via
 // resolveThingsActor pass the pat context so creates stamp provenance and
 // sandboxed tokens stay inside their own creations.
-export const viewerOf = (user: { id: string; username: string } | null, pat?: { jti: string; onlyCreatedThings?: boolean } | null): Viewer =>
+export const viewerOf = (
+  user: { id: string; username: string } | null,
+  pat?: { jti: string; onlyCreatedThings?: boolean; visibility?: 'all' | 'public' | 'private' } | null
+): Viewer =>
   user
     ? {
         id: user.id,
         username: user.username,
-        ...(pat ? { pat: { tokenId: pat.jti, onlyCreatedThings: pat.onlyCreatedThings === true } } : {})
+        ...(pat
+          ? {
+              pat: {
+                tokenId: pat.jti,
+                onlyCreatedThings: pat.onlyCreatedThings === true,
+                visibility: pat.visibility === 'public' || pat.visibility === 'private' ? pat.visibility : 'all'
+              }
+            }
+          : {})
       }
     : null;
 
@@ -732,6 +745,40 @@ const patSandboxBlocks = (viewer: Viewer, doc: ThingDoc): boolean => {
 };
 
 const patSandboxFail = (): Fail => fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
+
+// ---------------------------------------------------------------------------
+// Token visibility fence — the Settings token minter's public-only /
+// private-only restriction. Orthogonal to the tt:token sandbox above: the
+// sandbox says WHICH things (its own creations), the fence says WHICH
+// AUDIENCE ('public' = the inherit-resolved acl carries tt:all, 'private' =
+// it doesn't). Unlike the sandbox, the fence applies to READS too — a
+// public-only token exists so an agent can hold it without ever seeing
+// private data, so out-of-audience things are invisible, not just
+// untouchable.
+
+export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | null =>
+  viewer?.pat?.visibility === 'public' || viewer?.pat?.visibility === 'private' ? viewer.pat.visibility : null;
+
+// Fence check on a CONCRETE acl. tt:inherit means the audience lives on the
+// target chain — the inherit-aware paths (canViewInherited, the mutation-site
+// patVisibilityBlocksDoc) resolve it first; a direct hit on an unresolved
+// inherit acl fails closed. Exported for patVisibility.test.ts: this one
+// expression IS the fence, so its truth table is pinned rather than left to a
+// live stack (same reason visibleRelatedModerationClause is exported).
+export const patVisibilityBlocksAcl = (viewer: Viewer, acl: string[]): boolean => {
+  const mode = patVisibilityOf(viewer);
+  if (!mode) return false;
+  if (acl.includes(ACL_INHERIT)) return true;
+  return acl.includes(ACL_ALL) !== (mode === 'public');
+};
+
+const patVisibilityFail = (viewer: Viewer): Fail =>
+  fail(
+    403,
+    patVisibilityOf(viewer) === 'public'
+      ? 'This token is public-only — it can only see and touch public things 🌐'
+      : 'This token is private-only — it can only see and touch private (non-public) things 🔒'
+  );
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -968,6 +1015,18 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
   if (input.acl !== undefined && input.acl !== null) {
     const acl = sanitizeAcl(input.acl);
     if (isFail(acl)) return acl;
+    // tt:inherit is SERVER-assigned (createThing stamps it on comments and
+    // target-attached things) — never caller-supplied, the same stance the
+    // visibility branch below already takes. Accepting it would detach a
+    // thing's audience from its own acl: both visibility-fence checks skip
+    // inherit acls on the grounds that the target was already judged, so a
+    // restricted token could hand itself an unjudged audience, and a
+    // standalone thing has no target to resolve — leaving it visible to
+    // nobody but its owner and permanently un-editable, since every later
+    // acl change 400s on the guard above.
+    if (acl.includes(ACL_INHERIT)) {
+      return fail(400, 'tt:inherit is set by the server on target-attached things — it cannot be supplied');
+    }
     return acl;
   }
   if (input.visibility !== undefined && input.visibility !== null) {
@@ -1119,7 +1178,18 @@ export const createThing = async (
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {
-    acl = inputAcl || [ACL_ALL];
+    // a private-only token's standalone creations default private — the
+    // public default would only ever 403 on the visibility fence below
+    acl = inputAcl || (patVisibilityOf(viewer) === 'private' ? [ACL_OWNER] : [ACL_ALL]);
+  }
+
+  // The token visibility fence on the NEW thing's audience. By-design
+  // audiences skip it: saves are always owner-private (a bookmark of the
+  // already-fence-checked target), and inherit acls take their target's
+  // audience — the findViewableThingAs above judged that target through the
+  // fence-aware canView.
+  if (!acl.includes(ACL_INHERIT) && !validated.thingtime.includes('save') && patVisibilityBlocksAcl(viewer, acl)) {
+    return patVisibilityFail(viewer);
   }
 
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
@@ -2073,6 +2143,11 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	) {
 		return false;
 	}
+  // The token visibility fence outranks even the owner short-circuit: a
+  // public-only token acting AS the owner must still not see the owner's
+  // private things (inherit acls are judged on their resolved terminal via
+  // canViewInherited; a direct hit on one fails closed).
+  if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   // shareId serves the constant tt:extsourced audience, whose membership is
   // per-(post, viewer) rather than encoded in the entry itself
@@ -2108,6 +2183,16 @@ export const canViewInherited = async (
   if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
   if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
   return canView(terminal, viewer);
+};
+
+// Mutation-site visibility-fence check with the inherit chain resolved —
+// updateThing and deleteThing load their target by ownership (never through
+// canView), so they ask this directly. Free for unrestricted viewers; broken
+// chains fail closed like canViewInherited.
+const patVisibilityBlocksDoc = async (viewer: Viewer, doc: ThingDoc): Promise<boolean> => {
+  if (!patVisibilityOf(viewer)) return false;
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+  return !terminal || patVisibilityBlocksAcl(viewer, aclOf(terminal));
 };
 
 // Coalescing, memoised shareId lookup for one request: every lookup issued in
@@ -2160,6 +2245,19 @@ const circleClause = (circle: PostVisibility) => {
   }
 };
 
+// DB-level fence for visibility-restricted tokens — a coarse superset like
+// every clause here (exact judgement stays with canView/canViewInherited on
+// the fetched page). Inherit-acl children pass the public fence explicitly so
+// their terminal can be judged in memory; they pass the private $nor
+// naturally (they never carry tt:all themselves). Exported so the test can pin
+// the clause against patVisibilityBlocksAcl: if this coarse tier ever stops
+// covering what the exact tier admits, listings silently lose rows.
+export const patVisibilityMatchClause = (viewer: Viewer): Record<string, any> | null => {
+  const mode = patVisibilityOf(viewer);
+  if (!mode) return null;
+  return mode === 'public' ? { $or: [circleClause('public'), { acl: ACL_INHERIT }] } : { $nor: [circleClause('public')] };
+};
+
 export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) => {
   const wanted = circles.length ? circles : VISIBILITIES;
   const publicWanted = wanted.includes('public');
@@ -2180,7 +2278,9 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   }
   // nothing requested that the viewer could ever see
   if (!clauses.length) return null;
-  return clauses.length === 1 ? clauses[0] : { $or: clauses };
+  const query = clauses.length === 1 ? clauses[0] : { $or: clauses };
+  const fence = patVisibilityMatchClause(viewer);
+  return fence ? { $and: [query, fence] } : query;
 };
 
 const findThing = async (shareId: unknown): Promise<ThingDoc | null> => {
@@ -2524,11 +2624,19 @@ export const listUserPosts = async (
   const own = viewer?.id === ownerId;
   // a friend browsing this profile also sees the owner's friends-circle posts
   const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
-  const match = own
+  const baseMatch = own
     ? withMatch(postMatch(), { ownerId })
     : friendOfOwner
       ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
       : withMatch(postMatch(), { ownerId }, circleClause('public'));
+  // visibility-restricted tokens: conjoin the audience fence the same way
+  // listThings does. Not just paging hygiene (without it a public-only token
+  // pages an owner's mostly-private profile in near-empty slices while the
+  // cursor advances) — postCount below is computed from this match, so an
+  // unfenced match would report the owner's private posts to a token that
+  // must never learn they exist.
+  const fence = patVisibilityMatchClause(viewer);
+  const match = fence ? withMatch(baseMatch, fence) : baseMatch;
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -2694,6 +2802,13 @@ export const listThings = async (
   }
   if (thingtime.length) {
     match = withMatch(match, thingtimeInClause(thingtime));
+  }
+  if (!app) {
+    // visibility-restricted tokens: conjoin the audience fence so pages stay
+    // full instead of being trimmed to nothing in memory (the per-doc
+    // canViewInherited below remains the exact gate)
+    const fence = patVisibilityMatchClause(viewer);
+    if (fence) match = withMatch(match, fence);
   }
 
   const parsed = parseChronoCursor(query.cursor);
@@ -3706,6 +3821,9 @@ export const deleteThing = async (
     }
     return fail(404, 'Thing not found');
   }
+  // visibility fence — same judgement the update path makes: out-of-audience
+  // things are untouchable (inherit acls resolve through the target chain)
+  if (await patVisibilityBlocksDoc(viewer, initial)) return patVisibilityFail(viewer);
 	// Pin the physical root identity across the multi-transaction drain. If a
 	// competing deleter wins and a caller later reuses the same public shareId,
 	// this in-flight request must never delete that replacement Thing (ABA).
@@ -3835,6 +3953,9 @@ export const updateThing = async (
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
   if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
+  // visibility fence: the thing being edited must sit inside the token's
+  // audience (inherit acls resolve through the target chain)
+  if (await patVisibilityBlocksDoc(viewer, doc)) return patVisibilityFail(viewer);
 	const storedSandboxState = storageSandboxState(doc);
 	if (doc.appId && storedSandboxState === 'invalid') {
 		return fail(503, 'Thing has an invalid storage namespace marker and must be reconciled before it can be updated');
@@ -3927,6 +4048,10 @@ export const updateThing = async (
       if (nextAcl) acl = nextAcl;
     }
   }
+  // …and the audience it ends up with must sit inside the token's fence too —
+  // a restricted token can never move a thing across the public/private
+  // boundary in either direction (publishing private data, or hiding public)
+  if (!acl.includes(ACL_INHERIT) && patVisibilityBlocksAcl(viewer, acl)) return patVisibilityFail(viewer);
 
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
