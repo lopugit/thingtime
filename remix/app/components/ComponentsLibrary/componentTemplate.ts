@@ -135,8 +135,39 @@ export const resolveTemplate = (
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(template)) {
 		if (budget.left <= 0) break;
+		// ttAction/ttActionInputs are interactive-intent markers, folded into
+		// allowlisted data-* props below — never copied through as node keys
+		if (key === 'ttAction' || key === 'ttActionInputs') continue;
 		const resolved = resolveTemplate(value, scope, budget);
 		if (resolved !== undefined) out[key] = resolved;
+	}
+	// ttAction: '<actionKey-or-id>' on a node marks it as a runnable control.
+	// It resolves to data-tt-action / data-tt-action-inputs attributes (the
+	// ONLY two data-* props the sanitising renderers allowlist); an
+	// onClickCapture wrapper on trusted surfaces reads them and calls the run
+	// API AS THE VIEWER — a click grants no authority the viewer didn't
+	// already have on /actions, and the executor's capability/budget envelope
+	// still bounds the run. '{arg}' tokens substitute inside both.
+	//
+	// The inputs subtree resolves on the SHARED budget: it is attacker-shaped
+	// template like any other, and a fresh per-node budget would let a hostile
+	// component nest its expansion under ttActionInputs and multiply the
+	// whole-tree cap by the node count — see MAX_RESOLVED_VALUES.
+	if (typeof template.ttAction === 'string' && template.ttAction.trim()) {
+		const action = substitute(template.ttAction, scope).trim();
+		if (action) {
+			const props = isPlainObject(out.props) ? (out.props as Record<string, unknown>) : {};
+			props['data-tt-action'] = action;
+			if (template.ttActionInputs !== undefined) {
+				const inputs = resolveTemplate(template.ttActionInputs, scope, budget);
+				if (isPlainObject(inputs)) {
+					try {
+						props['data-tt-action-inputs'] = JSON.stringify(inputs);
+					} catch {}
+				}
+			}
+			out.props = props;
+		}
 	}
 	return out;
 };

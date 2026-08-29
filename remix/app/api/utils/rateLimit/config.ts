@@ -34,6 +34,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // admin component-library seeding (/api/v1/admin/components/seed) — batch
   // writes; enforced fail-closed at the route
   'components.seed': { limit: 30, windowMs: 60_000, enabled: true },
+  // action execution (POST /api/v1/actions/run) — compute + writes; each run
+  // is additionally bounded by its own budget envelope (registry limits)
+  'actions.run': { limit: 60, windowMs: 60_000, enabled: true },
+  // run-history reads (GET /api/v1/actions/runs) — read-only, browse-shaped
+  'actions.runs': { limit: 120, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },

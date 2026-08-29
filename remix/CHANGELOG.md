@@ -17,6 +17,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
+
+- Multi-agent defensive security review of the Action Thing surface (report:
+  SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md). Three
+  findings, all fixed: action-created things now mint PRIVATE
+  (`acl: [ACL_OWNER]`) instead of inheriting createThing's public standalone
+  default; the /things PreviewModal passes `untrusted` for components the
+  viewer does not own, so foreign markup renders inert; and a ttAction click
+  (`source: 'component'`) resolves only actions the invoker owns, closing an
+  id-path hijack the actionKey branch was already hardened against. The
+  inspector also stopped asserting absolute negatives for composing actions.
+  Battery 73/73 (+8 security regressions), test:actions 27/27,
+  test:schemas 82/82. Verified live: a foreign component renders but does not
+  fire, an owned one still does, and onboard-customer's invoice is private.
+
+### 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design
+
+- "⚡ New action" builder on /actions with LIVE-DERIVED capabilities
+  (declaration always covers behavior — one unscoped step unscopes the
+  capability), ttAction component-render bindings (data-tt-action /
+  data-tt-action-inputs, the only allowlisted data-* attributes; /things
+  PreviewModal is the interactive surface), the Used-by back-reference
+  panel on the inspector, seven Lopu-review fixes across review rounds, unit
+  suites test:actions (23) + actionGrammar (15), and the v2
+  external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
+  Details: PRs/387-*.md. CI green; batteries 65/65 + 30/30. A functional
+  multi-review pass (correctness / UX-consistency / docs-accuracy) then
+  landed: optimistic cached paint on /actions/:key, ActionChip overflow
+  guards at 375px, family-consistent pink CTAs, design-doc reconciliation
+  with the shipped grammar/executor, input-default/type congruence
+  (save-time refusal + type-aware builder coercion), the ⚡ kind renderer
+  wired into /things tiles, inspector state reset on cross-action
+  navigation, and latest-revision resolution for duplicate actionKeys
+  (executor + inspector agree; test:actions 25, test:schemas 82).
+
+### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
+
+- New `action` + protected `action-run` kinds, executor
+  (`api/utils/actions/execute.ts`), `POST /api/v1/actions/run` +
+  `GET /api/v1/actions/runs`, /actions browse + inspector UI, ⚡ kind renderer
+  and Actions filter on /things, drawer entry, and the Customer/Invoice demo
+  seed (`scripts/seed-demo-app.mjs`). Verified by
+  `scripts/verify-actions.mjs` (52 live checks) + browser click-through.
+  Details: `PRs/action-thing-v1-design.md` and PR #387 (stacked on the
+  Components runtime split, PR #382).
+
 ### Changed
 
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
