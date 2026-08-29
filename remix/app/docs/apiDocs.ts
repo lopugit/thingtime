@@ -6922,14 +6922,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
     },
     methods: ['GET'],
     steps: [
-      'Send optional types, circles, from, to, algorithm, cursor, and limit query parameters.',
+      'Send optional types, circles, tag, from, to, algorithm, cursor, and limit query parameters.',
       'Use algorithm=latest to force chronological ordering.',
       'Use nextCursor for infinite scrolling.',
       'Read ranked to know whether algorithm scoring affected the page.'
