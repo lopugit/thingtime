@@ -50,13 +50,12 @@ export const regexToReplacementConverter = async (props: any) => {
     newValue += item + `$${index + 1}`;
   });
 
-  // unescape \{ \[ \\ \] \} and \. from the clipboard text.
-  // one pass, not six: the backslash here consumes whatever character follows
-  // it, so a "\" produced by unescaping "\\" can never be re-read as the start
-  // of another escape. the old sequential form did exactly that — "\\}" became
-  // "\}" on the "\\" step and then "}" on the "\}" step, eating the backslash
-  // the input had explicitly escaped (same for "\\]" and "\\.").
-  newValue = newValue.replace(/\\([[\]{}.\\])/g, "$1");
+  // replace all escaped characters in newValue such as \{ \\ \[ \] \} \. with unescaped versions.
+  // one left-to-right pass that consumes each backslash together with the character it escapes,
+  // so a backslash produced by unescaping \\ is never unescaped a second time (\\] stays \], not ]).
+  // the old sequential form did exactly that — "\\}" became "\}" on the "\\" step and then "}" on
+  // the "\}" step, eating the backslash the input had explicitly escaped (same for "\\]" and "\\.").
+  newValue = newValue.replace(/\\([\\[\]{}.])/g, "$1");
 
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");

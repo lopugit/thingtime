@@ -24,12 +24,13 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// Cross-origin access is opt-in: set CORS_ORIGINS to a comma-separated origin
-// list. This used to be a hardcoded '*', which let any page a browser happened
-// to be on read this server's responses — including a locally running instance
-// on a developer's machine. An empty list means same-origin only; non-browser
-// clients (curl, native socket.io) are unaffected either way.
-const corsOrigins = (process.env.CORS_ORIGINS || '')
+// Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// Defaults to the local dev origin. This used to be a hardcoded '*', which let any page a browser
+// happened to be on read this server's authenticated responses — including a locally running
+// instance on a developer's machine — so a wildcard is deliberately not the fallback. An allowlist
+// that trims to nothing means same-origin only; non-browser clients (curl, native socket.io) are
+// unaffected either way.
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
