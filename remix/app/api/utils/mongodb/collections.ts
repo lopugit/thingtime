@@ -268,6 +268,12 @@ export const getFeedAlgorithmsCollection = async () => getHomeCollection('feedAl
 // rate-limit config) and the general per-endpoint rate-limit windows.
 export const getSettingsCollection = async () => getHomeCollection('settings');
 export const getRateLimitsCollection = async () => getHomeCollection('rateLimits');
+// Admin integration records are a home-pinned control plane. Their encrypted
+// credential material is never represented as a user Thing or browser setting.
+export const getAdminIntegrationSecretsCollection = async () => getHomeCollection('adminIntegrationSecrets');
+export const getAdminIntegrationEndpointsCollection = async () => getHomeCollection('adminIntegrationEndpoints');
+export const getAdminIntegrationClaimsCollection = async () => getHomeCollection('adminIntegrationClaims');
+export const getAdminIntegrationAuditCollection = async () => getHomeCollection('adminIntegrationAudit');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
 export const getEmailMessagesCollection = async () => getHomeCollection('email_messages');
@@ -500,6 +506,25 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'theme_gallery_updated', partialFilterExpression: { thingtime: 'theme' } },
       ['thingtime_1_updatedAt_-1']
     ),
+    // Public tag feeds (`GET /api/v1/things/feed?tag=…`): one tag's posts,
+    // newest first. Without `tags` as a key the tag is a post-scan residual —
+    // the pager walks every post in createdAt order until it fills a page, so a
+    // rare tag reads the whole post history on an unauthenticated endpoint.
+    //
+    // `thingtime` must NOT be a key here: it is itself multikey on every
+    // things-era doc (`thingtime: ['post']`, `['waitlist']`, …), so pairing it
+    // with `tags` is a parallel-array compound. Mongo then rejects EVERY
+    // things insert with `cannot index parallel arrays [tags] [thingtime]`
+    // (code 171) — even `tags: []` counts as an array — taking down post
+    // creation and waitlist signup alike. Post-ness stays a cheap residual on
+    // a set already narrowed to the one tag; it cannot be a partial filter
+    // either, because postMatch() spells post-ness as an $or over
+    // thingtime/kind that the planner cannot prove subsumed (measured: the
+    // partial variant is not selected and examines the whole corpus).
+    //
+    // Verified on a 10k-post local dataset: this query goes from 10,000 keys
+    // and 10,000 docs examined to return 3, down to 3 keys and 3 docs.
+    col.createIndex({ tags: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
@@ -943,6 +968,17 @@ export const ensureIndexes = async () => {
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // Admin integration vault: write-only encrypted values, endpoint policy,
+        // short create-only claims, and redacted, expiring audit evidence.
+        col('adminIntegrationSecrets').createIndex({ id: 1 }, { unique: true }),
+        col('adminIntegrationSecrets').createIndex({ label: 1 }, { unique: true }),
+        col('adminIntegrationEndpoints').createIndex({ id: 1 }, { unique: true }),
+        col('adminIntegrationEndpoints').createIndex({ secretId: 1 }),
+        col('adminIntegrationClaims').createIndex({ endpointId: 1, resourceKey: 1 }, { unique: true }),
+        col('adminIntegrationClaims').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('adminIntegrationAudit').createIndex({ createdAt: -1 }),
+        col('adminIntegrationAudit').createIndex({ endpointId: 1, createdAt: -1 }),
+        col('adminIntegrationAudit').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats

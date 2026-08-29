@@ -181,6 +181,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // The integration vault can trigger provider operations; keep its admin
+  // control plane bounded even before an endpoint policy is consulted.
+  'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
   // service-account provisioning is public self-service but each call mints a
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,

@@ -27,8 +27,11 @@ import { Server } from 'socket.io';
 // Cross-origin access is an explicit allowlist, never '*'.
 //
 // Comma-separated, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
-// Defaults to the local dev origin. A wildcard origin would let any site read this API's
-// authenticated responses, so it is deliberately not the fallback.
+// THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
+// Defaults to the local dev origin. A wildcard origin would let any website read this API's
+// authenticated cross-origin responses from a visitor's browser, so it is deliberately not
+// the fallback. An explicitly empty value grants no cross-origin access at all, which is the
+// safe setting for a service that is no longer deployed.
 //
 // Nothing builds or runs this package any more — it moved under deprecated/ in
 // the repo consolidation, its pm2 entry is commented out in
@@ -37,11 +40,18 @@ import { Server } from 'socket.io';
 // unexploitable TODAY, but it is still a genuinely permissive configuration
 // sitting in the tree: it re-flags on every scan, and it would be a live
 // world-readable API the moment anyone revived the server. A closed default is
-// the honest resolution — set CORS_ORIGINS to whatever a revival actually needs.
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+// the honest resolution — set CORS_ORIGINS to whatever a revival actually needs,
+// or to the empty string to keep it closed.
+const configuredOrigins = (
+	process.env.CORS_ORIGINS ??
+	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
+	'http://localhost:3000'
+)
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
+
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : false
 
 const io = new Server(server, {
 	cors: {
