@@ -72,7 +72,8 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    is now rate-limited fail-closed per IP, body-capped, and field-whitelisted —
    see `claude-todo/09-security-hardening.md` §A._
 
-   > ✅ **Status update (verified on main 2026-07-21):** A1 and A2 are fixed.
+   > ✅ **Status update (verified on main 2026-07-21, re-verified 2026-08-29):**
+   > A1 and A2 are fixed.
    > `raw-results` (`_raw-results.tsx`) now requires admin (`requireAdmin`) +
    > fail-closed rate limiting and only executes bounded read-only queries via
    > `runMongoQuery`; `populate` (`_populate.tsx`) is admin-only + fail-closed
@@ -173,8 +174,8 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 
     > ✅ Mostly fixed (verified on main 2026-07-21): the unbounded
     > `window.useThingtimeScope` per-render array push is gone — the hook moved
-    > to `app/components/Thingtime/useThingtime.tsx` and is now a plain context
-    > read, so the severe half of this item is closed.
+    > to `remix/app/components/Thingtime/useThingtime.tsx` and is now a plain
+    > context read, so the severe half of this item is closed.
     >
     > The remaining render-path `console.log`s are owned by PR #115
     > (`claude/render-log-leaks-s7`), which removes them and rewrites this item.
