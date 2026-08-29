@@ -205,6 +205,12 @@ export function useApi() {
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
+      integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
+      integrationAction: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/integrations', errorContext: 'manage integration policy' }),
+        [asyncFetcher]
+      ),
       ciControl: useCallback(
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
@@ -668,7 +674,8 @@ export function useApi() {
               scopes: args?.scopes,
               expiresInMs: args?.expiresInMs ?? null,
               maxUses: args?.maxUses ?? null,
-              onlyCreatedThings: args?.onlyCreatedThings === true
+              onlyCreatedThings: args?.onlyCreatedThings === true,
+              visibility: args?.visibility ?? 'all'
             },
             { action: '/api/v1/tokens' }
           ),

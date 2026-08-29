@@ -17,6 +17,11 @@ export const wishSlotMusing = (localTime: string): string | null => {
 	return null;
 };
 
+// The one shared picker: time-rotated, RNG-free (CodeQL-friendly), same slot
+// for everyone in the same instant — deterministic in the test==live sense.
+// Used by the musing stream and the waitlist welcome fortune.
+export const pickFallbackMusing = (): string => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
+
 export const FALLBACK_MUSINGS: string[] = [
   'Tiny things become big things. Keep tending the little ones. ✨',
   'The best ideas, like unicorns, show up when you stop chasing them. 🦄',
