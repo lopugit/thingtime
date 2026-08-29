@@ -197,7 +197,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           if (generationRef.current !== generation) return;
 
           const page: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => (cursor ? appendPostsDeduped(prev, page) : page));
+          setPosts((prev) => appendPostsDeduped(cursor ? prev : [], page));
           nextCursorRef.current = resp?.nextCursor ?? null;
           setNextCursor(resp?.nextCursor ?? null);
           return;
@@ -211,7 +211,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         if (generationRef.current !== generation) return;
 
         const page: PublicPost[] = mergeReactionOverlays(startedAt, Array.isArray(resp?.posts) ? resp.posts : []);
-        setPosts((prev) => (cursor ? appendPostsDeduped(prev, page) : page));
+        setPosts((prev) => appendPostsDeduped(cursor ? prev : [], page));
         nextCursorRef.current = resp?.nextCursor ?? null;
         setNextCursor(resp?.nextCursor ?? null);
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);

@@ -1505,6 +1505,11 @@ is fixed, and cite the checklist you ran in the PR description.
       ranked modes and on a profile with >20 posts, then confirm every rendered
       `[data-thing-id]` is unique (ranked re-scores a moving window, so later
       pages can re-serve earlier ids; duplicates collide as React keys).
+      Every `setPosts` path — including the reset/first page — runs through the
+      helper, so a single page that repeats an id is collapsed too. The helper
+      itself is covered by `npm run test:feed`
+      (`app/components/Feed/feedTypes.test.ts`); this manual pass is for the
+      wiring (which pager calls it, and with which `prev`).
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 

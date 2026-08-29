@@ -97,7 +97,7 @@ export const FeedPage = () => {
           if (seq !== requestSeqRef.current) return;
 
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => (reset ? pagePosts : appendPostsDeduped(prev, pagePosts)));
+          setPosts((prev) => appendPostsDeduped(reset ? [] : prev, pagePosts));
           setNextCursor(resp.nextCursor ?? null);
           setRanked(!!resp.ranked);
           return;
@@ -116,8 +116,10 @@ export const FeedPage = () => {
         if (seq !== requestSeqRef.current) return;
 
         setPosts((prev) => {
-          const page = mergeReactionOverlays(startedAt, resp.posts || []);
-          return reset ? page : appendPostsDeduped(prev, page);
+          // `feed` responses are untyped JSON; name the projection the same way
+          // the advanced-search branch above does so the pager stays PublicPost[].
+          const page: PublicPost[] = mergeReactionOverlays<PublicPost>(startedAt, (resp.posts || []) as PublicPost[]);
+          return appendPostsDeduped(reset ? [] : prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
         setRanked(!!resp.ranked);
