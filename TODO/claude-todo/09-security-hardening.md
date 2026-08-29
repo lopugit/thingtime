@@ -1,8 +1,10 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🟡 Final §§C–D reconciliation in PR #99; §B and §A's A1/A2 closed on
-`develop`; §A's A3 is throttled but its token lifetime is still unbounded (see
-§A3 "Still open") · raised 2026-07-08 by a multi-agent review.
+**Status:** 🟡 §§B–D are closed on `develop` — PR #99 merged 2026-08-18 and every
+"Done when" box below is checked — as are §A's A1/A2. **The only work left in
+this file is §A's A3:** the service-account token is throttled but its lifetime
+is still unbounded (see §A3 "Still open"). Do not re-claim §§B–D or A1/A2
+· raised 2026-07-08 by a multi-agent review.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
