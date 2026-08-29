@@ -38,7 +38,7 @@
   "test:branding": "node --import tsx --test app/components/Branding/*.test.ts",
     "test:commander": "node --import tsx --test app/components/Commander/*.test.ts",
     "test:collections": "node --import tsx --test app/api/utils/mongodb/*.test.ts",
-    "test:connections": "node --import tsx --test app/api/utils/connections/*.test.ts",
+    "test:connections": "node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/*.test.ts app/api/utils/connections/*.test.mts",
     "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",
     "test:ci-control": "node --import tsx --test app/api/utils/ciControl/*.test.ts",
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js",

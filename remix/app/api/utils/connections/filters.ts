@@ -35,6 +35,25 @@ const CLASSIFY_MAX_TOKENS = 3000;
 const CLASSIFY_TEXT_CHARS = 600;
 // bounded parallelism across filters' independent LLM calls
 const CLASSIFY_CONCURRENCY = 4;
+// How much AI one feed read may spend. Without these, a cold page costs
+// ceil(posts/CLASSIFY_BATCH) × enabled-filters provider calls INLINE, before
+// the response: at the documented caps (20 filters × a 50-post page) that is
+// 100 completions of up to MUSING_MAX_OUTPUT_TOKENS each, ~25 of them
+// sequential, on an endpoint whose bucket allows 120 reads/min. The other AI
+// caller in the codebase (the musing) spends at most ONE completion per
+// request and still gates it behind an explicit 10/hour quota, so this path
+// must bound itself too. Overflow is NOT an error: it degrades to the same
+// deterministic heuristic used when no key is configured, and — because
+// heuristic verdicts are never cached while AI is available — the next read
+// retries the real classification. So a page with more work than one request
+// may spend simply converges over a few reads instead of blocking one long
+// request, and the cache makes that convergence monotonic.
+const CLASSIFY_MAX_AI_CALLS = 12;
+// Wall clock is the second bound, because the call cap alone still trusts the
+// provider to return. musing.ts puts no timeout on its stream (only
+// fetchWeather has one), so a slow provider would otherwise stall the feed for
+// as long as the platform allows — `fluid: true` means minutes.
+const CLASSIFY_DEADLINE_MS = 20_000;
 
 export type FeedFilterAction = 'warn' | 'hide';
 
@@ -232,6 +251,16 @@ export const applyFeedFilters = async (
 
   const things = await getThingsCollection();
   const aiConfigured = hasLopuAiProviderConfigured();
+  // One AI budget shared by every filter on this request (see the constants).
+  // The slot is reserved BEFORE awaiting so CLASSIFY_CONCURRENCY in-flight
+  // calls can't collectively overshoot the cap.
+  const deadlineAt = Date.now() + CLASSIFY_DEADLINE_MS;
+  let aiCallsLeft = CLASSIFY_MAX_AI_CALLS;
+  const reserveAiCall = (): boolean => {
+    if (!aiConfigured || aiCallsLeft <= 0 || Date.now() >= deadlineAt) return false;
+    aiCallsLeft -= 1;
+    return true;
+  };
   const pushMatch = (postId: string, match: FeedFilterMatch) => {
     const list = matchesByPostId.get(postId) || [];
     list.push(match);
@@ -275,7 +304,7 @@ export const applyFeedFilters = async (
       const batch = pending.slice(start, start + CLASSIFY_BATCH);
       let verdicts: Map<string, { matched: boolean; reason: string }> | null = null;
       let source: 'claude' | 'openai' | 'heuristic' = 'heuristic';
-      if (aiConfigured) {
+      if (reserveAiCall()) {
         const ai = await aiVerdicts(filter.prompt, batch);
         if (ai) {
           verdicts = ai.byId;
@@ -298,8 +327,11 @@ export const applyFeedFilters = async (
         }
         // cache policy: heuristic verdicts persist only when no AI provider
         // is configured — with AI available, a transient failure/truncation
-        // must degrade THIS response, never poison the cache (the next read
-        // retries the AI classification)
+        // (or this request running out of its AI budget) must degrade THIS
+        // response, never poison the cache. This is also what makes the budget
+        // safe: unspent work stays uncached, so the next read retries it for
+        // real and each read caches a little more until the page is fully
+        // classified.
         if (entrySource === 'heuristic' && aiConfigured) continue;
         writes.push({
           updateOne: {
