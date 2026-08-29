@@ -2649,7 +2649,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (84 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -2662,6 +2662,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       OF THAT action — the delete cascade is the only thing that stops a
       create/run/delete cycle stranding unaccounted records. Covered by
       verify-actions.
+- [ ] Same lifecycle with a run STILL IN FLIGHT: start a run, DELETE the action
+      before it finishes, and confirm the run still returns its own result while
+      `GET /api/v1/actions/runs?action=<id>` AND the unfiltered history are both
+      empty of it. The record is written when the run ENDS, so the cascade cannot
+      see it — writeRunRecord removes a record whose action went away mid-run.
+      Covered by verify-actions.
 - [ ] Kind boundary: an action declaring an UNSCOPED `things.update` (or
       `things.read`) whose step targets a non-data thing (a schema thing, an
       action thing) is refused at run time ("not a data thing — actions read and

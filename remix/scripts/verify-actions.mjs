@@ -484,6 +484,64 @@ const run = async () => {
 	const neighbourRuns = await api(`/api/v1/actions/runs?action=${encodeURIComponent(createCustomerId)}`, { cookie: alice.cookie });
 	check('another action keeps its own runs', neighbourRuns.status === 200 && (neighbourRuns.body?.runs || []).length > 0);
 
+	// ---- ...including a run that was ALREADY IN FLIGHT (Lopu review finding) --
+	// The record is written when the run ENDS, so the cascade — which snapshots
+	// the closure before that insert exists — cannot see it. createThing rides
+	// out this race by transacting its insert with a touch of the target doc;
+	// the run-record insert writes no parent doc, so nothing makes Mongo retry
+	// either side and the orphan is permanent (unprunable, undeletable,
+	// off-ledger). Delete the action WHILE a run of it is in flight: whichever
+	// way the interleaving lands, no record may survive naming a dead action.
+	const inFlight = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Deleted mid-run',
+			actionKey: `midrun-${suffix}`,
+			capabilities: [{ capability: 'things.read' }],
+			// several real round trips, so the DELETE below lands before the run
+			// reaches writeRunRecord — the window this guard actually closes
+			steps: [
+				...Array.from({ length: 12 }, () => ({ op: 'things.search', limit: 5 })),
+				{ op: 'return', value: 'done' }
+			]
+		}
+	});
+	const inFlightId = inFlight.body?.thing?.id;
+	check('mid-run-delete action saves', inFlight.status === 200 && !!inFlightId, JSON.stringify(inFlight.body || {}).slice(0, 200));
+	// fire the run WITHOUT awaiting, then delete underneath it. The short head
+	// start only removes the uninteresting third interleaving (the delete
+	// beating resolveActionProgram, which is a plain 404 and strands nothing);
+	// both remaining orders must satisfy the assertions below.
+	const inFlightRun = runAction(alice.cookie, { action: inFlightId });
+	await new Promise((resolve) => setTimeout(resolve, 250));
+	let midRunDelete = await api(`/api/v1/things?id=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie, method: 'DELETE' });
+	const runOutcome = await inFlightRun;
+	// a cascade that raced a just-committed record answers 409 "try again" —
+	// retry so the assertion below tests the trail, not the retry contract
+	for (let attempt = 0; attempt < 5 && midRunDelete.status === 409; attempt += 1) {
+		midRunDelete = await api(`/api/v1/things?id=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie, method: 'DELETE' });
+	}
+	check(
+		'the action deletes while one of its runs is still executing',
+		midRunDelete.status === 200,
+		`status ${midRunDelete.status} ${JSON.stringify(midRunDelete.body || {}).slice(0, 140)}`
+	);
+	check('the in-flight run still returns its own result to the caller', runOutcome.status === 200 && !!runOutcome.body?.runId);
+	const strandedByAction = await api(`/api/v1/actions/runs?action=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie });
+	check(
+		'a run that finished after its action was deleted leaves no record',
+		strandedByAction.status === 200 && (strandedByAction.body?.runs || []).length === 0,
+		`${(strandedByAction.body?.runs || []).length} record(s) survived`
+	);
+	// and it is gone from the UNFILTERED history too — that view is the only
+	// place an orphan would still surface, and nothing could ever remove it
+	const wholeHistory = await api(`/api/v1/actions/runs?limit=50`, { cookie: alice.cookie });
+	check(
+		'no orphan survives in the unfiltered run history either',
+		wholeHistory.status === 200 && !(wholeHistory.body?.runs || []).some((record) => record?.actionId === inFlightId),
+		JSON.stringify((wholeHistory.body?.runs || []).filter((record) => record?.actionId === inFlightId)).slice(0, 140)
+	);
+
 	// ---- action privacy ------------------------------------------------------
 	const privateAction = await createThing(alice.cookie, {
 		thingtime: ['action'],

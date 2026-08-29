@@ -53,7 +53,9 @@ import {
 //   cascade — action-run rides CASCADE_CHILD_THINGTIME, so deleting an action
 //   takes its trail with it instead of stranding unaccounted records that
 //   nothing would prune again (and that the owner could never remove, the kind
-//   being protected).
+//   being protected). The cascade can only take the trail it can SEE, and this
+//   record is written when the run ENDS, so writeRunRecord closes its own half:
+//   a record whose action went away mid-run deletes itself.
 
 export type ActionRunTraceEntry = {
 	step: string;
@@ -593,6 +595,40 @@ const writeRunRecord = async (
 			storageClass: 'control'
 		} as any)
 		.catch(() => null); // a failed audit write must not mask the run result
+
+	// The record lands at the END of the run, so the action it names can have
+	// been deleted at any point WHILE the program was executing (a run gets up
+	// to timeoutMs). The delete cascade only takes the trail it can SEE:
+	// discoverCascadeDescendants and deleteDrainedRootAtomically both snapshot
+	// before this insert exists. createThing survives that race because it
+	// transacts its insert together with a touch of the target doc, so a
+	// concurrent cascade cannot commit an orphan between the two writes
+	// (things.ts) — this direct insert writes no parent doc, so there is no
+	// write conflict to make Mongo retry either side.
+	//
+	// An orphan is PERMANENT: the retention prune only ever fires during a run
+	// OF THAT ACTION (gone), action-run is PROTECTED so no route lets its owner
+	// delete one, and storageClass 'control' keeps it off the storage ledger.
+	// So reconcile in the direction the delete already chose. Deliberately NOT
+	// owner-scoped: a public action is owned by its author while the run record
+	// is owned by the invoker.
+	//
+	// This closes the realistic window — the whole duration of the run. It does
+	// not close commit ordering: a record that lands after the root-delete
+	// transaction's snapshot but is read back before that transaction commits
+	// still strands. That residue is one round trip wide instead of one run
+	// wide, and the cascade owns the other interleaving — a record committed
+	// before the snapshot BLOCKS the root delete, and the re-walk removes it.
+	try {
+		const parent = await things.findOne({ shareId: actionId } as any, { projection: { _id: 1 } });
+		if (!parent) {
+			await things.deleteOne({ shareId: runId, thingtime: 'action-run' } as any);
+			return runId;
+		}
+	} catch {
+		// best-effort like the insert — never mask the run result
+	}
+
 	// Bound accumulation (issueAppToken posture): keep the newest N records for
 	// this (owner, action) and drop the rest. The CI-event precedent this kind
 	// borrows its storageClass from is written by trusted webhook deliveries as
