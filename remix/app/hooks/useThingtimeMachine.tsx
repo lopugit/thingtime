@@ -2,6 +2,7 @@ import React from 'react';
 import { smarts } from '../smarts';
 import localforage from 'localforage';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { shouldIgnoreGlobalKeydown } from '~/utils/editableTarget';
 import { parse, stringify } from 'flatted';
 
 // @ts-ignore
@@ -82,15 +83,9 @@ export const useThingtimeLine = (Everything) => {
 
 			// inside editable targets the browser's native undo/redo must win —
 			// hijacking it there mutates unrelated thingtime state while the
-			// user is trying to fix a typo
-			const target = e?.target as HTMLElement | null;
-			const isEditableTarget =
-				!!target &&
-				(target.tagName === 'INPUT' ||
-					target.tagName === 'TEXTAREA' ||
-					target.tagName === 'SELECT' ||
-					target.isContentEditable);
-			if (isEditableTarget || e?.isComposing) {
+			// user is trying to fix a typo. Shared guard so every app-wide
+			// keydown listener bails on the same rule (see utils/editableTarget).
+			if (shouldIgnoreGlobalKeydown(e)) {
 				return;
 			}
 
