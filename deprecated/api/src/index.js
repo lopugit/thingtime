@@ -23,9 +23,19 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
+
+// Cross-origin access is an explicit allowlist, never '*'. /v1/thing both reads
+// and writes thing data, so letting any origin read the responses is a real
+// exposure. Override with a comma-separated THINGTIME_API_ALLOWED_ORIGINS;
+// the default covers local development only.
+const allowedOrigins = (process.env.THINGTIME_API_ALLOWED_ORIGINS || 'http://localhost:3000')
+	.split(',')
+	.map(origin => origin.trim())
+	.filter(Boolean)
+
 const io = new Server(server, {
 	cors: {
-		origin: '*',
+		origin: allowedOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -38,7 +48,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: '*',
+		origin: allowedOrigins,
 	}))
 
 	app.get('/', (req, res) => {
