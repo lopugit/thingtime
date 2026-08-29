@@ -1715,6 +1715,11 @@ is fixed, and cite the checklist you ran in the PR description.
       Tab A. Tab A replaces its own tree as before, but Tab B's tree and undo
       timeline are untouched — a whole-tree replacement is never broadcast,
       while a named child of the root (`tt.settings.…`) still syncs.
+- [ ] Repeat that root assignment through a doubled alias (`tt.tt = …`,
+      `thingtime.tt = …`) and write a doubled-alias timeline path
+      (`tt.tt.timemachine.… = …`). Neither crosses to Tab B: its root
+      `tt`/`thingtime` self-reference and its undo timeline both survive
+      intact, while `tt.tt.settings.…` still syncs as ordinary data.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 

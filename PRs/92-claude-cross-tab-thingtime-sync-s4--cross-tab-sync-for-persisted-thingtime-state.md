@@ -29,11 +29,17 @@ There is no second persistence codec or storage mechanism.
 - Received writes re-enter the same queue with
   `{ ignoreUndoRedo: true, fromRemote: true }`, so pre-hydration writes remain
   ordered, undo history stays local, and broadcasts cannot echo.
-- The provider's internal root `timemachine` path (including `tt`/`thingtime`
-  aliases) is deliberately channel-local. Undo and redo still broadcast the
-  ordinary data path they restore, while one tab can never replace another
-  tab's timeline metadata. Nested user data such as `Content.timemachine`
-  remains syncable.
+- The provider's internal root `timemachine` path is deliberately channel-local.
+  Because `applyThingtimeUpdate` re-establishes `tt`/`thingtime` as self-
+  references on every write, the classifier collapses the whole *leading run* of
+  root aliases before deciding, so `tt.timemachine`, `tt.tt.timemachine`, and
+  `thingtime.tt.timemachine` are all recognised as the same tab-local node — and
+  a path that is nothing but aliases (`tt`, `tt.tt`, `thingtime.tt`) is treated
+  as a whole-tree replacement rather than being broadcast. Undo and redo still
+  broadcast the ordinary data path they restore, while one tab can never replace
+  another tab's timeline metadata or detach its root self-alias. Only a leading
+  run counts, so nested user data such as `Content.timemachine` and
+  `Content.tt.timemachine` remains syncable.
 - Remote-applied state schedules the existing `latestRevisionAutosave`
   coordinator. `ThingtimeProvider` remains the sole LocalForage writer.
 - Missing `BroadcastChannel` support returns to the prior single-tab behavior

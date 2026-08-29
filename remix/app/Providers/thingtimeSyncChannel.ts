@@ -40,18 +40,30 @@ const pathParts = (value: ThingtimeSyncPath): string[] => {
 	return typeof value === 'string' ? value.split(/[.[\]"']+/).filter(Boolean) : value;
 };
 
-const isTabLocalPath = (parts: string[]): boolean => {
-	const rootPart = ROOT_ALIASES.has(parts[0]) ? parts[1] : parts[0];
-	return rootPart === 'timemachine';
+// The root is self-referential: applyThingtimeUpdate re-establishes
+// `thingtime.tt === thingtime` and `thingtime.thingtime === thingtime` before
+// every write, so a whole LEADING RUN of root aliases resolves back to the root
+// — `tt.tt.settings` and `settings` address the same node. Classifying a path
+// therefore has to collapse the entire run, not just one alias. Only the
+// leading run: a nested user key named `tt` (`Content.tt.…`) is ordinary data.
+const withoutRootAliases = (parts: string[]): string[] => {
+	let index = 0;
+	while (index < parts.length && ROOT_ALIASES.has(parts[index])) index += 1;
+	return parts.slice(index);
 };
 
-// A bare 'tt' / 'thingtime' path is not a path-level write: ThingtimeProvider's
-// applyThingtimeUpdate treats it as a whole-tree REPLACEMENT. Broadcasting one
-// would hand every other tab the sender's entire root — including the
-// `timemachine` timeline that isTabLocalPath keeps tab-local on every other
-// path — and ship a full tree snapshot per keystroke. Whole-tree convergence is
-// the persistence layer's job; this channel only carries path-level writes.
-const isWholeTreeReplacement = (parts: string[]): boolean => parts.length === 1 && ROOT_ALIASES.has(parts[0]);
+const isTabLocalPath = (parts: string[]): boolean => withoutRootAliases(parts)[0] === 'timemachine';
+
+// A path that is nothing but root aliases is not a path-level write:
+// ThingtimeProvider's applyThingtimeUpdate treats a bare 'tt'/'thingtime' as a
+// whole-tree REPLACEMENT, and a doubled `tt.tt` resolves to the root's own
+// alias property. Broadcasting either would hand every other tab the sender's
+// entire root — including the `timemachine` timeline that isTabLocalPath keeps
+// tab-local on every other path — or replace the receiving tab's self-alias
+// with an arbitrary payload, and ship a full tree snapshot per keystroke.
+// Whole-tree convergence is the persistence layer's job; this channel only
+// carries path-level writes.
+const isWholeTreeReplacement = (parts: string[]): boolean => withoutRootAliases(parts).length === 0;
 
 const isThingtimeSyncPath = (value: unknown): value is ThingtimeSyncPath => {
 	if (typeof value === 'string') {

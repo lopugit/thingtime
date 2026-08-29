@@ -121,10 +121,20 @@ test('undo timelines remain tab-local while nested user data named timemachine s
 		sender.publish('timemachine.user', { local: true });
 		sender.publish(['tt', 'timemachine', 'user'], { local: true });
 		sender.publish('thingtime.timemachine.user', { local: true });
+		// The root aliases each point back at the root, so a REPEATED alias run
+		// still addresses the tab-local timeline and must not cross either.
+		sender.publish('tt.tt.timemachine.user', { local: true });
+		sender.publish('thingtime.tt.timemachine.user', { local: true });
+		sender.publish(['tt', 'thingtime', 'timemachine', 'user'], { local: true });
 		sender.publish('Content.timemachine', 'ordinary user data');
+		// Only a LEADING alias run is the root. A nested key named tt is user data.
+		sender.publish('Content.tt.timemachine', 'ordinary user data');
 		await settleMessages();
 
-		assert.deepEqual(applied, [{ path: 'Content.timemachine', value: 'ordinary user data' }]);
+		assert.deepEqual(applied, [
+			{ path: 'Content.timemachine', value: 'ordinary user data' },
+			{ path: 'Content.tt.timemachine', value: 'ordinary user data' }
+		]);
 	} finally {
 		sender.close();
 		receiver.close();
@@ -151,10 +161,21 @@ test('a whole-tree root replacement is never broadcast, but named children of th
 		sender.publish('thingtime', { whole: 'tree' });
 		sender.publish(['tt'], { whole: 'tree' });
 		sender.publish(['thingtime'], { whole: 'tree' });
+		// A path that is only aliases resolves to the root's own alias property, so
+		// applying one would replace the receiving tab's `tt`/`thingtime`
+		// self-reference with the payload and detach it from its real tree.
+		sender.publish('tt.tt', { whole: 'tree' });
+		sender.publish('thingtime.tt', { whole: 'tree' });
+		sender.publish(['tt', 'thingtime'], { whole: 'tree' });
 		sender.publish('tt.settings.theme', 'dark');
+		// A repeated alias run in front of real data is still an ordinary write.
+		sender.publish('tt.tt.settings.theme', 'dark');
 		await settleMessages();
 
-		assert.deepEqual(applied, [{ path: 'tt.settings.theme', value: 'dark' }]);
+		assert.deepEqual(applied, [
+			{ path: 'tt.settings.theme', value: 'dark' },
+			{ path: 'tt.tt.settings.theme', value: 'dark' }
+		]);
 	} finally {
 		sender.close();
 		receiver.close();
