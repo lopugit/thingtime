@@ -66,6 +66,9 @@ jobs:
           node --test .github/scripts/rebase-related-edits.test.mjs
           node --test .github/scripts/resolve-canonical-instruction-type-conflicts.test.mjs
 
+      - name: Validate Lopu PR status rendering and classification
+        run: node --test .github/scripts/lopu-pr-status.test.mjs
+
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
