@@ -172,9 +172,14 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 14. **🧹 Remove render-time debug leaks in the hot path.**
 
     > ✅ Mostly fixed (verified on main 2026-07-21): the unbounded
-    > `window.useThingtimeScope` per-render array push is gone from
-    > `useThingtime.tsx`. Small remainder: `ThingtimeURL.tsx` still has 4
-    > render-path `console.log`s (dev-gate or remove).
+    > `window.useThingtimeScope` per-render array push is gone — the hook moved
+    > to `app/components/Thingtime/useThingtime.tsx` and is now a plain context
+    > read, so the severe half of this item is closed.
+    >
+    > The remaining render-path `console.log`s are owned by PR #115
+    > (`claude/render-log-leaks-s7`), which removes them and rewrites this item.
+    > Do not restate a count here — it goes stale the moment #115 lands. If
+    > #115 merges first, resolve this block to #115's text.
 
     `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
     unbounded per-instance array on `window.useThingtimeScope` on **every render**
