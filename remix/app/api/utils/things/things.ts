@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
@@ -41,6 +41,7 @@ import {
   ACL_ALL,
   ACL_FAMILY,
   ACL_FRIENDS,
+  ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
 	APP_STORAGE_RESERVED_ID_PREFIX,
@@ -106,7 +107,7 @@ export { REACTION_EMOJIS };
 // derived from the registry's whitelist so the validation gate and the feed's
 // type filters can never drift
 export type PostType = (typeof REGISTRY_POST_TYPES)[number];
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
+export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
 export type MarketplaceListing = {
@@ -139,6 +140,11 @@ export type ThingDoc = {
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
+  // hidden (unlisted) things: the randomly generated secret that makes the
+  // thing viewable to ANYONE presenting it (?key= URLs). Minted whenever the
+  // acl enters tt:hidden (fresh each time, so old links never resurrect);
+  // inert while the acl says anything else. Owner-only in projections.
+  linkKey?: string | null;
   targetId?: string | null;
   // Drive-style organization (v2 only): shareId of a folder thing the SAME
   // owner holds, or null/absent for the root of /things. Containment lives on
@@ -266,6 +272,9 @@ export type PublicPost = {
   // legacy name derived from acl so old clients keep working
   visibility: PostVisibility;
   acl: string[];
+  // owner-only, hidden things only: the secret behind the shareable
+  // /post/<id>?key=<linkKey> URL
+  linkKey?: string;
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
@@ -304,6 +313,8 @@ export type PublicThing = {
   // same vocabulary the KV surface speaks; first-party projections never emit it
   visibility: ThingVisibility | 'app';
   acl: string[];
+  // owner-only, hidden things only: the ?key= secret for the hidden link
+  linkKey?: string;
   targetId: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
@@ -331,8 +342,25 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' } | null;
   friendIds?: ReadonlySet<string>;
+  // hidden-link keys presented with THIS request (?key= / body.key) — canView
+  // grants a hidden thing to whoever carries its linkKey here
+  linkKeys?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
+
+// 32 base64url chars (~192 bits) — the whole security of a hidden link is
+// this string being unguessable
+const generateLinkKey = (): string => randomBytes(24).toString('base64url');
+
+// Attach presented hidden-link keys to a viewer. Works for logged-out callers
+// too: an anonymous key-holder rides an id-less viewer shell (id '' is falsy,
+// so every viewer?.id check still reads it as anonymous — the key is its only
+// power). No keys = the viewer passes through untouched.
+export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer => {
+  const presented = keys.map((key) => key.trim()).filter(Boolean);
+  if (!presented.length) return viewer;
+  return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
+};
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
@@ -344,7 +372,15 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
+// The DEFAULT circle set: what an unfiltered feed/search covers. 'hidden' is
+// deliberately absent — an unlisted thing is reachable by its link key (or by
+// its owner's own-things clause), never by simply not filtering.
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+// What a caller may ASK for. Wider than the default set: 'hidden' is a real
+// circle the composer, post menu and feed/search filter chips all offer, so
+// `circles=hidden` has to survive input validation — dropping it silently
+// widens the query back to every default circle, i.e. the opposite filter.
+export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -1075,6 +1111,10 @@ export const createThing = async (
     return patVisibilityFail(viewer);
   }
 
+  // hidden things are born with their secret link key — the random URL that
+  // makes an unlisted thing reachable (canView honors it while acl says hidden)
+  const linkKey = acl.includes(ACL_HIDDEN) ? generateLinkKey() : null;
+
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
   if (isFail(folderAssignment)) return folderAssignment;
 
@@ -1122,6 +1162,7 @@ export const createThing = async (
     // free provenance) plus any entries the caller seeded; a sandboxed
     // creator listing peers here is delegation at birth
     ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
+    ...(linkKey ? { linkKey } : {}),
     createdAt: now,
     updatedAt: now,
 		...(app ? appNamespaceStamp(app, sizeBytes) : {})
@@ -1920,6 +1961,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
+      // owner-only: the hidden-link secret, only while the acl says hidden
+      ...(viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? { linkKey: doc.linkKey }
+        : {}),
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
@@ -1960,12 +2005,19 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
     const tokenAcl = viewer?.id && viewer.id === doc.ownerId ? tokenAclOf(doc) : [];
+    // the hidden-link secret is owner-facing too, and only meaningful while
+    // the acl still says hidden
+    const linkKey =
+      viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? doc.linkKey
+        : null;
     return {
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
+      ...(linkKey ? { linkKey } : {}),
       targetId: targetIdOf(doc),
       folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
@@ -2011,6 +2063,18 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
+  // hidden (unlisted) things: the random link key IS the audience — anyone
+  // presenting it may view, logged out included. The key only grants while
+  // the acl still says hidden, so un-hiding instantly retires shared links.
+  if (
+    viewer?.linkKeys?.size &&
+    typeof doc.linkKey === 'string' &&
+    doc.linkKey &&
+    viewer.linkKeys.has(doc.linkKey) &&
+    aclOf(doc).includes(ACL_HIDDEN)
+  ) {
+    return true;
+  }
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
@@ -2093,10 +2157,16 @@ const circleClause = (circle: PostVisibility) => {
     case 'family':
       return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
     case 'private':
-      // $nin on an array field means "contains none of these"
+      // $nin on an array field means "contains none of these". ACL_HIDDEN is
+      // excluded too: hidden things carry no broad grant, so without it every
+      // unlisted thing would also answer the 'private' chip.
       return {
-        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN] } }, { visibility: 'private' }]
       };
+    case 'hidden':
+      // v2-only (no legacy enum era) — reachable only by explicit circle
+      // filters; 'hidden' is deliberately NOT in the default VISIBILITIES set
+      return { acl: ACL_HIDDEN };
   }
 };
 
@@ -2126,9 +2196,20 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
   if (viewer?.id) {
-    // the viewer's own things, optionally narrowed to the requested circles
+    // The viewer's own things, optionally narrowed to the requested circles.
+    // The unnarrowed shortcut is only sound when the caller asked for NO
+    // filter, or asked for every circle they could ask for. A bare length
+    // comparison would also fire for a same-sized but different selection
+    // (say public+friends+family+hidden), silently pulling the viewer's
+    // private things back into a feed they filtered them out of — and
+    // covering only the DEFAULT set has the same shape of bug one circle
+    // over: ticking exactly public+friends+family+private (i.e. everything
+    // except 🕵️ Hidden) would take the shortcut and hand back the hidden
+    // things the caller just excluded. An omitted circle must always really
+    // be omitted, so only the two genuinely unfiltered cases skip narrowing.
+    const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
     clauses.push(
-      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      unfiltered ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
   }
   // nothing requested that the viewer could ever see
@@ -2386,7 +2467,9 @@ export const getFeed = async (
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
-  const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
+  // REQUESTABLE, not the default set — 'hidden' is a chip the filter menu
+  // offers, and a dropped circle reads as "no filter" downstream
+  const circles = (query.circles || []).filter((circle) => REQUESTABLE_VISIBILITIES.includes(circle));
 
   const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };
@@ -3905,6 +3988,13 @@ export const updateThing = async (
   // boundary in either direction (publishing private data, or hiding public)
   if (!acl.includes(ACL_INHERIT) && patVisibilityBlocksAcl(viewer, acl)) return patVisibilityFail(viewer);
 
+  // Entering hidden mints a FRESH link key — links that circulated during an
+  // earlier hidden period must never resurrect on re-hide. Leaving hidden
+  // keeps the field (inert: canView only honors it while acl says hidden).
+  const wasHidden = aclOf(doc).includes(ACL_HIDDEN);
+  const nowHidden = acl.includes(ACL_HIDDEN);
+  const nextLinkKey = nowHidden && (!wasHidden || typeof doc.linkKey !== 'string' || !doc.linkKey) ? generateLinkKey() : undefined;
+
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
   // arbitrary JSON is ambiguous
@@ -3986,6 +4076,7 @@ export const updateThing = async (
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
     tags,
     acl,
+    ...(nextLinkKey ? { linkKey: nextLinkKey } : {}),
     updatedAt: now,
 		...(storageScope ? { appId: storageScope.appId } : {}),
 		...(isBillable || storageScope ? { sizeBytes: newSize } : {}),

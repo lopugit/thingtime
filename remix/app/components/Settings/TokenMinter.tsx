@@ -47,6 +47,7 @@ type PatTokenRow = {
   scopes: string[];
   onlyCreatedThings?: boolean;
   visibility?: PatVisibilityMode;
+  allowGet?: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -172,6 +173,7 @@ export const TokenMinter = (props: { userId: string }) => {
   const [selectedScopes, setSelectedScopes] = React.useState<string[]>(['things']);
   const [onlyCreatedThings, setOnlyCreatedThings] = React.useState(false);
   const [visibility, setVisibility] = React.useState<PatVisibilityMode>('all');
+  const [allowGet, setAllowGet] = React.useState(false);
   const [expiresInMs, setExpiresInMs] = React.useState<number | null>(30 * 24 * 60 * 60 * 1000);
   const [customValue, setCustomValue] = React.useState('30');
   const [customUnit, setCustomUnit] = React.useState('d');
@@ -282,7 +284,8 @@ export const TokenMinter = (props: { userId: string }) => {
         expiresInMs,
         maxUses,
         onlyCreatedThings,
-        visibility
+        visibility,
+        allowGet
       });
       setMinted({ token: resp.token, example: resp.example, docs: resp.docs });
       if (resp.tokenInfo) saveTokens((prev) => [resp.tokenInfo, ...prev.filter((t) => t.id !== resp.tokenInfo.id)]);
@@ -397,6 +400,23 @@ export const TokenMinter = (props: { userId: string }) => {
           </Box>
           <Box marginLeft="auto" flexShrink={0}>
             <Switch isChecked={onlyCreatedThings} onChange={(e) => setOnlyCreatedThings(e.target.checked)}></Switch>
+          </Box>
+        </Flex>
+
+        {/* GET bridge: opt-in because the token rides the URL itself */}
+        <Flex alignItems="center" columnGap={4} paddingTop={1}>
+          <Box minWidth={0}>
+            <Text fontSize="sm" color="var(--tt-ink, #16161a)">
+              Works via GET links 🌍
+            </Text>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
+              Opens /api/v1/get to this token — the whole API as plain GET URLs with the token in a query
+              param, so AIs that can only browse the web can still read and write your things. URLs land in
+              logs and browser history, so tick this only for tokens you scope tightly.
+            </Text>
+          </Box>
+          <Box marginLeft="auto" flexShrink={0}>
+            <Switch isChecked={allowGet} onChange={(e) => setAllowGet(e.target.checked)}></Switch>
           </Box>
         </Flex>
 
@@ -627,6 +647,7 @@ export const TokenMinter = (props: { userId: string }) => {
                     {summarizeScopes(token.scopes)}
                     {token.onlyCreatedThings ? ' · 🧸 its own things only' : ''}
                     {summarizeVisibility(token.visibility)}
+                    {token.allowGet ? ' · 🌍 GET links' : ''}
                   </Text>
                   <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {meta.join(' · ')}

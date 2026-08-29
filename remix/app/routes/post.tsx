@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Center, Flex, Spinner, Text } from '@chakra-ui/react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
@@ -24,6 +24,10 @@ type ThingResponse = {
 
 export const PostPage = () => {
   const { id } = useParams();
+  // hidden (unlisted) posts: the secret ?key= from the shared link makes the
+  // post viewable to whoever opened it — logged out included
+  const [searchParams] = useSearchParams();
+  const linkKey = (searchParams.get('key') || '').trim();
   const api = useApi();
   const navigate = useNavigate();
 
@@ -43,7 +47,7 @@ export const PostPage = () => {
     // lands after it merges through the viewer's overlay, never clobbers it
     const startedAt = Date.now();
     api.v1.things
-      .get({ id: id || '' })
+      .get({ id: id || '', ...(linkKey ? { key: linkKey } : {}) })
       .then((resp: any) => {
         if (cancelled) return;
         setData({
@@ -65,7 +69,7 @@ export const PostPage = () => {
     };
     // api.v1.things.get is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, linkKey]);
 
   const post = data?.post ?? null;
   const isComment = !!post?.thingtime?.includes('comment');
