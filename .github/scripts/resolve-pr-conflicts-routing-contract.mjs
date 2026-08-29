@@ -748,18 +748,23 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
-    /existing_body[\s\S]*?Time conversion \(UTC source\)[\s\S]*?return 0/u,
-    "a legacy exact-snapshot comment is upgraded unless it already contains the status dashboard",
+    /upsert_legacy_status_context[\s\S]*?thingtime-lopu-status-context:v1/u,
+    "legacy exact-snapshot work receives one separately marked status dashboard",
   );
   assert.match(
     detectBlock,
-    /thingtime-lopu-progress-timeline:start[\s\S]*?tail -n 60/u,
-    "upgrading a legacy comment preserves and bounds its existing progress timeline",
+    /original timeline remains untouched[\s\S]*?render-context/u,
+    "the companion dashboard cannot erase the pre-existing progress history",
   );
   assert.match(
     detectBlock,
-    /gh api --method PATCH "repos\/\$REPO\/issues\/comments\/\$comment_id"/u,
-    "the detector edits the legacy comment in place instead of adding a duplicate",
+    /context_comment_id[\s\S]*?upsert_legacy_status_context "\$item" "\$context_comment_id"/u,
+    "repeat detector passes update the same legacy companion instead of adding duplicates",
+  );
+  assert.match(
+    detectBlock,
+    /thingtime-lopu-status-native:v1/u,
+    "new progress comments identify themselves as dashboard-native singletons",
   );
   assert.match(
     progressBlock,
@@ -796,6 +801,7 @@ function assertWorkflowSource() {
   assert.match(progressBlock, /read_live_stats/u, "repository PR counts refresh while a batch is active");
   assert.match(progressBlock, /sync_progress_labels/u, "queue and resolving labels follow the real worker phase");
   assert.match(progressBlock, /render-context/u, "every progress update includes time, queue, and relationship tables");
+  assert.match(progressBlock, /thingtime-lopu-status-native:v1/u, "new monitors retain the native dashboard marker");
   assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
 
   for (const label of [
