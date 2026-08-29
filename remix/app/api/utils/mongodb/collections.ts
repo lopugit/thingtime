@@ -465,6 +465,21 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
+    // Public theme gallery (`GET /api/v1/themes/shared` with no id): public
+    // themes, newest-UPDATED first. Every other index here sorts by createdAt,
+    // so the gallery's `updatedAt` sort had nothing to ride: the planner
+    // narrowed on thingtime, then blocking-sorted EVERY theme thing in memory
+    // just to take 60 — a sort that grows with the theme corpus and eventually
+    // trips Mongo's 32 MB in-memory sort limit outright.
+    //
+    // `acl` deliberately stays OUT of the key and remains a residual: it is an
+    // array, `thingtime` is an array, and a compound over both is a parallel
+    // -array index that Mongo refuses to write to at all. The residual is cheap
+    // because the walk is already scoped to themes and stops at the page.
+    //
+    // Verified on a local 40k-theme / 40k-post dataset: 40,000 keys and 40,000
+    // docs examined with a blocking SORT, down to 600 and 600 with none.
+    col.createIndex({ thingtime: 1, updatedAt: -1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
