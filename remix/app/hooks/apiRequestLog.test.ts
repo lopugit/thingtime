@@ -16,6 +16,13 @@ import {
 
 const baseEntry = { at: 1, method: 'GET', url: '/api/v1/health', status: 200, ok: true, durationMs: 12 };
 
+// A fixture for the position a credential occupies in a URI (`user:HERE@host`).
+// Deliberately not credential-shaped: every assertion below only checks that
+// whatever sits in that position is gone afterwards, so a self-describing
+// sentinel proves exactly as much as a realistic-looking credential would —
+// without this file tripping secret scanners on every push, which it has twice.
+const uriSentinel = (label: string) => `redact-me-${label}`;
+
 test('ring buffer keeps the newest entries first and caps at the limit', () => {
 	clearApiCalls();
 	for (let i = 0; i < MAX_API_LOG_ENTRIES + 5; i++) {
@@ -133,10 +140,10 @@ test('a connection string stored under a plain key keeps its credential out of t
 	clearApiCalls();
 	// exactly what MongoEndpointConfig posts via useApi mongodb.endpoints.add:
 	// the credential rides in the VALUE, under the unremarkable key `url`
-	const password = ['s3cr3t', 'pw'].join('-');
+	const userinfoFixture = uriSentinel('mongo-userinfo');
 	// assembled piecewise, per this file's convention, so no scanner ever sees a
 	// literal `scheme://user:pass@host` connection string in source
-	const connectionString = ['mongodb+srv://svcuser', ':', password, '@', 'cluster0.abc.mongodb.net/thingtime'].join('');
+	const connectionString = ['mongodb+srv://svcuser', ':', userinfoFixture, '@', 'cluster0.abc.mongodb.net/thingtime'].join('');
 	recordApiCall({
 		...baseEntry,
 		method: 'POST',
@@ -146,7 +153,7 @@ test('a connection string stored under a plain key keeps its credential out of t
 	const [logged] = getApiCalls();
 	assert.deepEqual(logged.body, { name: 'prod', url: 'mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime' });
 	const curl = buildCurlForEntry(logged, 'https://thingtime.com');
-	assert.ok(!curl.includes(password), 'copy-as-curl must not leak a connection-string password');
+	assert.ok(!curl.includes(userinfoFixture), 'copy-as-curl must not leak a connection-string password');
 	assert.ok(!curl.includes('svcuser'), 'the userinfo username goes with it');
 	// the row must still say which endpoint was configured
 	assert.ok(curl.includes('cluster0.abc.mongodb.net'));
@@ -165,10 +172,39 @@ test('userinfo redaction leaves ordinary urls — including @handle paths — in
 
 test('an absolute request url with userinfo is scrubbed before it is stored', () => {
 	clearApiCalls();
-	const password = ['n0t', 'real'].join('-');
-	const absolute = ['https://admin', ':', password, '@', 'internal.thingtime.com/api/v1/health?ok=1'].join('');
+	const userinfoFixture = uriSentinel('absolute-url');
+	const absolute = ['https://admin', ':', userinfoFixture, '@', 'internal.thingtime.com/api/v1/health?ok=1'].join('');
 	recordApiCall({ ...baseEntry, url: absolute });
 	const [logged] = getApiCalls();
 	assert.equal(logged.url, 'https://•••@internal.thingtime.com/api/v1/health?ok=1');
-	assert.ok(!logged.url.includes(password));
+	assert.ok(!logged.url.includes(userinfoFixture));
+});
+
+test('an unencoded @ inside the credential does not leave its tail in the log', () => {
+	// Atlas issues passwords containing `@`, and percent-encoding it before
+	// pasting the URI is the step people skip. Userinfo runs to the LAST `@` of
+	// the authority (RFC 3986); matching to the first one stopped at the `@`
+	// *inside* the credential, so everything after it stayed in the row —
+	// `mongodb+srv://•••@tail-that-must-not-survive@cluster0...` — and copied
+	// straight out as curl.
+	const tail = 'tail-that-must-not-survive';
+	const credential = ['head', '@', tail].join('');
+	assert.equal(
+		redactUriCredentials(`mongodb+srv://svcuser:${credential}@cluster0.abc.mongodb.net/thingtime`),
+		'mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime'
+	);
+
+	clearApiCalls();
+	recordApiCall({
+		...baseEntry,
+		method: 'POST',
+		url: '/api/v1/mongodb/endpoints',
+		body: { name: 'prod', url: `mongodb+srv://svcuser:${credential}@cluster0.abc.mongodb.net/thingtime` }
+	});
+	const [logged] = getApiCalls();
+	// exact-shape, not a host substring check: greediness is the risk this
+	// change introduces, so assert precisely how much the match consumed
+	assert.deepEqual(logged.body, { name: 'prod', url: 'mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime' });
+	const curl = buildCurlForEntry(logged, 'https://thingtime.com');
+	assert.ok(!curl.includes(tail), 'no part of the credential may survive into a copied curl');
 });

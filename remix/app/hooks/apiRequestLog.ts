@@ -38,7 +38,15 @@ const MAX_REDACT_DEPTH = 6;
 // own error text; a log that stored it verbatim would hand it straight back
 // through copy-as-curl. Only the userinfo is replaced, so the row still reads
 // (scheme + host survive) while the credential cannot be copied out.
-const URI_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)[^/?#@]*@/i;
+//
+// The `@` run is greedy to the LAST `@` of the authority, not the first, which
+// is how RFC 3986 / WHATWG delimit userinfo. It matters: an unencoded `@` in
+// the password (Atlas issues passwords containing `@`, and percent-encoding it
+// is the step people skip) would otherwise end the match at that `@` and leave
+// the tail of the credential behind — `://•••@ssw0rd@host` — in the row and in
+// any curl copied from it. `/?#` still terminate the scan, so ordinary paths
+// and queries may hold `@` freely (this app puts @handles in paths).
+const URI_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i;
 
 export const redactUriCredentials = (value: string): string => value.replace(URI_USERINFO, `$1${REDACTED}@`);
 
