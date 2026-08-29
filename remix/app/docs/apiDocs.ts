@@ -1895,6 +1895,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST { "token": "<jwt>" } (or send the token as an Authorization: Bearer header with an empty JSON body).',
+      'Call it from your server: introspection is a back-channel check, and unlike /api/v1/oauth/userinfo this route sends no CORS headers, so browser JavaScript on another origin cannot read the response.',
       'Thingtime verifies the signature, then checks the session record for revocation and expiry.',
       'active: true includes sub (user id), jti (session id), purpose, iat/exp (epoch seconds; exp null means non-expiring), and iss.',
       'active only means the session is live — it does not mean the credential is a full account session. Branch on purpose: browser and service are full account credentials; app, app-sandbox, pat, oauth-code, chatgpt-oauth-code, chatgpt-mcp, chatgpt-mcp-refresh, and chatgpt-mcp-connection are scoped credentials that other endpoints will still reject. Treat any purpose you do not recognise as scoped.',

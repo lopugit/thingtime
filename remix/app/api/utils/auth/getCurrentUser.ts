@@ -122,6 +122,13 @@ export const introspectToken = async (token: string): Promise<TokenIntrospection
     if (!serviceAccountAuthenticationAllowed(user)) return { active: false };
   }
 
+  // iat/exp are the SESSION's dates, not the JWT's, because the session record
+  // is what getLiveSession actually enforces. That reports the real expiry only
+  // while every mint site keeps session.expiresAt at or before its token's exp
+  // — patTokens rounds the JWT up, accounts.ts re-mints a fresh 30d JWT over an
+  // older session, and the rest pair identical TTLs. A future mint site that
+  // sets expiresAt LATER than its token's exp would make this over-report the
+  // life of the credential; pair the two there, or read exp off the JWT here.
   return {
     active: true,
     sub: claims.sub,
