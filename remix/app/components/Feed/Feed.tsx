@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -68,6 +69,32 @@ export const FeedPage = () => {
   const viewerIdRef = React.useRef(user?.id ?? null);
   viewerIdRef.current = user?.id ?? null;
 
+  // public tag feeds (claude-todo/10 ✨): /feed?tag=<tag> narrows the feed to
+  // one tag — shareable, guest-visible topic hubs. Tag chips on PostCards link
+  // here; the banner clears back to the full feed.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tagParam = (searchParams.get('tag') || '').trim().toLowerCase() || null;
+
+  // Advanced mode runs the other query grammar, and /things/search ORs its tag
+  // list (`{ tags: { $in: [...] } }`) — folding the URL tag into a non-empty
+  // advanced tags input would WIDEN the page instead of narrowing it. So the
+  // tag is honoured there only when the panel names no tags of its own;
+  // otherwise the panel's explicit input wins and the banner says so rather
+  // than captioning a page that was never tag-filtered.
+  const advancedTags = appliedAdvanced?.tags.trim() || '';
+  const tagApplied = !!tagParam && !advancedTags;
+
+  const clearTagParam = React.useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('tag');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
   const load = React.useCallback(
     async (options: { reset?: boolean; cursor?: string | null } = {}) => {
       const { reset, cursor } = options;
@@ -86,6 +113,10 @@ export const FeedPage = () => {
           // way the feed projects them — simple filters keep narrowing
           const resp = await apiRef.current.v1.things.search({
             ...advancedSearchBody(appliedAdvanced),
+            // spread after the body so the URL tag fills search's `tags` slot.
+            // tagApplied is false whenever the panel set its own tags, so this
+            // only ever fills an unset field — it never overwrites the input.
+            ...(tagApplied ? { tags: tagParam } : {}),
             types: filters.types.length ? filters.types : undefined,
             circles: filters.circles.length ? filters.circles : undefined,
             from: filters.from || undefined,
@@ -109,6 +140,7 @@ export const FeedPage = () => {
         const resp = await apiRef.current.v1.things.feed({
           types: filters.types,
           circles: filters.circles,
+          tag: tagParam || undefined,
           from: filters.from,
           to: filters.to,
           algorithm: algorithmId ?? 'latest',
@@ -139,7 +171,7 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, appliedAdvanced]
+    [filters, algorithmId, appliedAdvanced, tagParam, tagApplied]
   );
 
   // initial fetch + reset whenever the filters, algorithm, or advanced search
@@ -247,6 +279,38 @@ export const FeedPage = () => {
             Feed 📰
           </Box>
         </Flex>
+
+        {tagParam && (
+          <Flex
+            alignItems="center"
+            columnGap={2}
+            padding="8px 12px"
+            borderRadius="var(--tt-radius-md, 12px)"
+            border="1px solid var(--tt-border, #ececef)"
+            background="var(--tt-card, #fff)"
+          >
+            <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+              {tagApplied ? 'Posts tagged' : 'Advanced search tags override'}{' '}
+              <Text as="span" fontFamily="mono" fontWeight={700} color="var(--tt-ink, #16161a)">
+                #{tagParam}
+              </Text>
+            </Text>
+            <Box
+              as="button"
+              type="button"
+              marginLeft="auto"
+              onClick={clearTagParam}
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-muted, #9a9aa6)"
+              cursor="pointer"
+              _hover={{ color: 'var(--tt-ink, #16161a)' }}
+              title="Back to the full feed"
+            >
+              Clear ✕
+            </Box>
+          </Flex>
+        )}
 
         {/* controls */}
         <Flex alignItems="center" columnGap={2}>
