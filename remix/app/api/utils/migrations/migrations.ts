@@ -33,7 +33,13 @@ import {
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
 import { themeAcl } from '../themes/themes';
-import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import {
+	builtinSchemaSeedNeedsRefresh,
+	bulkWriteErrorCodesByOp,
+	exactDocumentSnapshotMatch,
+	storageMigrationOwnership,
+	upsertedOpIndexes
+} from './migrationCore';
 import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
@@ -914,10 +920,12 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
               inserted[i] = true;
             });
           } catch (err: any) {
-            const writeErrors = err?.writeErrors ?? [];
-            if (!writeErrors.length) throw err; // not a per-op bulk failure
-            const failed = new Map<number, number>(); // position in toInsert → code
-            for (const we of writeErrors) failed.set(we?.index, we?.code ?? we?.err?.code);
+            // position in toInsert → code (the ops array IS toInsert here)
+            const failed = bulkWriteErrorCodesByOp(err);
+            if (!failed) throw err; // not a per-op bulk failure
+            // Inserts are all-or-nothing per op, so absence from the error map
+            // IS the success signal — unlike the upsert branch below, where a
+            // non-failing op may have merely matched an existing doc.
             toInsert.forEach(({ i }, pos) => {
               if (!failed.has(pos)) inserted[i] = true;
             });
@@ -962,13 +970,13 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
         const errorCodes = new Map<number, number>(); // op index → write-error code
         try {
           const res: any = await things.bulkWrite(ops as any, { ordered: false });
-          for (const k of Object.keys(res?.upsertedIds ?? {})) inserted[Number(k)] = true;
+          for (const i of upsertedOpIndexes(res)) inserted[i] = true;
         } catch (err: any) {
-          const writeErrors = err?.writeErrors ?? [];
-          if (!writeErrors.length) throw err; // not a per-op bulk failure
+          const codes = bulkWriteErrorCodesByOp(err);
+          if (!codes) throw err; // not a per-op bulk failure
           // Unordered: the non-failing ops still applied — recover their upserts.
-          for (const k of Object.keys(err?.result?.upsertedIds ?? {})) inserted[Number(k)] = true;
-          for (const we of writeErrors) errorCodes.set(we?.index, we?.code ?? we?.err?.code);
+          for (const i of upsertedOpIndexes(err?.result)) inserted[i] = true;
+          for (const [i, code] of codes) errorCodes.set(i, code);
         }
 
         // Non-11000 failures are generic per-doc errors (the per-doc path threw

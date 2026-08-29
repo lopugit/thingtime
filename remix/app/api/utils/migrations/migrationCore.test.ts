@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore.ts';
+import {
+	builtinSchemaSeedNeedsRefresh,
+	bulkWriteErrorCodesByOp,
+	exactDocumentSnapshotMatch,
+	storageMigrationOwnership,
+	upsertedOpIndexes
+} from './migrationCore.ts';
 
 test('legacy conversion delete pins the full source even without updatedAt', () => {
 	const source = { _id: 'legacy-1', email: 'person@example.test', nested: { value: 1 } };
@@ -30,4 +36,64 @@ test('builtin schema seed treats a missing control-plane stamp as repairable dri
 		builtinSchemaSeedNeedsRefresh({ crystal: { ...crystal, name: 'Stale' }, storageClass: 'control' }, crystal),
 		true
 	);
+});
+
+// --------------------------------------------------------------------------
+// Batched claim phase of collectionToThingsMigration (perf: one bulk write per
+// page instead of one round trip per doc). The claim decides which candidates
+// THIS run created, and only those may have their legacy source consumed, so a
+// misread of the driver's bulk outcome is a data-loss bug rather than a
+// cosmetic one. These pin the two readers against the shapes the mongodb
+// driver actually produces (v6 `MongoBulkWriteError`: `writeErrors` keyed by
+// the original op index, plus a `result` BulkWriteResult carrying the upserts
+// that still landed).
+
+test('a fully successful bulk upsert reports exactly the ops that created a doc', () => {
+	// ops 0 and 2 inserted; op 1 MATCHED a prior-run twin and is deliberately
+	// absent — it has to go through the genuine check, not be claimed as ours
+	assert.deepEqual(upsertedOpIndexes({ upsertedIds: { 0: 'id-a', 2: 'id-c' } }), [0, 2]);
+	assert.deepEqual(upsertedOpIndexes({ upsertedIds: {} }), []);
+	assert.deepEqual(upsertedOpIndexes(undefined), []);
+	assert.deepEqual(upsertedOpIndexes(null), []);
+});
+
+test('a partially failed unordered bulk write still yields its landed upserts', () => {
+	// unordered execution applies every op that did not fail: op 1 duplicated a
+	// key, ops 0 and 2 upserted anyway and must NOT be re-claimed next run
+	const error = {
+		writeErrors: [{ index: 1, code: 11000 }],
+		result: { upsertedIds: { 0: 'id-a', 2: 'id-c' } }
+	};
+	assert.deepEqual(upsertedOpIndexes(error.result), [0, 2]);
+	assert.deepEqual([...bulkWriteErrorCodesByOp(error)!], [[1, 11000]]);
+});
+
+test('write-error codes are keyed by the original op index, with an err.code fallback', () => {
+	const codes = bulkWriteErrorCodesByOp({
+		writeErrors: [{ index: 3, code: 11000 }, { index: 7, err: { code: 121 } }]
+	})!;
+	assert.equal(codes.get(3), 11000);
+	// a WriteError exposing its code only through the nested err payload
+	assert.equal(codes.get(7), 121);
+	// 11000 is the only code that means "a unique key is already held"; anything
+	// else is a generic per-doc conversion error and is skipped, not re-read
+	assert.equal(codes.get(0), undefined);
+	assert.equal(codes.size, 2);
+});
+
+test('a rejection with no per-op write errors is not a per-op outcome', () => {
+	// write-concern failure, connection loss, any driver-level error: these say
+	// nothing about which documents landed, so the caller must rethrow instead
+	// of reading an empty map as "nothing conflicted"
+	assert.equal(bulkWriteErrorCodesByOp({ writeErrors: [] }), null);
+	assert.equal(bulkWriteErrorCodesByOp({ result: { upsertedIds: {} } }), null);
+	assert.equal(bulkWriteErrorCodesByOp(new Error('connection closed')), null);
+	assert.equal(bulkWriteErrorCodesByOp(undefined), null);
+});
+
+test('a lone write error object fails closed to the rethrow', () => {
+	// the driver types writeErrors as one-or-many. A bare object must never read
+	// as an empty map: that would mark a conflicting insert as successful and
+	// let the consume phase delete its legacy source.
+	assert.equal(bulkWriteErrorCodesByOp({ writeErrors: { index: 0, code: 11000 } }), null);
 });
