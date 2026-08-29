@@ -28,9 +28,13 @@ const peerBody = async (request: Request) => {
 const boundedPeerRate = (request: Request, origin: string) =>
 	enforceFixedRateLimit(request, 'peer.discovery', `peer:${origin}`, { limit: 60, windowMs: 60_000 });
 
-const pinAuthenticatedPeer = async (origin: string, publicKey: string) => {
+const pinAuthenticatedPeer = async (
+	origin: string,
+	publicKey: string,
+	dataEnvironment: Parameters<typeof announcePeer>[2]
+) => {
 	try {
-		await announcePeer(origin, publicKey);
+		await announcePeer(origin, publicKey, dataEnvironment);
 		return null;
 	} catch (error) {
 		if (error instanceof PeerIdentityMismatchError)
@@ -47,17 +51,18 @@ export const loader = async ({ request }: { request: Request }) => {
 	if (!auth.ok) return json({ ok: false, error: auth.error }, { status: auth.status });
 	const rate = await boundedPeerRate(request, auth.origin);
 	if (!rate.allowed) return json({ ok: false, error: 'Peer discovery is moving too quickly' }, rateLimitedResponseInit(rate));
-	const pinError = await pinAuthenticatedPeer(auth.origin, auth.publicKey);
+	const pinError = await pinAuthenticatedPeer(auth.origin, auth.publicKey, auth.dataEnvironment);
 	if (pinError) return pinError;
 
 	const page = await listActivePeers({
 		cursor: decodePeerCursor(new URL(request.url).searchParams.get('cursor')),
-		limit: boundedPeerLimit(new URL(request.url).searchParams.get('limit'))
+		limit: boundedPeerLimit(new URL(request.url).searchParams.get('limit')),
+		dataEnvironment: auth.dataEnvironment
 	});
 	const identity = getPeerSigningIdentity();
 	const selfOrigin = getSelfPeerOrigin(request);
 	if (!identity || !selfOrigin) return json({ ok: false, error: 'Peer discovery is not configured' }, { status: 503 });
-	return signedPeerNdjsonResponse(identity, selfOrigin, [
+	return signedPeerNdjsonResponse(identity, selfOrigin, auth.dataEnvironment, [
 		...page.peers.map((peer) => ({ type: 'peer', peer })),
 		{ type: 'page.complete', nextCursor: page.nextCursor, count: page.peers.length }
 	]);
@@ -73,7 +78,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (!auth.ok) return json({ ok: false, error: auth.error }, { status: auth.status });
 	const rate = await boundedPeerRate(request, auth.origin);
 	if (!rate.allowed) return json({ ok: false, error: 'Peer discovery is moving too quickly' }, rateLimitedResponseInit(rate));
-	const pinError = await pinAuthenticatedPeer(auth.origin, auth.publicKey);
+	const pinError = await pinAuthenticatedPeer(auth.origin, auth.publicKey, auth.dataEnvironment);
 	if (pinError) return pinError;
 	let body: any;
 	try {
@@ -87,7 +92,7 @@ export const action = async ({ request }: { request: Request }) => {
 		if (!origin || origin !== auth.origin || Object.keys(body).some((key) => key !== 'op' && key !== 'origin')) {
 			return json({ ok: false, error: 'Peer announcement is invalid' }, { status: 400 });
 		}
-		return json({ ok: true, peer: await announcePeer(origin, auth.publicKey) });
+		return json({ ok: true, peer: await announcePeer(origin, auth.publicKey, auth.dataEnvironment) });
 	}
 
 	if (body?.op === 'sync' && Object.keys(body).length === 1) {
@@ -96,7 +101,7 @@ export const action = async ({ request }: { request: Request }) => {
 			return json({ ok: false, error: 'Only a deployment may start its own peer sync' }, { status: 403 });
 		const identity = getPeerSigningIdentity();
 		if (!identity) return json({ ok: false, error: 'Peer discovery is not configured' }, { status: 503 });
-		return signedPeerNdjsonResponse(identity, selfOrigin, syncPeerMesh({ selfOrigin }));
+		return signedPeerNdjsonResponse(identity, selfOrigin, auth.dataEnvironment, syncPeerMesh({ selfOrigin }));
 	}
 
 	return json({ ok: false, error: 'Unknown peer operation' }, { status: 400 });

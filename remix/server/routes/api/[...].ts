@@ -291,9 +291,10 @@ export default defineHandler(async (event) => {
     return proxyApiRequestToFallback(event.req);
   }
 
-  if (path === 'v1/capabilities') {
-    const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
-    return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities']), {
+	if (path === 'v1/capabilities') {
+		const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
+		const { getDeploymentDataEnvironment } = await import('../../../app/api/utils/deployment/dataEnvironment');
+		return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities'], getDeploymentDataEnvironment()), {
       headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
     });
   }

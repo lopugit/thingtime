@@ -65,6 +65,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   recreate-and-republish release requirements, role/action controls, and the
   current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
 
+- **Explicit data-authority identity for clients and peer federation**:
+  deployments now publish a safe `production`, `development`, or named
+  `custom` database/authentication environment through root data and
+  `api.capabilities` `1.1.0`. Electron rejects selected endpoints that cannot
+  prove this identity, account recovery uses its configured authority rather
+  than Vercel tier/branch inference, and signed peer gossip is scoped to the
+  matching federation id. No MongoDB host, database name, connection string,
+  account, or secret is exposed. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **Thingtime’s MCP initialization now supplies connector-wide interaction

@@ -603,6 +603,33 @@ MONGO_PASS="<password>"
 literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
 placeholder using URL encoding so special characters in the password are safe.
 
+### Public data-environment identity
+
+Every deployed API must publish a safe identifier for its **database and
+authentication authority**. It is not a MongoDB host, database name, or
+credential; it lets browser bundles, Electron, account federation, and peer
+discovery distinguish deployments that share data from deployments that only
+look similar by URL. Set one public value for each Vercel target:
+
+```sh
+# Production target
+THINGTIME_DATA_ENV="production"
+
+# Preview + development targets that share the development database
+THINGTIME_DATA_ENV="development"
+
+# A separate named database/authentication authority
+THINGTIME_DATA_ENV="custom:demo"
+THINGTIME_DATA_AUTHORITY_ORIGIN="https://demo.thingtime.com"
+# Optional when multiple ids deliberately share one authority/database
+THINGTIME_FEDERATION_ID="demo"
+```
+
+`/api/v1/capabilities` (feature `api.capabilities` `1.1.0`) and root data
+publish only `{ id, kind, federationId, authorityOrigin }`. Clients must use
+that identity for sign-in and federation; `VERCEL_ENV`, branch names, URLs, and
+commit SHAs are diagnostics, never the data-authority contract.
+
 ### Deployment peer discovery
 
 First-party production, preview, and development deployments can converge on a
@@ -615,21 +642,24 @@ THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
 # Base64url PKCS#8 Ed25519 private key; create and store it in the deployment's secret manager.
 THINGTIME_PEER_SIGNING_PRIVATE_KEY="replace-with-base64url-ed25519-pkcs8-private-key"
 THINGTIME_PUBLIC_ORIGIN="https://this-deployment.example.thingtime.com"
-# Optional; defaults to https://thingtime.com
-THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://thingtime.com"
+# Required public data/authentication authority: production, development, or custom:<id>
+THINGTIME_DATA_ENV="development"
+# Optional; defaults to the authority origin for THINGTIME_DATA_ENV
+THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://dev.thingtime.com"
 # Optional comma-separated first-party host suffixes; defaults to thingtime.com,vercel.app
 THINGTIME_PEER_ALLOWED_HOST_SUFFIXES="thingtime.com,vercel.app"
 ```
 
-Peers sign exact request method, path, timestamp, and raw body using HMAC, then
+Peers sign exact request method, path, timestamp, raw body, and federation id using HMAC, then
 also add an Ed25519 signature derived from that deployment's private key. The
 receiver verifies the public signature and pins the public key to the canonical
 origin after first HMAC-authenticated contact; a later key change fails closed.
 Every NDJSON peer event is independently Ed25519-signed too. The protocol
 rejects anonymous requests, expired or tampered signatures, non-first-party
 origins, credentials in URLs, and arbitrary outbound targets. Each origin is a
-separate `deploymentPeers` control-plane row with a ten-minute TTL lease. A
-signed `POST {"op":"sync"}` first announces to the production bootstrap,
+separate `deploymentPeers` control-plane row with a ten-minute TTL lease. Only
+deployments with the same public federation id may discover one another. A
+signed `POST {"op":"sync"}` first announces to that data environment's authority,
 then probes a bounded breadth-first set of known peers; `GET` is capped,
 cursor-paginated NDJSON rather than an all-peers array. Run self-sync from a
 trusted deployment scheduler or deploy hook at a modest cadence (for example

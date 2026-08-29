@@ -1,8 +1,9 @@
 import { createHash, createHmac, createPrivateKey, createPublicKey, sign, timingSafeEqual, verify } from 'node:crypto';
 
+import { getDeploymentDataEnvironment, type DeploymentDataEnvironment } from '../deployment/dataEnvironment';
 import { getDeploymentPeersCollection } from '../mongodb/collections';
 
-export const PEER_DISCOVERY_PROTOCOL_VERSION = 1;
+export const PEER_DISCOVERY_PROTOCOL_VERSION = 2;
 export const PEER_LEASE_MS = 10 * 60_000;
 export const PEER_STREAM_DEFAULT_LIMIT = 25;
 export const PEER_STREAM_MAX_LIMIT = 50;
@@ -10,10 +11,18 @@ export const PEER_SYNC_MAX_ORIGINS = 8;
 export const PEER_SYNC_MAX_RESPONSE_BYTES = 256 * 1024;
 export const PEER_SIGNATURE_MAX_SKEW_MS = 5 * 60_000;
 
-export type PeerPublicRecord = { origin: string; signingPublicKey: string; firstSeenAt: string; lastSeenAt: string; expiresAt: string };
+export type PeerPublicRecord = {
+	origin: string;
+	signingPublicKey: string;
+	dataEnvironment: Pick<DeploymentDataEnvironment, 'id' | 'kind' | 'federationId'>;
+	firstSeenAt: string;
+	lastSeenAt: string;
+	expiresAt: string;
+};
 // The browser-facing developer projection intentionally contains only the
-// lease's public identity and observed timestamps. In particular, it never
-// exposes `syncCursor`, request signatures, or any deployment secret.
+// lease's public identity, its non-secret data-authority descriptor, and
+// observed timestamps. In particular, it never exposes `syncCursor`, request
+// signatures, or any deployment secret.
 export type PeerExplorerRecord = PeerPublicRecord & { status: 'active' | 'expired' };
 export type PeerCursor = { lastSeenAt: string; origin: string };
 
@@ -33,6 +42,8 @@ const canonicalJson = (value: unknown): string => {
 		.join(',')}}`;
 };
 const digestJson = (value: unknown) => createHash('sha256').update(canonicalJson(value)).digest('hex');
+const federationIdFromWire = (value: unknown): string | null =>
+	typeof value === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(value) ? value : null;
 
 const peerIdentityFromPrivateKey = (value: string): PeerSigningIdentity | null => {
 	try {
@@ -93,27 +104,33 @@ export const getPeerDiscoverySecret = () => {
 	return value.length >= 32 ? value : null;
 };
 
-export const peerSigningPayload = (method: string, path: string, timestamp: string, body: string) =>
-	`${PEER_DISCOVERY_PROTOCOL_VERSION}\n${method.toUpperCase()}\n${path}\n${timestamp}\n${bodyDigest(body)}`;
+export const peerSigningPayload = (method: string, path: string, timestamp: string, body: string, federationId: string) =>
+	`${PEER_DISCOVERY_PROTOCOL_VERSION}\n${federationId}\n${method.toUpperCase()}\n${path}\n${timestamp}\n${bodyDigest(body)}`;
 
-const publicPeerSigningPayload = (method: string, path: string, timestamp: string, body: string, publicKey: string) =>
-	`${peerSigningPayload(method, path, timestamp, body)}\n${publicKey}`;
+const publicPeerSigningPayload = (method: string, path: string, timestamp: string, body: string, publicKey: string, federationId: string) =>
+	`${peerSigningPayload(method, path, timestamp, body, federationId)}\n${publicKey}`;
 
-const peerStreamSigningPayload = (origin: string, timestamp: string, event: unknown, publicKey: string) =>
-	`${PEER_DISCOVERY_PROTOCOL_VERSION}\npeer-stream\n${origin}\n${timestamp}\n${digestJson(event)}\n${publicKey}`;
+const peerStreamSigningPayload = (origin: string, timestamp: string, event: unknown, publicKey: string, federationId: string) =>
+	`${PEER_DISCOVERY_PROTOCOL_VERSION}\npeer-stream\n${origin}\n${federationId}\n${timestamp}\n${digestJson(event)}\n${publicKey}`;
 
-export const signPeerRequest = (secret: string, method: string, path: string, timestamp: string, body = '') =>
-	createHmac('sha256', secret).update(peerSigningPayload(method, path, timestamp, body)).digest('base64url');
+export const signPeerRequest = (secret: string, method: string, path: string, timestamp: string, body = '', federationId?: string) => {
+	const resolvedFederationId = federationId || getDeploymentDataEnvironment()?.federationId;
+	if (!resolvedFederationId) throw new Error('Peer data environment is not configured');
+	return createHmac('sha256', secret)
+		.update(peerSigningPayload(method, path, timestamp, body, resolvedFederationId))
+		.digest('base64url');
+};
 
 const signWithPeerIdentity = (identity: PeerSigningIdentity, payload: string) =>
 	sign(null, Buffer.from(payload), identity.privateKey).toString('base64url');
 
-export const signPeerPublicRequest = (method: string, path: string, timestamp: string, body = '') => {
+export const signPeerPublicRequest = (method: string, path: string, timestamp: string, body = '', federationId?: string) => {
 	const identity = getPeerSigningIdentity();
-	if (!identity) throw new Error('Peer signing identity is not configured');
+	const resolvedFederationId = federationId || getDeploymentDataEnvironment()?.federationId;
+	if (!identity || !resolvedFederationId) throw new Error('Peer signing identity or data environment is not configured');
 	return {
 		publicKey: identity.publicKey,
-		signature: signWithPeerIdentity(identity, publicPeerSigningPayload(method, path, timestamp, body, identity.publicKey))
+		signature: signWithPeerIdentity(identity, publicPeerSigningPayload(method, path, timestamp, body, identity.publicKey, resolvedFederationId))
 	};
 };
 
@@ -129,8 +146,11 @@ const verifyPeerSignature = (publicKey: string, signature: string, payload: stri
 
 export const verifyPeerRequest = (request: Request, body = '', now = Date.now()) => {
 	const secret = getPeerDiscoverySecret();
-	if (!secret || !getPeerSigningIdentity()) return { ok: false as const, status: 503, error: 'Peer discovery is not configured' };
+	const dataEnvironment = getDeploymentDataEnvironment();
+	if (!secret || !getPeerSigningIdentity() || !dataEnvironment)
+		return { ok: false as const, status: 503, error: 'Peer discovery is not configured' };
 	const origin = normalizePeerOrigin(request.headers.get('x-thingtime-peer-origin'), { allowLoopback: process.env.NODE_ENV === 'test' });
+	const federationId = federationIdFromWire(request.headers.get('x-thingtime-peer-federation-id'));
 	const timestamp = request.headers.get('x-thingtime-peer-timestamp') || '';
 	const signature = request.headers.get('x-thingtime-peer-signature') || '';
 	const publicKey = request.headers.get('x-thingtime-peer-public-key') || '';
@@ -138,6 +158,8 @@ export const verifyPeerRequest = (request: Request, body = '', now = Date.now())
 	const timestampMs = Date.parse(timestamp);
 	if (
 		!origin ||
+		!federationId ||
+		federationId !== dataEnvironment.federationId ||
 		!Number.isFinite(timestampMs) ||
 		Math.abs(now - timestampMs) > PEER_SIGNATURE_MAX_SKEW_MS ||
 		!/^[A-Za-z0-9_-]{43}$/.test(signature)
@@ -145,7 +167,7 @@ export const verifyPeerRequest = (request: Request, body = '', now = Date.now())
 		return { ok: false as const, status: 401, error: 'Unauthorized peer request' };
 	}
 	const url = new URL(request.url);
-	const expected = signPeerRequest(secret, request.method, `${url.pathname}${url.search}`, timestamp, body);
+	const expected = signPeerRequest(secret, request.method, `${url.pathname}${url.search}`, timestamp, body, federationId);
 	const actualBytes = Buffer.from(signature);
 	const expectedBytes = Buffer.from(expected);
 	if (actualBytes.length !== expectedBytes.length || !timingSafeEqual(actualBytes, expectedBytes)) {
@@ -155,12 +177,12 @@ export const verifyPeerRequest = (request: Request, body = '', now = Date.now())
 		!verifyPeerSignature(
 			publicKey,
 			publicSignature,
-			publicPeerSigningPayload(request.method, `${url.pathname}${url.search}`, timestamp, body, publicKey)
+			publicPeerSigningPayload(request.method, `${url.pathname}${url.search}`, timestamp, body, publicKey, federationId)
 		)
 	) {
 		return { ok: false as const, status: 401, error: 'Unauthorized peer request' };
 	}
-	return { ok: true as const, origin, publicKey };
+	return { ok: true as const, origin, publicKey, dataEnvironment };
 };
 
 export const encodePeerCursor = (cursor: PeerCursor) => base64url(JSON.stringify(cursor));
@@ -182,6 +204,11 @@ export const boundedPeerLimit = (value: string | null) => {
 const projectPeer = (row: any): PeerPublicRecord => ({
 	origin: row.origin,
 	signingPublicKey: row.signingPublicKey,
+	dataEnvironment: {
+		id: row.dataEnvironmentId,
+		kind: row.dataEnvironmentKind,
+		federationId: row.federationId
+	},
 	firstSeenAt: new Date(row.firstSeenAt).toISOString(),
 	lastSeenAt: new Date(row.lastSeenAt).toISOString(),
 	expiresAt: new Date(row.expiresAt).toISOString()
@@ -192,7 +219,12 @@ const projectPeerExplorer = (row: any, now: Date): PeerExplorerRecord => ({
 	status: new Date(row.expiresAt).getTime() > now.getTime() ? 'active' : 'expired'
 });
 
-export const announcePeer = async (origin: string, signingPublicKey: string, now = new Date()): Promise<PeerPublicRecord> => {
+export const announcePeer = async (
+	origin: string,
+	signingPublicKey: string,
+	dataEnvironment: DeploymentDataEnvironment,
+	now = new Date()
+): Promise<PeerPublicRecord> => {
 	const canonical = normalizePeerOrigin(origin, { allowLoopback: process.env.NODE_ENV === 'test' });
 	if (!canonical || !peerPublicKeyFromWire(signingPublicKey)) throw new Error('Invalid peer identity');
 	const expiresAt = new Date(now.getTime() + PEER_LEASE_MS);
@@ -200,10 +232,24 @@ export const announcePeer = async (origin: string, signingPublicKey: string, now
 	let result;
 	try {
 		result = await peers.updateOne(
-			{ origin: canonical, $or: [{ signingPublicKey: { $exists: false } }, { signingPublicKey }] },
+			{
+				origin: canonical,
+				$and: [
+					{ $or: [{ signingPublicKey: { $exists: false } }, { signingPublicKey }] },
+					{ $or: [{ federationId: { $exists: false } }, { federationId: dataEnvironment.federationId }] }
+				]
+			},
 			{
 				$setOnInsert: { origin: canonical, firstSeenAt: now, schemaVersion: 1 },
-				$set: { signingPublicKey, lastSeenAt: now, expiresAt, updatedAt: now }
+				$set: {
+					signingPublicKey,
+					dataEnvironmentId: dataEnvironment.id,
+					dataEnvironmentKind: dataEnvironment.kind,
+					federationId: dataEnvironment.federationId,
+					lastSeenAt: now,
+					expiresAt,
+					updatedAt: now
+				}
 			},
 			{ upsert: true }
 		);
@@ -214,12 +260,27 @@ export const announcePeer = async (origin: string, signingPublicKey: string, now
 	if (!result.acknowledged || (!result.matchedCount && !result.upsertedCount))
 		throw new PeerIdentityMismatchError('Peer signing key does not match its pinned identity');
 	const row = await peers.findOne({ origin: canonical });
-	if (!row?.signingPublicKey) throw new Error('Peer signing identity was not retained');
+	if (!row?.signingPublicKey || row.federationId !== dataEnvironment.federationId)
+		throw new Error('Peer signing identity was not retained');
 	return projectPeer(row);
 };
 
-export const listActivePeers = async ({ cursor, limit, now = new Date() }: { cursor: PeerCursor | null; limit: number; now?: Date }) => {
-	const filter: any = { expiresAt: { $gt: now }, signingPublicKey: { $exists: true } };
+export const listActivePeers = async ({
+	cursor,
+	limit,
+	dataEnvironment,
+	now = new Date()
+}: {
+	cursor: PeerCursor | null;
+	limit: number;
+	dataEnvironment: Pick<DeploymentDataEnvironment, 'federationId'>;
+	now?: Date;
+}) => {
+	const filter: any = {
+		expiresAt: { $gt: now },
+		signingPublicKey: { $exists: true },
+		federationId: dataEnvironment.federationId
+	};
 	if (cursor) {
 		filter.$or = [{ lastSeenAt: { $lt: new Date(cursor.lastSeenAt) } }, { lastSeenAt: new Date(cursor.lastSeenAt), origin: { $gt: cursor.origin } }];
 	}
@@ -296,17 +357,23 @@ export const ndjsonResponse = (lines: Iterable<unknown> | AsyncIterable<unknown>
 	);
 };
 
-type PeerStreamSigner = { origin: string; publicKey: string; timestamp: string; signature: string };
+type PeerStreamSigner = { origin: string; federationId: string; publicKey: string; timestamp: string; signature: string };
 
-export const signedPeerStreamEvent = (identity: PeerSigningIdentity, origin: string, event: Record<string, unknown>) => {
+export const signedPeerStreamEvent = (
+	identity: PeerSigningIdentity,
+	origin: string,
+	dataEnvironment: Pick<DeploymentDataEnvironment, 'federationId'>,
+	event: Record<string, unknown>
+) => {
 	const timestamp = new Date().toISOString();
 	return {
 		...event,
 		signer: {
 			origin,
+			federationId: dataEnvironment.federationId,
 			publicKey: identity.publicKey,
 			timestamp,
-			signature: signWithPeerIdentity(identity, peerStreamSigningPayload(origin, timestamp, event, identity.publicKey))
+			signature: signWithPeerIdentity(identity, peerStreamSigningPayload(origin, timestamp, event, identity.publicKey, dataEnvironment.federationId))
 		} satisfies PeerStreamSigner
 	};
 };
@@ -314,21 +381,23 @@ export const signedPeerStreamEvent = (identity: PeerSigningIdentity, origin: str
 export const signedPeerNdjsonResponse = (
 	identity: PeerSigningIdentity,
 	origin: string,
+	dataEnvironment: Pick<DeploymentDataEnvironment, 'federationId'>,
 	lines: Iterable<Record<string, unknown>> | AsyncIterable<Record<string, unknown>>
 ) => {
 	async function* signedLines() {
-		for await (const line of lines) yield signedPeerStreamEvent(identity, origin, line);
+		for await (const line of lines) yield signedPeerStreamEvent(identity, origin, dataEnvironment, line);
 	}
 	return ndjsonResponse(signedLines());
 };
 
-export const verifyPeerStreamEvent = (value: unknown, expectedOrigin: string) => {
+export const verifyPeerStreamEvent = (value: unknown, expectedOrigin: string, expectedFederationId: string) => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const { signer, ...event } = value as Record<string, unknown>;
 	if (!signer || typeof signer !== 'object' || Array.isArray(signer)) return null;
 	const candidate = signer as Partial<PeerStreamSigner>;
 	if (
 		candidate.origin !== expectedOrigin ||
+		candidate.federationId !== expectedFederationId ||
 		typeof candidate.publicKey !== 'string' ||
 		typeof candidate.timestamp !== 'string' ||
 		typeof candidate.signature !== 'string' ||
@@ -337,7 +406,7 @@ export const verifyPeerStreamEvent = (value: unknown, expectedOrigin: string) =>
 		!verifyPeerSignature(
 			candidate.publicKey,
 			candidate.signature,
-			peerStreamSigningPayload(expectedOrigin, candidate.timestamp, event, candidate.publicKey)
+			peerStreamSigningPayload(expectedOrigin, candidate.timestamp, event, candidate.publicKey, expectedFederationId)
 		)
 	) {
 		return null;
@@ -386,16 +455,28 @@ async function* readBoundedNdjson(response: Response): AsyncGenerator<unknown> {
 	}
 }
 
-const remoteHeaders = (secret: string, identity: PeerSigningIdentity, origin: string, method: string, path: string, body = '') => {
+const remoteHeaders = (
+	secret: string,
+	identity: PeerSigningIdentity,
+	origin: string,
+	dataEnvironment: Pick<DeploymentDataEnvironment, 'federationId'>,
+	method: string,
+	path: string,
+	body = ''
+) => {
 	const timestamp = new Date().toISOString();
 	const publicRequest = {
 		publicKey: identity.publicKey,
-		signature: signWithPeerIdentity(identity, publicPeerSigningPayload(method, path, timestamp, body, identity.publicKey))
+		signature: signWithPeerIdentity(
+			identity,
+			publicPeerSigningPayload(method, path, timestamp, body, identity.publicKey, dataEnvironment.federationId)
+		)
 	};
 	return {
 		'x-thingtime-peer-origin': origin,
+		'x-thingtime-peer-federation-id': dataEnvironment.federationId,
 		'x-thingtime-peer-timestamp': timestamp,
-		'x-thingtime-peer-signature': signPeerRequest(secret, method, path, timestamp, body),
+		'x-thingtime-peer-signature': signPeerRequest(secret, method, path, timestamp, body, dataEnvironment.federationId),
 		'x-thingtime-peer-public-key': publicRequest.publicKey,
 		'x-thingtime-peer-public-signature': publicRequest.signature
 	};
@@ -425,13 +506,14 @@ export async function* syncPeerMesh({
 }): AsyncGenerator<PeerSyncEvent> {
 	const secret = getPeerDiscoverySecret();
 	const identity = getPeerSigningIdentity();
-	if (!secret || !identity) throw new Error('Peer discovery is not configured');
-	const bootstrap = normalizePeerOrigin(process.env.THINGTIME_PEER_BOOTSTRAP_ORIGIN || 'https://thingtime.com');
+	const dataEnvironment = getDeploymentDataEnvironment();
+	if (!secret || !identity || !dataEnvironment) throw new Error('Peer discovery is not configured');
+	const bootstrap = normalizePeerOrigin(process.env.THINGTIME_PEER_BOOTSTRAP_ORIGIN || dataEnvironment.authorityOrigin || '');
 	if (!bootstrap) throw new Error('Peer bootstrap origin is invalid');
 
-	await announcePeer(selfOrigin, identity.publicKey);
+	await announcePeer(selfOrigin, identity.publicKey, dataEnvironment);
 	yield { type: 'peer.announced', origin: selfOrigin };
-	const known = await listActivePeers({ cursor: null, limit: PEER_SYNC_MAX_ORIGINS });
+	const known = await listActivePeers({ cursor: null, limit: PEER_SYNC_MAX_ORIGINS, dataEnvironment });
 	const seeds = [bootstrap, ...known.peers.map((peer) => peer.origin)].filter(
 		(origin, index, values) => origin !== selfOrigin && values.indexOf(origin) === index
 	);
@@ -448,7 +530,7 @@ export async function* syncPeerMesh({
 			const announcePath = '/api/v1/peers';
 			const announce = await fetchImpl(new URL(announcePath, peerOrigin), {
 				method: 'POST',
-				headers: { ...remoteHeaders(secret, identity, selfOrigin, 'POST', announcePath, announceBody), 'content-type': 'application/json' },
+				headers: { ...remoteHeaders(secret, identity, selfOrigin, dataEnvironment, 'POST', announcePath, announceBody), 'content-type': 'application/json' },
 				body: announceBody,
 				redirect: 'error',
 				signal: AbortSignal.timeout(8_000)
@@ -460,7 +542,7 @@ export async function* syncPeerMesh({
 			if (cursor) params.set('cursor', cursor);
 			const streamPath = `/api/v1/peers?${params}`;
 			const response = await fetchImpl(new URL(streamPath, peerOrigin), {
-				headers: remoteHeaders(secret, identity, selfOrigin, 'GET', streamPath),
+				headers: remoteHeaders(secret, identity, selfOrigin, dataEnvironment, 'GET', streamPath),
 				redirect: 'error',
 				signal: AbortSignal.timeout(8_000)
 			});
@@ -468,9 +550,9 @@ export async function* syncPeerMesh({
 				throw new Error(`peer stream returned HTTP ${response.status}`);
 			let nextCursor: string | null | undefined;
 			for await (const event of readBoundedNdjson(response)) {
-				const signed = verifyPeerStreamEvent(event, peerOrigin);
+				const signed = verifyPeerStreamEvent(event, peerOrigin, dataEnvironment.federationId);
 				if (!signed) throw new Error('peer stream signature is invalid');
-				await announcePeer(peerOrigin, signed.publicKey);
+				await announcePeer(peerOrigin, signed.publicKey, dataEnvironment);
 				const remoteEvent: any = signed.event;
 				if (remoteEvent?.type === 'page.complete') {
 					if (nextCursor !== undefined || (remoteEvent.nextCursor !== null && !validRemoteCursor(remoteEvent.nextCursor))) {
@@ -482,8 +564,9 @@ export async function* syncPeerMesh({
 				if (remoteEvent?.type !== 'peer' || !remoteEvent.peer) continue;
 				const origin = normalizePeerOrigin(remoteEvent.peer.origin);
 				const signingPublicKey = remoteEvent.peer.signingPublicKey;
+				if (remoteEvent.peer.dataEnvironment?.federationId !== dataEnvironment.federationId) continue;
 				if (!origin || origin === selfOrigin) continue;
-				await announcePeer(origin, signingPublicKey);
+				await announcePeer(origin, signingPublicKey, dataEnvironment);
 				discovered += 1;
 				yield { type: 'peer.discovered', origin, via: peerOrigin };
 				if (!visited.has(origin) && queue.length + visited.size < PEER_SYNC_MAX_ORIGINS) queue.push(origin);

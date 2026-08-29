@@ -489,8 +489,7 @@ export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
 // collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
 	'sourceIds_1_createdAt_-1_shareId_1',
-	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
-	'things_passkey_link_key_unique'
+	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1'
 ] as const;
 
 // Home-only: a custom data endpoint belongs to the user and may legitimately
@@ -1159,7 +1158,17 @@ export const ensureIndexes = async () => {
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('deploymentPeers').createIndex({ origin: 1 }, { unique: true }),
         col('deploymentPeers').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('deploymentPeers').createIndex({ lastSeenAt: -1, origin: 1 }),
+        // listActivePeers filters by federationId, then pages lastSeenAt desc /
+        // origin asc. The federation prefix is new: name the index and retire
+        // the auto-named `lastSeenAt_-1_origin_1` it supersedes, or every
+        // already-deployed database keeps both forever (a plain createIndex
+        // with a new key shape never drops the old one).
+        createIndexReplacing(
+          col('deploymentPeers'),
+          { federationId: 1, lastSeenAt: -1, origin: 1 },
+          { name: 'deployment_peers_federation_recent' },
+          ['lastSeenAt_-1_origin_1']
+        ),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats

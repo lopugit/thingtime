@@ -77,12 +77,34 @@ is fixed, and cite the checklist you ran in the PR description.
       deployment, a signed-out visit shows the "Continue as… ✨" corner card;
       picking an account routes to `/login?u=<username>` with the username
       prefilled and password focused; "Not now" snoozes it for a day; it never
-      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
-      while signed in.
+      renders on `/authorize`, `/reset-password`, or while signed in. On a
+      foreign `*.vercel.app` login/register page, the recovery card is the
+      intentional exception: it opens the matching first-party hub.
 - [ ] Hint liveness: log out on the OTHER deployment → the suggestion
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
+- [ ] Account-hint response privacy: both the same-origin endpoint and the
+      credentialed federated resolver send `Cache-Control: private, no-store`;
+      their `Vary` headers include `Cookie` (the resolver also includes
+      `Origin`) and a 429 retains its `Retry-After` header.
+- [ ] Cross-deployment account hint: the compact row names the deployment
+      environment (for example `Dev preview · PR #68`, never `Production` for
+      a preview); expand its chevron to reveal every environment badge, exact
+      origin, and last-active time without selecting or signing in as the
+      suggested account.
+- [ ] Vercel-preview account recovery: on a `*.vercel.app` login page, the
+      account card remains available and opens `https://dev.thingtime.com`
+      (not production) for the same development environment. The preview
+      itself cannot read the `.thingtime.com` cookie; the Dev Thingtime popup
+      must present its first-party signed-in account choices instead.
+- [ ] Data-authority identity: deploy a Preview whose branch name and
+      `VERCEL_ENV` disagree with its configured `THINGTIME_DATA_ENV`. Root
+      data and `/api/v1/capabilities` must expose the same safe
+      `{ id, kind, federationId, authorityOrigin }` identity; sign-in routing
+      must use that authority rather than infer an environment from Vercel
+      metadata. No database host, database name, connection string, or secret
+      may appear in either public response.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
@@ -2511,7 +2533,8 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       preview. It must return schema version 1, exactly one semver `api.*`
       contract for every entry in the API-doc registry, and a `route.*` entry
       for every executable API route (including intentionally undocumented
-      diagnostics). Verify the desktop accepts a
+      diagnostics), plus a valid explicit data-authority identity. Verify the
+      desktop accepts a
       compatible `api.devices` minor/patch update, rejects a missing or new
       major, and uses the legacy `/api/v1/devices` probe only when an older
       deployment returns a manifest 404.
@@ -2526,7 +2549,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       self-signed sync and verify it first announces to `thingtime.com`, then
       discovers only the bounded peer budget; every NDJSON event must verify
       against the sending deployment's public key. No browser request may
-      possess either private credential.
+      possess either private credential. Repeat against a deployment with a
+      different `federationId`: its signed request and peer rows must be
+      rejected rather than merging distinct production/development/custom
+      data environments.
 - [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
       signed bundle, then install a build which omits or renames that endpoint
       profile. `desktop-settings.json` must retain the normalized selected URL
