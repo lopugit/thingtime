@@ -718,8 +718,8 @@ function assertWorkflowSource() {
   );
   assert.doesNotMatch(
     detectBlock,
-    /--argjson (?:files|classification|all)\b/u,
-    "large changed-path, classification, and repository arrays never cross the process argument-size boundary",
+    /--argjson (?:files|classification|all|prs)\b/u,
+    "large changed-path, classification, PR, and repository arrays never cross the process argument-size boundary",
   );
   assert.match(
     detectBlock,
@@ -745,6 +745,11 @@ function assertWorkflowSource() {
     detectBlock,
     /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*lane-plan/u,
     "queue and resolving labels are projected from the live durable fleet",
+  );
+  assert.match(
+    detectBlock,
+    /sync_lopu_lane_labels[\s\S]*--slurpfile classification "\$classification_file"[\s\S]*lane-plan/u,
+    "the full PR classification reaches lane planning through a file-backed join",
   );
   assert.match(
     detectBlock,
