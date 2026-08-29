@@ -131,6 +131,36 @@ test('undo timelines remain tab-local while nested user data named timemachine s
 	}
 });
 
+test('a whole-tree root replacement is never broadcast, but named children of the root still are', async () => {
+	// applyThingtimeUpdate treats a bare 'tt'/'thingtime' path as a REPLACEMENT of
+	// the entire tree. Broadcasting one would overwrite each receiving tab's root
+	// wholesale — carrying the sender's tab-local `timemachine` timeline with it —
+	// so the root aliases are only ever a prefix here, never the whole path.
+	const channelName = uniqueChannelName();
+	const applied: Array<{ path: any; value: any }> = [];
+	const receiver = createThingtimeSyncChannel({
+		tabId: 'tab-b',
+		channelName,
+		onRemoteWrite: (path, value) => applied.push({ path, value })
+	});
+	const sender = createThingtimeSyncChannel({ tabId: 'tab-a', channelName, onRemoteWrite: () => {} });
+	assert.ok(receiver && sender);
+
+	try {
+		sender.publish('tt', { whole: 'tree' });
+		sender.publish('thingtime', { whole: 'tree' });
+		sender.publish(['tt'], { whole: 'tree' });
+		sender.publish(['thingtime'], { whole: 'tree' });
+		sender.publish('tt.settings.theme', 'dark');
+		await settleMessages();
+
+		assert.deepEqual(applied, [{ path: 'tt.settings.theme', value: 'dark' }]);
+	} finally {
+		sender.close();
+		receiver.close();
+	}
+});
+
 test('foreign, malformed, and invalid-path messages are ignored', async () => {
 	const channelName = uniqueChannelName();
 	const applied: any[] = [];

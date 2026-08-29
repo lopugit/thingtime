@@ -45,17 +45,32 @@ const isTabLocalPath = (parts: string[]): boolean => {
 	return rootPart === 'timemachine';
 };
 
+// A bare 'tt' / 'thingtime' path is not a path-level write: ThingtimeProvider's
+// applyThingtimeUpdate treats it as a whole-tree REPLACEMENT. Broadcasting one
+// would hand every other tab the sender's entire root — including the
+// `timemachine` timeline that isTabLocalPath keeps tab-local on every other
+// path — and ship a full tree snapshot per keystroke. Whole-tree convergence is
+// the persistence layer's job; this channel only carries path-level writes.
+const isWholeTreeReplacement = (parts: string[]): boolean => parts.length === 1 && ROOT_ALIASES.has(parts[0]);
+
 const isThingtimeSyncPath = (value: unknown): value is ThingtimeSyncPath => {
 	if (typeof value === 'string') {
 		const parts = pathParts(value);
-		return value.length > 0 && parts.length > 0 && !isTabLocalPath(parts) && parts.every((part) => !UNSAFE_PATH_PARTS.has(part));
+		return (
+			value.length > 0 &&
+			parts.length > 0 &&
+			!isTabLocalPath(parts) &&
+			!isWholeTreeReplacement(parts) &&
+			parts.every((part) => !UNSAFE_PATH_PARTS.has(part))
+		);
 	}
 
 	return (
 		Array.isArray(value) &&
 		value.length > 0 &&
 		value.every((part) => typeof part === 'string' && part.length > 0 && !UNSAFE_PATH_PARTS.has(part)) &&
-		!isTabLocalPath(value)
+		!isTabLocalPath(value) &&
+		!isWholeTreeReplacement(value)
 	);
 };
 

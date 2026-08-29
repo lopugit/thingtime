@@ -52,7 +52,10 @@ by a stale tab writing its old in-memory tree.
    stable tab id and ignores messages carrying that id.
    Root `timemachine` metadata (including `tt`/`thingtime` aliases) is rejected
    in both directions so timelines remain tab-local; ordinary data writes made
-   by undo/redo still broadcast normally.
+   by undo/redo still broadcast normally. A bare `tt`/`thingtime` path is
+   rejected too: `applyThingtimeUpdate` reads it as a whole-tree replacement,
+   which would overwrite each receiving tab's root — `timemachine` included —
+   rather than apply a path-level write.
 3. **Persist ownership.** Keep the single persist path in `ThingtimeProvider`
    (per `FUNDAMENTALS.md` single-source-of-truth thinking). The channel imports
    `stringifyThingtime` / `parseThingtime` directly rather than maintaining a

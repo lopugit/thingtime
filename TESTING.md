@@ -1711,6 +1711,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Make at least two local edits around an unrelated remote edit, then undo
       locally. The restored data path reaches the peer, the peer's independent
       value remains, and root `timemachine` metadata never crosses tabs.
+- [ ] In the Commander, assign the root itself (`tt = …` / `thingtime = …`) in
+      Tab A. Tab A replaces its own tree as before, but Tab B's tree and undo
+      timeline are untouched — a whole-tree replacement is never broadcast,
+      while a named child of the root (`tt.settings.…`) still syncs.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
