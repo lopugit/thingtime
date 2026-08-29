@@ -29,7 +29,7 @@ import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscri
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Users are THINGS now (thingtime ["user"], see
-// TODO/claude-todo/16-everything-is-a-thing-collections.md): public
+// TODO/claude-todo/21-everything-is-a-thing-collections.md): public
 // profile in crystal, credentials/private state under the root `secure` field
 // (sensitive strings as BinData so the $** text index can't tokenize them),
 // uniqueness via uniqueKeys (username plain, email hashed). This module keeps
@@ -41,7 +41,7 @@ import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Canonical legacy user document (thingtime.users) — now also the adapter
 // output shape for user things. See FUNDAMENTALS.md §3 +
-// TODO/claude-todo/16-everything-is-a-thing-collections.md.
+// TODO/claude-todo/21-everything-is-a-thing-collections.md.
 export type UserDoc = {
 	_id?: any;
 	ttid: string;

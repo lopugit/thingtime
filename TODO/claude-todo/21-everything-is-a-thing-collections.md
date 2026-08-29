@@ -1,4 +1,4 @@
-# 16 — Everything is a thing: collapse the satellite collections
+# 21 — Everything is a thing: collapse the satellite collections
 
 Owner request (2026-07-12): users, feedAlgorithms, themes, waitlist, and
 thingTypes all become docs in the `things` collection, each with its kind in

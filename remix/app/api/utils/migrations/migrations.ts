@@ -635,7 +635,7 @@ const thingsMigration: Migration = {
 
 // ---------------------------------------------------------------------------
 // Collection → things migrations (everything is a thing —
-// TODO/claude-todo/16-everything-is-a-thing-collections.md).
+// TODO/claude-todo/21-everything-is-a-thing-collections.md).
 // users, themes, feedAlgorithms, and waitlist collapse into the things
 // collection. The destination shapes are EXACTLY what the new-write paths
 // produce (auth/users insertUser, themes saveTheme, algorithms
