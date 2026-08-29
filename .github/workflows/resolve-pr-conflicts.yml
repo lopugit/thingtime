@@ -1078,16 +1078,24 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # Still an API-only detector: nothing is checked out and no code from
-      # scanned PRs runs here. Write access exists solely to upsert the
-      # detect-status comment on PRs the detector must leave alone (fork
-      # conflicts, verdicts that never settle) so silence is never ambiguous.
+      # Only the fixed github-actions status helper is checked out; no code
+      # from scanned PRs runs here. Write access exists for human progress
+      # comments and the managed `lopu:` fact/queue labels.
       pull-requests: write
       issues: write
     outputs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
     steps:
+      - name: Check out the trusted Lopu PR-status helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/lopu-pr-status.mjs
+          sparse-checkout-cone-mode: false
+
       - name: Scan open PRs and assign deterministic resolver ownership
         id: scan
         env:
@@ -1168,6 +1176,7 @@ jobs:
           # Total time budget for verdicts, and the pause between re-queries.
           MERGEABLE_POLL_SECONDS: "500"
           MERGEABLE_POLL_INTERVAL: "15"
+          STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
         run: |
           set -euo pipefail
 
@@ -1336,6 +1345,77 @@ jobs:
             printf '%s' "$value" | base64 --decode
           }
 
+          ensure_lopu_label_definitions() {
+            local existing definitions encoded definition name color description
+            existing="$(gh_read_retry --paginate "repos/$REPO/labels?per_page=100" --slurp \
+              | jq -c 'add // []')" || return 1
+            definitions="$(node "$STATUS_HELPER" labels)" || return 1
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              definition="$(base64 --decode <<<"$encoded")"
+              name="$(jq -r '.name' <<<"$definition")"
+              color="$(jq -r '.color' <<<"$definition")"
+              description="$(jq -r '.description' <<<"$definition")"
+              if jq -e --arg name "$name" 'any(.[]; .name == $name)' >/dev/null <<<"$existing"; then
+                continue
+              fi
+              if ! gh api --method POST "repos/$REPO/labels" \
+                  -f name="$name" -f color="$color" -f description="$description" >/dev/null; then
+                # A simultaneous detector may have created it after our read.
+                if ! gh_read_retry "repos/$REPO/labels/$(encode_ref "$name")" >/dev/null; then
+                  echo "::warning::Could not create managed label $name."
+                fi
+              fi
+            done < <(jq -r '.[] | @base64' <<<"$definitions")
+          }
+
+          # Reconcile only the explicitly supplied subset. Product/team labels
+          # and the other Lopu scope (fact versus active-lane) are preserved.
+          sync_lopu_label_subset() {
+            local number="$1" managed="$2" desired="$3"
+            local current delta additions removals body label
+            if [ "$#" -ge 4 ]; then
+              current="$4"
+            else
+              current="$(gh_read_retry "repos/$REPO/issues/$number" \
+                | jq -c '[.labels[]?.name]')" || return 1
+            fi
+            delta="$(jq -cn \
+              --argjson current "$current" \
+              --argjson managed "$managed" \
+              --argjson desired "$desired" \
+              '{current:$current,managed:$managed,desired:$desired}' \
+              | node "$STATUS_HELPER" label-delta)" || return 1
+            additions="$(jq -c '.add' <<<"$delta")"
+            removals="$(jq -c '.remove' <<<"$delta")"
+            if [ "$(jq 'length' <<<"$additions")" -gt 0 ]; then
+              body="$RUNNER_TEMP/lopu-label-add-$number.json"
+              jq -n --argjson labels "$additions" '{labels:$labels}' >"$body"
+              gh api --method POST "repos/$REPO/issues/$number/labels" --input "$body" >/dev/null \
+                || echo "::warning::Could not add one or more managed Lopu labels to #$number."
+              rm -f "$body"
+            fi
+            while IFS= read -r label; do
+              [ -n "$label" ] || continue
+              gh api --method DELETE "repos/$REPO/issues/$number/labels/$(encode_ref "$label")" >/dev/null \
+                || echo "::warning::Could not remove stale managed label $label from #$number."
+            done < <(jq -r '.[]' <<<"$removals")
+          }
+
+          sync_lopu_fact_labels() {
+            local classification_file="$1" managed encoded metadata number desired current
+            managed="$(node "$STATUS_HELPER" labels --scope fact | jq -c '[.[].name]')" || return 1
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              metadata="$(base64 --decode <<<"$encoded")"
+              number="$(jq -r '.number' <<<"$metadata")"
+              desired="$(jq -c '.desiredFactLabels' <<<"$metadata")"
+              current="$(jq -c '.labels' <<<"$metadata")"
+              sync_lopu_label_subset "$number" "$managed" "$desired" "$current" \
+                || echo "::warning::Could not reconcile Lopu fact labels for #$number."
+            done < <(jq -r '.prs[] | @base64' "$classification_file")
+          }
+
           # Detection visibility: reviewers otherwise see only GitHub's
           # conflict banner plus this workflow's always-skipped push-run check
           # stubs, so a detector that stands aside must say so ON the PR.
@@ -1377,9 +1457,21 @@ jobs:
           # idempotent; the worker-side progress monitor owns later phase and
           # ten-minute timeline updates.
           ensure_progress_comment() {
-            local number="$1" head="$2" base="$3" head_sha="$4" base_sha="$5" mode="$6"
-            local marker comments comment_id body detected eta title event
+            local item="$1" number head base head_sha base_sha mode queue_total
+            local marker comments comment_id body detected eta title event now_epoch context
+            number="$(jq -r '.number' <<<"$item")"
+            head="$(jq -r '.head' <<<"$item")"
+            base="$(jq -r '.base' <<<"$item")"
+            head_sha="$(jq -r '.head_sha' <<<"$item")"
+            base_sha="$(jq -r '.base_sha' <<<"$item")"
+            mode="$(jq -r '.mode' <<<"$item")"
+            queue_total="$(jq -r '.queue_total' <<<"$item")"
             marker="<!-- thingtime-lopu-progress:v1 pr=$number head=$head_sha base=$base_sha -->"
+            sync_lopu_label_subset \
+              "$number" \
+              '["lopu: queued","lopu: resolving","lopu: needs attention"]' \
+              '["lopu: queued"]' \
+              || echo "::warning::Could not mark PR #$number as queued."
             comments="$RUNNER_TEMP/lopu-progress-$number.json"
             if ! gh_read_retry --paginate \
                 "repos/$REPO/issues/$number/comments?per_page=100" --slurp >"$comments"; then
@@ -1400,6 +1492,7 @@ jobs:
 
             detected="$(date -u '+%H:%M UTC')"
             eta="$(date -u -d '+20 minutes' '+%H:%M UTC')"
+            now_epoch="$(date +%s)"
             if [ "$mode" = outdated ]; then
               title='Lopu detected an out-of-date PR branch'
               event="Detected that \`$base\` needs to be merged into \`$head\`; assigning the exact snapshot to the resolver queue."
@@ -1414,6 +1507,20 @@ jobs:
               printf '**Current phase:** Entering Lopu\047s serialized PR-resolution queue.\n\n'
               printf '**Estimated completion:** around **%s** (~20 minutes; this adjusts as the queue moves).\n\n' "$eta"
               printf '_Next automatic check-in: within **10 minutes** while work remains active. You can stay on this PR; there is no need to find the Actions run._\n\n'
+              context="$(jq -cn \
+                --argjson nowEpoch "$now_epoch" \
+                --argjson etaMinutes 20 \
+                --argjson stats "$(jq -c '.repo_stats' <<<"$item")" \
+                --argjson batch "$(jq -cn --argjson total "$queue_total" \
+                  '{total:$total,resolving:0,queued:$total,done:0}')" \
+                --argjson relationships "$(jq -c '.relationships' <<<"$item")" \
+                --arg repo "$REPO" \
+                --arg base "$base" \
+                --arg head "$head" \
+                '{nowEpoch:$nowEpoch,etaMinutes:$etaMinutes,stats:$stats,batch:$batch,
+                  relationships:$relationships,repo:$repo,base:$base,head:$head}')"
+              node "$STATUS_HELPER" render-context <<<"$context"
+              printf '\n'
               printf '### Timeline\n'
               printf '<!-- thingtime-lopu-progress-timeline:start -->\n'
               printf -- '- %s — %s\n' "$detected" "$event"
@@ -1450,6 +1557,10 @@ jobs:
                       mergeable
                       mergeStateStatus
                       labels(first: 100) { nodes { name } }
+                      files(first: 100) {
+                        totalCount
+                        nodes { path }
+                      }
                     }
                     pageInfo { hasNextPage endCursor }
                   }
@@ -1469,8 +1580,38 @@ jobs:
             inventory="$(jq -c '[.[].data.repository.pullRequests.nodes[]
               | {number, headRefName, baseRefName, isCrossRepository,
                  isDraft, mergeable, mergeStateStatus,
-                 labels:(.labels.nodes // [])}]' "$response")"
+                 labels:(.labels.nodes // []),
+                 files:[.files.nodes[]?.path],
+                 filesTotal:(.files.totalCount // 0)}]' "$response")"
             rm -f "$response"
+            printf '%s\n' "$inventory"
+          }
+
+          # GraphQL provides the first 100 changed paths per PR in the shared
+          # inventory. Fetch the uncommon larger diffs once, after mergeability
+          # polling settles, so overlap labels never silently miss path 101+.
+          complete_large_pr_files() {
+            local inventory="$1" encoded pr number pages
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              pr="$(base64 --decode <<<"$encoded")"
+              number="$(jq -r '.number' <<<"$pr")"
+              pages="$RUNNER_TEMP/lopu-pr-files-$number.json"
+              if ! gh_read_retry --paginate \
+                  "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
+                rm -f "$pages"
+                echo "::warning::Could not complete the changed-file inventory for #$number."
+                continue
+              fi
+              inventory="$(jq -c \
+                --argjson number "$number" \
+                --slurpfile response "$pages" \
+                '($response[0] | add // [] | map(.filename) | unique) as $files
+                 | map(if .number == $number
+                       then . + {files:$files, filesTotal:($files | length)}
+                       else . end)' <<<"$inventory")"
+              rm -f "$pages"
+            done < <(jq -r '.[] | select(.filesTotal > (.files | length)) | @base64' <<<"$inventory")
             printf '%s\n' "$inventory"
           }
 
@@ -1545,6 +1686,11 @@ jobs:
             prs="$(query)"
           done
 
+          all_open="$(complete_large_pr_files "$all_open")"
+          all_open_file="$RUNNER_TEMP/lopu-all-open-prs.json"
+          printf '%s\n' "$all_open" >"$all_open_file"
+          prs="$(query)"
+
           if [ "$SCAN_ALL" = "true" ]; then
             echo "Open PRs in repository-wide scan:"
           elif [ -n "$PR_BATCH_B64" ]; then
@@ -1568,6 +1714,13 @@ jobs:
           # A reverse synchronization/promotion PR headed by the default branch
           # is not a stack parent for ordinary PRs based on that branch.
           default_ref="$(gh_read_retry "repos/$REPO" --jq '.default_branch')"
+          classification_file="$RUNNER_TEMP/lopu-pr-classification.json"
+          node "$STATUS_HELPER" classify --default-ref "$default_ref" \
+            <<<"$all_open" >"$classification_file"
+          ensure_lopu_label_definitions \
+            || echo "::warning::Could not fully initialize the managed Lopu label namespace."
+          sync_lopu_fact_labels "$classification_file" \
+            || echo "::warning::Could not fully refresh Lopu fact labels for the open PR inventory."
 
           # This is an operator-controlled hard stop, not a failed-snapshot
           # cache. Do not inspect its age, bot metadata, refs, or topology:
@@ -1610,7 +1763,9 @@ jobs:
           done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | @base64' <<<"$prs")
           rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
-          stacked_owned="$(jq -r --argjson all "$all_open" --arg default_ref "$default_ref" '
+          stacked_owned="$(jq -r --slurpfile all_open_inventory "$all_open_file" --arg default_ref "$default_ref" '
+            ($all_open_inventory[0]) as $all
+            |
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -1654,8 +1809,10 @@ jobs:
             --arg only "${ONLY_PR:-}" \
             --argjson manual_retry "$MANUAL_RETRY" \
             --argjson batch "$BATCH_JSON" \
-            --argjson all "$all_open" \
+            --slurpfile all_open_inventory "$all_open_file" \
             --arg default_ref "$default_ref" '
+            ($all_open_inventory[0]) as $all
+            |
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -1732,17 +1889,32 @@ jobs:
             snapshots="$(jq -c --argjson item "$candidate" '. + [$item]' <<<"$snapshots")"
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           conflicting="$snapshots"
+          conflicting="$(jq -c --slurpfile classifications "$classification_file" '
+            ($classifications[0]) as $classification
+            |
+            . as $items
+            | ($items | length) as $queue_total
+            | map(. as $item
+                | ($classification.prs[] | select(.number == $item.number)) as $metadata
+                | . + {
+                    queue_total:$queue_total,
+                    repo_stats:$classification.stats,
+                    relationships:{
+                      parents:$metadata.parents,
+                      children:$metadata.children,
+                      targetRoot:$metadata.targetRoot,
+                      targetMissing:$metadata.targetMissing,
+                      overlapPrNumbers:$metadata.overlapPrNumbers,
+                      sharedFileCount:$metadata.sharedFileCount
+                    }
+                  })
+          ' <<<"$conflicting")"
+          rm -f "$classification_file" "$all_open_file"
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
             candidate="$(base64 --decode <<<"$encoded")"
             number="$(jq -r '.number' <<<"$candidate")"
-            ensure_progress_comment \
-              "$number" \
-              "$(jq -r '.head' <<<"$candidate")" \
-              "$(jq -r '.base' <<<"$candidate")" \
-              "$(jq -r '.head_sha' <<<"$candidate")" \
-              "$(jq -r '.base_sha' <<<"$candidate")" \
-              "$(jq -r '.mode' <<<"$candidate")" \
+            ensure_progress_comment "$candidate" \
               || echo "::warning::Could not post Lopu's immediate progress comment on #$number."
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           if [ "$HUMAN_EXPLICIT" = true ] \
@@ -5830,6 +6002,7 @@ jobs:
     continue-on-error: true
     permissions:
       actions: read
+      contents: read
       pull-requests: read
       issues: write
     env:
@@ -5840,7 +6013,18 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       HEARTBEAT_SECONDS: "600"
       POLL_SECONDS: "60"
+      DEFAULT_REF: ${{ github.event.repository.default_branch || 'main' }}
+      STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
     steps:
+      - name: Check out the trusted Lopu PR-status helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/lopu-pr-status.mjs
+          sparse-checkout-cone-mode: false
+
       # One monitor covers the entire materialized batch. Do not turn this
       # into a matrix: that would bill one idle heartbeat runner per PR and
       # undermine the unified Lopu fleet's serialization/cost controls.
@@ -5871,10 +6055,100 @@ jobs:
             return 1
           }
 
+          encode_label() {
+            jq -rn --arg value "$1" '$value | @uri'
+          }
+
+          read_live_stats() {
+            local inventory classification baseline
+            baseline="$(jq -c '.[0].repo_stats // {}' <<<"$PRS")"
+            inventory="$RUNNER_TEMP/lopu-live-pr-inventory.json"
+            if ! gh pr list --repo "$REPO" --state open --limit 500 \
+                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels \
+                >"$inventory"; then
+              rm -f "$inventory"
+              printf '%s\n' "$baseline"
+              return 0
+            fi
+            if ! classification="$(node "$STATUS_HELPER" classify --default-ref "$DEFAULT_REF" <"$inventory")"; then
+              rm -f "$inventory"
+              printf '%s\n' "$baseline"
+              return 0
+            fi
+            rm -f "$inventory"
+            jq -c --argjson baseline "$baseline" '
+              .stats
+              | .overlappingPrs = ($baseline.overlappingPrs // 0)
+              | .overlapPairs = ($baseline.overlapPairs // 0)
+              | .filesCapped = ($baseline.filesCapped // 0)
+            ' <<<"$classification"
+          }
+
+          sync_progress_label_subset() {
+            local number="$1" managed="$2" desired="$3"
+            local current delta additions removals body label
+            if ! current="$(gh api "repos/$REPO/issues/$number" --jq '[.labels[]?.name]')"; then
+              return 1
+            fi
+            delta="$(jq -cn \
+              --argjson current "$current" \
+              --argjson managed "$managed" \
+              --argjson desired "$desired" \
+              '{current:$current,managed:$managed,desired:$desired}' \
+              | node "$STATUS_HELPER" label-delta)" || return 1
+            additions="$(jq -c '.add' <<<"$delta")"
+            removals="$(jq -c '.remove' <<<"$delta")"
+            if [ "$(jq 'length' <<<"$additions")" -gt 0 ]; then
+              body="$RUNNER_TEMP/lopu-progress-label-add-$number.json"
+              jq -n --argjson labels "$additions" '{labels:$labels}' >"$body"
+              gh api --method POST "repos/$REPO/issues/$number/labels" --input "$body" >/dev/null \
+                || echo "::warning::Could not add one or more progress labels to #$number."
+              rm -f "$body"
+            fi
+            while IFS= read -r label; do
+              [ -n "$label" ] || continue
+              gh api --method DELETE "repos/$REPO/issues/$number/labels/$(encode_label "$label")" >/dev/null \
+                || echo "::warning::Could not remove stale progress label $label from #$number."
+            done < <(jq -r '.[]' <<<"$removals")
+          }
+
+          sync_progress_labels() {
+            local number="$1" lane="$2" fact_transition="$3"
+            sync_progress_label_subset \
+              "$number" \
+              '["lopu: queued","lopu: resolving","lopu: needs attention"]' \
+              "$lane" \
+              || echo "::warning::Could not reconcile Lopu's active-lane label for #$number."
+            case "$fact_transition" in
+              mergeable)
+                sync_progress_label_subset \
+                  "$number" \
+                  '["lopu: conflicting","lopu: out-of-date","lopu: mergeable","lopu: unknown state"]' \
+                  '["lopu: mergeable"]' \
+                  || echo "::warning::Could not mark #$number mergeable."
+                ;;
+              conflicting)
+                sync_progress_label_subset \
+                  "$number" \
+                  '["lopu: conflicting","lopu: out-of-date","lopu: mergeable","lopu: unknown state"]' \
+                  '["lopu: conflicting"]' \
+                  || echo "::warning::Could not restore #$number's conflict fact label."
+                ;;
+              closed)
+                sync_progress_label_subset \
+                  "$number" \
+                  '["lopu: conflicting","lopu: out-of-date","lopu: mergeable","lopu: unknown state"]' \
+                  '[]' \
+                  || echo "::warning::Could not clear terminal branch-state labels from #$number."
+                ;;
+            esac
+          }
+
           update_progress() {
             local item="$1" status_label="$2" phase_label="$3" eta_minutes="$4" active="$5" event="$6"
+            local stats="$7" batch="$8"
             local number head base head_sha base_sha marker comments comment_id existing_body
-            local timeline_file trimmed_file body now eta_at eta_text
+            local timeline_file trimmed_file body now eta_at eta_text now_epoch context
             number="$(jq -r '.number' <<<"$item")"
             head="$(jq -r '.head' <<<"$item")"
             base="$(jq -r '.base' <<<"$item")"
@@ -5916,6 +6190,7 @@ jobs:
               capture { print }
             ' <<<"$existing_body" >"$timeline_file"
             now="$(date -u '+%H:%M UTC')"
+            now_epoch="$(date +%s)"
             printf -- '- %s — %s\n' "$now" "$event" >>"$timeline_file"
             # A 360-minute ceiling produces at most 36 heartbeats plus phase
             # transitions. Keep a little headroom while bounding the comment.
@@ -5938,9 +6213,19 @@ jobs:
                 echo '_Next automatic check-in: within **10 minutes**, or sooner when the phase changes. You can stay on this PR; there is no need to find the Actions run._'
                 echo
               fi
-              # Literal Markdown backticks, not shell command substitution.
-              # shellcheck disable=SC2016
-              printf 'Lopu is merging `%s` into `%s` for this exact branch snapshot.\n\n' "$base" "$head"
+              context="$(jq -cn \
+                --argjson nowEpoch "$now_epoch" \
+                --argjson etaMinutes "$eta_minutes" \
+                --argjson stats "$stats" \
+                --argjson batch "$batch" \
+                --argjson relationships "$(jq -c '.relationships' <<<"$item")" \
+                --arg repo "$REPO" \
+                --arg base "$base" \
+                --arg head "$head" \
+                '{nowEpoch:$nowEpoch,etaMinutes:$etaMinutes,stats:$stats,batch:$batch,
+                  relationships:$relationships,repo:$repo,base:$base,head:$head}')"
+              node "$STATUS_HELPER" render-context <<<"$context"
+              echo
               echo '### Timeline'
               echo '<!-- thingtime-lopu-progress-timeline:start -->'
               cat "$trimmed_file"
@@ -5971,6 +6256,9 @@ jobs:
 
             all_done=true
             now_epoch="$(date +%s)"
+            live_stats="$(read_live_stats)"
+            batch_counts="$(jq -cn --argjson prs "$PRS" --argjson jobs "$jobs" \
+              '{prs:$prs,jobs:$jobs}' | node "$STATUS_HELPER" batch-counts)"
             while IFS= read -r encoded; do
               [ -n "$encoded" ] || continue
               item="$(base64 --decode <<<"$encoded")"
@@ -5985,6 +6273,8 @@ jobs:
               active=true
               event='The immutable head/base selection is reserved; waiting for its worker job to enter the serialized lane.'
               phase_key='materializing'
+              desired_lane='["lopu: queued"]'
+              fact_transition=''
               if [ -n "$job" ]; then
                 job_status="$(jq -r '.status // "queued"' <<<"$job")"
                 conclusion="$(jq -r '.conclusion // ""' <<<"$job")"
@@ -5998,6 +6288,7 @@ jobs:
                     ;;
                   in_progress)
                     status_label='🛠️ Lopu is actively working'
+                    desired_lane='["lopu: resolving"]'
                     case "$step" in
                       'Honor user-controlled ai-merge-paused'|'Revalidate queued PR snapshot before expensive work'|'Comment on PR (resolution starting)')
                         phase_label='Revalidating the exact PR and branch snapshot'; eta_minutes=18 ;;
@@ -6025,6 +6316,7 @@ jobs:
                   completed)
                     active=false
                     eta_minutes=0
+                    desired_lane='[]'
                     case "$conclusion" in
                       success)
                         pr="$(gh api "repos/$REPO/pulls/$number" 2>/dev/null || true)"
@@ -6036,14 +6328,17 @@ jobs:
                           status_label='✅ Lopu finished — this PR is closed or merged'
                           phase_label='The resolver branch work is complete'
                           event='The resolver worker completed successfully and the PR is no longer open.'
+                          fact_transition='closed'
                         elif [ "$pr_mergeable" = true ]; then
                           status_label='✅ Lopu finished — this PR is mergeable'
                           phase_label='GitHub verified the published branch result'
                           event='The resolver worker completed successfully and GitHub now reports this PR as mergeable.'
+                          fact_transition='mergeable'
                         elif [ "$pr_mergeable" = false ]; then
                           status_label='↪️ Resolver finished; a newer conflict remains'
                           phase_label='The next detector event will own the current branch state'
                           event='The worker published its verified result, but GitHub reports the latest PR state as conflicting again; Lopu will rediscover it automatically.'
+                          fact_transition='conflicting'
                         else
                           wait_started="${completion_wait_started[$number]:-$now_epoch}"
                           completion_wait_started[$number]="$wait_started"
@@ -6076,6 +6371,7 @@ jobs:
                         status_label='⚠️ Resolver needs attention'
                         phase_label='The detailed Lopu result explains the stopped phase'
                         event="The resolver worker finished with ${conclusion:-an unsuccessful result}; its detailed result is posted on this PR."
+                        desired_lane='["lopu: needs attention"]'
                         ;;
                     esac
                     ;;
@@ -6097,8 +6393,9 @@ jobs:
                 if [ "$phase_key" = "$previous_phase" ] && [ "$active" = true ]; then
                   event="10-minute check-in: still working — $phase_label."
                 fi
+                sync_progress_labels "$number" "$desired_lane" "$fact_transition"
                 update_progress "$item" "$status_label" "$phase_label" \
-                  "$eta_minutes" "$active" "$event" \
+                  "$eta_minutes" "$active" "$event" "$live_stats" "$batch_counts" \
                   || echo "::warning::Could not publish a progress update for PR #$number."
                 last_phase[$number]="$phase_key"
                 last_post[$number]="$now_epoch"
