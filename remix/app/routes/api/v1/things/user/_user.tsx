@@ -1,7 +1,7 @@
 import { json } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
-import { listUserPosts } from '~/api/utils/things/things';
+import { listUserPosts, viewerOf } from '~/api/utils/things/things';
 
 // GET /api/v1/things/user?username=&cursor=&limit= — a user's posts, filtered
 // to what the viewer may see (owners see all their circles, others see public).
@@ -13,8 +13,10 @@ export const loader = async ({ request }: { request: Request }) => {
   const user = auth.actor.user;
   const params = new URL(request.url).searchParams;
 
+  // pat context rides along so a visibility-restricted token's audience fence
+  // applies to profile listings too
   const result = await listUserPosts(
-    user ? { id: user.id, username: user.username } : null,
+    viewerOf(user, auth.actor.pat),
     params.get('username') || '',
     params.get('cursor'),
     Number(params.get('limit')) || undefined
