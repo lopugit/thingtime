@@ -23,16 +23,27 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
+
 // Browser origins allowed to call this API. Comma-separated allowlist, e.g.
-// CORS_ORIGINS="https://thingtime.app,http://localhost:3000"; defaults to the
-// local dev origin. A wildcard origin would let ANY site drive /v1/thing (an
-// unauthenticated read/write store) from a visitor's browser and read this
-// API's authenticated responses, so it is deliberately not the fallback. Set
-// CORS_ORIGINS to widen the allowlist deliberately.
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+// CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
+// Defaults to the local dev origin. A wildcard origin would let ANY site drive /v1/thing
+// (an unauthenticated read/write store) from a visitor's browser and read this API's
+// cross-origin responses, so it is deliberately not the fallback. Set CORS_ORIGINS to
+// widen the allowlist deliberately.
+// An explicitly empty value grants no cross-origin access at all, which is the safe setting
+// for a service that is no longer deployed.
+const configuredOrigins = (
+	process.env.CORS_ORIGINS ??
+	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
+	'http://localhost:3000'
+)
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
+
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : false
+
 const io = new Server(server, {
 	cors: {
 		origin: corsOrigins,
