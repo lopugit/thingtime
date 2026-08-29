@@ -481,6 +481,15 @@ function assertWorkflowSource() {
     3,
     "every gh_read_retry copy also treats transport-level resets as retryable",
   );
+  // Declaring the pattern is not the same as branching on it: a copy that
+  // keeps `transport=` but drops the predicate reintroduces the exact
+  // outage. Assert the predicate is actually wired into all three retry
+  // branches, independent of how each copy formats its condition.
+  assert.equal(
+    source.match(/\|\| grep -Eq "\$transport" "\$errors"/gu)?.length,
+    3,
+    "every gh_read_retry copy branches on the transport predicate, not just declares it",
+  );
   assert.doesNotMatch(
     source,
     /if grep -Eq 'HTTP \(408\|429\|500\|502\|503\|504\)\(\[\^0-9\]\|\$\)' "\$errors"; then/u,
