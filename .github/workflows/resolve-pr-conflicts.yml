@@ -1077,6 +1077,7 @@ jobs:
     # (~8 minutes) before classification starts; keep headroom for sweeps.
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       # Only the fixed github-actions status helper is checked out; no code
       # from scanned PRs runs here. Write access exists for human progress
@@ -1102,6 +1103,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
           EVENT_REF: ${{ github.ref_name }}
           # Identity of the workflow that STARTED the run. Under
           # workflow_call that is the thin product-branch listener, not
@@ -1347,6 +1349,7 @@ jobs:
 
           ensure_lopu_label_definitions() {
             local existing definitions encoded definition name color description
+            local existing_definition existing_color existing_description
             existing="$(gh_read_retry --paginate "repos/$REPO/labels?per_page=100" --slurp \
               | jq -c 'add // []')" || return 1
             definitions="$(node "$STATUS_HELPER" labels)" || return 1
@@ -1356,7 +1359,18 @@ jobs:
               name="$(jq -r '.name' <<<"$definition")"
               color="$(jq -r '.color' <<<"$definition")"
               description="$(jq -r '.description' <<<"$definition")"
-              if jq -e --arg name "$name" 'any(.[]; .name == $name)' >/dev/null <<<"$existing"; then
+              existing_definition="$(jq -c --arg name "$name" \
+                '[.[] | select(.name == $name)] | first // empty' <<<"$existing")"
+              if [ -n "$existing_definition" ]; then
+                existing_color="$(jq -r '.color // "" | ascii_downcase' <<<"$existing_definition")"
+                existing_description="$(jq -r '.description // ""' <<<"$existing_definition")"
+                if [ "$existing_color" = "${color,,}" ] \
+                   && [ "$existing_description" = "$description" ]; then
+                  continue
+                fi
+                gh api --method PATCH "repos/$REPO/labels/$(encode_ref "$name")" \
+                  -f new_name="$name" -f color="$color" -f description="$description" >/dev/null \
+                  || echo "::warning::Could not update managed label definition $name."
                 continue
               fi
               if ! gh api --method POST "repos/$REPO/labels" \
@@ -1414,6 +1428,53 @@ jobs:
               sync_lopu_label_subset "$number" "$managed" "$desired" "$current" \
                 || echo "::warning::Could not reconcile Lopu fact labels for #$number."
             done < <(jq -r '.prs[] | @base64' "$classification_file")
+          }
+
+          read_lopu_lane_owners() {
+            local fleet_group fleet_group_encoded fleet_state
+            fleet_group="lopu-agent-fleet-$REPO"
+            fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
+            fleet_state="$(gh_read_retry \
+              "repos/$REPO/actions/concurrency_groups/$fleet_group_encoded")" || return 1
+            jq -c '
+              [
+                .group_members[]?
+                | select(.status == "pending"
+                         or .status == "queued"
+                         or .status == "requested"
+                         or .status == "waiting"
+                         or .status == "in_progress")
+                | . as $member
+                | ($member.job_name
+                    | (try capture("(^| / )(Resolve|Rebase) PR #(?<number>[0-9]+)$")
+                       catch empty)) as $match
+                | select($match.number != null)
+                | {number:($match.number | tonumber), status:$member.status}
+              ]
+            ' <<<"$fleet_state"
+          }
+
+          sync_lopu_lane_labels() {
+            local classification_file="$1" owners="$2" candidates="$3"
+            local managed plan encoded item number desired current
+            managed="$(node "$STATUS_HELPER" labels --scope lane | jq -c '[.[].name]')" \
+              || return 1
+            plan="$(jq -cn \
+              --argjson prs "$(jq -c '.prs' "$classification_file")" \
+              --argjson owners "$owners" \
+              --argjson candidates "$candidates" \
+              '{prs:$prs,owners:$owners,candidates:$candidates}' \
+              | node "$STATUS_HELPER" lane-plan)" || return 1
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              item="$(base64 --decode <<<"$encoded")"
+              number="$(jq -r '.number' <<<"$item")"
+              desired="$(jq -c '.desiredLaneLabels' <<<"$item")"
+              current="$(jq -c --argjson number "$number" \
+                '.prs[] | select(.number == $number) | .labels' "$classification_file")"
+              sync_lopu_label_subset "$number" "$managed" "$desired" "$current" \
+                || echo "::warning::Could not reconcile Lopu lane labels for #$number."
+            done < <(jq -r '.[] | @base64' <<<"$plan")
           }
 
           # Detection visibility: reviewers otherwise see only GitHub's
@@ -1801,6 +1862,13 @@ jobs:
             || echo "::warning::Could not fully initialize the managed Lopu label namespace."
           sync_lopu_fact_labels "$classification_file" \
             || echo "::warning::Could not fully refresh Lopu fact labels for the open PR inventory."
+          if [ "$EVENT_NAME" = pull_request_target ] \
+             && [ "$EVENT_ACTION" = closed ] \
+             && [[ "${ONLY_PR:-}" =~ ^[1-9][0-9]*$ ]]; then
+            managed_all="$(node "$STATUS_HELPER" labels | jq -c '[.[].name]')"
+            sync_lopu_label_subset "$ONLY_PR" "$managed_all" '[]' \
+              || echo "::warning::Could not clear terminal Lopu labels from closed PR #$ONLY_PR."
+          fi
 
           # This is an operator-controlled hard stop, not a failed-snapshot
           # cache. Do not inspect its age, bot metadata, refs, or topology:
@@ -1989,6 +2057,13 @@ jobs:
                     }
                   })
           ' <<<"$conflicting")"
+          candidate_numbers="$(jq -c '[.[].number]' <<<"$conflicting")"
+          if lane_owners="$(read_lopu_lane_owners)"; then
+            sync_lopu_lane_labels "$classification_file" "$lane_owners" "$candidate_numbers" \
+              || echo "::warning::Could not fully reconcile the managed Lopu lane labels."
+          else
+            echo "::warning::Could not read the durable Lopu fleet; preserving existing non-candidate lane labels this sweep."
+          fi
           rm -f "$classification_file" "$all_open_file"
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue

@@ -8,6 +8,7 @@ import {
   classifyInventory,
   formatZonedTimestamp,
   labelDelta,
+  planLaneLabels,
   renderContext,
   summarizeBatch,
 } from "./lopu-pr-status.mjs";
@@ -152,6 +153,69 @@ test("label reconciliation changes only its managed subset", () => {
       desired: ["lopu: resolving"],
     }),
     { add: ["lopu: resolving"], remove: ["lopu: queued"] },
+  );
+  assert.deepEqual(
+    labelDelta({
+      current: ["enhancement", "lopu: queued"],
+      managed: ["lopu: queued", "lopu: resolving"],
+      desired: ["enhancement", "lopu: resolving"],
+    }),
+    { add: ["lopu: resolving"], remove: ["lopu: queued"] },
+  );
+});
+
+test("lane reconciliation projects current owners, candidates, failures, and stale labels", () => {
+  assert.deepEqual(
+    planLaneLabels(
+      [
+        {
+          number: 10,
+          mergeable: "CONFLICTING",
+          mergeStateStatus: "DIRTY",
+          labels: ["lopu: needs attention"],
+        },
+        {
+          number: 20,
+          mergeable: "CONFLICTING",
+          mergeStateStatus: "DIRTY",
+          labels: ["lopu: resolving"],
+        },
+        {
+          number: 30,
+          mergeable: "MERGEABLE",
+          mergeStateStatus: "CLEAN",
+          labels: ["lopu: queued"],
+        },
+        {
+          number: 40,
+          mergeable: "CONFLICTING",
+          mergeStateStatus: "DIRTY",
+          labels: ["lopu: needs attention"],
+        },
+        {
+          number: 50,
+          mergeable: "MERGEABLE",
+          mergeStateStatus: "CLEAN",
+          labels: ["lopu: needs attention"],
+        },
+      ],
+      {
+        owners: [
+          { number: 10, status: "pending" },
+          { number: 10, status: "in_progress" },
+          { number: 30, status: "pending" },
+          { number: 50, status: "completed" },
+        ],
+        candidates: [20, 30],
+      },
+    ),
+    [
+      { number: 10, desiredLaneLabels: ["lopu: resolving"] },
+      { number: 20, desiredLaneLabels: ["lopu: queued"] },
+      { number: 30, desiredLaneLabels: ["lopu: queued"] },
+      { number: 40, desiredLaneLabels: ["lopu: needs attention"] },
+      { number: 50, desiredLaneLabels: [] },
+    ],
   );
 });
 

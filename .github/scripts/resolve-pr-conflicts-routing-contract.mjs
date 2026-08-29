@@ -738,6 +738,26 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
+    /permissions:\n\s+actions: read[\s\S]*issues: write/u,
+    "the detector can read the durable Lopu fleet before reconciling lane labels",
+  );
+  assert.match(
+    detectBlock,
+    /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*lane-plan/u,
+    "queue and resolving labels are projected from the live durable fleet",
+  );
+  assert.match(
+    detectBlock,
+    /EVENT_ACTION: \$\{\{ github\.event\.action \}\}[\s\S]*EVENT_ACTION" = closed[\s\S]*managed_all[\s\S]*'\[\]'/u,
+    "closed PRs lose every dynamic Lopu label while unrelated labels remain untouched",
+  );
+  assert.match(
+    detectBlock,
+    /--method PATCH "repos\/\$REPO\/labels\/[\s\S]*new_name="\$name"[\s\S]*description="\$description"/u,
+    "managed label colors and descriptions are updated when their definitions change",
+  );
+  assert.match(
+    detectBlock,
     /repo_stats:\$classification\.stats[\s\S]*overlapPrNumbers:\$metadata\.overlapPrNumbers/u,
     "immutable resolver snapshots carry queue and file-overlap context",
   );
