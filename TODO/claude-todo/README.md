@@ -24,9 +24,11 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
 | 13 | Admin role + admin-configurable rate limits (env-allowlist + `meta.admin`, promote/demote UI, global rate-limit config, react/comment throttling) | 🟢 Built, live-tested locally | [13-admin-and-rate-limits.md](./13-admin-and-rate-limits.md) |
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
+| 17 | Circles become real 💞 (friends/family membership + real acl resolution) | 🟡 Friends circle shipped (real friend graph); family circle still owner-only | [17-circles.md](./17-circles.md) |
 | 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
 | 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
 | 20 | Versioned experience history — revisit any app/search/feed state | 🔴 P1 fundamental · not started | [20-versioned-experience-history.md](./20-versioned-experience-history.md) |
+| 21 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (48 in use, ~5 legacy-era slots reclaimable once the v1 read path retires, budget guard) | 🔴 Not started · no rush, headroom exists | [21-index-budget-consolidation.md](./21-index-budget-consolidation.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
