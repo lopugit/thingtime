@@ -23,17 +23,19 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
-// Browser origins allowed to call this API. `origin: '*'` let ANY site drive
-// /v1/thing (an unauthenticated read/write store) from a visitor's browser, so
-// the allowlist is environment-driven and defaults to local dev only. Set
-// CORS_ORIGINS to a comma-separated list to widen it deliberately.
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+// Browser origins allowed to call this API. Comma-separated allowlist, e.g.
+// CORS_ORIGINS="https://thingtime.app,http://localhost:3000"; defaults to the
+// local dev origin. A wildcard origin would let ANY site drive /v1/thing (an
+// unauthenticated read/write store) from a visitor's browser and read this
+// API's authenticated responses, so it is deliberately not the fallback. Set
+// CORS_ORIGINS to widen the allowlist deliberately.
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
 const io = new Server(server, {
 	cors: {
-		origin: allowedOrigins,
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -46,7 +48,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: allowedOrigins,
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {
