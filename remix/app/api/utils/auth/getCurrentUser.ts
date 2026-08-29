@@ -108,9 +108,19 @@ export const introspectToken = async (token: string): Promise<TokenIntrospection
   if (!session) return { active: false };
   if (String(session.userId) !== claims.sub) return { active: false };
 
-  const user = await findUserById(claims.sub);
-  if (!user) return { active: false };
-  if (!serviceAccountAuthenticationAllowed(user)) return { active: false };
+  // Sandbox sessions (apps/sandbox.ts) are minted against a synthetic
+  // 'sandbox:<uuid>' owner that is deliberately no real user — nothing ever
+  // persists one — so findUserById can only ever return null for them.
+  // Requiring a user document here would report every live sandbox token as
+  // inactive, which is precisely backwards for the pre-registration
+  // integrators the sandbox exists to serve (and would make the documented
+  // purpose:'app-sandbox' response unreachable). Their session doc is still
+  // the kill switch, so the liveness checks above are the whole answer.
+  if (session.purpose !== 'app-sandbox') {
+    const user = await findUserById(claims.sub);
+    if (!user) return { active: false };
+    if (!serviceAccountAuthenticationAllowed(user)) return { active: false };
+  }
 
   return {
     active: true,
