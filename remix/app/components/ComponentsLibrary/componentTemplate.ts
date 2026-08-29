@@ -21,6 +21,21 @@ export const REPEAT_HARD_CAP = 24;
 // at 560 resolved values with args maxed out (mean 185) — ~7x headroom.
 export const MAX_RESOLVED_NODES = 4000;
 
+// The node budget bounds how MANY values a resolve produces, not how many
+// CHARACTERS. Token substitution is the second amplifier, and it multiplies
+// with the first: one stored string can carry thousands of `{arg}` tokens, each
+// resolving to an arg value up to MAX_COMPONENT_SAVED_ARG_CHARS (2000) long, so
+// the ~4000 string nodes the node budget still permits can materialise
+// gigabytes of text. Measured against this resolver: a 695-byte template that
+// clears every server cap (16 raw nodes, depth 6) resolved to 43.9 MB, and a
+// 9 KB one exhausted a 3 GB heap outright. So the same shared budget also
+// meters every string a resolve ALLOCATES. Strings with no token are returned
+// by reference — immutable and shared, so they cost nothing and are not
+// charged. Across 26,728 resolves — the whole 2800-component catalog with
+// every arg maxed out — the peak is 3,583 chars, so this sits ~73x above
+// anything real and truncates nothing that ships.
+export const MAX_RESOLVED_CHARS = 256 * 1024;
+
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 export type ComponentArgScalar = string | number | boolean;
@@ -42,19 +57,37 @@ export type ComponentArgValues = Record<string, ComponentArgScalar | undefined>;
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	!!value && typeof value === 'object' && !Array.isArray(value);
 
-const substitute = (template: string, scope: ComponentArgValues): string =>
-	template.replace(TOKEN_PATTERN, (_match, name: string) => {
-		const value = scope[name];
+// Scope lookups must not fall through to Object.prototype. Arg names are only
+// screened by COMPONENT_ARG_NAME_PATTERN, which admits `constructor`,
+// `toString`, `valueOf`, … — so a bare scope[name] resolves an UNDECLARED token
+// to a native function instead of the '' / undefined this module documents.
+const argValue = (scope: ComponentArgValues, name: string): ComponentArgScalar | undefined =>
+	Object.prototype.hasOwnProperty.call(scope, name) ? scope[name] : undefined;
+
+const substitute = (template: string, scope: ComponentArgValues, budget: ResolveBudget): string => {
+	let interpolated = 0;
+	const out = template.replace(TOKEN_PATTERN, (_match, name: string) => {
+		const value = argValue(scope, name);
 		if (value === undefined || value === null) return '';
-		return String(value);
+		// clamp to what the budget can still pay for, so an oversized string is
+		// never built in the first place
+		const room = budget.chars - interpolated;
+		if (room <= 0) return '';
+		const text = String(value);
+		interpolated += Math.min(text.length, room);
+		return text.length > room ? text.slice(0, room) : text;
 	});
+	budget.chars -= out.length;
+	if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, draw the partial tree
+	return out;
+};
 
 const truthy = (value: unknown): boolean => {
 	if (typeof value === 'string') return value.trim() !== '' && value !== 'false' && value !== '0';
 	return !!value;
 };
 
-type ResolveBudget = { left: number };
+type ResolveBudget = { left: number; chars: number };
 
 const resolveNode = (template: unknown, scope: ComponentArgValues, budget: ResolveBudget): unknown => {
 	// budget exhausted → drop this subtree (arrays skip undefined entries and
@@ -63,7 +96,8 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	budget.left -= 1;
 
 	if (typeof template === 'string') {
-		return template.includes('{') ? substitute(template, scope) : template;
+		// tokenless strings are returned by reference — no allocation, no charge
+		return template.includes('{') ? substitute(template, scope, budget) : template;
 	}
 	if (Array.isArray(template)) {
 		const out: unknown[] = [];
@@ -79,18 +113,18 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	if (!isPlainObject(template)) return template;
 
 	if ('ttArg' in template) {
-		return scope[String(template.ttArg)];
+		return argValue(scope, String(template.ttArg));
 	}
 	if ('ttMap' in template) {
 		const spec = isPlainObject(template.ttMap) ? template.ttMap : {};
-		const key = String(scope[String(spec.arg)]);
+		const key = String(argValue(scope, String(spec.arg)));
 		const values = isPlainObject(spec.values) ? spec.values : {};
 		const picked = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : spec.default;
 		return resolveNode(picked, scope, budget);
 	}
 	if ('ttIf' in template) {
 		const spec = isPlainObject(template.ttIf) ? template.ttIf : {};
-		const value = scope[String(spec.arg)];
+		const value = argValue(scope, String(spec.arg));
 		const hit = spec.equals !== undefined ? String(value) === String(spec.equals) : truthy(value);
 		const branch = hit ? spec.then : spec.else;
 		return branch === undefined ? undefined : resolveNode(branch, scope, budget);
@@ -107,7 +141,7 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	}
 	if ('ttRepeat' in template) {
 		const spec = isPlainObject(template.ttRepeat) ? template.ttRepeat : {};
-		const raw = spec.arg !== undefined ? scope[String(spec.arg)] : spec.count;
+		const raw = spec.arg !== undefined ? argValue(scope, String(spec.arg)) : spec.count;
 		const max = Math.min(Number(spec.max) || 0, REPEAT_HARD_CAP) || REPEAT_HARD_CAP;
 		const n = Math.max(0, Math.min(Math.round(Number(raw) || 0), max));
 		const out: unknown[] = [];
@@ -128,10 +162,11 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	return out;
 };
 
-// One budget per top-level resolve — nested ttRepeat shares it, so total output
-// is bounded no matter how the wrappers are nested.
+// One budget per top-level resolve — nested ttRepeat shares it, so both total
+// output COUNT and total allocated TEXT are bounded no matter how the wrappers
+// are nested or how many tokens each string carries.
 export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {}): unknown =>
-	resolveNode(template, scope, { left: MAX_RESOLVED_NODES });
+	resolveNode(template, scope, { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS });
 
 // ---------------------------------------------------------------------------
 

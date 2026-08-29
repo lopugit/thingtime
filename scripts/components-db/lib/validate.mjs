@@ -27,6 +27,11 @@ export const ARG_TYPES = new Set(['string', 'text', 'number', 'boolean', 'enum',
 
 export const MAX_RENDER_BYTES = 30 * 1024; // server cap is 32KB — keep headroom
 export const MAX_RESOLVED_NODES = 550; // renderer cap is 600
+// Resolved TEXT, counted in characters — the resolver's own ceiling is 256KB
+// (MAX_RESOLVED_CHARS in resolve.mjs), so like the node cap above this sits
+// well below it: a token-heavy archetype fails generation loudly instead of
+// being silently truncated at render time. The catalog peaks at 3,583 chars.
+export const MAX_RESOLVED_CHARS = 32 * 1024;
 export const MAX_DEPTH = 22; // renderer cap is 24
 export const MAX_ARGS = 16;
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -128,6 +133,7 @@ const walkResolved = (node, path, issues, state, depth = 0) => {
 	state.maxDepth = Math.max(state.maxDepth, depth);
 	if (state.nodes > MAX_RESOLVED_NODES + 50 || depth > MAX_DEPTH + 2) return;
 
+	if (typeof node === 'string') state.chars += node.length;
 	if (typeof node === 'string' || typeof node === 'number' || node === null || node === undefined) return;
 	if (Array.isArray(node)) {
 		node.forEach((entry, index) => walkResolved(entry, `${path}[${index}]`, issues, state, depth));
@@ -221,10 +227,13 @@ export const validateDefinition = (def) => {
 	}
 
 	const resolved = resolveTemplate(def.render, defaultsFromArgs(args));
-	const state = { nodes: 0, maxDepth: 0 };
+	const state = { nodes: 0, maxDepth: 0, chars: 0 };
 	walkResolved(resolved, label, issues, state);
 	if (state.nodes > MAX_RESOLVED_NODES) issues.push(`${label}: resolves to ${state.nodes} nodes (> ${MAX_RESOLVED_NODES})`);
 	if (state.maxDepth > MAX_DEPTH) issues.push(`${label}: resolves ${state.maxDepth} deep (> ${MAX_DEPTH})`);
+	if (state.chars > MAX_RESOLVED_CHARS) {
+		issues.push(`${label}: resolves to ${state.chars} chars of text (> ${MAX_RESOLVED_CHARS})`);
+	}
 
 	return issues;
 };

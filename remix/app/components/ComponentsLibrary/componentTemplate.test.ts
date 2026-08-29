@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import { MAX_RESOLVED_NODES, REPEAT_HARD_CAP, resolveTemplate } from './componentTemplate.ts';
+import { MAX_RESOLVED_CHARS, MAX_RESOLVED_NODES, REPEAT_HARD_CAP, resolveTemplate } from './componentTemplate.ts';
 
 // Count every value in a resolved tree the way the server's render gate counts
 // the raw template (countServerRenderNodes / checkSchemaRenderTree): one per
@@ -61,6 +61,54 @@ test('nested ttRepeat cannot expand past the resolve budget', () => {
 		`resolution produced ${produced} values, over the ${MAX_RESOLVED_NODES} budget`
 	);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
+// Count every character of resolved TEXT — what the DOM actually holds.
+const countChars = (value: unknown): number => {
+	if (typeof value === 'string') return value.length;
+	if (Array.isArray(value)) return value.reduce((sum: number, entry) => sum + countChars(entry), 0);
+	if (value && typeof value === 'object') {
+		return Object.values(value as Record<string, unknown>).reduce((sum: number, entry) => sum + countChars(entry), 0);
+	}
+	return 0;
+};
+
+// Regression: the node budget bounds output COUNT, not output SIZE. One stored
+// string can carry thousands of '{arg}' tokens and each resolves to an arg
+// value up to MAX_COMPONENT_SAVED_ARG_CHARS (2000) long, so the string nodes
+// the node budget still allows can materialise gigabytes. Measured before the
+// char budget existed: this 695-byte template resolved to 43.9 MB, and a 9 KB
+// sibling exhausted a 3 GB heap.
+test('token substitution cannot expand past the resolve budget', () => {
+	const leaf = '{a}'.repeat(200); // 600-char string, 200 tokens
+	const nest = (depth: number): unknown =>
+		depth === 0 ? leaf : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const attack = { tag: 'div', children: [nest(3)] };
+	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
+	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
+
+	const started = Date.now();
+	// a saved-version arg value at its maximum stored length
+	const produced = countChars(resolveTemplate(attack, { a: 'A'.repeat(2000) }));
+
+	// Only substituted strings are charged — tokenless ones (here the 'div' tag)
+	// are returned by reference, so they cost no memory however often they
+	// repeat. Allow the raw template's own size on top of the budget.
+	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
+	assert.ok(produced <= ceiling, `resolution produced ${produced} chars, over the ${ceiling} ceiling`);
+	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
+// Arg names are screened by COMPONENT_ARG_NAME_PATTERN, which admits
+// `constructor`, `toString`, … — an UNDECLARED token must still resolve to the
+// documented '' / undefined rather than reaching Object.prototype.
+test('scope lookups do not fall through to Object.prototype', () => {
+	assert.equal(resolveTemplate('x={constructor}', {}), 'x=');
+	assert.equal(resolveTemplate('x={toString}', { label: 'hi' }), 'x=');
+	assert.equal(resolveTemplate({ ttArg: 'constructor' }, {}), undefined);
+	assert.equal(resolveTemplate({ ttIf: { arg: 'valueOf', then: 'yes', else: 'no' } }, {}), 'no');
+	// declared args of those names still work normally
+	assert.equal(resolveTemplate('x={toString}', { toString: 'mine' }), 'x=mine');
 });
 
 test('the budget leaves ordinary components untouched', () => {
