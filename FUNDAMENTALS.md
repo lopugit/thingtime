@@ -33,7 +33,7 @@ Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
-`app/schemas/registry.ts` and `TODO/claude-todo/21-everything-is-a-thing-collections.md`).
+`app/schemas/registry.ts` and `TODO/claude-todo/22-everything-is-a-thing-collections.md`).
 
 **Physical collections are versioned.** The names below are _logical_ — the
 vocabulary of code, docs, and the admin query API. On the MongoDB server each

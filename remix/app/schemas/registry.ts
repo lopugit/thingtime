@@ -2227,7 +2227,7 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 
 // ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
-// TODO/claude-todo/21-everything-is-a-thing-collections.md). These kinds are
+// TODO/claude-todo/22-everything-is-a-thing-collections.md). These kinds are
 // PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
 // Only their dedicated utils (register, profile update, themes/algorithms/
 // waitlist) write them, each a direct insert that owns the right secure/

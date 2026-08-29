@@ -29,8 +29,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
 | 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
 | 20 | Versioned experience history — revisit any app/search/feed state | 🔴 P1 fundamental · not started | [20-versioned-experience-history.md](./20-versioned-experience-history.md) |
-| 21 | Everything is a thing — collapse satellite collections (users/themes/feedAlgorithms/waitlist → `things`; `uniqueKeys` + `secure` mechanisms, dual-era migrations) | 🟡 In build (PR #69 stack) | [21-everything-is-a-thing-collections.md](./21-everything-is-a-thing-collections.md) |
 | 21 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (48 in use, ~5 legacy-era slots reclaimable once the v1 read path retires, budget guard) | 🔴 Not started · no rush, headroom exists | [21-index-budget-consolidation.md](./21-index-budget-consolidation.md) |
+| 22 | Everything is a thing — collapse satellite collections (users/themes/feedAlgorithms/waitlist → `things`; `uniqueKeys` + `secure` mechanisms, dual-era migrations) | 🟡 In build (PR #69 stack) | [22-everything-is-a-thing-collections.md](./22-everything-is-a-thing-collections.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
