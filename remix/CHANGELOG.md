@@ -955,9 +955,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   branch-scoped `dev.thingtime.com` binding and explains how to verify the
   healthy Cloudflare-to-Vercel ACME delegation in the authoritative DNS
   referral instead of mistaking empty recursive short output for a missing
-  record. It separates that corrected live domain state from the remaining
-  #188 default-branch listener promotion required to activate the current
-  protected controller. — Codex (AI), 2026-08-12
+  record. It separates that corrected live domain state from the #188
+  default-branch listener promotion, which merged on 2026-08-17 and put the
+  thin listener on `main`. — Codex (AI), 2026-08-12
+
 - **The Thingtime AI preference now reaches the remaining Claude runtime**:
   Lopu musings resolve their Anthropic model from the current Admin waterfall
   on every Claude attempt, just like conflict resolution, rebase repair, and
@@ -966,6 +967,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the independent OpenAI fallback retains its provider-valid model. Focused
   tests prevent warm runtimes from pinning an earlier Admin choice. — Codex
   (AI), 2026-08-12
+
 - **iOS Vercel destination history is usable at full length**: the native Web
   destination drawer now keeps its controls pinned above a lazy vertical list,
   shows scroll indicators when content exceeds the viewport, and reserves the

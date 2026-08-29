@@ -40,13 +40,14 @@ JWT material, or environment-variable value is stored in the repository.
 ## Current CI direction
 
 The protected implementation from PR #239 lives on `github-actions`, and the
-thin listener from PR #233 lives on `develop`. The default `main` branch still
-contains the previous direct workflow; PR #188 remains the reviewed promotion
-path that brings the thin listener to the default branch. Because
-`pull_request_target` loads its workflow from `main`, #188 must land before a
-fresh eligible PR run can exercise the current protected implementation. The
-corrected Vercel binding clears the stable-domain configuration gate; it does
-not by itself activate the newer controller path.
+thin listener from PR #233 lives on `develop`. Because `pull_request_target`
+loads its workflow from the default branch, that listener also had to reach
+`main` before a live run could exercise the protected implementation. PR #188
+merged on 2026-08-17, so `.github/workflows/develop-pr-preview.yml` on `main`
+is now the thin listener delegating to
+`lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`.
+The corrected Vercel binding clears the stable-domain configuration gate. What
+remains is a fresh eligible develop-target PR run as final live proof.
 
 ## Fresh controller evidence — 2026-08-12
 
@@ -54,16 +55,18 @@ not by itself activate the newer controller path.
 was dispatched from this PR's refreshed head SHA. The listener handoff passed,
 the default-branch job started, and the controller self-test passed 40/40. The
 job then stopped before creating a Vercel deployment because it checked out
-`main`'s previous direct script, which rejects any wildcard-domain API result
-other than a literal `misconfigured: false`.
+`main` at `ca036ea7`, whose previous direct script rejects any wildcard-domain
+API result other than a literal `misconfigured: false`.
 
 That failure is not evidence of missing wildcard DNS. Current Vercel metadata
 reports the wildcard verified and detached, and both authoritative Cloudflare
 nameservers return the exact wildcard CNAME to `cname.vercel-dns.com`. The
 protected `github-actions` implementation replaces the obsolete advisory flag
-gate with that live CNAME verification. Promotion through #188 is therefore the
-prerequisite for rerunning the exact-SHA deployment, alias, CORS, and attachment
-checks; none of those mutation stages ran in the failed default-branch job.
+gate with that live CNAME verification. Promotion through #188 has since landed
+(2026-08-17), so that obsolete gate is no longer in the path and a fresh
+eligible run can now exercise the exact-SHA deployment, alias, CORS, and
+attachment checks; none of those mutation stages ran in the failed
+default-branch job.
 
 ## Separate Production drift
 
