@@ -1088,9 +1088,32 @@ jobs:
       any: ${{ steps.scan.outputs.any }}
     steps:
       - name: Check out the trusted Lopu PR-status helper
+        id: trusted_status_helper
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/lopu-pr-status.mjs
+          sparse-checkout-cone-mode: false
+
+      # Bootstrap only: the introducing PR necessarily runs before the fixed
+      # controller branch contains this helper. Once merged, the trusted
+      # checkout above always supplies it and this fallback never executes.
+      - name: Detect an absent pre-merge status helper
+        id: status_helper_bootstrap
+        run: |
+          if [ -f .github/scripts/lopu-pr-status.mjs ]; then
+            echo 'required=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'required=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bootstrap the introducing revision's status helper
+        if: steps.status_helper_bootstrap.outputs.required == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           sparse-checkout: .github/scripts/lopu-pr-status.mjs
@@ -6006,9 +6029,32 @@ jobs:
       STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
     steps:
       - name: Check out the trusted Lopu PR-status helper
+        id: trusted_status_helper
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/lopu-pr-status.mjs
+          sparse-checkout-cone-mode: false
+
+      # Same one-time bootstrap as the detector. The progress job cannot run
+      # for the introducing PR unless that PR is itself admitted, but keeping
+      # both consumers symmetric makes the missing-helper state explicit.
+      - name: Detect an absent pre-merge status helper
+        id: status_helper_bootstrap
+        run: |
+          if [ -f .github/scripts/lopu-pr-status.mjs ]; then
+            echo 'required=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'required=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bootstrap the introducing revision's status helper
+        if: steps.status_helper_bootstrap.outputs.required == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           sparse-checkout: .github/scripts/lopu-pr-status.mjs

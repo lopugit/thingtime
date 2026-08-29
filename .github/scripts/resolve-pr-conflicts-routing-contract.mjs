@@ -708,6 +708,11 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
+    /Detect an absent pre-merge status helper[\s\S]*Bootstrap the introducing revision's status helper[\s\S]*steps\.status_helper_bootstrap\.outputs\.required == 'true'[\s\S]*ref: \$\{\{ github\.sha \}\}/u,
+    "the introducing PR has a one-time helper bootstrap that becomes unreachable after merge",
+  );
+  assert.match(
+    detectBlock,
     /files\(first: 100\)[\s\S]*totalCount[\s\S]*nodes \{ path \}/u,
     "one open-PR inventory includes changed paths for overlap classification",
   );
@@ -764,6 +769,11 @@ function assertWorkflowSource() {
     "the monitor derives live resolving, waiting, and finished batch counts",
   );
   assert.match(progressBlock, /read_live_stats/u, "repository PR counts refresh while a batch is active");
+  assert.match(
+    progressBlock,
+    /Detect an absent pre-merge status helper[\s\S]*Bootstrap the introducing revision's status helper[\s\S]*ref: \$\{\{ github\.sha \}\}/u,
+    "the progress consumer has the same explicit one-time helper bootstrap",
+  );
   assert.match(progressBlock, /sync_progress_labels/u, "queue and resolving labels follow the real worker phase");
   assert.match(progressBlock, /render-context/u, "every progress update includes time, queue, and relationship tables");
   assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
