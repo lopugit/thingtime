@@ -1449,6 +1449,57 @@ jobs:
             fi
           }
 
+          # A progress monitor that was already running when this dashboard
+          # shipped still owns its original comment and may rewrite that body
+          # from an older workflow definition. Give those immutable snapshots
+          # one companion status surface with a distinct marker. The legacy
+          # worker cannot erase it, while repeat detector sweeps edit it in
+          # place. Native post-dashboard progress comments remain singletons.
+          upsert_legacy_status_context() {
+            local item="$1" comment_id="$2"
+            local number head base queue_total head_sha base_sha marker body now_epoch context
+            number="$(jq -r '.number' <<<"$item")"
+            head="$(jq -r '.head' <<<"$item")"
+            base="$(jq -r '.base' <<<"$item")"
+            queue_total="$(jq -r '.queue_total' <<<"$item")"
+            head_sha="$(jq -r '.head_sha' <<<"$item")"
+            base_sha="$(jq -r '.base_sha' <<<"$item")"
+            marker="<!-- thingtime-lopu-status-context:v1 pr=$number head=$head_sha base=$base_sha -->"
+            now_epoch="$(date +%s)"
+            body="$RUNNER_TEMP/lopu-status-context-$number.md"
+            {
+              echo '## 🤖 Lopu PR status context'
+              echo
+              echo '**Status:** 🕒 Resolver queued'
+              echo
+              echo "**Current phase:** Waiting in Lopu's serialized PR-management lane"
+              echo
+              echo '_This exact snapshot is owned by a pre-dashboard resolver run. Its original timeline remains untouched; this companion comment is the durable repository, queue, stack, and changed-file view._'
+              echo
+              context="$(jq -cn \
+                --argjson nowEpoch "$now_epoch" \
+                --argjson etaMinutes 20 \
+                --argjson stats "$(jq -c '.repo_stats' <<<"$item")" \
+                --argjson batch "$(jq -cn --argjson total "$queue_total" \
+                  '{total:$total,resolving:0,queued:$total,done:0}')" \
+                --argjson relationships "$(jq -c '.relationships' <<<"$item")" \
+                --arg repo "$REPO" \
+                --arg base "$base" \
+                --arg head "$head" \
+                '{nowEpoch:$nowEpoch,etaMinutes:$etaMinutes,stats:$stats,batch:$batch,
+                  relationships:$relationships,repo:$repo,base:$base,head:$head}')"
+              node "$STATUS_HELPER" render-context <<<"$context"
+              echo
+              echo "$marker"
+            } >"$body"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" \
+                -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
+          }
+
           # First-human-signal contract: the instant this detector has proved
           # an eligible, immutable PR/base snapshot, announce the work on the
           # PR itself. The marker includes both SHAs so an older admitted run
@@ -1458,8 +1509,8 @@ jobs:
           # ten-minute timeline updates.
           ensure_progress_comment() {
             local item="$1" number head base head_sha base_sha mode queue_total
-            local marker comments comment_id existing_body body detected eta title event now_epoch context
-            local timeline_file trimmed_file
+            local marker native_marker legacy_marker comments comment_id context_comment_id existing_body
+            local body detected eta title event now_epoch context
             number="$(jq -r '.number' <<<"$item")"
             head="$(jq -r '.head' <<<"$item")"
             base="$(jq -r '.base' <<<"$item")"
@@ -1468,6 +1519,8 @@ jobs:
             mode="$(jq -r '.mode' <<<"$item")"
             queue_total="$(jq -r '.queue_total' <<<"$item")"
             marker="<!-- thingtime-lopu-progress:v1 pr=$number head=$head_sha base=$base_sha -->"
+            native_marker='<!-- thingtime-lopu-status-native:v1 -->'
+            legacy_marker="<!-- thingtime-lopu-status-context:v1 pr=$number head=$head_sha base=$base_sha -->"
             sync_lopu_label_subset \
               "$number" \
               '["lopu: queued","lopu: resolving","lopu: needs attention"]' \
@@ -1499,9 +1552,20 @@ jobs:
               | last
               | .body // ""
             ' "$comments")"
+            context_comment_id="$(jq -r --arg marker "$legacy_marker" '
+              add // []
+              | [.[]
+                  | select(.user.login == "github-actions[bot]")
+                  | select(.body | contains($marker))
+                  | .id]
+              | last // empty
+            ' "$comments")"
             rm -f "$comments"
-            if [ -n "$comment_id" ] \
-               && grep -Fq '### Time conversion (UTC source)' <<<"$existing_body"; then
+            if [ -n "$comment_id" ]; then
+              if grep -Fq "$native_marker" <<<"$existing_body"; then
+                return 0
+              fi
+              upsert_legacy_status_context "$item" "$context_comment_id"
               return 0
             fi
 
@@ -1515,20 +1579,6 @@ jobs:
               title='Lopu detected merge conflicts'
               event="Detected conflicts between \`$base\` and \`$head\`; assigning the exact snapshot to the resolver queue."
             fi
-            timeline_file="$RUNNER_TEMP/lopu-progress-timeline-$number.txt"
-            trimmed_file="$RUNNER_TEMP/lopu-progress-timeline-trimmed-$number.txt"
-            awk '
-              /thingtime-lopu-progress-timeline:start/ { capture=1; next }
-              /thingtime-lopu-progress-timeline:end/ { capture=0 }
-              capture { print }
-            ' <<<"$existing_body" >"$timeline_file"
-            if [ -s "$timeline_file" ]; then
-              printf -- '- %s — Refreshed the live timezone, queue, stack, and changed-file context for this admitted snapshot.\n' \
-                "$detected" >>"$timeline_file"
-            else
-              printf -- '- %s — %s\n' "$detected" "$event" >"$timeline_file"
-            fi
-            tail -n 60 "$timeline_file" >"$trimmed_file"
             body="$RUNNER_TEMP/lopu-progress-$number.md"
             {
               printf '## 🤖 %s\n\n' "$title"
@@ -1552,17 +1602,12 @@ jobs:
               printf '\n'
               printf '### Timeline\n'
               printf '<!-- thingtime-lopu-progress-timeline:start -->\n'
-              cat "$trimmed_file"
+              printf -- '- %s — %s\n' "$detected" "$event"
               printf '<!-- thingtime-lopu-progress-timeline:end -->\n\n'
+              printf '%s\n' "$native_marker"
               printf '%s\n' "$marker"
             } >"$body"
-            rm -f "$timeline_file" "$trimmed_file"
-            if [ -n "$comment_id" ]; then
-              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" \
-                -F "body=@$body" >/dev/null
-            else
-              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
-            fi
+            gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
           }
 
           all_open_prs() {
@@ -6268,6 +6313,7 @@ jobs:
               echo
               echo "[Technical run details]($RUN_URL) — optional; this comment is the human-facing source of truth."
               echo
+              echo '<!-- thingtime-lopu-status-native:v1 -->'
               echo "$marker"
             } >"$body"
 
