@@ -465,6 +465,13 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
+    // Public tag feeds (`GET /api/v1/things/feed?tag=…`): one tag's posts,
+    // newest first. Without `tags` as a key the tag is a post-scan residual —
+    // the pager walks every post in createdAt order until it fills a page, so a
+    // rare tag reads the whole post history on an unauthenticated endpoint.
+    // `tags` is the only array field here (acl keeps its own index below), so
+    // this stays a legal single-multikey compound.
+    col.createIndex({ thingtime: 1, tags: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
