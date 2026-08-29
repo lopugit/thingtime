@@ -18,6 +18,8 @@ const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.met
 const REBASE_WORKFLOW_URL = new URL("../workflows/rebase-pr-stacks.yml", import.meta.url);
 const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml", import.meta.url);
 const LOPU_ACTION_URL = new URL("../actions/lopu-agent/action.yml", import.meta.url);
+const LOPU_STATUS_URL = new URL("./lopu-pr-status.mjs", import.meta.url);
+const LOPU_STATUS_TEST_URL = new URL("./lopu-pr-status.test.mjs", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
@@ -192,6 +194,8 @@ function assertWorkflowSource() {
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
+  const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
+  const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
@@ -698,6 +702,36 @@ function assertWorkflowSource() {
     "the first detection comment promises the human heartbeat cadence",
   );
   assert.match(
+    detectBlock,
+    /Check out the trusted Lopu PR-status helper[\s\S]*ref: github-actions[\s\S]*sparse-checkout: \.github\/scripts\/lopu-pr-status\.mjs/u,
+    "detector classification executes only the fixed controller helper",
+  );
+  assert.match(
+    detectBlock,
+    /files\(first: 100\)[\s\S]*totalCount[\s\S]*nodes \{ path \}/u,
+    "one open-PR inventory includes changed paths for overlap classification",
+  );
+  assert.match(
+    detectBlock,
+    /complete_large_pr_files[\s\S]*pulls\/\$number\/files\?per_page=100/u,
+    "large PRs receive an exact paginated changed-file inventory",
+  );
+  assert.match(
+    detectBlock,
+    /classify --default-ref "\$default_ref"[\s\S]*sync_lopu_fact_labels/u,
+    "every open PR receives reconciled Lopu fact labels from repository topology",
+  );
+  assert.match(
+    detectBlock,
+    /repo_stats:\$classification\.stats[\s\S]*overlapPrNumbers:\$metadata\.overlapPrNumbers/u,
+    "immutable resolver snapshots carry queue and file-overlap context",
+  );
+  assert.match(
+    detectBlock,
+    /render-context/u,
+    "the immediate comment renders UTC conversions and queue context",
+  );
+  assert.match(
     progressBlock,
     /name: Keep PR reviewers updated every 10 minutes/u,
     "one dedicated human progress monitor accompanies a resolver batch",
@@ -708,7 +742,7 @@ function assertWorkflowSource() {
     "the progress monitor is one batch job, never one idle runner per PR",
   );
   assert.match(progressBlock, /continue-on-error: true/u, "comment telemetry cannot fail valid resolution work");
-  assert.match(progressBlock, /actions: read[\s\S]*pull-requests: read[\s\S]*issues: write/u);
+  assert.match(progressBlock, /actions: read[\s\S]*contents: read[\s\S]*pull-requests: read[\s\S]*issues: write/u);
   assert.match(progressBlock, /HEARTBEAT_SECONDS: "600"/u, "active work checks in every ten minutes");
   assert.match(progressBlock, /POLL_SECONDS: "60"/u, "phase transitions are detected promptly");
   assert.match(
@@ -724,7 +758,39 @@ function assertWorkflowSource() {
   assert.match(progressBlock, /this PR is mergeable/u, "the human status confirms GitHub's final mergeability verdict");
   assert.match(progressBlock, /wait_elapsed[\s\S]*-lt 180/u, "a completed worker gives GitHub a bounded verdict-refresh window");
   assert.match(progressBlock, /there is no need to find the Actions run/u, "the PR comment is the human control surface");
+  assert.match(
+    progressBlock,
+    /batch_counts[\s\S]*batch-counts/u,
+    "the monitor derives live resolving, waiting, and finished batch counts",
+  );
+  assert.match(progressBlock, /read_live_stats/u, "repository PR counts refresh while a batch is active");
+  assert.match(progressBlock, /sync_progress_labels/u, "queue and resolving labels follow the real worker phase");
+  assert.match(progressBlock, /render-context/u, "every progress update includes time, queue, and relationship tables");
   assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
+
+  for (const label of [
+    "lopu: conflicting",
+    "lopu: out-of-date",
+    "lopu: mergeable",
+    "lopu: queued",
+    "lopu: resolving",
+    "lopu: part of stack",
+    "lopu: target PR not open",
+    "lopu: overlapping files",
+    "lopu: needs attention",
+  ]) {
+    assert.match(lopuStatusSource, new RegExp(label, "u"), `managed status helper defines ${label}`);
+  }
+  assert.match(lopuStatusSource, /America\/Los_Angeles/u, "time guide uses Los Angeles' IANA zone");
+  assert.match(lopuStatusSource, /Australia\/Melbourne/u, "time guide uses Melbourne's IANA zone");
+  assert.match(lopuStatusSource, /Time conversion \(UTC source\)/u, "UTC remains the canonical displayed time");
+  assert.match(lopuStatusSource, /Currently resolving/u, "queue table exposes active resolver count");
+  assert.match(lopuStatusSource, /Changed-file overlap/u, "related PRs disclose overlapping changed paths");
+  assert.match(lopuStatusSource, /export function labelDelta/u, "label mutation is a tested managed-subset diff");
+  assert.match(lopuStatusSource, /export function summarizeBatch/u, "worker queue counts use one tested classifier");
+  assert.match(lopuStatusTestSource, /daylight-saving aware/u, "timezone offsets have deterministic DST fixtures");
+  assert.match(lopuStatusTestSource, /missing parents, file overlap/u, "relationship labels have deterministic fixtures");
+  assert.match(lopuStatusTestSource, /exact matrix worker names/u, "queue counts reject unrelated jobs");
   assert.match(admissionBlock, /id: admission/u, "queued workers have an admission gate");
   assert.match(
     admissionBlock,
