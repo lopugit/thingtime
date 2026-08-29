@@ -29,7 +29,7 @@ export type FeedAuthor = {
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden';
+export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden' | 'custom';
 
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -169,7 +169,8 @@ export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string;
   friends: { label: 'Friends', emoji: '🤝', hint: 'Your friends circle' },
   family: { label: 'Family', emoji: '🏡', hint: 'Your family circle' },
   private: { label: 'Private', emoji: '🔒', hint: 'Only you' },
-  hidden: { label: 'Hidden', emoji: '🕵️', hint: 'Unlisted — only people with its secret link' }
+  hidden: { label: 'Hidden', emoji: '🕵️', hint: 'Unlisted — only people with its secret link' },
+  custom: { label: 'Custom', emoji: '🎭', hint: 'Pick exactly who can read, comment, or edit' }
 };
 
 export const MARKETPLACE_CATEGORY_META: Record<MarketplaceCategory, { label: string; emoji: string }> = {

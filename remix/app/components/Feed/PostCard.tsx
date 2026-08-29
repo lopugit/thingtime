@@ -43,6 +43,7 @@ import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
+import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
@@ -1187,10 +1188,33 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Custom audience 🎭: the picker composes the acl; applying PATCHes it
+  const [audienceOpen, setAudienceOpen] = React.useState(false);
+  const handleCustomApply = async (acl: string[]) => {
+    const prevVisibility = post.visibility;
+    const prevAcl = post.acl;
+    onChanged?.((prev) => ({ ...prev, visibility: 'custom' as PostVisibility, acl }));
+    try {
+      const resp = await api.v1.things.update({ id: post.id, acl });
+      if (resp?.post) {
+        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
+      }
+      lopu({ title: 'Custom audience set 🎭', description: 'Exactly the people you picked, with the powers you gave them.', status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      lopu({ title: err?.error || 'Could not change the audience 😞', status: 'error' });
+    }
+  };
+
   // Change privacy from the post menu. Optimistic: the circle badge flips
   // immediately; the server response reconciles the derived acl, and a
   // failure flips it back.
   const handleVisibilityChange = async (next: PostVisibility) => {
+    // custom routes through the picker (it needs the WHO before it can apply)
+    if (next === 'custom') {
+      setAudienceOpen(true);
+      return;
+    }
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
@@ -1565,6 +1589,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 )}
               </MenuList>
             </Menu>
+          )}
+          {isOwner && (
+            <CustomAudienceModal
+              isOpen={audienceOpen}
+              onClose={() => setAudienceOpen(false)}
+              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
+              onApply={handleCustomApply}
+            />
           )}
         </Flex>
 

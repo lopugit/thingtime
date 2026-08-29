@@ -23,16 +23,31 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
-// Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
-// Defaults to the local dev origin. A wildcard origin would let any site read this API's
-// authenticated responses, so it is deliberately not the fallback.
-const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+
+// Cross-origin callers come from an explicit allowlist, never '*' (CodeQL
+// js/cors-permissive-configuration). A wildcard let ANY site on the web read
+// every response this server produces, including authenticated ones; the
+// reflected form below echoes only origins that were configured on purpose,
+// so an unlisted site gets no Access-Control-Allow-Origin header at all.
+// Set CORS_ORIGINS to a comma-separated list to widen it, e.g.
+// CORS_ORIGINS="https://thingtime.app,http://localhost:3000"; unset it and
+// only the local dev origins are allowed. A wildcard is deliberately not the
+// fallback.
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:9999')
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
+
+// `origin` is undefined for same-origin/non-browser callers (curl, server to
+// server) — those were never subject to CORS, so they keep working.
+const corsOrigin = (origin, callback) => {
+	if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+	callback(null, false)
+}
+
 const io = new Server(server, {
 	cors: {
-		origin: corsOrigins,
+		origin: corsOrigin,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -45,7 +60,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: corsOrigins,
+		origin: corsOrigin,
 	}))
 
 	app.get('/', (req, res) => {

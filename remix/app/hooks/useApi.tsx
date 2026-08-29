@@ -658,6 +658,31 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    groups: {
+      // audience groups (custom visibility) + the picker's prefill sources
+      list: useCallback(async () => getJson('/api/v1/groups'), []),
+      create: useCallback(
+        async (args) => asyncFetcher.submit({ name: args?.name, memberIds: args?.memberIds }, { action: '/api/v1/groups' }),
+        [asyncFetcher]
+      ),
+      update: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              id: args?.id,
+              ...(args && 'name' in args ? { name: args.name } : {}),
+              ...(args && 'memberIds' in args ? { memberIds: args.memberIds } : {})
+            },
+            { action: '/api/v1/groups', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
+        [asyncFetcher]
+      ),
+      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [])
+    },
     tokens: {
       // personal access tokens (Settings → Token minter) — the mint response
       // carries the token string exactly once

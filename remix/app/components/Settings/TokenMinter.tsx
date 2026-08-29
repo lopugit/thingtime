@@ -126,7 +126,7 @@ const VISIBILITY_BY_ID = new Map(PAT_VISIBILITY_CATALOG.map((mode) => [mode.id, 
 
 // list-row badge for restricted tokens ('all' shows nothing — it's the default)
 const summarizeVisibility = (visibility: PatVisibilityMode | undefined): string => {
-  if (visibility !== 'public' && visibility !== 'private') return '';
+  if (visibility !== 'public' && visibility !== 'private' && visibility !== 'hidden') return '';
   const mode = VISIBILITY_BY_ID.get(visibility);
   return mode ? ` · ${mode.emoji} ${mode.title.toLowerCase()}` : '';
 };
@@ -442,7 +442,9 @@ export const TokenMinter = (props: { userId: string }) => {
               ? 'Public only — the token can only see and touch public things. Your private things stay invisible to it, and everything it creates must be public.'
               : visibility === 'private'
                 ? 'Private only — the token can only see and touch private (non-public) things. It can’t read the public feed, post publicly, or engage with public things; its creations default to private.'
-                : 'Public & private — no audience fence. The token reaches everything its permissions above allow.'}
+                : visibility === 'hidden'
+                  ? 'Hidden only — the token lives entirely in hidden link-key things 🕵️. Everything it creates is born hidden with a fresh secret link, and nothing outside the hidden world is visible or touchable to it.'
+                  : 'Public & private — no audience fence. The token reaches everything its permissions above allow.'}
           </Text>
         </Flex>
       </Flex>
