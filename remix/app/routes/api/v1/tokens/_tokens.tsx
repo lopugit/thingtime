@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { listPatTokens, mintPatToken, PAT_SCOPE_CATALOG } from '~/api/utils/auth/patTokens';
+import { listPatTokens, mintPatToken, PAT_SCOPE_CATALOG, PAT_VISIBILITY_CATALOG } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -24,11 +24,12 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const tokens = await listPatTokens(user.id);
-  return json({ ok: true, tokens, scopes: PAT_SCOPE_CATALOG });
+  return json({ ok: true, tokens, scopes: PAT_SCOPE_CATALOG, visibilities: PAT_VISIBILITY_CATALOG });
 };
 
 // POST /api/v1/tokens — mint: { name?, scopes: string[], expiresInMs?: number
-// | null, maxUses?: number | null }. The token string is returned ONCE and
+// | null, maxUses?: number | null, onlyCreatedThings?: boolean, visibility?:
+// 'all' | 'public' | 'private' }. The token string is returned ONCE and
 // never stored in recoverable form (only the revocable session doc is kept).
 export const action = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
@@ -51,7 +52,8 @@ export const action = async ({ request }: { request: Request }) => {
     scopes: body?.scopes,
     expiresInMs: body?.expiresInMs,
     maxUses: body?.maxUses,
-    onlyCreatedThings: body?.onlyCreatedThings
+    onlyCreatedThings: body?.onlyCreatedThings,
+    visibility: body?.visibility
   });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
