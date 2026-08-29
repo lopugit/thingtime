@@ -24,21 +24,26 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// A wildcard CORS origin lets any website read this API's cross-origin
-// responses from a visitor's browser. List the exact origins this legacy API
-// should serve in THINGTIME_API_ALLOWED_ORIGINS (comma separated). With none
-// configured no cross-origin access is granted, which is the safe default for
-// a service that is no longer deployed.
-const allowedOrigins = (process.env.THINGTIME_API_ALLOWED_ORIGINS || '')
+// Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
+// Defaults to the local dev origin. A wildcard origin would let any website read this API's
+// cross-origin responses from a visitor's browser, so it is deliberately not the fallback.
+// An explicitly empty value grants no cross-origin access at all, which is the safe setting
+// for a service that is no longer deployed.
+const configuredOrigins = (
+	process.env.CORS_ORIGINS ??
+	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
+	'http://localhost:3000'
+)
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
 
-const corsOrigin = allowedOrigins.length > 0 ? allowedOrigins : false
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : false
 
 const io = new Server(server, {
 	cors: {
-		origin: corsOrigin,
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -51,7 +56,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: corsOrigin,
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {
