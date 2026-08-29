@@ -669,7 +669,8 @@ export function useApi() {
               scopes: args?.scopes,
               expiresInMs: args?.expiresInMs ?? null,
               maxUses: args?.maxUses ?? null,
-              onlyCreatedThings: args?.onlyCreatedThings === true
+              onlyCreatedThings: args?.onlyCreatedThings === true,
+              visibility: args?.visibility ?? 'all'
             },
             { action: '/api/v1/tokens' }
           ),

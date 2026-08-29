@@ -29,6 +29,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 20 | Versioned experience history — revisit any app/search/feed state | 🔴 P1 fundamental · not started | [20-versioned-experience-history.md](./20-versioned-experience-history.md) |
 | 20 | Run actions from the component tester (confirm gate, inert browse grid) | 🔴 Not started · owner-approved | [20-tester-runs-actions.md](./20-tester-runs-actions.md) |
 | 21 | Composed app surface — a folder of Things rendered as a working mini-app | 🔴 Not started | [21-app-composition-surface.md](./21-app-composition-surface.md) |
+| 21 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (48 in use, ~5 legacy-era slots reclaimable once the v1 read path retires, budget guard) | 🔴 Not started · no rush, headroom exists | [21-index-budget-consolidation.md](./21-index-budget-consolidation.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
