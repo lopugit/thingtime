@@ -12,7 +12,10 @@ import {
 
 // Both the configured-check and the verifier read process.env at CALL time, so
 // tests can set the secret per case without module-mocking.
-const SECRET = 'whsec_test_do_not_use';
+// The literal is an arbitrary HMAC key — deliberately NOT carrying Vercel's
+// `whsec_` prefix, which secret scanners match on shape alone and then fail the
+// PR over a fixture. Only "these two keys differ" is load-bearing below.
+const SECRET = 'vercel-webhook-signing-fixture';
 
 const withSecret = <T>(secret: string | undefined, run: () => T): T => {
   const previous = process.env.VERCEL_WEBHOOK_SECRET;
@@ -89,7 +92,7 @@ test('a tampered body is rejected even with a previously valid signature', () =>
 test('a signature made with the wrong secret is rejected', () => {
   const body = JSON.stringify(envelope());
   assert.equal(
-    withSecret(SECRET, () => verifyVercelSignature(body, sign(body, 'whsec_attacker'))),
+    withSecret(SECRET, () => verifyVercelSignature(body, sign(body, 'attacker-controlled-key'))),
     false
   );
 });
