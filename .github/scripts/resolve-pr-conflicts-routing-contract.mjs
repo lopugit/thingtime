@@ -216,6 +216,10 @@ function assertWorkflowSource() {
     source.indexOf("\n  detect:"),
     source.indexOf("\n  handoff:"),
   );
+  const progressBlock = source.slice(
+    source.indexOf("\n  progress:"),
+    source.indexOf("\n  resolve:"),
+  );
   const reviewDetectBlock = source.slice(
     source.indexOf("\n  review_detect:"),
     source.indexOf("\n  review_handoff:"),
@@ -678,6 +682,49 @@ function assertWorkflowSource() {
     /RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=\$\{\{ github\.run_id \}\} -->'/u,
     "resolver status marker is scoped to the workflow run",
   );
+  assert.match(
+    detectBlock,
+    /thingtime-lopu-progress:v1 pr=\$number head=\$head_sha base=\$base_sha/u,
+    "detected work has an immutable PR/head/base progress marker",
+  );
+  assert.match(
+    detectBlock,
+    /conflicting="\$snapshots"[\s\S]*?ensure_progress_comment[\s\S]*?echo "prs=\$conflicting"/u,
+    "the detector comments before handing actionable snapshots to the worker queue",
+  );
+  assert.match(
+    detectBlock,
+    /Next automatic check-in: within \*\*10 minutes\*\*/u,
+    "the first detection comment promises the human heartbeat cadence",
+  );
+  assert.match(
+    progressBlock,
+    /name: Keep PR reviewers updated every 10 minutes/u,
+    "one dedicated human progress monitor accompanies a resolver batch",
+  );
+  assert.doesNotMatch(
+    progressBlock,
+    /\n\s+strategy:/u,
+    "the progress monitor is one batch job, never one idle runner per PR",
+  );
+  assert.match(progressBlock, /continue-on-error: true/u, "comment telemetry cannot fail valid resolution work");
+  assert.match(progressBlock, /actions: read[\s\S]*pull-requests: read[\s\S]*issues: write/u);
+  assert.match(progressBlock, /HEARTBEAT_SECONDS: "600"/u, "active work checks in every ten minutes");
+  assert.match(progressBlock, /POLL_SECONDS: "60"/u, "phase transitions are detected promptly");
+  assert.match(
+    progressBlock,
+    /actions\/runs\/\$RUN_ID\/jobs\?filter=all&per_page=100/u,
+    "the monitor reads live sibling resolver phases instead of inventing status",
+  );
+  assert.match(progressBlock, /job_name="Resolve PR #\$number"/u, "each update follows its exact matrix worker");
+  assert.match(progressBlock, /10-minute check-in: still working/u, "unchanged long phases append a heartbeat");
+  assert.match(progressBlock, /thingtime-lopu-progress-timeline:start/u, "progress history is retained in place");
+  assert.match(progressBlock, /Rebuilding Graphify structure and semantic context/u, "Graphify has a visible phase");
+  assert.match(progressBlock, /repos\/\$REPO\/pulls\/\$number/u, "completion reads the live PR verdict");
+  assert.match(progressBlock, /this PR is mergeable/u, "the human status confirms GitHub's final mergeability verdict");
+  assert.match(progressBlock, /wait_elapsed[\s\S]*-lt 180/u, "a completed worker gives GitHub a bounded verdict-refresh window");
+  assert.match(progressBlock, /there is no need to find the Actions run/u, "the PR comment is the human control surface");
+  assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
   assert.match(admissionBlock, /id: admission/u, "queued workers have an admission gate");
   assert.match(
     admissionBlock,
