@@ -1,6 +1,7 @@
 import { getAuthToken } from './authCookie';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
-import { isKnownPatScope, patScopeCovers } from './patScopes';
+import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
+import type { PatVisibilityMode } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
 import { createSession, getLiveSession } from './sessions';
 import type { SessionDoc } from './sessions';
@@ -30,8 +31,8 @@ import { getSubscription } from '../subscriptions/subscriptions';
 // The scope catalog + covering logic live in the pure module patScopes.ts so
 // the client-side permissions selector can import them without dragging Mongo
 // into the bundle; re-exported here for the server-side callers.
-export { PAT_SCOPE_CATALOG, PAT_SCOPE_IDS, isKnownPatScope, patScopeCovers } from './patScopes';
-export type { PatScopeDescriptor } from './patScopes';
+export { PAT_SCOPE_CATALOG, PAT_SCOPE_IDS, PAT_VISIBILITY_CATALOG, isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
+export type { PatScopeDescriptor, PatVisibilityDescriptor, PatVisibilityMode } from './patScopes';
 
 // Bounds. Accumulation is bounded by the per-user cap (revoked never-expiring
 // tokens get a reap date on revoke, and the TTL index clears expired docs).
@@ -51,6 +52,9 @@ export type PublicPatToken = {
   // sandbox: permissions apply only to things this token itself created
   // (things.ts stamps createdByTokenId on every PAT-created thing)
   onlyCreatedThings: boolean;
+  // audience fence: which visibility of things the token may see/touch
+  // ('all' = unrestricted; tokens minted before the field read as 'all')
+  visibility: PatVisibilityMode;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -62,6 +66,11 @@ export type PublicPatToken = {
 
 const patSessionScopes = (meta: Record<string, any> | undefined): string[] =>
   Array.isArray(meta?.scopes) ? meta.scopes.filter(isKnownPatScope) : [];
+
+// Absent (every pre-visibility token) and unknown values both read as 'all' —
+// the unrestricted behaviour those tokens were minted with.
+const patSessionVisibility = (meta: Record<string, any> | undefined): PatVisibilityMode =>
+  isKnownPatVisibility(meta?.visibility) ? meta!.visibility : 'all';
 
 export const toPublicPatToken = (session: SessionDoc): PublicPatToken => {
   const meta = session.meta ?? {};
@@ -82,6 +91,7 @@ export const toPublicPatToken = (session: SessionDoc): PublicPatToken => {
     name: typeof meta.name === 'string' && meta.name ? meta.name : 'API token',
     scopes: patSessionScopes(meta),
     onlyCreatedThings: meta.onlyCreatedThings === true,
+    visibility: patSessionVisibility(meta),
     createdAt: new Date(session.createdAt).toISOString(),
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     maxUses,
@@ -98,6 +108,7 @@ export type MintPatInput = {
   expiresInMs?: unknown;
   maxUses?: unknown;
   onlyCreatedThings?: unknown;
+  visibility?: unknown;
 };
 
 export type MintPatResult =
@@ -141,6 +152,16 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
     maxUses = Math.min(Math.floor(value), PAT_MAX_USES);
   }
 
+  // Same fail-loudly stance as scopes: a typo'd visibility must surface at
+  // mint time, never silently widen to 'all'.
+  let visibility: PatVisibilityMode = 'all';
+  if (input.visibility !== null && input.visibility !== undefined) {
+    if (!isKnownPatVisibility(input.visibility)) {
+      return { ok: false, status: 400, error: `Unknown visibility: ${String(input.visibility)} — use 'all', 'public', or 'private'` };
+    }
+    visibility = input.visibility;
+  }
+
   const sessions = await getSessionsCollection();
   // The cap is the user's subscription tier (null = unlimited, e.g. payg);
   // free mirrors MAX_PAT_TOKENS_PER_USER.
@@ -167,6 +188,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       maxUses,
       usesRemaining: maxUses,
       onlyCreatedThings: input.onlyCreatedThings === true,
+      // only restrictions are stored — absent means 'all', matching every
+      // token minted before the field existed
+      ...(visibility !== 'all' ? { visibility } : {}),
       createdVia: 'token-minter'
     }
   });
@@ -240,6 +264,9 @@ export type PatContext = {
   // sandbox: this token's permissions apply only to things it created —
   // things.ts viewerOf(user, pat) turns this into stamp checks
   onlyCreatedThings: boolean;
+  // audience fence: things.ts viewerOf(user, pat) turns 'public'/'private'
+  // into acl checks on every read and mutation ('all' = unrestricted)
+  visibility: PatVisibilityMode;
   expiresAt: Date | null;
   maxUses: number | null;
   // remaining AFTER this request's consumption
@@ -312,6 +339,7 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
           name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
           scopes,
           onlyCreatedThings: session.meta?.onlyCreatedThings === true,
+          visibility: patSessionVisibility(session.meta),
           expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
           maxUses,
           usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - 1)
