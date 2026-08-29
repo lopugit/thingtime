@@ -7,6 +7,7 @@ import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 
 import { ThemePreviewCard } from './ThemeStudio';
+import { resolveTheme, THINGTIME_THEME } from '~/theme/tokens';
 import type { TtTheme } from '~/theme/tokens';
 
 // /themes/gallery — the public theme gallery (claude-todo/10 ✨): every public
@@ -59,7 +60,21 @@ export const ThemeGallery = () => {
 				const res = await api.v1.themes.listShared();
 				if (cancelled) return;
 				if (res?.ok && Array.isArray(res.themes)) {
-					setThemes(res.themes);
+					// Resolve every listed theme against the default before it reaches a
+					// preview card. Unlike "My themes" — one person's own saves — this
+					// grid renders documents written by STRANGERS, straight into
+					// themeToCssVars, which reads theme.colors.*, colors.rainbow[0..4]
+					// and general.* unguarded. Stored docs are not guaranteed
+					// current-shaped (themeToCssVars already carries a
+					// `theme.windows || THINGTIME_THEME.windows` fallback for exactly
+					// that reason), and there is no ErrorBoundary anywhere in the app,
+					// so ONE stale or partially-migrated public doc would white-screen
+					// /themes/gallery for every visitor. resolveTheme is the same
+					// sanitizer saveTheme applies on write, so a well-formed theme
+					// round-trips byte-identically; a malformed one falls back per
+					// token instead of throwing — and any pre-sanitizer legacy value
+					// gets re-gated before it becomes a CSS custom property.
+					setThemes(res.themes.map((entry: any) => ({ ...entry, theme: resolveTheme(THINGTIME_THEME, entry?.theme) })));
 				} else {
 					setError(res?.error || 'The gallery could not be loaded');
 				}

@@ -29,6 +29,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // public theme gallery list (GET /api/v1/themes/shared with no id) — the same
+  // anonymous browse shape as schemas.browse; it only ever returns public theme
+  // projections, but each call is two indexed reads and up to 60 token docs
+  'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },

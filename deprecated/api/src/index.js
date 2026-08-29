@@ -23,9 +23,26 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
+
+// Cross-origin access is an explicit allowlist, never '*'.
+//
+// Nothing builds or runs this package any more — it moved under deprecated/ in
+// the repo consolidation, its pm2 entry is commented out in
+// ecosystem.config.js, the root `npm run api` script points at a directory that
+// no longer exists, and Vercel only ever builds remix/. That makes the wildcard
+// unexploitable TODAY, but it is still a genuinely permissive configuration
+// sitting in the tree: it re-flags on every scan, and it would be a live
+// world-readable API the moment anyone revived the server. A closed default is
+// the honest resolution — set THINGTIME_API_ALLOWED_ORIGINS (comma separated)
+// to whatever a revival actually needs.
+const ALLOWED_ORIGINS = (process.env.THINGTIME_API_ALLOWED_ORIGINS || 'http://localhost:3000')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean)
+
 const io = new Server(server, {
 	cors: {
-		origin: '*',
+		origin: ALLOWED_ORIGINS,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -36,9 +53,9 @@ import { v4 as uuidv4 } from 'uuid'
 
 	await thingtime.init()
 
-	// Express middleware
+	// Express middleware — same allowlist as the socket.io server above
 	app.use(cors({
-		origin: '*',
+		origin: ALLOWED_ORIGINS,
 	}))
 
 	app.get('/', (req, res) => {

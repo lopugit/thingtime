@@ -479,7 +479,27 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     //
     // Verified on a local 40k-theme / 40k-post dataset: 40,000 keys and 40,000
     // docs examined with a blocking SORT, down to 600 and 600 with none.
-    col.createIndex({ thingtime: 1, updatedAt: -1 }),
+    //
+    // PARTIAL on thingtime:'theme' — `things` is the whole platform (posts,
+    // comments, reactions, chat messages, attachments, every ci-* record), and
+    // an unfiltered key would add an entry per thingtime element to EVERY one
+    // of those writes, forever, to serve one gallery read. The partial filter
+    // is the same tool `notification_unread` below uses for the same reason.
+    // Both theme queries name thingtime:'theme' explicitly, so the planner can
+    // still prove the predicate implies the filter and use the index for the
+    // gallery AND listThemesForUser; no other query in the codebase sorts
+    // `things` by a bare updatedAt under a thingtime equality.
+    //
+    // createIndexReplacing (not a bare createIndex) because a same-key index
+    // with different options is IndexOptionsConflict(85): any environment that
+    // already built the unfiltered `thingtime_1_updatedAt_-1` gets it swapped
+    // for the scoped one instead of failing the whole ensure batch.
+    createIndexReplacing(
+      col,
+      { thingtime: 1, updatedAt: -1 },
+      { name: 'theme_gallery_updated', partialFilterExpression: { thingtime: 'theme' } },
+      ['thingtime_1_updatedAt_-1']
+    ),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
