@@ -94,7 +94,7 @@ export const ThemeGallery = () => {
 				await navigator.clipboard.writeText(url);
 				lopu({ title: 'Share link copied 🔗', description: 'Anyone with the link can apply this theme.', status: 'success', duration: 6000 });
 			} catch {
-				lopu({ title: 'Could not copy the link', description: url, status: 'warning' });
+				lopu({ title: 'Could not copy the link', description: url, status: 'error' });
 			}
 		},
 		[lopu]
