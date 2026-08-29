@@ -155,8 +155,12 @@ test('a connection string stored under a plain key keeps its credential out of t
 	const curl = buildCurlForEntry(logged, 'https://thingtime.com');
 	assert.ok(!curl.includes(userinfoFixture), 'copy-as-curl must not leak a connection-string password');
 	assert.ok(!curl.includes('svcuser'), 'the userinfo username goes with it');
-	// the row must still say which endpoint was configured
-	assert.ok(curl.includes('cluster0.abc.mongodb.net'));
+	// the row must still say which endpoint was configured — exact-shape, per the
+	// convention the `@`-tail test below states: asserting the whole redacted URI
+	// pins that the credential was replaced *and* that scheme/host/db survived,
+	// where a bare host substring would also pass if the match had over- or
+	// under-consumed around it.
+	assert.ok(curl.includes('mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime'));
 });
 
 test('userinfo redaction leaves ordinary urls — including @handle paths — intact', () => {
