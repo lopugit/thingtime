@@ -51,10 +51,9 @@ export const regexToReplacementConverter = async (props: any) => {
   });
 
   // replace all escaped characters in newValue such as \{ \\ \[ \] \} \. with unescaped versions.
-  // One left-to-right pass that consumes the backslash together with the character it escapes:
-  // running these as separate sequential replaces let the `\\` -> `\` rule emit a backslash that a
-  // later rule unescaped a second time, so `\\]` collapsed to `]` and lost the escaped backslash.
-  newValue = newValue.replace(/\\([\\{[\]}.])/g, "$1");
+  // one left-to-right pass that consumes each backslash together with the character it escapes,
+  // so a backslash produced by unescaping \\ is never unescaped a second time (\\] stays \], not ]).
+  newValue = newValue.replace(/\\([\\[\]{}.])/g, "$1");
 
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");
