@@ -1458,7 +1458,8 @@ jobs:
           # ten-minute timeline updates.
           ensure_progress_comment() {
             local item="$1" number head base head_sha base_sha mode queue_total
-            local marker comments comment_id body detected eta title event now_epoch context
+            local marker comments comment_id existing_body body detected eta title event now_epoch context
+            local timeline_file trimmed_file
             number="$(jq -r '.number' <<<"$item")"
             head="$(jq -r '.head' <<<"$item")"
             base="$(jq -r '.base' <<<"$item")"
@@ -1487,8 +1488,22 @@ jobs:
                   | .id]
               | last // empty
             ' "$comments")"
+            # A queue entry can predate the status-dashboard helper. Upgrade
+            # that exact immutable snapshot in place instead of treating the
+            # legacy marker as proof that the richer human surface exists.
+            existing_body="$(jq -r --arg marker "$marker" '
+              add // []
+              | [.[]
+                  | select(.user.login == "github-actions[bot]")
+                  | select(.body | contains($marker))]
+              | last
+              | .body // ""
+            ' "$comments")"
             rm -f "$comments"
-            [ -z "$comment_id" ] || return 0
+            if [ -n "$comment_id" ] \
+               && grep -Fq '### Time conversion (UTC source)' <<<"$existing_body"; then
+              return 0
+            fi
 
             detected="$(date -u '+%H:%M UTC')"
             eta="$(date -u -d '+20 minutes' '+%H:%M UTC')"
@@ -1500,6 +1515,20 @@ jobs:
               title='Lopu detected merge conflicts'
               event="Detected conflicts between \`$base\` and \`$head\`; assigning the exact snapshot to the resolver queue."
             fi
+            timeline_file="$RUNNER_TEMP/lopu-progress-timeline-$number.txt"
+            trimmed_file="$RUNNER_TEMP/lopu-progress-timeline-trimmed-$number.txt"
+            awk '
+              /thingtime-lopu-progress-timeline:start/ { capture=1; next }
+              /thingtime-lopu-progress-timeline:end/ { capture=0 }
+              capture { print }
+            ' <<<"$existing_body" >"$timeline_file"
+            if [ -s "$timeline_file" ]; then
+              printf -- '- %s — Refreshed the live timezone, queue, stack, and changed-file context for this admitted snapshot.\n' \
+                "$detected" >>"$timeline_file"
+            else
+              printf -- '- %s — %s\n' "$detected" "$event" >"$timeline_file"
+            fi
+            tail -n 60 "$timeline_file" >"$trimmed_file"
             body="$RUNNER_TEMP/lopu-progress-$number.md"
             {
               printf '## 🤖 %s\n\n' "$title"
@@ -1523,11 +1552,17 @@ jobs:
               printf '\n'
               printf '### Timeline\n'
               printf '<!-- thingtime-lopu-progress-timeline:start -->\n'
-              printf -- '- %s — %s\n' "$detected" "$event"
+              cat "$trimmed_file"
               printf '<!-- thingtime-lopu-progress-timeline:end -->\n\n'
               printf '%s\n' "$marker"
             } >"$body"
-            gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            rm -f "$timeline_file" "$trimmed_file"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" \
+                -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
           }
 
           all_open_prs() {

@@ -747,6 +747,21 @@ function assertWorkflowSource() {
     "the immediate comment renders UTC conversions and queue context",
   );
   assert.match(
+    detectBlock,
+    /existing_body[\s\S]*?Time conversion \(UTC source\)[\s\S]*?return 0/u,
+    "a legacy exact-snapshot comment is upgraded unless it already contains the status dashboard",
+  );
+  assert.match(
+    detectBlock,
+    /thingtime-lopu-progress-timeline:start[\s\S]*?tail -n 60/u,
+    "upgrading a legacy comment preserves and bounds its existing progress timeline",
+  );
+  assert.match(
+    detectBlock,
+    /gh api --method PATCH "repos\/\$REPO\/issues\/comments\/\$comment_id"/u,
+    "the detector edits the legacy comment in place instead of adding a duplicate",
+  );
+  assert.match(
     progressBlock,
     /name: Keep PR reviewers updated every 10 minutes/u,
     "one dedicated human progress monitor accompanies a resolver batch",
