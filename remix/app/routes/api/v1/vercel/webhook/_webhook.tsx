@@ -23,7 +23,9 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const rawBody = await request.text().catch(() => '');
-  if (rawBody.length > MAX_BODY_BYTES) {
+  // byte length, not String#length — a body of multi-byte UTF-8 would slip past
+  // a code-unit cap (matches the integrations receiver's check)
+  if (Buffer.byteLength(rawBody, 'utf8') > MAX_BODY_BYTES) {
     return json({ ok: false, error: 'Request body too large' }, { status: 413 });
   }
 
