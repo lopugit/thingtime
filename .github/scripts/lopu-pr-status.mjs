@@ -69,13 +69,13 @@ export const LABEL_DEFINITIONS = Object.freeze([
   {
     name: "lopu: queued",
     color: "1d76db",
-    description: "The exact PR snapshot is waiting in Lopu's resolver queue",
+    description: "The current PR snapshot is waiting in Lopu's PR-management queue",
     scope: "lane",
   },
   {
     name: "lopu: resolving",
     color: "8250df",
-    description: "Lopu is actively updating this PR branch",
+    description: "Lopu is actively managing this PR branch",
     scope: "lane",
   },
   {
@@ -87,6 +87,9 @@ export const LABEL_DEFINITIONS = Object.freeze([
 ]);
 
 const FACT_LABEL_ORDER = LABEL_DEFINITIONS.filter(({ scope }) => scope === "fact").map(
+  ({ name }) => name,
+);
+const LANE_LABEL_ORDER = LABEL_DEFINITIONS.filter(({ scope }) => scope === "lane").map(
   ({ name }) => name,
 );
 
@@ -239,13 +242,52 @@ export function classifyInventory(rawInventory, { defaultRef = "main" } = {}) {
 export function labelDelta({ current = [], managed = [], desired = [] } = {}) {
   const currentNames = uniqueSortedStrings(current);
   const managedNames = new Set(uniqueSortedStrings(managed));
-  const desiredNames = uniqueSortedStrings(desired);
+  const desiredNames = uniqueSortedStrings(desired).filter((name) => managedNames.has(name));
   const currentSet = new Set(currentNames);
   const desiredSet = new Set(desiredNames);
   return {
     add: desiredNames.filter((name) => !currentSet.has(name)),
     remove: currentNames.filter((name) => managedNames.has(name) && !desiredSet.has(name)),
   };
+}
+
+export function planLaneLabels(rawInventory, { owners = [], candidates = [] } = {}) {
+  if (!Array.isArray(rawInventory) || !Array.isArray(owners) || !Array.isArray(candidates)) {
+    throw new Error("Lane reconciliation requires PR, owner, and candidate arrays");
+  }
+
+  const ownerLaneByNumber = new Map();
+  for (const owner of owners) {
+    if (!Number.isSafeInteger(owner?.number) || owner.number <= 0) {
+      throw new Error("Lane owner entries require a positive integer PR number");
+    }
+    const status = String(owner.status ?? "");
+    const lane = status === "in_progress"
+      ? "lopu: resolving"
+      : ["pending", "queued", "requested", "waiting"].includes(status)
+        ? "lopu: queued"
+        : "";
+    if (!lane) continue;
+    if (lane === "lopu: resolving" || !ownerLaneByNumber.has(owner.number)) {
+      ownerLaneByNumber.set(owner.number, lane);
+    }
+  }
+
+  const candidateNumbers = new Set(uniqueSortedNumbers(candidates));
+  return rawInventory.map(normalizePr).map((pr) => {
+    const actionable = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "BEHIND";
+    const ownerLane = ownerLaneByNumber.get(pr.number);
+    let desired = [];
+    if (ownerLane) desired = [ownerLane];
+    else if (actionable && candidateNumbers.has(pr.number)) desired = ["lopu: queued"];
+    else if (actionable && pr.labels.includes("lopu: needs attention")) {
+      desired = ["lopu: needs attention"];
+    }
+    return {
+      number: pr.number,
+      desiredLaneLabels: LANE_LABEL_ORDER.filter((name) => desired.includes(name)),
+    };
+  });
 }
 
 export function summarizeBatch(prs, jobs) {
@@ -468,6 +510,16 @@ async function main() {
   if (command === "label-delta") {
     const input = await readStdin();
     process.stdout.write(`${JSON.stringify(labelDelta(input))}\n`);
+    return;
+  }
+  if (command === "lane-plan") {
+    const input = await readStdin();
+    process.stdout.write(
+      `${JSON.stringify(planLaneLabels(input?.prs, {
+        owners: input?.owners,
+        candidates: input?.candidates,
+      }))}\n`,
+    );
     return;
   }
   if (command === "batch-counts") {
