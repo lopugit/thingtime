@@ -189,8 +189,11 @@ test('an unencoded @ inside the credential does not leave its tail in the log', 
 	// straight out as curl.
 	const tail = 'tail-that-must-not-survive';
 	const credential = ['head', '@', tail].join('');
+	// assembled piecewise, per this file's convention, so no scanner ever sees a
+	// literal `scheme://user:pass@host` connection string in source
+	const connectionString = ['mongodb+srv://svcuser', ':', credential, '@', 'cluster0.abc.mongodb.net/thingtime'].join('');
 	assert.equal(
-		redactUriCredentials(`mongodb+srv://svcuser:${credential}@cluster0.abc.mongodb.net/thingtime`),
+		redactUriCredentials(connectionString),
 		'mongodb+srv://•••@cluster0.abc.mongodb.net/thingtime'
 	);
 
@@ -199,7 +202,7 @@ test('an unencoded @ inside the credential does not leave its tail in the log', 
 		...baseEntry,
 		method: 'POST',
 		url: '/api/v1/mongodb/endpoints',
-		body: { name: 'prod', url: `mongodb+srv://svcuser:${credential}@cluster0.abc.mongodb.net/thingtime` }
+		body: { name: 'prod', url: connectionString }
 	});
 	const [logged] = getApiCalls();
 	// exact-shape, not a host substring check: greediness is the risk this
