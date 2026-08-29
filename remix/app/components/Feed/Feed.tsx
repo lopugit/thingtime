@@ -75,6 +75,15 @@ export const FeedPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tagParam = (searchParams.get('tag') || '').trim().toLowerCase() || null;
 
+  // Advanced mode runs the other query grammar, and /things/search ORs its tag
+  // list (`{ tags: { $in: [...] } }`) — folding the URL tag into a non-empty
+  // advanced tags input would WIDEN the page instead of narrowing it. So the
+  // tag is honoured there only when the panel names no tags of its own;
+  // otherwise the panel's explicit input wins and the banner says so rather
+  // than captioning a page that was never tag-filtered.
+  const advancedTags = appliedAdvanced?.tags.trim() || '';
+  const tagApplied = !!tagParam && !advancedTags;
+
   const clearTagParam = React.useCallback(() => {
     setSearchParams(
       (prev) => {
@@ -104,6 +113,10 @@ export const FeedPage = () => {
           // way the feed projects them — simple filters keep narrowing
           const resp = await apiRef.current.v1.things.search({
             ...advancedSearchBody(appliedAdvanced),
+            // spread after the body so the URL tag fills search's `tags` slot.
+            // tagApplied is false whenever the panel set its own tags, so this
+            // only ever fills an unset field — it never overwrites the input.
+            ...(tagApplied ? { tags: tagParam } : {}),
             types: filters.types.length ? filters.types : undefined,
             circles: filters.circles.length ? filters.circles : undefined,
             from: filters.from || undefined,
@@ -158,7 +171,7 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, appliedAdvanced, tagParam]
+    [filters, algorithmId, appliedAdvanced, tagParam, tagApplied]
   );
 
   // initial fetch + reset whenever the filters, algorithm, or advanced search
@@ -277,7 +290,7 @@ export const FeedPage = () => {
             background="var(--tt-card, #fff)"
           >
             <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
-              Posts tagged{' '}
+              {tagApplied ? 'Posts tagged' : 'Advanced search tags override'}{' '}
               <Text as="span" fontFamily="mono" fontWeight={700} color="var(--tt-ink, #16161a)">
                 #{tagParam}
               </Text>
