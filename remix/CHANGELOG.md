@@ -1102,10 +1102,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   rejecting new unbound runtimes or obsolete hard-coded models. The deleted
   legacy GitHub workflow registration was also disabled.
   — Codex (AI), 2026-08-10
-- **PR conflict resolver model selection follows Thingtime Admin**: the older
-  workflow snapshot on PR #54 now loads the public, allowlisted model waterfall
-  instead of hardcoding Opus 4.8, safely falling back to the Claude default if
-  the setting is unavailable or malformed. — Codex (AI), 2026-08-10
+- **PR conflict resolver model selection follows Thingtime Admin**: the
+  protected `github-actions` resolver controller loads the public, allowlisted
+  model waterfall instead of hardcoding Opus 4.8, safely falling back to the
+  Claude default if the setting is unavailable or malformed. The change was
+  authored on PR #54, but that branch's `.github/workflows/` snapshot has since
+  been collapsed back to the trigger-only listener, so the live implementation
+  is on `github-actions` only. — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default

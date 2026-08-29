@@ -23,9 +23,17 @@ import { default as s } from 'smarts'
 const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
+// Cross-origin access is opt-in: set CORS_ALLOWED_ORIGINS to a comma-separated list of exact
+// origins. Unset means same-origin only. Never a wildcard -- this API answers with credential-
+// bearing user data, so `origin: '*'` would let any site read it from a logged-in browser.
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean)
+const corsOrigin = allowedOrigins.length ? allowedOrigins : false
 const io = new Server(server, {
 	cors: {
-		origin: '*',
+		origin: corsOrigin,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -38,7 +46,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	// Express middleware
 	app.use(cors({
-		origin: '*',
+		origin: corsOrigin,
 	}))
 
 	app.get('/', (req, res) => {

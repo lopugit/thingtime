@@ -124,9 +124,10 @@ Collections, with the two new ones marked:
   bounces, complaints, manual blocks, and unsubscribe-all.
 - `email_unsubscribes`: tokenized unsubscribe requests, one-click requests, and
   body-link preference changes.
-- `email_inbound_messages` **(new)**: inbound/reply metadata, routing target, parsed
-  participants, spam verdict, and raw MIME pointer.
-- `email_delivery_limits` **(new)**: per-domain, per-stream, per-IP, and global throttles.
+- `email_inbound_messages` **(new)**: inbound/reply metadata, routing target,
+  parsed participants, spam verdict, and raw MIME pointer.
+- `email_delivery_limits` **(new)**: per-domain, per-stream, per-IP, and global
+  throttles.
 
 Raw MIME can exceed MongoDB's normal document limits. Store large raw MIME in
 object storage or Mongo GridFS and keep a content hash plus storage pointer in
@@ -215,6 +216,19 @@ Authentication requirements:
   waiting for old mail to age out, then removing the old selector.
 - DMARC must align the visible `From:` domain with either the SPF envelope
   domain or the DKIM `d=` domain.
+- SPF is evaluated against the **envelope** sender (`MAIL FROM`/Return-Path),
+  not the `From:` header. A separate bounce domain therefore needs its own SPF
+  record: if bounces use `bounce.thingtime.com`, that name — not just `auth.`
+  and `news.` — must publish `v=spf1 ip4:<smtp-ipv4> -all`.
+- Resolve the bounce-domain/alignment conflict before publishing DMARC. The
+  `aspf=s` shown above is *strict* SPF alignment, which requires the envelope
+  domain to equal the `From:` domain exactly, so a `bounce.thingtime.com`
+  Return-Path under an `auth.thingtime.com` From will always fail SPF
+  alignment and leave DKIM as the only passing path. Either use `aspf=r`
+  (relaxed — both names share the `thingtime.com` organizational domain, so
+  they align), or keep the Return-Path on the same subdomain as `From:`. Do not
+  ship `aspf=s` with a split bounce domain and then treat the resulting
+  aggregate-report failures as the warm-up policy's "unexpected failures".
 - Transactional and newsletter streams must use stable From addresses.
 - Do not use `gmail.com`, `googlemail.com`, or other third-party domains in
   `From:` headers.
