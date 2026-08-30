@@ -66,8 +66,9 @@ identity anchored throughout the bounded drain.
 - Browser QA covered 1100x760 and 390x844 viewports, full scrolling, all tabs,
   selection, expanded details, diff panes, confirmation gating, and horizontal
   overflow.
-- Graphify semantic refresh completed through the local Codex proxy with
-  28,899 nodes, 71,638 edges, and 1,266 communities.
+- Graphify semantic refresh completed after synchronizing the latest `main`
+  through the local Codex proxy with 28,968 nodes, 71,787 edges, and 1,273
+  communities.
 
 ## Remaining live gate
 
