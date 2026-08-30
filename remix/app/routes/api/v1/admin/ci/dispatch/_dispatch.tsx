@@ -4,6 +4,7 @@ import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { dispatchCiWorkflow, type CiWorkflowKey } from '~/api/utils/ciControl/githubClient';
 
 const WORKFLOWS = new Set<CiWorkflowKey>([
+  'feature-stack',
   'resolve-conflicts',
   'rebase-stack',
   'promote-features',
