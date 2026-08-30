@@ -193,7 +193,7 @@ export const ActionsPage = () => {
 						</Text>
 					</Box>
 					{user && !building ? (
-						<Button colorScheme="pink" onClick={() => setBuilding(true)} size="sm">
+						<Button bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" onClick={() => setBuilding(true)} size="sm" _hover={{ opacity: 0.9 }}>
 							⚡ New action
 						</Button>
 					) : null}

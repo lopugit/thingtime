@@ -1,22 +1,51 @@
-import { Box, Button, Container, Divider, Flex, Heading, Text, Badge, Link, Progress } from '@chakra-ui/react';
+import type { ReactNode } from 'react';
+import { Box, Button, Flex, Link, Text } from '@chakra-ui/react';
 import { useLoaderData, useRevalidator } from 'react-router';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
+import { CARD_STYLES } from '~/theme/card';
+import { RAINBOW } from '~/theme/rainbow';
+import { PageHeader, PageShell } from '../components/Layout/PageShell';
+
+const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
 
 const value = (raw?: string | null) => raw || '—';
+
+const StatusRow = (props: { label: string; first?: boolean; children: ReactNode }) => (
+  <Flex
+    justify="space-between"
+    alignItems="baseline"
+    gap={4}
+    py={2.5}
+    borderTop={props.first ? undefined : '1px solid var(--tt-border-light, #f0f0f2)'}
+  >
+    <Text
+      fontFamily={MONO}
+      fontSize="xs"
+      fontWeight={600}
+      letterSpacing="0.06em"
+      textTransform="uppercase"
+      color="var(--tt-muted, #9a9aa6)"
+      flexShrink={0}
+    >
+      {props.label}
+    </Text>
+    {props.children}
+  </Flex>
+);
 
 export default function StatusPage() {
   const status = useLoaderData() as VercelDeploymentStatus;
   const revalidator = useRevalidator();
 
-  const badgeScheme =
+  const dotColor =
     status.state === 'ready'
-      ? 'green'
+      ? 'var(--tt-positive, #2f8f4f)'
       : status.state === 'building' || status.state === 'queued'
-        ? 'yellow'
+        ? 'var(--tt-warning, #ffbc48)'
         : status.state === 'local'
-          ? 'gray'
-          : 'red';
+          ? 'var(--tt-muted, #9a9aa6)'
+          : 'var(--tt-danger, #d6455a)';
   const buildProgress = typeof status.buildProgress === 'number' ? status.buildProgress : 0;
   const buildProgressText =
     status.buildProgress === undefined || Number.isNaN(status.buildProgress)
@@ -25,124 +54,131 @@ export default function StatusPage() {
   const checking = revalidator.state === 'loading';
 
   return (
-    <Container maxWidth="container.md" py={24}>
-      <Flex flexDirection="column" gap={6}>
-        <Flex alignItems="center" gap={3}>
-          <Box
-            width="14px"
-            height="14px"
-            borderRadius="full"
-            bg={status.state === 'ready' ? 'var(--tt-positive, #48BB78)' : status.state === 'building' || status.state === 'queued' ? 'var(--tt-warning, #ECC94B)' : status.state === 'local' ? 'var(--tt-muted, #718096)' : 'var(--tt-danger, #FC8181)'}
-          />
-          <Heading size="lg">Vercel Deployment Status</Heading>
-        </Flex>
+    <PageShell width={760}>
+      <PageHeader
+        eyebrow="Thingtime · deployment health"
+        title="Status 🚀"
+        variant="rainbow"
+        subtitle={
+          <>
+            Sourced from server endpoint{' '}
+            <Text as="span" fontFamily={MONO}>
+              /api/v1/vercel/status
+            </Text>
+          </>
+        }
+      />
 
+      <Box {...CARD_STYLES} px={5} py={4}>
         <Flex alignItems="center" gap={3}>
-          <Badge colorScheme={badgeScheme} px={3} py={1} borderRadius="md">
+          <Box width="10px" height="10px" borderRadius="full" bg={dotColor} flexShrink={0} />
+          <Text
+            fontFamily={MONO}
+            fontSize="xs"
+            fontWeight={600}
+            letterSpacing="0.08em"
+            textTransform="uppercase"
+            color="var(--tt-muted, #9a9aa6)"
+          >
             {status.label}
-          </Badge>
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Sourced from server endpoint <Text as="span" fontFamily="mono">/api/v1/vercel/status</Text>
           </Text>
         </Flex>
+      </Box>
 
-        <Divider />
-
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Branch
+      <Box {...CARD_STYLES} px={5} py={2}>
+        <StatusRow label="Branch" first>
+          <Text fontFamily={MONO} fontSize="sm" color="var(--tt-ink, #16161a)">
+            {value(status.branch)}
           </Text>
-          <Text fontFamily="mono" fontSize="sm">{value(status.branch)}</Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Commit
+        </StatusRow>
+        <StatusRow label="Commit">
+          <Text fontFamily={MONO} fontSize="sm" color="var(--tt-ink, #16161a)">
+            {value(status.commitSha)}
           </Text>
-          <Text fontFamily="mono" fontSize="sm">{value(status.commitSha)}</Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Environment
+        </StatusRow>
+        <StatusRow label="Environment">
+          <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+            {value(status.environment)}
           </Text>
-          <Text fontSize="sm">{value(status.environment)}</Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Deployment URL
-          </Text>
-          <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
+        </StatusRow>
+        <StatusRow label="Deployment URL">
+          <Text fontFamily={MONO} fontSize="sm" textAlign="right" maxW="65%" wordBreak="break-all">
             {status.deploymentUrl ? (
-              <Link href={status.deploymentUrl} color="var(--tt-link, #319795)" isExternal>
+              <Link href={status.deploymentUrl} color="var(--tt-link, #2f8fd6)" isExternal>
                 {status.deploymentUrl}
               </Link>
             ) : (
               '—'
             )}
           </Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Latest Deployment URL
-          </Text>
-          <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
+        </StatusRow>
+        <StatusRow label="Latest Deployment URL">
+          <Text fontFamily={MONO} fontSize="sm" textAlign="right" maxW="65%" wordBreak="break-all">
             {status.latestDeploymentUrl ? (
-              <Link href={status.latestDeploymentUrl} color="var(--tt-link, #319795)" isExternal>
+              <Link href={status.latestDeploymentUrl} color="var(--tt-link, #2f8fd6)" isExternal>
                 {status.latestDeploymentUrl}
               </Link>
             ) : (
               '—'
             )}
           </Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Build page
-          </Text>
-          <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
+        </StatusRow>
+        <StatusRow label="Build page">
+          <Text fontFamily={MONO} fontSize="sm" textAlign="right" maxW="65%">
             {status.buildPageUrl ? (
-              <Link href={status.buildPageUrl} color="var(--tt-link, #319795)" isExternal>
+              <Link href={status.buildPageUrl} color="var(--tt-link, #2f8fd6)" isExternal>
                 Open build info
               </Link>
             ) : (
               '—'
             )}
           </Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Build phase
-          </Text>
-          <Text fontFamily="mono" fontSize="sm" textAlign="right">
+        </StatusRow>
+        <StatusRow label="Build phase">
+          <Text fontFamily={MONO} fontSize="sm" textAlign="right" color="var(--tt-ink, #16161a)">
             {value(status.buildPhase)}
           </Text>
-        </Flex>
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Build progress
-          </Text>
-          <Text fontFamily="mono" fontSize="sm" textAlign="right">
+        </StatusRow>
+        <StatusRow label="Build progress">
+          <Text fontFamily={MONO} fontSize="sm" textAlign="right" color="var(--tt-ink, #16161a)">
             {buildProgressText}
           </Text>
-        </Flex>
-        {status.state === 'building' || status.state === 'queued' ? <Progress value={buildProgress} size="sm" max={100} min={0} isIndeterminate={status.buildProgress === undefined} /> : null}
-        <Flex justify="space-between">
-          <Text color="var(--tt-muted, #718096)" fontSize="sm">
-            Vercel API configured
+        </StatusRow>
+        {status.state === 'building' || status.state === 'queued' ? (
+          <Box
+            mb={2.5}
+            height="6px"
+            borderRadius="var(--tt-radius-pill, 999px)"
+            bg="var(--tt-surface-alt, #f5f5f7)"
+            overflow="hidden"
+          >
+            <Box
+              height="100%"
+              borderRadius="var(--tt-radius-pill, 999px)"
+              width={status.buildProgress === undefined ? '100%' : `${buildProgress}%`}
+              background={status.buildProgress === undefined ? RAINBOW : 'var(--tt-positive, #2f8f4f)'}
+              transition="width 0.3s ease"
+            />
+          </Box>
+        ) : null}
+        <StatusRow label="Vercel API configured">
+          <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+            {status.configured ? 'yes' : 'no'}
           </Text>
-          <Text fontSize="sm">{status.configured ? 'yes' : 'no'}</Text>
-        </Flex>
-        {status.error ? (
-          <Text color="var(--tt-danger, #FC8181)" fontSize="sm" whiteSpace="pre-wrap">
+        </StatusRow>
+      </Box>
+
+      {status.error ? (
+        <Box bg="rgba(214, 69, 90, 0.12)" borderRadius="var(--tt-radius-md, 12px)" px={4} py={3}>
+          <Text color="var(--tt-danger, #d6455a)" fontSize="sm" whiteSpace="pre-wrap">
             {status.error}
           </Text>
-        ) : null}
+        </Box>
+      ) : null}
 
-        <Divider />
-
-        <Button size="sm" width="fit-content" onClick={() => revalidator.revalidate()} isLoading={checking} loadingText="Re-checking…">
-          Re-check deployment status
-        </Button>
-      </Flex>
-    </Container>
+      <Button size="sm" width="fit-content" onClick={() => revalidator.revalidate()} isLoading={checking} loadingText="Re-checking…">
+        Re-check deployment status
+      </Button>
+    </PageShell>
   );
 }

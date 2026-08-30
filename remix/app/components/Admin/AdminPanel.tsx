@@ -28,11 +28,12 @@ type AdminRow = {
 type RateLimitRow = Rule & { endpoint: string; label: string };
 
 const eyebrow = {
+  fontFamily: 'var(--tt-font-mono, ui-monospace, Menlo, monospace)',
   fontSize: '10px',
   fontWeight: 600,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  opacity: 0.45
+  color: 'var(--tt-muted, #9a9aa6)'
 };
 
 const ENDPOINT_LABELS: Record<string, string> = {
@@ -159,7 +160,7 @@ const RateLimitEditor = () => {
             borderRadius="var(--tt-radius-sm, 9px)"
             background="var(--tt-surface-alt, #f5f5f7)"
           >
-            <Text fontSize="sm" fontWeight={600} minWidth="90px">
+            <Text fontSize="sm" fontWeight={600} minWidth="90px" color="var(--tt-ink, #16161a)">
               {ENDPOINT_LABELS[name] || name}
             </Text>
             <Flex alignItems="center" columnGap={1}>
@@ -171,7 +172,7 @@ const RateLimitEditor = () => {
                 onChange={(e) => patch(name, { limit: Math.max(1, Math.floor(Number(e.target.value) || 0)) })}
                 aria-label={`${name} limit`}
               />
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 per
               </Text>
               <Input
@@ -182,12 +183,12 @@ const RateLimitEditor = () => {
                 onChange={(e) => patch(name, { windowMs: Math.max(1, Math.floor(Number(e.target.value) || 0)) * 1000 })}
                 aria-label={`${name} window seconds`}
               />
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 sec
               </Text>
             </Flex>
             <Flex alignItems="center" columnGap={1} marginLeft="auto">
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 {rule.enabled ? 'On' : 'Off'}
               </Text>
               <Switch
@@ -201,7 +202,7 @@ const RateLimitEditor = () => {
         );
       })}
       {rateLimitRows.length > 0 && rateLimitQuery.rows.length === 0 ? (
-        <Text fontSize="xs" opacity={0.6}>
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
           No rate-limit rules match this query.
         </Text>
       ) : null}
@@ -281,15 +282,15 @@ const AdminManager = () => {
   const row = (r: AdminRow) => (
     <Flex key={r.id} alignItems="center" columnGap={2} padding={2} borderRadius="var(--tt-radius-sm, 9px)" _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}>
       <Box minWidth={0} flex="1 1 auto">
-        <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+        <Text fontSize="sm" fontWeight={600} noOfLines={1} color="var(--tt-ink, #16161a)">
           {r.displayName || r.username}
           {r.envAdmin && (
-            <Text as="span" fontSize="xs" opacity={0.6} fontWeight={400}>
+            <Text as="span" fontSize="xs" color="var(--tt-muted, #9a9aa6)" fontWeight={400}>
               {' '}· env admin
             </Text>
           )}
         </Text>
-        <Text fontSize="xs" opacity={0.6} noOfLines={1}>
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
           @{r.username}
         </Text>
       </Box>
@@ -316,7 +317,7 @@ const AdminManager = () => {
     <Flex flexDirection="column" rowGap={3}>
       <Text sx={eyebrow}>Admins</Text>
       {adminsCapped ? (
-        <Text fontSize="xs" opacity={0.65}>
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
           Showing the newest {adminsLimit} admins. Filters apply to this bounded roster snapshot.
         </Text>
       ) : null}
@@ -334,12 +335,12 @@ const AdminManager = () => {
           adminQuery.rows.length ? (
             adminQuery.rows.map(row)
           ) : (
-            <Text fontSize="xs" opacity={0.6}>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
               No admins match this query.
             </Text>
           )
         ) : (
-          <Text fontSize="xs" opacity={0.6}>
+          <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
             No DB-flagged admins yet.
           </Text>
         )}

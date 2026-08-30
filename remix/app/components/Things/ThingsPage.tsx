@@ -1107,7 +1107,7 @@ export const ThingsPage = () => {
           </Text>
           <Box flex={1} />
           <Menu placement="bottom-end">
-            <MenuButton as={Button} colorScheme="pink" leftIcon={<Plus size={14} />} size="sm">
+            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>

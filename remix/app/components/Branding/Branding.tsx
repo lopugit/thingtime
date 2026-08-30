@@ -1,10 +1,11 @@
 import { Flex, Heading, Text } from '@chakra-ui/react';
+import { PAGE_TOP_CLEARANCE } from '../Layout/PageShell';
 import { Logo } from './Logo';
 
 export const Branding = () => {
   return (
     <Flex
-      pt="calc(var(--thingtime-safe-area-top, 0px) + 108px)"
+      pt={PAGE_TOP_CLEARANCE}
       pb={24}
       flexDir="column"
       w="100%"
