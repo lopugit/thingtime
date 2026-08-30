@@ -2361,6 +2361,10 @@ const enforceReactionCaps = async (targetShareId: string, ownerId: string, token
 export type FeedQuery = {
   types?: PostType[];
   circles?: PostVisibility[];
+  // public tag feeds (claude-todo/10 ✨): narrow to posts carrying one tag.
+  // Normalized like sanitizeTags (trim/lowercase/cap) so the filter always
+  // speaks the stored vocabulary.
+  tag?: string | null;
   from?: Date | null;
   to?: Date | null;
   cursor?: string | null;
@@ -2398,6 +2402,10 @@ export const getFeed = async (
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
   const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
+  // same normalization sanitizeTags applies at write time — the stored tags
+  // are already trimmed/lowercased/capped, so an un-normalized filter could
+  // never match anything
+  const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS) : '';
 
   const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };
@@ -2408,7 +2416,7 @@ export const getFeed = async (
     if (query.from) range.createdAt.$gte = query.from;
     if (query.to) range.createdAt.$lte = query.to;
   }
-  const match = withMatch(postMatch(), visibility, typeClause(types), range);
+  const match = withMatch(postMatch(), visibility, typeClause(types), tag ? { tags: tag } : {}, range);
 
   const things = await getThingsCollection();
   const weights = query.weights || null;
