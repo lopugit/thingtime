@@ -1217,8 +1217,10 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			applyLayout(config);
 		}
 
-		// always clear the flag — a stale name must not re-fire on the next mount
-		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true });
+		// always clear the flag — a stale name must not re-fire on the next mount.
+		// Tab-local for the same reason the write is: consuming this tab's intent
+		// must not erase an intent another tab set and has not navigated to yet.
+		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true, tabLocal: true });
 	}, [pendingConfigName, applyLayout]);
 
 	// mirror the live layout into settings for the drawer: first write lands

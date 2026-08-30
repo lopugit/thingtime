@@ -234,9 +234,17 @@ export const useDrawer = () => {
 		[setDrawerSetting]
 	);
 
+	// Which top-level section the drawer shows tracks THIS tab's route:
+	// DrawerContent writes it from `pathname`, so two tabs on two routes hold two
+	// legitimately different selections. Broadcasting it would swap a peer's
+	// submenu to a section that peer is not even on, and nothing there would put
+	// it back — the pathname-sync effect only re-runs on `pathname`/`open`/
+	// `variant`/`loading`, none of which a remote write touches, and it returns
+	// early while that peer's drawer is closed. Persisted as before, so a reload
+	// still restores the last section; only the broadcast is suppressed.
 	const setSelectedItem = React.useCallback(
 		(id: string) => {
-			setDrawerSetting('selectedItem', id);
+			setDrawerSetting('selectedItem', id, { tabLocal: true });
 		},
 		[setDrawerSetting]
 	);

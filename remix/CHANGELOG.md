@@ -341,6 +341,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   destroying a query being typed there. All of it is still persisted, so a
   reload restores it as before, and drawer width/direction/ordering and the
   Commander's own preferences keep syncing. — Lopu (AI), 2026-08-30
+- **Cross-tab sync also excludes the drawer's selected section (PR #92 review)**:
+  `settings.drawer.selectedItem` now passes `{ tabLocal: true }` too. It is not a
+  preference — `DrawerContent` writes it from the current tab's `pathname`, so
+  two tabs on two routes hold two legitimately correct selections. Broadcasting
+  it swapped a peer's drawer to a section that peer was not on, and nothing there
+  restored it: the pathname-sync effect re-runs only on
+  `pathname`/`open`/`variant`/`loading` — none of which a remote write touches —
+  and returns early while that peer's drawer is closed. Still persisted, so each
+  tab's reload restores the section it last chose. The call-site guard test now
+  covers `open` and `selectedItem` together. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the editor's open-config handoff (PR #92 review)**:
+  both `settings.editor.openConfig` writes — the drawer's set and `EditorSplit`'s
+  consuming clear — now pass `{ tabLocal: true }`. An earlier note called this key
+  harmless because it is only read on mount; that was wrong. `openedConfigRef` is
+  a per-mount latch and the effect re-runs on the value, so a tab already on
+  `/editor` that had not yet consumed an intent would apply a *remote* config over
+  its own open windows. The key is a handoff to the writing tab's next navigation
+  (when the editor is already mounted the drawer uses the tab-local events bus
+  instead). Clearing had to be suppressed too, or consuming one tab's intent would
+  erase an intent another tab had not navigated to yet. — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.

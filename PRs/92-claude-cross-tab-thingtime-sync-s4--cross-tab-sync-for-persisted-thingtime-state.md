@@ -87,6 +87,40 @@ misspelled flag would otherwise fail silently.
 Drawer width, `opens.direction`, ordering, and the Commander's own preferences
 are untouched and still sync — that sharing is the point of this channel.
 
+### Second pass — `settings.drawer.selectedItem` (Lopu, 2026-08-30)
+
+That sweep classified by "is this open/focused here", which missed a key that is
+viewport state for a different reason: **which** section the drawer shows.
+`DrawerContent` writes `settings.drawer.selectedItem` from this tab's `pathname`,
+so two tabs on two routes hold two legitimately different — and both correct —
+selections. Broadcasting it moved a peer's drawer to a section that peer was not
+on, changing the submenu under it.
+
+Nothing in the receiving tab put it back. The pathname-sync effect re-runs only
+on `pathname`/`open`/`variant`/`loading`, none of which a remote write touches,
+and it returns early entirely while that peer's drawer is closed — so the wrong
+section persisted until that tab next navigated. `selectedItem` now passes
+`{ tabLocal: true }` as well, and the drawer source-contract test asserts `open`
+and `selectedItem` together so the next key of this shape is caught by name.
+
+### Second pass — `settings.editor.openConfig`, both directions (Lopu, 2026-08-30)
+
+The previous pass recorded this key as "odd but harmless — doesn't actuate a
+peer". That was wrong, and the correction is the reason it moved. `EditorSplit`
+does not merely read the name on mount: `openedConfigRef` is a per-mount latch
+that starts `false`, and the effect re-runs on `pendingConfigName`. A tab sitting
+on `/editor` that has not consumed an intent since mounting will therefore pick
+up a *remote* name and call `applyLayout` over the windows someone has open
+there. `EditorDrawerSection` states the intended scope in its own comment —
+"remember which config to load, then head to the editor" — a handoff to the
+writing tab's next navigation. When the editor is already mounted it does not use
+this key at all; it emits on the tab-local events bus.
+
+Both directions now pass `{ tabLocal: true }`, because suppressing only the write
+leaves the pair lopsided: the consuming clear would still cross and erase an
+intent another tab set but has not navigated to yet. A third source-contract test
+pins both call sites.
+
 ## Optional future hardening
 
 A discarded or long-suspended tab can still miss broadcasts entirely. A future

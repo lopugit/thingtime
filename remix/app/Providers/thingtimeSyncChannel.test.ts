@@ -351,12 +351,19 @@ test('every commanderActive write declares itself tab-local', () => {
 	assert.ok(checked >= 5, `expected the known commanderActive write sites, found ${checked}`);
 });
 
-test('the drawer open/closed write declares itself tab-local while drawer preferences still sync', () => {
+test('the drawer writes that describe this viewport declare themselves tab-local while drawer preferences still sync', () => {
 	const useDrawer = readFileSync(path.join(appDir, 'components/Nav/Drawer/useDrawer.tsx'), 'utf8');
-	const openWrite = useDrawer.match(/setDrawerSetting\('open'[^;]*;/);
 
-	assert.ok(openWrite, 'expected useDrawer to still write settings.drawer.open through setDrawerSetting');
-	assert.match(openWrite[0], /tabLocal: true/);
+	// `open` is whether this drawer is showing; `selectedItem` is which section it
+	// is showing, and DrawerContent writes that one from this tab's `pathname`.
+	// Both describe a viewport rather than a preference, and a peer cannot undo
+	// either: the pathname-sync effect re-runs only on pathname/open/variant/
+	// loading, and returns early while that peer's drawer is closed.
+	for (const viewportState of ["setDrawerSetting('open'", "setDrawerSetting('selectedItem'"]) {
+		const write = useDrawer.slice(useDrawer.indexOf(viewportState)).match(/^[^;]*;/);
+		assert.ok(write, `expected useDrawer to still write ${viewportState} through setDrawerSetting`);
+		assert.match(write[0], /tabLocal: true/, `${viewportState} must not actuate another tab`);
+	}
 
 	// Width/direction/ordering are shared preferences — the motivating case for
 	// this channel — and must NOT have been swept up by the same change.
@@ -364,6 +371,26 @@ test('the drawer open/closed write declares itself tab-local while drawer prefer
 		const write = useDrawer.slice(useDrawer.indexOf(preference)).match(/^[^;]*;/);
 		assert.ok(write, `expected useDrawer to still write ${preference}`);
 		assert.doesNotMatch(write[0], /tabLocal/, `${preference} should keep syncing across tabs`);
+	}
+});
+
+test('both settings.editor.openConfig writes declare themselves tab-local', () => {
+	// openConfig is a handoff to this tab's own next navigation ("remember which
+	// config to load, then head to the editor"), not a shared setting. Crossing
+	// tabs it does two things: a peer already on /editor that has not consumed an
+	// intent since mount applies the layout over its open windows, and the
+	// consuming clear erases an intent another tab set but has not navigated to.
+	// Both directions have to be suppressed or the pair is still lopsided.
+	const writes = [
+		['components/Nav/Drawer/EditorDrawerSection.tsx', "setThingtime('settings.editor.openConfig'"],
+		['components/Thingtime/EditorSplit.tsx', "setThingtimeRef.current('settings.editor.openConfig'"]
+	];
+
+	for (const [file, needle] of writes) {
+		const source = readFileSync(path.join(appDir, file), 'utf8');
+		const index = source.indexOf(needle);
+		assert.notEqual(index, -1, `expected ${file} to still write settings.editor.openConfig`);
+		assert.match(source.slice(index).match(/^[^;]*;/)?.[0] ?? '', /tabLocal: true/, `${file} must not actuate another tab`);
 	}
 });
 

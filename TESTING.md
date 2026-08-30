@@ -1726,6 +1726,17 @@ is fixed, and cite the checklist you ran in the PR description.
       Open and close the nav drawer in Tab A: Tab B's drawer does not move.
       Reload Tab B afterwards — both still restore from its own persisted
       state, exactly as before the channel existed.
+- [ ] Drawer section selection follows each tab's own route. Put Tab A and Tab B
+      on routes under two different top-level drawer items, with both drawers
+      open, then click a third top-level item in Tab A. Tab B keeps its own
+      selection and submenu — it does not jump to Tab A's section, including
+      while Tab B's drawer is closed and after reopening it. Reload Tab B: it
+      still restores the section it last selected itself.
+- [ ] Editor open-config handoff stays in its own tab. With Tab B sitting on
+      `/editor` with windows open (and no config opened there since it loaded),
+      open a saved config from the drawer in Tab A. Tab B's layout is untouched.
+      Then set an intent in Tab B's drawer without navigating yet, open a config
+      in Tab A, and confirm Tab B still opens its own config when it arrives.
 - [ ] Drawer *preferences* still sync in the same session: change the width and
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)
