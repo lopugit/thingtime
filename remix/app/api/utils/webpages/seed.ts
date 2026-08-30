@@ -19,6 +19,11 @@ type SitePageSeed = {
 	key: string; // route key → shareId webpage-route-<key>, native block key
 	path: string; // crystal.siteRoute
 	name: string;
+	// pages decomposed in the client native-section registry
+	// (remix/app/components/Builder/nativeSections.tsx) seed one native block
+	// PER SECTION instead of a single whole-page native — keep the two lists
+	// in sync when converting a page
+	sections?: string[];
 };
 
 export const SITE_PAGE_SEEDS: SitePageSeed[] = [
@@ -33,7 +38,7 @@ export const SITE_PAGE_SEEDS: SitePageSeed[] = [
 	{ key: 'settings', path: '/settings', name: 'Settings' },
 	{ key: 'profile', path: '/profile', name: 'Profile' },
 	{ key: 'themes', path: '/themes', name: 'Themes' },
-	{ key: 'status', path: '/status', name: 'Status' },
+	{ key: 'status', path: '/status', name: 'Status', sections: ['status-header', 'status-state', 'status-readout', 'status-recheck'] },
 	{ key: 'vercel', path: '/vercel', name: 'Deployments' },
 	{ key: 'mongodb-status', path: '/mongodb-status', name: 'MongoDB' },
 	{ key: 'migrations', path: '/migrations', name: 'Migrations' },
@@ -95,7 +100,11 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 				pageKey: `route-${seed.key}`,
 				siteRoute: seed.path,
 				version: 1,
-				blocks: [{ id: `native-${seed.key}`, type: 'native', native: seed.key }]
+				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
+					id: `native-${sectionKey}`,
+					type: 'native',
+					native: sectionKey
+				}))
 			}
 		})),
 		{

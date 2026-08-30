@@ -200,11 +200,9 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs })
       },
       { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
-      {
-        path: 'status',
-        lazy: lazyRoute(() => import('./routes/status')),
-        loader: () => fetchJson('/api/v1/vercel/status')
-      },
+      // status renders from its native-section registry list; the sections'
+      // shared hook fetches — no navigation-blocking loader
+      { path: 'status', lazy: lazyRoute(() => import('./routes/status')) },
       {
         path: 'vercel',
         lazy: lazyRoute(() => import('./routes/vercel')),

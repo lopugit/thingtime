@@ -5,7 +5,13 @@ import { useLocation } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { DRAWER_HOVER_Z } from '../Nav/Drawer/useDrawer';
-import { PAGE_TOP_CLEARANCE } from '../Layout/PageShell';
+import { PAGE_TOP_CLEARANCE, PageShell } from '../Layout/PageShell';
+import {
+	blocksAreFullySectioned,
+	getNativePageByRoute,
+	getNativeSection,
+	NativeSectionView
+} from './nativeSections';
 import { WebpageBlocksRenderer, type ComponentsByRef } from './WebpageBlocksRenderer';
 import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
@@ -160,10 +166,44 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 	const globalBlocks = (globalResolved?.page?.crystal?.blocks as WebpageBlock[]) || [];
 	const globalComponents = globalResolved?.componentsByRef || {};
 
+	const docBlocks = (resolved?.page?.crystal?.blocks as WebpageBlock[]) || [];
+	// Fully sectioned docs (every native block is a registered section) render
+	// the whole composition doc-driven — ordering/insertions/removals from the
+	// viewer's fork apply, sections are pixel-identical to the route's own
+	// render, and the route element is not mounted (one render, one truth).
+	const sectioned = docBlocks.length > 0 && blocksAreFullySectioned(docBlocks);
+	const sectionedPage = sectioned ? getNativeSection((docBlocks.find((block) => block.type === 'native') as WebpageBlock).native || '')?.page : null;
+
 	const blocks = (resolved?.source === 'user' ? (resolved?.page?.crystal?.blocks as WebpageBlock[]) : null) || [];
 	const { before, after } = splitAroundNative(blocks);
 	const componentsByRef = resolved?.componentsByRef || {};
 	const hasInjectedAbove = globalBlocks.length > 0 || before.length > 0;
+
+	if (sectioned && sectionedPage) {
+		const shellWidth = sectionedPage.shellWidth;
+		const composition = (
+			<WebpageBlocksRenderer
+				blocks={docBlocks}
+				componentsByRef={componentsByRef}
+				interactive={resolved?.source === 'user'}
+				renderNative={(key) => <NativeSectionView sectionKey={key} />}
+			/>
+		);
+		return (
+			<>
+				<GlobalBlocks blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} />
+				{shellWidth === 'full' ? (
+					<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
+						{composition}
+					</Box>
+				) : (
+					<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
+						<PageShell width={shellWidth}>{composition}</PageShell>
+					</Box>
+				)}
+			</>
+		);
+	}
 
 	return (
 		<>
@@ -242,15 +282,23 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 	}, [pageDraft.resolved]);
 
 	// Unseeded deployment (no system site doc yet): start the draft with the
-	// locked native block so the live screen stays visible and positionable —
+	// registered SECTION list when this route is in the native registry (the
+	// page decomposes immediately), else the locked whole-page native block —
 	// otherwise the fork would have no marker and every block could only land
 	// below the page.
 	const seededEmptyRef = React.useRef(false);
 	React.useEffect(() => {
 		if (pageDraft.loading || pageDraft.resolved?.page || pageDraft.blocks.length || seededEmptyRef.current) return;
 		seededEmptyRef.current = true;
-		const key = path === '/' ? 'home' : path.slice(1).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page';
-		pageDraft.setBlocks([{ id: `native-${key}`, type: 'native', native: key }]);
+		const registered = getNativePageByRoute(path);
+		if (registered) {
+			pageDraft.setBlocks(
+				registered.sections.map((section) => ({ id: `native-${section.key}`, type: 'native' as const, native: section.key }))
+			);
+		} else {
+			const key = path === '/' ? 'home' : path.slice(1).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page';
+			pageDraft.setBlocks([{ id: `native-${key}`, type: 'native', native: key }]);
+		}
 		if (!pageName) setPageName('This page');
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot seeding keyed on resolve state
 	}, [pageDraft.loading, pageDraft.resolved, pageDraft.blocks.length, path]);
@@ -275,17 +323,28 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- pageName read at call time
 	}, [globalDraft.dirty, globalDraft.save, pageDraft.dirty, pageDraft.save, pageName]);
 
-	// native = the actual page, full width, exactly as the normal view —
-	// only its redundant nav clearance shrinks (content already sits below
-	// the global strip)
+	// native = a registered section (pixel-identical block) when the key is in
+	// the registry, else the whole live page — full width, exactly as the
+	// normal view, with only its redundant nav clearance shrunk (content
+	// already sits below the global strip)
 	const renderNative = React.useCallback(
-		() => (
-			<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
-				{children}
-			</Box>
-		),
+		(key: string) =>
+			getNativeSection(key) ? (
+				<NativeSectionView sectionKey={key} />
+			) : (
+				<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+					{children}
+				</Box>
+			),
 		[children]
 	);
+
+	// a fully sectioned draft edits inside the page's own shell (surface wash,
+	// clearance, readable column) — exactly how the route renders it
+	const draftSectioned = pageDraft.blocks.length > 0 && blocksAreFullySectioned(pageDraft.blocks);
+	const draftPage = draftSectioned
+		? getNativeSection((pageDraft.blocks.find((block) => block.type === 'native') as WebpageBlock)?.native || '')?.page
+		: null;
 
 	return (
 		<>
@@ -316,21 +375,45 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 								nav · drawer · footer are Thingtime chrome
 							</Box>
 						</Flex>
-						<WebpageBlocksRenderer
-							blocks={globalDraft.blocks}
-							componentsByRef={globalDraft.componentsByRef}
-							chrome={globalChrome.chrome}
-						/>
+						{globalDraft.loading && !globalDraft.blocks.length ? null : (
+							<WebpageBlocksRenderer
+								blocks={globalDraft.blocks}
+								componentsByRef={globalDraft.componentsByRef}
+								chrome={globalChrome.chrome}
+							/>
+						)}
 					</Box>
 				</Box>
-				{/* this page — full-bleed, the live screen is the native block */}
-				<WebpageBlocksRenderer
-					blocks={pageDraft.blocks}
-					componentsByRef={pageDraft.componentsByRef}
-					chrome={pageChrome.chrome}
-					renderNative={renderNative}
-					insetNonNative={960}
-				/>
+				{/* this page — sectioned pages edit inside their own shell; legacy
+				    whole-page natives edit full-bleed with authored blocks inset.
+				    While the draft resolves, the live page renders untouched
+				    (optimistic — never an empty dropwell flash) */}
+				{pageDraft.loading && !pageDraft.blocks.length ? (
+					<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+						{children}
+					</Box>
+				) : draftSectioned && draftPage && draftPage.shellWidth !== 'full' ? (
+					// the global strip above already cleared the nav — shrink the
+					// shell's own clearance to a normal seam
+					<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+						<PageShell width={draftPage.shellWidth}>
+							<WebpageBlocksRenderer
+								blocks={pageDraft.blocks}
+								componentsByRef={pageDraft.componentsByRef}
+								chrome={pageChrome.chrome}
+								renderNative={renderNative}
+							/>
+						</PageShell>
+					</Box>
+				) : (
+					<WebpageBlocksRenderer
+						blocks={pageDraft.blocks}
+						componentsByRef={pageDraft.componentsByRef}
+						chrome={pageChrome.chrome}
+						renderNative={renderNative}
+						insetNonNative={960}
+					/>
+				)}
 			</Box>
 			{!drawerOpen ? <InspectorReopenPill onClick={() => setDrawerOpen(true)} /> : null}
 			{drawerOpen ? (

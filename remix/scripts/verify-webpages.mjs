@@ -137,9 +137,9 @@ const run = async () => {
 	);
 	const statusBlocks = anonStatus.body?.page?.crystal?.blocks || [];
 	check(
-		'system /status body is the locked native block',
-		statusBlocks.length === 1 && statusBlocks[0]?.type === 'native' && statusBlocks[0]?.native === 'status',
-		JSON.stringify(statusBlocks).slice(0, 120)
+		'system /status body is native section blocks (status-* keys)',
+		statusBlocks.length >= 1 && statusBlocks.every((block) => block?.type === 'native' && String(block?.native || '').startsWith('status')),
+		JSON.stringify(statusBlocks).slice(0, 160)
 	);
 	const anonGlobal = await api('/api/v1/webpages/resolve?global=1');
 	check(
