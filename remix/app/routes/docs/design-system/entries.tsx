@@ -1,5 +1,10 @@
 import type { DesignSystemStory } from './ThingContextMenuStories';
 import { thingContextMenuStories } from './ThingContextMenuStories';
+import { coreControlsEntries } from './entries/coreControls';
+import { surfacesEntries } from './entries/surfaces';
+import { navigationEntries } from './entries/navigation';
+import { identityEntries } from './entries/identity';
+import { practicesEntries } from './entries/practices';
 import { brutalButtonStories } from './BrutalButtonStories';
 import { builderBlocksStories } from './BuilderBlocksStories';
 import { foundationsStories } from './FoundationsStories';
@@ -307,6 +312,10 @@ export const designSystemEntries: DesignSystemEntry[] = [
 			'Ongoing — remaining hand-rolled pages migrate to the scaffold as they are touched; any clearance value that is not PAGE_TOP_CLEARANCE is a bug to fix on sight.'
 		]
 	},
+	...coreControlsEntries,
+	...surfacesEntries,
+	...navigationEntries,
+	...identityEntries,
 	{
 		slug: 'brutal-button',
 		title: 'Brutal Button',
@@ -627,7 +636,8 @@ export const designSystemEntries: DesignSystemEntry[] = [
 			'Done — site personalisation: viewer forks (forkOf lineage) outrank the system doc for a route at resolve time.',
 			'Next — the native-block screen vocabulary grows as more app surfaces become embeddable; each new key ships with its site-page renderNative wiring.'
 		]
-	}
+	},
+	...practicesEntries
 ];
 
 export const getDesignSystemEntryBySlug = (slug?: string | null) =>
