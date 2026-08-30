@@ -1690,8 +1690,13 @@ jobs:
             # read failure gh_read_retry prints nothing to stdout, so
             # `> "$response"` leaves an EMPTY file and the shape check below
             # would misreport a torn-down connection as a malformed GitHub
-            # payload. `set -e` does not abort on a redirected function call,
-            # so the status has to be tested explicitly.
+            # payload. The status has to be tested explicitly because this
+            # function runs inside the `$(...)` of `all_open="$(all_open_prs)"`
+            # and bash leaves `inherit_errexit` off by default, so the
+            # substitution subshell drops `errexit` entirely (`$-` loses `e`).
+            # No command in this function is protected by `set -e` — redirected
+            # or not — so every failure that must stop the scan needs its own
+            # explicit check, exactly like this one.
             if ! gh_read_retry graphql --paginate --slurp \
               -f owner="$owner" \
               -f name="$name" \
