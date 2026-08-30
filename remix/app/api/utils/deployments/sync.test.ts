@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { collectRemoteThings, contentKey, modeForProfile, modeForThing, orderOps, putBodyFor } from './sync';
+import {
+  collectRemoteThings,
+  contentKey,
+  modeForProfile,
+  modeForThing,
+  orderOps,
+  putBodyFor,
+  syncBudgetSpent
+} from './sync';
 import type { NormalizedThing, SyncOp } from './sync';
 import type { RemoteThing } from './remote';
 import type { DeploymentLinkPathRule, DeploymentSyncMode, SavedDeploymentLink } from '../auth/users';
@@ -268,6 +276,32 @@ test('a failing remote page aborts the scan', async () => {
   const result = await collectRemoteThings(link(), lister);
   assert.equal((result as any).ok, false);
   assert.equal((result as any).status, 502);
+});
+
+// ── syncBudgetSpent: the wall-clock fence on a pass ─────────────────────────
+
+test('a pass under its time budget keeps scheduling ops', () => {
+  assert.equal(syncBudgetSpent(5, 1_000, 45_000), false);
+  // exhausting the budget is what stops it, not merely approaching it
+  assert.equal(syncBudgetSpent(5, 44_999, 45_000), false);
+});
+
+test('a pass over its time budget stops scheduling ops', () => {
+  // MAX_SYNC_OPS_PER_RUN bounds how many remote calls a pass makes, not how
+  // long they take: 40 ops × a 15s remoteFetch timeout outlives any serverless
+  // function limit, and a killed pass loses the report for writes that already
+  // landed. The leftovers are reported as `remaining` and resume next pass.
+  assert.equal(syncBudgetSpent(1, 45_000, 45_000), true);
+  assert.equal(syncBudgetSpent(40, 600_000, 45_000), true);
+});
+
+test('every pass settles at least one op, however long the scans took', () => {
+  // THE anti-livelock invariant. The scans run before the op loop and can eat
+  // the whole budget on their own; a pure elapsed-time check would then return
+  // "0 done, N remaining" on every re-run and never make progress. Nothing
+  // settled yet ⇒ the fence cannot fire, whatever the clock says.
+  assert.equal(syncBudgetSpent(0, 45_000, 45_000), false);
+  assert.equal(syncBudgetSpent(0, 10_000_000, 45_000), false);
 });
 
 test('ordering preserves every op exactly once', () => {

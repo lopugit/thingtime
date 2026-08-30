@@ -177,6 +177,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // tight and the routes enforce fail-closed. Token minting shares the key
   // (each mint writes a never-expiring session doc).
   'deployments.link': { limit: 10, windowMs: 300_000, enabled: true },
+  // Editing a link you already hold (name, sync mode, path rules) dials
+  // NOTHING — it rewrites one row in the caller's own secure blob. It gets its
+  // own budget because the settings pane sends one PATCH per sync-mode tap and
+  // per path-rule save: on the dial budget above, configuring a couple of links
+  // exhausts the window and locks the same user out of linking and unlinking.
+  'deployments.update': { limit: 60, windowMs: 60_000, enabled: true },
   // One sync pass fans out up to ~40 writes against the linked deployment plus
   // paginated reads on both sides — heavier than any single API call, so the
   // per-user budget is small (fail-closed at the route). Passes are resumable,

@@ -42,6 +42,30 @@ const MAX_REPORTED_ERRORS = 12;
 // comment, reaction → either): depth is tiny in practice
 const MAX_TARGET_ROUNDS = 5;
 
+// Wall-clock fence for one pass. MAX_SYNC_OPS_PER_RUN bounds how MANY remote
+// calls a pass makes, not how long they take: every remoteFetch waits up to
+// REMOTE_TIMEOUT_MS (15s), so 40 ops against a merely slow deployment — a cold
+// serverless remote doing a Mongo upsert per write is enough — outlive the
+// platform's function limit long before the op budget runs out.
+//
+// Being killed mid-pass is the outcome worth avoiding: the writes that already
+// landed stay landed, but the route never reaches its updateUserDeploymentLink
+// call, so lastSyncAt/lastSyncSummary never record them and the caller gets a
+// platform 504 instead of the report. Stopping early costs nothing by
+// comparison — the pass is already resumable, and whatever is left is counted
+// in `remaining`, which is exactly what the UI tells the user to run again.
+const SYNC_WALL_CLOCK_BUDGET_MS = 45_000;
+
+// true = stop scheduling ops. One op is ALWAYS attempted before the fence can
+// fire: if the scans alone ate the budget, a pure elapsed-time check would
+// return "0 done, N remaining" forever and no re-run would ever advance. Every
+// pass settling at least one op keeps progress monotonic.
+export const syncBudgetSpent = (
+  settled: number,
+  elapsedMs: number,
+  budgetMs: number = SYNC_WALL_CLOCK_BUDGET_MS
+): boolean => settled > 0 && elapsedMs >= budgetMs;
+
 export type SyncSummary = {
   mode: DeploymentSyncMode;
   dryRun: boolean;
@@ -223,7 +247,8 @@ export const runDeploymentSync = async (
   options: { dryRun?: boolean } = {}
 ): Promise<SyncSummary | Fail> => {
   const dryRun = !!options.dryRun;
-  const startedAt = new Date().toISOString();
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
   const errors: string[] = [];
   const pushError = (message: string) => {
     if (errors.length < MAX_REPORTED_ERRORS) errors.push(message);
@@ -351,6 +376,9 @@ export const runDeploymentSync = async (
     const viewer = viewerOf({ id: user.id, username: user.username });
     for (const op of ordered) {
       if (executed >= MAX_SYNC_OPS_PER_RUN) break;
+      // the other half of the budget: ops left after this fires are reported as
+      // `remaining`, same as ops left by MAX_SYNC_OPS_PER_RUN
+      if (syncBudgetSpent(opsSettled, Date.now() - startedAtMs)) break;
       executed += 1;
       if (op.direction === 'push') {
         const result = await remotePutThing(link.baseUrl, link.token, putBodyFor(op.source));
