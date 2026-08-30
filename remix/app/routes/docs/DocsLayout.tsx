@@ -488,13 +488,22 @@ const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: 
 });
 
 type DocsDrawerContentProps = {
+  closeAriaLabel?: string;
+  closeIcon?: React.ElementType;
   closeTestId?: string;
   onClose?: () => void;
   pathname: string;
   showClose?: boolean;
 };
 
-function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
+function DocsDrawerContent({
+  closeAriaLabel = 'Close docs navigation',
+  closeIcon = X,
+  closeTestId,
+  onClose,
+  pathname,
+  showClose = false
+}: DocsDrawerContentProps) {
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
   // The search query lives in the URL (?q=) so refresh persists it, searches
   // are deep-linkable, and both drawer instances (desktop + mobile) share one
@@ -595,9 +604,9 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
 
         {showClose ? (
           <IconButton
-            aria-label="Close docs navigation"
+            aria-label={closeAriaLabel}
             data-testid={closeTestId}
-            icon={<Icon as={X} boxSize={5} />}
+            icon={<Icon as={closeIcon} boxSize={5} />}
             onClick={onClose}
             size="md"
             type="button"
@@ -806,19 +815,15 @@ export default function DocsLayout() {
               position={drawerFitsViewport ? 'sticky' : 'relative'}
               pr={2}
               ref={drawerContentRef}
-              top={drawerFitsViewport ? '96px' : undefined}
+              top={drawerFitsViewport ? 0 : undefined}
             >
-              <Flex justify="flex-end" mb={3}>
-                <IconButton
-                  aria-label="Collapse docs navigation"
-                  icon={<Icon as={PanelLeftClose} boxSize={4} />}
-                  onClick={() => setDesktopDrawerOpen(false)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                />
-              </Flex>
-              <DocsDrawerContent pathname={pathname} />
+              <DocsDrawerContent
+                closeAriaLabel="Collapse docs navigation"
+                closeIcon={PanelLeftClose}
+                onClose={() => setDesktopDrawerOpen(false)}
+                pathname={pathname}
+                showClose
+              />
             </Box>
 
             <Box
