@@ -2519,6 +2519,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       null` in GET /api/v1/deployment-links); the login-derived 30-day
       session is revoked after the swap. Against an OLDER deployment the
       30-day token is kept and `tokenExpiresAt` shows its expiry.
+- [ ] The upgraded token actually AUTHENTICATES: right after a password link,
+      Sync now must succeed rather than 401 with "no longer accepts the link's
+      token". Regression — a session `purpose` that is not in
+      `sessionPurposeCanActAsAccount` (`api/utils/auth/credentialPurpose.ts`)
+      is dropped by `getCurrentUser`, so minting `deployment-link` without
+      allowlisting it stored a token that could never authenticate, and the
+      swap had already revoked the working one. Pinned by `npm run
+      test:deployments` (`app/api/utils/deployments/linkTokenPurpose.test.ts`);
+      re-check this row whenever a new `purpose` is added to `SessionDoc`.
 - [ ] Link via token: Create a link token 🔑 on deployment B (shown exactly
       once), paste into deployment A's "Paste a token" form → link works
       without a password crossing between deployments.
