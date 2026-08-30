@@ -29,6 +29,31 @@ export type ThingtimeSyncChannel = {
 	close: () => void;
 };
 
+export type ThingtimeSyncPublishOptions = {
+	fromRemote?: boolean;
+	tabLocal?: boolean;
+};
+
+// Which successfully applied writes belong on the wire, excluded for two
+// different reasons:
+//
+//   fromRemote — the write IS another tab's broadcast, already applied here
+//     through the normal queue. Republishing it would echo it back around the
+//     channel.
+//   tabLocal   — the call site declared the write ephemeral view chrome for
+//     THIS viewport (what is currently open and focused) rather than user data
+//     or a saved preference. Such a key is still persisted, so a reload
+//     restores it exactly as before — it just stops one tab actuating another
+//     tab's UI mid-session.
+//
+// Chrome is declared at the write site instead of pattern-matched here so the
+// transport stays generic: this module knows nothing about drawers or the
+// Commander, and a NEW chrome key cannot start crossing tabs by accident just
+// because nobody remembered to extend a denylist in an unrelated file.
+export const shouldPublishAppliedWrite = (options?: ThingtimeSyncPublishOptions): boolean => {
+	return !options?.fromRemote && !options?.tabLocal;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 };

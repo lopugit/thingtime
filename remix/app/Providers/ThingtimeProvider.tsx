@@ -17,7 +17,7 @@ import {
 	stringifyThingtime,
 	stringifyThingtimeForStorage
 } from './thingtimeSerialization';
-import { createThingtimeSyncChannel } from './thingtimeSyncChannel';
+import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel';
 import type { ThingtimeSyncChannel, ThingtimeSyncPath } from './thingtimeSyncChannel';
 export interface ThingtimeTypes {
 	thingtime: any;
@@ -151,6 +151,11 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// Applied from another tab's broadcast — never re-published (no echo
 		// loops) and never entered into this tab's undo/redo timeline.
 		fromRemote?: boolean;
+		// Ephemeral view chrome for THIS viewport — what is currently open and
+		// focused here, as opposed to user data or a saved preference. Still
+		// persisted (a reload restores it), but never broadcast, so one tab's
+		// panel/focus state cannot actuate another tab's UI mid-session.
+		tabLocal?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -281,8 +286,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				const nextState = applyUpdate(workingThingtime, nextThingtime.path, nextThingtime.value, nextThingtime.options, nextThingtime.timestamp);
 
 				// Publish only after this update applied successfully. Remote writes use
-				// the same queue but never echo back onto the channel.
-				if (!nextThingtime.options?.fromRemote) {
+				// the same queue but never echo back onto the channel, and tab-local
+				// view chrome is persisted without ever actuating another tab.
+				if (shouldPublishAppliedWrite(nextThingtime.options)) {
 					syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
 				}
 

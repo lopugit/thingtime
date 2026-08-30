@@ -331,6 +331,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Commander, Content, or preference changes made elsewhere. See the
   [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
   — Claude (AI), 2026-08-20
+- **Cross-tab sync excludes view chrome (PR #92 review)**: writes that describe
+  what is open and focused in the current viewport — `settings.drawer.open` and
+  `settings.commander.<id>.commanderActive` — now pass `{ tabLocal: true }` to
+  `setThingtime`, which suppresses only the broadcast. Because `commanderId` is
+  a literal shared by every tab, broadcasting them let one tab toggle another's
+  palette and drawer; closing the palette in one tab ran the peer's toggle
+  effect, which clears its input under the default `clearCommanderOnToggle`,
+  destroying a query being typed there. All of it is still persisted, so a
+  reload restores it as before, and drawer width/direction/ordering and the
+  Commander's own preferences keep syncing. — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.

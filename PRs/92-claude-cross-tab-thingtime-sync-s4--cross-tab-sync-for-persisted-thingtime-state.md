@@ -64,6 +64,29 @@ There is no second persistence codec or storage mechanism.
   serializer, echo, or lifecycle diagnostics.
 - Full PR checks and preview: pending the published head.
 
+## Review follow-up — view chrome is not broadcast (Lopu, 2026-08-30)
+
+The first cut broadcast every applied non-remote write, holding back only root
+`timemachine` and whole-tree replacements. A few `settings.*` keys are neither
+user data nor saved preferences — they describe what is open and focused in the
+current viewport, under an id that is identical in every tab
+(`settings.drawer.open`; `settings.commander.<id>.commanderActive`, where
+`commanderId` is the literal `nav`/`global`). One tab therefore actuated
+another's UI, and the closing direction lost typed input: Tab A closing the
+palette ran Tab B's toggle effect, which clears its input under the default
+`clearCommanderOnToggle`.
+
+Those five call sites now pass `{ tabLocal: true }` to `setThingtime`, which
+suppresses only the broadcast — the values are still persisted, so a reload
+restores them exactly as before this PR. The rule lives at the write site, not
+as a path denylist in `thingtimeSyncChannel.ts`, so the transport stays generic.
+Two source-contract tests in `thingtimeSyncChannel.test.ts` hold the line,
+which matters because `setThingtime` is typed `any` at every consumer and a
+misspelled flag would otherwise fail silently.
+
+Drawer width, `opens.direction`, ordering, and the Commander's own preferences
+are untouched and still sync — that sharing is the point of this channel.
+
 ## Optional future hardening
 
 A discarded or long-suspended tab can still miss broadcasts entirely. A future

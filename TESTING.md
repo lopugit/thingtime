@@ -1720,6 +1720,15 @@ is fixed, and cite the checklist you ran in the PR description.
       (`tt.tt.timemachine.… = …`). Neither crosses to Tab B: its root
       `tt`/`thingtime` self-reference and its undo timeline both survive
       intact, while `tt.tt.settings.…` still syncs as ordinary data.
+- [ ] View chrome stays in its own tab. With the Commander open and a query
+      half-typed in Tab B, open and then close the Commander in Tab A: Tab B's
+      palette neither opens, closes, steals focus, nor loses the typed query.
+      Open and close the nav drawer in Tab A: Tab B's drawer does not move.
+      Reload Tab B afterwards — both still restore from its own persisted
+      state, exactly as before the channel existed.
+- [ ] Drawer *preferences* still sync in the same session: change the width and
+      `opens.direction` in Tab A and confirm Tab B follows without a reload.
+      (This is the pair that distinguishes the fix from over-blocking.)
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 

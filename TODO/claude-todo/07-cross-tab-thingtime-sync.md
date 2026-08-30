@@ -56,6 +56,23 @@ by a stale tab writing its old in-memory tree.
    rejected too: `applyThingtimeUpdate` reads it as a whole-tree replacement,
    which would overwrite each receiving tab's root — `timemachine` included —
    rather than apply a path-level write.
+2b. **Keep view chrome out of the channel.** A few `settings.*` keys are not
+   user data or saved preferences — they describe what is currently open and
+   focused in *this* viewport, under an id that is byte-identical in every tab
+   (`settings.drawer.open`; `settings.commander.<id>.commanderActive`, where
+   `commanderId` is the literal `nav`/`global`). Broadcasting them made one tab
+   actuate another's UI: closing the palette in Tab A ran Tab B's toggle
+   effect, which clears its input under the default `clearCommanderOnToggle`
+   and so destroyed a query being typed there; opening it focused Tab B's
+   input. Such writes pass `{ tabLocal: true }` to `setThingtime`, which
+   suppresses only the broadcast. They are still persisted, so a reload
+   restores them exactly as before. The intent is declared at the write site
+   rather than pattern-matched in the transport, so `thingtimeSyncChannel.ts`
+   keeps no list of feature paths and a new chrome key cannot start crossing
+   tabs because nobody remembered to extend a denylist elsewhere. Genuine
+   preferences under the same keys — drawer width, `opens.direction`,
+   ordering, the Commander's `clearCommanderOnToggle`/`hideSuggestionsOnToggle`
+   — are unaffected and still sync; sharing them is the point of this channel.
 3. **Persist ownership.** Keep the single persist path in `ThingtimeProvider`
    (per `FUNDAMENTALS.md` single-source-of-truth thinking). The channel imports
    `stringifyThingtime` / `parseThingtime` directly rather than maintaining a

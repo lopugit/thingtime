@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 // @ts-ignore Node executes this TypeScript test through the tsx loader.
 import { stringifyThingtime } from './thingtimeSerialization.ts';
 // @ts-ignore Node executes this TypeScript test through the tsx loader.
-import { createThingtimeSyncChannel } from './thingtimeSyncChannel.ts';
+import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel.ts';
 
 let channelSequence = 0;
 const uniqueChannelName = (): string => `thingtime-test-${process.pid}-${channelSequence++}`;
@@ -283,6 +286,84 @@ test('undefined values survive through an explicit safe-codec marker', async () 
 	} finally {
 		sender.close();
 		receiver.close();
+	}
+});
+
+test('only writes that are neither remote echoes nor tab-local chrome are published', () => {
+	assert.equal(shouldPublishAppliedWrite(undefined), true);
+	assert.equal(shouldPublishAppliedWrite({}), true);
+	assert.equal(shouldPublishAppliedWrite({ fromRemote: false, tabLocal: false }), true);
+
+	// A peer's write already rode this tab's queue — republishing it would echo.
+	assert.equal(shouldPublishAppliedWrite({ fromRemote: true }), false);
+	// Chrome for this viewport: persisted as usual, but never actuates a peer.
+	assert.equal(shouldPublishAppliedWrite({ tabLocal: true }), false);
+	assert.equal(shouldPublishAppliedWrite({ fromRemote: true, tabLocal: true }), false);
+});
+
+// The transport deliberately holds no list of chrome paths, so nothing stops a
+// future write of a viewport-presence key from silently crossing tabs again.
+// These two assertions are that guard: they read the real call sites.
+const appDir = fileURLToPath(new URL('..', import.meta.url));
+
+const sourceFilesUnder = (dir: string): string[] => {
+	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFilesUnder(full);
+		return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
+	});
+};
+
+// The text of each setThingtime(...) call, so a multi-line options object is
+// inspected as one statement rather than line by line.
+const setThingtimeCalls = (source: string): string[] => {
+	const calls: string[] = [];
+	const call = /setThingtime\??\.?\(/g;
+	let match = call.exec(source);
+
+	while (match) {
+		const end = source.indexOf(');', match.index);
+		calls.push(source.slice(match.index, end === -1 ? source.length : end));
+		match = call.exec(source);
+	}
+
+	return calls;
+};
+
+test('every commanderActive write declares itself tab-local', () => {
+	const offenders: string[] = [];
+	let checked = 0;
+
+	for (const file of sourceFilesUnder(appDir)) {
+		for (const call of setThingtimeCalls(readFileSync(file, 'utf8'))) {
+			if (!call.includes('commanderActive')) continue;
+			checked += 1;
+			// Broadcasting the palette's open/closed state toggles it in every
+			// other tab — and the peer's toggle effect clears its input, so a
+			// half-typed query elsewhere is destroyed. Commander *preferences*
+			// under the same key are unaffected and still sync.
+			if (!call.includes('tabLocal: true')) offenders.push(`${path.relative(appDir, file)}: ${call.split('\n')[0]}`);
+		}
+	}
+
+	assert.deepEqual(offenders, []);
+	// A rename that silently matches nothing would otherwise pass vacuously.
+	assert.ok(checked >= 5, `expected the known commanderActive write sites, found ${checked}`);
+});
+
+test('the drawer open/closed write declares itself tab-local while drawer preferences still sync', () => {
+	const useDrawer = readFileSync(path.join(appDir, 'components/Nav/Drawer/useDrawer.tsx'), 'utf8');
+	const openWrite = useDrawer.match(/setDrawerSetting\('open'[^;]*;/);
+
+	assert.ok(openWrite, 'expected useDrawer to still write settings.drawer.open through setDrawerSetting');
+	assert.match(openWrite[0], /tabLocal: true/);
+
+	// Width/direction/ordering are shared preferences — the motivating case for
+	// this channel — and must NOT have been swept up by the same change.
+	for (const preference of ["setDrawerSetting('width'", "setDrawerSetting('opens.direction'", "setDrawerSetting('userDrawerOrdering'"]) {
+		const write = useDrawer.slice(useDrawer.indexOf(preference)).match(/^[^;]*;/);
+		assert.ok(write, `expected useDrawer to still write ${preference}`);
+		assert.doesNotMatch(write[0], /tabLocal/, `${preference} should keep syncing across tabs`);
 	}
 });
 

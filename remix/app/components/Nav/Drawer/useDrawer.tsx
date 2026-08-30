@@ -177,10 +177,11 @@ export const useDrawer = () => {
 	// Drawer chrome state is UI preference, not content — keep it out of the
 	// undo/redo timeline.
 	const setDrawerSetting = React.useCallback(
-		(path: string, value: any) => {
+		(path: string, value: any, options?: { tabLocal?: boolean }) => {
 			setThingtime?.(`settings.drawer.${path}`, value, {
 				ignoreUndoRedo: true,
-				namespace: 'drawer'
+				namespace: 'drawer',
+				...options
 			});
 		},
 		[setThingtime]
@@ -188,7 +189,11 @@ export const useDrawer = () => {
 
 	const setOpen = React.useCallback(
 		(value: boolean) => {
-			setDrawerSetting('open', !!value);
+			// Whether the drawer is open describes this viewport, not the user's
+			// preferences: width/direction/ordering are worth sharing between tabs,
+			// but a second window sliding its drawer open because you opened this
+			// one is not. Persisted as before, so a reload still restores it.
+			setDrawerSetting('open', !!value, { tabLocal: true });
 		},
 		[setDrawerSetting]
 	);
@@ -285,7 +290,10 @@ export const useDrawer = () => {
 	const openSearch = React.useCallback(() => {
 		setThingtime?.('settings.commander.nav.commanderActive', true, {
 			ignoreUndoRedo: true,
-			namespace: 'drawer'
+			namespace: 'drawer',
+			// Opening the palette here must not open and focus it in every other
+			// open tab — see the tabLocal note in ThingtimeProvider.
+			tabLocal: true
 		});
 
 		if (searchClosesDrawer && open) {
