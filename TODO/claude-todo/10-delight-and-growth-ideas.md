@@ -121,16 +121,23 @@ systems. Reusable whimsy exports (from the review):
 
 ## ⌨️ Power user / dev
 
-- **`Cmd+K` opens the Commander anywhere** *(S)*. It only activates on click today.
-  One keydown that sets `settings.commander.nav.commanderActive=true` + focuses the
-  input; the open/close plumbing (`openSearch`, `allCommanderKeyListener`, Esc to
-  close) already exists. Huge muscle-memory payoff. *(`CommanderV2.tsx` /
-  `root.tsx`; `useDrawer.openSearch`.)*
-- **Commander `>` command registry** *(M)*. No registry exists. Add one consulted
-  in `executeCommand` before the setter/navigate fallthrough: `>theme Midnight`,
-  `>undo`/`>redo`, `>feed`, `>docs api`, `>editor`, each confirming via Lopu. Turns
-  the omnipresent input into a real palette and gives every future egg/tool a home.
-  *(`CommanderV2.tsx` `executeCommand` L245, new `commanderCommands.ts`.)*
+- ✅ **`Cmd+K` opens the Commander anywhere** *(S — shipped via PR #130)*. A window
+  keydown on the global (nav) Commander only, so multiple mounted instances don't
+  fight; the existing open/focus plumbing (the `commanderActive` effect) does the
+  rest. One surface outranks it: Editor.js binds `CMD+K` to its core link tool, so
+  the palette yields inside a `.codex-editor` block. *(`commanderShortcut.ts`,
+  `CommanderV2.tsx`.)*
+- ✅ **Commander `>` command registry** *(M — shipped via PR #130)*. A `>` prefix
+  flips the dropdown into command mode and Enter runs the command instead of the
+  setter/navigate fallthrough: `>help` · `>theme <name>` · `>undo`/`>redo` ·
+  `>search` · `>docs [section]` · `>feed` · `>things` · `>themes` · `>settings` ·
+  `>profile` · `>schemas`, each confirming via Lopu. The registry is DOM-free (side
+  effects injected), so it unit-tests in plain Node.
+  *(`commanderCommands.ts`, `CommanderV2.tsx` `executeCommand`.)*
+  - `>editor` from the original sketch was deliberately **not** shipped: there is no
+    `/editor` route, so it fell through to the `*` catch-all tree viewer while
+    toasting success. Add the one registry line the day an editor page lands —
+    `commanderCommands.test.ts` pins every navigation target to a declared route.
 - **"Run it ▶" live API playground on `/docs/api`** *(M)*. Every endpoint already
   self-describes via its `-docs` twin with generated curl/JS/Python. Add a per-
   endpoint run button: editable JSON body, fetch with the real session cookie,
