@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { stringifyThingtime } from './thingtimeSerialization.ts';
 // @ts-ignore Node executes this TypeScript test through the tsx loader.
 import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel.ts';
+// @ts-ignore Node executes this TypeScript test through the tsx loader.
+import { smarts } from '../smarts/index.tsx';
 
 let channelSequence = 0;
 const uniqueChannelName = (): string => `thingtime-test-${process.pid}-${channelSequence++}`;
@@ -428,6 +430,73 @@ test("the composer's tmp seed declares itself tab-local so it cannot delete a pe
 	assert.match(seed[0], /tabLocal: true/, 'the tmp seed must not delete another tab composer session');
 	// Passing an options object replaces setThingtime's default one.
 	assert.match(seed[0], /namespace: 'default'/, 'the seed must keep the namespace it has always used');
+});
+
+test('the DevKit form prefills declare themselves tab-local', () => {
+	// A prefill fills the form in front of THIS DevKit — an instruction to one
+	// viewport, not shared state. Login/Register consume it from an effect keyed
+	// on `_ts`, a fresh Date.now() every click, so the effect always re-fires:
+	// broadcast, one click replaces the username/email/password a peer has typed
+	// into its own form and calls setPasswordVisible(true) there. DevKit is not
+	// dev-only — root.tsx renders it for every session except the authorize popup.
+	const devKit = readFileSync(path.join(appDir, 'components/DevKit/DevKit.tsx'), 'utf8');
+
+	for (const key of ['devKit.registerPrefill', 'devKit.loginPrefill']) {
+		const write = devKit.match(new RegExp(`setThingtime\\(\\s*'${key.replace('.', '\\.')}'[\\s\\S]*?\\);`));
+		assert.ok(write, `expected DevKit to still write ${key} through setThingtime`);
+		assert.match(write[0], /tabLocal: true/, `${key} must not overwrite a form in another tab`);
+		// Passing an options object replaces setThingtime's default one.
+		assert.match(write[0], /namespace: 'default'/, `${key} must keep the namespace it has always used`);
+	}
+
+	// The consumers are what make the broadcast actuating rather than inert;
+	// if either stops driving form state from the prefill, revisit the flag.
+	for (const [file, setter] of [
+		['components/Login/Login.tsx', 'loginPrefill'],
+		['components/Login/Register.tsx', 'registerPrefill']
+	]) {
+		const source = readFileSync(path.join(appDir, file), 'utf8');
+		assert.match(source, new RegExp(setter), `expected ${file} to still read ${setter}`);
+		assert.match(source, /setPasswordVisible\(true\)/, `expected ${file} to still reveal the password on prefill`);
+	}
+});
+
+test('an array path part is one literal key, so exact-match validation is sufficient', () => {
+	// The guard checks string paths by SPLITTING them and array paths by matching
+	// each element exactly. That asymmetry looks like a hole — `['a.__proto__']`
+	// and `['tt.timemachine']` both slip past an exact-match check — and it is
+	// only safe because smarts.setsmart never re-splits an array element: it
+	// assigns obj[ee(part)] directly, so a dotted part is a literal own key that
+	// addresses neither the prototype nor the real timeline. Pin that here: if
+	// setsmart ever starts re-splitting, the guard becomes bypassable and this
+	// test is the thing that says so.
+	//
+	// It also rules OUT the tempting inverse fix — normalising array parts
+	// through the string splitter before validating. Legitimate keys contain dots
+	// (see useTtTheme's `custom` map, keyed 'windows.close'), so splitting them
+	// would mis-segment real data rather than harden anything.
+	const build = () => {
+		const root: any = { timemachine: { SENTINEL: 'local-timeline' } };
+		root.tt = root;
+		root.thingtime = root;
+		return root;
+	};
+
+	const polluted = build();
+	smarts.setsmart(polluted, ['a.__proto__', 'polluted'], 'ATTACKER');
+	assert.equal(({} as any).polluted, undefined, 'a dotted array part must not reach Object.prototype');
+	assert.ok(Object.prototype.hasOwnProperty.call(polluted, 'a.__proto__'), 'it must land as one literal own key');
+
+	const aliased = build();
+	smarts.setsmart(aliased, ['tt.timemachine', 'SENTINEL'], 'ATTACKER');
+	assert.equal(aliased.timemachine.SENTINEL, 'local-timeline', 'a dotted array part must not reach the real timeline');
+	assert.ok(Object.prototype.hasOwnProperty.call(aliased, 'tt.timemachine'), 'it must land as one literal own key');
+
+	// Sensitivity check: the segmented form the guard actually rejects DOES reach
+	// the timeline, so the two assertions above are not passing vacuously.
+	const reached = build();
+	smarts.setsmart(reached, ['timemachine', 'SENTINEL'], 'ATTACKER');
+	assert.equal(reached.timemachine.SENTINEL, 'ATTACKER');
 });
 
 test('BroadcastChannel absence degrades to the existing single-tab behavior', () => {

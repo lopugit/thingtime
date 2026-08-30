@@ -288,8 +288,19 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				// Publish only after this update applied successfully. Remote writes use
 				// the same queue but never echo back onto the channel, and tab-local
 				// view chrome is persisted without ever actuating another tab.
+				//
+				// Contained in its own try: this callback's RETURN VALUE is the new
+				// state, and drainThingtimeMutationQueue drops an update whose apply
+				// throws. Letting a transport failure escape here would therefore
+				// discard a write that already applied — the user's own edit would
+				// vanish because a peer-facing broadcast failed. Sync is best-effort;
+				// the local write is not.
 				if (shouldPublishAppliedWrite(nextThingtime.options)) {
-					syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
+					try {
+						syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
+					} catch (error) {
+						console.error('[tt] Failed to broadcast an applied Thingtime write', error);
+					}
 				}
 
 				return nextState;

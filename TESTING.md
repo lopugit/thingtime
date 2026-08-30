@@ -1737,6 +1737,11 @@ is fixed, and cite the checklist you ran in the PR description.
       open a saved config from the drawer in Tab A. Tab B's layout is untouched.
       Then set an intent in Tab B's drawer without navigating yet, open a config
       in Tab A, and confirm Tab B still opens its own config when it arrives.
+- [ ] DevKit prefills stay in their own tab. With a real username/email/password
+      typed into the register form in Tab B, open DevKit in Tab A and click
+      "prefill register". Tab B's fields are untouched and its password field
+      stays masked. Repeat for the login form and "prefill login". In Tab A the
+      prefill still fills that tab's own form, and still does after a reload.
 - [ ] Drawer *preferences* still sync in the same session: change the width and
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)

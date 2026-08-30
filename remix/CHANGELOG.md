@@ -361,6 +361,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (when the editor is already mounted the drawer uses the tab-local events bus
   instead). Clearing had to be suppressed too, or consuming one tab's intent would
   erase an intent another tab had not navigated to yet. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the DevKit form prefills (PR #92 review)**: both
+  `devKit.registerPrefill` and `devKit.loginPrefill` now pass `{ tabLocal: true }`.
+  A prefill fills the form in front of *that* DevKit, and `root.tsx` renders
+  DevKit for every session (not dev-only). `Login`/`Register` consume it from an
+  effect keyed on `_ts` — a fresh `Date.now()` per click, so it always re-fires —
+  meaning one click replaced the username/email/password a peer tab had typed
+  into its own form and called `setPasswordVisible(true)` there. Still persisted,
+  so the same DevKit still prefills after a reload. — Lopu (AI), 2026-08-30
+- **A broadcast failure can no longer discard a local write (PR #92 review)**:
+  `flushSetThingtimeQueue` published inside the callback whose return value *is*
+  the new state, and `drainThingtimeMutationQueue` drops any update whose apply
+  throws — so a throw on the publish path would have silently rolled back a write
+  that had already applied. The channel catches internally today, so this was not
+  a live defect; the publish is now contained in its own `try` so that stays true
+  independently of the transport. Sync is best-effort, the local write is not.
+  — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.

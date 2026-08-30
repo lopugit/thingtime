@@ -47,8 +47,9 @@ There is no second persistence codec or storage mechanism.
 
 ## Validation
 
-- `npm run test:autosave`: 33/33 passed, including the active safe codec,
-  malformed/self messages, lifecycle fallback, and tab-local timeline guard.
+- `npm run test:autosave`: 41/41 passed, including the active safe codec,
+  malformed/self messages, lifecycle fallback, the tab-local timeline guard, and
+  the call-site guards for every viewport-scoped key.
 - `npm run test:unit`: passed (the repository's complete unit/contract suite).
 - `npm run build`: passed, including client, Nitro/Vercel output patching, and
   `verify:vercel-output`.
@@ -120,6 +121,47 @@ Both directions now pass `{ tabLocal: true }`, because suppressing only the writ
 leaves the pair lopsided: the consuming clear would still cross and erase an
 intent another tab set but has not navigated to yet. A third source-contract test
 pins both call sites.
+
+### Third pass — the DevKit prefills, and the default that keeps producing these (Lopu, 2026-08-30)
+
+`devKit.registerPrefill` and `devKit.loginPrefill` were still on the wire. A
+prefill fills the form in front of *that* DevKit, and `root.tsx` renders DevKit
+for every session — it is not dev-only. `Login`/`Register` consume it from an
+effect keyed on `_ts`, a fresh `Date.now()` per click, so the effect always
+re-fires: one click in Tab A replaced the username/email/password a peer had
+typed into its own form and called `setPasswordVisible(true)` there. Both writes
+now pass `{ tabLocal: true }`; a fourth source-contract test pins them, and also
+pins the two consumers, since they are what makes the broadcast actuating.
+
+That is the seventh such key. The pattern is worth naming rather than fixing
+once more: **broadcast is the default and `tabLocal` is opt-out**, so every miss
+fails toward "a peer's state is overwritten" instead of "this key quietly does
+not sync". The module comment previously claimed the write-site rule prevented
+accidental cross-tab keys; it does not — it distributes the denylist rather than
+removing it, and the comment now says so. The fail-safe inversion (`shared: true`
+opt-in, or an allowlist of syncable subtrees) is recorded there as the known
+trade-off. It is a real design change that re-annotates every genuine data write,
+so it is the author's call, not a reviewer's; the guard tests hold the line
+meanwhile.
+
+Two robustness items from the same pass:
+
+- **A broadcast failure could discard a local write.** `flushSetThingtimeQueue`
+  published inside the callback whose return value *is* the new state, and
+  `drainThingtimeMutationQueue` drops any update whose apply throws — so a throw
+  on the publish path would silently roll back a write that had already applied.
+  Not live (the channel catches internally), but the publish is now contained in
+  its own `try` so it stays that way independently of the transport.
+- **The array-path validation asymmetry is closed, and must not be "fixed".**
+  An earlier pass flagged that string paths are split before validation while
+  array parts are matched exactly, so `['a.__proto__']` slips past. Verified
+  against `smarts.setsmart`: it never re-splits an array element, assigning
+  `obj[ee(part)]` directly, so a dotted part is one literal own key reaching
+  neither the prototype nor the timeline. A test now pins that (with a
+  sensitivity check that the segmented form *does* reach the timeline). The
+  proposed inverse — normalising array parts through the string splitter —
+  would have been a regression: legitimate keys contain dots (`useTtTheme`'s
+  `custom` map is keyed `'windows.close'`).
 
 ## Optional future hardening
 

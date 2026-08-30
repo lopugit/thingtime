@@ -46,10 +46,29 @@ export type ThingtimeSyncPublishOptions = {
 //     restores it exactly as before — it just stops one tab actuating another
 //     tab's UI mid-session.
 //
-// Chrome is declared at the write site instead of pattern-matched here so the
-// transport stays generic: this module knows nothing about drawers or the
-// Commander, and a NEW chrome key cannot start crossing tabs by accident just
-// because nobody remembered to extend a denylist in an unrelated file.
+// Chrome is declared at the write site rather than pattern-matched here so the
+// transport stays generic: this module knows nothing about drawers, the
+// Commander, or the composer, and no central list has to be kept in sync with
+// call sites in unrelated files.
+//
+// Be clear-eyed about what that does NOT buy, because it is easy to read the
+// paragraph above as a safety property. Declaring at the write site distributes
+// the denylist; it does not remove it. Broadcast is still the DEFAULT, so a new
+// write site that nobody annotates does start crossing tabs by accident — which
+// is not hypothetical: review of this change found seven separate keys that
+// should never have been on the wire (root `timemachine` under doubled aliases,
+// `commanderActive`, `settings.drawer.open`/`selectedItem`,
+// `settings.editor.openConfig`/`live`, the composer's `tmp` seed, and the DevKit
+// prefills), each after the previous one was called the last.
+//
+// The fail-safe alternative is to invert the default: publish nothing unless a
+// write opts in (`shared: true`), or allowlist the syncable subtrees outright.
+// Every miss above would then have been a key that quietly did not sync, rather
+// than one that quietly destroyed a peer's typed input. That is a deliberate
+// design change with a real cost — it re-annotates every genuine data write —
+// so it is recorded here as the known trade-off, not made unilaterally. The
+// call-site guard tests below are the compensating control in the meantime; add
+// to them whenever a new viewport-scoped key appears.
 export const shouldPublishAppliedWrite = (options?: ThingtimeSyncPublishOptions): boolean => {
 	return !options?.fromRemote && !options?.tabLocal;
 };

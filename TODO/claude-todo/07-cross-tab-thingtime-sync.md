@@ -68,8 +68,13 @@ by a stale tab writing its old in-memory tree.
    suppresses only the broadcast. They are still persisted, so a reload
    restores them exactly as before. The intent is declared at the write site
    rather than pattern-matched in the transport, so `thingtimeSyncChannel.ts`
-   keeps no list of feature paths and a new chrome key cannot start crossing
-   tabs because nobody remembered to extend a denylist elsewhere. Genuine
+   keeps no list of feature paths. Be clear that this distributes the denylist
+   rather than removing it: broadcast is still the default, so a new chrome key
+   *does* cross tabs until somebody annotates it — review found seven such keys,
+   each after the previous was called the last. The fail-safe inversion (publish
+   nothing unless a write opts in, or allowlist syncable subtrees) is recorded as
+   a known trade-off in `thingtimeSyncChannel.ts`; the call-site guard tests are
+   the compensating control until it is decided. Genuine
    preferences under the same keys — drawer width, `opens.direction`,
    ordering, the Commander's `clearCommanderOnToggle`/`hideSuggestionsOnToggle`
    — are unaffected and still sync; sharing them is the point of this channel.
@@ -99,10 +104,10 @@ by a stale tab writing its old in-memory tree.
 
 ## Validation
 
-- `npm run test:autosave`: 33/33 pass, including safe-codec Date/string/cycle
+- `npm run test:autosave`: 41/41 pass, including safe-codec Date/string/cycle
   round-tripping, function stripping, malformed messages, self-echo, close,
-  explicit `undefined`, tab-local timeline metadata, and the
-  no-`BroadcastChannel` fallback.
+  explicit `undefined`, tab-local timeline metadata, the call-site guards for
+  every viewport-scoped key, and the no-`BroadcastChannel` fallback.
 - Targeted provider/channel ESLint passes.
 - Full unit suite and production/Vercel build pass.
 - Live two-tab verification passed bidirectionally, including a 20-write burst,
