@@ -71,7 +71,9 @@ test('buildCurlForEntry mirrors the docs curl shape', () => {
 	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/things', body: { text: "it's alive" } });
 	const curl = buildCurlForEntry(getApiCalls()[0], 'http://127.0.0.1:9999');
 	assert.match(curl, /^curl -X POST 'http:\/\/127\.0\.0\.1:9999\/api\/v1\/things' \\\n/);
-	assert.match(curl, /-b 'tt_session=<your session cookie>'/);
+	// the cookie NAME must be the one authCookie.ts issues, or a caller who
+	// pastes their real value still sends an anonymous request
+	assert.match(curl, /-b 'tt_auth=<your session cookie>'/);
 	assert.match(curl, /-H 'Content-Type: application\/json'/);
 	// single quotes in the body survive shell quoting
 	assert.match(curl, /--data '\{"text":"it'\\''s alive"\}'/);

@@ -168,6 +168,12 @@ export const describeApiStatus = (entry: Pick<ApiLogEntry, 'status' | 'aborted'>
 // same single-quote escaping the API docs' curl examples use
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
+// Must match the cookie auth/authCookie.ts actually issues (`createCookie('tt_auth')`).
+// A placeholder under any other name produces a curl that stays anonymous even
+// after the caller pastes their real value in — the request would 401 and the
+// panel would be lying about being ready to paste.
+const AUTH_COOKIE_NAME = 'tt_auth';
+
 /**
  * A ready-to-paste curl for a logged call, mirroring the docs examples' shape.
  * The session cookie is httpOnly (unreadable from JS by design), so the line
@@ -175,7 +181,7 @@ const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'
  */
 export const buildCurlForEntry = (entry: ApiLogEntry, origin: string): string => {
 	const lines = [`curl -X ${entry.method} ${shellQuote(`${origin}${entry.url}`)}`];
-	lines.push(`  -b ${shellQuote('tt_session=<your session cookie>')}`);
+	lines.push(`  -b ${shellQuote(`${AUTH_COOKIE_NAME}=<your session cookie>`)}`);
 	if (entry.body !== undefined) {
 		lines.push(`  -H ${shellQuote('Content-Type: application/json')}`);
 		lines.push(`  --data ${shellQuote(JSON.stringify(entry.body))}`);
