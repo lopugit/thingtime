@@ -20,7 +20,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
 
 - Grouped summary; full detail in the PR note
-  (`PRs/<pr>-thingtime-design-system-builder.md`).
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485).
 - **Design system**: new shared `PageShell`/`PageHeader` primitives
   (`remix/app/components/Layout/PageShell.tsx`) extracted from the canonical
   hand-copied idiom; every off-system page aligned (status, mongodb-status,
