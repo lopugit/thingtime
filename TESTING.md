@@ -2184,6 +2184,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       requested → accepted (or failed) with a relational event. Arbitrary
       workflow names, non-allowlisted inputs, and feature-branch entry refs
       cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Build a Feature Stack by checking 2–20 feature rows in a deliberate
+      order, choose `develop`, `main`, or both, refresh/reload, and confirm the
+      draft order/name/targets persist while the destructive confirmation does
+      not. Dispatch once and verify the server snapshots the live same-repo PR
+      head refs/SHAs, rejects drafts/forks/moved refs/duplicate targets, and
+      forwards only canonical base64 through the thin `develop` listener.
+- [ ] In the protected Feature Stack run, confirm each target starts from its
+      admitted SHA, every source becomes exactly one two-parent merge commit in
+      list order, clean merges are byte-identical to Git, AI edits touch only
+      recomputed conflict paths, source/target movement aborts publication, and
+      a target-specific PR is opened with auto-merge while branch protection
+      remains the final gate. Pause/opt-out labels must stop the batch.
+- [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
+      preview origin. Confirm its `origin` matches exactly, every generated API
+      and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
+      `1.1.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      breaking-major manifest before dispatch.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
@@ -2220,6 +2237,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Desktop and 375px mobile: add/remove Feature Stack rows, targets, and the
+      confirmation; verify long branch/feature names truncate without hiding
+      their remove controls, the ordered list remains readable, every control
+      is keyboard-focusable, and the full page has no horizontal overflow.
 - [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and
