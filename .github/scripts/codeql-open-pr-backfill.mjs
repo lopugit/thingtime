@@ -9,6 +9,16 @@ const REQUIRED_CATEGORIES = [
   "/language:javascript-typescript",
 ];
 const TRANSIENT_HTTP_STATUS = /\b(?:408|429|500|502|503|504)\b/u;
+// A connection torn down mid-response never reaches a status line, so
+// classifying transience by HTTP status alone makes a retryable edge blip
+// fatal: run 33262097171 tore the resolver's PR inventory down with
+// `stream error: stream ID 1; CANCEL; received from peer` and carried no
+// HTTP code at all. This backfill issues the same shape of long paginated
+// read, so it is exposed to the same reset. Mirrors the `gh_read_retry`
+// transport predicate in resolve-pr-conflicts.yml. Retrying is safe by
+// construction: every call routed through ghJson is a read.
+const TRANSIENT_TRANSPORT =
+  /stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i\/o timeout|server closed idle connection|client connection force closed/u;
 const CENTRAL_RUN_TITLE = /^Lopu CodeQL PR #(\d+) @ ([0-9a-f]{40,64})$/u;
 const ACTIVE_RUN_STATUSES = [
   "queued",
@@ -29,6 +39,10 @@ function commandFailureText(error) {
     .join("\n");
 }
 
+function isTransientFailure(text) {
+  return TRANSIENT_HTTP_STATUS.test(text) || TRANSIENT_TRANSPORT.test(text);
+}
+
 function ghJson(args, { attempts = 4 } = {}) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -41,7 +55,7 @@ function ghJson(args, { attempts = 4 } = {}) {
       return output.trim() ? JSON.parse(output) : null;
     } catch (error) {
       const failure = commandFailureText(error);
-      if (attempt === attempts || !TRANSIENT_HTTP_STATUS.test(failure)) {
+      if (attempt === attempts || !isTransientFailure(failure)) {
         throw new Error(`gh ${args.join(" ")} failed: ${failure}`);
       }
       const delaySeconds = 2 ** attempt;
@@ -360,6 +374,24 @@ function selfTest() {
     analysisRef: "refs/pull/4/head",
     analysisSha: sha("4"),
   });
+  // A transport reset carries no HTTP status, so it must still be retried;
+  // auth and permission failures must still fail fast on the first attempt.
+  for (const failure of [
+    "stream error: stream ID 1; CANCEL; received from peer",
+    "http2: server sent GOAWAY and closed the connection",
+    "read tcp 10.1.0.4:52918->140.82.121.6:443: connection reset by peer",
+    "Post \"https://api.github.com/graphql\": unexpected EOF",
+    "gh: HTTP 504: Gateway Timeout (https://api.github.com/graphql)",
+  ]) {
+    assert.equal(isTransientFailure(failure), true, failure);
+  }
+  for (const failure of [
+    "gh: Bad credentials (HTTP 401)",
+    "gh: Resource not accessible by integration (HTTP 403)",
+    "gh: Could not resolve to a Repository with the name 'o/r'.",
+  ]) {
+    assert.equal(isTransientFailure(failure), false, failure);
+  }
   process.stdout.write("codeql-open-pr-backfill self-test: OK\n");
 }
 
