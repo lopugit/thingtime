@@ -24,6 +24,12 @@ is fixed, and cite the checklist you ran in the PR description.
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
       access; removing the last account revokes the ChatGPT bridge session.
+- [ ] With a known Thing ID outside the first recent/list page,
+      `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
+      stable `thing_not_found` error; it never falls back to list/search. With a
+      known parent ID, `list_thingtime_comments` returns only directly attached
+      comments and preserves `limit`/`cursor` pagination without fetching global
+      comment rows.
 
 ## Passkeys + cross-deployment auto-login
 
