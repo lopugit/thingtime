@@ -89,6 +89,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   manifest, API docs, and the distributable plugin package live together so
   clients can negotiate the contract rather than route-probing. — Codex (AI),
   2026-08-25
+- **Admin external integrations**: `/admin` now exposes a dedicated
+  **External integrations** tab for a write-only AES-256-GCM secret vault,
+  saved HTTPS endpoint policies, and a bounded redacted audit trail. The
+  provider proxy enforces selected read / create-only / write permissions;
+  Vercel create-only environment writes check for an existing value before
+  POST and never use PATCH/upsert. Setup: `README.md` “Admin integration vault
+  and policy proxy”. — Codex (AI), 2026-08-24
 
 ### Security
 
@@ -1320,6 +1327,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   now reads section icons from the canonical Thing icon registry instead of a
   removed local binding, with a populated-group runtime regression test in the
   required unit suite. — Codex (AI), 2026-08-12
+
+- **Hosted development isolation docs now match the shared Preview runtime**:
+  the runbook records verified `dev.thingtime.com` DNS/ownership/HTTPS and the
+  distinct development-versus-Production Atlas/JWT/S3 planes while clarifying
+  that generic Preview intentionally shares development MongoDB, JWT, cron,
+  and private-S3 configuration. It also documents URI-authoritative MongoDB
+  usernames and the live health checks for the canonical `thingtime` database
+  without storing credentials. The runbook now records the restored
+  branch-scoped `dev.thingtime.com` binding and explains how to verify the
+  healthy Cloudflare-to-Vercel ACME delegation in the authoritative DNS
+  referral instead of mistaking empty recursive short output for a missing
+  record. It separates that corrected live domain state from the #188
+  default-branch listener promotion, which merged on 2026-08-17 and put the
+  thin listener on `main`. — Codex (AI), 2026-08-12
 
 - **The Thingtime AI preference now reaches the remaining Claude runtime**:
   Lopu musings resolve their Anthropic model from the current Admin waterfall

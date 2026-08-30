@@ -34,6 +34,8 @@ import {
 } from './docsCode';
 import { Link as RouterLink, useLocation, useParams } from 'react-router';
 
+import { ApiPlayground } from './ApiPlayground';
+
 const METHOD_COLORS: Record<ApiHttpMethod, string> = {
   GET: 'blue',
   POST: 'purple',
@@ -392,6 +394,8 @@ function EndpointDocs({
           </Box>
         </Stack>
       </SimpleGrid>
+
+      <ApiPlayground doc={doc} />
 
       <Box mt={6}>
         <Heading as="h4" fontSize="md" mb={3}>

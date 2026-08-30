@@ -895,6 +895,19 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-feed-tag-filtered',
+    name: 'Feed honours tag filter',
+    description: 'Filtering by a tag returns only posts carrying that tag (normalized), and an unused tag returns an empty page.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/feed?tag=Tt-Api-Test-Definitely-Unused-Tag&circles=public&limit=5',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.posts) && body.posts.length === 0,
+      'Feed filtered by an unused tag (mixed case in the query) returned ok with zero posts.'
+    )
+  },
+  {
     id: 'things-create-guarded',
     name: 'Post create requires auth',
     description: 'Creating a post without a session is rejected (401) or accepted for a logged-in tester.',
@@ -1181,6 +1194,15 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/admin/moderation',
     body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
+  },
+  {
+    id: 'admin-integrations-guarded',
+    name: 'Integration vault is admin-only',
+    description: 'Listing external secret metadata and endpoint policies requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/integrations',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin integration vault read was rejected.')
   },
   {
     id: 'admin-users-overview-guarded',
