@@ -36,6 +36,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   component search, drag/drop, right-side inspector drawer), `/p/:id`
   published pages, and site-wide ✏️ edit mode with viewer-owned
   personalisation forks + memoised global blocks.
+- **Round 3 (limitless builder)**: builder mode is full-bleed on every page
+  (dual-region 🌐 global + page editing, one drawer, collapsible), touch UX is
+  Squarespace-grade (44px zones, dropwells, bottom-sheet insert menu, chrome
+  unselectable), and built-in pages decompose into PIXEL-IDENTICAL native
+  sections via the new registry (`components/Builder/nativeSections.tsx`):
+  status, home landing, welcome, ode, mongodb-status so far — the route, the
+  seed table, and the builder all share one section list.
 - **Catalog eviction**: the components-db catalog + pipeline moved to the
   public repo <https://github.com/lopugit/thingtime-components> (2800
   components); this repo ships only the runtime — components live in MongoDB

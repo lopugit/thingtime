@@ -158,3 +158,53 @@ Changes (commits 2d2a7c2e1, e03939289):
   develop environment — other deployments repoint it, so branch-endpoint
   probes must gate any preview API work (the seeded docs persist in the DB
   regardless).
+
+## Round 3 — Squarespace-grade UX + pixel-identical native sections (owner feedback, next morning)
+
+Feedback: nested add-block buttons untappable on mobile (overlapping zones +
+iOS text selection); the add/block UI needed Squarespace-level friendliness;
+native blocks should decompose into pixel-identical builder sections; QA 3h+
+like a human QA'er.
+
+### Touch/UX overhaul (commit a1da58cb5)
+- Builder chrome is unselectable (user-select/touch-callout none, transparent
+  tap highlight, touch-action manipulation) — no more iOS long-press
+  selecting "+ add block".
+- Insert zones are whole-strip tap targets (44px visible; always visible on
+  coarse pointers); empty containers render a tall dashed DROPWELL that
+  cannot collide with sibling zones (the screenshot bug); container frames
+  ignore capture-clicks on nested chrome (found live: tapping a nested well
+  selected the container instead of opening the menu).
+- The insert menu is a bottom sheet under 640px (scrim, notch, safe-area,
+  enlarged rows, no keyboard auto-pop).
+
+### Native SECTION registry (commits ee5599fd6 → 6ad68f728)
+The real answer to "convert everything inside native blocks": a registered
+page declares its shell + an ordered list of standalone section components
+(lazy-loaded; data via shared module-cached hooks). The ROUTE renders that
+same list, the seed table seeds the same keys, the builder edits them — one
+source of truth, pixel-identical by construction. Fully sectioned docs render
+doc-driven in view mode (fork ordering/insertions/removals apply; the route
+element is not mounted); full-bleed pages register their page-owned Shell so
+doc renders keep their chrome.
+
+Converted so far: **status** (4 sections), **home landing** (8 sections incl.
+hero/demo/faq/footer — confetti + waitlist intact via a module store),
+**welcome** (2 + WelcomeShell), **ode** (1 atomic Thingtime-tree section),
+**mongodb-status** (3; blocking loader replaced by a shared hook that bridges
+MongoEndpointConfig's revalidator signal). Remaining pages keep the
+whole-page native path and convert incrementally with the same recipe.
+
+### QA-found fixes this round
+1. Container frames swallowed nested-chrome taps (capture-phase select).
+2. Region-ambiguous zone testids (global vs page) — now prefixed.
+3. Native sections were wrapped in width-100% Boxes in view mode, defeating
+   page-owned centering (/welcome card hugged the left edge).
+4. Sectioned compositions rendered inside the renderer's root column Flex,
+   blocking shell layout — view mode now renders BARE inside shells.
+5. Dropwell/zone flicker during draft resolve — the live page renders
+   untouched until the draft lands.
+6. Insert menu autofocus popped the mobile keyboard over the sheet.
+
+Regression after each step: webpageBlocks 6/6, verify-webpages 25/25 (native
+assertion updated for sections), apiTests webpages 9/9, client build ✓.
