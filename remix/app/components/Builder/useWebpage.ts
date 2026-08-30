@@ -130,6 +130,20 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		[componentsByRef]
 	);
 
+	// Saves announce themselves so caches elsewhere (SiteBlocksHost's per-path
+	// and global-blocks caches) can invalidate without coupling to this hook.
+	const announceSave = (crystal: WebpageCrystal) => {
+		try {
+			window.dispatchEvent(
+				new CustomEvent('thingtime:webpage-saved', {
+					detail: { pageKey: crystal.pageKey || null, siteRoute: crystal.siteRoute || null }
+				})
+			);
+		} catch {
+			// non-browser runtimes
+		}
+	};
+
 	const save = React.useCallback(
 		async (options?: { name?: string; isPublic?: boolean }) => {
 			if (!targetKey) return { ok: false, error: 'Nothing to save' };
@@ -163,6 +177,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 					setDirty(false);
 					setResolved((prev) => (prev ? { ...prev, page: { ...prev.page!, crystal } } : prev));
+					announceSave(crystal);
 					return { ok: true, id: page.id };
 				}
 				// forking a system/site default or creating a brand-new page —
@@ -177,6 +192,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 				setDirty(false);
 				// re-resolve so source flips to 'user' and future saves update in place
 				setRefreshTick((tick) => tick + 1);
+				announceSave(crystal);
 				return { ok: true, id };
 			} catch (err: any) {
 				return { ok: false, error: err?.error || err?.message || 'Save failed' };
@@ -192,6 +208,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 			const resp: any = await apiRef.current.v1.things.remove({ id: page.id });
 			if (!resp?.ok) return { ok: false, error: resp?.error || 'Reset failed' };
 			setRefreshTick((tick) => tick + 1);
+			announceSave((page.crystal || {}) as WebpageCrystal);
 			return { ok: true };
 		} catch (err: any) {
 			return { ok: false, error: err?.error || err?.message || 'Reset failed' };

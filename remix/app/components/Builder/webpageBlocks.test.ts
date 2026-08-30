@@ -95,3 +95,15 @@ test('newBlockId never collides and labels stay short', () => {
 	assert.equal(blockLabel({ id: 'x', type: 'component', component: 'mui-card' } as WebpageBlock), 'mui-card');
 	assert.equal(blockLabel({ id: 'x', type: 'native', native: 'feed' } as WebpageBlock), 'native · feed');
 });
+
+test('moveBlockRelative steps within the parent list and clamps at edges', async () => {
+	const { moveBlockRelative } = await import('./webpageBlocks');
+	const blocks = tree();
+	const down = moveBlockRelative(blocks, 'a', 1);
+	assert.deepEqual(down.map((block) => block.id), ['row', 'a', 'native-home']);
+	// clamped: first block up / nested child within its own list only
+	assert.deepEqual(moveBlockRelative(blocks, 'a', -1), blocks);
+	const nestedUp = moveBlockRelative(blocks, 'c', -1);
+	assert.deepEqual(findBlock(nestedUp, 'row')?.children?.map((block) => block.id), ['c', 'b']);
+	assert.deepEqual(moveBlockRelative(blocks, 'missing', 1), blocks);
+});

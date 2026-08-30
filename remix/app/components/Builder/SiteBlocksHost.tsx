@@ -77,6 +77,20 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 			setState(globalCache);
 		})();
 	}, [enabled]);
+	// in-place refresh when a site-global save happens while a page view is
+	// mounted (saves from the in-page edit mode)
+	React.useEffect(() => {
+		const onSaved = (event: Event) => {
+			const detail = (event as CustomEvent).detail as { pageKey?: string | null } | undefined;
+			if (detail?.pageKey !== 'site-global') return;
+			(async () => {
+				globalCache = await resolveWebpageClient({ kind: 'global' });
+				setState(globalCache);
+			})();
+		};
+		window.addEventListener('thingtime:webpage-saved', onSaved);
+		return () => window.removeEventListener('thingtime:webpage-saved', onSaved);
+	}, []);
 	return state;
 };
 
@@ -231,6 +245,22 @@ export const SiteBlocksHost = ({ children }: { children: React.ReactNode }) => {
 	const toggleEditMode = React.useCallback(() => {
 		setThingtime?.('settings.builder.editMode', !editMode, { ignoreUndoRedo: true, namespace: 'builder' });
 	}, [editMode, setThingtime]);
+
+	// Always-mounted invalidation (the /builder canvas saves while no page
+	// view is mounted): any webpage save clears the module caches so the next
+	// navigation refetches fresh state.
+	React.useEffect(() => {
+		const onSaved = (event: Event) => {
+			const detail = (event as CustomEvent).detail as { pageKey?: string | null; siteRoute?: string | null } | undefined;
+			if (detail?.pageKey === 'site-global') {
+				globalFetched = false;
+				globalCache = null;
+			}
+			if (detail?.siteRoute) routeCache.delete(detail.siteRoute);
+		};
+		window.addEventListener('thingtime:webpage-saved', onSaved);
+		return () => window.removeEventListener('thingtime:webpage-saved', onSaved);
+	}, []);
 
 	if (excluded) return <>{children}</>;
 

@@ -143,6 +143,18 @@ export const moveBlock = (
 	return insertBlock(without, containerId, index, moving);
 };
 
+// Move a block one step up/down within its parent list — the deterministic
+// (keyboard/inspector) twin of drag/drop.
+export const moveBlockRelative = (blocks: WebpageBlock[], id: string, delta: -1 | 1): WebpageBlock[] => {
+	const parentId = findParentId(blocks, id);
+	if (parentId === undefined) return blocks;
+	const siblings = parentId === null ? blocks : findBlock(blocks, parentId)?.children || [];
+	const index = siblings.findIndex((block) => block.id === id);
+	const nextIndex = index + delta;
+	if (index === -1 || nextIndex < 0 || nextIndex >= siblings.length) return blocks;
+	return moveBlock(blocks, id, parentId, nextIndex);
+};
+
 export const defaultTextBlock = (existing: Set<string>): WebpageBlock => ({
 	id: newBlockId('text', existing),
 	type: 'text',

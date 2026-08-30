@@ -7,6 +7,7 @@ import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/co
 import {
 	blockLabel,
 	findBlock,
+	moveBlockRelative,
 	removeBlock,
 	updateBlock,
 	type WebpageBlock,
@@ -136,8 +137,31 @@ const BlockInspector = ({
 
 	return (
 		<Flex flexDirection="column" rowGap={3}>
-			<Flex alignItems="center" justifyContent="space-between">
+			<Flex alignItems="center" justifyContent="space-between" columnGap={2}>
 				<Eyebrow>Selected block · {blockLabel(block)}</Eyebrow>
+				<Flex columnGap={1} flexShrink={0}>
+					{([-1, 1] as const).map((delta) => (
+						<Box
+							key={delta}
+							as="button"
+							aria-label={delta === -1 ? 'Move block up' : 'Move block down'}
+							data-testid={delta === -1 ? 'builder-move-up' : 'builder-move-down'}
+							color="var(--tt-muted, #9a9aa6)"
+							fontSize="13px"
+							lineHeight="1"
+							paddingX="5px"
+							paddingY="3px"
+							borderRadius="var(--tt-radius-xs, 7px)"
+							border="1px solid"
+							borderColor="var(--tt-border, #ececef)"
+							cursor="pointer"
+							_hover={{ color: 'var(--tt-ink, #16161a)', borderColor: 'var(--tt-muted, #9a9aa6)' }}
+							onClick={() => draft.setBlocks(moveBlockRelative(draft.blocks, block.id, delta))}
+						>
+							{delta === -1 ? '↑' : '↓'}
+						</Box>
+					))}
+				</Flex>
 				{block.type !== 'native' ? (
 					<Box
 						as="button"

@@ -92,17 +92,31 @@ const PagesList = () => {
 						Your pages are things — private by default, publishable at /p/&lt;id&gt; when you flip the toggle.
 					</Text>
 				</Flex>
-			) : pages === null ? null : pages.length === 0 ? (
-				<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
-					<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
-						No pages yet 🌱
-					</Text>
-					<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
-						Hit “New page ✨” to start one, or open any Thingtime page and press the ✏️ pill to make it yours.
-					</Text>
-				</Flex>
-			) : (
+			) : pages === null ? null : (
 				<Flex flexDirection="column" rowGap={3}>
+					{pages.length === 0 ? (
+						<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
+							<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
+								No pages yet 🌱
+							</Text>
+							<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+								Hit “New page ✨” to start one, or open any Thingtime page and press the ✏️ pill to make it yours.
+							</Text>
+						</Flex>
+					) : null}
+					<Flex {...CARD_STYLES} padding={4} alignItems="center" justifyContent="space-between" columnGap={3}>
+						<Box minWidth={0}>
+							<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
+								Global blocks 🌐
+							</Text>
+							<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px">
+								blocks that render on every page — yours only
+							</Text>
+						</Box>
+						<Button as={Link} to="/builder?page=__global__" size="xs" flexShrink={0}>
+							Edit
+						</Button>
+					</Flex>
 					{pages.map((page) => (
 						<Flex key={page.id} {...CARD_STYLES} padding={4} alignItems="center" justifyContent="space-between" columnGap={3}>
 							<Box minWidth={0}>
@@ -139,7 +153,10 @@ const PagesList = () => {
 
 const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 	const navigate = useNavigate();
-	const draft = useWebpageDraft(React.useMemo(() => ({ kind: 'id' as const, id: pageId }), [pageId]));
+	const isGlobal = pageId === '__global__';
+	const draft = useWebpageDraft(
+		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
+	);
 	const { chrome, selectedId, deselect, insertMenu } = useBuilderChrome(draft);
 	const [pageName, setPageName] = React.useState('');
 	const [isPublic, setIsPublic] = React.useState(false);
@@ -154,7 +171,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 		}
 	}, [draft.resolved]);
 
-	const isSiteDoc = !!draft.resolved?.page?.crystal?.siteRoute;
+	const isSiteDoc = isGlobal || !!draft.resolved?.page?.crystal?.siteRoute;
 
 	return (
 		<>
@@ -204,7 +221,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				</Flex>
 			</Flex>
 			<BuilderDrawer
-				title={isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
+				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
 				draft={draft}
 				selectedId={selectedId}
 				onDeselect={deselect}
