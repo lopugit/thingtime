@@ -130,6 +130,16 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
+CI Control also supports **Feature Stacks**. An admin checks 2–20 open feature
+PRs in the exact order they should be combined, chooses one or two live target
+branches (for example `develop` and `main`), confirms the batch, and dispatches
+it once. The server snapshots every selected same-repository PR head SHA. The
+protected controller builds an isolated integration history for each target,
+lets Lopu resolve only Git-reported conflict paths, mechanically verifies every
+merge parent and clean-merge byte, then opens a target-specific PR with
+auto-merge enabled. Required checks and branch protection remain the final gate;
+the batch never pushes directly to a target branch.
+
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
 router on GitHub. A GitHub selection continues normally. A Vercel selection
@@ -317,6 +327,14 @@ Actions secrets:
 - `ANTHROPIC_API_KEY`, or
 - `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
 
+To prefer a separate Claude Max/Pro account for all Lopu agent work without
+replacing either existing slot, run `claude setup-token` while signed into that
+account and save the result as the repository Actions secret
+`CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`. Lopu tries this preferred OAuth account
+first, then the existing primary credentials above, then the existing fallback
+credentials below. Never paste the token into a file, command argument, log, or
+commit; pipe it directly into the GitHub secret prompt or API.
+
 Optional ordered fallback credentials are `ANTHROPIC_API_KEY_FALLBACK` or
 `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK`. Lopu changes slots only for provider
 capacity, quota, credit, or authentication failures; a max-turn continuation
@@ -472,6 +490,13 @@ entire connection. Do not paste a PAT into a chat. The public `tools/list`
 response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
+
+The read surface deliberately separates intent: `get_thingtime_thing({ id })`
+uses the Things API's exact-ID read and returns `thing_not_found` for a missing
+ID; `list_thingtime_comments({ targetId })` lists comments attached to that
+known target; `list_thingtime_things` and `search_thingtime_things` are only for
+browsing/discovery when the exact ID is unknown. This prevents known Things or
+their comments from disappearing behind unrelated pagination.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:

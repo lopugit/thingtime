@@ -3,22 +3,27 @@
 // objects (ttArg / ttMap / ttIf / ttMerge / ttRepeat) and '{argName}' string
 // tokens, resolved here against the tester's current args BEFORE the tree is
 // drawn through the sanitising allowlist renderers. The canonical semantics
-// twin lives at scripts/components-db/lib/resolve.mjs — keep them identical.
+// twin lives at scripts/components-db/lib/resolve.mjs — keep the resolver and
+// BOTH expansion budgets below identical there. The ttAction binding at the
+// bottom is the one deliberate exception: it is a runtime-only interactive
+// marker, and the catalog generator never emits one.
 
 export const REPEAT_HARD_CAP = 24;
 
 // Resolution can expand FAR beyond the stored template. The server render gate
 // (sanitizeSchemaRender) bounds the RAW template — 600 nodes, depth 24, 32KB —
 // but nested ttRepeat multiplies: ~11 nestings fit inside depth 24 and buy
-// 24^11 output nodes from a few hundred stored bytes. The catalog generator
-// already caps RESOLVED nodes (scripts/components-db/lib/validate.mjs), but
-// `component` is deliberately NOT in PROTECTED_THINGTIME — any signed-in user
-// can publish one, and /components, the detail page, and the `component` kind
-// renderer (feed/search/things) all resolve whatever they are handed. So the
-// live resolver carries its own ceiling: one budget shared across a whole
-// resolve, after which expansion stops and the partial tree is drawn (a
-// truncated preview beats a frozen tab). The full 2800-component catalog peaks
-// at 560 resolved values with args maxed out (mean 185) — ~7x headroom.
+// 24^11 output nodes from a few hundred stored bytes. The renderers' own
+// 600-node budgets cannot help either: this resolver materialises the whole
+// tree BEFORE they ever see it. The catalog generator already caps RESOLVED
+// nodes (scripts/components-db/lib/validate.mjs), but `component` is
+// deliberately NOT in PROTECTED_THINGTIME — any signed-in user can publish one,
+// and /components, the detail page, and the `component` kind renderer
+// (feed/search/things) all resolve whatever they are handed. So the live
+// resolver carries its own ceiling: one budget shared across a whole resolve,
+// after which expansion stops and the partial tree is drawn (a truncated
+// preview beats a frozen tab). The full 2800-component catalog peaks at 560
+// resolved values with args maxed out (mean 185) — ~7x headroom.
 export const MAX_RESOLVED_NODES = 4000;
 
 // The node budget bounds how MANY values a resolve produces, not how many
@@ -57,10 +62,14 @@ export type ComponentArgValues = Record<string, ComponentArgScalar | undefined>;
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	!!value && typeof value === 'object' && !Array.isArray(value);
 
-// Scope lookups must not fall through to Object.prototype. Arg names are only
-// screened by COMPONENT_ARG_NAME_PATTERN, which admits `constructor`,
-// `toString`, `valueOf`, … — so a bare scope[name] resolves an UNDECLARED token
-// to a native function instead of the '' / undefined this module documents.
+// Scope lookups must not fall through to Object.prototype. Scope is a plain
+// object literal and arg names are only screened by
+// COMPONENT_ARG_NAME_PATTERN, which admits `constructor`, `toString`,
+// `valueOf`, … — so a bare scope[name] resolves an UNDECLARED token to a native
+// function (which then rides into the node tree and renders as
+// "function Object() {…}" text) instead of the '' / undefined this module
+// documents. Own-property only, the same guard ttMap already applies to its
+// `values` table.
 const argValue = (scope: ComponentArgValues, name: string): ComponentArgScalar | undefined =>
 	Object.prototype.hasOwnProperty.call(scope, name) ? scope[name] : undefined;
 
@@ -156,15 +165,48 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(template)) {
 		if (budget.left <= 0) break;
+		// ttAction/ttActionInputs are interactive-intent markers, folded into
+		// allowlisted data-* props below — never copied through as node keys
+		if (key === 'ttAction' || key === 'ttActionInputs') continue;
 		const resolved = resolveNode(value, scope, budget);
 		if (resolved !== undefined) out[key] = resolved;
+	}
+	// ttAction: '<actionKey-or-id>' on a node marks it as a runnable control.
+	// It resolves to data-tt-action / data-tt-action-inputs attributes (the
+	// ONLY two data-* props the sanitising renderers allowlist); an
+	// onClickCapture wrapper on trusted surfaces reads them and calls the run
+	// API AS THE VIEWER — a click grants no authority the viewer didn't
+	// already have on /actions, and the executor's capability/budget envelope
+	// still bounds the run. '{arg}' tokens substitute inside both.
+	//
+	// The key and the inputs subtree resolve on the SHARED budget: they are
+	// attacker-shaped template like any other, and a fresh per-node budget
+	// would let a hostile component nest its expansion under ttActionInputs and
+	// multiply the whole-tree caps by the node count — see MAX_RESOLVED_NODES
+	// and MAX_RESOLVED_CHARS.
+	if (typeof template.ttAction === 'string' && template.ttAction.trim()) {
+		const action = substitute(template.ttAction, scope, budget).trim();
+		if (action) {
+			const props = isPlainObject(out.props) ? (out.props as Record<string, unknown>) : {};
+			props['data-tt-action'] = action;
+			if (template.ttActionInputs !== undefined) {
+				const inputs = resolveNode(template.ttActionInputs, scope, budget);
+				if (isPlainObject(inputs)) {
+					try {
+						props['data-tt-action-inputs'] = JSON.stringify(inputs);
+					} catch {}
+				}
+			}
+			out.props = props;
+		}
 	}
 	return out;
 };
 
-// One budget per top-level resolve — nested ttRepeat shares it, so both total
-// output COUNT and total allocated TEXT are bounded no matter how the wrappers
-// are nested or how many tokens each string carries.
+// One budget per top-level resolve — nested ttRepeat, ttActionInputs subtrees
+// and sibling nodes all share it, so both total output COUNT and total
+// allocated TEXT are bounded no matter how the wrappers are nested or how many
+// tokens each string carries.
 export const resolveTemplate = (template: unknown, scope: ComponentArgValues = {}): unknown =>
 	resolveNode(template, scope, { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS });
 

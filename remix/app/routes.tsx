@@ -179,12 +179,19 @@ export const router = createBrowserRouter([
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
+      // Actions: declarative capability-bounded programs — browse + the
+      // per-action inspector (inputs, effects, limits, run panel, history)
+      { path: 'actions', lazy: lazyRoute(() => import('./routes/actions')) },
+      { path: 'actions/:key', lazy: lazyRoute(() => import('./routes/action-detail')) },
       // UI component library: /schemas' UI-first sibling; every component
       // family gets its own deep-linked page + /docs twin. The twin is a named
       // export of the detail module, so it reuses that same chunk.
       { path: 'components', lazy: lazyRoute(() => import('./routes/components')) },
       { path: 'components/:key', lazy: lazyRoute(() => import('./routes/component-detail')) },
-      { path: 'components/:key/docs', lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs }) },
+      {
+        path: 'components/:key/docs',
+        lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs })
+      },
       { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
       {
         path: 'status',

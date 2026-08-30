@@ -102,10 +102,14 @@ export const seedComponents = async (input: unknown): Promise<SeedFail | SeedCom
 		const category = typeof validated.crystal.category === 'string' ? validated.crystal.category : '';
 		if (library) tags.push(library);
 		if (category && !tags.includes(category)) tags.push(category);
-		for (const tag of Array.isArray(def.tags) ? def.tags : []) {
-			if (typeof tag === 'string' && tag.trim() && tag.length <= 40 && tags.length < 11 && !tags.includes(tag)) {
-				tags.push(tag.trim().toLowerCase());
-			}
+		// Dedupe on the NORMALISED value: comparing the raw string let a
+		// definition tag of 'Antd' (or ' antd ') slip past a library/category
+		// entry already seeded above, so the thing shipped duplicate tags.
+		for (const raw of Array.isArray(def.tags) ? def.tags : []) {
+			if (typeof raw !== 'string') continue;
+			const tag = raw.trim().toLowerCase();
+			if (!tag || tag.length > 40 || tags.length >= 11 || tags.includes(tag)) continue;
+			tags.push(tag);
 		}
 
 		const shareId = `${COMPONENT_RESERVED_ID_PREFIX}${slug}`;
