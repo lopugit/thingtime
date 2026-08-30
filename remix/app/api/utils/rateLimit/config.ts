@@ -184,7 +184,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,
   // ever). Enforced fail-closed at the route like mongodb.populate.
-  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // the "try my feed brain 🧠" share-link preview (GET /api/v1/algorithms/shared)
+  // — public and anonymous, two DB reads per call (the algorithm lookup plus an
+  // owner-username resolve). The shareId is an unguessable uuid, so this is not
+  // an enumeration brake; it is the same "bound the anonymous public read"
+  // budget the other unauthenticated endpoints carry, keyed by hashed IP.
+  'algorithms.shared': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
