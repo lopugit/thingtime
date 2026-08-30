@@ -130,6 +130,16 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
+CI Control also supports **Feature Stacks**. An admin checks 2–20 open feature
+PRs in the exact order they should be combined, chooses one or two live target
+branches (for example `develop` and `main`), confirms the batch, and dispatches
+it once. The server snapshots every selected same-repository PR head SHA. The
+protected controller builds an isolated integration history for each target,
+lets Lopu resolve only Git-reported conflict paths, mechanically verifies every
+merge parent and clean-merge byte, then opens a target-specific PR with
+auto-merge enabled. Required checks and branch protection remain the final gate;
+the batch never pushes directly to a target branch.
+
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
 router on GitHub. A GitHub selection continues normally. A Vercel selection
@@ -317,6 +327,14 @@ Actions secrets:
 - `ANTHROPIC_API_KEY`, or
 - `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
 
+To prefer a separate Claude Max/Pro account for all Lopu agent work without
+replacing either existing slot, run `claude setup-token` while signed into that
+account and save the result as the repository Actions secret
+`CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`. Lopu tries this preferred OAuth account
+first, then the existing primary credentials above, then the existing fallback
+credentials below. Never paste the token into a file, command argument, log, or
+commit; pipe it directly into the GitHub secret prompt or API.
+
 Optional ordered fallback credentials are `ANTHROPIC_API_KEY_FALLBACK` or
 `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK`. Lopu changes slots only for provider
 capacity, quota, credit, or authentication failures; a max-turn continuation
@@ -473,12 +491,16 @@ response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
 
-The read surface deliberately separates intent: `get_thingtime_thing({ id })`
-uses the Things API's exact-ID read and returns `thing_not_found` for a missing
-ID; `list_thingtime_comments({ targetId })` lists comments attached to that
-known target; `list_thingtime_things` and `search_thingtime_things` are only for
-browsing/discovery when the exact ID is unknown. This prevents known Things or
-their comments from disappearing behind unrelated pagination.
+The MCP publishes 31 bounded tools plus prompts, account-scoped resources, and
+an embedded review UI. Exact batch reads preserve requested IDs and report
+missing Things independently; schema discovery/validation, relationship and
+thread traversal, and ACL-aware change polling cover richer read workflows.
+For writes, composed operations produce a signed before/after preview first,
+then apply with scope checks and optimistic `updatedAt` preconditions only
+after the call explicitly supplies `confirmed: true`. Encrypted MCP history records partial outcomes and can
+produce a fresh undo preview. Reusable `Thingtime Capability` data Things may
+compose only the same registered create/update/delete grammar: arbitrary URLs,
+database queries, API routes, and executable payloads are rejected.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
@@ -571,6 +593,30 @@ placeholder:
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+### Hosted `develop` and Preview data plane
+
+`https://dev.thingtime.com` and generic Vercel Preview deployments deliberately
+share one development data/auth plane. Assign the current development MongoDB,
+JWT, `APP_URL`, cron, and private-S3 values to both the `develop` Custom
+Environment and generic Preview. Keep Production MongoDB, JWT, and S3 values
+separately scoped; never reuse or document their secrets. Treat every branch
+that Vercel may build for this project as trusted development code with access
+to shared, disposable development data.
+
+For Atlas, the username inside `MONGODB_CONNECTION_STRING` is authoritative.
+The runtime reads `MONGO_PASS` only when replacing the literal
+`<db_password>` placeholder; `MONGO_USER` may remain operator metadata but is
+not read by the application. The home API explicitly selects the canonical
+`thingtime` database, so the hosted URI may leave its database path empty.
+
+After changing the hosted database configuration, redeploy `develop` and check
+`GET https://dev.thingtime.com/api/v1/health/mongodb`. It must return HTTP 200,
+`connected: true`, the expected development Atlas host, `dbName: "thingtime"`,
+and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
+`https://thingtime.com` and confirm that Production reports a different Atlas
+host. The current Thingtime hostnames and deployment state are recorded in
+`VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
 ## Admin access
 
@@ -1476,6 +1522,10 @@ delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
+When verifying the delegation, query either authoritative Cloudflare nameserver
+with `+norecurse +authority`: delegation NS records are returned in the DNS
+referral's authority section, so a recursive `dig +short NS` can misleadingly
+print no answer even while the delegation is healthy.
 Vercel may still label this externally managed arrangement `DNS Change
 Recommended` or return `misconfigured: true`; that advisory asks to move the
 apex nameservers and is not the publication gate. The controller instead
@@ -1507,17 +1557,33 @@ bucket stays private:
 ]
 ```
 
-Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Activation status as of 2026-08-12: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for `*.previews.dev.thingtime.com`. The first live dispatch
-authenticated successfully and exposed the external-DNS advisory mismatch.
-The corrected implementation must merge to `github-actions`, and this thin
-listener must reach `main` through `develop`; a successful post-fix exact-SHA
-deployment, alias publication, CORS probe, and attachment upload/removal check
-then complete the activation checklist.
+are complete for `*.previews.dev.thingtime.com`. The protected controller from
+#239 is now on `github-actions`, and the thin listener from #233 is on
+`develop`.
+
+Live Vercel inspection on 2026-08-12 confirms the intended stable-domain
+invariant: `dev.thingtime.com` is verified with `gitBranch: develop` and
+`customEnvironmentId: null`; the `develop` Custom Environment retains its
+literal branch matcher and has an empty domain list. This resolves the earlier
+stable-domain configuration-gate failure.
+
+Because `pull_request_target` loads its workflow from the default branch, the
+thin listener had to reach `main` before a live run could exercise the
+protected implementation. **That promotion has since landed** (#188 merged
+2026-08-17): `.github/workflows/develop-pr-preview.yml` on `main` is now the
+thin listener delegating to
+`lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`, so
+`main`'s previous direct controller — whose obsolete requirement for a literal
+`misconfigured: false` could reject healthy externally managed wildcard DNS
+before deployment — is no longer in the path. The remaining step is a fresh
+eligible develop-target PR run as final live proof, exercising the protected
+#239 implementation's exact-SHA deployment, alias publication, CORS probe, and
+attachment upload/removal checks.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and
