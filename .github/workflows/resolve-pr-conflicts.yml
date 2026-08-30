@@ -1297,13 +1297,20 @@ jobs:
           }
           # Read-only GitHub API requests may occasionally fail at the edge
           # (the #414 detector observed an HTTP 504 after its first successful
-          # PR inventory). Retry only explicit transient statuses, keep every
-          # notice on stderr so command-substitution JSON stays clean, and
-          # surface auth/schema/permission failures immediately. Mutating API
-          # calls deliberately do not use this helper because a blind retry
-          # could duplicate a side effect.
+          # PR inventory; run 33262097171 observed the HTTP/2 transport reset
+          # `stream error: stream ID 1; CANCEL; received from peer` tearing the
+          # PR inventory down mid-response). Retry explicit transient statuses
+          # AND transport-level resets: a connection torn down before a status
+          # line is parsed is the same recoverable edge failure, it just never
+          # carries an HTTP code, so status-only matching made a retryable blip
+          # fatal. Keep every notice on stderr so command-substitution JSON
+          # stays clean, and surface auth/schema/permission failures
+          # immediately. Mutating API calls deliberately do not use this helper
+          # because a blind retry could duplicate a side effect; every read
+          # routed here is idempotent, so replaying a torn-down request is safe.
           gh_read_retry() {
-            local attempt output errors delay
+            local attempt output errors delay transport
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -1314,7 +1321,8 @@ jobs:
                 rm -f "$output" "$errors"
                 return 0
               fi
-              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors"; then
+              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                 || grep -Eq "$transport" "$errors"; then
                 if [ "$attempt" -lt 4 ]; then
                   delay="$((1 << attempt))"
                   echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -1678,7 +1686,18 @@ jobs:
             response="$RUNNER_TEMP/open-pr-inventory.json"
             # GraphQL variable names must remain literal for gh to bind them.
             # shellcheck disable=SC2016
-            gh_read_retry graphql --paginate --slurp \
+            # Transport success must be checked before the shape check: on a
+            # read failure gh_read_retry prints nothing to stdout, so
+            # `> "$response"` leaves an EMPTY file and the shape check below
+            # would misreport a torn-down connection as a malformed GitHub
+            # payload. The status has to be tested explicitly because this
+            # function runs inside the `$(...)` of `all_open="$(all_open_prs)"`
+            # and bash leaves `inherit_errexit` off by default, so the
+            # substitution subshell drops `errexit` entirely (`$-` loses `e`).
+            # No command in this function is protected by `set -e` — redirected
+            # or not — so every failure that must stop the scan needs its own
+            # explicit check, exactly like this one.
+            if ! gh_read_retry graphql --paginate --slurp \
               -f owner="$owner" \
               -f name="$name" \
               -f query='query($owner: String!, $name: String!, $endCursor: String) {
@@ -1706,7 +1725,11 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                   }
                 }
-              }' > "$response"
+              }' > "$response"; then
+              echo "::error::Could not read the open PR inventory from GitHub; the API read failed before any response was parsed." >&2
+              rm -f "$response"
+              return 1
+            fi
             if ! jq -e '
               type == "array"
               and length > 0
@@ -2867,7 +2890,8 @@ jobs:
           # Retry only read-only metadata commands and keep diagnostics off
           # stdout so command-substitution JSON remains parseable.
           gh_read_retry() {
-            local attempt delay output errors
+            local attempt delay output errors transport
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -2878,7 +2902,10 @@ jobs:
                 rm -f "$output" "$errors"
                 return 0
               fi
-              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+              # A transport reset never carries an HTTP status line; it is the
+              # same retryable edge failure as a 502/504 for an idempotent read.
+              if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                   || grep -Eq "$transport" "$errors"; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -3483,7 +3510,8 @@ jobs:
           set -euo pipefail
 
           gh_read_retry() {
-            local attempt delay output errors
+            local attempt delay output errors transport
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -3494,7 +3522,10 @@ jobs:
                 rm -f "$output" "$errors"
                 return 0
               fi
-              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+              # A transport reset never carries an HTTP status line; it is the
+              # same retryable edge failure as a 502/504 for an idempotent read.
+              if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                   || grep -Eq "$transport" "$errors"; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2

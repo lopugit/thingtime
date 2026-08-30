@@ -474,9 +474,41 @@ function assertWorkflowSource() {
     /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
     "read-only GitHub API calls retry a bounded set of transient failures with backoff",
   );
+  // A mid-response HTTP/2 reset carries no status line, so status-only
+  // classification made a retryable edge blip fatal (run 33262097171).
+  // Count the helper definitions instead of hard-coding today's three: an
+  // absolute count is exactly inverted for a fourth copy. It stays green when
+  // that copy ships the status-only predicate (the outage shape, silently
+  // reintroduced) and goes red when the copy is correct. The floor keeps the
+  // pair from passing vacuously if the helper is ever renamed away.
+  const readRetryCopies =
+    source.match(/^[ \t]*gh_read_retry\(\) \{[ \t]*$/gmu)?.length ?? 0;
+  assert.ok(
+    readRetryCopies >= 1,
+    "the control plane still defines its read-only GitHub API retry helper",
+  );
+  assert.equal(
+    source.match(/^\s*transport='stream error\|/gmu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy also treats transport-level resets as retryable",
+  );
+  // Declaring the pattern is not the same as branching on it: a copy that
+  // keeps `transport=` but drops the predicate reintroduces the exact
+  // outage. Assert the predicate is actually wired into every retry branch,
+  // independent of how each copy formats its condition.
+  assert.equal(
+    source.match(/\|\| grep -Eq "\$transport" "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy branches on the transport predicate, not just declares it",
+  );
+  assert.doesNotMatch(
+    source,
+    /if grep -Eq 'HTTP \(408\|429\|500\|502\|503\|504\)\(\[\^0-9\]\|\$\)' "\$errors"; then/u,
+    "no gh_read_retry copy classifies transience by HTTP status alone",
+  );
   assert.match(
     source,
-    /gh_read_retry graphql --paginate --slurp[\s\S]*successful but malformed PR inventory response/u,
+    /if ! gh_read_retry graphql --paginate --slurp[\s\S]*Could not read the open PR inventory from GitHub[\s\S]*successful but malformed PR inventory response/u,
     "the GraphQL PR inventory is parsed only after transport success and response-shape validation",
   );
   assert.match(
