@@ -55,6 +55,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Admin CI Control now batches features as a verified multi-target Feature
+  Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
+  live target branches, and dispatch once. The server snapshots exact live
+  same-repository heads; the protected Lopu controller sequentially combines
+  them per target, restricts AI edits to Git-reported conflicts, verifies merge
+  topology and bytes, and opens branch-protected auto-merge PRs. The new
+  origin-scoped API capability manifest advertises the additive dispatch
+  contract as `api.admin-ci-dispatch` 1.1.0. [Detailed PR #487 validation
+  note](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-30
+
 - **Thingtime’s MCP initialization now supplies connector-wide interaction
   instructions.** ChatGPT receives the account-selection, token-safety, and
   confirmed-mutation contract before tools are called; the additive MCP feature
