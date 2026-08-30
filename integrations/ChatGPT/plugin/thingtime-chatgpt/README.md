@@ -15,12 +15,18 @@ connection record used by every live credential.
 ## What the tools can do
 
 - List, select, and disconnect connected Thingtime accounts.
-- Read token identity/scopes, list Things, and search Things.
+- Read token identity/scopes, retrieve exactly one Thing by ID, and list comments
+  attached to one known target ID.
+- Browse Things or use text search when the exact Thing ID is unknown.
 - Create, update, delete, comment, react, save, and share Things only when the
   relevant personal access token permits it.
 
 The server has no arbitrary-URL or generic API proxy tool. It only reaches
 explicitly allowed Thingtime origins and the focused Things operation list.
+When a task supplies an exact Thing ID, use `get_thingtime_thing` rather than a
+paginated list or fuzzy search. When it supplies the parent ID for comments,
+use `list_thingtime_comments`; it targets that parent directly instead of
+fetching unrelated global comments.
 
 ## Install in ChatGPT
 

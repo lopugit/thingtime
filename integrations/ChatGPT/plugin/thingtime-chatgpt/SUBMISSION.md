@@ -38,7 +38,7 @@ bundled Thingtime streamable-HTTP server in **Settings → MCP servers**. Codex
 uses a callback-specific ChatGPT Client ID Metadata Document and a bounded
 `127.0.0.1` loopback callback. Confirm the authorization page accepts the
 matching callback, shows the encrypted multi-account form, and that Codex
-discovers all thirteen tools before entering a least-privilege reviewer PAT.
+discovers all fifteen tools before entering a least-privilege reviewer PAT.
 This validates the shared local Codex-host configuration; it does not enable
 custom MCP apps in ChatGPT iOS chats.
 
@@ -60,11 +60,13 @@ custom MCP apps in ChatGPT iOS chats.
 
 ## MCP metadata justification
 
-All thirteen tools require the `thingtime` OAuth bridge scope and are scoped to
+All fifteen tools require the `thingtime` OAuth bridge scope and are scoped to
 one selected Thingtime connection. The server does not proxy arbitrary URLs.
 
-- **Read-only:** account listing, profile lookup, list, and search only
-  retrieve data.
+- **Read-only:** account listing, profile lookup, exact Thing retrieval,
+  target-specific comment listing, browse, and search only retrieve data.
+  Exact retrieval and targeted comment listing also advertise
+  `idempotentHint: true`.
 - **Private mutable:** selecting a default account and saving a Thing change
   only the connected account or its private library; neither is irreversible
   or open-world.
@@ -85,13 +87,18 @@ Positive cases:
    endpoint origins, and opaque account IDs return from `list_thingtime_accounts`.
 2. Select the second account and verify future reads use it without exposing a
    PAT.
-3. Search a known Thing and verify the selected account is returned with a
-   minimal, relevant result.
-4. Create a private draft after explicit confirmation, then update it after a
+3. Call `get_thingtime_thing` with a known ID and verify the exact object is
+   returned without pagination; retry a missing ID and expect
+   `thing_not_found`.
+4. Call `list_thingtime_comments` with that target ID and verify only directly
+   attached comments are returned, with cursor pagination when needed.
+5. Browse/search without a known ID and verify the selected account is returned
+   with a minimal, relevant result.
+6. Create a private draft after explicit confirmation, then update it after a
    second explicit confirmation.
-5. Add a comment or share a test post after confirmation and verify the action
+7. Add a comment or share a test post after confirmation and verify the action
    card reflects the write-oriented metadata.
-6. Request `thingtime offline_access`, exchange the returned refresh token
+8. Request `thingtime offline_access`, exchange the returned refresh token
    once, then confirm the replacement token works and the original does not.
 
 Negative cases:

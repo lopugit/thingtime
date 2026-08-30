@@ -24,6 +24,12 @@ is fixed, and cite the checklist you ran in the PR description.
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
       access; removing the last account revokes the ChatGPT bridge session.
+- [ ] With a known Thing ID outside the first recent/list page,
+      `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
+      stable `thing_not_found` error; it never falls back to list/search. With a
+      known parent ID, `list_thingtime_comments` returns only directly attached
+      comments and preserves `limit`/`cursor` pagination without fetching global
+      comment rows.
 
 ## Admin integration vault + policy proxy
 
@@ -2163,6 +2169,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       requested → accepted (or failed) with a relational event. Arbitrary
       workflow names, non-allowlisted inputs, and feature-branch entry refs
       cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Build a Feature Stack by checking 2–20 feature rows in a deliberate
+      order, choose `develop`, `main`, or both, refresh/reload, and confirm the
+      draft order/name/targets persist while the destructive confirmation does
+      not. Dispatch once and verify the server snapshots the live same-repo PR
+      head refs/SHAs, rejects drafts/forks/moved refs/duplicate targets, and
+      forwards only canonical base64 through the thin `develop` listener.
+- [ ] In the protected Feature Stack run, confirm each target starts from its
+      admitted SHA, every source becomes exactly one two-parent merge commit in
+      list order, clean merges are byte-identical to Git, AI edits touch only
+      recomputed conflict paths, source/target movement aborts publication, and
+      a target-specific PR is opened with auto-merge while branch protection
+      remains the final gate. Pause/opt-out labels must stop the batch.
+- [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
+      preview origin. Confirm its `origin` matches exactly, every generated API
+      and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
+      `1.1.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      breaking-major manifest before dispatch.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
@@ -2199,6 +2222,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Desktop and 375px mobile: add/remove Feature Stack rows, targets, and the
+      confirmation; verify long branch/feature names truncate without hiding
+      their remove controls, the ordered list remains readable, every control
+      is keyboard-focusable, and the full page has no horizontal overflow.
 - [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and
@@ -2653,3 +2680,118 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
+
+- [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
+      passes end to end (browse + filters + docs twin, admin seed gate,
+      user save-version via the unified things path, react/save decoration).
+- [ ] /components paints the seeded library; every card renders its component
+      LIVE from the stored template (no raw JSON fallbacks), with the library
+      badge matching the card's visual style.
+- [ ] The library filter pills (Ant Design → Thingtime) rescope the browse and
+      the counts line; text search works and the lib filter is not silently
+      applied while a q is active.
+- [ ] "Args" expands the tester; editing a string arg re-renders live, an enum
+      swaps its mapped styles (e.g. tracking-timeline stage), a boolean toggles
+      its ttIf branch, and "reset to defaults" restores the original render.
+- [ ] "Schema" stays collapsed by default and expands to inherits chips, args
+      chips, on-create shape, thingtime-adds system fields, and the raw JSON
+      definition (scrollable, no page overflow).
+- [ ] "Save version" (signed in) pre-fills a name, saves privately by default,
+      shows the Lopu toast, bumps the source card's "saved versions" count, and
+      the version appears under Mine with its savedArgs snapshot rendering.
+- [ ] React + Add to library work optimistically on component cards and
+      reconcile with the server (flags survive a reload).
+- [ ] Drawer: Schemas and Components are separate top-level items; /components
+      highlights Components (not Schemas), /schemas highlights Schemas, and
+      Search's submenu no longer contains Schemas.
+- [ ] Mobile (375px): pills wrap, cards stay single-column, no horizontal
+      scroll, args/schema expanders stay inside the card.
+- [ ] Seeding is idempotent: re-running `node scripts/components-db/seed.mjs`
+      reports unchanged (not created) for an already-seeded library, and a
+      foreign doc squatting a `component-<slug>` shareId is skipped, never
+      overwritten.
+- [ ] Grouping: the default catalog shows ONE card per component family with a
+      "designs (N)" pill row; clicking a pill swaps the card's preview,
+      badge, and description to that library's rendition (args tweaks
+      survive the switch); a q-search collapses its result pages the same
+      way (no 8-duplicate walls).
+- [ ] Deep links: every card's Docs button opens /components/<familyKey>/docs
+      (scrolled to Docs); /components/<familyKey> shows the design switcher,
+      big preview, args tester, deep-link copy row, args reference, API
+      snippet, and definition; a componentKey slug and a component-<slug>
+      shareId resolve to the same family page; unknown keys get the friendly
+      not-found panel.
+- [ ] Tags: every seeded component card and detail page shows a tags row led by
+      the "✨ Made by Fable 5 Ultracode" attribution chip (bolder/filled),
+      followed by topical tags (component, library, category, per-component
+      topics); the attribution tag survives a reseed (it is stamped first so
+      per-definition tags can never squeeze it out).
+
+## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
+
+- [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
+      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
+      ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
+      run-time scope enforcement, shared budget across actions.invoke, direct +
+      ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
+      owner-private history, private-action 404, delegated (`source: 'component'`)
+      runs refusing a foreign action by id, docs twins).
+- [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
+      lists it, DELETE the action, and confirm the same query is now empty while
+      another action keeps its own runs. action-run is protected (no route deletes
+      one directly) and off-ledger, and the retention prune only fires during a run
+      OF THAT action — the delete cascade is the only thing that stops a
+      create/run/delete cycle stranding unaccounted records. Covered by
+      verify-actions.
+- [ ] Same lifecycle with a run STILL IN FLIGHT: start a run, DELETE the action
+      before it finishes, and confirm the run still returns its own result while
+      `GET /api/v1/actions/runs?action=<id>` AND the unfiltered history are both
+      empty of it. The record is written when the run ENDS, so the cascade cannot
+      see it — writeRunRecord removes a record whose action went away mid-run.
+      Covered by verify-actions.
+- [ ] Kind boundary: an action declaring an UNSCOPED `things.update` (or
+      `things.read`) whose step targets a non-data thing (a schema thing, an
+      action thing) is refused at run time ("not a data thing — actions read and
+      write Data Things only") and leaves the target unchanged; the action still
+      SAVES (save time can't resolve a dynamic id). Covered by verify-actions.
+- [ ] `node remix/scripts/seed-demo-app.mjs http://127.0.0.1:<nitro-port> <user>`
+      seeds the Customer/Invoice demo idempotently (re-run reports "exists").
+- [ ] /actions lists your actions with derived effect chips (creates/reads/
+      updates/invokes + the limits envelope) and schema IDs resolve to display
+      names; clicking a card opens /actions/:id.
+- [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
+      steps deep-link to the invoked action) / Can access / Cannot access (no
+      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
+      and the raw definition.
+- [ ] The Run panel renders one typed input per descriptor, runs the action,
+      and shows status + duration + ops/depth/child budget usage + the
+      hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
+      links; the Lopu toast fires on success and error.
+- [ ] Last runs refreshes after an in-page run and survives a reload (the
+      protected action-run trail).
+- [ ] A composed action (onboard-customer) consumes ONE shared budget: opsUsed
+      counts child ops, depthUsed 1, childActionsUsed 2.
+- [ ] /things: ⚡ action things render via the action kind renderer, the
+      Actions filter pill scopes the grid, and clicking an action opens the
+      inspector; data things created by runs render through their schema
+      {field} templates (the sent invoice shows "— sent" + sentAt).
+- [ ] Mobile (375px): /actions and the inspector have no horizontal scroll;
+      chips wrap; the run panel stays inside its card.
+- [ ] Builder: "⚡ New action" on /actions derives CAN ACCESS chips LIVE from
+      the steps (scoped when every step carries a literal schema, unscoped the
+      moment one step lacks one); saving lands on the new action's inspector;
+      a narrowed scope that no longer covers a step surfaces the registry
+      refusal verbatim in the Lopu toast.
+- [ ] ttAction: a component render node with ttAction/ttActionInputs draws as
+      data-tt-action/data-tt-action-inputs (the ONLY data-* attributes the
+      renderer allowlists) and the tt keys never survive as node keys; in the
+      /things PreviewModal clicking the control runs the action AS the viewer
+      (toast with ms · ops + Inspect link) and the target data thing mutates;
+      grid tiles stay pointerEvents:none (clicks select, never run).
+- [ ] /things component previews render RESOLVED templates (savedArgs over
+      defaults) via the kind renderer — never raw {token} text.
+- [ ] Used by: /actions/:key lists the viewer's components binding the action
+      via ttAction as clickable 🧩 chips; exact-token matching (an action key
+      that prefixes another never cross-matches).

@@ -229,3 +229,37 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     profile links. Preserve server-side moderation and state the honest limits
     of anonymity.
     Full spec: `claude-todo/19-anonymous-group-chats.md`.
+
+19. **⚡ Run actions from the component tester.**
+
+    _✅ Approved 2026-08-25 by the repo owner: the tester should fire._
+
+    A component's `ttAction` control is inert on `/components/:key`, because
+    the catalog renders the resolved template directly through the sanitising
+    renderers and never mounts the click wrapper; `/things` PreviewModal is the
+    only firing surface today. Make the live preview and the args tester run
+    the bound action as the viewer, with the tester's current arguments
+    reaching the action inputs, behind a confirmation that names what will run.
+    The browse grid must stay inert — one preview component renders the feed,
+    grid, and columns views, so arming it arms an infinite scroller — and the
+    confirmation, never the author-controlled button label, is the source of
+    truth about what executes. Since the 2026-08-25 security review the
+    delegated run path is owner-pinned, so foreign markup can only ever name
+    one of the viewer's *own* actions — with author-chosen inputs, and a bare
+    key is exactly the case the dialog cannot resolve client-side. Ownership
+    therefore sets confirmation strength rather than acting as an on/off
+    switch: a component the viewer did not author always confirms, with no
+    skip.
+    Full spec: `claude-todo/20-tester-runs-actions.md`.
+
+20. **📁 Composed app surface for Data + Component + Action programs.**
+
+    Give a folder of Things a runtime view: open it as a composed page that
+    renders its component things live against their saved arguments, with
+    `ttAction` controls firing, so the folder reads as a working mini-app
+    rather than a list of parts. Every element stays traceable to its Thing and
+    `/things` stays the editor. The `app` kind and the root `appId` scalar are
+    already taken by the third-party OAuth client namespace, so express
+    app-ness as a view over an existing folder rather than overloading the
+    client-identity control plane.
+    Full spec: `claude-todo/21-app-composition-surface.md`.
