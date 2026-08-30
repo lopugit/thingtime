@@ -91,7 +91,8 @@ const InsertZone = ({
 	containerId,
 	index,
 	chrome,
-	alwaysVisible
+	alwaysVisible,
+	testIdPrefix
 }: {
 	containerId: string | null;
 	index: number;
@@ -99,6 +100,7 @@ const InsertZone = ({
 	// empty containers and the end of the root list keep their zone visible —
 	// a canvas must never look like there is nothing to do
 	alwaysVisible?: boolean;
+	testIdPrefix?: string;
 }) => {
 	const [active, setActive] = React.useState(false);
 	const coarse = useCoarsePointer();
@@ -109,7 +111,7 @@ const InsertZone = ({
 			type="button"
 			aria-label="Add a block here"
 			className="ttInsertZone"
-			data-testid={`insert-${containerId ?? 'root'}-${index}`}
+			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}`}
 			alignItems="center"
 			justifyContent="center"
 			width="100%"
@@ -175,11 +177,13 @@ const InsertZone = ({
 const DropWell = ({
 	containerId,
 	chrome,
-	label
+	label,
+	testIdPrefix
 }: {
 	containerId: string | null;
 	chrome: BuilderChrome;
 	label?: string;
+	testIdPrefix?: string;
 }) => {
 	const [active, setActive] = React.useState(false);
 	return (
@@ -188,7 +192,7 @@ const DropWell = ({
 			type="button"
 			aria-label="Add the first block"
 			className="ttDropWell"
-			data-testid={`dropwell-${containerId ?? 'root'}`}
+			data-testid={`dropwell-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}`}
 			flexDirection="column"
 			alignItems="center"
 			justifyContent="center"
@@ -424,6 +428,8 @@ export type WebpageBlocksRendererProps = {
 	// full-bleed surfaces (the in-place site editor): root-level non-native
 	// blocks center at this readable width while native screens span full
 	insetNonNative?: number;
+	// distinguishes co-mounted renderers' zone test ids (e.g. 'global'/'page')
+	testIdPrefix?: string;
 };
 
 const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean }) => {
@@ -522,9 +528,18 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 	// collide with sibling zones); the end of the root list keeps its zone
 	// visible so a page always invites another block
 	if (blocks.length === 0) {
-		return <DropWell containerId={containerId} chrome={chrome} label={isRoot ? 'Add your first block' : 'Add a block inside'} />;
+		return (
+			<DropWell
+				containerId={containerId}
+				chrome={chrome}
+				label={isRoot ? 'Add your first block' : 'Add a block inside'}
+				testIdPrefix={props.testIdPrefix}
+			/>
+		);
 	}
-	const zones: React.ReactNode[] = [<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} />];
+	const zones: React.ReactNode[] = [
+		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} testIdPrefix={props.testIdPrefix} />
+	];
 	blocks.forEach((block, index) => {
 		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />);
 		zones.push(
@@ -534,6 +549,7 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 				index={index + 1}
 				chrome={chrome}
 				alwaysVisible={isRoot && index === blocks.length - 1}
+				testIdPrefix={props.testIdPrefix}
 			/>
 		);
 	});

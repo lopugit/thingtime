@@ -8,6 +8,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
+import { getNativeSection, NativeSectionView } from './nativeSections';
 import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { useWebpageDraft } from './useWebpage';
@@ -227,7 +228,14 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 						padding={[3, 6]}
 						minHeight="50vh"
 					>
-						<WebpageBlocksRenderer blocks={draft.blocks} componentsByRef={draft.componentsByRef} chrome={chrome} />
+						<WebpageBlocksRenderer
+							blocks={draft.blocks}
+							componentsByRef={draft.componentsByRef}
+							chrome={chrome}
+							// registered native sections render for real in the canvas
+							// too; unregistered keys keep the placeholder chip
+							renderNative={(key) => (getNativeSection(key) ? <NativeSectionView sectionKey={key} /> : null)}
+						/>
 					</Box>
 				</Flex>
 			</Flex>

@@ -380,6 +380,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 								blocks={globalDraft.blocks}
 								componentsByRef={globalDraft.componentsByRef}
 								chrome={globalChrome.chrome}
+								testIdPrefix="global"
 							/>
 						)}
 					</Box>
@@ -402,6 +403,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 								componentsByRef={pageDraft.componentsByRef}
 								chrome={pageChrome.chrome}
 								renderNative={renderNative}
+								testIdPrefix="page"
 							/>
 						</PageShell>
 					</Box>
@@ -412,6 +414,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 						chrome={pageChrome.chrome}
 						renderNative={renderNative}
 						insetNonNative={960}
+						testIdPrefix="page"
 					/>
 				)}
 			</Box>
