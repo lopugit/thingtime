@@ -99,6 +99,25 @@ export const FeedPage = () => {
             description: 'The link may have been turned off by its owner.',
             status: 'info'
           });
+          return;
+        }
+        // 429 is the other knowable state, and it is the one this feature
+        // invites: the preview limiter keys off the hashed IP, so a link that
+        // actually travels can throttle visitors who merely share an egress
+        // (office NAT, carrier CGNAT) without any of them doing anything wrong.
+        // Silence would read as "this link is broken" — say it's temporary, and
+        // don't imply the owner unshared. Retry-After is already on the 429, so
+        // ThingtimeApiError.retryAfterSeconds carries the real wait.
+        if (err?.status === 429) {
+          const retryAfterSeconds = err?.retryAfterSeconds;
+          lopuRef.current({
+            title: 'Too many feed-brain lookups from your network 🌸',
+            description:
+              typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
+                ? `The link still works — reload in about ${retryAfterSeconds} seconds.`
+                : 'The link still works — reload in a moment.',
+            status: 'info'
+          });
         }
       });
     return () => {
