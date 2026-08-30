@@ -473,6 +473,13 @@ response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
 
+The read surface deliberately separates intent: `get_thingtime_thing({ id })`
+uses the Things API's exact-ID read and returns `thing_not_found` for a missing
+ID; `list_thingtime_comments({ targetId })` lists comments attached to that
+known target; `list_thingtime_things` and `search_thingtime_things` are only for
+browsing/discovery when the exact ID is unknown. This prevents known Things or
+their comments from disappearing behind unrelated pagination.
+
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
 
@@ -588,6 +595,46 @@ and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
 `https://thingtime.com` and confirm that Production reports a different Atlas
 host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
+
+## Components library (`/components` + `components-db/`)
+
+`/components` is the UI-first sibling of `/schemas`: component things
+(thingtime `["component"]`) carry an arg-templated render tree (drawn only
+through the sanitising allowlist renderers) plus arg descriptors the page
+turns into a live tester. "Save version" stores the current tester state as a
+user-owned component thing in your Things.
+
+The 1000-component platform catalog (styled after Ant Design, Bootstrap, MUI,
+shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
+lives in the repo as a folder database: one JSON file per component under
+`components-db/components/<library>/<slug>.json` plus an `index.json`
+manifest, produced deterministically by `scripts/components-db/generate.mjs`
+from archetype builders in `scripts/components-db/lib/archetypes/`.
+
+Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
+
+```sh
+# 1. Start the dev stack and register a throwaway user, then restart with
+#    that user on the admin allowlist:
+ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
+
+# 2. Put the credentials where the seeder finds them (untracked file):
+cat > scripts/components-db/.seed-env <<'ENV'
+TT_SEED_BASE=http://127.0.0.1:<nitro-port>
+TT_SEED_ADMIN_USER=<your-seed-user>
+TT_SEED_ADMIN_PASS=<your-seed-password>
+ENV
+
+# 3. Regenerate + validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs
+node scripts/components-db/seed.mjs
+```
+
+The seed endpoint (`POST /api/v1/admin/components/seed`) upserts system-owned
+public things with deterministic `component-<slug>` shareIds (the prefix is
+reserved against squatters), refreshes drifted crystals in place, and never
+touches foreign docs. `GET` on the same path returns the census.
+Verification: `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`.
 
 ## Admin access
 

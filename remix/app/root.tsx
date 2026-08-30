@@ -94,11 +94,15 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
-                    : pathname.startsWith('/connections')
-                      ? `${baseTitle} - Connections`
-                      : pathname === '/branding'
-                        ? `${baseTitle} - Brand resources`
-                        : baseTitle;
+                    : pathname.startsWith('/actions')
+                      ? `${baseTitle} - Actions`
+                      : pathname.startsWith('/components')
+                        ? `${baseTitle} - Components`
+                        : pathname.startsWith('/connections')
+                          ? `${baseTitle} - Connections`
+                          : pathname === '/branding'
+                            ? `${baseTitle} - Brand resources`
+                            : baseTitle;
 
       document.title = routeTitle;
     }
