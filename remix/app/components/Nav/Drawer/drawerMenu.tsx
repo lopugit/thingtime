@@ -66,9 +66,36 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		label: 'Search',
 		icon: '🔍',
 		to: '/search',
+		children: [{ id: 'search-home', label: 'Search', icon: '🔍', to: '/search' }]
+	},
+	{
+		id: 'schemas',
+		label: 'Schemas',
+		icon: '💎',
+		to: '/schemas',
 		children: [
-			{ id: 'search-home', label: 'Search', icon: '🔍', to: '/search' },
-			{ id: 'search-schemas', label: 'Schemas', icon: '💎', to: '/schemas' }
+			{ id: 'schemas-browse', label: 'Browse', icon: '💎', to: '/schemas' },
+			{ id: 'schemas-docs', label: 'Reference docs', icon: '📚', to: '/docs/schemas' }
+		]
+	},
+	{
+		id: 'components',
+		label: 'Components',
+		icon: '🧩',
+		to: '/components',
+		children: [
+			{ id: 'components-browse', label: 'Browse', icon: '🧩', to: '/components' },
+			{ id: 'components-schemas', label: 'Schemas', icon: '💎', to: '/schemas' }
+		]
+	},
+	{
+		id: 'actions',
+		label: 'Actions',
+		icon: '⚡',
+		to: '/actions',
+		children: [
+			{ id: 'actions-browse', label: 'Browse', icon: '⚡', to: '/actions' },
+			{ id: 'actions-docs', label: 'API reference', icon: '📚', to: '/docs/api/actions' }
 		]
 	},
 	{
