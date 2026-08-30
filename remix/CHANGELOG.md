@@ -19,7 +19,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
-- **Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.**
+- **[Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.](../PRs/482-codex-limitless-mcp-make-thingtime-mcp-limitless-composable-and-safe.md)**
   Thirty-one bounded tools add exact batch reads, schema intelligence,
   relationship/thread traversal, change polling, signed multi-Thing previews,
   optimistic concurrency, encrypted history/undo, durable Capability workflow
