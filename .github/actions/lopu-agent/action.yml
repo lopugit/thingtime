@@ -15,6 +15,9 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token when the Claude backend uses OAuth authentication.
     required: false
+  claude-code-oauth-token-preferred:
+    description: Preferred Claude Code OAuth token; capacity or credential failures continue through the existing primary and fallback slots.
+    required: false
   anthropic-api-key-fallback:
     description: Secondary Anthropic API key used only after an account-capacity or credential failure.
     required: false
@@ -77,6 +80,7 @@ runs:
         BACKEND: ${{ inputs.backend }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ inputs.claude-code-oauth-token-preferred }}
         ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
         CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
@@ -88,19 +92,24 @@ runs:
         set -euo pipefail
         case "$BACKEND" in
           claude)
+            preferred_available=false
             primary_available=false
             fallback_available=false
+            if [ -n "${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}" ]; then
+              preferred_available=true
+            fi
             if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
               primary_available=true
             fi
             if [ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ]; then
               fallback_available=true
             fi
-            if [ "$primary_available" != true ] && [ "$fallback_available" != true ]; then
-              echo "::error::Lopu's Claude backend requires a primary or fallback Anthropic/Claude Code credential."
+            if [ "$preferred_available" != true ] && [ "$primary_available" != true ] && [ "$fallback_available" != true ]; then
+              echo "::error::Lopu's Claude backend requires a preferred, primary, or fallback Anthropic/Claude Code credential."
               exit 1
             fi
             backend_label="Claude Code"
+            echo "claude_preferred_available=$preferred_available" >>"$GITHUB_OUTPUT"
             echo "claude_primary_available=$primary_available" >>"$GITHUB_OUTPUT"
             echo "claude_fallback_available=$fallback_available" >>"$GITHUB_OUTPUT"
             ;;
@@ -140,9 +149,41 @@ runs:
         echo "backend=$BACKEND" >>"$GITHUB_OUTPUT"
         echo "backend_label=$backend_label" >>"$GITHUB_OUTPUT"
 
+    - name: Run Lopu with the preferred Claude credential
+      id: claude_preferred
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_preferred_available == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token-preferred }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify a preferred Claude credential failure
+      id: claude_preferred_failure
+      if: >-
+        steps.config.outputs.backend == 'claude'
+        && steps.config.outputs.claude_preferred_available == 'true'
+        && steps.claude_preferred.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_preferred.outputs.execution_file }}
+      run: |
+        set -euo pipefail
+        execution_file="${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"
+        node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" \
+          "$execution_file" >>"$GITHUB_OUTPUT"
+
     - name: Run Lopu with the primary Claude credential
       id: claude_primary
-      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_primary_available == 'true'
+      if: >-
+        steps.config.outputs.backend == 'claude'
+        && steps.config.outputs.claude_primary_available == 'true'
+        && (steps.config.outputs.claude_preferred_available != 'true'
+            || (steps.claude_preferred.outcome == 'failure'
+                && steps.claude_preferred_failure.outputs.retryable == 'true'))
       continue-on-error: true
       uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
       with:
@@ -173,6 +214,9 @@ runs:
       if: >-
         steps.config.outputs.backend == 'claude'
         && steps.config.outputs.claude_fallback_available == 'true'
+        && (steps.config.outputs.claude_preferred_available != 'true'
+            || (steps.claude_preferred.outcome == 'failure'
+                && steps.claude_preferred_failure.outputs.retryable == 'true'))
         && (steps.config.outputs.claude_primary_available != 'true'
             || (steps.claude_primary.outcome == 'failure'
                 && steps.claude_primary_failure.outputs.retryable == 'true'))
@@ -191,12 +235,14 @@ runs:
       if: always() && steps.config.outputs.backend == 'claude'
       shell: bash
       env:
+        PREFERRED_AVAILABLE: ${{ steps.config.outputs.claude_preferred_available }}
+        PREFERRED_OUTCOME: ${{ steps.claude_preferred.outcome }}
         PRIMARY_AVAILABLE: ${{ steps.config.outputs.claude_primary_available }}
         PRIMARY_OUTCOME: ${{ steps.claude_primary.outcome }}
         FALLBACK_OUTCOME: ${{ steps.claude_fallback.outcome }}
       run: |
         set -euo pipefail
-        credential_slot=primary
+        credential_slot=preferred
         successful=false
         if [ "$FALLBACK_OUTCOME" = success ]; then
           credential_slot=fallback
@@ -204,16 +250,23 @@ runs:
         elif [ "$PRIMARY_OUTCOME" = success ]; then
           credential_slot=primary
           successful=true
+        elif [ "$PREFERRED_OUTCOME" = success ]; then
+          credential_slot=preferred
+          successful=true
         elif [ "$FALLBACK_OUTCOME" = failure ]; then
           credential_slot=fallback
-        elif [ "$PRIMARY_AVAILABLE" != true ]; then
+        elif [ "$PRIMARY_AVAILABLE" != true ] && [ "$PREFERRED_AVAILABLE" != true ]; then
           credential_slot=fallback
+        elif [ "$PREFERRED_AVAILABLE" != true ]; then
+          credential_slot=primary
         fi
         printf '%s\n' "$credential_slot" >"$RUNNER_TEMP/lopu-claude-credential-slot"
         echo "credential_slot=$credential_slot" >>"$GITHUB_OUTPUT"
         echo "successful=$successful" >>"$GITHUB_OUTPUT"
         if [ "$credential_slot" = fallback ]; then
           echo "::notice::Lopu used the fallback Claude credential slot."
+        elif [ "$credential_slot" = primary ] && [ "$PREFERRED_AVAILABLE" = true ]; then
+          echo "::notice::Lopu continued from the preferred Claude account to the existing primary slot."
         fi
 
     - name: Require a successful Claude execution
@@ -221,11 +274,14 @@ runs:
       shell: bash
       env:
         SUCCESSFUL: ${{ steps.claude_result.outputs.successful }}
+        PREFERRED_FAILURE_REASON: ${{ steps.claude_preferred_failure.outputs.reason }}
         PRIMARY_FAILURE_REASON: ${{ steps.claude_primary_failure.outputs.reason }}
       run: |
         set -euo pipefail
         if [ "$SUCCESSFUL" != true ]; then
-          if [ -n "${PRIMARY_FAILURE_REASON:-}" ]; then
+          if [ -n "${PREFERRED_FAILURE_REASON:-}" ]; then
+            echo "::error::Lopu's Claude execution did not complete ($PREFERRED_FAILURE_REASON)."
+          elif [ -n "${PRIMARY_FAILURE_REASON:-}" ]; then
             echo "::error::Lopu's Claude execution did not complete ($PRIMARY_FAILURE_REASON)."
           else
             echo "::error::Lopu's Claude execution did not complete."

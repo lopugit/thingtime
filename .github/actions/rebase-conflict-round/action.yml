@@ -36,6 +36,9 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token, when OAuth authentication is configured.
     required: false
+  claude-code-oauth-token-preferred:
+    description: Preferred Claude Code OAuth token before the existing primary and fallback slots.
+    required: false
   anthropic-api-key-fallback:
     description: Secondary Anthropic API key for account-capacity failover.
     required: false
@@ -282,7 +285,7 @@ runs:
       shell: bash
       env:
         BACKEND: ${{ inputs.backend }}
-        HAS_CLAUDE_CREDENTIAL: ${{ inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
+        HAS_CLAUDE_CREDENTIAL: ${{ inputs.claude-code-oauth-token-preferred != '' || inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
         HAS_OPENAI_CREDENTIAL: ${{ inputs.openai-api-key != '' }}
       run: |
         set -euo pipefail
@@ -309,6 +312,7 @@ runs:
         backend: ${{ inputs.backend }}
         anthropic-api-key: ${{ inputs.anthropic-api-key }}
         claude-code-oauth-token: ${{ inputs.claude-code-oauth-token }}
+        claude-code-oauth-token-preferred: ${{ inputs.claude-code-oauth-token-preferred }}
         anthropic-api-key-fallback: ${{ inputs.anthropic-api-key-fallback }}
         claude-code-oauth-token-fallback: ${{ inputs.claude-code-oauth-token-fallback }}
         openai-api-key: ${{ inputs.openai-api-key }}
@@ -381,6 +385,7 @@ runs:
       if: steps.prepare.outputs.needs_ai == 'true' && inputs.backend == 'claude' && steps.lopu.outcome == 'failure'
       shell: bash
       env:
+        PREFERRED_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token-preferred }}
         PRIMARY_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
         FALLBACK_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key-fallback }}
@@ -392,6 +397,10 @@ runs:
 
         credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
         case "$credential_slot" in
+          preferred)
+            unset ANTHROPIC_API_KEY
+            export CLAUDE_CODE_OAUTH_TOKEN="$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN"
+            ;;
           primary)
             export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
             export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
@@ -542,6 +551,7 @@ runs:
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ inputs.claude-code-oauth-token-preferred }}
         ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
         CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
@@ -855,7 +865,8 @@ runs:
 
         needles="$temp_dir/secret-needles"
         : >"$needles"
-        for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+        for secret in "${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}" \
+          "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
           "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
           "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
           [[ -n "$secret" ]] || continue

@@ -557,8 +557,8 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   }, 0);
   assert.equal(
     claudeActionCount,
-    2,
-    "only the single Lopu action owns the ordered primary and fallback Claude invocations",
+    3,
+    "only the single Lopu action owns the ordered preferred, primary, and fallback Claude invocations",
   );
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
@@ -1315,8 +1315,32 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/u,
-    "manual all-branch and CodeQL recovery stay inside Lopu maintenance",
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql, merge-feature-stack\]/u,
+    "manual Feature Stack, all-branch, and CodeQL recovery stay inside Lopu maintenance",
+  );
+  const featureStackMerge = resolver.slice(
+    resolver.indexOf("\n  feature_stack_merge:"),
+    resolver.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.doesNotMatch(
+    featureStackMerge,
+    /actions\/checkout@[\s\S]{0,160}ref: \$\{\{ matrix\.base_sha \}\}/u,
+    "privileged Feature Stack jobs never load candidate code through actions/checkout",
+  );
+  assert.match(
+    featureStackMerge,
+    /name: Check out the trusted controller[\s\S]{0,220}ref: github-actions[\s\S]{0,120}path: trusted[\s\S]{0,120}fetch-depth: 0/u,
+    "Feature Stack workflow and action code always come from the protected controller",
+  );
+  assert.match(
+    featureStackMerge,
+    /git init "\$integration"[\s\S]{0,180}remote add snapshot "\$GITHUB_WORKSPACE\/trusted"[\s\S]{0,1200}trusted_source=.*refs\/remotes\/origin\/\$head/u,
+    "candidate Git objects are admitted as data into a separate integration repository",
+  );
+  assert.equal(
+    featureStackMerge.match(/working-directory: integration/gu)?.length,
+    4,
+    "the model, continuations, verifier, and publisher remain inside the isolated integration repository",
   );
   const allBranchHandoff = resolver.slice(
     resolver.indexOf("\n  handoff_all_branch_event:"),

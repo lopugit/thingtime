@@ -1476,6 +1476,7 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -2095,6 +2096,7 @@ jobs:
         env:
           GRAPHIFY_VERSION: "0.9.4"
           PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREFERRED_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
@@ -2112,6 +2114,10 @@ jobs:
           cd -- "$REBASE_REPO"
           credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
           case "$credential_slot" in
+            preferred)
+              unset ANTHROPIC_API_KEY
+              export CLAUDE_CODE_OAUTH_TOKEN="$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
             primary)
               export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
               export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
@@ -2254,7 +2260,8 @@ jobs:
           # backstop. The security boundary remains review on the PR branch.
           needles="$RUNNER_TEMP/graphify-secret-needles.txt"
           : > "$needles"
-          for secret in "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
+          for secret in "$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN" \
+            "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
             "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \
             "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
