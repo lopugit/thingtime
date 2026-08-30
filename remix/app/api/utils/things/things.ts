@@ -45,6 +45,7 @@ import {
   ACL_INHERIT,
   ACL_OWNER,
 	APP_STORAGE_RESERVED_ID_PREFIX,
+	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
@@ -788,6 +789,14 @@ export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
 // Builtin-schema seed mints shareId `schema-<id>` deterministically — reserve
 // the prefix so a client can't pre-claim (and impersonate) a builtin schema.
 export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
+// Component library seed mints shareId `component-<slug>` deterministically —
+// reserve the prefix so a client can't pre-claim (and impersonate) a seeded
+// library component.
+export const COMPONENT_RESERVED_ID_PREFIX = 'component-';
+// The action- prefix is reserved for system use the same way: user creates
+// refuse it, and the executor mints `action-run-<uuid>` run-record ids
+// under it.
+export const ACTION_RESERVED_ID_PREFIX = 'action-';
 // Subscription tier revisions and user assignments use deterministic ids so
 // historical links stay stable. They are protected control-plane destinations
 // and cannot be pre-claimed through generic Thing creation.
@@ -811,6 +820,8 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
@@ -3460,7 +3471,10 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			targetId: { $in: parentIds },
 			// A malformed multi-kind Thing must never turn a share into cascade
 			// garbage: shares intentionally survive their original disappearing.
-			thingtime: { $in: ['attachment', 'comment', 'reaction', 'save', 'vote'], $nin: ['share'] }
+			// Poll votes cascade for the same reason: a vote carries acl
+			// ['tt:inherit'] and exists only for the poll it targets, so it is
+			// visible exactly when the poll is and must go when the poll goes.
+			thingtime: { $in: [...CASCADE_CHILD_THINGTIME, 'vote'], $nin: ['share'] }
 		},
 		{
 			parentId: { $in: parentIds },
@@ -3484,7 +3498,7 @@ const cascadeParentIdsOf = (doc: ThingDoc): string[] => {
 	const parents = new Set<string>();
 	const thingtime = Array.isArray(doc.thingtime) ? doc.thingtime : [];
 	if (
-		thingtime.some((entry) => entry === 'attachment' || entry === 'comment' || entry === 'reaction' || entry === 'save' || entry === 'vote') &&
+		thingtime.some((entry) => (CASCADE_CHILD_THINGTIME as readonly string[]).includes(entry) || entry === 'vote') &&
 		!thingtime.includes('share') &&
 		typeof doc.targetId === 'string' &&
 		doc.targetId

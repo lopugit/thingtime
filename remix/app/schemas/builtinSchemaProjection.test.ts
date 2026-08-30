@@ -26,6 +26,12 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   share: [], // marker schema — the thingtime tag is the payload
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
+  // args + savedArgs + render: records → dropped
+  component: ['name', 'description', 'library', 'category', 'componentKey', 'familyKey', 'version', 'forkOf', 'previewBg'],
+  // inputs + steps + capabilities + limits: records → dropped
+  action: ['name', 'description', 'actionKey', 'category', 'version', 'forkOf'],
+  // inputs + result + trace: records → dropped
+  'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
   save: [], // marker schema
   vote: ['optionIndex', 'voteKey'],
   folder: ['name', 'icon', 'description'],
