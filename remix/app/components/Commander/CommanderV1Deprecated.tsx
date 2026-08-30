@@ -113,7 +113,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 	}, []);
 
 	const command = React.useMemo(() => {
-		const debug: any = {};
 		// const sanitizedCommand = sanitise(value)
 		// const sanitizedCommand = inputValue
 		const sanitizedInput = virtualValue;
@@ -126,7 +125,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		});
 
 		if (typeof validSetter === 'string') {
-			debug.validSetter = validSetter;
 			const indexOfSplitter = sanitizedInput?.indexOf(validSetter);
 			const [pathRaw, valRaw] = [sanitizedInput?.slice(0, indexOfSplitter), sanitizedInput?.slice(indexOfSplitter + validSetter?.length)];
 
@@ -149,8 +147,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		}
 
 		if (props?.pathPrefix) {
-			debug.pathPrefix = props?.pathPrefix;
-			debug.safeSplitPathPrefix = safeSplit(props?.pathPrefix);
 			return [safeSplit(props?.pathPrefix), sanitizedInput];
 		}
 
