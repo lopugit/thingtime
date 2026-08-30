@@ -394,6 +394,42 @@ test('both settings.editor.openConfig writes declare themselves tab-local', () =
 	}
 });
 
+test('the editor live-layout mirror declares itself tab-local while saved configs still sync', () => {
+	// `settings.editor.live` IS a viewport: the windows open in THIS editor,
+	// keyed by ids this mount generated. EditorDrawerSection renders it as that
+	// tab's own window list, so broadcasting swaps a peer's list for this tab's —
+	// its real windows disappear from its drawer while the foreign rows it shows
+	// act on ids absent from its tree. Its mirror effect depends on
+	// tree/floating/minimised, none of which a remote write touches, so the peer
+	// cannot put it back until its own layout happens to change.
+	const editorSplit = readFileSync(path.join(appDir, 'components/Thingtime/EditorSplit.tsx'), 'utf8');
+	const mirror = editorSplit.match(/setThingtimeRef\.current\('settings\.editor\.live'[\s\S]*?\);/);
+	assert.ok(mirror, 'expected EditorSplit to still mirror the live layout into settings');
+	assert.match(mirror[0], /tabLocal: true/, 'the live layout must not replace a peer drawer window list');
+
+	// Saved layouts are shared user data — the motivating case for this channel —
+	// and must NOT have been swept up by the same change.
+	const drawerSection = readFileSync(path.join(appDir, 'components/Nav/Drawer/EditorDrawerSection.tsx'), 'utf8');
+	const configWrite = drawerSection.slice(drawerSection.indexOf("setThingtime('settings.editor.configs'")).match(/^[^;]*;/);
+	assert.ok(configWrite, 'expected EditorDrawerSection to still write settings.editor.configs');
+	assert.doesNotMatch(configWrite[0], /tabLocal/, 'saved configs should keep syncing across tabs');
+});
+
+test("the composer's tmp seed declares itself tab-local so it cannot delete a peer's live draft", () => {
+	// The seed REPLACES the whole `tmp` branch, and its prune cannot tell an
+	// abandoned persisted session from another tab's live one — every `s<hex>`
+	// key is dropped. Broadcast, that reaches a peer as "your composer session no
+	// longer exists" and destroys a post someone is part-way through typing.
+	// Unlike the chrome cases this is user-authored content, so it is the one
+	// tab-local write here whose absence loses data rather than just surprising.
+	const composer = readFileSync(path.join(appDir, 'components/Feed/PostComposer.tsx'), 'utf8');
+	const seed = composer.match(/setThingtime\(\s*DRAFT_TMP_KEY,[\s\S]*?\);/);
+	assert.ok(seed, 'expected PostComposer to still seed the tmp branch through setThingtime');
+	assert.match(seed[0], /tabLocal: true/, 'the tmp seed must not delete another tab composer session');
+	// Passing an options object replaces setThingtime's default one.
+	assert.match(seed[0], /namespace: 'default'/, 'the seed must keep the namespace it has always used');
+});
+
 test('BroadcastChannel absence degrades to the existing single-tab behavior', () => {
 	const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
 	Object.defineProperty(globalThis, 'BroadcastChannel', { configurable: true, writable: true, value: undefined });

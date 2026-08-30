@@ -259,10 +259,25 @@ export const PostComposer = (props: PostComposerProps) => {
     // so the editor opens on a truly blank "Imagine.." slate instead of an
     // empty object rendering as {} chrome. Editing an existing thingtime post
     // seeds the draft with the post's thing as of mount (editSeedRef).
-    setThingtime(DRAFT_TMP_KEY, {
-      ...preserved,
-      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
-    });
+    //
+    // tabLocal because this REPLACES the whole `tmp` branch and the pruning
+    // above cannot tell an abandoned persisted session from another tab's live
+    // one — every `s<hex>` key is dropped. Broadcast, that lands on a peer as
+    // "your composer session no longer exists" and destroys a post someone is
+    // part-way through typing there. Pruning stale sessions out of the
+    // persisted blob is this tab's own housekeeping; `preserved` only copies
+    // user-authored `tmp` keys through unchanged, so nothing a peer needs is
+    // withheld by keeping it off the wire.
+    setThingtime(
+      DRAFT_TMP_KEY,
+      {
+        ...preserved,
+        [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+      },
+      // Passing options replaces setThingtime's default object, so restate the
+      // namespace this write has always used rather than silently dropping it.
+      { namespace: 'default', tabLocal: true }
+    );
   }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
