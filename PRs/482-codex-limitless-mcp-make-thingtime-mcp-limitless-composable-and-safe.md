@@ -70,8 +70,19 @@ identity anchored throughout the bounded drain.
   through the local Codex proxy with 28,968 nodes, 71,787 edges, and 1,273
   communities.
 
-## Remaining live gate
+## Live preview evidence
 
-The Vercel preview and GitHub checks must finish after the branch push. A real
-reviewer-account OAuth/read/write smoke remains manual because no account token
-is embedded in the repository or test environment.
+- The branch preview at
+  `https://thingtime-git-codex-limitless-mcp-lopugits-projects.vercel.app`
+  reached `READY` for commit `e0ec49ba1a3bf12daec6001f8a828c8a76bc45a4`.
+- `/`, `/index.html`, and the built Vite asset returned 200 from the public
+  branch alias.
+- The live MCP endpoint returned version 1.3.0, 31 tools, five prompts, two
+  resources, four resource templates, and the embedded review UI. The live
+  capability manifest returned 14 features and 36 operations, and no API
+  fallback header was present.
+- GitHub's build, typecheck-ratchet, unit, headless API, product-contract,
+  Vercel, and secret-scanning gates passed on that implementation commit.
+
+A real reviewer-account OAuth/read/write smoke remains manual because no
+account token is embedded in the repository or test environment.
