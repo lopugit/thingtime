@@ -479,6 +479,20 @@ test("the composer's tmp seed declares itself tab-local so it cannot delete a pe
 	assert.match(seed[0], /tabLocal: true/, 'the tmp seed must not delete another tab composer session');
 	// Passing an options object replaces setThingtime's default one.
 	assert.match(seed[0], /namespace: 'default'/, 'the seed must keep the namespace it has always used');
+
+	// The post-submit clear is the seed's other half and has to match it, or the
+	// branch is only half off the wire. It writes `tmp.<draftSessionId>`, and
+	// draftSessionId is minted per mount (`React.useState(() => 's' + hex)`), so
+	// the key names THIS composer's session and no peer owns one. Broadcast, it
+	// cannot destroy a peer draft — the peer's id differs — but it does land a
+	// foreign `s<hex>` branch in every other tab, which that tab then persists in
+	// its next full-tree autosave and shows under `tt.tmp` in the tree editor
+	// until its own next composer mount prunes it. Asserted separately from the
+	// seed so a change to either one alone fails here.
+	const clear = composer.match(/setThingtime\(`\$\{DRAFT_TMP_KEY\}\.\$\{draftSessionId\}`[\s\S]*?\);/);
+	assert.ok(clear, 'expected PostComposer to still clear its own session branch through setThingtime');
+	assert.match(clear[0], /tabLocal: true/, "the spent-draft clear must not reach another tab's tmp branch");
+	assert.match(clear[0], /namespace: 'default'/, 'the clear must keep the namespace it has always used');
 });
 
 test('the DevKit form prefills declare themselves tab-local', () => {

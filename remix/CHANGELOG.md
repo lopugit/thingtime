@@ -377,6 +377,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   a live defect; the publish is now contained in its own `try` so that stays true
   independently of the transport. Sync is best-effort, the local write is not.
   — Lopu (AI), 2026-08-30
+- **The composer's spent-draft clear is tab-local too (PR #92 review)**: the
+  post-submit `setThingtime('tmp.<draftSessionId>', {})` was the one half of the
+  `tmp` branch still on the wire — its sibling seed had already been made
+  `tabLocal`. `draftSessionId` is minted per mount, so the key names the writing
+  tab's own composer session and no peer owns one: it could not destroy a peer
+  draft, but it did land a foreign `s<hex>` branch in every other tab, which that
+  tab then persisted in its next full-tree autosave and displayed under `tt.tmp`
+  in the tree editor until its own next composer mount pruned it. Local clear and
+  persistence are unchanged; only the broadcast is suppressed. The composer guard
+  test now asserts the seed and the clear together so the pair cannot drift again.
+  — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
