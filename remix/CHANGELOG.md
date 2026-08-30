@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **[Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.](../PRs/482-codex-limitless-mcp-make-thingtime-mcp-limitless-composable-and-safe.md)**
+  Thirty-one bounded tools add exact batch reads, schema intelligence,
+  relationship/thread traversal, change polling, signed multi-Thing previews,
+  optimistic concurrency, encrypted history/undo, durable Capability workflow
+  runs, MCP prompts/resources, and an interactive result/diff review UI while
+  continuing to reject arbitrary routes, queries, and code. — Codex (AI),
+  2026-08-30
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
   A dedicated provider-double suite proves that a reasoning-starved decorated
   Claude or OpenAI stream retries bare on the same model, never retries after
