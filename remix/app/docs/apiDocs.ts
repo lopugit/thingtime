@@ -5066,6 +5066,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with credentials to list the caller algorithms and active id.',
       'POST a name, optional emoji, optional branchFrom id, and optional events to create an algorithm.',
       'Use branchFrom to copy an existing algorithm weight profile before further training.',
+      'branchFrom also accepts the share-link id of an algorithm someone else turned sharing on for — the weights are copied into your own private algorithm, which starts unshared. A 404 means the id is neither yours nor shared.',
       'Handle 401 for anonymous callers and 400 for invalid creation payloads.'
     ],
     requestExamples: [

@@ -3399,9 +3399,16 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
       weights: input.weights,
       eventCount: Number.isFinite(eventCount) && eventCount >= 0 ? Math.floor(eventCount) : 0,
       lastTrainedAt: boundedString(input.lastTrainedAt, 40),
-      // carried, not dropped: this allowlist rebuilds the crystal from scratch,
-      // so an omitted `shared` would unshare the algorithm. Strict === true
-      // matches updateAlgorithm's boolean-only gate.
+      // Carried, not dropped: this allowlist rebuilds the crystal from scratch,
+      // so an omitted `shared` would silently unshare the algorithm. Strict
+      // === true matches updateAlgorithm's boolean-only gate.
+      //
+      // Defensive, not load-bearing today: 'feed-algorithm' is in
+      // PROTECTED_THINGTIME, so generic Thing CRUD refuses the kind (403) and
+      // no feed-algorithm crystal is ever WRITTEN through this sanitizer —
+      // algorithms.ts and the feed-algorithms-to-things migration build the
+      // crystal directly. Keep the field listed anyway so the allowlist stays
+      // honest if the kind ever becomes generically writable.
       shared: input.shared === true
     }
   };

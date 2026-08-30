@@ -18,7 +18,10 @@ const MAX_BODY_BYTES = 128 * 1024;
 
 // POST /api/v1/algorithms — { name, emoji?, branchFrom?, events? } — create an
 // algorithm, optionally branching an existing one and/or seed-training it from
-// a doomscroll session's events.
+// a doomscroll session's events. branchFrom resolves the caller's OWN algorithms
+// first and then falls back to any algorithm its owner explicitly shared, so it
+// accepts a share-link id the caller does not own; 404 means "neither owned nor
+// shared". The copy is always private and starts unshared.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {
