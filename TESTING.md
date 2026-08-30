@@ -1826,6 +1826,10 @@ is fixed, and cite the checklist you ran in the PR description.
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with
       the page scroll — the bottom of the menu stays reachable.
+- [ ] At desktop widths, the drawer header starts directly below the global
+      navigation with no duplicated top spacer, and its collapse control sits
+      in the Thingtime Docs title row. At mobile widths, opening the full-screen
+      drawer keeps its close control visible in that same header row.
 
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
