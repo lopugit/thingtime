@@ -9,6 +9,19 @@ const REQUIRED_CATEGORIES = [
   "/language:javascript-typescript",
 ];
 const TRANSIENT_HTTP_STATUS = /\b(?:408|429|500|502|503|504)\b/u;
+// An idempotent read can also die below or above the HTTP status line, and
+// neither shape carries a status code. A connection torn down mid-response
+// reports as a transport string (run 33262097171); a body that stops
+// mid-document reports as the decoder's message instead (run 33316907281) --
+// lowercase from gh when gh parses, title case from JSON.parse when this
+// script does. Status-only matching made both fatal on the first attempt,
+// which is the outage resolve-pr-conflicts.yml already retired from its three
+// gh_read_retry copies; this helper is the remaining read classifier and needs
+// the same set. The widening stays narrow: a genuinely malformed payload (an
+// HTML error page, an auth/permission error) carries a different message and
+// still surfaces immediately.
+const TRANSIENT_READ_FAILURE =
+  /\b(?:408|429|500|502|503|504)\b|stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|[Uu]nexpected end of JSON input|TLS handshake timeout|i\/o timeout|server closed idle connection|client connection force closed/u;
 const CENTRAL_RUN_TITLE = /^Lopu CodeQL PR #(\d+) @ ([0-9a-f]{40,64})$/u;
 const ACTIVE_RUN_STATUSES = [
   "queued",
@@ -38,10 +51,13 @@ function ghJson(args, { attempts = 4 } = {}) {
         maxBuffer: 64 * 1024 * 1024,
         stdio: ["ignore", "pipe", "pipe"],
       });
+      // JSON.parse stays inside the try on purpose: when gh exits 0 after a
+      // partial write, the truncation surfaces here rather than on stderr, and
+      // it is the same recoverable failure one layer up.
       return output.trim() ? JSON.parse(output) : null;
     } catch (error) {
       const failure = commandFailureText(error);
-      if (attempt === attempts || !TRANSIENT_HTTP_STATUS.test(failure)) {
+      if (attempt === attempts || !TRANSIENT_READ_FAILURE.test(failure)) {
         throw new Error(`gh ${args.join(" ")} failed: ${failure}`);
       }
       const delaySeconds = 2 ** attempt;
@@ -252,6 +268,11 @@ function dispatchAnalysisWithInput(repository, candidate) {
       return;
     } catch (error) {
       const failure = commandFailureText(error);
+      // This POST deliberately keeps the status-only classifier and does not
+      // use TRANSIENT_READ_FAILURE. A transport reset or a torn-down body says
+      // nothing about whether GitHub already accepted the dispatch, so
+      // replaying one could queue a duplicate CodeQL run; a rejecting status
+      // is the only evidence that no scan was started.
       if (attempt === 4 || !TRANSIENT_HTTP_STATUS.test(failure)) {
         throw new Error(`CodeQL dispatch for PR #${candidate.number} failed: ${failure}`);
       }

@@ -889,6 +889,29 @@ export function assertControlPlaneContract() {
     "CodeQL inventory never trusts the lagging pull-list synthetic merge SHA",
   );
   assert.match(codeqlBackfill, /MAX_DISPATCHES must be an integer from 1 through 20/u);
+  // This helper is the one read-failure classifier outside resolve-pr-conflicts.yml,
+  // so the routing contract's "never classify transience by HTTP status alone"
+  // assertion cannot see it. Pin the same transport and truncated-body patterns
+  // here: status-only matching is what made an upstream blip fatal on the first
+  // attempt in runs 33262097171 and 33316907281.
+  assert.match(
+    codeqlBackfill,
+    /TRANSIENT_READ_FAILURE\s*=\s*\/[^\n]*\|stream error\|[^\n]*\|\[Uu\]nexpected end of JSON input\|/u,
+    "the CodeQL inventory read helper retries transport resets and truncated bodies",
+  );
+  assert.match(
+    codeqlBackfill,
+    /!TRANSIENT_READ_FAILURE\.test\(failure\)/u,
+    "the CodeQL inventory read helper branches on the widened classifier",
+  );
+  // The dispatch POST must keep the narrow status-only classifier: a reset
+  // proves nothing about whether GitHub already queued the scan, so replaying
+  // one could start a duplicate analysis.
+  assert.match(
+    codeqlBackfill,
+    /!TRANSIENT_HTTP_STATUS\.test\(failure\)\) \{\n\s*throw new Error\(`CodeQL dispatch for PR/u,
+    "the mutating CodeQL dispatch stays status-only and never replays on a transport reset",
+  );
   assert.doesNotMatch(
     codeqlBackfill,
     /ANTHROPIC|OPENAI|actions\/checkout/u,
