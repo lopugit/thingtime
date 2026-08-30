@@ -36,6 +36,7 @@ export type ApiEndpointDoc = {
   requestExamples: ApiRequestExample[];
   responseExamples: ApiResponseExample[];
   notes?: string[];
+  featureVersion?: string;
 };
 
 export type ApiPlatformExamples = {
@@ -116,9 +117,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
+    featureVersion: '1.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -132,6 +134,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Ask the develop listener to resolve one exact PR using the github-actions control plane.',
         method: 'POST',
         body: { workflow: 'resolve-conflicts', ref: 'develop', inputs: { pr_number: '190' } }
+      },
+      {
+        name: 'Merge a Feature Stack into develop and main',
+        description: 'Snapshot the selected PRs in this exact order and dispatch one verified integration job per target.',
+        method: 'POST',
+        body: {
+          workflow: 'feature-stack',
+          ref: 'develop',
+          inputs: {
+            name: 'Search + Messenger',
+            source_pr_numbers: [427, 434],
+            targets: ['develop', 'main']
+          }
+        }
       }
     ],
     responseExamples: [

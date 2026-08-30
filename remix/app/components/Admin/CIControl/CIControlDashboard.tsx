@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Alert,
   AlertIcon,
+  Badge,
   Box,
   Button,
   Checkbox,
@@ -16,6 +17,7 @@ import {
   FormLabel,
   Grid,
   Heading,
+  IconButton,
   Input,
   Link,
   Modal,
@@ -33,9 +35,10 @@ import {
   useDisclosure,
   useMediaQuery
 } from '@chakra-ui/react';
-import { FiCloud, FiExternalLink, FiGitBranch, FiGithub, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
+import { FiCloud, FiExternalLink, FiGitBranch, FiGithub, FiLayers, FiPlay, FiPlus, FiRefreshCw, FiSearch, FiX } from 'react-icons/fi';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
@@ -341,6 +344,7 @@ const FeatureDetail = ({ feature, pr, runs, previews, events, canDispatch, onDis
 };
 
 const WORKFLOW_LABELS: Record<CiWorkflowKey, string> = {
+  'feature-stack': 'Merge Feature Stack',
   'resolve-conflicts': 'Resolve PR conflicts',
   'rebase-stack': 'Rebase PR or stack',
   'promote-features': 'Promote features to main',
@@ -418,7 +422,7 @@ const DispatchModal = ({
                   setConfirmed(false);
                 }}
               >
-                {(Object.keys(WORKFLOW_LABELS) as CiWorkflowKey[]).map((key) => (
+                {(Object.keys(WORKFLOW_LABELS) as CiWorkflowKey[]).filter((key) => key !== 'feature-stack').map((key) => (
                   <option key={key} value={key}>{WORKFLOW_LABELS[key]}</option>
                 ))}
               </Select>
@@ -458,6 +462,149 @@ const DispatchModal = ({
         </ModalFooter>
       </ModalContent>
     </Modal>
+  );
+};
+
+type FeatureStackDraft = {
+  name: string;
+  selectedFeatureIds: string[];
+  targets: string[];
+};
+
+type FeatureStackComposerProps = {
+  name: string;
+  selected: { feature: CiEntity; pr: CiEntity }[];
+  targets: string[];
+  branchOptions: string[];
+  confirmed: boolean;
+  isSubmitting: boolean;
+  canDispatch: boolean;
+  onNameChange: (value: string) => void;
+  onRemove: (featureId: string) => void;
+  onAddTarget: (target: string) => void;
+  onRemoveTarget: (target: string) => void;
+  onConfirmedChange: (value: boolean) => void;
+  onSubmit: () => void;
+};
+
+const FeatureStackComposer = ({
+  name,
+  selected,
+  targets,
+  branchOptions,
+  confirmed,
+  isSubmitting,
+  canDispatch,
+  onNameChange,
+  onRemove,
+  onAddTarget,
+  onRemoveTarget,
+  onConfirmedChange,
+  onSubmit
+}: FeatureStackComposerProps) => {
+  const availableTargets = branchOptions.filter((branch) => !targets.includes(branch));
+  const ready = selected.length >= 2 && targets.length >= 1 && name.trim().length > 0 && confirmed;
+  return (
+    <Box
+      border="1px solid var(--tt-border, #e7e7eb)"
+      borderRadius="var(--tt-radius-md, 12px)"
+      bg="var(--tt-card, #fff)"
+      mb={4}
+      overflow="hidden"
+    >
+      <Flex px={4} py={3} align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={3} direction={{ base: 'column', md: 'row' }}>
+        <Box>
+          <Flex align="center" gap={2}>
+            <FiLayers />
+            <Heading size="sm">Feature Stack</Heading>
+            <Badge colorScheme={selected.length >= 2 ? 'purple' : 'gray'}>{selected.length} selected</Badge>
+          </Flex>
+          <Text mt={1} fontSize="xs" opacity={0.6}>
+            Select feature PRs below in merge order, then combine them into every chosen target in one verified Lopu batch.
+          </Text>
+        </Box>
+        <Button
+          size="sm"
+          colorScheme="purple"
+          leftIcon={<FiPlay />}
+          onClick={onSubmit}
+          isLoading={isSubmitting}
+          isDisabled={!canDispatch || !ready}
+          flex="0 0 auto"
+        >
+          Merge all
+        </Button>
+      </Flex>
+      <Grid
+        templateColumns={{ base: '1fr', lg: 'minmax(210px, .65fr) minmax(0, 1.35fr) minmax(210px, .8fr)' }}
+        gap={4}
+        px={4}
+        py={4}
+        borderTop="1px solid var(--tt-border, #e7e7eb)"
+      >
+        <FormControl>
+          <FormLabel fontSize="xs">Stack name</FormLabel>
+          <Input
+            size="sm"
+            value={name}
+            maxLength={80}
+            onChange={(event) => onNameChange(event.target.value)}
+            placeholder="Search + Messenger"
+          />
+        </FormControl>
+        <FormControl>
+          <FormLabel fontSize="xs">Ordered feature list</FormLabel>
+          <Stack spacing={1.5} minH="32px">
+            {selected.map(({ feature, pr }, index) => (
+              <Flex key={feature.id} align="center" gap={2} minW={0}>
+                <Badge borderRadius="999px" minW="22px" textAlign="center">{index + 1}</Badge>
+                <Text fontSize="xs" fontWeight="600" noOfLines={1} flex="1">
+                  #{String(pr.number)} {String(feature.title ?? pr.title ?? pr.headRef ?? '')}
+                </Text>
+                <IconButton
+                  aria-label={`Remove PR #${String(pr.number)} from Feature Stack`}
+                  icon={<FiX />}
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => onRemove(feature.id)}
+                />
+              </Flex>
+            ))}
+            {!selected.length ? <EmptyLine>Use the checkboxes below to add at least two features.</EmptyLine> : null}
+          </Stack>
+        </FormControl>
+        <FormControl>
+          <FormLabel fontSize="xs">Target branches</FormLabel>
+          <Select
+            size="sm"
+            value=""
+            icon={<FiPlus />}
+            onChange={(event) => event.target.value && onAddTarget(event.target.value)}
+            isDisabled={targets.length >= 2 || availableTargets.length === 0}
+          >
+            <option value="">Add target…</option>
+            {availableTargets.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
+          </Select>
+          <Flex mt={2} gap={1.5} wrap="wrap">
+            {targets.map((target) => (
+              <Button key={target} size="xs" variant="outline" rightIcon={<FiX />} onClick={() => onRemoveTarget(target)}>
+                {target}
+              </Button>
+            ))}
+          </Flex>
+        </FormControl>
+      </Grid>
+      <Flex px={4} py={3} borderTop="1px solid var(--tt-border, #e7e7eb)" align="flex-start" gap={3} direction={{ base: 'column', md: 'row' }}>
+        <Checkbox isChecked={confirmed} onChange={(event) => onConfirmedChange(event.target.checked)} alignItems="flex-start">
+          <Text fontSize="xs">
+            Merge these exact PR snapshots in the listed order, open one auto-merge PR per target, and let branch protection finish each target.
+          </Text>
+        </Checkbox>
+        <Text ml={{ base: 0, md: 'auto' }} fontSize="xs" opacity={0.54} flex="0 0 auto">
+          2–20 features · 1–2 targets
+        </Text>
+      </Flex>
+    </Box>
   );
 };
 
@@ -563,6 +710,15 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   apiRef.current = api;
   const lopu = useLopu();
   const cacheKey = `tt-admin-ci-control-v1:${cacheIdentity}`;
+  const stackCacheKey = `tt-admin-ci-feature-stack-v1:${cacheIdentity}`;
+  const initialStackDraft = React.useMemo(
+    () => readLocalCache<FeatureStackDraft>(stackCacheKey) ?? {
+      name: 'Feature Stack',
+      selectedFeatureIds: [],
+      targets: ['develop', 'main']
+    },
+    [stackCacheKey]
+  );
   const [response, setResponse] = React.useState<CiControlResponse | null>(() => readLocalCache<CiControlResponse>(cacheKey));
   const [loading, setLoading] = React.useState(!response);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -576,7 +732,20 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [dispatchWorkflow, setDispatchWorkflow] = React.useState<CiWorkflowKey>('resolve-conflicts');
   const [dispatchPr, setDispatchPr] = React.useState<CiEntity | null>(null);
   const [dispatching, setDispatching] = React.useState(false);
+  const [featureStackDispatching, setFeatureStackDispatching] = React.useState(false);
   const [savingWorkflow, setSavingWorkflow] = React.useState<CiWorkflowKey | null>(null);
+  const [featureStackName, setFeatureStackName] = React.useState(initialStackDraft.name);
+  const [featureStackIds, setFeatureStackIds] = React.useState(initialStackDraft.selectedFeatureIds);
+  const [featureStackTargets, setFeatureStackTargets] = React.useState(initialStackDraft.targets);
+  const [featureStackConfirmed, setFeatureStackConfirmed] = React.useState(false);
+
+  React.useEffect(() => {
+    writeLocalCache(stackCacheKey, {
+      name: featureStackName,
+      selectedFeatureIds: featureStackIds,
+      targets: featureStackTargets
+    } satisfies FeatureStackDraft);
+  }, [featureStackIds, featureStackName, featureStackTargets, stackCacheKey]);
 
   const load = React.useCallback(async (options?: { signal?: AbortSignal; foreground?: boolean }) => {
     if (options?.foreground) setRefreshing(true);
@@ -643,6 +812,36 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
   const selectedFeature = features.find((feature) => feature.id === selectedFeatureId) ?? features[0] ?? null;
   const selectedPr = dashboard ? selectPrimaryPr(selectedFeature, dashboard.pullRequests) : null;
+  const featureStackSelection = React.useMemo(() => {
+    if (!dashboard) return [];
+    const byId = new Map(dashboard.features.map((feature) => [feature.id, feature]));
+    return featureStackIds.flatMap((featureId) => {
+      const feature = byId.get(featureId);
+      const pr = feature ? selectPrimaryPr(feature, dashboard.pullRequests) : null;
+      return feature && pr && Number.isSafeInteger(Number(pr.number)) && pr.headRef && pr.headSha
+        ? [{ feature, pr }]
+        : [];
+    });
+  }, [dashboard, featureStackIds]);
+  const featureStackSourceRefs = React.useMemo(
+    () => new Set(featureStackSelection.map(({ pr }) => String(pr.headRef))),
+    [featureStackSelection]
+  );
+  const featureStackBranchOptions = React.useMemo(() => {
+    if (!dashboard) return [];
+    return dashboard.branches
+      .map((branch) => String(branch.ref ?? branch.title ?? branch.externalId ?? ''))
+      .filter((branch) => branch && !featureStackSourceRefs.has(branch))
+      .sort((left, right) => {
+        const priority = (value: string) => value === 'develop' ? 0 : value === 'main' ? 1 : 2;
+        return priority(left) - priority(right) || left.localeCompare(right);
+      });
+  }, [dashboard, featureStackSourceRefs]);
+  React.useEffect(() => {
+    if (!dashboard) return;
+    const valid = new Set(dashboard.features.map((feature) => feature.id));
+    setFeatureStackIds((current) => current.filter((id) => valid.has(id)));
+  }, [dashboard]);
   const selectedRuns = dashboard
     ? dashboard.workflowRuns.filter((run) => matchesEntity(run, selectedPr)).slice(0, 10)
     : [];
@@ -661,6 +860,16 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         .sort((left, right) => (parseTime(right.occurredAt ?? entityTime(right))?.getTime() ?? 0) - (parseTime(left.occurredAt ?? entityTime(left))?.getTime() ?? 0))
     : [];
 
+  const toggleFeatureStack = (feature: CiEntity, pr: CiEntity | null) => {
+    if (!pr?.number || !pr.headRef || !pr.headSha) return;
+    setFeatureStackIds((current) =>
+      current.includes(feature.id)
+        ? current.filter((id) => id !== feature.id)
+        : current.length < 20 ? [...current, feature.id] : current
+    );
+    setFeatureStackConfirmed(false);
+  };
+
   const selectFeature = (feature: CiEntity) => {
     setSelectedFeatureId(feature.id);
     if (isMobile) setMobileDetailOpen(true);
@@ -678,10 +887,11 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       const result = await apiRef.current.v1.admin.dispatchCiWorkflow({ workflow, ref, inputs });
       if (!result?.ok) throw new Error('Dispatch rejected');
       dispatchDisclosure.onClose();
+      const policy = policies.find((candidate) => candidate.key === workflow);
       lopu({
         title: `${WORKFLOW_LABELS[workflow]} queued 🙌`,
         description:
-          selectedDispatchPolicy?.executionProvider === 'vercel-sandbox'
+          policy?.executionProvider === 'vercel-sandbox'
             ? 'Vercel Workflow is provisioning an isolated runner for the protected GitHub workflow. Status will update here automatically.'
             : 'GitHub accepted the trusted dispatch. Status will update here as webhook events arrive.',
         status: 'success',
@@ -696,6 +906,41 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       });
     } finally {
       setDispatching(false);
+    }
+  };
+
+  const submitFeatureStack = async () => {
+    if (featureStackDispatching || featureStackSelection.length < 2 || featureStackTargets.length < 1) return;
+    setFeatureStackDispatching(true);
+    try {
+      await requireThingtimeCapability('api.admin-ci-dispatch', '1.1.0');
+      const result = await apiRef.current.v1.admin.dispatchCiWorkflow({
+        workflow: 'feature-stack',
+        ref: 'develop',
+        inputs: {
+          name: featureStackName.trim(),
+          source_pr_numbers: featureStackSelection.map(({ pr }) => Number(pr.number)),
+          targets: featureStackTargets
+        }
+      });
+      if (!result?.ok) throw new Error('Feature Stack dispatch rejected');
+      setFeatureStackIds([]);
+      setFeatureStackConfirmed(false);
+      lopu({
+        title: 'Feature Stack queued 😍🙌',
+        description: `Lopu is combining ${featureStackSelection.length} features into ${featureStackTargets.join(' and ')}. Each target will merge only after its verified stack PR passes branch protection.`,
+        status: 'success',
+        duration: 8000
+      });
+      window.setTimeout(() => load(), 1500);
+    } catch {
+      lopu({
+        title: 'The Feature Stack was not queued',
+        description: 'Nothing was changed. Reconcile GitHub, confirm every selected PR is still open and current, then try again.',
+        status: 'error'
+      });
+    } finally {
+      setFeatureStackDispatching(false);
     }
   };
 
@@ -891,6 +1136,34 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onChange={updateAutomation}
       />
 
+      <FeatureStackComposer
+        name={featureStackName}
+        selected={featureStackSelection}
+        targets={featureStackTargets}
+        branchOptions={featureStackBranchOptions}
+        confirmed={featureStackConfirmed}
+        isSubmitting={featureStackDispatching}
+        canDispatch={Boolean(integration?.githubAppConfigured && policies.find((policy) => policy.key === 'feature-stack')?.enabled)}
+        onNameChange={(value) => {
+          setFeatureStackName(value);
+          setFeatureStackConfirmed(false);
+        }}
+        onRemove={(featureId) => {
+          setFeatureStackIds((current) => current.filter((id) => id !== featureId));
+          setFeatureStackConfirmed(false);
+        }}
+        onAddTarget={(target) => {
+          setFeatureStackTargets((current) => current.length < 2 && !current.includes(target) ? [...current, target] : current);
+          setFeatureStackConfirmed(false);
+        }}
+        onRemoveTarget={(target) => {
+          setFeatureStackTargets((current) => current.filter((candidate) => candidate !== target));
+          setFeatureStackConfirmed(false);
+        }}
+        onConfirmedChange={setFeatureStackConfirmed}
+        onSubmit={submitFeatureStack}
+      />
+
       <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)' }} gap={4}>
         <Box {...CARD_STYLES} overflow="hidden">
           <Flex p={3} gap={2} borderBottom="1px solid var(--tt-border, #ececef)" direction={{ base: 'column', sm: 'row' }}>
@@ -907,7 +1180,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
           </Flex>
           <Grid
             display={{ base: 'none', md: 'grid' }}
-            templateColumns="minmax(0, 1.6fr) minmax(150px, .8fr) 110px 110px"
+            templateColumns="36px minmax(0, 1.6fr) minmax(150px, .8fr) 110px 110px"
             gap={3}
             px={4}
             py={2}
@@ -918,7 +1191,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             letterSpacing="0.06em"
             color="var(--tt-muted, #9a9aa6)"
           >
-            <Text>Feature</Text><Text>Branch</Text><Text>Status</Text><Text>Updated</Text>
+            <Text aria-hidden="true">Add</Text><Text>Feature</Text><Text>Branch</Text><Text>Status</Text><Text>Updated</Text>
           </Grid>
           <Box maxH={{ base: 'none', lg: '720px' }} overflowY={{ base: 'visible', lg: 'auto' }}>
             {features.map((feature) => {
@@ -926,24 +1199,41 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
               const selected = feature.id === selectedFeature?.id;
               return (
                 <Grid
-                  as="button"
-                  type="button"
                   key={feature.id}
                   width="100%"
-                  templateColumns={{ base: 'minmax(0, 1fr) auto', md: 'minmax(0, 1.6fr) minmax(150px, .8fr) 110px 110px' }}
-                  gap={3}
+                  templateColumns={{ base: '36px minmax(0, 1fr)', md: '36px minmax(0, 1.6fr) minmax(150px, .8fr) 110px 110px' }}
+                  columnGap={3}
+                  rowGap={{ base: 1, md: 3 }}
                   alignItems="center"
-                  textAlign="left"
                   px={4}
                   py={3}
                   borderTop="1px solid var(--tt-border-light, #f0f0f2)"
                   bg={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
                   _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-                  _focusVisible={{ outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
-                  onClick={() => selectFeature(feature)}
-                  aria-pressed={selected}
                 >
-                  <Box minW={0}>
+                  <Checkbox
+                    gridColumn={{ base: '1', md: 'auto' }}
+                    gridRow={{ base: '1 / span 3', md: 'auto' }}
+                    alignSelf={{ base: 'start', md: 'center' }}
+                    mt={{ base: 1, md: 0 }}
+                    isChecked={featureStackIds.includes(feature.id)}
+                    isDisabled={!pr?.number || !pr.headRef || !pr.headSha}
+                    onChange={() => toggleFeatureStack(feature, pr)}
+                    aria-label={pr?.number ? `Add PR #${String(pr.number)} to Feature Stack` : 'Feature has no selectable pull request'}
+                  />
+                  <Button
+                    variant="unstyled"
+                    height="auto"
+                    minW={0}
+                    width="100%"
+                    gridColumn={{ base: '2', md: 'auto' }}
+                    gridRow={{ base: '1', md: 'auto' }}
+                    textAlign="left"
+                    justifyContent="flex-start"
+                    onClick={() => selectFeature(feature)}
+                    aria-pressed={selected}
+                  >
+                    <Box minW={0}>
                     <Flex align="center" gap={2} minW={0}>
                       {pr?.number ? (
                         <Text
@@ -961,12 +1251,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
                       ) : null}
                       <Text fontSize="sm" fontWeight="650" noOfLines={1} color="var(--tt-ink, #16161a)">{feature.title || pr?.title || 'Untitled feature'}</Text>
                     </Flex>
-                    <Text display={{ base: 'block', md: 'none' }} mt={1} fontFamily={MONO} fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
-                      {String(pr?.headRef ?? feature.externalId ?? 'No branch linked')}
-                    </Text>
-                  </Box>
-                  <Text display={{ base: 'none', md: 'block' }} fontFamily={MONO} fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>{String(pr?.headRef ?? '—')}</Text>
-                  <Box><StatusBadge status={pr?.status ?? feature.status} /></Box>
+                    </Box>
+                  </Button>
+                  <Text gridColumn={{ base: '2', md: 'auto' }} gridRow={{ base: '2', md: 'auto' }} fontFamily={MONO} fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>{String(pr?.headRef ?? '—')}</Text>
+                  <Box gridColumn={{ base: '2', md: 'auto' }} gridRow={{ base: '3', md: 'auto' }}><StatusBadge status={pr?.status ?? feature.status} /></Box>
                   <Text display={{ base: 'none', md: 'block' }} fontSize="xs" color="var(--tt-muted, #9a9aa6)">{relativeTime(entityTime(pr ?? feature))}</Text>
                 </Grid>
               );
