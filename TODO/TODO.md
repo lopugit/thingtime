@@ -161,7 +161,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     or `e.isComposing`; also normalise `e.key.toLowerCase() === 'z'` (Shift+Z
     reports `'Z'`, making the redo branch at L101 unreachable in most browsers).
 
-14. **✅ FIXED: Remove render-time debug leaks in the hot path.**
+14. **✅ FIXED IN PR #115 — 🧹 Remove render-time debug leaks in the hot path.**
 
     The severe part — the unbounded `window.useThingtimeScope` per-render array
     in `useThingtime.tsx` — was already gone before this pass (the hook is now a
@@ -169,12 +169,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     `claude/render-log-leaks-s7` (2026-07-21): removed all four render-time logs
     in `ThingtimeURL.tsx` (the `location`, path/thing `useMemo` bodies, and the
     per-render return log), the per-render `commanderActive` log and the
-    per-keypress `e?.code` log in `CommanderV2.tsx`, and gated the three
+    per-keypress `e?.code` log in `CommanderV2.tsx`, the per-render `debug`
+    object + log in the `command` `useMemo` and the per-keypress `e?.code` log
+    in `CommanderV1Deprecated.tsx` (folded in from PR #110), and gated the three
     `addNewChild` debug logs in `Thingtime.tsx` behind the file's existing
     `TT_DEBUG` flag. Verified live: `/` and `/things` render cleanly with no
     console errors and none of the removed logs. (Discrete event-handler logs in
     `CommanderV2` — on select/close/error — were left as-is; they are not
-    render-time hot-path leaks.)
+    render-time hot-path leaks. The two remaining render-body `console.debug`
+    calls in `LogoOld2.tsx`/`LogoOld3.tsx` are unreachable — neither component
+    is imported anywhere — so they are not hot-path leaks either.)
 
 15. **🟡 MOSTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
 
