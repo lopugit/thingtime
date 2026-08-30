@@ -9,15 +9,33 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.1.0',
+  'chatgpt.mcp': '1.2.0',
   'chatgpt.oauth': '1.3.0',
   'chatgpt.connections': '1.1.0',
-  'chatgpt.things.read': '1.1.0',
+  'chatgpt.things.read': '1.2.0',
   'chatgpt.things.write': '1.0.1'
 } as const;
 
+export const CHATGPT_MCP_TOOL_FEATURES = {
+  list_thingtime_accounts: 'chatgpt.connections',
+  select_thingtime_account: 'chatgpt.connections',
+  remove_thingtime_account: 'chatgpt.connections',
+  get_thingtime_profile: 'chatgpt.connections',
+  get_thingtime_thing: 'chatgpt.things.read',
+  list_thingtime_comments: 'chatgpt.things.read',
+  list_thingtime_things: 'chatgpt.things.read',
+  search_thingtime_things: 'chatgpt.things.read',
+  create_thingtime_thing: 'chatgpt.things.write',
+  update_thingtime_thing: 'chatgpt.things.write',
+  delete_thingtime_thing: 'chatgpt.things.write',
+  comment_on_thingtime_thing: 'chatgpt.things.write',
+  react_to_thingtime_thing: 'chatgpt.things.write',
+  save_thingtime_thing: 'chatgpt.things.write',
+  share_thingtime_thing: 'chatgpt.things.write'
+} as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
+
 export const CHATGPT_MCP_INSTRUCTIONS =
-  'Thingtime operates only on named accounts connected through this app. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Read and search may proceed on request; before any create, update, delete, comment, reaction, save, share, or disconnect, state the selected account, target, and effect and obtain clear confirmation.';
+  'Thingtime operates only on named accounts connected through this app. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. When an exact Thing ID is supplied, always use get_thingtime_thing; never rely on a paginated or recent Things listing to locate a known ID. When a comment target ID is supplied, use list_thingtime_comments instead of listing global Things. Read and search may proceed on request; before any create, update, delete, comment, reaction, save, share, or disconnect, state the selected account, target, and effect and obtain clear confirmation.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
@@ -316,9 +334,14 @@ export const pluginDiscovery = (origin: string) => ({
     authorization_response_iss_parameter_supported: true
   },
   capabilityManifest: {
-    schemaVersion: '1.0.0',
+    schemaVersion: '1.1.0',
     origin,
     features: CHATGPT_PLUGIN_FEATURES,
-    routes: CHATGPT_PLUGIN_ROUTES
+    routes: CHATGPT_PLUGIN_ROUTES,
+    operations: Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({
+      transport: 'mcp-tool',
+      name,
+      feature
+    }))
   }
 });
