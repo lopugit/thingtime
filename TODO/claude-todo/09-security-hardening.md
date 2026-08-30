@@ -149,13 +149,16 @@ revive only tagged values.
 
 ## Done when
 
-- [x] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
+- [ ] 🟡 A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
       any that remain apply visibility filtering. _(A1 raw-results + A2 populate
       became admin-only + rate-limited fail-closed in earlier PRs; A3
       service-account provisioning stays public by design — "anyone can
       provision a service account, so accountKind confers no trust" — but is now
       rate-limited fail-closed per IP (`auth.serviceAccount`), body-capped at
-      16 KiB, and field-whitelisted. 2026-07-21.)_
+      16 KiB, and field-whitelisted. 2026-07-21.)_ **Still open:** A3's minted
+      token is non-expiring (`signJwt expiresIn: null`, `createSession
+      expiresAt: null`) and carries the 5 GiB default allowance. Bound the
+      lifetime before checking this box — see §A3.
 - [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
       Login + resend already enforced the shared `enforceRateLimit`; the
