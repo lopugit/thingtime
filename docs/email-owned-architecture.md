@@ -94,6 +94,16 @@ All app sends should pass through a single internal module:
 Those functions enqueue a message and return an internal message id. They do
 not directly open SMTP connections. The worker owns delivery.
 
+That boundary already exists as the single `sendEmail({ stream, ... })` in
+`remix/app/api/utils/email/service.ts`; the named helpers above are a proposed
+ergonomic layer over it, not a replacement. Today's callers are
+`api/utils/auth/email.ts` (transactional and newsletter) and
+`api/utils/notifications/` (notification). Note that `EmailStream` already has
+**three** members — `transactional`, `newsletter`, and `notification` — each
+with its own From address in `email/config.ts`. There is no `security` stream;
+security mail rides the transactional one. Any new helper must map onto those
+existing streams rather than introducing a fourth name for the same traffic.
+
 ### Mongo Collections
 
 **Most of this already exists — extend it, do not rebuild it.** Seven of the
@@ -143,6 +153,14 @@ Keep transactional and marketing reputation separate:
 - Bounce handling: `bounce.thingtime.com`.
 - Transactional/auth stream: `auth.thingtime.com` or `mail.thingtime.com`.
 - Newsletter stream: `news.thingtime.com`.
+- Notification stream (weekly summaries and activity digests, the existing
+  `notification` stream): decide deliberately whether it shares the
+  transactional domain or gets its own. It is subscribed, recurring, digest
+  mail, so its complaint profile is closer to newsletter than to auth — but
+  routing it through `news.thingtime.com` would let a marketing reputation
+  problem take account digests down with it. Whichever is chosen, it needs its
+  own SPF/DKIM/DMARC coverage; the DNS block below currently provisions only
+  `auth.` and `news.`.
 - Inbound app-managed replies: `inbound.thingtime.com` or
   `reply.thingtime.com`.
 - Abuse and postmaster contacts: `abuse@thingtime.com` and
@@ -389,8 +407,18 @@ Use adaptive throttles:
 
 - Keep SES as the bridge when approved.
 - Keep all app code behind the Thingtime email service boundary.
-- Add Mongo collections and indexes for messages, events, templates,
-  subscriptions, suppressions, unsubscribes, inbound metadata, and limits.
+- Add Mongo collections and indexes for `email_inbound_messages` and
+  `email_delivery_limits`. The other seven are already registered and indexed —
+  see the collections section above.
+- **Wire the event stream.** `recordEmailEvent()` exists in
+  `email/events.ts` but currently has no callers: `service.ts` does not import
+  it, so `email_events` is registered and indexed yet receives no rows. Today
+  `sendEmail()` records state only as mutable `status` transitions on the
+  `email_messages` row, which means a message's history is overwritten rather
+  than accumulated. Emitting `queued`/`sent`/`logged`/`skipped`/`failed` events
+  from `sendEmail()` is the smallest change that makes the append-only trail
+  real, and it must land before provider webhooks start appending
+  `delivered`/`bounced`/`complained` to the same stream.
 - Build deterministic template rendering tests.
 - Add dev/test email endpoints that cannot leak credentials or send to
   arbitrary addresses.
@@ -399,13 +427,31 @@ Exit criteria:
 
 - Signup verification, email OTP, password reset, and service-account
   verification are represented as queued message records.
-- Every send attempt creates an event trail.
+- Every send attempt creates an event trail — specifically, `email_events` is
+  non-empty for every `email_messages` row, which is not true today.
 - Suppression checks happen before delivery.
 
 ### Phase 1: Compliance Core
 
 - Build subscription/preference center.
-- Build one-click unsubscribe endpoint.
+- **Reconcile the two opt-out systems that already exist, then build the
+  one-click endpoint on top of the survivor.** Thingtime currently has two
+  unrelated ways to stop mail:
+  - The email service checks `email_suppression_list` for every stream, and
+    `email_unsubscribes` **only** when `stream === 'newsletter'`
+    (`getSuppressedRecipients()` in `email/service.ts`).
+  - The notification path never reaches those collections. It gates on a user
+    preference before calling `sendEmail()` at all
+    (`notificationEmailChannelOn()`), and its footer link —
+    `/api/v1/notifications/email/unsubscribe`, already HMAC-tokenised and
+    rate-limited — flips `masters.email` on the user document.
+
+  Opt-out is therefore correct today but not observable in one place: nothing
+  in `email_unsubscribes` reflects a notification opt-out, and a suppression
+  audit that reads only the email collections would report a user as
+  subscribed after they unsubscribed. Pick one system of record before adding
+  RFC 8058 headers, or the `List-Unsubscribe-Post` endpoint and the footer link
+  will write to different stores.
 - Build consent capture and proof records.
 - Build bounce and complaint ingestion abstraction that can accept SES events
   now and owned-MTA events later.
