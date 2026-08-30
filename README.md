@@ -473,6 +473,13 @@ response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
 
+The read surface deliberately separates intent: `get_thingtime_thing({ id })`
+uses the Things API's exact-ID read and returns `thing_not_found` for a missing
+ID; `list_thingtime_comments({ targetId })` lists comments attached to that
+known target; `list_thingtime_things` and `search_thingtime_things` are only for
+browsing/discovery when the exact ID is unknown. This prevents known Things or
+their comments from disappearing behind unrelated pagination.
+
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
 
