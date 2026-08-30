@@ -30,6 +30,20 @@ is fixed, and cite the checklist you ran in the PR description.
       known parent ID, `list_thingtime_comments` returns only directly attached
       comments and preserves `limit`/`cursor` pagination without fetching global
       comment rows.
+- [ ] `tools/list` exposes all 31 tools with the Thingtime MCP App output
+      template; prompts and static UI/contract resources work before OAuth,
+      while account-scoped resources return the OAuth challenge. In the app,
+      inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
+      select multiple rows, expand details, and verify Apply stays disabled
+      until the explicit confirmation checkbox is checked.
+- [ ] Preview a create/update/delete plan with least-privilege scopes. Change
+      one target after preview and verify apply returns 409 without performing
+      any operation; with fresh preconditions, verify serial apply, honest
+      partial failure receipts, encrypted history, and undo-as-a-new-preview.
+- [ ] Create a valid `Thingtime Capability` data Thing with `$input`
+      placeholders, start it, and verify its exact signed preview must match the
+      persisted workflow run. Reject missing inputs, duplicate targets, more
+      than 25 operations, raw query/operator keys, URLs/routes, and code.
 
 ## Passkeys + cross-deployment auto-login
 

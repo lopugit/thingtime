@@ -3636,13 +3636,17 @@ export type DeleteThingHooks = {
 	// Things are removed and quota is refunded. A failure leaves the root and
 	// conservative charge intact for a safe retry.
 	beforeCascade?: (root: ThingDoc) => Promise<Fail | { ok: true }>;
+	// Optional optimistic-concurrency precondition used by previewed agent
+	// mutations. It is checked against the exact root before any descendant or
+	// attachment cleanup begins, so a stale preview can never delete new state.
+	expectedUpdatedAt?: unknown;
 };
 
 export const deleteThing = async (
 	viewerInput: string | Viewer,
 	shareId: unknown,
-	app: AppLens,
-	hooks: DeleteThingHooks
+	app: AppLens = null,
+	hooks: DeleteThingHooks = {}
 ): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -3673,13 +3677,26 @@ export const deleteThing = async (
     }
     return fail(404, 'Thing not found');
   }
+	if (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) {
+		if (typeof hooks.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(hooks.expectedUpdatedAt).getTime())) {
+			return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
+		}
+		const currentUpdatedAt = new Date(initial.updatedAt);
+		if (Number.isNaN(currentUpdatedAt.getTime()) || currentUpdatedAt.getTime() !== new Date(hooks.expectedUpdatedAt).getTime()) {
+			return fail(409, 'Thing changed after the preview — build a new preview before deleting');
+		}
+	}
   // visibility fence — same judgement the update path makes: out-of-audience
   // things are untouchable (inherit acls resolve through the target chain)
   if (await patVisibilityBlocksDoc(viewer, initial)) return patVisibilityFail(viewer);
 	// Pin the physical root identity across the multi-transaction drain. If a
 	// competing deleter wins and a caller later reuses the same public shareId,
 	// this in-flight request must never delete that replacement Thing (ABA).
-	const anchoredDeleteFilter = { ...deleteFilter, _id: (initial as any)._id };
+	const anchoredDeleteFilter = {
+		...deleteFilter,
+		_id: (initial as any)._id,
+		...(hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null ? { updatedAt: initial.updatedAt } : {})
+	};
 
 	try {
 		if (hooks.beforeCascade) {
@@ -3792,7 +3809,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -3801,6 +3818,15 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  if (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null) {
+    if (typeof options.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(options.expectedUpdatedAt).getTime())) {
+      return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
+    }
+    const currentUpdatedAt = new Date(doc.updatedAt);
+    if (Number.isNaN(currentUpdatedAt.getTime()) || currentUpdatedAt.getTime() !== new Date(options.expectedUpdatedAt).getTime()) {
+      return fail(409, 'Thing changed after the preview — build a new preview before updating');
+    }
+  }
   // app writes stay inside the namespace: a thing the acting user owns but
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
@@ -4026,13 +4052,28 @@ export const updateThing = async (
 				if (registeredStorageScope && appDelta !== 0) {
 					await applyAppStorageDeltaTransaction(registeredStorageScope, appDelta, session);
 				}
-				writeResult = await things.updateOne({ shareId: doc.shareId, ...expectedSize } as any, { $set: set, $unset: unset } as any, { session });
+				writeResult = await things.updateOne(
+					{
+						_id: (doc as any)._id,
+						...expectedSize,
+						...(options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null ? { updatedAt: doc.updatedAt } : {})
+					} as any,
+					{ $set: set, $unset: unset } as any,
+					{ session }
+				);
 				if (writeResult.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Thing changed while it was being updated — try again');
 				}
 			});
 		} else {
-    writeResult = await things.updateOne({ shareId: doc.shareId, ...expectedSize } as any, { $set: set, $unset: unset } as any);
+    writeResult = await things.updateOne(
+      {
+        _id: (doc as any)._id,
+        ...expectedSize,
+        ...(options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null ? { updatedAt: doc.updatedAt } : {})
+      } as any,
+      { $set: set, $unset: unset } as any
+    );
   }
 	} catch (error) {
 		const storageFail = storageMutationFail(error);
@@ -4041,8 +4082,8 @@ export const updateThing = async (
 		// ambiguous result; its existing reconciliation path repairs over-counting.
 		throw error;
 	}
-	if (storageScope?.sandbox && writeResult.matchedCount === 0) {
-		if (appDelta > 0) await refundAppStorage(storageScope, appDelta);
+	if (writeResult.matchedCount === 0) {
+		if (storageScope?.sandbox && appDelta > 0) await refundAppStorage(storageScope, appDelta);
     return fail(409, 'Thing changed while it was being updated — try again');
   }
 	if (storageScope?.sandbox && appDelta < 0) await refundAppStorage(storageScope, -appDelta);

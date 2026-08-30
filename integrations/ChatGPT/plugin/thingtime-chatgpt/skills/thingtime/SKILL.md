@@ -20,6 +20,21 @@ delete, comment, reaction, save, or share action, show the intended account,
 target, and effect and obtain clear confirmation. Treat delete and disconnect
 as irreversible from the current ChatGPT connection.
 
+For more than one exact ID, use `get_thingtime_things`; preserve its ordered
+per-ID found/not-found results. Discover and validate schemas before creating
+typed data. Use `list_thingtime_related` for target, parent, folder, backlink,
+or bounded thread traversal, and `list_thingtime_changes` for resumable polling
+(it is not a deletion change stream).
+
+For a composed mutation or Capability workflow, always call the preview/start
+tool first. Explain the selected account and complete before/after plan, then
+stop for clear confirmation. Apply only the returned signed receipt. If a
+precondition is stale, build a new preview; never bypass it. Set `confirmed:
+true` only after that confirmation. Undo also creates
+a fresh preview and requires a second confirmation. Capability Things may only
+compose the published bounded mutation grammar — never invent URLs, API paths,
+database queries, operator objects, or executable code.
+
 When the user or task supplies an exact Thing ID, always call
 `get_thingtime_thing`. Never rely on `list_thingtime_things`, a recent page, or
 `search_thingtime_things` to locate a known ID. Use list/search only for
