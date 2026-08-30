@@ -54,8 +54,11 @@ export const BlockInsertMenu = (props: {
 	const menuRef = React.useRef<HTMLDivElement | null>(null);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 
-	// position beside the clicked insert zone, clamped to the viewport — open
-	// whichever way has more room and never grow past it
+	// Small screens get a bottom sheet (Squarespace-style) — a popover anchored
+	// to a cramped zone is exactly what made mobile taps miserable. Desktop
+	// keeps the anchored popover: open whichever way has more room, never grow
+	// past the viewport.
+	const sheet = typeof window !== 'undefined' && window.innerWidth < 640;
 	const rect = anchor.getBoundingClientRect();
 	const width = 300;
 	const left = Math.max(8, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 8));
@@ -67,7 +70,10 @@ export const BlockInsertMenu = (props: {
 	const bottom = openUp ? window.innerHeight - rect.top + 6 : undefined;
 
 	React.useEffect(() => {
-		inputRef.current?.focus();
+		// autofocus would pop the mobile keyboard over the bottom sheet —
+		// desktop only
+		if (!sheet) inputRef.current?.focus();
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- mount-time layout choice
 	}, []);
 
 	React.useEffect(() => {
@@ -109,22 +115,43 @@ export const BlockInsertMenu = (props: {
 	}, [query]);
 
 	return (
+		<>
+		{sheet ? (
+			<Box
+				position="fixed"
+				top={0}
+				left={0}
+				right={0}
+				bottom={0}
+				zIndex={DRAWER_POPUP_Z - 1}
+				background="rgba(22, 22, 26, 0.35)"
+				onClick={onClose}
+				onTouchStart={onClose}
+			/>
+		) : null}
 		<Box
 			ref={menuRef}
 			className="ttBlockInsertMenu"
 			data-testid="block-insert-menu"
 			position="fixed"
-			left={`${left}px`}
-			top={top !== undefined ? `${top}px` : undefined}
-			bottom={bottom !== undefined ? `${bottom}px` : undefined}
-			width={`${width}px`}
-			maxHeight={`${maxHeight}px`}
+			left={sheet ? 0 : `${left}px`}
+			right={sheet ? 0 : undefined}
+			top={!sheet && top !== undefined ? `${top}px` : undefined}
+			bottom={sheet ? 0 : bottom !== undefined ? `${bottom}px` : undefined}
+			width={sheet ? 'auto' : `${width}px`}
+			maxHeight={sheet ? 'min(70vh, 520px)' : `${maxHeight}px`}
 			overflowY="auto"
 			zIndex={DRAWER_POPUP_Z}
 			{...CARD_STYLES}
+			borderRadius={sheet ? 'var(--tt-radius-xl, 20px) var(--tt-radius-xl, 20px) 0 0' : CARD_STYLES.borderRadius}
 			boxShadow="var(--tt-shadow-popover, 0 12px 32px rgba(0, 0, 0, 0.12))"
-			padding={3}
+			padding={sheet ? 4 : 3}
+			paddingBottom={sheet ? 'calc(var(--thingtime-safe-area-bottom, 0px) + 20px)' : 3}
+			sx={{ WebkitTapHighlightColor: 'transparent' }}
 		>
+			{sheet ? (
+				<Box width="44px" height="5px" borderRadius="999px" background="var(--tt-border, #ececef)" marginX="auto" marginBottom={3} />
+			) : null}
 			<Flex flexWrap="wrap" gap={1.5} marginBottom={2}>
 				{QUICK_BLOCKS.map((quick) => (
 					<Flex
@@ -134,10 +161,10 @@ export const BlockInsertMenu = (props: {
 						alignItems="center"
 						columnGap="6px"
 						fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-						fontSize="11px"
+						fontSize={sheet ? '13px' : '11px'}
 						fontWeight={600}
-						paddingX="9px"
-						paddingY="6px"
+						paddingX={sheet ? '13px' : '9px'}
+						paddingY={sheet ? '10px' : '6px'}
 						borderRadius="var(--tt-radius-pill, 999px)"
 						border="1px solid"
 						borderColor="var(--tt-border, #ececef)"
@@ -185,8 +212,8 @@ export const BlockInsertMenu = (props: {
 							columnGap={2}
 							textAlign="left"
 							width="100%"
-							paddingX={2}
-							paddingY="7px"
+							paddingX={sheet ? 3 : 2}
+							paddingY={sheet ? '13px' : '7px'}
 							borderRadius="var(--tt-radius-sm, 9px)"
 							cursor="pointer"
 							_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
@@ -203,5 +230,6 @@ export const BlockInsertMenu = (props: {
 				})}
 			</Flex>
 		</Box>
+		</>
 	);
 };

@@ -53,6 +53,40 @@ export type BuilderChrome = {
 
 const DRAG_MIME = 'application/x-tt-block-id';
 
+// Builder chrome must never behave like page text: no long-press selection,
+// no iOS callout, no tap highlight, and taps fire immediately.
+const CHROME_TOUCH_SX = {
+	userSelect: 'none',
+	WebkitUserSelect: 'none',
+	WebkitTouchCallout: 'none',
+	WebkitTapHighlightColor: 'transparent',
+	touchAction: 'manipulation'
+} as const;
+
+// Touch devices have no hover — every affordance stays visible there.
+const useCoarsePointer = (): boolean => {
+	const [coarse, setCoarse] = React.useState(() => {
+		try {
+			return window.matchMedia('(pointer: coarse)').matches;
+		} catch {
+			return false;
+		}
+	});
+	React.useEffect(() => {
+		try {
+			const media = window.matchMedia('(pointer: coarse)');
+			const onChange = () => setCoarse(media.matches);
+			media.addEventListener('change', onChange);
+			return () => media.removeEventListener('change', onChange);
+		} catch {
+			return undefined;
+		}
+	}, []);
+	return coarse;
+};
+
+// A slim insert line between siblings — the WHOLE strip is the tap target
+// (44px when visible), the pill is just the label.
 const InsertZone = ({
 	containerId,
 	index,
@@ -67,19 +101,32 @@ const InsertZone = ({
 	alwaysVisible?: boolean;
 }) => {
 	const [active, setActive] = React.useState(false);
+	const coarse = useCoarsePointer();
+	const visible = active || alwaysVisible || coarse;
 	return (
 		<Flex
+			as="button"
+			type="button"
+			aria-label="Add a block here"
 			className="ttInsertZone"
 			data-testid={`insert-${containerId ?? 'root'}-${index}`}
 			alignItems="center"
 			justifyContent="center"
-			height={active || alwaysVisible ? '28px' : '14px'}
-			marginY="-2px"
-			opacity={active ? 1 : alwaysVisible ? 0.75 : 0}
+			width="100%"
+			height={visible ? '44px' : '18px'}
+			marginY="3px"
+			opacity={active ? 1 : visible ? 0.8 : 0}
 			_hover={{ opacity: 1 }}
 			transition="opacity 0.12s ease, height 0.12s ease"
 			position="relative"
 			zIndex={5}
+			cursor="pointer"
+			sx={CHROME_TOUCH_SX}
+			onClick={(event: React.MouseEvent<HTMLElement>) => {
+				event.preventDefault();
+				event.stopPropagation();
+				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
+			}}
 			onDragOver={(event) => {
 				if (event.dataTransfer.types.includes(DRAG_MIME)) {
 					event.preventDefault();
@@ -98,31 +145,101 @@ const InsertZone = ({
 				}
 			}}
 		>
-			<Box position="absolute" left={0} right={0} top="50%" height="2px" background="var(--tt-accent, hotpink)" opacity={0.35} borderRadius="1px" />
+			<Box position="absolute" left={0} right={0} top="50%" height="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
 			<Box
-				as="button"
-				type="button"
-				aria-label="Add a block here"
+				as="span"
 				position="relative"
+				pointerEvents="none"
 				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-				fontSize="11px"
+				fontSize="12px"
 				fontWeight={700}
 				lineHeight="1"
-				paddingX="10px"
-				paddingY="5px"
+				paddingX="14px"
+				paddingY="8px"
 				borderRadius="var(--tt-radius-pill, 999px)"
 				border="1px solid"
 				borderColor="var(--tt-accent, hotpink)"
 				background="var(--tt-card, #ffffff)"
 				color="var(--tt-accent, hotpink)"
-				cursor="pointer"
-				_hover={{ background: 'var(--tt-accent-tint, #fff5fa)' }}
-				onClick={(event: React.MouseEvent<HTMLElement>) => {
-					event.stopPropagation();
-					chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
-				}}
+				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 			>
 				+ add block
+			</Box>
+		</Flex>
+	);
+};
+
+// An empty container (or an empty page) renders a tall, unmistakable
+// dropwell instead of a slim line — the whole well is tappable and droppable,
+// and it can never visually collide with sibling zones outside the container.
+const DropWell = ({
+	containerId,
+	chrome,
+	label
+}: {
+	containerId: string | null;
+	chrome: BuilderChrome;
+	label?: string;
+}) => {
+	const [active, setActive] = React.useState(false);
+	return (
+		<Flex
+			as="button"
+			type="button"
+			aria-label="Add the first block"
+			className="ttDropWell"
+			data-testid={`dropwell-${containerId ?? 'root'}`}
+			flexDirection="column"
+			alignItems="center"
+			justifyContent="center"
+			rowGap="6px"
+			width="100%"
+			minHeight="96px"
+			marginY="6px"
+			border="2px dashed"
+			borderColor={active ? 'var(--tt-accent, hotpink)' : 'var(--tt-border, #ececef)'}
+			borderRadius="var(--tt-radius-lg, 16px)"
+			background={active ? 'var(--tt-accent-tint, #fff5fa)' : 'var(--tt-surface, #fafafb)'}
+			cursor="pointer"
+			transition="border-color 0.12s ease, background 0.12s ease"
+			sx={CHROME_TOUCH_SX}
+			_hover={{ borderColor: 'var(--tt-accent, hotpink)', background: 'var(--tt-accent-tint, #fff5fa)' }}
+			onClick={(event: React.MouseEvent<HTMLElement>) => {
+				event.preventDefault();
+				event.stopPropagation();
+				chrome.onInsert(containerId, 0, event.currentTarget as HTMLElement);
+			}}
+			onDragOver={(event) => {
+				if (event.dataTransfer.types.includes(DRAG_MIME)) {
+					event.preventDefault();
+					event.dataTransfer.dropEffect = 'move';
+					setActive(true);
+				}
+			}}
+			onDragLeave={() => setActive(false)}
+			onDrop={(event) => {
+				const id = event.dataTransfer.getData(DRAG_MIME);
+				setActive(false);
+				if (id) {
+					event.preventDefault();
+					event.stopPropagation();
+					chrome.onMove(id, containerId, 0);
+				}
+			}}
+		>
+			<Box as="span" fontSize="20px" lineHeight="1" pointerEvents="none">
+				＋
+			</Box>
+			<Box
+				as="span"
+				pointerEvents="none"
+				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+				fontSize="12px"
+				fontWeight={700}
+				letterSpacing="0.04em"
+				color="var(--tt-accent, hotpink)"
+			>
+				{label || 'Add a block'}
 			</Box>
 		</Flex>
 	);
@@ -169,6 +286,10 @@ const BlockFrame = ({
 				if (chrome.hoverId !== block.id) chrome.onHover(block.id);
 			}}
 			onClickCapture={(event) => {
+				// chrome controls nested inside this frame (insert zones, dropwells)
+				// own their clicks — capturing them would select the container
+				// instead of opening the menu
+				if ((event.target as HTMLElement).closest?.('.ttInsertZone, .ttDropWell')) return;
 				event.preventDefault();
 				event.stopPropagation();
 				chrome.onSelect(block.id, event.currentTarget as HTMLElement);
@@ -177,24 +298,26 @@ const BlockFrame = ({
 			{(hovered || selected) && (
 				<Flex
 					position="absolute"
-					top="-11px"
+					top="-14px"
 					left="6px"
 					zIndex={6}
 					alignItems="center"
 					columnGap="6px"
 					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-					fontSize="10px"
+					fontSize="11px"
 					fontWeight={700}
 					lineHeight="1"
 					textTransform="uppercase"
 					letterSpacing="0.06em"
-					paddingX="7px"
-					paddingY="4px"
+					paddingX="10px"
+					paddingY="7px"
 					borderRadius="var(--tt-radius-pill, 999px)"
 					background={tone}
 					color="var(--tt-accent-contrast, #ffffff)"
+					boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 					pointerEvents={locked ? 'none' : 'auto'}
 					draggable={!locked}
+					sx={CHROME_TOUCH_SX}
 					onDragStart={(event) => {
 						event.stopPropagation();
 						event.dataTransfer.setData(DRAG_MIME, block.id);
@@ -395,11 +518,13 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 			</>
 		);
 	}
-	// empty lists and the end of the root list keep a visible zone — an empty
-	// canvas must invite, never look inert
-	const zones: React.ReactNode[] = [
-		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} alwaysVisible={blocks.length === 0} />
-	];
+	// an empty list renders one tall dropwell (never a slim line that could
+	// collide with sibling zones); the end of the root list keeps its zone
+	// visible so a page always invites another block
+	if (blocks.length === 0) {
+		return <DropWell containerId={containerId} chrome={chrome} label={isRoot ? 'Add your first block' : 'Add a block inside'} />;
+	}
+	const zones: React.ReactNode[] = [<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} />];
 	blocks.forEach((block, index) => {
 		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />);
 		zones.push(
