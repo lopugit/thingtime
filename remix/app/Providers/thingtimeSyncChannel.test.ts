@@ -291,6 +291,55 @@ test('undefined values survive through an explicit safe-codec marker', async () 
 	}
 });
 
+test('the carried timestamp is diagnostic: same-path concurrent writes swap instead of converging', async () => {
+	// Pins the semantics the `timestamp` field does NOT provide, because a wire
+	// field named `timestamp` reads like conflict resolution and there is none:
+	// every message is applied on arrival, so per path this is last-writer-wins
+	// by delivery order. Two tabs writing one path inside a single round-trip
+	// therefore end up holding each other's value permanently.
+	//
+	// Asserted as the behaviour that exists rather than the behaviour that would
+	// be nicer, for the same reason as the escaped-path test below: pinning what
+	// is true is what makes a future change visible. If per-path applied
+	// timestamps ever land in ThingtimeProvider, the later write wins in BOTH
+	// tabs and this test goes red — that is the signal to update it together
+	// with the note on the field in thingtimeSyncChannel.ts, not to delete it.
+	const channelName = uniqueChannelName();
+	const tabA: Record<string, any> = {};
+	const tabB: Record<string, any> = {};
+	const a = createThingtimeSyncChannel({
+		tabId: 'tab-a',
+		channelName,
+		onRemoteWrite: (path, value) => {
+			tabA[String(path)] = value;
+		}
+	});
+	const b = createThingtimeSyncChannel({
+		tabId: 'tab-b',
+		channelName,
+		onRemoteWrite: (path, value) => {
+			tabB[String(path)] = value;
+		}
+	});
+	assert.ok(a && b);
+
+	try {
+		// Each tab applies its own write locally first — exactly what the mutation
+		// queue does before ThingtimeProvider publishes — then broadcasts it.
+		tabA['Content.note'] = 'from-a';
+		a.publish('Content.note', 'from-a');
+		tabB['Content.note'] = 'from-b';
+		b.publish('Content.note', 'from-b');
+		await settleMessages();
+
+		assert.equal(tabA['Content.note'], 'from-b', 'tab A ends up holding tab B write');
+		assert.equal(tabB['Content.note'], 'from-a', 'tab B ends up holding tab A write');
+	} finally {
+		a.close();
+		b.close();
+	}
+});
+
 test('only writes that are neither remote echoes nor tab-local chrome are published', () => {
 	assert.equal(shouldPublishAppliedWrite(undefined), true);
 	assert.equal(shouldPublishAppliedWrite({}), true);

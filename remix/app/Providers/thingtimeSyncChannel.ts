@@ -15,6 +15,24 @@ type ThingtimeSyncMessage = {
 	path: ThingtimeSyncPath;
 	payload: string;
 	sourceTabId: string;
+	// Diagnostic only — NOT a conflict-resolution field, despite reading like
+	// one. Nothing compares it, so the channel is arrival-order last-writer-wins
+	// per path, and two tabs that write the SAME path inside one message
+	// round-trip do not converge: each applies its own value, then receives and
+	// applies the other's, so the two tabs end up holding each other's value
+	// permanently (reproduced in the test below). Whichever tab autosaves last
+	// then persists its swapped copy.
+	//
+	// This is narrow in practice — it needs sub-round-trip concurrency on one
+	// key, which one pair of hands at one keyboard does not produce, and the
+	// clobber this channel exists to fix is the WHOLE-TREE one — so it is
+	// recorded rather than fixed here. Resolving it is not a change to this
+	// module: the receiver would have to reject a remote write older than the
+	// last write applied locally at that path, which means per-path applied
+	// timestamps living in ThingtimeProvider next to the mutation queue, plus
+	// eviction so that map does not grow with the tree. Same-machine tabs share
+	// one clock, so the comparison would at least be sound. If that lands, this
+	// field stops being diagnostic and the pinning test below is what says so.
 	timestamp: number;
 };
 

@@ -6,7 +6,8 @@
 > codec in `thingtimeSerialization.ts`; remote writes use the normal mutation
 > queue with `{ ignoreUndoRedo: true, fromRemote: true }`. Unit coverage runs in
 > `test:autosave`; live two-tab results are recorded below. Remaining optional
-> hardening: cold-tab revision reconciliation (implementation item 5).
+> hardening: cold-tab revision reconciliation (implementation item 5) and
+> same-path concurrent-write resolution (implementation item 6).
 
 ## What it's for
 
@@ -88,6 +89,19 @@ by a stale tab writing its old in-memory tree.
 5. **Cold-tab staleness.** Optional hardening: on tab focus/visibilitychange,
    diff a lightweight revision counter (e.g. `thingtime.__rev` bumped on each
    persist) against storage and re-merge if the stored revision is newer.
+6. **Same-path concurrency.** Optional hardening, and a known limit of what
+   shipped: messages carry a `timestamp` but nothing compares it, so per path
+   the channel is last-writer-wins *by arrival order*. Two tabs writing the same
+   path inside one message round-trip do not converge — each applies its own
+   value, then applies the other's, and the two end up holding each other's
+   value until something else writes that path. Narrow in practice (it needs
+   sub-round-trip concurrency on one key, and the whole-tree clobber this
+   channel exists to fix is unaffected), and pinned by a regression test in
+   `thingtimeSyncChannel.test.ts`. Resolving it belongs in `ThingtimeProvider`,
+   not the channel: reject a remote write older than the last write applied
+   locally at that path, which needs per-path applied timestamps beside the
+   mutation queue plus eviction so that map cannot grow with the tree. Tabs on
+   one machine share a clock, so the comparison would be sound.
 
 ## Done when
 
@@ -104,10 +118,11 @@ by a stale tab writing its old in-memory tree.
 
 ## Validation
 
-- `npm run test:autosave`: 41/41 pass, including safe-codec Date/string/cycle
+- `npm run test:autosave`: 43/43 pass, including safe-codec Date/string/cycle
   round-tripping, function stripping, malformed messages, self-echo, close,
   explicit `undefined`, tab-local timeline metadata, the call-site guards for
-  every viewport-scoped key, and the no-`BroadcastChannel` fallback.
+  every viewport-scoped key, the pinned same-path arrival-order semantics
+  (implementation item 6), and the no-`BroadcastChannel` fallback.
 - Targeted provider/channel ESLint passes.
 - Full unit suite and production/Vercel build pass.
 - Live two-tab verification passed bidirectionally, including a 20-write burst,
