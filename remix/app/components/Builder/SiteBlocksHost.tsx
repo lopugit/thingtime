@@ -212,6 +212,20 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		}
 	}, [draft.resolved]);
 
+	// Unseeded deployment (no system site doc yet): start the draft with the
+	// locked native block so the live screen stays visible and positionable —
+	// otherwise the fork would have no marker and every block could only land
+	// below the page.
+	const seededEmptyRef = React.useRef(false);
+	React.useEffect(() => {
+		if (draft.loading || draft.resolved?.page || draft.blocks.length || seededEmptyRef.current) return;
+		seededEmptyRef.current = true;
+		const key = path === '/' ? 'home' : path.slice(1).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page';
+		draft.setBlocks([{ id: `native-${key}`, type: 'native', native: key }]);
+		if (!pageName) setPageName('This page');
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot seeding keyed on resolve state
+	}, [draft.loading, draft.resolved, draft.blocks.length, path]);
+
 	// keep the view cache fresh so leaving edit mode shows what was saved
 	React.useEffect(() => {
 		return () => {
