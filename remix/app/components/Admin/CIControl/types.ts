@@ -80,6 +80,7 @@ export type CiControlResponse = {
 };
 
 export type CiWorkflowKey =
+  | 'feature-stack'
   | 'resolve-conflicts'
   | 'rebase-stack'
   | 'promote-features'
