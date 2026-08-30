@@ -53,6 +53,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   manifest, API docs, and the distributable plugin package live together so
   clients can negotiate the contract rather than route-probing. — Codex (AI),
   2026-08-25
+- **Admin external integrations**: `/admin` now exposes a dedicated
+  **External integrations** tab for a write-only AES-256-GCM secret vault,
+  saved HTTPS endpoint policies, and a bounded redacted audit trail. The
+  provider proxy enforces selected read / create-only / write permissions;
+  Vercel create-only environment writes check for an existing value before
+  POST and never use PATCH/upsert. Setup: `README.md` “Admin integration vault
+  and policy proxy”. — Codex (AI), 2026-08-24
 
 ### Security
 

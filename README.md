@@ -732,6 +732,28 @@ sha256 hash is stored, 10-minute TTL, atomically attempt-capped at 5); a second
 `POST /api/v1/login { challenge, code }` completes login with a constant-time
 comparison. Login attempts are rate-limited per IP (`auth.login`).
 
+### Admin integration vault and policy proxy
+
+The **/admin → External integrations** tab stores a write-only external
+credential and binds it to a saved endpoint policy. The browser never receives
+the credential again—not masked, decrypted, or through an audit record.
+Provision this distinct server-only value before creating any secret:
+
+```sh
+# Generate once with a secure secret manager / CSPRNG. It must decode to exactly 32 bytes.
+THINGTIME_ADMIN_VAULT_KEY="<base64url-32-byte-aes-256-gcm-key>"
+# Optional: exact comma-separated hosts allowed for Generic endpoint policies.
+# Vercel is built in as https://api.vercel.com; localhost/private/IP hosts are always refused.
+THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS="api.example.com"
+```
+
+Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
+accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
+origins, closed path prefixes, byte bounds, no redirects, and selected read /
+create-only / write permissions. The initial Vercel adapter checks for an
+existing environment variable before a create-only POST; it never PATCHes or
+simulates generic upstream conditional writes.
+
 ### Email delivery (owned email layer)
 
 All outbound email flows through `remix/app/api/utils/email/` — every send
