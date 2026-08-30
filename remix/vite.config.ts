@@ -6,6 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
 import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
@@ -204,6 +205,19 @@ export default defineConfig({
       port: devPorts.hmr
     },
     proxy: {
+      [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
+        target: localApiTarget,
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const host = req.headers.host;
+            if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+            proxyReq.setHeader('x-forwarded-host', host);
+            const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+            proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+          });
+        }
+      },
       '/api': {
         target: apiProxyTarget,
         changeOrigin: true,
