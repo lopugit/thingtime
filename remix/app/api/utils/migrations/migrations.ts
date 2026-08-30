@@ -740,18 +740,58 @@ const writeCollectionConversionReceipt = async (collection: string, source: any,
 	);
 };
 
-const hasCollectionConversionReceipt = async (collection: string, source: any): Promise<boolean> => {
-	const receipt = await (
-		await getSettingsCollection()
-	).findOne(
-		{ key: migrationReceiptKey(collection, source._id), sourceCollection: collection },
-		{ projection: { sourceUpdatedAtMs: 1, sourceDigest: 1, destinationShareId: 1 } }
-	);
+// Everything the receipt decision needs; `key` is carried so a batched read can
+// map each row back to the source it certifies.
+const CONVERSION_RECEIPT_PROJECTION = { key: 1, sourceUpdatedAtMs: 1, sourceDigest: 1, destinationShareId: 1 };
+
+// Does an ALREADY-FETCHED receipt certify this exact source snapshot? Pure, so
+// the single-doc and batched lookups below cannot drift apart in what they
+// accept — the two are read by the same consume phase and disagreement would
+// mean deleting a legacy source on weaker proof in one path than the other.
+export const conversionReceiptCovers = (receipt: any, source: any): boolean => {
 	if (!receipt || typeof receipt.destinationShareId !== 'string') return false;
 	const sourceTime = sourceUpdatedAtMs(source);
 	return sourceTime !== null && Number.isFinite(receipt.sourceUpdatedAtMs)
 		? Number(receipt.sourceUpdatedAtMs) >= sourceTime
 		: receipt.sourceDigest === migrationSourceDigest(source);
+};
+
+const hasCollectionConversionReceipt = async (collection: string, source: any): Promise<boolean> => {
+	const receipt = await (
+		await getSettingsCollection()
+	).findOne(
+		{ key: migrationReceiptKey(collection, source._id), sourceCollection: collection },
+		{ projection: CONVERSION_RECEIPT_PROJECTION }
+	);
+	return conversionReceiptCovers(receipt, source);
+};
+
+// Batched form of the lookup above: one `key: { $in: [...] }` read resolves a
+// whole page's receipts against the unique `settings.key` index, instead of one
+// findOne per surviving document.
+//
+// Safe to hoist out of the per-doc loop because the receipt key derives ONLY
+// from (collection, source._id) — identical for a page-query snapshot and its
+// consume-phase re-read — and because receipts are only ever upserted, never
+// deleted or revoked. So a page-old snapshot can miss a receipt a concurrent
+// runner just wrote, but can never invent one: a miss falls through to the
+// stricter semantic-equality path, which is the same direction every other
+// batched read here already fails. The freshness comparison itself stays
+// per-document, run against the exact snapshot being judged.
+const findCollectionConversionReceipts = async (collection: string, sourceIds: any[]): Promise<Map<string, any>> => {
+	if (!sourceIds.length) return new Map();
+	const sourceIdByKey = new Map(sourceIds.map((id) => [migrationReceiptKey(collection, id), String(id)]));
+	const receipts = (await (
+		await getSettingsCollection()
+	)
+		.find({ key: { $in: [...sourceIdByKey.keys()] }, sourceCollection: collection }, { projection: CONVERSION_RECEIPT_PROJECTION })
+		.toArray()) as any[];
+	const bySourceId = new Map<string, any>();
+	for (const receipt of receipts) {
+		const sourceId = sourceIdByKey.get(String(receipt?.key));
+		if (sourceId !== undefined) bySourceId.set(sourceId, receipt);
+	}
+	return bySourceId;
 };
 
 const conversionSemanticFields = [
@@ -1050,6 +1090,14 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
         .find({ shareId: { $in: survivors.map(({ c, i }) => (inserted[i] ? c.thing.shareId : twins[i]?.shareId ?? c.thing.shareId)) } } as any)
         .toArray()) as any[];
       const destinationByShareId = new Map(destinations.map((d) => [String(d.shareId), d]));
+      // Third batched read: the conversion receipts. Keyed by source _id, which
+      // both consume-phase checks below share (`fresh` is this same _id re-read),
+      // so one page-wide lookup serves the already-consumed branch and the
+      // freshness check alike.
+      const receiptBySourceId = await findCollectionConversionReceipts(
+        spec.collection,
+        survivors.map(({ c }) => c.doc._id)
+      );
 
       for (const { c, i } of survivors) {
         const { doc, thing } = c;
@@ -1057,10 +1105,11 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
         const fresh = freshById.get(String(doc._id));
         const destinationShareId = inserted[i] ? thing.shareId : twin?.shareId ?? thing.shareId;
         try {
+          const receipt = receiptBySourceId.get(String(doc._id));
           if (!fresh) {
             // Another runner already consumed the source. Its receipt, not our
             // observation of a destination-shaped row, is the completion proof.
-            if (!(await hasCollectionConversionReceipt(spec.collection, doc))) {
+            if (!conversionReceiptCovers(receipt, doc)) {
               skip(doc, 'source changed during conversion — left for a later re-run');
             }
             continue;
@@ -1076,7 +1125,7 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
             skip(doc, 'destination changed during conversion — left for a later re-run');
             continue;
           }
-          const receiptCoversFresh = await hasCollectionConversionReceipt(spec.collection, fresh);
+          const receiptCoversFresh = conversionReceiptCovers(receipt, fresh);
           if (!receiptCoversFresh && !conversionThingSemanticallyEquals(destination, expected, !!spec.findExisting)) {
             // We may repair only the row inserted by THIS invocation, and only
             // while it still equals our original snapshot. A pre-existing weak
