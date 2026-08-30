@@ -1396,6 +1396,13 @@ canceled events pointing at:
 https://<your-thingtime-origin>/api/v1/vercel/webhook
 ```
 
+Forks: the helper script `remix/scripts/vercel/create-webhook.mjs` registers
+that webhook against `VERCEL_PROJECT_ID` / `VERCEL_TEAM_ID` (documented above).
+It falls back to this repository's own upstream project and team when those are
+unset, so set both to your own values before running it — otherwise the call is
+aimed at an account your token does not own. Creating the webhook by hand in the
+Vercel dashboard needs neither variable.
+
 While `VERCEL_WEBHOOK_SECRET` is unset the endpoint answers `404` and
 `/api/v1/vercel/status` behaves exactly as before (live API polling). Once it is
 set, the latest event per git branch is persisted server-side and a `ready`
