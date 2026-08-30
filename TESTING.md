@@ -45,6 +45,30 @@ is fixed, and cite the checklist you ran in the PR description.
       persisted workflow run. Reject missing inputs, duplicate targets, more
       than 25 operations, raw query/operator keys, URLs/routes, and code.
 
+## Limitless MCP Lab (`/docs/mcp`)
+
+- [ ] On a production-CSP preview, the embedded review app renders its Result,
+      Diff, and Raw tabs instead of remaining on the empty placeholder; the
+      route CSP permits only the review module's exact SHA-256 hash and keeps
+      `unsafe-inline` / `unsafe-eval` absent.
+
+- [ ] Open `/docs/mcp` at desktop and 390px mobile widths. Confirm the live
+      contract badge resolves without replacing the optimistic release counts,
+      all six stat cards fit without horizontal overflow, and the docs drawer
+      opens, closes, and identifies **Limitless MCP Lab** as active.
+- [ ] Select all five missions. Each selection must update the prompt, expected
+      outcome, ordered tool pipeline, and embedded review cards without a page
+      reload; **Copy** copies only the selected prompt.
+- [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
+      row, expand Full details, and scroll to the bottom. The read-only morning
+      mission must not show an Apply control. Write-composing missions must keep
+      Apply disabled until the confirmation checkbox is selected, then fail
+      closed with the host-only message rather than mutating data.
+- [ ] Load the page with MCP discovery unavailable. The release contract and
+      workflow cards remain immediately usable, the page shows the quiet
+      release-contract state, and no spinner, blank page, recursive request,
+      iframe error, or console exception appears.
+
 ## Admin integration vault + policy proxy
 
 - [ ] Sign in as an admin and open **/admin → External integrations**. Without

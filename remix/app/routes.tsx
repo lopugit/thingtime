@@ -137,6 +137,7 @@ export const router = createBrowserRouter([
         lazy: lazyRoute(() => import('./routes/docs/DocsLayout')),
         children: [
           { index: true, lazy: lazyRoute(() => import('./routes/docs/index')) },
+          { path: 'mcp', lazy: lazyRoute(() => import('./routes/docs/mcp')) },
           { path: 'embed', lazy: lazyRoute(() => import('./routes/docs/embed')) },
           { path: 'api', lazy: lazyRoute(() => import('./routes/docs/api')) },
           { path: 'api/:group', lazy: lazyRoute(() => import('./routes/docs/api')) },
