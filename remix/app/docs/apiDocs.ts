@@ -420,6 +420,44 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-integrations',
+    group: 'admin',
+    title: 'Admin integration vault and proxy',
+    endpoint: '/api/v1/admin/integrations',
+    summary: 'Manage write-only encrypted external credentials and endpoint read/write policies (admin only).',
+    detail:
+      'Stores external credentials as AES-256-GCM ciphertext using THINGTIME_ADMIN_VAULT_KEY. GET returns only metadata, endpoint policy, and redacted audit rows—never a credential value. The proxy accepts a saved endpoint id, not an arbitrary upstream URL. It enforces HTTPS origin/path allowlists, selected read/create-only/full-write permissions, request/response byte bounds, redirects disabled, and a fail-closed rate limit. Vercel create-only environment-variable writes check the remote project env list before POST; they never use PATCH/upsert. Generic create-only endpoints are refused rather than simulated unsafely.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Provision THINGTIME_ADMIN_VAULT_KEY as a distinct 32-byte base64url server secret. Do not reuse JWT, session, peer, or cron secrets.',
+      'POST action:create-secret with a label and value. The value is write-only and never appears in a later response.',
+      'POST action:save-endpoint with a saved secret id, provider, HTTPS origin, closed path prefixes, and read/write policy.',
+      'POST action:proxy with endpointId, operation, path, and a bounded JSON body. Only the Vercel adapter supports create-only writes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create write-only credential',
+        description: 'Value is encrypted server-side and omitted from every response.',
+        method: 'POST',
+        body: { action: 'create-secret', label: 'Vercel project token', value: '<write-only-token>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vault metadata; no encrypted fields or credential values are exposed.',
+        body: {
+          ok: true,
+          vaultConfigured: true,
+          secrets: [{ id: 'secret_example', label: 'Vercel project token' }],
+          endpoints: [{ id: 'endpoint_example', writeMode: 'create-only' }]
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
@@ -6410,7 +6448,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
-      'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. Circles resolve to the owner only until a relationship graph exists.',
+      'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. tt:userFriends resolves against the real friend graph (accepted friendships from /api/v1/users/friend); no family graph exists yet, so tt:userFamily still resolves to the owner only.',
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
@@ -6884,14 +6922,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
     },
     methods: ['GET'],
     steps: [
-      'Send optional types, circles, from, to, algorithm, cursor, and limit query parameters.',
+      'Send optional types, circles, tag, from, to, algorithm, cursor, and limit query parameters.',
       'Use algorithm=latest to force chronological ordering.',
       'Use nextCursor for infinite scrolling.',
       'Read ranked to know whether algorithm scoring affected the page.'
@@ -8030,8 +8068,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Email accepted.',
-        body: { ok: true }
+        description: 'Email accepted — includes a welcome fortune from Lopu (deterministic, time-rotated).',
+        body: { ok: true, fortune: 'Tiny things become big things. Keep tending the little ones. ✨' }
       },
       {
         status: 400,
