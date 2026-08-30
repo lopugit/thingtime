@@ -499,6 +499,78 @@ test('an array path part is one literal key, so exact-match validation is suffic
 	assert.equal(reached.timemachine.SENTINEL, 'ATTACKER');
 });
 
+test('an escaped-bracket string path passes the guard and still lands as one literal key', async () => {
+	// The string-path twin of the test above, and the same shape of reasoning.
+	//
+	// The guard splits string paths on /[.[\]"']+/, which does NOT treat a
+	// backslash as a delimiter, so `[\"__proto__\"]` tokenises to `\` and
+	// `__proto__\` — neither matches UNSAFE_PATH_PARTS and the message is
+	// ACCEPTED. That is harmless only downstream: parsePropertyPath never enters
+	// its bracket mode for `[\"` (that mode needs a bare `["`), so the whole path
+	// stays ONE literal own key addressing neither the prototype nor the real
+	// timeline. Assert the acceptance rather than a rejection the guard does not
+	// actually make, so this pins the behaviour that exists.
+	//
+	// If parsePropertyPath ever learns to honour `\"` inside brackets — plausible,
+	// it already carries escape branches — these paths start resolving to a real
+	// `__proto__` segment while the guard still waves them through. This test is
+	// the thing that says so.
+	//
+	// The tempting fix at that point is "validate with parsePropertyPath instead
+	// of the regex, so the guard and the apply path agree." Don't: it LOOSENS the
+	// guard. Swapping it and replaying 545 hostile paths accepted 256 where the
+	// regex accepted 125 — a strict superset, nothing accepted by the regex and
+	// rejected by the parser — because the regex splits on `[`, `]`, `"` and `'`
+	// unconditionally and so rejects bare and single-quoted bracket forms
+	// (`[__proto__]`, `['__proto__']`, `["__proto__"`) that parsePropertyPath
+	// keeps as one literal key. Splitting more aggressively than the consumer is
+	// the correct direction for a denylist: it can over-reject a path, never
+	// under-reject one. Keep the regex; fix the segmentation downstream.
+	const escaped = '[\\"__proto__\\"]';
+	const nested = 'a[\\"__proto__\\"].x';
+
+	const accepted: any[] = [];
+	const channelName = uniqueChannelName();
+	const channel = createThingtimeSyncChannel({
+		tabId: 'tab-guard',
+		channelName,
+		onRemoteWrite: (path) => accepted.push(path)
+	});
+	assert.ok(channel);
+	const impostor = new BroadcastChannel(channelName);
+	const payload = stringifyThingtime({ codec: 'thingtime-safe-v1', value: 'ATTACKER' });
+
+	try {
+		for (const path of [escaped, nested]) {
+			impostor.postMessage({ type: 'tt-write', path, payload, sourceTabId: 'other', timestamp: 1 });
+		}
+		await settleMessages();
+		assert.deepEqual(accepted, [escaped, nested], 'the regex guard does not catch the escaped forms');
+	} finally {
+		impostor.close();
+		channel.close();
+	}
+
+	// ...and the apply path is what keeps that safe: one literal key, no reachable
+	// `__proto__` segment, prototype chain untouched.
+	for (const path of [escaped, nested]) {
+		const root: any = {};
+		smarts.setsmart(root, path, 'ATTACKER');
+		assert.equal(Object.getPrototypeOf(root), Object.prototype, `${path} must not replace the prototype`);
+		assert.equal(({} as any).x, undefined, `${path} must not reach Object.prototype`);
+		assert.ok(
+			Object.keys(root).every((key) => !key.startsWith('__proto__')),
+			`${path} must not create a bare __proto__ segment`
+		);
+	}
+	assert.deepEqual(smarts.parsePropertyPath(escaped), [escaped], 'the escaped form must stay one unsplit key');
+
+	// Sensitivity check: the unescaped form the guard DOES reject is the one that
+	// would otherwise segment into a real `__proto__` part, so the assertions above
+	// are not passing vacuously.
+	assert.deepEqual(smarts.parsePropertyPath('settings.__proto__.polluted'), ['settings', '__proto__', 'polluted']);
+});
+
 test('BroadcastChannel absence degrades to the existing single-tab behavior', () => {
 	const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
 	Object.defineProperty(globalThis, 'BroadcastChannel', { configurable: true, writable: true, value: undefined });
