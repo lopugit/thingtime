@@ -2806,3 +2806,41 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Used by: /actions/:key lists the viewer's components binding the action
       via ttAction as clickable 🧩 chips; exact-token matching (an action key
       that prefixes another never cross-matches).
+
+## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
+      migrations, apps, raw, admin + sub-panels) renders the PageShell surface
+      wash, clears the fixed nav (no underlap at 54px), and shows the mono
+      eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
+- [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
+      private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
+      sub-blocks highlight innermost-wins; clicking selects (solid outline)
+      and opens the inspector in the right drawer.
+- [ ] Inline "+ add block" lines appear between siblings on hover; the menu
+      offers quick structural blocks and a live component search backed by
+      /api/v1/components/browse; picking a component renders it instantly.
+- [ ] Inspector args derive from the component's arg specs (string/text/
+      number/boolean/enum inputs); edits re-render the canvas live; align +
+      max-width apply; delete removes the block (native blocks can't be
+      deleted, only moved).
+- [ ] Drag the ⠿ chip onto any insert line to reorder/move blocks, including
+      into/out of containers; dropping a container into its own subtree is
+      refused.
+- [ ] Save on a fresh page creates the thing (private by default); the Public
+      toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
+      see public pages read-only (ttActions inert — owner-only interactivity).
+- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
+      /authorize) enters in-place editing of the current route; the live app
+      screen renders as the locked 🔒 native block; Save my version forks a
+      viewer-owned twin; leaving edit mode shows the personalised blocks in
+      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
+      refetch or remount on client navigation.
+- [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →
+      unchanged), GET returns the census, non-admins get 401/403, and
+      webpage- shareIds are refused on generic creates (reserved prefix).
+- [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
+      builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.

@@ -788,6 +788,47 @@ const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; 
 	);
 };
 
+// ————— 🧱 webpage (block-based page from the /builder) —————
+
+type WebpageKindValue = {
+	name: string;
+	siteRoute: string | null;
+	blockCount: number;
+	types: string[];
+};
+
+const WEBPAGE_TYPE_EMOJI: Record<string, string> = {
+	component: '🧩',
+	container: '📐',
+	text: '📝',
+	native: '🖥'
+};
+
+// Quiet card preview — a full page never draws inside a grid tile; the real
+// render surface is /p/<id> (or the builder canvas).
+const WebpageKindRenderer = ({ value, context }: { value: WebpageKindValue; context: KindRenderContext }) => (
+	<Flex
+		alignItems="center"
+		columnGap="10px"
+		width="100%"
+		padding={context.size === 'compact' ? '6px 8px' : '10px 12px'}
+		border="1px solid var(--tt-border, #ececef)"
+		borderRadius="var(--tt-radius-md, 12px)"
+		background="var(--tt-card, #ffffff)"
+	>
+		<Text fontSize={context.size === 'compact' ? '16px' : '20px'}>🧱</Text>
+		<Box minWidth={0} flex={1}>
+			<Text color="var(--tt-ink, #16161a)" fontSize={context.size === 'compact' ? 'xs' : 'sm'} fontWeight={700} noOfLines={1}>
+				{value.name}
+			</Text>
+			<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="10px" noOfLines={1}>
+				{value.siteRoute ? `site page · ${value.siteRoute}` : `${value.blockCount} block${value.blockCount === 1 ? '' : 's'}`}
+				{value.types.length ? ` · ${value.types.map((type) => WEBPAGE_TYPE_EMOJI[type] || type).join(' ')}` : ''}
+			</Text>
+		</Box>
+	</Flex>
+);
+
 // ————— ⚡ action (declarative capability-bounded program) —————
 
 type ActionKindValue = {
@@ -1238,6 +1279,44 @@ registerKindRenderer({
 		};
 	},
 	render: ActionKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'webpage',
+	title: 'Webpage',
+	emoji: '🧱',
+	category: 'Builder',
+	description:
+		'A block-based webpage built in the /builder — an ordered tree of component/container/text/native blocks. Standalone pages publish at /p/<id>; site pages personalise a built-in route.',
+	aliases: ['webpage-thing'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && Array.isArray(crystal.blocks) && ('pageKey' in crystal || 'siteRoute' in crystal || 'name' in crystal);
+	},
+	adapt: (thing): WebpageKindValue | null => {
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!Array.isArray(crystal.blocks)) return null;
+		const countTree = (blocks: unknown[]): number =>
+			blocks.reduce<number>((sum, block) => {
+				if (!block || typeof block !== 'object') return sum;
+				const children = (block as Record<string, unknown>).children;
+				return sum + 1 + (Array.isArray(children) ? countTree(children) : 0);
+			}, 0);
+		const types = [
+			...new Set(
+				crystal.blocks
+					.map((block) => (block && typeof block === 'object' ? String((block as Record<string, unknown>).type || '') : ''))
+					.filter(Boolean)
+			)
+		];
+		return {
+			name: typeof crystal.name === 'string' ? crystal.name : 'Webpage',
+			siteRoute: typeof crystal.siteRoute === 'string' ? crystal.siteRoute : null,
+			blockCount: countTree(crystal.blocks),
+			types
+		};
+	},
+	render: WebpageKindRenderer
 });
 
 };

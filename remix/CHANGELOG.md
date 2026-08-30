@@ -17,6 +17,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/<pr>-thingtime-design-system-builder.md`).
+- **Design system**: new shared `PageShell`/`PageHeader` primitives
+  (`remix/app/components/Layout/PageShell.tsx`) extracted from the canonical
+  hand-copied idiom; every off-system page aligned (status, mongodb-status,
+  tests, vercel, crypto, migrations, apps, raw, ode, reset-password,
+  catch-all shell, admin dashboard + TierManager/IntegrationManager/
+  ModerationTab/AdminPanel/CIControlDashboard) plus a token nit sweep.
+  `/docs/design-system` gains foundations/page-scaffold/brutal-button/
+  builder-blocks entries; `/design-system` redirects there.
+- **Builder**: new `webpage` thing kind (bounded block tree, sanitized in the
+  registry write gate), `GET /api/v1/webpages/resolve`, admin
+  `POST /api/v1/admin/webpages/seed` (26 site docs + site-global), `/builder`
+  canvas (hover boundaries, inline + add-block menu with Mongo-backed
+  component search, drag/drop, right-side inspector drawer), `/p/:id`
+  published pages, and site-wide ✏️ edit mode with viewer-owned
+  personalisation forks + memoised global blocks.
+- **Catalog eviction**: the components-db catalog + pipeline moved to the
+  public repo <https://github.com/lopugit/thingtime-components> (2800
+  components); this repo ships only the runtime — components live in MongoDB
+  and the frontend fetches them via `/api/v1/components/browse`.
+- Local runbook: seed site pages with an admin session via
+  `POST /api/v1/admin/webpages/seed`; smoke with
+  `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
 ### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
 
 - Multi-agent defensive security review of the Action Thing surface (report:
