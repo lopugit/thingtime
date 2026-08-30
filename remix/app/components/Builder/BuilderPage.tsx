@@ -176,7 +176,11 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 			setPageName(page.crystal?.name || 'Untitled page');
 			setIsPublic(Array.isArray((page as any).acl) ? (page as any).acl.includes('tt:all') : false);
 		}
-	}, [draft.resolved]);
+		// unseeded deployments: the global doc may not exist yet — name the
+		// fork properly instead of "Untitled page"
+		if (!page && isGlobal && !draft.loading && !pageName) setPageName('Global blocks');
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- pageName guard reads current value only
+	}, [draft.resolved, draft.loading, isGlobal]);
 
 	const isSiteDoc = isGlobal || !!draft.resolved?.page?.crystal?.siteRoute;
 

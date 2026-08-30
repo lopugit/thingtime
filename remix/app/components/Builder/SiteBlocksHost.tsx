@@ -198,19 +198,42 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 
 // ——— edit mode: the full builder grammar on the live page ————————————————
 
+// The in-place site editor — the PRIMARY builder surface (limitless: every
+// page, full-bleed). The page renders exactly as its normal full-width self;
+// block chrome (boundaries, insert zones, drag/drop) overlays it, and the
+// right drawer appears. TWO regions edit together through one drawer:
+//   🌐 global — the site-global doc, blocks on every page
+//   this page — the route's doc, with the live screen as its native block
+// Saving persists whichever drafts are dirty (each as the viewer's own fork).
 const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: React.ReactNode; onDone: () => void }) => {
-	const draft = useWebpageDraft(React.useMemo(() => ({ kind: 'path' as const, path }), [path]));
-	const { chrome, selectedId, deselect, insertMenu } = useBuilderChrome(draft);
+	const pageDraft = useWebpageDraft(React.useMemo(() => ({ kind: 'path' as const, path }), [path]));
+	const globalDraft = useWebpageDraft(React.useMemo(() => ({ kind: 'global' as const }), []));
+	const pageChrome = useBuilderChrome(pageDraft);
+	const globalChrome = useBuilderChrome(globalDraft);
 	const [pageName, setPageName] = React.useState('');
 	const namedForRef = React.useRef<string | null>(null);
 
+	// one selection across both regions — picking in one clears the other
 	React.useEffect(() => {
-		const page = draft.resolved?.page;
+		if (pageChrome.selectedId) globalChrome.deselect();
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- deselect is stable
+	}, [pageChrome.selectedId]);
+	React.useEffect(() => {
+		if (globalChrome.selectedId) pageChrome.deselect();
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- deselect is stable
+	}, [globalChrome.selectedId]);
+
+	const activeIsGlobal = !!globalChrome.selectedId;
+	const activeDraft = activeIsGlobal ? globalDraft : pageDraft;
+	const activeChrome = activeIsGlobal ? globalChrome : pageChrome;
+
+	React.useEffect(() => {
+		const page = pageDraft.resolved?.page;
 		if (page && namedForRef.current !== page.id) {
 			namedForRef.current = page.id;
 			setPageName(page.crystal?.name || 'This page');
 		}
-	}, [draft.resolved]);
+	}, [pageDraft.resolved]);
 
 	// Unseeded deployment (no system site doc yet): start the draft with the
 	// locked native block so the live screen stays visible and positionable —
@@ -218,13 +241,13 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 	// below the page.
 	const seededEmptyRef = React.useRef(false);
 	React.useEffect(() => {
-		if (draft.loading || draft.resolved?.page || draft.blocks.length || seededEmptyRef.current) return;
+		if (pageDraft.loading || pageDraft.resolved?.page || pageDraft.blocks.length || seededEmptyRef.current) return;
 		seededEmptyRef.current = true;
 		const key = path === '/' ? 'home' : path.slice(1).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page';
-		draft.setBlocks([{ id: `native-${key}`, type: 'native', native: key }]);
+		pageDraft.setBlocks([{ id: `native-${key}`, type: 'native', native: key }]);
 		if (!pageName) setPageName('This page');
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot seeding keyed on resolve state
-	}, [draft.loading, draft.resolved, draft.blocks.length, path]);
+	}, [pageDraft.loading, pageDraft.resolved, pageDraft.blocks.length, path]);
 
 	// keep the view cache fresh so leaving edit mode shows what was saved
 	React.useEffect(() => {
@@ -233,33 +256,93 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		};
 	}, [path]);
 
-	const renderNative = React.useCallback(() => <Box width="100%">{children}</Box>, [children]);
+	const saveAll = React.useCallback(async () => {
+		if (globalDraft.dirty) {
+			const result = await globalDraft.save({ name: 'Global blocks' });
+			if (!result.ok) return result;
+		}
+		if (pageDraft.dirty) {
+			const result = await pageDraft.save({ name: pageName || 'This page' });
+			if (!result.ok) return result;
+		}
+		return { ok: true as const };
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- pageName read at call time
+	}, [globalDraft.dirty, globalDraft.save, pageDraft.dirty, pageDraft.save, pageName]);
+
+	// native = the actual page, full width, exactly as the normal view —
+	// only its redundant nav clearance shrinks (content already sits below
+	// the global strip)
+	const renderNative = React.useCallback(
+		() => (
+			<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+				{children}
+			</Box>
+		),
+		[children]
+	);
 
 	return (
 		<>
-			<Box width="100%" paddingRight={[0, `${BUILDER_DRAWER_WIDTH}px`]} paddingTop={PAGE_TOP_CLEARANCE} background="var(--tt-surface, #fafafb)">
-				<Box maxWidth="1100px" marginX="auto" paddingX={4} paddingY={4} whiteSpace="normal">
-					<WebpageBlocksRenderer
-						blocks={draft.blocks}
-						componentsByRef={draft.componentsByRef}
-						chrome={chrome}
-						renderNative={renderNative}
-					/>
+			<Box width="100%" paddingRight={[0, `${BUILDER_DRAWER_WIDTH}px`]} whiteSpace="normal">
+				{/* 🌐 global region — blocks on every page, editable right here */}
+				<Box
+					width="100%"
+					paddingTop={PAGE_TOP_CLEARANCE}
+					paddingX={4}
+					paddingBottom={2}
+					background="var(--tt-surface, #fafafb)"
+					borderBottom="1px dashed var(--tt-border, #ececef)"
+				>
+					<Box maxWidth="960px" marginX="auto">
+						<Flex alignItems="baseline" columnGap={2} marginBottom={1}>
+							<Box
+								as="span"
+								color="var(--tt-muted, #9a9aa6)"
+								fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+								fontSize="10px"
+								fontWeight={700}
+								letterSpacing="0.12em"
+								textTransform="uppercase"
+							>
+								🌐 Global · renders on every page
+							</Box>
+							<Box as="span" color="var(--tt-faint, #b6b6c0)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="10px">
+								nav · drawer · footer are Thingtime chrome
+							</Box>
+						</Flex>
+						<WebpageBlocksRenderer
+							blocks={globalDraft.blocks}
+							componentsByRef={globalDraft.componentsByRef}
+							chrome={globalChrome.chrome}
+						/>
+					</Box>
 				</Box>
+				{/* this page — full-bleed, the live screen is the native block */}
+				<WebpageBlocksRenderer
+					blocks={pageDraft.blocks}
+					componentsByRef={pageDraft.componentsByRef}
+					chrome={pageChrome.chrome}
+					renderNative={renderNative}
+					insetNonNative={960}
+				/>
 			</Box>
 			<BuilderDrawer
-				title={`Site page · ${path}`}
-				draft={draft}
-				selectedId={selectedId}
-				onDeselect={deselect}
+				title={`Editing · ${path}`}
+				draft={activeDraft}
+				selectedId={activeChrome.selectedId}
+				onDeselect={activeChrome.deselect}
 				onClose={onDone}
 				mode="site"
 				pageName={pageName}
 				onPageName={setPageName}
 				isPublic={false}
 				onIsPublic={() => {}}
+				onSaveAll={saveAll}
+				anyDirty={pageDraft.dirty || globalDraft.dirty}
+				regionLabel={activeIsGlobal ? '🌐 global block' : 'this page'}
 			/>
-			{insertMenu}
+			{pageChrome.insertMenu}
+			{globalChrome.insertMenu}
 		</>
 	);
 };

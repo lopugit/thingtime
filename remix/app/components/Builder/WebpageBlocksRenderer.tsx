@@ -53,7 +53,19 @@ export type BuilderChrome = {
 
 const DRAG_MIME = 'application/x-tt-block-id';
 
-const InsertZone = ({ containerId, index, chrome }: { containerId: string | null; index: number; chrome: BuilderChrome }) => {
+const InsertZone = ({
+	containerId,
+	index,
+	chrome,
+	alwaysVisible
+}: {
+	containerId: string | null;
+	index: number;
+	chrome: BuilderChrome;
+	// empty containers and the end of the root list keep their zone visible —
+	// a canvas must never look like there is nothing to do
+	alwaysVisible?: boolean;
+}) => {
 	const [active, setActive] = React.useState(false);
 	return (
 		<Flex
@@ -61,9 +73,9 @@ const InsertZone = ({ containerId, index, chrome }: { containerId: string | null
 			data-testid={`insert-${containerId ?? 'root'}-${index}`}
 			alignItems="center"
 			justifyContent="center"
-			height={active ? '28px' : '14px'}
+			height={active || alwaysVisible ? '28px' : '14px'}
 			marginY="-2px"
-			opacity={active ? 1 : 0}
+			opacity={active ? 1 : alwaysVisible ? 0.75 : 0}
 			_hover={{ opacity: 1 }}
 			transition="opacity 0.12s ease, height 0.12s ease"
 			position="relative"
@@ -286,10 +298,13 @@ export type WebpageBlocksRendererProps = {
 	// a placeholder; /p/ pages omit → native blocks render nothing)
 	renderNative?: (key: string, block: WebpageBlock) => React.ReactNode;
 	chrome?: BuilderChrome | null;
+	// full-bleed surfaces (the in-place site editor): root-level non-native
+	// blocks center at this readable width while native screens span full
+	insetNonNative?: number;
 };
 
-const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
-	const { block, componentsByRef, interactive, renderNative, chrome } = props;
+const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean }) => {
+	const { block, componentsByRef, interactive, renderNative, chrome, insetNonNative, isRoot } = props;
 
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
@@ -339,6 +354,16 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) 
 		}
 	}
 
+	// full-bleed surfaces: root-level authored blocks center at a readable
+	// width while the native screen keeps the whole viewport
+	if (insetNonNative && isRoot && block.type !== 'native') {
+		body = (
+			<Box width="100%" maxWidth={`${insetNonNative}px`} marginX="auto" paddingX={4}>
+				{body}
+			</Box>
+		);
+	}
+
 	if (!chrome) {
 		return (
 			<Box
@@ -360,19 +385,32 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) 
 
 const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | null }) => {
 	const { blocks, chrome, containerId } = props;
+	const isRoot = containerId === null;
 	if (!chrome) {
 		return (
 			<>
 				{blocks.map((block) => (
-					<BlockView key={block.id} {...props} block={block} />
+					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />
 				))}
 			</>
 		);
 	}
-	const zones: React.ReactNode[] = [<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} />];
+	// empty lists and the end of the root list keep a visible zone — an empty
+	// canvas must invite, never look inert
+	const zones: React.ReactNode[] = [
+		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} alwaysVisible={blocks.length === 0} />
+	];
 	blocks.forEach((block, index) => {
-		zones.push(<BlockView key={block.id} {...props} block={block} />);
-		zones.push(<InsertZone key={`zone-${index + 1}`} containerId={containerId} index={index + 1} chrome={chrome} />);
+		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />);
+		zones.push(
+			<InsertZone
+				key={`zone-${index + 1}`}
+				containerId={containerId}
+				index={index + 1}
+				chrome={chrome}
+				alwaysVisible={isRoot && index === blocks.length - 1}
+			/>
+		);
 	});
 	return <>{zones}</>;
 };

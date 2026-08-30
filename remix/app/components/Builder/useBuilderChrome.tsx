@@ -62,10 +62,12 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		/>
 	) : null;
 
+	const deselect = React.useCallback(() => setSelectedId(null), []);
+
 	return {
 		chrome,
 		selectedId,
-		deselect: () => setSelectedId(null),
+		deselect,
 		insertMenu
 	};
 };

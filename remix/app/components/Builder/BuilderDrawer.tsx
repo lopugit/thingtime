@@ -315,8 +315,29 @@ export const BuilderDrawer = (props: {
 	isPublic: boolean;
 	onIsPublic: (next: boolean) => void;
 	onSaved?: (id: string) => void;
+	// dual-region site editing (page + global drafts share one drawer):
+	// onSaveAll saves every dirty draft, anyDirty drives the Save state, and
+	// regionLabel names the region the selected block lives in
+	onSaveAll?: () => Promise<{ ok: boolean; error?: string }>;
+	anyDirty?: boolean;
+	regionLabel?: string;
 }) => {
-	const { title, draft, selectedId, onDeselect, onClose, mode, pageName, onPageName, isPublic, onIsPublic, onSaved } = props;
+	const {
+		title,
+		draft,
+		selectedId,
+		onDeselect,
+		onClose,
+		mode,
+		pageName,
+		onPageName,
+		isPublic,
+		onIsPublic,
+		onSaved,
+		onSaveAll,
+		anyDirty,
+		regionLabel
+	} = props;
 	const lopu = useLopu();
 	const [saving, setSaving] = React.useState(false);
 	// name/visibility edits live here (not in the block draft), so they mark
@@ -328,7 +349,9 @@ export const BuilderDrawer = (props: {
 
 	const handleSave = async () => {
 		setSaving(true);
-		const result = await draft.save({ name: pageName, isPublic: mode === 'page' ? isPublic : false });
+		const result = onSaveAll
+			? await onSaveAll()
+			: await draft.save({ name: pageName, isPublic: mode === 'page' ? isPublic : false });
 		setSaving(false);
 		if (result.ok) {
 			setMetaDirty(false);
@@ -387,7 +410,22 @@ export const BuilderDrawer = (props: {
 
 			<Flex flexDirection="column" rowGap={4} padding={4}>
 				{selected ? (
-					<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} />
+					<>
+						{regionLabel ? (
+							<Text
+								color="var(--tt-muted, #9a9aa6)"
+								fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+								fontSize="10px"
+								fontWeight={700}
+								letterSpacing="0.1em"
+								textTransform="uppercase"
+								marginBottom={-2}
+							>
+								{regionLabel}
+							</Text>
+						) : null}
+						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} />
+					</>
 				) : (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">
 						Hover blocks to see their boundaries, click one to edit it, drag the ⠿ chip to move it, and use the inline
@@ -446,7 +484,14 @@ export const BuilderDrawer = (props: {
 				</Box>
 
 				<Flex columnGap={2}>
-					<Button size="sm" onClick={handleSave} isLoading={saving} isDisabled={!draft.dirty && !metaDirty && source === 'user'} data-testid="builder-save" flex={1}>
+					<Button
+						size="sm"
+						onClick={handleSave}
+						isLoading={saving}
+						isDisabled={anyDirty !== undefined ? !anyDirty && !metaDirty : !draft.dirty && !metaDirty && source === 'user'}
+						data-testid="builder-save"
+						flex={1}
+					>
 						{source === 'user' ? 'Save' : mode === 'site' ? 'Save my version' : 'Save page'}
 					</Button>
 					{draft.dirty ? (
