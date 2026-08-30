@@ -159,7 +159,9 @@ asynchronously — typically well under a second behind, but not zero.
 Two mitigations, both cheap:
 
 1. **Read-your-own-writes:** after a write, that user's next reads must see
-   it. MongoDB *causal sessions* guarantee it server-side. But note we
+   it. MongoDB *causal sessions* guarantee it server-side — though only at
+   `majority` read+write concern, and only within a single session, which on
+   serverless means within one invocation (§7). But note we
    already solve most of this in the UI: the optimistic-rendering house rule
    paints your post/reaction instantly from local state, and the write
    response returns the authoritative doc. The remaining gap (hard refresh
@@ -168,8 +170,9 @@ Two mitigations, both cheap:
    `readPreference: primaryPreferred` for a short window.
 2. **Staleness bounds:** `maxStalenessSeconds` on the read preference caps how
    far behind a node may lag before the driver abandons it (driver minimum is
-   90s — in practice lag is ~1-2s and this is a circuit breaker, not the norm).
-   For a social feed, seconds-old is indistinguishable from fresh.
+   90s — steady-state lag is a few hundred ms per §7's measurement, so this is
+   a circuit breaker, not the norm). For a social feed, sub-second staleness is
+   indistinguishable from fresh.
 
 **Code changes (small, and they degrade to a single-node dev Mongo cleanly):**
 
@@ -227,11 +230,31 @@ configuration](https://vercel.com/docs/build-output-api/configuration) and
 build can emit the SAME Nitro server bundle twice:
 
 - `api-read.func` → `regions: ["syd1", "iad1", ...]` — serves GET/HEAD
-- `api-write.func` → `regions: ["syd1"]` — serves POST/PUT/PATCH/DELETE
+- `api-write.func` → `regions: ["syd1"]` — serves POST
 
-with two `config.json` route entries splitting by method. One URL, one
-deployment, writes always execute next to the primary, reads always execute
-next to the user. (Fallbacks if ever needed: Routing Middleware `rewrite()`
+with two `config.json` route entries splitting by method. (The API surface is
+exactly GET/HEAD/POST: the catch-all sends GET/HEAD to a route's `loader` and
+everything else to its `action`, and answers 405 with `Allow: GET, POST` —
+there are no PUT/PATCH/DELETE routes to place.) One URL, one deployment,
+writes always execute next to the primary, reads always execute next to the
+user.
+
+⚠️ **The split cannot be purely method-based — three cron routes mutate on
+GET.** Vercel invokes cron jobs with GET, so all three jobs declared in the
+root `vercel.json` do their writing in a `loader`:
+`/api/v1/attachments/cleanup`, `/api/v1/moderation/sweep`, and
+`/api/v1/notifications/email/weekly-summary`. The first two are GET-*only* by
+design (their `action` returns 405 `Allow: GET`), so they cannot be
+reclassified as POST without changing the cron contract. Their work is exactly
+the shape that must not cross an ocean — `sweepUnmoderatedTextThings` walks a
+batch issuing one `things.updateOne` per document, and `reapExpiredAttachments`
+reaps per attachment — yet on a multi-region read plane they are no longer
+guaranteed to execute in `syd1`, turning each batch into N × ~200ms. That is
+the precise cost B exists to delete. So the write plane must be selected by
+**path OR method**: pin those three cron paths to `syd1` beside the POST rule.
+Cheap to get right up front; silent and expensive to get wrong.
+
+(Fallbacks if ever needed: Routing Middleware `rewrite()`
 runs globally and can geo-route, and external rewrites can reverse-proxy to a
 second region-pinned project — but the microfrontends/multi-project route
 costs $250/project/mo past the included two, so the single-deployment split
@@ -412,7 +435,7 @@ measurement of a multi-region change.
   |---|---|
   | M10 3-node Sydney (today's shape, paid) | $92 (Sydney premium: us-east equivalent is $60) |
   | **M10 Sydney + 1 read-only us-east-1** (Phase 1) | **~$112** *(derived per-node math — the real mixed-region number only shows in the cluster builder UI)* |
-  | + 1 read-only eu-west-1 (Phase 5) | ~$134 |
+  | + 1 read-only EU node (Phase 5) | ~$134 *(quoted at eu-west-1, the cheapest EU region; the `fra1`/`lhr1` picks recommended above map to eu-central-1/eu-west-2, which price slightly higher)* |
   | M20 same 5-node shape (headroom tier) | ~$330 |
   | M30 Global Cluster, 2 zones (Option C floor) | **~$980** + cross-zone read-only nodes + transfer |
 
@@ -474,9 +497,11 @@ measurement of a multi-region change.
    Phase 3's multi-region functions). Worth it now, or park this doc until
    there's a US user cohort? (Vercel Analytics can tell us where visitors
    actually are before we spend.)
-2. **Staleness tolerance** — is "a US user might see an AU post ~1-2s late"
-   acceptable? (Recommendation: yes — the optimistic-rendering rule already
-   embraces this philosophy for the author's own view.)
+2. **Staleness tolerance** — is "a US user might see an AU post a few hundred
+   ms late" acceptable? (§7: steady-state lag ≈ the measured 201ms
+   Sydney↔us-east delay plus apply time. Recommendation: yes — the
+   optimistic-rendering rule already embraces this philosophy for the author's
+   own view.)
 3. **Rate limits** — OK with regional-best-effort limits on ordinary routes
    (strict Mongo-backed limits retained only on failClosed routes)?
 4. **Which second region first** — US-East (iad1 + us-east-1) is the default
