@@ -171,9 +171,13 @@ test('userinfo redaction leaves ordinary urls — including @handle paths — in
 	assert.equal(redactUriCredentials('https://example.com/a?to=x@y.com'), 'https://example.com/a?to=x@y.com');
 	assert.equal(redactUriCredentials('/api/v1/things/feed'), '/api/v1/things/feed');
 	assert.equal(redactUriCredentials('not a url at all'), 'not a url at all');
-	// but a bare userinfo, in any scheme, still goes
-	assert.equal(redactUriCredentials('https://user@example.com/x'), 'https://•••@example.com/x');
-	assert.equal(redactUriCredentials('postgres://u:p@db.internal:5432/app'), 'postgres://•••@db.internal:5432/app');
+	// but a bare userinfo, in any scheme, still goes — assembled piecewise, per
+	// this file's convention, so no scanner ever sees a literal userinfo pair in
+	// source (a literal here regressed that convention once already)
+	const bareUserinfo = ['https://', uriSentinel('bare'), '@', 'example.com/x'].join('');
+	assert.equal(redactUriCredentials(bareUserinfo), 'https://•••@example.com/x');
+	const otherScheme = ['postgres://', uriSentinel('other-scheme-user'), ':', uriSentinel('other-scheme'), '@', 'db.internal:5432/app'].join('');
+	assert.equal(redactUriCredentials(otherScheme), 'postgres://•••@db.internal:5432/app');
 });
 
 test('an absolute request url with userinfo is scrubbed before it is stored', () => {
