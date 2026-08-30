@@ -1186,6 +1186,15 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
   },
   {
+    id: 'admin-integrations-guarded',
+    name: 'Integration vault is admin-only',
+    description: 'Listing external secret metadata and endpoint policies requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/integrations',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin integration vault read was rejected.')
+  },
+  {
     id: 'admin-users-overview-guarded',
     name: 'Users overview is admin-only',
     description: 'The /admin Users tab data requires an admin session.',

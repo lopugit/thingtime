@@ -268,6 +268,12 @@ export const getFeedAlgorithmsCollection = async () => getHomeCollection('feedAl
 // rate-limit config) and the general per-endpoint rate-limit windows.
 export const getSettingsCollection = async () => getHomeCollection('settings');
 export const getRateLimitsCollection = async () => getHomeCollection('rateLimits');
+// Admin integration records are a home-pinned control plane. Their encrypted
+// credential material is never represented as a user Thing or browser setting.
+export const getAdminIntegrationSecretsCollection = async () => getHomeCollection('adminIntegrationSecrets');
+export const getAdminIntegrationEndpointsCollection = async () => getHomeCollection('adminIntegrationEndpoints');
+export const getAdminIntegrationClaimsCollection = async () => getHomeCollection('adminIntegrationClaims');
+export const getAdminIntegrationAuditCollection = async () => getHomeCollection('adminIntegrationAudit');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
 export const getEmailMessagesCollection = async () => getHomeCollection('email_messages');
@@ -927,6 +933,17 @@ export const ensureIndexes = async () => {
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // Admin integration vault: write-only encrypted values, endpoint policy,
+        // short create-only claims, and redacted, expiring audit evidence.
+        col('adminIntegrationSecrets').createIndex({ id: 1 }, { unique: true }),
+        col('adminIntegrationSecrets').createIndex({ label: 1 }, { unique: true }),
+        col('adminIntegrationEndpoints').createIndex({ id: 1 }, { unique: true }),
+        col('adminIntegrationEndpoints').createIndex({ secretId: 1 }),
+        col('adminIntegrationClaims').createIndex({ endpointId: 1, resourceKey: 1 }, { unique: true }),
+        col('adminIntegrationClaims').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('adminIntegrationAudit').createIndex({ createdAt: -1 }),
+        col('adminIntegrationAudit').createIndex({ endpointId: 1, createdAt: -1 }),
+        col('adminIntegrationAudit').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats
