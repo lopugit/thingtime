@@ -24,12 +24,10 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// Cross-origin access is an explicit allowlist, never '*'.
 // Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
 // THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
 // Defaults to the local dev origin. A wildcard origin would let any website read this API's
-// cross-origin responses from a visitor's browser, so it is deliberately not the fallback:
-// /v1/thing both reads and writes thing data, so that would be a real exposure.
+// cross-origin responses from a visitor's browser, so it is deliberately not the fallback.
 // An explicitly empty value grants no cross-origin access at all, which is the safe setting
 // for a service that is no longer deployed.
 const configuredOrigins = (
