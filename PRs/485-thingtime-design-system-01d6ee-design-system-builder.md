@@ -126,3 +126,35 @@ repo. #291 can now be slimmed to nothing / closed.
 - graphify: this worktree's CAS alias is a non-symlink; `scripts/graphify`
   refuses to run here (hit by all mapping agents). Graph refresh left to the
   canonical environment, per the #291 practice.
+
+## Round 2 — Limitless full-bleed builder (owner feedback, same day)
+
+Feedback: the containered canvas wasn't the goal — builder mode must work on
+every page with the page rendering as its normal full-width self; "+ add
+block" was hover-only (empty canvases looked dead); global blocks weren't
+tangible on the existing UI.
+
+Changes (commits 2d2a7c2e1, e03939289):
+
+- **Site edit mode is now the primary builder surface, full-bleed**: the page
+  renders exactly as normal (no container), block chrome overlays it, the
+  drawer sits beside it (collapsible — ✕ collapses, 🧱 Inspector reopens,
+  ✕ Done exits). Root-level authored blocks center at a readable 960px via
+  the renderer's new insetNonNative; the native screen spans the viewport.
+- **Dual-region editing**: the 🌐 global region (site-global doc — labelled
+  "renders on every page", editable in place even when empty, with a note
+  that nav/drawer/footer are Thingtime chrome) sits above the page region.
+  One drawer serves both: selection is coordinated across regions (the
+  region label shows which owns the selected block) and Save persists every
+  dirty draft as the viewer's own fork.
+- **Persistent insert zones**: empty containers and the end of the root list
+  keep their "+ add block" visible — an empty canvas invites instead of
+  looking inert.
+- **Develop-environment seeding**: per the owner's go-ahead, a temporary
+  ADMIN_USERNAMES bootstrap (Vercel env oWtLayuDiUUXc588, scoped to the
+  develop custom environment only) lets the QA user run
+  POST /api/v1/admin/webpages/seed on the shared develop DB; the env var is
+  deleted right after seeding. Note: the pr-485 alias's /api is the SHARED
+  develop environment — other deployments repoint it, so branch-endpoint
+  probes must gate any preview API work (the seeded docs persist in the DB
+  regardless).
