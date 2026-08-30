@@ -430,6 +430,10 @@ export type WebpageBlocksRendererProps = {
 	insetNonNative?: number;
 	// distinguishes co-mounted renderers' zone test ids (e.g. 'global'/'page')
 	testIdPrefix?: string;
+	// view-mode compositions inside page-owned shells: render the block list
+	// WITHOUT the root column Flex so the shell's own layout (centering, gap)
+	// applies to sections exactly as it does on the route render
+	bare?: boolean;
 };
 
 const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean }) => {
@@ -494,6 +498,9 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; is
 	}
 
 	if (!chrome) {
+		// native sections render BARE in view mode — a full-width wrapper would
+		// defeat page-owned shells that center their children (e.g. /welcome)
+		if (block.type === 'native') return <>{body}</>;
 		return (
 			<Box
 				width="100%"
@@ -556,8 +563,11 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 	return <>{zones}</>;
 };
 
-export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => (
-	<Flex flexDirection="column" width="100%" rowGap={props.chrome ? 0 : 4}>
-		<BlockList {...props} containerId={null} />
-	</Flex>
-);
+export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => {
+	if (props.bare && !props.chrome) return <BlockList {...props} containerId={null} />;
+	return (
+		<Flex flexDirection="column" width="100%" rowGap={props.chrome ? 0 : 4}>
+			<BlockList {...props} containerId={null} />
+		</Flex>
+	);
+};

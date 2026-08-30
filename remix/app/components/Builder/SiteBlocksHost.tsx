@@ -181,26 +181,34 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 
 	if (sectioned && sectionedPage) {
 		const shellWidth = sectionedPage.shellWidth;
+		const PageOwnShell = sectionedPage.Shell;
 		const composition = (
 			<WebpageBlocksRenderer
 				blocks={docBlocks}
 				componentsByRef={componentsByRef}
 				interactive={resolved?.source === 'user'}
 				renderNative={(key) => <NativeSectionView sectionKey={key} />}
+				bare
 			/>
 		);
 		return (
 			<>
 				<GlobalBlocks blocks={globalBlocks} componentsByRef={globalComponents} interactive={globalResolved?.source === 'user'} />
-				{shellWidth === 'full' ? (
-					<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
-						{composition}
-					</Box>
-				) : (
-					<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
+				<Box width="100%" whiteSpace="normal" sx={globalBlocks.length ? { '--tt-nav-clearance': '12px' } : undefined}>
+					{shellWidth === 'full' ? (
+						PageOwnShell ? (
+							// full-bleed pages keep their page-owned chrome (background,
+							// clearance, centering) in doc-driven renders too
+							<React.Suspense fallback={null}>
+								<PageOwnShell>{composition}</PageOwnShell>
+							</React.Suspense>
+						) : (
+							composition
+						)
+					) : (
 						<PageShell width={shellWidth}>{composition}</PageShell>
-					</Box>
-				)}
+					)}
+				</Box>
 			</>
 		);
 	}
@@ -392,6 +400,21 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 				{pageDraft.loading && !pageDraft.blocks.length ? (
 					<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
 						{children}
+					</Box>
+				) : draftSectioned && draftPage && draftPage.shellWidth === 'full' && draftPage.Shell ? (
+					// full-bleed sectioned pages edit inside their page-owned shell
+					<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+						<React.Suspense fallback={null}>
+							<draftPage.Shell>
+								<WebpageBlocksRenderer
+									blocks={pageDraft.blocks}
+									componentsByRef={pageDraft.componentsByRef}
+									chrome={pageChrome.chrome}
+									renderNative={renderNative}
+									testIdPrefix="page"
+								/>
+							</draftPage.Shell>
+						</React.Suspense>
 					</Box>
 				) : draftSectioned && draftPage && draftPage.shellWidth !== 'full' ? (
 					// the global strip above already cleared the nav — shrink the

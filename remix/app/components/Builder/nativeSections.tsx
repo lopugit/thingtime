@@ -28,8 +28,12 @@ export type NativePageDef = {
 	// route key, e.g. 'status' — matches the seed table + native auto-seed
 	key: string;
 	route: string;
-	// PageShell column width for the sectioned composition; 'full' = no shell
+	// PageShell column width for the sectioned composition; 'full' = no
+	// PageShell — the page's own Shell component (below) provides its chrome
 	shellWidth: PageShellWidth | 'full';
+	// full-bleed pages export their page-owned wrapper (background, clearance,
+	// centering) so doc-driven renders keep the chrome the route has
+	Shell?: React.LazyExoticComponent<React.ComponentType<{ children: React.ReactNode }>>;
 	sections: NativeSectionDef[];
 };
 
@@ -56,6 +60,78 @@ export const NATIVE_PAGES: NativePageDef[] = [
 			),
 			lazySection('status-recheck', 'Re-check control', () =>
 				import('../Status/statusSections').then((m) => ({ default: m.StatusRecheckSection }))
+			)
+		]
+	},
+	{
+		key: 'home',
+		route: '/',
+		shellWidth: 'full',
+		Shell: React.lazy(() => import('../Landing/landingSections').then((m) => ({ default: m.LandingShell }))),
+		sections: [
+			lazySection('home-hero', 'Nav & hero', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeHeroSection }))
+			),
+			lazySection('home-demo', 'Live demo', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeDemoSection }))
+			),
+			lazySection('home-use-cases', 'Use cases', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeUseCasesSection }))
+			),
+			lazySection('home-ecosystem', 'Ecosystem', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeEcosystemSection }))
+			),
+			lazySection('home-developers', 'Developers', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeDevelopersSection }))
+			),
+			lazySection('home-back', 'Back the launch', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeBackSection }))
+			),
+			lazySection('home-faq', 'FAQ', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeFaqSection }))
+			),
+			lazySection('home-footer', 'Footer', () =>
+				import('../Landing/landingSections').then((m) => ({ default: m.HomeFooterSection }))
+			)
+		]
+	},
+	{
+		key: 'welcome',
+		route: '/welcome',
+		shellWidth: 'full',
+		Shell: React.lazy(() => import('../Welcome/welcomeSections').then((m) => ({ default: m.WelcomeShell }))),
+		sections: [
+			lazySection('welcome-hero', 'Welcome hero', () =>
+				import('../Welcome/welcomeSections').then((m) => ({ default: m.WelcomeHeroSection }))
+			),
+			lazySection('welcome-card', 'Account card', () =>
+				import('../Welcome/welcomeSections').then((m) => ({ default: m.WelcomeCardSection }))
+			)
+		]
+	},
+	{
+		key: 'ode',
+		route: '/ode',
+		shellWidth: 680,
+		sections: [
+			lazySection('ode-poem', 'Ode to Thingtime poem', () =>
+				import('../Ode/odeSections').then((m) => ({ default: m.OdePoemSection }))
+			)
+		]
+	},
+	{
+		key: 'mongodb-status',
+		route: '/mongodb-status',
+		shellWidth: 760,
+		sections: [
+			lazySection('mongodb-status-header', 'MongoDB header', () =>
+				import('../MongoDB/mongodbStatusSections').then((m) => ({ default: m.MongoStatusHeaderSection }))
+			),
+			lazySection('mongodb-status-connection', 'Connection readout', () =>
+				import('../MongoDB/mongodbStatusSections').then((m) => ({ default: m.MongoStatusConnectionSection }))
+			),
+			lazySection('mongodb-status-endpoint', 'Data endpoint config', () =>
+				import('../MongoDB/mongodbStatusSections').then((m) => ({ default: m.MongoStatusEndpointSection }))
 			)
 		]
 	}

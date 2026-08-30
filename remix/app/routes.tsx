@@ -161,11 +161,9 @@ export const router = createBrowserRouter([
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
       { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
-      {
-        path: 'mongodb-status',
-        lazy: lazyRoute(() => import('./routes/mongodb-status')),
-        loader: () => fetchJson('/api/v1/mongodb/status-data')
-      },
+      // mongodb-status renders from its native-section registry list; the
+      // sections' shared hook fetches — no navigation-blocking loader
+      { path: 'mongodb-status', lazy: lazyRoute(() => import('./routes/mongodb-status')) },
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },

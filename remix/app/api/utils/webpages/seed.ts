@@ -27,7 +27,7 @@ type SitePageSeed = {
 };
 
 export const SITE_PAGE_SEEDS: SitePageSeed[] = [
-	{ key: 'home', path: '/', name: 'Home' },
+	{ key: 'home', path: '/', name: 'Home', sections: ['home-hero', 'home-demo', 'home-use-cases', 'home-ecosystem', 'home-developers', 'home-back', 'home-faq', 'home-footer'] },
 	{ key: 'feed', path: '/feed', name: 'Feed' },
 	{ key: 'messages', path: '/messages', name: 'Messages' },
 	{ key: 'search', path: '/search', name: 'Search' },
@@ -40,7 +40,7 @@ export const SITE_PAGE_SEEDS: SitePageSeed[] = [
 	{ key: 'themes', path: '/themes', name: 'Themes' },
 	{ key: 'status', path: '/status', name: 'Status', sections: ['status-header', 'status-state', 'status-readout', 'status-recheck'] },
 	{ key: 'vercel', path: '/vercel', name: 'Deployments' },
-	{ key: 'mongodb-status', path: '/mongodb-status', name: 'MongoDB' },
+	{ key: 'mongodb-status', path: '/mongodb-status', name: 'MongoDB', sections: ['mongodb-status-header', 'mongodb-status-connection', 'mongodb-status-endpoint'] },
 	{ key: 'migrations', path: '/migrations', name: 'Migrations' },
 	{ key: 'tests', path: '/tests', name: 'API tests' },
 	{ key: 'admin', path: '/admin', name: 'Admin' },
@@ -48,9 +48,10 @@ export const SITE_PAGE_SEEDS: SitePageSeed[] = [
 	{ key: 'apps-manage', path: '/apps/manage', name: 'My apps' },
 	{ key: 'branding', path: '/branding', name: 'Branding' },
 	{ key: 'docs', path: '/docs', name: 'Docs' },
-	{ key: 'welcome', path: '/welcome', name: 'Welcome' },
+	{ key: 'welcome', path: '/welcome', name: 'Welcome', sections: ['welcome-hero', 'welcome-card'] },
 	{ key: 'crypto', path: '/crypto', name: 'Crypto' },
 	{ key: 'raw', path: '/raw', name: 'MongoDB query' },
+	{ key: 'ode', path: '/ode', name: 'Ode', sections: ['ode-poem'] },
 	{ key: 'builder', path: '/builder', name: 'Builder' }
 ];
 
