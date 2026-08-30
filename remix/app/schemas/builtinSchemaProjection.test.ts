@@ -28,6 +28,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   // args + savedArgs + render: records → dropped
   component: ['name', 'description', 'library', 'category', 'componentKey', 'familyKey', 'version', 'forkOf', 'previewBg'],
+  // blocks: record → dropped
+  webpage: ['name', 'description', 'pageKey', 'siteRoute', 'version', 'forkOf', 'previewBg'],
   // inputs + steps + capabilities + limits: records → dropped
   action: ['name', 'description', 'actionKey', 'category', 'version', 'forkOf'],
   // inputs + result + trace: records → dropped

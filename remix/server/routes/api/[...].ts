@@ -14,6 +14,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
   'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
   'v1/admin/components/seed': () => import('../../../app/routes/api/v1/admin/components/seed/_seed'),
+  'v1/admin/webpages/seed': () => import('../../../app/routes/api/v1/admin/webpages/seed/_seed'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
   'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
@@ -153,6 +154,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/actions/run': () => import('../../../app/routes/api/v1/actions/run/_run'),
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
+  'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
