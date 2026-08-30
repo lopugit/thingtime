@@ -160,7 +160,14 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 	const { chrome, selectedId, deselect, insertMenu } = useBuilderChrome(draft);
 	const [pageName, setPageName] = React.useState('');
 	const [isPublic, setIsPublic] = React.useState(false);
+	// collapsible on small screens — closing the drawer never exits the canvas
+	const [drawerOpen, setDrawerOpen] = React.useState(true);
 	const namedForRef = React.useRef<string | null>(null);
+
+	// selecting a block is a request to inspect it — reopen a collapsed drawer
+	React.useEffect(() => {
+		if (selectedId) setDrawerOpen(true);
+	}, [selectedId]);
 
 	React.useEffect(() => {
 		const page = draft.resolved?.page;
@@ -181,7 +188,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				minHeight="100vh"
 				background="var(--tt-surface, #fafafb)"
 				paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
-				paddingRight={[0, `${BUILDER_DRAWER_WIDTH}px`]}
+				paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0}
 				whiteSpace="normal"
 			>
 				<Flex flexDirection="column" width="100%" maxWidth="960px" marginX="auto" paddingX={4} paddingY={8} flex={1}>
@@ -220,21 +227,52 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 					</Box>
 				</Flex>
 			</Flex>
+			{!drawerOpen ? (
+				<Flex
+					as="button"
+					aria-label="Open the builder inspector"
+					data-testid="builder-drawer-reopen"
+					position="fixed"
+					// clear of the DevKit bubble bottom-right
+					right="84px"
+					bottom="14px"
+					zIndex={10120}
+					alignItems="center"
+					columnGap="7px"
+					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+					fontSize="12px"
+					fontWeight={700}
+					paddingX="12px"
+					paddingY="9px"
+					borderRadius="var(--tt-radius-pill, 999px)"
+					border="1px solid"
+					borderColor="var(--tt-border, #ececef)"
+					background="var(--tt-card, #ffffff)"
+					color="var(--tt-ink, #16161a)"
+					boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+					cursor="pointer"
+					onClick={() => setDrawerOpen(true)}
+				>
+					🧱 Inspector
+				</Flex>
+			) : null}
+			{drawerOpen ? (
 			<BuilderDrawer
 				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
 				draft={draft}
 				selectedId={selectedId}
 				onDeselect={deselect}
-				onClose={() => navigate('/builder')}
+				onClose={() => setDrawerOpen(false)}
 				mode={isSiteDoc ? 'site' : 'page'}
 				pageName={pageName}
 				onPageName={setPageName}
 				isPublic={isPublic}
 				onIsPublic={setIsPublic}
 				onSaved={(id) => {
-					if (id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
+					if (!isGlobal && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
 				}}
 			/>
+			) : null}
 			{insertMenu}
 		</>
 	);

@@ -48,7 +48,8 @@ const splitAroundNative = (blocks: WebpageBlock[]): { before: WebpageBlock[]; af
 const GlobalBlocks = React.memo(function GlobalBlocks({
 	blocks,
 	componentsByRef,
-	interactive
+	interactive,
+	compensateClearance
 }: {
 	blocks: WebpageBlock[];
 	componentsByRef: ComponentsByRef;
@@ -56,7 +57,13 @@ const GlobalBlocks = React.memo(function GlobalBlocks({
 }) {
 	if (!blocks.length) return null;
 	return (
-		<Box className="ttGlobalBlocks" width="100%" paddingTop={PAGE_TOP_CLEARANCE} paddingX={4} background="var(--tt-surface, #fafafb)">
+		<Box
+			className="ttGlobalBlocks"
+			width="100%"
+			paddingTop={PAGE_TOP_CLEARANCE}
+			paddingX={4}
+			background="var(--tt-surface, #fafafb)"
+		>
 			<Box maxWidth="960px" marginX="auto" whiteSpace="normal">
 				<WebpageBlocksRenderer blocks={blocks} componentsByRef={componentsByRef} interactive={interactive} />
 			</Box>
@@ -157,6 +164,7 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 	const blocks = (resolved?.source === 'user' ? (resolved?.page?.crystal?.blocks as WebpageBlock[]) : null) || [];
 	const { before, after } = splitAroundNative(blocks);
 	const componentsByRef = resolved?.componentsByRef || {};
+	const hasInjectedAbove = globalBlocks.length > 0 || before.length > 0;
 
 	return (
 		<>
@@ -168,7 +176,15 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 					</Box>
 				</Box>
 			) : null}
-			{children}
+			{hasInjectedAbove ? (
+				// content already starts below the fixed nav, so the page's own
+				// clearance would be pure gap — shrink it for the whole subtree
+				<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
+					{children}
+				</Box>
+			) : (
+				children
+			)}
 			{after.length ? (
 				<Box width="100%" paddingBottom={8} paddingX={4} background="var(--tt-surface, #fafafb)">
 					<Box maxWidth="960px" marginX="auto" whiteSpace="normal">
