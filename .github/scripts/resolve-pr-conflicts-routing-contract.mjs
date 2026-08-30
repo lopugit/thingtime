@@ -476,18 +476,29 @@ function assertWorkflowSource() {
   );
   // A mid-response HTTP/2 reset carries no status line, so status-only
   // classification made a retryable edge blip fatal (run 33262097171).
+  // Count the helper definitions instead of hard-coding today's three: an
+  // absolute count is exactly inverted for a fourth copy. It stays green when
+  // that copy ships the status-only predicate (the outage shape, silently
+  // reintroduced) and goes red when the copy is correct. The floor keeps the
+  // pair from passing vacuously if the helper is ever renamed away.
+  const readRetryCopies =
+    source.match(/^[ \t]*gh_read_retry\(\) \{[ \t]*$/gmu)?.length ?? 0;
+  assert.ok(
+    readRetryCopies >= 1,
+    "the control plane still defines its read-only GitHub API retry helper",
+  );
   assert.equal(
     source.match(/^\s*transport='stream error\|/gmu)?.length,
-    3,
+    readRetryCopies,
     "every gh_read_retry copy also treats transport-level resets as retryable",
   );
   // Declaring the pattern is not the same as branching on it: a copy that
   // keeps `transport=` but drops the predicate reintroduces the exact
-  // outage. Assert the predicate is actually wired into all three retry
-  // branches, independent of how each copy formats its condition.
+  // outage. Assert the predicate is actually wired into every retry branch,
+  // independent of how each copy formats its condition.
   assert.equal(
     source.match(/\|\| grep -Eq "\$transport" "\$errors"/gu)?.length,
-    3,
+    readRetryCopies,
     "every gh_read_retry copy branches on the transport predicate, not just declares it",
   );
   assert.doesNotMatch(
