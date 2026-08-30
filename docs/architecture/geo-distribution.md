@@ -281,7 +281,8 @@ The honest costs, which is why this is the *later* option:
    C's strength (local own-data writes) doesn't match Thingtime's dominant
    workload today.
 4. **Tier jump.** Global Clusters require **M30+ sharded** — the 2-zone floor
-   is ~$980/mo before extras (§7), ~7× Option A's ~$134/mo. Also: the shard
+   is ~$980/mo before extras (§7), ~7× a fully built-out Option A (~$134/mo
+   with both the US and EU read nodes; Phase 1 alone is ~$112). Also: the shard
    key is set once and **cannot be resharded later**, must be exactly
    `{location-first, one-secondary-field}` with ISO country codes, and
    dedicated Search Nodes are unsupported with Global Writes. This is a
@@ -351,7 +352,8 @@ measurement of a multi-region change.
 - **Fluid Compute** ([docs](https://vercel.com/docs/fluid-compute)): available
   on all plans, default for new projects since 2025-04-23. Thingtime predates
   that and needed an explicit opt-in; **that has since happened** — the root
-  `vercel.json` carries `"fluid": true` (enabled 2026-08-08), so this is a
+  `vercel.json` carries `"fluid": true` (enabled 2026-08-17, in the same
+  commit that moved the region pin to the root file), so this is a
   prerequisite already met rather than an outstanding one. What it buys us:
   in-function concurrency
   (many requests share one instance → far fewer Mongo connection pools),
