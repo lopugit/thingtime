@@ -147,13 +147,18 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	const save = React.useCallback(
 		async (options?: { name?: string; isPublic?: boolean }) => {
 			if (!targetKey) return { ok: false, error: 'Nothing to save' };
+			const target = JSON.parse(targetKey) as WebpageTarget;
 			const page = resolved?.page || null;
 			const crystalBase: Partial<WebpageCrystal> = page?.crystal || {};
+			// site/global targets must stamp their binding even when no seed doc
+			// existed to inherit it from (fresh deployments before the admin seed)
+			const siteRoute = crystalBase.siteRoute || (target.kind === 'path' ? target.path : undefined);
+			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : undefined);
 			const crystal: WebpageCrystal = {
 				name: options?.name || crystalBase.name || 'Untitled page',
 				...(crystalBase.description ? { description: crystalBase.description } : {}),
-				...(crystalBase.pageKey ? { pageKey: crystalBase.pageKey } : {}),
-				...(crystalBase.siteRoute ? { siteRoute: crystalBase.siteRoute } : {}),
+				...(pageKey ? { pageKey } : {}),
+				...(siteRoute ? { siteRoute } : {}),
 				...(crystalBase.previewBg ? { previewBg: crystalBase.previewBg } : {}),
 				version: (Number(crystalBase.version) || 0) + 1,
 				...(resolved?.source === 'user'
