@@ -18,9 +18,10 @@ import { commanderEnterSuggestionIndex, commanderSearchResults } from '../Search
 import type { CommanderSearchResult } from '../Search/commanderSearch';
 import type { SearchPerson, SearchResponse } from '../Search/searchTypes';
 import { CommanderClickAwayBoundary } from './commanderClickAway';
-import { matchCommanderCommands, runCommanderCommand } from './commanderCommands';
+import { commanderCommandEnterIndex, matchCommanderCommands, runCommanderCommand } from './commanderCommands';
 import type { CommanderCommandContext } from './commanderCommands';
 import { parseCommanderLiteral } from './commanderLiteral';
+import { shouldToggleCommanderFromKeydown } from './commanderShortcut';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -407,8 +408,13 @@ export const CommanderV2 = (props) => {
 		// path/setter machinery below. A hovered dropdown row wins over the raw
 		// input (same rule as path suggestions).
 		if (commanderActive && commandMode) {
-			if (typeof hoveredSuggestion === 'number' && commandMatches?.[hoveredSuggestion]) {
-				selectSuggestion(hoveredSuggestion);
+			const rowIndex = commanderCommandEnterIndex({
+				hoveredSuggestion,
+				inputValue,
+				matchCount: commandMatches?.length || 0
+			});
+			if (rowIndex !== null) {
+				selectSuggestion(rowIndex);
 				return;
 			}
 			runCommanderCommand(inputValue, commandContext);
@@ -595,7 +601,10 @@ export const CommanderV2 = (props) => {
 			return;
 		}
 		const cmdKListener = (e: any) => {
-			if ((e?.metaKey || e?.ctrlKey) && !e?.altKey && !e?.shiftKey && (e?.code === 'KeyK' || e?.key?.toLowerCase?.() === 'k')) {
+			// commanderShortcut.ts owns the chord AND the one surface that outranks
+			// it: Editor.js binds CMD+K to its link tool, so the palette yields
+			// inside an editor block rather than opening on top of it.
+			if (shouldToggleCommanderFromKeydown(e)) {
 				e.preventDefault();
 				toggleCommander();
 			}

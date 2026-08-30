@@ -164,6 +164,28 @@ export const matchCommanderCommands = (input: string): CommanderCommand[] => {
 };
 
 /**
+ * Which dropdown row Enter should run in `>` mode, or null to run the raw
+ * input — the command-mode twin of `commanderEnterSuggestionIndex`.
+ *
+ * Rows complete the command NAME, so a highlight only means anything while the
+ * name is all that has been typed. `>theme Midnight` filters to the same two
+ * rows as `>theme` (the args don't narrow the list), so a highlight left on
+ * `>themes` would otherwise still win and Enter would navigate to /themes,
+ * silently dropping a fully-typed command. Once there are arguments, the typed
+ * input is unambiguous — run that.
+ */
+export const commanderCommandEnterIndex = (input: {
+	hoveredSuggestion: number | null;
+	inputValue: string;
+	matchCount: number;
+}): number | null => {
+	if (typeof input.hoveredSuggestion !== 'number') return null;
+	if (input.hoveredSuggestion < 0 || input.hoveredSuggestion >= input.matchCount) return null;
+	if (parseCommanderCommand(input.inputValue)?.args) return null;
+	return input.hoveredSuggestion;
+};
+
+/**
  * Run a `>` command. Returns true when the input was a `>` command (whether or
  * not it named a real one) so the caller stops there; unknown names toast a
  * pointer to `>help`.

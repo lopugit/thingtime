@@ -3,7 +3,13 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import { COMMANDER_COMMANDS, matchCommanderCommands, parseCommanderCommand, runCommanderCommand } from './commanderCommands.ts';
+import {
+	COMMANDER_COMMANDS,
+	commanderCommandEnterIndex,
+	matchCommanderCommands,
+	parseCommanderCommand,
+	runCommanderCommand
+} from './commanderCommands.ts';
 
 type Call = { kind: string; payload: any };
 
@@ -106,6 +112,22 @@ test('matchCommanderCommands filters by prefix and shows all for a bare ">"', ()
 		matchCommanderCommands('>comm').map((command) => command.name),
 		['help']
 	);
+});
+
+test('a highlighted row only wins Enter while the command name is all that is typed', () => {
+	// `>the` → rows [theme, themes]; the highlight is the user's actual choice
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: 1, inputValue: '>the', matchCount: 2 }), 1);
+	// row completion leaves a trailing space — still no argument, still the row
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: 0, inputValue: '>theme ', matchCount: 2 }), 0);
+
+	// …but arguments don't narrow the rows, so an older highlight would sit on
+	// `>themes` and navigate there, silently dropping the typed preset
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: 1, inputValue: '>theme Midnight', matchCount: 2 }), null);
+
+	// nothing highlighted, or a highlight left past the end of a narrowed list
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: null, inputValue: '>the', matchCount: 2 }), null);
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: 5, inputValue: '>the', matchCount: 2 }), null);
+	assert.equal(commanderCommandEnterIndex({ hoveredSuggestion: 0, inputValue: '>zzz', matchCount: 0 }), null);
 });
 
 // Every `>` command that navigates must land on a route the router actually
