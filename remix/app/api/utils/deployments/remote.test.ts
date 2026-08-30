@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isBlockedDeploymentHostname, normalizeDeploymentBaseUrl } from './remote';
+import {
+  isBlockedDeploymentAddress,
+  isBlockedDeploymentHostname,
+  normalizeDeploymentBaseUrl,
+  resolvedDeploymentHostBlocked
+} from './remote';
 
 // `normalizeDeploymentBaseUrl` is the ONLY gate between a signed-in user's
 // typed string and a server-side fetch, so every rule it enforces is load
@@ -90,4 +95,84 @@ test('ordinary public deployment hostnames are not blocked', () => {
   for (const host of ['thingtime.com', 'dev.thingtime.com', 'thingtime-abc.vercel.app', 'internal-tools.example.com']) {
     assert.equal(isBlockedDeploymentHostname(host), false, `${host} should stay allowed`);
   }
+});
+
+// ————— resolved-address fence —————
+//
+// The syntactic fence above only ever sees the string a user typed. A public
+// NAME pointing at private space passes every one of those rules, so the
+// address a resolver actually returns is judged separately.
+
+test('reserved IPv4 space is refused whatever name pointed at it', () => {
+  for (const address of [
+    '0.0.0.0',
+    '10.0.0.5',
+    '127.0.0.1',
+    '169.254.169.254', // cloud metadata
+    '172.16.0.9',
+    '172.31.255.254',
+    '192.168.1.10',
+    '192.0.0.1',
+    '100.64.0.1', // carrier-grade NAT
+    '198.18.0.1', // benchmarking
+    '224.0.0.1', // multicast
+    '255.255.255.255'
+  ]) {
+    assert.equal(isBlockedDeploymentAddress(address, 4), true, `${address} should be blocked`);
+  }
+});
+
+test('ordinary public IPv4 addresses stay allowed', () => {
+  for (const address of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '172.15.0.1', '172.32.0.1']) {
+    assert.equal(isBlockedDeploymentAddress(address, 4), false, `${address} should stay allowed`);
+  }
+});
+
+test('reserved IPv6 space is refused, including v4-mapped spellings', () => {
+  for (const address of [
+    '::1', // loopback
+    '::', // unspecified
+    'fd00::1', // unique-local
+    'fe80::1', // link-local
+    'fec0::1', // site-local
+    'ff02::1', // multicast
+    '::ffff:169.254.169.254', // v4-mapped metadata, dotted spelling
+    '::ffff:a9fe:a9fe', // the SAME address as a resolver may render it
+    '::ffff:10.0.0.5',
+    'fe80::1%eth0' // zone index must not defeat the check
+  ]) {
+    assert.equal(isBlockedDeploymentAddress(address, 6), true, `${address} should be blocked`);
+  }
+});
+
+test('ordinary public IPv6 addresses stay allowed', () => {
+  for (const address of ['2606:4700:4700::1111', '2001:4860:4860::8888', '::ffff:8.8.8.8']) {
+    assert.equal(isBlockedDeploymentAddress(address, 6), false, `${address} should stay allowed`);
+  }
+});
+
+test('an unparseable address is refused rather than guessed at', () => {
+  assert.equal(isBlockedDeploymentAddress('not-an-address', 6), true);
+  assert.equal(isBlockedDeploymentAddress('1.2.3', 4), true);
+  assert.equal(isBlockedDeploymentAddress('1.2.3.999', 4), true);
+});
+
+test('an IP literal is judged directly by the resolved fence', async () => {
+  assert.equal(await resolvedDeploymentHostBlocked('169.254.169.254'), true);
+  assert.equal(await resolvedDeploymentHostBlocked('[fd00::1]'), true);
+  assert.equal(await resolvedDeploymentHostBlocked('8.8.8.8'), false);
+});
+
+test('localhost-shaped hosts keep their documented dev exemption', async () => {
+  // they resolve to loopback, which the address rules block by design — the
+  // dev-against-dev path has to opt out explicitly or it would break
+  for (const host of ['localhost', '127.0.0.1', '::1', '[::1]', 'tt.localhost']) {
+    assert.equal(await resolvedDeploymentHostBlocked(host), false, `${host} should stay allowed`);
+  }
+});
+
+test('a name that does not resolve is not refused by this fence', async () => {
+  // fetch() fails on it anyway; inventing a refusal would report a DNS outage
+  // as "not a public deployment"
+  assert.equal(await resolvedDeploymentHostBlocked('no-such-host.invalid'), false);
 });
