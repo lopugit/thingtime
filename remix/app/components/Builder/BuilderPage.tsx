@@ -8,7 +8,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
-import { BuilderDrawer, BUILDER_DRAWER_WIDTH } from './BuilderDrawer';
+import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { useWebpageDraft } from './useWebpage';
 import { countBlocks, type WebpageBlock } from './webpageBlocks';
@@ -231,35 +231,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 					</Box>
 				</Flex>
 			</Flex>
-			{!drawerOpen ? (
-				<Flex
-					as="button"
-					aria-label="Open the builder inspector"
-					data-testid="builder-drawer-reopen"
-					position="fixed"
-					// clear of the DevKit bubble bottom-right
-					right="84px"
-					bottom="14px"
-					zIndex={10120}
-					alignItems="center"
-					columnGap="7px"
-					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-					fontSize="12px"
-					fontWeight={700}
-					paddingX="12px"
-					paddingY="9px"
-					borderRadius="var(--tt-radius-pill, 999px)"
-					border="1px solid"
-					borderColor="var(--tt-border, #ececef)"
-					background="var(--tt-card, #ffffff)"
-					color="var(--tt-ink, #16161a)"
-					boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
-					cursor="pointer"
-					onClick={() => setDrawerOpen(true)}
-				>
-					🧱 Inspector
-				</Flex>
-			) : null}
+			{!drawerOpen ? <InspectorReopenPill onClick={() => setDrawerOpen(true)} /> : null}
 			{drawerOpen ? (
 			<BuilderDrawer
 				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}

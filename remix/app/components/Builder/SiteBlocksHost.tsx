@@ -7,7 +7,7 @@ import { useThingtime } from '../Thingtime/useThingtime';
 import { DRAWER_HOVER_Z } from '../Nav/Drawer/useDrawer';
 import { PAGE_TOP_CLEARANCE } from '../Layout/PageShell';
 import { WebpageBlocksRenderer, type ComponentsByRef } from './WebpageBlocksRenderer';
-import { BuilderDrawer, BUILDER_DRAWER_WIDTH } from './BuilderDrawer';
+import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { resolveWebpageClient, useWebpageDraft, type ResolvedWebpage } from './useWebpage';
 import type { WebpageBlock } from './webpageBlocks';
@@ -48,8 +48,7 @@ const splitAroundNative = (blocks: WebpageBlock[]): { before: WebpageBlock[]; af
 const GlobalBlocks = React.memo(function GlobalBlocks({
 	blocks,
 	componentsByRef,
-	interactive,
-	compensateClearance
+	interactive
 }: {
 	blocks: WebpageBlock[];
 	componentsByRef: ComponentsByRef;
@@ -227,6 +226,13 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 	const activeDraft = activeIsGlobal ? globalDraft : pageDraft;
 	const activeChrome = activeIsGlobal ? globalChrome : pageChrome;
 
+	// collapsible drawer — closing it never exits edit mode (the ✕ Done pill
+	// does that); selecting any block reopens it
+	const [drawerOpen, setDrawerOpen] = React.useState(true);
+	React.useEffect(() => {
+		if (pageChrome.selectedId || globalChrome.selectedId) setDrawerOpen(true);
+	}, [pageChrome.selectedId, globalChrome.selectedId]);
+
 	React.useEffect(() => {
 		const page = pageDraft.resolved?.page;
 		if (page && namedForRef.current !== page.id) {
@@ -283,7 +289,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 
 	return (
 		<>
-			<Box width="100%" paddingRight={[0, `${BUILDER_DRAWER_WIDTH}px`]} whiteSpace="normal">
+			<Box width="100%" paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0} whiteSpace="normal">
 				{/* 🌐 global region — blocks on every page, editable right here */}
 				<Box
 					width="100%"
@@ -326,12 +332,14 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 					insetNonNative={960}
 				/>
 			</Box>
+			{!drawerOpen ? <InspectorReopenPill onClick={() => setDrawerOpen(true)} /> : null}
+			{drawerOpen ? (
 			<BuilderDrawer
 				title={`Editing · ${path}`}
 				draft={activeDraft}
 				selectedId={activeChrome.selectedId}
 				onDeselect={activeChrome.deselect}
-				onClose={onDone}
+				onClose={() => setDrawerOpen(false)}
 				mode="site"
 				pageName={pageName}
 				onPageName={setPageName}
@@ -341,6 +349,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 				anyDirty={pageDraft.dirty || globalDraft.dirty}
 				regionLabel={activeIsGlobal ? '🌐 global block' : 'this page'}
 			/>
+			) : null}
 			{pageChrome.insertMenu}
 			{globalChrome.insertMenu}
 		</>
