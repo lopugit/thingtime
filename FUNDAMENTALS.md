@@ -1,7 +1,8 @@
 # 🏛️ Thingtime Fundamentals
 
 Core engineering principles for this codebase. These are deliberately short and
-non-negotiable — read before adding features. (Roadmap lives in `claude-todo/`.)
+non-negotiable — read before adding features. (Roadmap lives in
+`TODO/claude-todo/`.)
 
 ## 1. The API is the only gateway to data
 
