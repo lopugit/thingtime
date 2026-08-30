@@ -20,6 +20,13 @@ delete, comment, reaction, save, or share action, show the intended account,
 target, and effect and obtain clear confirmation. Treat delete and disconnect
 as irreversible from the current ChatGPT connection.
 
+When the user or task supplies an exact Thing ID, always call
+`get_thingtime_thing`. Never rely on `list_thingtime_things`, a recent page, or
+`search_thingtime_things` to locate a known ID. Use list/search only for
+discovery when the exact ID is unknown. When a Thing or comment ID is already
+known and its attached comments are needed, call `list_thingtime_comments` with
+that `targetId`; do not fetch a global Things page and discard unrelated rows.
+
 If a tool says the token lacks a scope, explain the minimum missing Thingtime
 scope and ask the user to create a narrower replacement token in Thingtime
 Settings → Token minter, then reconnect. Removing the final account revokes
