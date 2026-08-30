@@ -55,8 +55,7 @@ export const regexToReplacementConverter = async (props: any) => {
   // so a backslash produced by unescaping \\ is never unescaped a second time (\\] stays \], not ]).
   // Chaining a separate replace per character double-unescaped the same backslash: the `\\` -> `\`
   // pass produced a fresh `\]` that the following `\]` -> `]` pass then consumed, so an escaped
-  // backslash before a bracket was silently lost (the same went for "\\}" and "\\."). A single
-  // pass cannot feed its own output back in.
+  // backslash before a bracket was silently lost. A single pass cannot feed its own output back in.
   newValue = newValue.replace(/\\([\\[\]{}.])/g, "$1");
 
   // const regex = /([\s\r]+)/g;

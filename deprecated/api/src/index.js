@@ -26,12 +26,10 @@ import { Server } from 'socket.io';
 
 // Comma-separated CORS allowlist, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
 // THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
-// Defaults to the local dev origin. This used to be a hardcoded '*', which let any website a
-// visitor's browser happened to be on read this API's authenticated cross-origin responses —
-// including a locally running instance on a developer's machine — so a wildcard is deliberately
-// not the fallback. An explicitly empty value grants no cross-origin access at all, which is the
-// safe setting for a service that is no longer deployed; non-browser clients (curl, native
-// socket.io) are unaffected either way.
+// Defaults to the local dev origin. A wildcard origin would let any website read this API's
+// cross-origin responses from a visitor's browser, so it is deliberately not the fallback.
+// An explicitly empty value grants no cross-origin access at all, which is the safe setting
+// for a service that is no longer deployed.
 const configuredOrigins = (
 	process.env.CORS_ORIGINS ??
 	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
