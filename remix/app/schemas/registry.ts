@@ -344,6 +344,12 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   rosters: 1,
   settings: 1,
   rateLimits: 1,
+  // Admin-only integration control plane: encrypted credentials, saved policy,
+  // short create-only claims, and redacted expiring audit events.
+  adminIntegrationSecrets: 1,
+  adminIntegrationEndpoints: 1,
+  adminIntegrationClaims: 1,
+  adminIntegrationAudit: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
   email_events: 1,
@@ -1741,6 +1747,107 @@ const rateLimitSchema: ThingtimeSchema = {
   example: { key: 'waitlist:9f2c…', count: 3, schemaVersion: 2 }
 };
 
+const adminIntegrationSecretSchema: ThingtimeSchema = {
+  id: 'admin-integration-secret',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationSecrets,
+  kind: 'collection',
+  collection: 'adminIntegrationSecrets',
+  title: 'Admin integration secret vault entry',
+  summary: 'Admin-only AES-256-GCM encrypted external credential; its value is never projected by an API.',
+  detail:
+    'Endpoint policies reference the credential through an opaque id. Ciphertext, IV, and authentication tag remain server-only; deleting is blocked while an endpoint references the secret.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque vault id.' },
+    { name: 'label', type: 'string', required: true, description: 'Non-sensitive operator label.' },
+    { name: 'cipherText', type: 'string', required: true, description: 'AES-GCM ciphertext. Never projected.' },
+    { name: 'iv', type: 'string', required: true, description: 'AES-GCM nonce. Never projected.' },
+    { name: 'tag', type: 'string', required: true, description: 'AES-GCM auth tag. Never projected.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Rotation time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { id: 'secret_example', label: 'Vercel write-only token', cipherText: '<encrypted>', schemaVersion: 1 }
+};
+
+const adminIntegrationEndpointSchema: ThingtimeSchema = {
+  id: 'admin-integration-endpoint',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationEndpoints,
+  kind: 'collection',
+  collection: 'adminIntegrationEndpoints',
+  title: 'Admin integration endpoint policy',
+  summary: 'Admin-managed upstream origin, closed paths, credential reference, and read/write permission policy.',
+  detail:
+    'The proxy receives an endpoint id rather than an arbitrary URL. It enforces the selected read, create-only, or full-write mode before decrypting the referenced credential.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque endpoint id.' },
+    { name: 'origin', type: 'string', required: true, description: 'Allowlisted HTTPS upstream origin.' },
+    { name: 'secretId', type: 'string', required: true, description: 'Referenced vault id.' },
+    { name: 'allowedPathPrefixes', type: 'string[]', required: true, description: 'Closed upstream path prefixes.' },
+    { name: 'allowRead', type: 'boolean', required: true, description: 'Whether GET through the proxy is permitted.' },
+    { name: 'writeMode', type: 'enum', required: true, values: ['none', 'create-only', 'write'], description: 'Allowed write policy.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: {
+    id: 'endpoint_example',
+    origin: 'https://api.vercel.com',
+    secretId: 'secret_example',
+    allowedPathPrefixes: ['/v9/projects'],
+    allowRead: true,
+    writeMode: 'create-only',
+    schemaVersion: 1
+  }
+};
+
+const adminIntegrationClaimSchema: ThingtimeSchema = {
+  id: 'admin-integration-claim',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationClaims,
+  kind: 'collection',
+  collection: 'adminIntegrationClaims',
+  title: 'Admin integration create-only claim',
+  summary: 'Short-lived relational lock preventing concurrent create-only requests for the same provider resource.',
+  detail:
+    'Claims contain a derived provider resource identity but never a credential or request body. They expire automatically and are removed after each completed proxy call.',
+  fields: [
+    { name: 'endpointId', type: 'string', required: true, description: 'Saved endpoint policy id.' },
+    { name: 'resourceKey', type: 'string', required: true, description: 'Bounded provider-specific create identity.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Claim creation time.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'TTL expiry time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { endpointId: 'endpoint_example', resourceKey: 'project:ENV_KEY:production', expiresAt: '2026-08-24T00:02:00.000Z', schemaVersion: 1 }
+};
+
+const adminIntegrationAuditSchema: ThingtimeSchema = {
+  id: 'admin-integration-audit',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationAudit,
+  kind: 'collection',
+  collection: 'adminIntegrationAudit',
+  title: 'Admin integration proxy audit event',
+  summary: 'Redacted, expiring control-plane evidence for a policy-proxied external call.',
+  detail:
+    'Audit rows record endpoint, operation, path, status, and coarse outcome only. Credentials, request bodies, response bodies, and provider secret values are never stored here.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque audit event id.' },
+    { name: 'endpointId', type: 'string', required: true, description: 'Saved endpoint policy id.' },
+    { name: 'operation', type: 'enum', required: true, values: ['read', 'create', 'write'], description: 'Policy operation.' },
+    { name: 'path', type: 'string', required: true, description: 'Allowed upstream path without query values.' },
+    { name: 'status', type: 'number', required: true, description: 'Upstream status or policy-block code.' },
+    { name: 'outcome', type: 'enum', required: true, values: ['allowed', 'blocked', 'failed'], description: 'Coarse result.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Event time.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'TTL expiry time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: {
+    id: 'audit_example',
+    endpointId: 'endpoint_example',
+    operation: 'create',
+    path: '/v10/projects/example/env',
+    status: 200,
+    outcome: 'allowed',
+    schemaVersion: 1
+  }
+};
+
 const appSchema: ThingtimeSchema = {
   id: 'app',
   version: 3,
@@ -2364,7 +2471,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   passwordResetSchema,
   authOtpSchema,
   emailMessageSchema,
-  rateLimitSchema
+  rateLimitSchema,
+  adminIntegrationSecretSchema,
+  adminIntegrationEndpointSchema,
+  adminIntegrationClaimSchema,
+  adminIntegrationAuditSchema
 ];
 
 export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;
