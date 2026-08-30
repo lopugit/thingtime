@@ -84,7 +84,12 @@ export const parseVercelWebhookEvent = (
   if (!branch) return null;
 
   const eventAtMs = Number(envelope?.createdAt);
-  const rawUrl = asString(deployment?.url);
+  // `payload.url` is the same deployment host in envelopes that omit
+  // `payload.deployment.url` — the CI Control receiver reads both for the same
+  // reason (see ciControl/webhooks.ts). This URL is what
+  // persistedStatusIsForDeployment matches on, so losing it downgrades failure
+  // attribution to the commit SHA, which cannot separate same-SHA siblings.
+  const rawUrl = asString(deployment?.url) || asString(envelope?.payload?.url);
 
   return {
     branch,
@@ -93,7 +98,12 @@ export const parseVercelWebhookEvent = (
       commitSha: asString(meta?.githubCommitSha) || asString(meta?.gitlabCommitSha) || asString(meta?.bitbucketCommitSha),
       deploymentId: asString(deployment?.id) || asString(deployment?.uid),
       deploymentUrl: rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`) : undefined,
-      inspectorUrl: asString(deployment?.inspectorUrl),
+      // The webhook envelope carries the inspector page at `payload.links.deployment`.
+      // `deployment.inspectorUrl` is a REST API field that webhook deliveries do
+      // NOT include, so reading only that left buildPageUrl empty for every
+      // webhook-fed status and dropped the footer's build link back to the
+      // project-wide dashboard. Kept as a fallback for REST-shaped fixtures.
+      inspectorUrl: asString(envelope?.payload?.links?.deployment) || asString(deployment?.inspectorUrl),
       environment: asString(envelope?.payload?.target) || undefined,
       error: state === 'error' ? asString(envelope?.payload?.errorMessage) || 'Deployment failed' : undefined,
       eventAt: Number.isFinite(eventAtMs) && eventAtMs > 0 ? new Date(eventAtMs).toISOString() : new Date().toISOString(),

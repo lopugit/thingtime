@@ -211,6 +211,54 @@ test('an already-absolute deployment URL is left alone', () => {
   assert.equal(parsed?.next.deploymentUrl, 'https://already.example.com');
 });
 
+test('the deployment host falls back to payload.url when the deployment object omits it', () => {
+  // Losing this URL silently downgrades failure attribution to the commit SHA,
+  // which cannot separate same-SHA sibling deployments.
+  const parsed = parseVercelWebhookEvent(
+    envelope({
+      payload: {
+        url: 'thingtime-fromtop.vercel.app',
+        deployment: { id: 'dpl_1', meta: { githubCommitRef: 'main' } }
+      }
+    })
+  );
+  assert.equal(parsed?.next.deploymentUrl, 'https://thingtime-fromtop.vercel.app');
+});
+
+// regression: webhook deliveries carry the inspector page at
+// payload.links.deployment. `deployment.inspectorUrl` is a REST API field that
+// is absent from real deliveries, so reading only it left buildPageUrl empty
+// and the footer's build link fell back to the project-wide dashboard.
+test('the inspector URL is read from the real webhook envelope shape', () => {
+  const parsed = parseVercelWebhookEvent(
+    envelope({
+      payload: {
+        target: 'production',
+        links: { deployment: 'https://vercel.com/lopu/thingtime/dpl_links', project: 'https://vercel.com/lopu/thingtime' },
+        deployment: { id: 'dpl_1', url: 'thingtime-abc123.vercel.app', meta: { githubCommitRef: 'main' } }
+      }
+    })
+  );
+  assert.equal(parsed?.next.inspectorUrl, 'https://vercel.com/lopu/thingtime/dpl_links');
+});
+
+test('a REST-shaped inspectorUrl still works, but the envelope link wins', () => {
+  assert.equal(parseVercelWebhookEvent(envelope())?.next.inspectorUrl, 'https://vercel.com/lopu/thingtime/dpl_123');
+  const both = parseVercelWebhookEvent(
+    envelope({
+      payload: {
+        links: { deployment: 'https://vercel.com/lopu/thingtime/dpl_links' },
+        deployment: {
+          id: 'dpl_1',
+          inspectorUrl: 'https://vercel.com/lopu/thingtime/dpl_rest',
+          meta: { githubCommitRef: 'main' }
+        }
+      }
+    })
+  );
+  assert.equal(both?.next.inspectorUrl, 'https://vercel.com/lopu/thingtime/dpl_links');
+});
+
 test('error events always carry a message, defaulting when Vercel sends none', () => {
   const withMessage = parseVercelWebhookEvent(
     envelope({ type: 'deployment.error', payload: { ...envelope().payload, errorMessage: 'Build exceeded memory' } })

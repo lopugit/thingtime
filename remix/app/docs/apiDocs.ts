@@ -8047,7 +8047,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'Create a Vercel webhook for deployment.created, deployment.succeeded, deployment.error, and deployment.canceled pointing at this endpoint.',
+      'Create a Vercel webhook for deployment.created, deployment.succeeded, deployment.promoted, deployment.error, and deployment.canceled pointing at this endpoint.',
       'Set VERCEL_WEBHOOK_SECRET in the deployment environment to the webhook secret Vercel shows on creation.',
       'Vercel signs each delivery; unsigned or tampered requests are rejected with 401.',
       'Untracked event types are acknowledged with tracked: false so Vercel does not retry.'
@@ -8065,9 +8065,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             deployment: {
               id: 'dpl_123',
               url: 'thingtime-abc123.vercel.app',
-              inspectorUrl: 'https://vercel.com/lopu/thingtime/dpl_123',
               meta: { githubCommitRef: 'main', githubCommitSha: 'abc1234' }
-            }
+            },
+            links: { deployment: 'https://vercel.com/lopu/thingtime/dpl_123' }
           }
         }
       }

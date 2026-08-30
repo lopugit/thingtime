@@ -1389,8 +1389,8 @@ the Vercel REST API. This is optional and off by default:
 VERCEL_WEBHOOK_SECRET="<signing-secret-shown-once-when-the-webhook-is-created>"
 ```
 
-Create a project-scoped Vercel webhook for deployment created/succeeded/error/
-canceled events pointing at:
+Create a project-scoped Vercel webhook for deployment created/succeeded/
+promoted/error/canceled events pointing at:
 
 ```text
 https://<your-thingtime-origin>/api/v1/vercel/webhook
