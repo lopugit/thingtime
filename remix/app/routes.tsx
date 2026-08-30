@@ -131,6 +131,13 @@ export const router = createBrowserRouter([
       { path: 'apps/manage', lazy: lazyRoute(() => import('./routes/apps-manage')) },
       { path: 'branding', lazy: lazyRoute(() => import('./routes/branding/_index')) },
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
+      // the block-based site builder — create webpages from component things;
+      // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // published block-based webpages (reserved prefix — outranks the * catch-all)
+      { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      // the storybook-style design-system docs own the canonical short URL too
+      { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',

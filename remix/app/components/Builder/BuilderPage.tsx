@@ -1,0 +1,232 @@
+import React from 'react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+
+import { useApi } from '~/hooks/useApi';
+import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { CARD_STYLES } from '../../theme/card';
+import { PageHeader, PageShell } from '../Layout/PageShell';
+import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
+import { BuilderDrawer, BUILDER_DRAWER_WIDTH } from './BuilderDrawer';
+import { useBuilderChrome } from './useBuilderChrome';
+import { useWebpageDraft } from './useWebpage';
+import { countBlocks, type WebpageBlock } from './webpageBlocks';
+
+// /builder — create and edit block-based webpages. Without ?page= it lists
+// the user's pages (+ New page); with ?page=<id> it opens the canvas: the
+// page renders exactly as /p/ renders it, wrapped in builder chrome (hover
+// boundaries, inline + add block menus, drag/drop) with the right-side
+// drawer for page settings and the selected block's inspector.
+
+type PageRow = { id: string; crystal: Record<string, any>; updatedAt?: string };
+
+const PagesList = () => {
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const lopu = useLopu();
+	const user = useCurrentUser();
+	const navigate = useNavigate();
+	const [pages, setPages] = React.useState<PageRow[] | null>(null);
+	const [creating, setCreating] = React.useState(false);
+
+	React.useEffect(() => {
+		if (!user?.id) {
+			setPages([]);
+			return;
+		}
+		let cancelled = false;
+		(async () => {
+			try {
+				const resp: any = await apiRef.current.v1.things.list({ thingtime: 'webpage', limit: 50 });
+				if (!cancelled) setPages(resp?.ok ? resp.things || [] : []);
+			} catch {
+				if (!cancelled) setPages([]);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [user?.id]);
+
+	const createPage = async () => {
+		setCreating(true);
+		try {
+			const resp: any = await apiRef.current.v1.things.create({
+				thingtime: ['webpage'],
+				crystal: { name: 'Untitled page', version: 1, blocks: [] },
+				acl: ['tt:user']
+			});
+			if (!resp?.ok) throw resp;
+			const id = resp?.thing?.id || resp?.id;
+			lopu({ title: 'New page created 🧱✨', status: 'success' });
+			navigate(`/builder?page=${encodeURIComponent(id)}`);
+		} catch (err: any) {
+			lopu({ title: err?.error || 'Couldn’t create the page — try again 🌈', status: 'error' });
+		} finally {
+			setCreating(false);
+		}
+	};
+
+	return (
+		<PageShell width={920}>
+			<PageHeader
+				eyebrow="Thingtime · block by block"
+				title="Builder 🧱"
+				subtitle="Build webpages from Thingtime components and actions — and personalise every Thingtime page with the ✏️ edit mode."
+				after={
+					user?.id ? (
+						<Button size="sm" onClick={createPage} isLoading={creating} data-testid="builder-new-page">
+							New page ✨
+						</Button>
+					) : undefined
+				}
+			/>
+			{!user?.id ? (
+				<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
+					<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
+						Sign in to build pages 🗝️
+					</Text>
+					<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+						Your pages are things — private by default, publishable at /p/&lt;id&gt; when you flip the toggle.
+					</Text>
+				</Flex>
+			) : pages === null ? null : pages.length === 0 ? (
+				<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
+					<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
+						No pages yet 🌱
+					</Text>
+					<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+						Hit “New page ✨” to start one, or open any Thingtime page and press the ✏️ pill to make it yours.
+					</Text>
+				</Flex>
+			) : (
+				<Flex flexDirection="column" rowGap={3}>
+					{pages.map((page) => (
+						<Flex key={page.id} {...CARD_STYLES} padding={4} alignItems="center" justifyContent="space-between" columnGap={3}>
+							<Box minWidth={0}>
+								<Text color="var(--tt-ink, #16161a)" fontWeight={700} noOfLines={1}>
+									{page.crystal?.name || 'Untitled page'}
+								</Text>
+								<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px" noOfLines={1}>
+									{page.crystal?.siteRoute
+										? `site page · ${page.crystal.siteRoute}`
+										: `${countBlocks((page.crystal?.blocks as WebpageBlock[]) || [])} blocks · /p/${page.id}`}
+								</Text>
+							</Box>
+							<Flex columnGap={2} flexShrink={0}>
+								{!page.crystal?.siteRoute ? (
+									<Button as={Link} to={`/p/${page.id}`} size="xs" variant="outline">
+										View
+									</Button>
+								) : (
+									<Button as={Link} to={page.crystal.siteRoute} size="xs" variant="outline">
+										Visit
+									</Button>
+								)}
+								<Button as={Link} to={`/builder?page=${encodeURIComponent(page.id)}`} size="xs">
+									Edit
+								</Button>
+							</Flex>
+						</Flex>
+					))}
+				</Flex>
+			)}
+		</PageShell>
+	);
+};
+
+const BuilderCanvas = ({ pageId }: { pageId: string }) => {
+	const navigate = useNavigate();
+	const draft = useWebpageDraft(React.useMemo(() => ({ kind: 'id' as const, id: pageId }), [pageId]));
+	const { chrome, selectedId, deselect, insertMenu } = useBuilderChrome(draft);
+	const [pageName, setPageName] = React.useState('');
+	const [isPublic, setIsPublic] = React.useState(false);
+	const namedForRef = React.useRef<string | null>(null);
+
+	React.useEffect(() => {
+		const page = draft.resolved?.page;
+		if (page && namedForRef.current !== page.id) {
+			namedForRef.current = page.id;
+			setPageName(page.crystal?.name || 'Untitled page');
+			setIsPublic(Array.isArray((page as any).acl) ? (page as any).acl.includes('tt:all') : false);
+		}
+	}, [draft.resolved]);
+
+	const isSiteDoc = !!draft.resolved?.page?.crystal?.siteRoute;
+
+	return (
+		<>
+			<Flex
+				flexDirection="column"
+				width="100%"
+				minHeight="100vh"
+				background="var(--tt-surface, #fafafb)"
+				paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
+				paddingRight={[0, `${BUILDER_DRAWER_WIDTH}px`]}
+				whiteSpace="normal"
+			>
+				<Flex flexDirection="column" width="100%" maxWidth="960px" marginX="auto" paddingX={4} paddingY={8} flex={1}>
+					<Flex alignItems="baseline" justifyContent="space-between" marginBottom={4}>
+						<Text
+							color="var(--tt-muted, #9a9aa6)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="10px"
+							fontWeight={700}
+							letterSpacing="0.12em"
+							textTransform="uppercase"
+						>
+							Builder canvas · {countBlocks(draft.blocks)} blocks{draft.dirty ? ' · unsaved' : ''}
+						</Text>
+						<Box
+							as="button"
+							color="var(--tt-link, #2f8fd6)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="11px"
+							cursor="pointer"
+							_hover={{ textDecoration: 'underline' }}
+							onClick={() => navigate('/builder')}
+						>
+							← my pages
+						</Box>
+					</Flex>
+					<Box
+						background={draft.resolved?.page?.crystal?.previewBg || 'var(--tt-card, #ffffff)'}
+						border="1px solid"
+						borderColor="var(--tt-border, #ececef)"
+						borderRadius="var(--tt-radius-lg, 16px)"
+						padding={[3, 6]}
+						minHeight="50vh"
+					>
+						<WebpageBlocksRenderer blocks={draft.blocks} componentsByRef={draft.componentsByRef} chrome={chrome} />
+					</Box>
+				</Flex>
+			</Flex>
+			<BuilderDrawer
+				title={isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
+				draft={draft}
+				selectedId={selectedId}
+				onDeselect={deselect}
+				onClose={() => navigate('/builder')}
+				mode={isSiteDoc ? 'site' : 'page'}
+				pageName={pageName}
+				onPageName={setPageName}
+				isPublic={isPublic}
+				onIsPublic={setIsPublic}
+				onSaved={(id) => {
+					if (id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
+				}}
+			/>
+			{insertMenu}
+		</>
+	);
+};
+
+export const BuilderPage = () => {
+	const [searchParams] = useSearchParams();
+	const pageId = searchParams.get('page');
+	return pageId ? <BuilderCanvas pageId={pageId} /> : <PagesList />;
+};
+
+export default BuilderPage;
