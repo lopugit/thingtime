@@ -13,7 +13,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
@@ -29,6 +29,12 @@ const docsNav = [
     to: '/docs',
     icon: BookOpen,
     description: 'Docs home'
+  },
+  {
+    label: 'Limitless MCP Lab',
+    to: '/docs/mcp',
+    icon: Sparkles,
+    description: 'Live workflows + review UI'
   },
   {
     label: 'API reference',

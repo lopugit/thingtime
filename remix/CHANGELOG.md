@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The new Limitless MCP Lab turns the live connector contract into an
+  interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
+  in parallel, keeps the current release contract on first paint, demonstrates
+  five composable workflows, and drives the exact shipped review App with
+  synthetic non-mutating previews so confirmation and recovery behavior can be
+  explored safely. — Codex (AI), 2026-08-30
 - **[Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.](../PRs/482-codex-limitless-mcp-make-thingtime-mcp-limitless-composable-and-safe.md)**
   Thirty-one bounded tools add exact batch reads, schema intelligence,
   relationship/thread traversal, change polling, signed multi-Thing previews,
