@@ -1435,13 +1435,13 @@ function assertAdminModelRouting(
   );
   assert.match(
     lopuActionSource,
-    /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
-    "the protected Lopu action exposes an ordered secondary Anthropic account slot",
+    /claude-code-oauth-token-preferred:[\s\S]*anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
+    "the protected Lopu action exposes preferred, existing-primary, and fallback Anthropic account slots",
   );
   assert.match(
     lopuActionSource,
-    /classify-claude-credential-failure\.mjs[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
-    "the protected Lopu action falls back only after classified account-capacity or credential failures",
+    /classify-claude-credential-failure\.mjs[\s\S]*claude_preferred_failure\.outputs\.retryable == 'true'[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
+    "the protected Lopu action advances slots only after classified account-capacity or credential failures",
   );
   assert.match(
     rebaseActionSource,
@@ -1487,7 +1487,7 @@ function assertAdminModelRouting(
   assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
   assert.match(
     promotionGraphify,
-    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
+    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$preferred_claude_code_oauth_token"[\s\S]*"\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
     "promotion Graphify scans every provider credential before committing derived output",
   );
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");

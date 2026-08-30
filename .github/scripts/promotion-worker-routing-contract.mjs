@@ -82,9 +82,14 @@ const durableFleetQueue =
   /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
 assert.equal(
   [...workflow.matchAll(durableFleetQueue)].length,
-  3,
-  "every review, promotion, and conflict worker uses the durable single-Lopu queue",
+  4,
+  "every Feature Stack, review, promotion, and conflict worker uses the durable single-Lopu queue",
 );
+assert.match(workflow, /feature_stack_plan:\s+name: Validate the immutable Feature Stack/);
+assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
+assert.match(workflow, /feature-stack-plan\.mjs verify/);
+assert.match(workflow, /gh pr merge "\$pr_url" --auto --merge/);
+assert.match(workflow, /CLAUDE_CODE_OAUTH_TOKEN_THINGTIME/);
 assert.match(rebaseWorkflow, /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/);
 assert.match(rebaseWorkflow, /backend: \$\{\{ vars\.LOPU_AGENT_BACKEND/);
 assert.match(workflow, /--dangerously-skip-permissions/);

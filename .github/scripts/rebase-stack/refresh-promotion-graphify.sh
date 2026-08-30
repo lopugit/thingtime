@@ -192,8 +192,13 @@ GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.4}"
 [ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
 primary_anthropic_api_key="${ANTHROPIC_API_KEY:-}"
 primary_claude_code_oauth_token="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+preferred_claude_code_oauth_token="${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}"
 credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
 case "$credential_slot" in
+  preferred)
+    unset ANTHROPIC_API_KEY
+    CLAUDE_CODE_OAUTH_TOKEN="$preferred_claude_code_oauth_token"
+    ;;
   primary) ;;
   fallback)
     ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY_FALLBACK:-}"
@@ -388,7 +393,8 @@ fi
 # derived bytes. Reject exact raw or base64 credential material before commit.
 needles="$RUNNER_TEMP/promotion-graphify-needles.txt"
 : >"$needles"
-for secret in "${OPENAI_API_KEY:-}" "$primary_anthropic_api_key" \
+for secret in "${OPENAI_API_KEY:-}" "$preferred_claude_code_oauth_token" \
+  "$primary_anthropic_api_key" \
   "$primary_claude_code_oauth_token" "${ANTHROPIC_API_KEY_FALLBACK:-}" \
   "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"; do
   [ -n "$secret" ] || continue

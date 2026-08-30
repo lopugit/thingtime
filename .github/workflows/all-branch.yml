@@ -124,7 +124,7 @@ jobs:
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
         env:
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         shell: bash
         run: |
@@ -308,6 +308,7 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -396,6 +397,7 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -462,6 +464,7 @@ jobs:
           backend: ${{ steps.backend.outputs.backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
