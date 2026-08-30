@@ -47,6 +47,11 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Limitless MCP Lab (`/docs/mcp`)
 
+- [ ] On a production-CSP preview, the embedded review app renders its Result,
+      Diff, and Raw tabs instead of remaining on the empty placeholder; the
+      route CSP permits only the review module's exact SHA-256 hash and keeps
+      `unsafe-inline` / `unsafe-eval` absent.
+
 - [ ] Open `/docs/mcp` at desktop and 390px mobile widths. Confirm the live
       contract badge resolves without replacing the optimistic release counts,
       all six stat cards fit without horizontal overflow, and the docs drawer

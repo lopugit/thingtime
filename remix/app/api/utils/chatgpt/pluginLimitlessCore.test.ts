@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
   MAX_LIMITLESS_MUTATION_OPERATIONS,
   buildLimitlessMutationPreview,
+  renderThingtimeMcpUi,
   compileThingtimeCapability,
   normalizeLimitlessMutationOperations
 } from './pluginLimitlessCore';
+
+const MCP_LAB_SCRIPT_HASH = 'sha256-InujfRsBJ3VWJN0FJ9O1huZAeiHmJtIQbhm2Q3ZHwxE=';
+
+test('the Limitless Lab CSP hash matches the shipped MCP App module', () => {
+  const script = renderThingtimeMcpUi().match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script, 'review app module is present');
+  assert.equal(`sha256-${createHash('sha256').update(script).digest('base64')}`, MCP_LAB_SCRIPT_HASH);
+});
 
 test('mutation plans are bounded, assign stable create ids, and touch each Thing once', () => {
   const normalized = normalizeLimitlessMutationOperations([
