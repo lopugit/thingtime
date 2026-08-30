@@ -187,12 +187,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. Initialization returns concise server-wide instructions that require explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection, exact Thing reads by ID, comments targeted by parent ID, browse/search discovery, and confirmed writes. Initialization tells agents to use get_thingtime_thing whenever an exact ID is known and list_thingtime_comments whenever a target ID is known, so neither operation depends on a recent/global page. It also requires explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
       'POST JSON-RPC initialize, tools/list, and tools/call requests to this endpoint.',
+      'Use get_thingtime_thing for a known Thing ID and list_thingtime_comments for a known parent/target ID; reserve list/search for discovery.',
       'Use a write tool only after the person in the chat confirms the intended change.'
     ],
     requestExamples: [
@@ -207,7 +208,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }] } }
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
       },
       {
         status: 401,
@@ -218,7 +219,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'This route does not proxy arbitrary URLs or generic Thingtime API paths. Endpoint origins and operations are explicitly allowlisted.',
-      'The capability manifest names independently versioned features: chatgpt.mcp, chatgpt.oauth, chatgpt.connections, chatgpt.things.read, and chatgpt.things.write.'
+      'The capability manifest names independently versioned features: chatgpt.mcp, chatgpt.oauth, chatgpt.connections, chatgpt.things.read, and chatgpt.things.write. It also maps every executable MCP tool operation to its owning feature.'
     ]
   }),
   endpoint({
