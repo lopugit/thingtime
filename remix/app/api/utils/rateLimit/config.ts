@@ -29,6 +29,16 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // component browsing (/api/v1/components/browse) — same read-only shape
+  'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // admin component-library seeding (/api/v1/admin/components/seed) — batch
+  // writes; enforced fail-closed at the route
+  'components.seed': { limit: 30, windowMs: 60_000, enabled: true },
+  // action execution (POST /api/v1/actions/run) — compute + writes; each run
+  // is additionally bounded by its own budget envelope (registry limits)
+  'actions.run': { limit: 60, windowMs: 60_000, enabled: true },
+  // run-history reads (GET /api/v1/actions/runs) — read-only, browse-shaped
+  'actions.runs': { limit: 120, windowMs: 60_000, enabled: true },
   // public theme gallery list (GET /api/v1/themes/shared with no id) — the same
   // anonymous browse shape as schemas.browse; it only ever returns public theme
   // projections, but each call is two indexed reads and up to 60 token docs
