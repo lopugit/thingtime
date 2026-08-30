@@ -4,7 +4,9 @@ import test from 'node:test';
 import {
   isBlockedDeploymentAddress,
   isBlockedDeploymentHostname,
+  isUsableRemoteIdentity,
   normalizeDeploymentBaseUrl,
+  remoteErrorText,
   resolvedDeploymentHostBlocked
 } from './remote';
 
@@ -175,4 +177,46 @@ test('a name that does not resolve is not refused by this fence', async () => {
   // fetch() fails on it anyway; inventing a refusal would report a DNS outage
   // as "not a public deployment"
   assert.equal(await resolvedDeploymentHostBlocked('no-such-host.invalid'), false);
+});
+
+// ————— bounded untrusted strings —————
+//
+// The response-size cap bounds what we READ. These bound what we KEEP: an
+// `error` reaches the link's stored lastSyncSummary (inside the owner's secure
+// blob) and a toast, and the identity fields are written into the saved link.
+// Megabytes in either would push the account document at Mongo's 16MB ceiling.
+
+test('remote error text is truncated, not stored whole', () => {
+  const huge = 'x'.repeat(50_000);
+  const text = remoteErrorText(huge, 'fallback');
+  assert.ok(text.length < 400, `expected a bounded string, got ${text.length} chars`);
+  assert.ok(text.endsWith('…'), 'truncation should be visible to the reader');
+  assert.ok(text.startsWith('xxxx'), 'the useful head of the remote complaint is kept');
+});
+
+test('a short remote error is passed through untouched', () => {
+  assert.equal(remoteErrorText('Thing not found', 'fallback'), 'Thing not found');
+  assert.equal(remoteErrorText('  padded  ', 'fallback'), 'padded');
+});
+
+test('a missing or non-string remote error falls back to our own wording', () => {
+  // a remote answering { error: { nested: 1 } } must not become "[object Object]"
+  for (const value of [undefined, null, '', '   ', 42, {}, [], { message: 'nope' }]) {
+    assert.equal(remoteErrorText(value, 'fallback'), 'fallback', `${JSON.stringify(value)} should fall back`);
+  }
+});
+
+test('oversized remote identities are refused rather than truncated', () => {
+  // a silently shortened id would compare equal to itself on every later pass
+  // and quietly bind the link to the wrong account string
+  assert.equal(isUsableRemoteIdentity('x'.repeat(50_000)), false);
+  assert.equal(isUsableRemoteIdentity(''), false);
+  assert.equal(isUsableRemoteIdentity(undefined), false);
+  assert.equal(isUsableRemoteIdentity(null), false);
+  assert.equal(isUsableRemoteIdentity(42), false);
+});
+
+test('ordinary remote identities stay usable', () => {
+  assert.equal(isUsableRemoteIdentity('68b3f2a1c9d4e5f60718293a'), true, 'a Mongo ObjectId hex');
+  assert.equal(isUsableRemoteIdentity('nikolaj'), true);
 });

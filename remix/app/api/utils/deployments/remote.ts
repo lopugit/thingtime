@@ -23,6 +23,37 @@ const REMOTE_TIMEOUT_MS = 15_000;
 // anything"
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 
+// ── bounded untrusted strings ───────────────────────────────────────────────
+//
+// MAX_RESPONSE_BYTES bounds what we READ; it does not bound what we KEEP. Two
+// kinds of remote-chosen text outlive the response:
+//   • `error` messages ride a Fail all the way into the sync report, which the
+//     route persists as the link's lastSyncSummary — i.e. inside the user
+//     thing's secure blob — and the UI renders in a toast
+//   • the identity fields below are written into the saved link itself
+// A hostile (or merely broken) deployment answering with megabytes in either
+// field would otherwise push the owner's account document at Mongo's 16MB
+// limit and make every later secure write fail. Both are bounded here, at the
+// one place remote text enters, so no caller has to remember to do it.
+const MAX_REMOTE_ERROR_CHARS = 300;
+// far above any real value (ObjectId hex is 24, usernames are short slugs) —
+// this only has to reject the absurd
+const MAX_REMOTE_IDENTITY_CHARS = 200;
+
+// Display text: truncating is the right semantic — the operator still gets the
+// useful head of the remote's complaint.
+export const remoteErrorText = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const text = value.trim();
+  return text.length <= MAX_REMOTE_ERROR_CHARS ? text : `${text.slice(0, MAX_REMOTE_ERROR_CHARS)}…`;
+};
+
+// Identifiers, by contrast, are never truncated: a silently shortened id would
+// still compare equal to itself on the next pass and quietly bind the link to
+// the wrong account string. An oversized identity is refused instead.
+export const isUsableRemoteIdentity = (value: unknown): value is string =>
+  typeof value === 'string' && !!value && value.length <= MAX_REMOTE_IDENTITY_CHARS;
+
 const isLocalHostname = (hostname: string): boolean => {
   const host = hostname.toLowerCase();
   return (
@@ -303,13 +334,15 @@ export const remoteLogin = async (
   if (response.status !== 200 || response.json?.ok !== true) {
     return fail(
       response.status === 429 ? 429 : 401,
-      response.json?.error || 'That deployment rejected the login'
+      remoteErrorText(response.json?.error, 'That deployment rejected the login')
     );
   }
   const token = authTokenFromSetCookies(response.setCookies);
   if (!token) return fail(502, 'That deployment logged in but returned no session token');
   const user = response.json?.user;
-  if (!user?.id || !user?.username) return fail(502, 'That deployment returned no account identity');
+  if (!isUsableRemoteIdentity(user?.id) || !isUsableRemoteIdentity(user?.username)) {
+    return fail(502, 'That deployment returned no account identity');
+  }
   return { ok: true, token, user };
 };
 
@@ -318,7 +351,7 @@ export const remoteMe = async (baseUrl: string, token: string): Promise<RemotePu
   const response = await remoteFetch(baseUrl, '/api/v1/auth/me', { token });
   if (isFail(response)) return response;
   const user = response.json?.user;
-  if (!user?.id || !user?.username) {
+  if (!isUsableRemoteIdentity(user?.id) || !isUsableRemoteIdentity(user?.username)) {
     return fail(401, 'That deployment no longer accepts the link’s token — re-link to refresh it');
   }
   return user;
@@ -368,7 +401,10 @@ export const remoteListThings = async (
   const response = await remoteFetch(baseUrl, `/api/v1/things?${params}`, { token });
   if (isFail(response)) return response;
   if (response.status !== 200 || response.json?.ok !== true || !Array.isArray(response.json?.things)) {
-    return fail(response.status === 401 ? 401 : 502, response.json?.error || 'That deployment refused to list things');
+    return fail(
+      response.status === 401 ? 401 : 502,
+      remoteErrorText(response.json?.error, 'That deployment refused to list things')
+    );
   }
   return { things: response.json.things, nextCursor: response.json.nextCursor ?? null };
 };
@@ -384,7 +420,7 @@ export const remotePutThing = async (
     const passThrough = [429, 401, 404, 409];
     return fail(
       passThrough.includes(response.status) ? response.status : 502,
-      response.json?.error || `That deployment rejected the write (${response.status})`
+      remoteErrorText(response.json?.error, `That deployment rejected the write (${response.status})`)
     );
   }
   return { ok: true };
@@ -398,7 +434,7 @@ export const remoteUpdateProfile = async (
   const response = await remoteFetch(baseUrl, '/api/v1/users/profile', { method: 'POST', token, body });
   if (isFail(response)) return response;
   if (response.json?.ok !== true) {
-    return fail(502, response.json?.error || 'That deployment rejected the profile update');
+    return fail(502, remoteErrorText(response.json?.error, 'That deployment rejected the profile update'));
   }
   return { ok: true };
 };
