@@ -12,6 +12,7 @@ import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
 	canonicalPostTags,
 	matchesCommittedPostCreate,
+	MAX_POST_ATTACHMENTS,
 	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
@@ -816,7 +817,13 @@ export const PostComposer = (props: PostComposerProps) => {
 							storageStatus={user.storage.status}
 							onChange={setAttachmentSnapshot}
 							allowLinkedUrls
-							initialLinkedSeeds={isEdit ? editPost?.images : undefined}
+							// legacy URL-images seed as linked tiles, capped so bound
+							// attachments + seeds can never exceed the server's per-post
+							// limit (a pathological >25-media legacy post drops overflow
+							// URLs, matching the old composer's silent client-side filter)
+							initialLinkedSeeds={
+								isEdit ? (editPost?.images || []).slice(0, Math.max(0, MAX_POST_ATTACHMENTS - editAttachmentsSeedRef.current.length)) : undefined
+							}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
 						/>
 					)}

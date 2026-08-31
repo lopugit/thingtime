@@ -487,9 +487,15 @@ export const useAttachmentUploads = (
 						...(uploadPurpose === 'comment' ? { purpose: 'comment' as const } : {}),
 						...(demoteToFile ? { mediaKind: 'file' as const } : {})
 					});
-					if (!isCurrent(localId, 1)) return;
 					const attachment = normalizePublicAttachment(response?.attachment);
 					if (!attachment) throw new Error('invalid attachment projection');
+					if (!isCurrent(localId, 1)) {
+						// the tile was removed (or the composer torn down) while the mint
+						// was in flight — compensate so the just-minted draft doesn't sit
+						// orphaned until the TTL reap
+						void apiRef.current.remove({ id: attachment.id }).catch(() => {});
+						return;
+					}
 					patchUpload(localId, 1, {
 						status: 'ready',
 						attachment,

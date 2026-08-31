@@ -45,11 +45,14 @@ including the owner, while the PATCH sync's bound-set cover check counted them
   deliberately allowed; unbound mints expire on the 24h draft TTL. The server
   never fetches the URL (no SSRF surface). No upload-approval gate (parity
   with the legacy crystal.images flow it replaces).
-- Lifecycle: `cleanupClaimedDoc` takes a lazy S3 getter and short-circuits
-  linked docs straight to the transactional remove+refund — delete, cancel,
-  reap, session-replacement sweep, and post-delete cascade all work without
-  S3. The content endpoint 302s linked ids to the external URL as a fallback;
-  renderers use `crystal.url` directly (`attachmentMediaSrc`).
+- Lifecycle: `cleanupClaimedDoc` resolves S3 lazily — BEFORE the destructive
+  deleting claim for uploaded docs (unconfigured S3 fails atomically), never
+  for linked docs, which short-circuit straight to the transactional
+  remove+refund — so delete, cancel, reap, session-replacement sweep, and
+  post-delete cascade all work without S3. The content endpoint returns 404
+  for linked ids (a 302 to the external URL would be a first-party open
+  redirect — caught by the adversarial review); renderers always use
+  `crystal.url` directly (`attachmentMediaSrc`).
 - Client: `useAttachmentUploads.addLinkedUrl` appends a linked entry to the
   SAME uploads list (reorder/snapshot/markCommitted/remove all apply);
   `AttachmentComposer` grew the in-panel URL input + Add button (clears per
@@ -88,3 +91,31 @@ including the owner, while the PATCH sync's bound-set cover check counted them
 - Not covered locally (no S3): real-byte upload E2E — unit-covered; TESTING.md
   checklist items added for the preview pass, including the
   moderation-pending owner-visibility window.
+
+### Adversarial review round (12-agent workflow, 9 findings → 8 confirmed)
+
+Fixed in the follow-up commit:
+- **Open redirect (medium)**: removed the content-endpoint 302 fallback for
+  linked ids (renderers never needed it).
+- **Mint 503/409 on exotic basenames (medium)**: `linkedAttachmentNameForUrl`
+  now re-validates after the 255-char slice (trim, control chars, well-formed
+  unicode) and degrades to hostname → 'linked-media'.
+- **Lazy-S3-after-claim regression (medium)**: S3 resolves before the
+  deleting claim for uploaded docs again — a no-S3 deployment fails
+  atomically instead of half-deleting a mixed cascade and stranding docs in
+  a 'deleting' retry loop.
+- **Mid-mint removal orphan (low)**: a successful mint whose tile was removed
+  in flight now fires a compensating delete instead of waiting out the TTL.
+- **Seed cap bypass (low)**: legacy image seeds are capped to the remaining
+  attachment slots so a >25-media legacy post can't 400-loop on save.
+
+Accepted (documented, owner can revisit):
+- Linked mints intentionally skip the beta upload-approval gate and byte
+  moderation — exact parity with the legacy crystal.images flow they replace
+  (the server never has the bytes to scan; external images were always
+  unmoderated). Flag to owner: adding `requireUploadPermission: true` to the
+  link route is a one-line change if desired.
+- Pre-hygiene legacy URLs (stored before the strict URL sanitizer) that fail
+  today's canonicalizer are dropped on edit-save — identical to the old
+  composer, whose client-side filter silently dropped them on any edit-save
+  as well.

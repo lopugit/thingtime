@@ -443,6 +443,24 @@ test('linked media types derive from the extension; unknown defaults to an image
 	assert.equal(linkedAttachmentNameForUrl('https://example.com/'), 'example.com');
 });
 
+test('linked names always survive the crystal sanitizer round-trip', () => {
+	// the 255-char slice must not leave a trailing space or a split surrogate —
+	// every derived name has to mint a canonical crystal
+	const awkward = [
+		`https://example.com/${'a'.repeat(254)}%20b.png`, // slice ends on the encoded space
+		`https://example.com/${'a'.repeat(254)}%F0%9F%8D%89.png`, // slice splits the melon emoji
+		`https://example.com/${'a'.repeat(400)}.png`, // plain over-long basename
+		'https://example.com/%20%20/', // whitespace-only decoded basename
+		'https://example.com/a.jpg'
+	];
+	for (const url of awkward) {
+		const name = linkedAttachmentNameForUrl(url);
+		const sanitized = sanitizeAttachmentPublicMetadata({ name, size: 0, contentType: 'image/png' });
+		assert.equal(sanitized.ok, true, url);
+		if (sanitized.ok) assert.equal(sanitized.crystal.name, name, url);
+	}
+});
+
 test('the client extension table mirrors the server table exactly (pin)', () => {
 	const serverKinds = Object.fromEntries(Object.entries(LINKED_MEDIA_EXTENSION_TYPES).map(([ext, entry]) => [ext, entry.mediaKind]));
 	assert.deepEqual(LINKED_MEDIA_EXTENSION_KINDS, serverKinds);

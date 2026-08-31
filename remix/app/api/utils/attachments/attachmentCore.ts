@@ -268,8 +268,15 @@ export const linkedMediaTypeForUrl = (url: string): { contentType: string; media
 };
 
 // A display name for the linked media, from the URL path basename (decoded
-// when possible), falling back to the hostname.
+// when possible), falling back to the hostname. The result must survive the
+// crystal name sanitizer's round-trip EXACTLY (trimmed, well-formed unicode,
+// no control/format chars, ≤255) — a name that doesn't would make the freshly
+// minted crystal non-canonical and fail the mint.
 export const linkedAttachmentNameForUrl = (url: string): string => {
+	const canonicalName = (value: string): string | null => {
+		const sliced = value.slice(0, MAX_ATTACHMENT_NAME_CHARS).trim();
+		return sliced && !UNSAFE_FILENAME_CHAR_RE.test(sliced) && isWellFormedUnicode(sliced) ? sliced : null;
+	};
 	try {
 		const parsed = new URL(url);
 		const rawBasename = parsed.pathname.split('/').filter(Boolean).pop() || '';
@@ -279,9 +286,7 @@ export const linkedAttachmentNameForUrl = (url: string): string => {
 		} catch {
 			// keep the raw basename when percent-decoding fails
 		}
-		basename = basename.trim();
-		if (basename && !UNSAFE_FILENAME_CHAR_RE.test(basename)) return basename.slice(0, MAX_ATTACHMENT_NAME_CHARS);
-		return parsed.hostname.slice(0, MAX_ATTACHMENT_NAME_CHARS);
+		return canonicalName(basename) ?? canonicalName(parsed.hostname) ?? 'linked-media';
 	} catch {
 		return 'linked-media';
 	}

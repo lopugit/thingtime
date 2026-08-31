@@ -354,6 +354,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		doc: AttachmentDoc,
 		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
 	): Promise<AttachmentCleanupOutcome> => {
+		// Linked docs never touch S3. For everything else, resolve the client
+		// BEFORE the destructive deleting claim so an unconfigured/broken S3
+		// fails atomically — no half-deleted cascade, no doc stranded in
+		// 'deleting' retry loops. attachmentLinked is immutable, so the pre-claim
+		// doc is authoritative for this branch.
+		const s3 = doc.attachmentLinked === true ? null : getS3();
 		const allowedStates = doc.attachmentState === 'deleting' ? (['deleting'] as const) : ([doc.attachmentState, 'deleting'] as const);
 		let claimed: AttachmentDoc | null = null;
 		if (scope.kind === 'draft' && doc.attachmentState === 'pending' && !doc.uploadId && !doc.objectVersionId) {
@@ -371,10 +377,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		// verify, no version to delete. Straight to the transactional row removal
 		// and exact quota refund — S3 stays untouched (and unrequired, so linked
 		// cleanup works even where private storage is unconfigured).
-		if (claimed.attachmentLinked === true) {
+		if (s3 === null || claimed.attachmentLinked === true) {
 			return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
 		}
-		const s3 = getS3();
 		// A just-cancelled MPU remains billed until its retry-not-before. Part PUTs
 		// already in flight may finish after Abort; the later sweep repeats
 		// Abort/ListParts/HEAD before any refund.
@@ -1236,15 +1241,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');
 
-			// Linked attachments have no stored object — the content endpoint
-			// resolves them by redirecting to the external URL itself. Renderers
-			// normally use crystal.url directly; this keeps any consumer that still
-			// asks the endpoint working instead of 404ing.
-			if (doc.attachmentLinked === true) {
-				const linkedUrl = typeof doc.crystal.url === 'string' ? doc.crystal.url : '';
-				if (!linkedUrl) return fail(404, 'Attachment not found');
-				return { ok: true, url: linkedUrl, expiresAt: new Date(dependencies.now().getTime() + 60_000).toISOString() };
-			}
+			// Linked attachments have no stored object and are NEVER served or
+			// redirected through this endpoint: a 302 to crystal.url would turn the
+			// first-party content URL into an open redirect to an attacker-chosen
+			// origin (CWE-601). Renderers always use crystal.url directly.
+			if (doc.attachmentLinked === true) return fail(404, 'Attachment not found');
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
