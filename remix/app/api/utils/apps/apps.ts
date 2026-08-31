@@ -20,6 +20,7 @@ import {
   MAX_APP_NAME_CHARS,
   MAX_APP_ORIGINS
 } from '~/schemas/registry';
+import { normalizeDesktopRedirectUri, type DesktopRedirect } from './desktopOAuthRedirect';
 
 // Embed apps for "Login with Thingtime" (FUNDAMENTALS.md: everything is a
 // thing) — a registered app is a `things` doc with thingtime ['app'] and a
@@ -39,6 +40,7 @@ export type PublicApp = {
   clientId: string;
   name: string;
   origins: string[];
+  nativeRedirectUris: string[];
   storageAllowanceBytes: number | null;
 	storageUsedBytes: number | null;
   storageRemainingBytes: number | null;
@@ -102,6 +104,20 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
   return origins;
 };
 
+export const sanitizeNativeRedirectUris = (value: unknown): string[] | Fail => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return fail(400, 'nativeRedirectUris must be a list of exact native callback URIs');
+  if (value.length > MAX_APP_ORIGINS) return fail(400, `An app can have at most ${MAX_APP_ORIGINS} native callback URIs`);
+  const redirects: string[] = [];
+  for (const entry of value) {
+    const redirect = normalizeDesktopRedirectUri(entry);
+    if (!redirect?.native)
+      return fail(400, 'Native callbacks must use an exact reverse-domain scheme such as com.example.app://oauth/callback');
+    if (!redirects.includes(redirect.uri)) redirects.push(redirect.uri);
+  }
+  return redirects;
+};
+
 export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
   const crystal = doc?.crystal;
   const hasAllowance = !!crystal && Object.prototype.hasOwnProperty.call(crystal, 'storageAllowanceBytes');
@@ -138,6 +154,7 @@ const toPublicApp = (doc: any): PublicApp => {
     clientId: doc.crystal?.clientId,
     name: doc.crystal?.name,
     origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
+    nativeRedirectUris: Array.isArray(doc.crystal?.nativeRedirectUris) ? doc.crystal.nativeRedirectUris : [],
     storageAllowanceBytes: appUsage.allowanceBytes,
 		storageUsedBytes: policy.ready ? appUsage.usedBytes : null,
 		storageRemainingBytes: policy.ready ? remainingStorageBytes(appUsage) : null,
@@ -178,12 +195,26 @@ export const findAppsByClientIds = async (clientIds: string[]) => {
 export const appAllowsOrigin = (appDoc: any, origin: string): boolean =>
   originAllowedBy(appDoc?.crystal?.origins, origin);
 
-export const createApp = async (ownerId: string, input: { name?: unknown; origins?: unknown }): Promise<{ ok: true; app: PublicApp } | Fail> => {
+export const appAllowsNativeRedirectUri = (appDoc: any, value: string): boolean => {
+  const redirect = normalizeDesktopRedirectUri(value);
+  return !!redirect?.native && Array.isArray(appDoc?.crystal?.nativeRedirectUris)
+    && appDoc.crystal.nativeRedirectUris.includes(redirect.uri);
+};
+
+export const appAllowsDesktopRedirect = (appDoc: any, redirect: DesktopRedirect): boolean =>
+  redirect.native ? appAllowsNativeRedirectUri(appDoc, redirect.uri) : appAllowsOrigin(appDoc, redirect.origin);
+
+export const appAllowsTokenAudience = (appDoc: any, audience: string): boolean =>
+  appAllowsOrigin(appDoc, audience) || appAllowsNativeRedirectUri(appDoc, audience);
+
+export const createApp = async (ownerId: string, input: { name?: unknown; origins?: unknown; nativeRedirectUris?: unknown }): Promise<{ ok: true; app: PublicApp } | Fail> => {
   const name = sanitizeAppName(input.name);
   if (!name) return fail(400, `App name is required (max ${MAX_APP_NAME_CHARS} chars)`);
 
   const origins = sanitizeAppOrigins(input.origins);
   if (!Array.isArray(origins)) return origins;
+  const nativeRedirectUris = sanitizeNativeRedirectUris(input.nativeRedirectUris);
+  if (!Array.isArray(nativeRedirectUris)) return nativeRedirectUris;
 
   const things = await getThingsCollection();
 
@@ -210,6 +241,7 @@ export const createApp = async (ownerId: string, input: { name?: unknown; origin
       clientId: `ttapp_${randomUUID()}`,
       name,
       origins,
+      nativeRedirectUris,
       subscriptionTier: defaultSnapshot.tierId,
       subscriptionTierVersionId: defaultSnapshot.versionId,
       subscriptionTierVersion: defaultSnapshot.version,
@@ -256,7 +288,7 @@ export const listApps = async (ownerId: string): Promise<PublicApp[]> => {
 export const updateApp = async (
   ownerId: string,
   clientId: unknown,
-  input: { name?: unknown; origins?: unknown }
+  input: { name?: unknown; origins?: unknown; nativeRedirectUris?: unknown }
 ): Promise<{ ok: true; app: PublicApp } | Fail> => {
   if (typeof clientId !== 'string' || !clientId.trim()) return fail(400, 'clientId is required');
 
@@ -272,6 +304,11 @@ export const updateApp = async (
     const origins = sanitizeAppOrigins(input.origins);
     if (!Array.isArray(origins)) return origins;
     set['crystal.origins'] = origins;
+  }
+  if (input.nativeRedirectUris !== undefined) {
+    const nativeRedirectUris = sanitizeNativeRedirectUris(input.nativeRedirectUris);
+    if (!Array.isArray(nativeRedirectUris)) return nativeRedirectUris;
+    set['crystal.nativeRedirectUris'] = nativeRedirectUris;
   }
 
   // Managers = the registering owner or any 'app' account-link holder; both

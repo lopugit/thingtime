@@ -22,7 +22,8 @@ import {
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
-import { LongTextEditor } from '~/components/Editor/LongTextEditor';
+import { LongTextEditor, textToBlocks } from '~/components/Editor/LongTextEditor';
+import { blocksToText, isEditorJsDoc, type EditorJsDoc } from '~/components/Editor/editorJsValue';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { isLegacyLinkedSeedId } from '~/components/Attachments/useAttachmentUploads';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
@@ -38,7 +39,8 @@ import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from '
 // the viewer's avatar; expanded it grows type TOGGLES (Text is the always-on
 // base; Photos, Marketplace and Things each switch their field group on top
 // without deselecting the others), a block editor for the body (Editor.js —
-// headings, lists, quotes, checklists serialise to a plain string), the
+// headings, lists, quotes, checklists, inline marks, whitespace, and style
+// tunes), the
 // secure media uploader + linked image URLs (under the Photos toggle),
 // listing fields, tag chips and a circle picker. The stored crystal type is
 // DERIVED from the live toggles (things > marketplace > photos-with-visual-
@@ -158,10 +160,15 @@ export const PostComposer = (props: PostComposerProps) => {
 	// seeds them from whatever the post already carries.
 	const [photosOn, setPhotosOn] = React.useState(
 		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
-	);
-	const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
-	const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
-  const [text, setText] = React.useState(editPost?.text || '');
+  );
+  const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
+  const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
+  const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
+    isEditorJsDoc(editPost?.richText)
+      ? editPost.richText
+      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
+  );
+  const text = blocksToText(postEditorValue.blocks);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
   const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
   const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
@@ -351,7 +358,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setPhotosOn(false);
     setMarketOn(false);
     setThingOn(false);
-    setText('');
+    setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
     setComposerSession((session) => session + 1);
     setTitle('');
     setPrice('');
@@ -386,6 +393,10 @@ export const PostComposer = (props: PostComposerProps) => {
 		// migrate into linked attachments via the seed mints below).
 		const canonicalImages: string[] = [];
 		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		const canonicalText = blocksToText(postEditorValue.blocks).trim();
+		const canonicalRichText: EditorJsDoc | null = canonicalText
+			? { ...postEditorValue, kind: 'rich-text' }
+			: null;
 		// gallery layout: auto stores null; spans are pruned to the visual
 		// attachments actually going out with this post
 		const visualIdsForLayout = composerAttachments
@@ -410,7 +421,8 @@ export const PostComposer = (props: PostComposerProps) => {
 						ownerId: user.id,
 						crystal: {
 							type,
-							text: text.trim(),
+							text: canonicalText,
+							richText: canonicalRichText,
 							images: canonicalImages,
 							listing: canonicalListing,
 							thing: canonicalThing,
@@ -422,10 +434,11 @@ export const PostComposer = (props: PostComposerProps) => {
 				  }
 				: null;
 		const currentPayload: Record<string, unknown> = {
-        type,
-        text: text.trim(),
-        tags: parsedTags
-      };
+			type,
+			text: canonicalText,
+			richText: canonicalRichText,
+			tags: parsedTags
+		};
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
@@ -505,7 +518,8 @@ export const PostComposer = (props: PostComposerProps) => {
 					id: editPost!.id,
 					crystal: {
 						type,
-						text: text.trim(),
+						text: canonicalText,
+						richText: canonicalRichText,
 						images: canonicalImages,
 						listing: canonicalListing,
 						thing: canonicalThing,
@@ -707,8 +721,10 @@ export const PostComposer = (props: PostComposerProps) => {
         <Box flex="1" minWidth={0}>
           <LongTextEditor
             key={composerSession}
-            value={text}
-            onValueChange={(next) => setText(typeof next === 'string' ? next : '')}
+						value={postEditorValue}
+						onValueChange={(next) => {
+							if (isEditorJsDoc(next)) setPostEditorValue(next);
+						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
           />

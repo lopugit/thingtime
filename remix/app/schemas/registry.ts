@@ -13,6 +13,8 @@
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -97,6 +99,7 @@ export const CI_CONTROL_THINGTIME = [
   'ci-workflow-run',
   'ci-deployment',
   'ci-preview',
+  'ci-preview-policy',
   'ci-dispatch',
   'ci-event'
 ] as const;
@@ -625,7 +628,13 @@ const postSchema: ThingtimeSchema = {
       type: 'string',
       required: false,
       max: MAX_TEXT_CHARS,
-      description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+      description: `Canonical plain-text post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+    },
+    {
+      name: 'richText',
+      type: 'record',
+      required: false,
+      description: 'Bounded native Editor.js document preserving inline marks, block styles, whitespace, and line breaks.'
     },
     {
       name: 'images',
@@ -665,7 +674,14 @@ const postSchema: ThingtimeSchema = {
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
     }
   ],
-  example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
+  example: {
+    type: 'text',
+    text: 'Everything is a thing ✨',
+    richText: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: '<mark>Everything</mark> is a thing ✨' } }] },
+    images: [],
+    listing: null,
+    thing: null
+  }
 };
 
 const attachmentSchema: ThingtimeSchema = {
@@ -1652,6 +1668,7 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),
   ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
   ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
+  ciEntitySchema('ci-preview-policy', 'CI preview policy', 'Admin-only develop and production-data preview choices for one pull request.'),
   ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
   {
     id: 'ci-event',
@@ -2230,6 +2247,7 @@ const appSchema: ThingtimeSchema = {
       max: MAX_APP_ORIGINS,
       description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
     },
+    { name: 'nativeRedirectUris', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
     { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
     { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
     { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
@@ -2263,6 +2281,7 @@ const appSchema: ThingtimeSchema = {
     clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
     name: 'Rainbow Notes',
     origins: ['https://rainbownotes.example'],
+    nativeRedirectUris: ['com.rainbownotes.app://oauth/callback'],
     subscriptionTier: 'free',
     subscriptionTierVersionId: 'subscription-tier-free-v1',
     subscriptionTierVersion: 1,
@@ -2972,7 +2991,21 @@ const sanitizePostCrystal = (
 	const hasAnyAttachment = options.postAttachments?.hasAny === true;
 	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
-  const text = typeof input.text === 'string' ? input.text.trim() : '';
+  const richTextProvided = input.richText !== undefined;
+  let richText: Record<string, unknown> | null = null;
+  let text = typeof input.text === 'string' ? input.text.trim() : '';
+  if (richTextProvided && input.richText !== null) {
+    if (!input.richText || typeof input.richText !== 'object' || Array.isArray(input.richText)) {
+      return fail(400, 'richText must be a native rich-text document');
+    }
+    const sanitized = sanitizeDataValue(input.richText, { path: 'richText', depth: 2 });
+    if (sanitized.ok === false) return sanitized;
+    if (!isEditorJsDoc(sanitized.value) || !isEditorJsDocSafeToEdit(sanitized.value)) {
+      return fail(400, 'richText must be a safe native rich-text document');
+    }
+    richText = sanitized.value as Record<string, unknown>;
+    text = blocksToText(richText.blocks as any[]).trim();
+  }
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
 
   const rawImages = input.images;
@@ -3045,7 +3078,15 @@ const sanitizePostCrystal = (
 
 	return {
 		ok: true,
-		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+		crystal: {
+			type,
+			text,
+			...(richTextProvided ? { richText } : {}),
+			images,
+			listing,
+			thing,
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+		}
 	};
 };
 

@@ -38,6 +38,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
     'clientId',
     'name',
     'origins',
+    'nativeRedirectUris',
     'subscriptionTier',
     'subscriptionTierVersionId',
     'subscriptionTierVersion',
@@ -94,6 +95,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-workflow-run': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-preview-policy': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
@@ -126,6 +128,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
 	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
+	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);

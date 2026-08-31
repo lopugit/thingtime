@@ -46,5 +46,23 @@ batch without repeating the merge-conflict cycle for every feature.
 
 ## Live preview evidence
 
-The authenticated desktop/mobile interaction and overflow checks will be added
-after Vercel finishes deploying this branch.
+- The Vercel preview deployed successfully, and the merged `develop` deployment
+  at `https://dev.thingtime.com/admin` passed authenticated desktop interaction
+  QA at a 1560 px browser viewport with no horizontal overflow.
+- One selected pull request enables Save, three selections retain their explicit
+  merge order, automatic routing is selected by default, and the status picker
+  supports multiple simultaneous values.
+- The credential platform picker exposes Anthropic, OpenAI, and Google, accepts
+  a custom platform value, and can return to Anthropic without persisting the
+  draft. The model waterfall exposes inline model, effort, and speed editing and
+  Cancel restores the saved entry without a mutation.
+- The CI page was scrolled top-to-bottom and its nested status/platform menus
+  were opened. No application-origin layout overflow was observed.
+- The authenticated Chrome session did not honor its requested mobile viewport
+  override and continued reporting 1560 px, so a genuine live mobile-width
+  measurement remains an explicit QA gate rather than being claimed from a
+  desktop render.
+- Dev currently reports that GitHub App variables and
+  `THINGTIME_ADMIN_VAULT_KEY` are absent. Save remains available, while merge
+  dispatch and credential writes correctly stay disabled until those deployment
+  prerequisites are configured.

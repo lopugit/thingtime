@@ -81,13 +81,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
+    featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every current entity per kind for unlimited Feature Stack selection.', method: 'GET', query: { limit: 0 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every selectable feature, branch, and pull request. Recent run, deployment, preview, and dispatch activity stays bounded; summary counts remain exact.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
@@ -110,7 +111,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } },
+      {
+        status: 503,
+        description: 'A MongoDB blocking sort exceeded its memory ceiling. Retry-After is present and the client keeps its last-known cached snapshot.',
+        headers: { 'Retry-After': '30' },
+        body: {
+          ok: false,
+          error: 'CI dashboard data is temporarily unavailable. Last-known cached data remains safe to use.',
+          code: 'ci_dashboard_query_capacity',
+          retryable: true
+        }
+      }
     ]
   }),
   endpoint({
@@ -118,10 +130,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '2.0.0',
+    featureVersion: '2.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, snapshots every source ref and SHA into a canonical immutable plan, and refuses ambiguous cross-branch routing. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, safely omits selected sources and targets with no compatible partner, snapshots every remaining source ref and SHA into a canonical immutable plan, and rejects a plan with no compatible pair instead of crossing branch families. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -181,6 +193,45 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } }
     ],
     responseExamples: [{ status: 200, description: 'Redacted saved stack configuration.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved' }] } }]
+  }),
+  endpoint({
+    id: 'admin-ci-previews',
+    group: 'admin',
+    title: 'Manage opt-in PR preview environments',
+    endpoint: '/api/v1/admin/ci/previews',
+    featureVersion: '1.0.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    detail:
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'Select a same-repository open pull request.',
+      'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
+      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable a develop preview',
+        description: 'Build the exact current PR head with the develop Custom Environment.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'develop', enabled: true }
+      },
+      {
+        name: 'Enable a production-environment preview',
+        description: 'Explicitly allow this trusted PR to run with production environment values without assigning production domains.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'production', enabled: true, acknowledgeProductionData: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Policy stored and the exact-SHA deployment created or reused.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+      },
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+    ]
   }),
   endpoint({
     id: 'admin-ci-credentials',
@@ -1372,11 +1423,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey registration',
     endpoint: '/api/v1/auth/passkeys/register-options',
+    featureVersion: '1.0.1',
     summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
     detail:
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
       'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
-      'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
+      'Options request a DISCOVERABLE credential (residentKey required) with user verification required, matching ' +
+      'the verification policy used when the response returns. Discoverability is what makes usernameless ' +
       'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
       'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
       'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
@@ -1394,7 +1447,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Creation options (challenge cookie set).',
-        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'required' } } }
       },
       { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
     ]
@@ -1438,11 +1491,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey login',
     endpoint: '/api/v1/auth/passkeys/login-options',
+    featureVersion: '1.0.1',
     summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
     detail:
       'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
       'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
-      'whatever Thingtime passkeys it holds (no username, no enumeration surface) — this is also the ' +
+      'whatever Thingtime passkeys it holds (no username, no enumeration surface). User verification is required ' +
+      'in the browser because the assertion verifier requires it too. This is also the ' +
       'options payload for conditional-UI autofill: request it on login-form mount with ' +
       'mediation:"conditional" and Safari/Chrome surface the iCloud Keychain / 1Password passkey popup ' +
       'directly on the username field.',
@@ -1455,7 +1510,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
     responseExamples: [
-      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'required' } } }
     ]
   }),
   endpoint({
@@ -6387,6 +6442,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -6401,7 +6457,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST { thingtime: ["post"], crystal: { type, text, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'POST { thingtime: ["post"], crystal: { type, text, richText?, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'Post captions may include richText: a bounded native Editor.js document ({ kind: "rich-text", blocks: [...] }). The server derives crystal.text from those blocks as the canonical plain-text search, moderation, notification, and older-client fallback.',
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
@@ -6423,6 +6480,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           crystal: { type: 'text', text: 'Everything is a thing ✨' },
           acl: ['tt:all'],
           tags: ['thingtime']
+        }
+      },
+      {
+        name: 'Create rich-text post',
+        description: 'Native blocks retain inline marks, block styles, whitespace, and line breaks; text is derived server-side.',
+        method: 'POST',
+        body: {
+          type: 'text',
+          richText: {
+            kind: 'rich-text',
+            blocks: [{ type: 'paragraph', data: { text: '<mark>Home network public ip:</mark><br>113.29.241.145' } }]
+          },
+          visibility: 'private'
         }
       },
       {
@@ -6742,6 +6812,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
@@ -6880,12 +6951,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
+			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7068,6 +7140,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -7215,6 +7288,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
@@ -7255,6 +7329,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
@@ -7269,7 +7344,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST the thing id plus any of crystal, extended, visibility, and tags.',
-      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas. For posts, a text patch from an older/plain client that omits richText intentionally clears the previous rich-text document.',
       'For a previewed update, send expectedUpdatedAt; a stale value returns 409 without writing. Set replaceCrystal only when whole-crystal replacement is intended.',
       'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
@@ -7309,6 +7384,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
@@ -8270,6 +8346,63 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
       }
     ]
+  }),
+  endpoint({
+    id: 'network-probe-ping',
+    group: 'system',
+    title: 'Network probe ping',
+    endpoint: '/api/v1/network-probe/ping',
+    summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
+    detail:
+      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
+    requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'A 256-byte binary response.', headers: { 'Content-Type': 'application/octet-stream' } }]
+  }),
+  endpoint({
+    id: 'network-probe-download',
+    group: 'system',
+    title: 'Network probe download',
+    endpoint: '/api/v1/network-probe/download',
+    summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
+    detail:
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
+    requestExamples: [
+      { name: 'Download a 2 MiB packet', description: 'One member of the fixed speed-test ladder.', method: 'GET', query: { bytes: 2097152 } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'The requested fixed-size binary packet.', headers: { 'Content-Type': 'application/octet-stream' } }
+    ]
+  }),
+  endpoint({
+    id: 'network-probe-upload',
+    group: 'system',
+    title: 'Network probe upload',
+    endpoint: '/api/v1/network-probe/upload',
+    summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
+    detail:
+      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['POST'],
+    steps: [
+      'Pass one documented bytes value.',
+      'Send binary data with exactly that Content-Length.',
+      'Use the small JSON acknowledgement only after a 200.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upload a 500 KiB packet',
+        description: 'One member of the fixed speed-test ladder; set Content-Length to 512000.',
+        method: 'POST',
+        query: { bytes: 512000 }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Exact body accepted.', body: { ok: true, bytes: 512000 } }]
   }),
   endpoint({
     id: 'schemas-browse',

@@ -1,0 +1,20 @@
+name: Commander App Release
+
+# GitHub requires trigger entrypoints on the branch that receives the event.
+# The executable release implementation is versioned on the protected
+# github-actions ref, matching the Electron release control plane.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Commander/**
+      - .github/workflows/commander-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/commander-release.yml@github-actions
+    secrets: inherit

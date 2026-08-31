@@ -73,6 +73,60 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   filename/title/description), while Reaction schema searches resolve human
   emoji names such as “heart” to stored emoji and render the matching parent
   posts. — Codex (AI), 2026-08-31
+
+- **[Admin CI refreshes now fail softly and recover without a request
+  storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
+  The protected snapshot route turns MongoDB blocking-sort memory failures into
+  a retryable, private 503 with stable route/error-code telemetry, while the UI
+  keeps its cached state, deduplicates overlapping pollers, and exponentially
+  backs off automatic retries up to five minutes. — Codex (AI), 2026-08-31
+
+- **Passkeys and the Admin CI snapshot now recover from the two mobile failure
+  modes seen in production.** Registration and login options require the same
+  on-device user verification enforced by the WebAuthn verifier, so a valid
+  iCloud Keychain or 1Password ceremony is no longer rejected after the
+  authenticator returns. CI entities are read per repository through a stable
+  compound sort index instead of a growing in-memory sort, and a saved Feature
+  Stack keeps its PR-number placeholders visible until a temporarily missing
+  live snapshot can rehydrate them. Unlimited Feature Stack selection no longer
+  makes the same request fetch unlimited run, deployment, preview, and dispatch
+  history; activity stays bounded while the dashboard totals remain exact.
+  Running Feature Stacks now also respect an
+  admin's collapsed-card choice instead of immediately forcing themselves open.
+  — Codex (AI), 2026-08-31
+
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
 - **Vercel now serves Thingtime's origin-scoped API capability manifest from
   Nitro instead of the SPA shell.** The generic
   `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
@@ -293,6 +347,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -368,6 +427,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
@@ -1071,6 +1134,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
 
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
+
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
   the branch alias's current HTML on load, foreground, and focus, then reloads
@@ -1469,6 +1561,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Claude (AI), 2026-07-21.
 
 ### Added
+
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
 
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a

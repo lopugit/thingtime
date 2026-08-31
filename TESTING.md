@@ -114,9 +114,12 @@ is fixed, and cite the checklist you ran in the PR description.
       no platform sheet; correct password → the browser/1Password/iCloud sheet
       opens and the saved passkey appears in the list with provider name,
       created date, and your nickname. Cancelling the sheet shows NO error
-      toast (cancel is silent).
+      toast (cancel is silent). Inspect both registration and login options and
+      confirm `userVerification: "required"` matches the server verifier; a
+      completed Face ID/Touch ID/1Password ceremony must not return a generic
+      verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      44/44 — full software-authenticator ceremony: registration, duplicate
+      49/49 — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -241,6 +244,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Repository-root Vercel builds
 
+- [ ] Leave a custom-domain or Vercel preview tab open across an alias flip,
+      then navigate to a route whose chunk was not loaded before the deploy.
+      Chromium, Safari, and Firefox each perform exactly one hard reload and
+      land on the requested route instead of the dynamic-import error surface.
+      With the chunk request kept broken, the tab must not reload-loop; after
+      ten healthy seconds, a later alias flip can claim one new recovery.
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
       `github-actions` and generic Preview duplicate SHAs skip, the `develop`
@@ -464,7 +473,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+  scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -1127,7 +1136,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-    runner)`, while both required-context companion jobs have distinct
+  runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1821,6 +1830,138 @@ is fixed, and cite the checklist you ran in the PR description.
       unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
       routes keep the strict policy without `unsafe-eval`.
 
+## Installed-app Login with Thingtime (loopback + PKCE)
+
+- [ ] Register a disposable app with the exact callback origin
+      `http://127.0.0.1:<port>`, bind a loopback receiver before opening
+      `/authorize`, and pass `redirect_uri`, a random `state`, and an S256
+      `code_challenge`. Approving redirects to the exact callback path with only
+      `code` + the original `state`; no app access token appears in the browser
+      URL, page storage, or postMessage.
+- [ ] Exchange the code once at `POST /api/v1/oauth/token` with the original
+      verifier, clientId, and the same normalized redirectUri; call
+      `/api/v1/oauth/userinfo` with the returned Bearer token and confirm the
+      selected account/scopes. Replaying the code or changing the verifier,
+      clientId, redirect URI/path/port, or registered origin must return the same
+      bounded `invalid/expired/used/mismatched` 400 and mint no app session.
+- [ ] Reject HTTPS, `localhost`, `0.0.0.0`, non-loopback hosts, missing or
+      privileged ports, callback credentials/query/fragments, `plain` PKCE, and
+      malformed verifier/challenge lengths. Cancellation redirects with
+      `error=access_denied` and the original state but no code.
+- [ ] Present an `oauth-code` JWT as an Authorization Bearer token to
+      `/api/v1/auth/me`, `/api/v1/auth/accounts`, and an account-authenticated
+      write including `/api/v1/things`: it must never resolve as a
+      browser/account credential. Delete or
+      suspend the app, remove the callback origin, or delete the user between
+      issuance and exchange; exchange must fail closed.
+
+## Commander desktop launcher
+
+- [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
+      regex replacement escapes are decoded once, unsupported escapes remain
+      intact, and decoded backslashes are not decoded a second time.
+
+- [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
+      begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
+      Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
+      the launcher. Relaunch and verify the selected mode persists.
+- [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
+      app starts its bundled Node daemon and Rust search child, then open/close
+      the launcher repeatedly with the configured global shortcut. The search
+      input must already be focused and no blank WebKit frame may flash.
+- [ ] Force-terminate the Commander host and verify its parent watchdog stops
+      the Node/Rust children and releases port 47820. A subsequent verified
+      install must start a new host-owned daemon rather than accept stale health.
+- [ ] Search `settings`, press Return, and verify the separate native Settings
+      window. Exercise every General option, record a custom shortcut, quit and
+      relaunch, and confirm hotkey/menu-bar/login-item state is restored.
+- [ ] In General settings, turn “Open new Commander windows pinned” off, use
+      Open New Window, and verify that launcher dismisses on focus loss; turn
+      it on, open another window, and verify it remains visible on focus loss.
+- [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
+      with arrows, execute with Return, open Command-K, traverse actions, and
+      dismiss actions/launcher with Escape. Long names must not clip or create
+      horizontal scroll in default or compact mode.
+- [ ] Run a broad query with at least 30 path-backed results and move selection
+      quickly through the list. Results must stay interactive, rendering generic
+      or cached icons immediately and progressively resolving every visible
+      Finder icon (selected first) through the bounded queue. Rerun the query
+      to confirm cached icons return without a bridge burst; macOS must never
+      show a rainbow beachball once rows are visible.
+- [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat` across
+      apps, commands, extensions, files, and folders. Repeatedly choose a lower
+      equivalent result, rerun the same query, and verify device-local learned
+      ranking promotes it after a full Commander relaunch without changing an
+      unrelated query.
+- [ ] On a large mixed application/file index, search `raycast stop`; verify
+      the separator-equivalent `raycast-stop` application is present above
+      `raycast-start`, `raycast-status`, and noisy one-token file matches. Run
+      the indexer regression with a one-result output limit and verify all 129
+      matching FTS candidates are evaluated before ranking; rapid refinements
+      must keep only the active and latest uncapped query in flight.
+- [ ] Open Search Settings. Verify hidden files and unlimited entries are the
+      migrated defaults, the SQLite database footprint uses B/KB/MB/GB, and a
+      custom cap persists and can be cleared back to Unlimited. Index a hidden
+      file, extensionless executable, broken symlink, special Unix file, and
+      nested `.app`; verify each reference is searchable without following links
+      or recursively indexing package contents.
+- [ ] With more than one million indexed records, leave Search Settings open
+      across at least four two-second polls. Counts and database size must remain
+      populated without a five-second timeout or zero-state flash. Search a long
+      nonexistent term and verify the reader remains responsive or self-recovers
+      before the next status request.
+- [ ] Search `accessibility`; verify Accessibility Settings is the first
+      `System` result and Return opens the exact Privacy & Security →
+      Accessibility pane without changing any permission. Repeat with Screen
+      Recording, Full Disk Access, Login Items, and Displays; non-macOS
+      bootstrap catalogs must omit these platform-only entries.
+- [ ] Drag an application result into a disposable Terminal prompt and verify
+      the exact `.app` path is inserted through a native file-URL drag without
+      opening it. Clear the prompt without executing it; single and double click
+      on that result must still preserve normal selection/execution behavior.
+- [ ] In Extensions Settings, record, invoke, rebind, and Delete-clear a global
+      command shortcut. A duplicate command binding or collision with the
+      launcher hotkey must fail before persistence and restore the complete
+      previously working native registration set.
+- [ ] Bind Search Emoji & Symbols to Command-E. From another app, press
+      Command-E and immediately type `heart`; the picker must remain visible
+      and focused. Dismiss it, press Command-Space once, and verify the normal
+      launcher reappears. Hide Commander with Command-H and verify one
+      Command-Space press unhides and presents it again.
+- [ ] In Search Emoji & Symbols, type `ear` and verify WebKit/macOS shows no
+      spelling or autocorrection pill. With the input still focused, use every
+      arrow direction and verify only the emoji selection moves. Search `haert`
+      and `hert` and verify typo-tolerant heart results remain relevant.
+- [ ] Search `heart`, choose a non-leading heart twice, reopen the picker, and
+      repeat the query. The selected emoji must be promoted; quit/relaunch and
+      verify the same query-specific preference persists while unrelated
+      queries retain their own ranking.
+- [ ] Type a unique launcher query, launch a result, then hide and reopen with
+      the global shortcut. Verify the field clears while the launched command
+      is the first History row and its search term follows as a separate
+      full-width top-level row. Return on the command reruns it; Return on the
+      query restores it.
+      Create nine searches and verify the initial eight-session cap plus
+      interactive Show More/Show Less. History survives a complete
+      quit/relaunch without entering cloud-synced settings.
+- [ ] Run Close Commander Window and verify only the floating launcher hides;
+      then run Close Commander and verify the native host, daemon, and Rust
+      child exit and release port 47820. From Raycast, run
+      `Commander/extensions/raycast/`'s Open Commander no-view command and
+      verify it relaunches the installed app.
+- [ ] Browse the latest live Raycast Store feed, search a term, open the full
+      web catalog, and sideload a valid source folder. Malformed manifests and
+      unsupported view commands must show explicit compatibility errors; they
+      must never be reported as successfully executable.
+- [ ] Complete Thingtime PKCE login with two accounts, switch between them,
+      relaunch, and sync appearance/window preferences. Inspect the WebView and
+      loopback UI API: no Bearer token may be returned to React; Keychain items
+      must be separated by issuer, client ID, and user ID.
+- [ ] Resize Settings through its minimum and full-screen-adjacent sizes, visit
+      every tab, scroll top-to-bottom, and exercise Store, account, sync, and
+      Advanced dynamic states in light, dark, default-text, and large-text
+      modes. No content may overlap, clip, or escape the native window.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
@@ -2162,8 +2303,12 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
-      Account section shows the 🛠️ Admin item only for admins.
+      the dashboard for admins; `/admin/users`, `/admin/apps`,
+      `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
+      `/admin/external-integrations`, and `/admin/system` each open the exact
+      matching tab, remain correct through refresh/back/forward, and an unknown
+      admin section safely returns to `/admin`. The drawer's Account section
+      shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
       storage, and every count; multiple filters combine with AND and sorting
@@ -2250,6 +2395,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
       rows on first render without a spinner, then reconciles in the background.
       A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Grow CI event/run/deployment history beyond MongoDB's 32 MiB blocking-sort
+      threshold and confirm `/api/v1/admin/ci?limit=0` still returns through the
+      repository-scoped `things_ci_repository_updated` index. Confirm every
+      selectable feature, branch, and PR is returned, recent run/deployment/
+      preview/dispatch rows are capped, and the four summary totals remain exact
+      through independent counts. Leave the page foregrounded for at least two
+      30-second polls and confirm no live-refresh warning appears. While that
+      snapshot is unavailable, load a saved stack: every saved PR number stays
+      visible as restoring, its count remains honest, and the rows rehydrate in
+      order when the live snapshot recovers without another click.
+- [ ] Force the CI snapshot reader to raise MongoDB code 292 and confirm the API
+      returns a private 503 with `Retry-After` and
+      `code: ci_dashboard_query_capacity`. The browser preserves cached rows,
+      coalesces overlapping 5s/30s refreshes, backs off 30s → 60s → 120s up to
+      five minutes, and a manual Refresh bypasses that wait. Runtime logs contain
+      `ci_dashboard_query_failed`, the route, and Mongo code 292 without query,
+      namespace, credential, or document details.
 - [ ] Anonymous and non-admin callers receive the standard admin denial from
       all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
       them and the webhook routes do not accept a browser session as authority.
@@ -2279,7 +2441,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Mix PRs targeting `github-actions`, `main`, and `develop`, keep Auto
       decide branches selected, and prove the immutable plan routes controller
       sources only to `github-actions`, main sources only to `main`, and develop
-      sources only to selected product targets. Uncheck it and prove the
+      sources only to selected product targets. Include a selected source and a
+      selected target with no compatible partner: both are safely omitted while
+      the remaining compatible pairs still queue, and a zero-pair plan is rejected.
+      Confirm skipped saved targets are labelled skipped rather than running forever.
+      Uncheck it and prove the
       explicit merge-everywhere mode remains available.
 - [ ] In the protected Feature Stack run, confirm each target starts from its
       admitted SHA, every source becomes exactly one two-parent merge commit in
@@ -2311,13 +2477,31 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
       preview origin. Confirm its `origin` matches exactly, every generated API
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `2.0.0`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, saved stacks are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
-      breaking-major manifest before dispatch.
+      `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
+      are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
+      `1.1.0`, saved stacks are `1.0.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      breaking-major manifest before dispatch. CI dispatch 2.1 adds
+      compatible-pair omission during automatic Feature Stack routing.
+- [ ] Select one trusted open PR and independently enable Develop and
+      Production/Main previews, including both at once. Develop must use only
+      the configured Custom Environment; Production must require the explicit
+      warning acknowledgement, use Production values server-side, expose only
+      a generated immutable Vercel URL, and never assign `thingtime.com` or
+      another custom domain. Neither response, browser state, log, nor status
+      event may contain a credential value.
+- [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
+      rebuilds each enabled environment at exactly the new live head SHA.
+      Drafts, forks, moved heads, another repository, and closed PRs fail
+      closed. Disable each environment and close the PR; cleanup must delete
+      only deployments carrying the exact Thingtime PR/environment markers,
+      while stable develop and production deployments remain untouched.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
-      GitHub-only rather than accepting an unsupported provider.
+      GitHub-only rather than accepting an unsupported provider. The section
+      presents Feature Stack, conflict repair, rebases, promotions, and sync as
+      operation lanes of the one Lopu PR manager; Web CI and Electron remain a
+      separate supporting-build group, never competing repository managers.
 - [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
       installation id, private key, router secret, and Vercel runtime identity).
       The Admin badge says setup is needed, names the missing server setting,
@@ -2346,11 +2530,33 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       that no provider events have been imported. Run Reconcile once and verify
       existing branches, open PRs, runs, deployments, and previews populate;
       subsequent GitHub/Vercel deliveries advance the same records and history.
-- [ ] Desktop: search and use the Vercel-style multi-select status filter,
-      including All statuses and every mixed combination; select a PR, open its GitHub and
+- [ ] Desktop: search and use the Vercel-style multi-select PR status filter,
+      including All statuses, Clean, Conflicting, Draft, Merged, Closed, Unknown,
+      and every mixed combination; confirm each choice matches the status badge exactly,
+      then select a PR, open its GitHub and
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Select and remove at least 30 Feature Stack PRs while the selectable PR
+      table is in view. The ordered stack and selectable PR table remain separate
+      scroll regions, the composer height stays fixed, and the row under the
+      pointer does not jump vertically after any selection.
+- [ ] Run a saved Feature Stack and keep it selected. Its live merge stream
+      refreshes dispatch, workflow/job, skipped-target, and target-PR updates
+      without a page reload; progress never decreases; links open the matching
+      GitHub run or PR; and the clearly labelled estimated finish uses the
+      browser's local timezone. Terminal success and failure stop live polling.
+- [ ] Collapse and expand the Lopu automation, AI credential waterfall, and
+      Feature Stack cards from their headings. Reload and navigate away/back;
+      the per-admin collapsed state persists, the closed cards consume only
+      their heading height, all heading toggles expose `aria-expanded`, and a
+      selected actively running Feature Stack can remain collapsed until the
+      admin deliberately opens it again.
+- [ ] Open `/admin`, then every bookmarkable tab route (`/admin/users`,
+      `/admin/apps`, `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
+      `/admin/external-integrations`, `/admin/system`). Reload and use Back and
+      Forward; the selected tab and content must match the URL without a page
+      jump, and an unknown section must fail closed to Users.
 - [ ] Desktop and 375px mobile: add/remove Feature Stack rows and targets, save,
       load, edit, archive, toggle auto-decide, and inspect target progress;
       verify long branch/feature names truncate without hiding
@@ -2744,6 +2950,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       over generic image MIME/extensions (`🖼️`), ordinary photos/images use
       `🏞️`, known media/document/archive/install families are distinct, and an
       unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] Create and edit a Text post whose body contains hard line breaks,
+      repeated spaces, inline bold/italic/highlight/link marks, and at least
+      one block style tune. Verify the exact presentation survives save and
+      reload in Feed, profile, nested repost, comment, and `/post/:id` views at
+      desktop and mobile widths; legacy plain-text posts must still preserve
+      newline breaks without horizontal overflow.
 - [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
       a client change, then foreground/focus the old tab. It fetches the live
       alias HTML without cache and reloads only when the hashed `index-*.js`

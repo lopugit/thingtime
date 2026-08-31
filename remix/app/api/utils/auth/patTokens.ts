@@ -1,4 +1,5 @@
 import { getAuthToken } from './authCookie';
+import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
@@ -296,18 +297,6 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   if (!session) return anonymous;
   if (String(session.userId) !== claims.sub) return anonymous;
 
-  // App-scoped tokens only work through their dedicated path (apps/appTokens)
-  // — same rejection as resolveSessionUser.
-  if (
-    session.purpose === 'app' ||
-    session.purpose === 'app-sandbox' ||
-    session.purpose === 'oauth-code' ||
-    session.purpose === 'chatgpt-oauth-code' ||
-    session.purpose === 'chatgpt-mcp' ||
-    session.purpose === 'chatgpt-mcp-refresh' ||
-    session.purpose === 'chatgpt-mcp-connection'
-  ) return anonymous;
-
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
     // so a cross-site request can't replay one as an ambient credential.
@@ -347,6 +336,11 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
       }
     };
   }
+
+  // Every other scoped credential (app, sandbox app, one-time OAuth code, and
+  // future purpose values) only works through its dedicated resolver. Keep the
+  // full things surface aligned with resolveSessionUser's fail-closed gate.
+  if (!sessionPurposeCanActAsAccount(session.purpose)) return anonymous;
 
   // Full browser/service session — the normal path, no scope limits.
   const userDoc = await findUserById(claims.sub);

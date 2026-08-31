@@ -2,6 +2,7 @@ import { createSign } from 'node:crypto';
 
 import type { CiWorkflowKey } from './automationPolicy';
 import { ciProviderReadiness } from './providerReadiness';
+import { featureStackTargetsForSource } from './featureStackRoutingCore';
 import { getCiAutomationPolicy, recordCiEvent, upsertCiEntity } from './store';
 import { ciFeatureIdentity } from './webhooks';
 
@@ -198,14 +199,6 @@ type FeatureStackPullRequest = {
 	base?: { ref?: string };
 };
 
-const featureStackTargetsForSource = (base: string, selectedTargets: string[], autoDecideBranches: boolean) => {
-	if (!autoDecideBranches) return [...selectedTargets];
-	if (base === 'github-actions') return selectedTargets.filter((target) => target === 'github-actions');
-	if (base === 'main') return selectedTargets.filter((target) => target === 'main');
-	if (base === 'develop') return selectedTargets.filter((target) => target === 'develop' || target === 'main');
-	return selectedTargets.filter((target) => target === base);
-};
-
 export const canonicalFeatureStackPlanFromPullRequests = (input: {
   name: string;
   sourcePrNumbers: number[];
@@ -216,7 +209,7 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
 	autoDecideBranches: boolean;
 }) => {
   const headRefs = new Set<string>();
-  const sources = input.pullRequests.map((pr, index) => {
+	const sources = input.pullRequests.flatMap((pr, index) => {
     const number = input.sourcePrNumbers[index];
     const head = String(pr.head?.ref ?? '');
     const sha = String(pr.head?.sha ?? '');
@@ -240,26 +233,22 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
     }
     headRefs.add(head);
 		const targets = featureStackTargetsForSource(base, input.targets, input.autoDecideBranches);
-		if (!targets.length) {
-			throw new Error(`Feature Stack source PR #${number} targets ${base}, which is not compatible with any selected target`);
-		}
-		return { base, head, pr: number, sha, targets, title };
+		return targets.length ? [{ base, head, pr: number, sha, targets, title }] : [];
   });
   if (input.targets.some((target) => headRefs.has(target))) {
     throw new Error('A Feature Stack source branch cannot also be a target');
   }
-	for (const target of input.targets) {
-		if (!sources.some((source) => source.targets.includes(target))) {
-			throw new Error(`No selected pull request is compatible with target ${target}`);
-		}
+	if (!sources.length) {
+		throw new Error('No selected pull request is compatible with the selected target branches');
 	}
+	const targets = input.targets.filter((target) => sources.some((source) => source.targets.includes(target)));
 	return {
 		autoDecideBranches: input.autoDecideBranches,
 		autoMerge: true as const,
 		name: input.name,
 		sources,
 		stackId: input.stackId,
-		targets: input.targets,
+		targets,
 		version: 2 as const
 	};
 };
