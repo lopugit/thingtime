@@ -290,4 +290,11 @@ describe('fuzzyTextScore', () => {
     expect(fuzzyTextScore('raycsat', 'raycast-start')).toBeGreaterThanOrEqual(0);
     expect(fuzzyTextScore('raycsat', 'unrelated')).toBe(-1);
   });
+
+  it('treats a space-separated query as an exact filename title', () => {
+    expect(fuzzyTextScore('raycast stop', 'raycast-stop')).toBe(100_000);
+    expect(fuzzyTextScore('raycast stop', 'raycast-stop')).toBeGreaterThan(
+      fuzzyTextScore('raycast stop', 'raycast-start'),
+    );
+  });
 });

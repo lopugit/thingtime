@@ -572,19 +572,29 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         _ => {}
     }
 
+    let compact_query: Vec<char> = query
+        .iter()
+        .copied()
+        .filter(|character| character.is_alphanumeric())
+        .collect();
+    let compact_query = if compact_query.is_empty() {
+        query.to_vec()
+    } else {
+        compact_query
+    };
     let compact_candidate: Vec<char> = candidate
         .iter()
-        .filter(|glyph| !glyph.value.is_whitespace())
+        .filter(|glyph| glyph.value.is_alphanumeric())
         .map(|glyph| glyph.value)
         .collect();
     let coverage_bonus =
-        (((query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
+        (((compact_query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
     let contained_at = compact_candidate
-        .windows(query.len())
-        .position(|candidate_window| candidate_window == query);
-    let score = if compact_candidate.as_slice() == query {
+        .windows(compact_query.len())
+        .position(|candidate_window| candidate_window == compact_query);
+    let score = if compact_candidate == compact_query {
         EXACT_MATCH_SCORE
-    } else if compact_candidate.starts_with(query) {
+    } else if compact_candidate.starts_with(&compact_query) {
         PREFIX_MATCH_SCORE.saturating_sub(compact_candidate.len() as u64)
     } else if let Some(index) = contained_at {
         CONTAINED_MATCH_SCORE.saturating_sub(index as u64)
@@ -1011,6 +1021,21 @@ mod tests {
         assert_eq!(hits[0].item.id, "system");
         assert_eq!(hits[0].item.title, "Displays Settings");
         assert!(hits[0].score > hits[1].score);
+    }
+
+    #[test]
+    fn separator_equivalent_exact_title_beats_typo_siblings() {
+        let hits = search(&request(
+            "raycast stop",
+            vec![
+                item("start", "raycast-start"),
+                item("status", "raycast-status"),
+                item("stop", "raycast-stop"),
+            ],
+        ));
+
+        assert_eq!(hits[0].item.id, "stop");
+        assert_eq!(hits[0].score, EXACT_MATCH_SCORE);
     }
 
     #[test]

@@ -20,6 +20,9 @@
       files, and folders use the same typo-tolerant ordering. Choose a lower equivalent result several times, repeat
       the same query, and verify the selected item is promoted without affecting an unrelated query. Quit/relaunch
       and verify the learned ordering persists locally.
+- [ ] With a large mixed application/file index containing many one-token matches, search `raycast stop`; verify the
+      separator-equivalent `raycast-stop` application is surfaced above `raycast-start`, `raycast-status`, and noisy
+      files instead of being dropped by the filesystem candidate limit.
 - [ ] Create an extensionless executable named `raycast-start`, a hidden file, a broken symlink, and a nested `.app`
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.

@@ -648,6 +648,7 @@ impl IndexDatabase {
             return Ok(Vec::new());
         };
         let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
+        let focused_limit = limit.saturating_mul(4).min(MAX_FUZZY_CANDIDATES);
         let mut statement = self.connection.prepare(
             "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
              FROM records_fts
@@ -660,6 +661,20 @@ impl IndexDatabase {
              LIMIT ?5",
         )?;
         let flags = kind_flags(kinds);
+        let mut records = Vec::new();
+        if let Some(focused_query) = focused_fts_query(query) {
+            let rows = statement.query_map(
+                params![
+                    focused_query,
+                    flags.0,
+                    flags.1,
+                    flags.2,
+                    i64::try_from(focused_limit).unwrap_or(i64::MAX)
+                ],
+                row_to_record,
+            )?;
+            records.extend(collect_rows(rows)?);
+        }
         let rows = statement.query_map(
             params![
                 fts_query,
@@ -670,7 +685,8 @@ impl IndexDatabase {
             ],
             row_to_record,
         )?;
-        collect_rows(rows)
+        records.extend(collect_rows(rows)?);
+        Ok(records)
     }
 
     fn query_prefix(
@@ -1718,6 +1734,17 @@ fn fuzzy_fts_query(query: &str) -> Option<String> {
     (!terms.is_empty()).then(|| terms.join(" OR "))
 }
 
+fn focused_fts_query(query: &str) -> Option<String> {
+    let terms = query
+        .to_lowercase()
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|term| term.chars().count() >= 3)
+        .take(16)
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>();
+    (terms.len() >= 2).then(|| terms.join(" AND "))
+}
+
 fn database_size_bytes(path: &Path) -> u64 {
     ["", "-wal", "-shm"]
         .into_iter()
@@ -2330,6 +2357,39 @@ mod tests {
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
+    }
+
+    #[test]
+    fn mixed_kind_query_keeps_a_separator_equivalent_exact_application() {
+        let temp = TempDir::new().expect("tempdir");
+        create_dir_all(temp.path().join("raycast-stop.app")).expect("exact application");
+        for index in 0..64 {
+            write(
+                temp.path().join(format!("raycast-start-{index:02}.txt")),
+                "noise",
+            )
+            .expect("raycast noise");
+            write(temp.path().join(format!("stop-{index:02}.txt")), "noise").expect("stop noise");
+        }
+        let mut database = database(&temp);
+        database
+            .index(&configuration(
+                temp.path(),
+                vec![IndexKind::Application, IndexKind::File],
+            ))
+            .expect("index");
+
+        let records = database
+            .query(&QueryRequest {
+                query: "raycast stop".to_owned(),
+                kinds: vec![IndexKind::Application, IndexKind::File],
+                limit: 1,
+            })
+            .expect("query")
+            .records;
+
+        assert_eq!(records[0].kind, IndexKind::Application);
+        assert_eq!(records[0].name, "raycast-stop");
     }
 
     #[test]
