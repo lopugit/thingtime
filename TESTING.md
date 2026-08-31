@@ -228,6 +228,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Repository-root Vercel builds
 
+- [ ] Leave a custom-domain or Vercel preview tab open across an alias flip,
+      then navigate to a route whose chunk was not loaded before the deploy.
+      Chromium, Safari, and Firefox each perform exactly one hard reload and
+      land on the requested route instead of the dynamic-import error surface.
+      With the chunk request kept broken, the tab must not reload-loop; after
+      ten healthy seconds, a later alias flip can claim one new recovery.
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
       `github-actions` and generic Preview duplicate SHAs skip, the `develop`

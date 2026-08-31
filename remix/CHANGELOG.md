@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
 - **Vercel now serves Thingtime's origin-scoped API capability manifest from
   Nitro instead of the SPA shell.** The generic
   `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
