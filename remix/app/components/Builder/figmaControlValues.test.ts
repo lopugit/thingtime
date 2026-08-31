@@ -28,6 +28,20 @@ test('shorthand round-trips', () => {
 	}
 });
 
+test('functional css values stay whole through expansion', () => {
+	// calc() contains spaces — a naive whitespace split would shred it
+	assert.deepEqual(expandShorthand('calc(100% - 20px)'), [
+		'calc(100% - 20px)',
+		'calc(100% - 20px)',
+		'calc(100% - 20px)',
+		'calc(100% - 20px)'
+	]);
+	assert.equal(collapseShorthand(...expandShorthand('calc(100% - 20px)')), 'calc(100% - 20px)');
+	assert.deepEqual(expandShorthand('calc(1em + 2px) 8px'), ['calc(1em + 2px)', '8px', 'calc(1em + 2px)', '8px']);
+	// space-separated functional colors keep their digits out of border width
+	assert.deepEqual(parseBorder('solid rgb(0 0 0 / 50%)'), { width: '', style: 'solid', color: 'rgb(0 0 0 / 50%)' });
+});
+
 test('parseBorder splits width/style/color regardless of order', () => {
 	assert.deepEqual(parseBorder('1px solid #ececef'), { width: '1px', style: 'solid', color: '#ececef' });
 	assert.deepEqual(parseBorder('dashed 2px hotpink'), { width: '2px', style: 'dashed', color: 'hotpink' });

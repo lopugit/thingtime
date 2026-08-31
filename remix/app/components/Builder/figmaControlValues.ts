@@ -3,8 +3,12 @@
 
 // css shorthand expansion — works for sides (T R B L) and corners
 // (TL TR BR BL): [a, b=a, c=a, d=b] is the spec's fallback chain for both.
+// paren-aware tokenizer: calc(100% - 20px) / rgba(0, 0, 0, .5) stay whole
+export const tokenizeCssValue = (value?: string): string[] =>
+	(value || '').trim().match(/(?:[^\s()]+(?:\([^)]*\))?)/g) || [];
+
 export const expandShorthand = (value?: string): [string, string, string, string] => {
-	const parts = (value || '').trim().split(/\s+/).filter(Boolean);
+	const parts = tokenizeCssValue(value);
 	if (!parts.length) return ['', '', '', ''];
 	const [a, b = a, c = a, d = b] = parts;
 	return [a, b, c, d];
@@ -25,9 +29,7 @@ export const collapseShorthand = (a: string, b: string, c: string, d: string): s
 export const BORDER_STYLES = ['', 'solid', 'dashed', 'dotted', 'double'];
 
 export const parseBorder = (value?: string): { width: string; style: string; color: string } => {
-	// paren-aware tokenizer — rgba(0, 0, 0, 0.5) must stay ONE color token,
-	// never leak its numbers into the width slot
-	const tokens = (value || '').trim().match(/(?:[^\s()]+(?:\([^)]*\))?)/g) || [];
+	const tokens = tokenizeCssValue(value);
 	let width = '';
 	let style = '';
 	const rest: string[] = [];

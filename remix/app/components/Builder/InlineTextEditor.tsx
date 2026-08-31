@@ -49,10 +49,14 @@ export const InlineTextEditor = ({
 	const ref = React.useRef<HTMLDivElement | null>(null);
 	const [toolbar, setToolbar] = React.useState<ToolbarState>(null);
 	const commitTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+	// the html this editor last EMITTED — lets the sync effect below tell its
+	// own echoes apart from external updates (rich-editor Apply, discard)
+	const lastEmittedRef = React.useRef<string | null>(null);
 
 	const commit = React.useCallback(() => {
 		const el = ref.current;
 		if (!el) return;
+		lastEmittedRef.current = el.innerHTML;
 		onChange({ html: el.innerHTML, text: el.textContent || '' });
 	}, [onChange]);
 
@@ -79,11 +83,26 @@ export const InlineTextEditor = ({
 		} catch {
 			// caret placement is best-effort
 		}
+		lastEmittedRef.current = el.innerHTML;
 		return () => {
 			if (commitTimer.current) clearTimeout(commitTimer.current);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
 	}, []);
+
+	// EXTERNAL content changes (the Editor.js modal's Apply, a draft discard)
+	// must reach the live editor — but our own commit echoes must not rewrite
+	// the DOM mid-typing (that eats the caret). lastEmittedRef separates the
+	// two: an incoming value we did not emit replaces the editor content.
+	React.useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const incoming = html || escapeHtml(text || '');
+		if (incoming !== lastEmittedRef.current && incoming !== el.innerHTML) {
+			el.innerHTML = incoming;
+			lastEmittedRef.current = incoming;
+		}
+	}, [html, text]);
 
 	const updateToolbar = React.useCallback(() => {
 		const el = ref.current;

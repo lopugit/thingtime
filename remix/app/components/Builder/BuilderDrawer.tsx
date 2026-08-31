@@ -686,8 +686,8 @@ const BlockInspector = ({
 								<CssField label="Min width" cssKey="min-width" block={block} onCss={setCss} />
 								<CssField label="Min height" cssKey="min-height" block={block} onCss={setCss} />
 							</Flex>
-							<SidesControl label="Padding" value={block.css?.padding} onChange={(next) => setCss('padding', next)} testIdPrefix="padding" />
-							<SidesControl label="Margin" value={block.css?.margin} onChange={(next) => setCss('margin', next)} testIdPrefix="margin" />
+							<SidesControl key={`${block.id}-padding`} label="Padding" value={block.css?.padding} onChange={(next) => setCss('padding', next)} testIdPrefix="padding" />
+							<SidesControl key={`${block.id}-margin`} label="Margin" value={block.css?.margin} onChange={(next) => setCss('margin', next)} testIdPrefix="margin" />
 						</Flex>
 					</Box>
 					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
@@ -698,6 +698,7 @@ const BlockInspector = ({
 								<CssField label="Opacity" cssKey="opacity" block={block} onCss={setCss} placeholder="1" />
 							</Flex>
 							<CornersControl
+								key={`${block.id}-radius`}
 								label="Corner radius"
 								value={block.css?.['border-radius']}
 								onChange={(next) => setCss('border-radius', next)}
@@ -808,9 +809,9 @@ export const BuilderDrawer = (props: {
 			borderColor="var(--tt-border, #ececef)"
 			boxShadow="var(--tt-shadow-panel, -8px 0 24px rgba(0, 0, 0, 0.06))"
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + 12px)"
-			overflowY="auto"
 		>
-			{/* left-edge drag handle — the whole edge resizes the drawer */}
+			{/* left-edge drag handle — anchored to the drawer shell (the CONTENT
+			    scrolls, not the shell, so the handle is always reachable) */}
 			<Box
 				position="absolute"
 				left={0}
@@ -853,7 +854,7 @@ export const BuilderDrawer = (props: {
 				</Box>
 			</Flex>
 
-			<Flex flexDirection="column" rowGap={4} padding={4}>
+			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto">
 				{selected ? (
 					<>
 						{regionLabel ? (

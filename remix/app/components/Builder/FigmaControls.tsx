@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Flex, Input, Select, Text } from '@chakra-ui/react';
 
-import { BORDER_STYLES, collapseShorthand, expandShorthand, parseBorder, parseShadow } from './figmaControlValues';
+import { BORDER_STYLES, collapseShorthand, expandShorthand, parseBorder, parseShadow, tokenizeCssValue } from './figmaControlValues';
 
 // Figma-parity property controls for the block inspector. Every control edits
 // ONE css shorthand value (padding, margin, border-radius, border,
@@ -89,7 +89,7 @@ export { collapseShorthand, expandShorthand, parseBorder, parseShadow };
 type SidesMode = 'all' | 'axes' | 'sides';
 
 const modeOf = (value?: string): SidesMode => {
-	const parts = (value || '').trim().split(/\s+/).filter(Boolean);
+	const parts = tokenizeCssValue(value);
 	if (parts.length <= 1) return 'all';
 	if (parts.length === 2) return 'axes';
 	return 'sides';
@@ -142,7 +142,7 @@ export const SidesControl = ({
 			{mode === 'all' ? (
 				<Input
 					{...inputStyles}
-					value={(value || '').trim().split(/\s+/).length > 1 ? '' : value || ''}
+					value={value || ''}
 					placeholder="0"
 					onChange={(event) => onChange(event.target.value.trim())}
 					data-testid={`${testIdPrefix}-all`}
@@ -176,7 +176,7 @@ export const CornersControl = ({
 	onChange: (next: string) => void;
 	testIdPrefix: string;
 }) => {
-	const [independent, setIndependent] = React.useState(() => (value || '').trim().split(/\s+/).filter(Boolean).length > 1);
+	const [independent, setIndependent] = React.useState(() => tokenizeCssValue(value).length > 1);
 	const [tl, tr, br, bl] = expandShorthand(value);
 	const write = (a: string, b: string, c: string, d: string) => onChange(collapseShorthand(a, b, c, d));
 	return (
@@ -197,7 +197,7 @@ export const CornersControl = ({
 			{!independent ? (
 				<Input
 					{...inputStyles}
-					value={(value || '').trim().split(/\s+/).length > 1 ? '' : value || ''}
+					value={value || ''}
 					placeholder="0"
 					onChange={(event) => onChange(event.target.value.trim())}
 					data-testid={`${testIdPrefix}-all`}

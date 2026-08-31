@@ -54,7 +54,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	// OS file drops / pastes / inspector uploads → attachment uploads → media
 	// landing at their recorded target. Targets are matched back by
 	// (name, size) when each upload turns ready.
-	const pendingDropsRef = React.useRef<Array<{ name: string; size: number; target: UploadTarget }>>([]);
+	const pendingDropsRef = React.useRef<Array<{ name: string; size: number; queuedAt: number; target: UploadTarget }>>([]);
 	const consumedUploadsRef = React.useRef(new Set<string>());
 	const uploader = useAttachmentUploads(
 		user?.id,
@@ -62,16 +62,22 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		(message) => lopu({ title: message, status: 'error' }),
 		true
 	);
-	const { uploads, addFiles, markCommitted } = uploader;
+	const { uploads, addFiles, markCommitted, remove: removeUpload } = uploader;
 
 	const queueFiles = React.useCallback(
 		(files: File[], targetOf: (offset: number) => UploadTarget) => {
 			if (!files.length) return;
-			files.forEach((file, offset) => {
-				pendingDropsRef.current.push({ name: file.name, size: file.size, target: targetOf(offset) });
+			// clone with a fresh lastModified: the uploader dedupes selections by
+			// (name, size, lastModified) against the whole session, which would
+			// silently swallow a re-drop of the same OS file
+			const unique = files.map(
+				(file, offset) => new File([file], file.name || 'pasted-media', { type: file.type, lastModified: Date.now() + offset })
+			);
+			unique.forEach((file, offset) => {
+				pendingDropsRef.current.push({ name: file.name, size: file.size, queuedAt: Date.now(), target: targetOf(offset) });
 			});
-			addFiles(files);
-			lopu({ title: `Uploading ${files.length === 1 ? files[0].name || 'pasted media' : `${files.length} files`}… ⬆️`, status: 'info' });
+			addFiles(unique);
+			lopu({ title: `Uploading ${unique.length === 1 ? unique[0].name : `${unique.length} files`}… ⬆️`, status: 'info' });
 		},
 		[addFiles, lopu]
 	);
@@ -124,6 +130,9 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		for (const upload of uploads) {
 			if (upload.status !== 'ready' || !upload.attachment || consumedUploadsRef.current.has(upload.localId)) continue;
 			consumedUploadsRef.current.add(upload.localId);
+			// entries whose upload errored out never get consumed — drop them
+			// before matching so they can't capture a later same-name upload
+			pendingDropsRef.current = pendingDropsRef.current.filter((entry) => Date.now() - entry.queuedAt < 15 * 60_000);
 			const pendingIndex = pendingDropsRef.current.findIndex(
 				(entry) => entry.name === upload.file.name && entry.size === upload.file.size
 			);
@@ -161,8 +170,12 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 				title: `${media === 'image' ? '🖼' : media === 'video' ? '🎬' : '🎵'} ${attachment.name || 'media'} added to the page`,
 				status: 'success'
 			});
+			// retire the consumed upload from the session list — otherwise the
+			// uploader's 25-file session cap fills up and its selection dedupe
+			// starts refusing repeat drops (committed first, so no cleanup runs)
+			removeUpload(upload.localId);
 		}
-	}, [uploads, lopu, markCommitted]);
+	}, [uploads, lopu, markCommitted, removeUpload]);
 
 	// Cmd/Ctrl+V while a block is selected: clipboard FILES (screenshots,
 	// copied images/media) upload straight at the selection. Never steal a
