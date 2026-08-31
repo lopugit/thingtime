@@ -42,6 +42,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
 
 import type {
   CiAutomationPolicy,
@@ -1028,6 +1029,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         savingWorkflow={savingWorkflow}
         onChange={updateAutomation}
       />
+
+      <ClaudeCredentialWaterfall cacheIdentity={cacheIdentity} />
 
       <FeatureStackComposer
         name={featureStackName}
