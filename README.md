@@ -22,6 +22,11 @@ mutable root aliases out of Git. The same trusted router is copied into Lopu
 workspaces, so post-merge Graphify publication never executes a PR-head script
 with repository credentials.
 
+The router keeps one active portable snapshot by default and prunes superseded
+snapshots after successful updates. Run `.github/scripts/graphify prune` to
+enforce retention without rebuilding, or set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer when this branch deliberately needs more than one snapshot.
+
 The root `vercel.json` is the one deliberate non-CI runtime file. Vercel now
 uses the repository root for product deployments, so this branch must keep a
 config at that same location. It sets `git.deploymentEnabled` to `false` for

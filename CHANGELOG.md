@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Bounded the control-plane Graphify store to one active portable snapshot by
+  default, added an explicit safe prune command, and made every successful
+  update activate its replacement before deleting superseded snapshots. The
+  active snapshot and semantic CAS remain preserved, while invalid retention
+  settings fail closed. — Codex (AI), 2026-09-01
 - Gave the exact automation-owned `sync/main-into-develop` conflict worker its
   own serialized priority lane. Detector deduplication now sees both that lane
   and the ordinary Lopu fleet, while ordinary capacity limits no longer defer
