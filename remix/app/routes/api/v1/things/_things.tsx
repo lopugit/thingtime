@@ -323,7 +323,13 @@ export const action = async ({ request }: { request: Request }) => {
         return json({ ok: false, error: reordered.error }, { status: reordered.status, headers: cors });
       }
     }
-    const result = await updateThing(viewer, body?.id, bodyForCreate, { replaceCrystal: false }, app);
+    const result = await updateThing(
+      viewer,
+      body?.id,
+      bodyForCreate,
+      { replaceCrystal: body?.replaceCrystal === true, expectedUpdatedAt: body?.expectedUpdatedAt },
+      app
+    );
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
@@ -334,8 +340,8 @@ export const action = async ({ request }: { request: Request }) => {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
-        ? { beforeCascade: prepareAttachmentCascadeForThing }
-        : undefined;
+        ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }
+        : { expectedUpdatedAt: body?.expectedUpdatedAt };
     const result = await deleteThing(viewer, id, app, attachmentHooks);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
