@@ -31,8 +31,28 @@ import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 // module, so a screen costs one chunk fetch on first visit and nothing after.
 // Routes that declare a `loader` here keep it static — the loader fetch and
 // the chunk fetch then overlap instead of queueing.
+// Chunk fetches fail with "Failed to fetch dynamically imported module" when
+// a redeploy replaced the hashed assets an already-open tab's HTML points at.
+// One hard reload fetches the fresh HTML + chunk graph; a session guard
+// (cleared after 10 healthy seconds in entry.client) prevents reload loops
+// when the network itself is down.
+const recoverStaleChunk = (error: unknown): never => {
+  try {
+    const RELOAD_FLAG = 'tt-chunk-reload';
+    const message = String((error as Error)?.message || error || '');
+    const chunkFailure = /dynamically imported module|Importing a module script failed|error loading dynamically imported/i.test(message);
+    if (chunkFailure && !sessionStorage.getItem(RELOAD_FLAG)) {
+      sessionStorage.setItem(RELOAD_FLAG, String(Date.now()));
+      window.location.reload();
+    }
+  } catch {
+    // sessionStorage unavailable — fall through to the router error surface
+  }
+  throw error;
+};
+
 const lazyRoute = (load: () => Promise<{ default: ComponentType<any> }>) => async () => ({
-  Component: (await load()).default
+  Component: (await load().catch(recoverStaleChunk)).default
 });
 
 // Rendered while the router resolves the initial navigation — the root
