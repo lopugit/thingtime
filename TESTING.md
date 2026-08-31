@@ -255,6 +255,10 @@ is fixed, and cite the checklist you ran in the PR description.
       Output Directory, and Ignored Build Step overrides; select Other as the
       framework. Confirm a product-branch commit builds from root and serves
       `/`, one `/assets/...` file, and `/api/root-data` from the same deployment.
+- [ ] Fetch `/.well-known/thingtime-capabilities.json` from the built Vercel
+      output, its preview URL, and the production alias. It must reach Nitro and
+      return JSON with the exact request origin; it must never fall through to
+      `index.html` as `text/html`.
 - [ ] Confirm the literal `github-actions` branch and a disposable branch made
       from the thin control plane create no Vercel deployment. The product
       config must map `github-actions` to `false`, while the thin branch config

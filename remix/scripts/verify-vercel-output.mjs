@@ -75,12 +75,12 @@ const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
-const chatGptDiscoveryIndex = routes.findIndex(
+const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
-		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json)$' &&
+		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
-const serverFallbackIndex = routes.findIndex((route, index) => route.dest === '/__server' && index !== chatGptDiscoveryIndex);
+const serverFallbackIndex = routes.findIndex((route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex);
 
 if (spaIndex === -1) {
 	throw new Error('Vercel output config does not route non-API app paths to /index.html.');
@@ -114,12 +114,12 @@ if (filesystemIndex > spaIndex) {
 	throw new Error('Vercel output checks the SPA fallback before static filesystem assets.');
 }
 
-if (chatGptDiscoveryIndex === -1) {
-	throw new Error('Vercel output does not route ChatGPT OAuth and capability discovery to Nitro.');
+if (wellKnownDiscoveryIndex === -1) {
+	throw new Error('Vercel output does not route OAuth and Thingtime capability discovery to Nitro.');
 }
 
-if (chatGptDiscoveryIndex > filesystemIndex || chatGptDiscoveryIndex > spaIndex) {
-	throw new Error('Vercel output checks static or SPA fallbacks before ChatGPT discovery.');
+if (wellKnownDiscoveryIndex > filesystemIndex || wellKnownDiscoveryIndex > spaIndex) {
+	throw new Error('Vercel output checks static or SPA fallbacks before well-known discovery.');
 }
 
 if (apiIndex > spaIndex) {
@@ -224,5 +224,5 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, ChatGPT discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, OAuth and Thingtime capability discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );
