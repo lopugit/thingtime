@@ -1366,15 +1366,6 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		};
 	}, [activeSavedFeatureStack, dashboard, featureStackProgress]);
 
-  React.useEffect(() => {
-    if (!featureStackLiveSnapshot?.live || !collapsedSections.has('feature-stack')) return;
-    setCollapsedSections((current) => {
-      const next = new Set(current);
-      next.delete('feature-stack');
-      writeLocalCache(sectionCacheKey, [...next]);
-      return next;
-    });
-  }, [collapsedSections, featureStackLiveSnapshot?.live, sectionCacheKey]);
 	React.useEffect(() => {
 		if (!featureStackLiveSnapshot?.live) return;
 		let inFlight = false;
