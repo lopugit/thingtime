@@ -41,6 +41,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   rendered rich text passes only through the sanitising allowlist renderer
   (`htmlToNode` + `HtmlThingRenderer`, which gained the pure formatting tags
   b/i/u/s/mark/sub/sup).
+- **Stale-chunk self-heal**: after each preview alias flip, already-open tabs
+  died on "Failed to fetch dynamically imported module" (old HTML → replaced
+  hashed chunks). `entry.client` (vite:preloadError) and `lazyRoute` now
+  recover with one session-guarded hard reload.
+- **Component catalog seeded**: the 2800-component catalog
+  (lopugit/thingtime-components) now lives in the dev DB behind
+  `*.previews.dev.thingtime.com` via `POST /api/v1/admin/components/seed`
+  (census 2800) — the builder's component search returns real results.
 
 ### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
 
