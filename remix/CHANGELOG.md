@@ -317,6 +317,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -392,6 +397,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
@@ -1095,6 +1104,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
 
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
+
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
   the branch alias's current HTML on load, foreground, and focus, then reloads
@@ -1493,6 +1531,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Claude (AI), 2026-07-21.
 
 ### Added
+
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
 
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a

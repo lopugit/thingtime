@@ -8273,6 +8273,63 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'network-probe-ping',
+    group: 'system',
+    title: 'Network probe ping',
+    endpoint: '/api/v1/network-probe/ping',
+    summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
+    detail:
+      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
+    requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'A 256-byte binary response.', headers: { 'Content-Type': 'application/octet-stream' } }]
+  }),
+  endpoint({
+    id: 'network-probe-download',
+    group: 'system',
+    title: 'Network probe download',
+    endpoint: '/api/v1/network-probe/download',
+    summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
+    detail:
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
+    requestExamples: [
+      { name: 'Download a 2 MiB packet', description: 'One member of the fixed speed-test ladder.', method: 'GET', query: { bytes: 2097152 } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'The requested fixed-size binary packet.', headers: { 'Content-Type': 'application/octet-stream' } }
+    ]
+  }),
+  endpoint({
+    id: 'network-probe-upload',
+    group: 'system',
+    title: 'Network probe upload',
+    endpoint: '/api/v1/network-probe/upload',
+    summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
+    detail:
+      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['POST'],
+    steps: [
+      'Pass one documented bytes value.',
+      'Send binary data with exactly that Content-Length.',
+      'Use the small JSON acknowledgement only after a 200.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upload a 500 KiB packet',
+        description: 'One member of the fixed speed-test ladder; set Content-Length to 512000.',
+        method: 'POST',
+        query: { bytes: 512000 }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Exact body accepted.', body: { ok: true, bytes: 512000 } }]
+  }),
+  endpoint({
     id: 'schemas-browse',
     group: 'schemas',
     title: 'Browse published schemas',

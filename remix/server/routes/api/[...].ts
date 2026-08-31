@@ -157,6 +157,9 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/actions/run': () => import('../../../app/routes/api/v1/actions/run/_run'),
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
+  'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
+  'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
+  'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>

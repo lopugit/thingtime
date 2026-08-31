@@ -38,6 +38,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
     'clientId',
     'name',
     'origins',
+    'nativeRedirectUris',
     'subscriptionTier',
     'subscriptionTierVersionId',
     'subscriptionTierVersion',
