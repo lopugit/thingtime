@@ -30,6 +30,57 @@ is fixed, and cite the checklist you ran in the PR description.
       known parent ID, `list_thingtime_comments` returns only directly attached
       comments and preserves `limit`/`cursor` pagination without fetching global
       comment rows.
+- [ ] `tools/list` exposes all 31 tools with the Thingtime MCP App output
+      template; prompts and static UI/contract resources work before OAuth,
+      while account-scoped resources return the OAuth challenge. In the app,
+      inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
+      select multiple rows, expand details, and verify Apply stays disabled
+      until the explicit confirmation checkbox is checked.
+- [ ] Preview a create/update/delete plan with least-privilege scopes. Change
+      one target after preview and verify apply returns 409 without performing
+      any operation; with fresh preconditions, verify serial apply, honest
+      partial failure receipts, encrypted history, and undo-as-a-new-preview.
+- [ ] Create a valid `Thingtime Capability` data Thing with `$input`
+      placeholders, start it, and verify its exact signed preview must match the
+      persisted workflow run. Reject missing inputs, duplicate targets, more
+      than 25 operations, raw query/operator keys, URLs/routes, and code.
+
+## Limitless MCP Lab (`/docs/mcp`)
+
+- [ ] On a production-CSP preview, the embedded review app renders its Result,
+      Diff, and Raw tabs instead of remaining on the empty placeholder; the
+      route CSP permits only the review module's exact SHA-256 hash and keeps
+      `unsafe-inline` / `unsafe-eval` absent.
+
+- [ ] Open `/docs/mcp` at desktop and 390px mobile widths. Confirm the live
+      contract badge resolves without replacing the optimistic release counts,
+      all six stat cards fit without horizontal overflow, and the docs drawer
+      opens, closes, and identifies **Limitless MCP Lab** as active.
+- [ ] Select all five missions. Each selection must update the prompt, expected
+      outcome, ordered tool pipeline, and embedded review cards without a page
+      reload; **Copy** copies only the selected prompt.
+- [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
+      row, expand Full details, and scroll to the bottom. The read-only morning
+      mission must not show an Apply control. Write-composing missions must keep
+      Apply disabled until the confirmation checkbox is selected, then fail
+      closed with the host-only message rather than mutating data.
+- [ ] Load the page with MCP discovery unavailable. The release contract and
+      workflow cards remain immediately usable, the page shows the quiet
+      release-contract state, and no spinner, blank page, recursive request,
+      iframe error, or console exception appears.
+
+## Admin integration vault + policy proxy
+
+- [ ] Sign in as an admin and open **/admin → External integrations**. Without
+      `THINGTIME_ADMIN_VAULT_KEY`, the visible warning explains setup and
+      **Save secret** is disabled; no browser request reveals a credential.
+- [ ] With a disposable 32-byte base64url vault key, save a labelled Vercel
+      token. Refresh and confirm its row shows only label/id/date—not masked or
+      plaintext value. Deletion is blocked while an endpoint references it.
+- [ ] Save a Vercel endpoint with read + **Create new items only**, then verify
+      an existing environment key is blocked before POST and the redacted audit
+      contains only operation, path, status, and outcome—never body, token, or
+      secret value. Generic endpoints cannot claim create-only semantics.
 
 ## Admin integration vault + policy proxy
 
@@ -1788,6 +1839,10 @@ is fixed, and cite the checklist you ran in the PR description.
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with
       the page scroll — the bottom of the menu stays reachable.
+- [ ] At desktop widths, the drawer header starts directly below the global
+      navigation with no duplicated top spacer, and its collapse control sits
+      in the Thingtime Docs title row. At mobile widths, opening the full-screen
+      drawer keeps its close control visible in that same header row.
 
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
@@ -2150,6 +2205,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       requested → accepted (or failed) with a relational event. Arbitrary
       workflow names, non-allowlisted inputs, and feature-branch entry refs
       cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Build a Feature Stack by checking 2–20 feature rows in a deliberate
+      order, choose `develop`, `main`, or both, refresh/reload, and confirm the
+      draft order/name/targets persist while the destructive confirmation does
+      not. Dispatch once and verify the server snapshots the live same-repo PR
+      head refs/SHAs, rejects drafts/forks/moved refs/duplicate targets, and
+      forwards only canonical base64 through the thin `develop` listener.
+- [ ] In the protected Feature Stack run, confirm each target starts from its
+      admitted SHA, every source becomes exactly one two-parent merge commit in
+      list order, clean merges are byte-identical to Git, AI edits touch only
+      recomputed conflict paths, source/target movement aborts publication, and
+      a target-specific PR is opened with auto-merge while branch protection
+      remains the final gate. Pause/opt-out labels must stop the batch.
+- [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
+      preview origin. Confirm its `origin` matches exactly, every generated API
+      and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
+      `1.1.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      breaking-major manifest before dispatch.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
@@ -2186,6 +2258,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Desktop and 375px mobile: add/remove Feature Stack rows, targets, and the
+      confirmation; verify long branch/feature names truncate without hiding
+      their remove controls, the ordered list remains readable, every control
+      is keyboard-focusable, and the full page has no horizontal overflow.
 - [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and

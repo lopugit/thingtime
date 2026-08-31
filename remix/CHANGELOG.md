@@ -65,6 +65,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The new Limitless MCP Lab turns the live connector contract into an
+  interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
+  in parallel, keeps the current release contract on first paint, demonstrates
+  five composable workflows, and drives the exact shipped review App with
+  synthetic non-mutating previews so confirmation and recovery behavior can be
+  explored safely. Its production route grants that sandboxed App only the
+  exact SHA-256 script hash it needs, preserving the strict global CSP without
+  `unsafe-inline` or `unsafe-eval`. — Codex (AI), 2026-08-30
+- **[Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.](../PRs/482-codex-limitless-mcp-make-thingtime-mcp-limitless-composable-and-safe.md)**
+  Thirty-one bounded tools add exact batch reads, schema intelligence,
+  relationship/thread traversal, change polling, signed multi-Thing previews,
+  optimistic concurrency, encrypted history/undo, durable Capability workflow
+  runs, MCP prompts/resources, and an interactive result/diff review UI while
+  continuing to reject arbitrary routes, queries, and code. — Codex (AI),
+  2026-08-30
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
   A dedicated provider-double suite proves that a reasoning-starved decorated
   Claude or OpenAI stream retries bare on the same model, never retries after
@@ -85,6 +100,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
 
 ### Added
+
+- **Admin CI Control now batches features as a verified multi-target Feature
+  Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
+  live target branches, and dispatch once. The server snapshots exact live
+  same-repository heads; the protected Lopu controller sequentially combines
+  them per target, restricts AI edits to Git-reported conflicts, verifies merge
+  topology and bytes, and opens branch-protected auto-merge PRs. The new
+  origin-scoped API capability manifest advertises the additive dispatch
+  contract as `api.admin-ci-dispatch` 1.1.0. Detailed validation notes:
+  [PR #487 (`develop`)](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md)
+  and [PR #489 (`main` promotion)](../PRs/489-codex-feature-stack-main-add-verified-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-30
 
 - **Thingtime’s MCP initialization now supplies connector-wide interaction
   instructions.** ChatGPT receives the account-selection, token-safety, and

@@ -10,6 +10,12 @@ export type { CiWorkflowKey } from './automationPolicy';
 const API_VERSION = '2022-11-28';
 const DEFAULT_REPOSITORY = 'lopugit/thingtime';
 const DEFAULT_CONTROL_REF = 'github-actions';
+const GIT_REF = /^(?![./])(?!.*(?:\.\.|\/\.|\.\/|@\{|\\|[[~^:?*]))[A-Za-z0-9._/-]{1,180}(?<![./])$/;
+const hasControlCharacter = (value: string) =>
+  Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127;
+  });
 
 type CachedToken = { token: string; expiresAt: number };
 let cachedInstallationToken: CachedToken | null = null;
@@ -93,6 +99,7 @@ export const repositoryName = () =>
   (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
 
 const workflowFileByKey = {
+  'feature-stack': 'resolve-pr-conflicts.yml',
   'resolve-conflicts': 'resolve-pr-conflicts.yml',
   'rebase-stack': 'resolve-pr-conflicts.yml',
   'promote-features': 'resolve-pr-conflicts.yml',
@@ -103,6 +110,7 @@ const workflowFileByKey = {
 } as const;
 
 const inputAllowlist: Record<CiWorkflowKey, readonly string[]> = {
+  'feature-stack': ['feature_stack_plan_b64'],
   'resolve-conflicts': ['pr_number', 'branch'],
   'rebase-stack': ['pr_number', 'branch', 'cascade'],
   'promote-features': ['dry_run', 'lookback'],
@@ -113,6 +121,7 @@ const inputAllowlist: Record<CiWorkflowKey, readonly string[]> = {
 };
 
 const workflowEntryRef: Record<CiWorkflowKey, 'develop' | 'main'> = {
+  'feature-stack': 'develop',
   'resolve-conflicts': 'develop',
   'rebase-stack': 'develop',
   'promote-features': 'develop',
@@ -141,12 +150,28 @@ export const resolveCiWorkflowDispatch = (
   const selected = Object.fromEntries(
     Object.entries(requestedInputs)
       .filter(([key]) => allowed.has(key))
-      .map(([key, value]) => [key, typeof value === 'boolean' ? value : String(value ?? '').slice(0, 300)])
+      .map(([key, value]) => [
+        key,
+        typeof value === 'boolean'
+          ? value
+          : String(value ?? '').slice(0, key === 'feature_stack_plan_b64' ? 24_000 : 300)
+      ])
   ) as Record<string, string | boolean>;
 
   const managerInputs = (maintenanceOperation: string) => ({
     maintenance_operation: maintenanceOperation
   }) satisfies Record<string, string | boolean>;
+  if (workflow === 'feature-stack') {
+    const encoded = selected.feature_stack_plan_b64;
+    if (typeof encoded !== 'string' || !encoded) throw new Error('Feature Stack plan is required');
+    return {
+      workflowFile,
+      inputs: {
+        ...managerInputs('merge-feature-stack'),
+        feature_stack_plan_b64: encoded
+      }
+    };
+  }
   if (workflow === 'rebase-stack') {
     const inputs: Record<string, string | boolean> = managerInputs('manage-prs');
     if ('pr_number' in selected) inputs.pr_number = selected.pr_number;
@@ -169,6 +194,95 @@ export const resolveCiWorkflowDispatch = (
   return { workflowFile, inputs: selected };
 };
 
+type FeatureStackPullRequest = {
+  number?: number;
+  title?: string;
+  state?: string;
+  draft?: boolean;
+  head?: { ref?: string; sha?: string; repo?: { full_name?: string } | null };
+};
+
+export const canonicalFeatureStackPlanFromPullRequests = (input: {
+  name: string;
+  sourcePrNumbers: number[];
+  targets: string[];
+  pullRequests: FeatureStackPullRequest[];
+  repository: string;
+}) => {
+  const headRefs = new Set<string>();
+  const sources = input.pullRequests.map((pr, index) => {
+    const number = input.sourcePrNumbers[index];
+    const head = String(pr.head?.ref ?? '');
+    const sha = String(pr.head?.sha ?? '');
+    const title = String(pr.title ?? '').trim().slice(0, 200);
+    if (
+      pr.number !== number || pr.state !== 'open' || pr.draft === true ||
+      pr.head?.repo?.full_name !== input.repository || !GIT_REF.test(head) ||
+      !/^[0-9a-f]{40}$/.test(sha) || !title || hasControlCharacter(title) || headRefs.has(head)
+    ) {
+      throw new Error(`Feature Stack source PR #${number} is not an eligible immutable same-repository PR`);
+    }
+    headRefs.add(head);
+    return { head, pr: number, sha, title };
+  });
+  if (input.targets.some((target) => headRefs.has(target))) {
+    throw new Error('A Feature Stack source branch cannot also be a target');
+  }
+  return { autoMerge: true as const, name: input.name, sources, targets: input.targets, version: 1 as const };
+};
+
+export const buildFeatureStackInputs = async (
+  requestedInputs: Record<string, unknown>
+): Promise<Record<string, unknown>> => {
+  const repository = repositoryName();
+  const name = typeof requestedInputs.name === 'string' ? requestedInputs.name.trim() : '';
+  const rawNumbers = requestedInputs.source_pr_numbers;
+  const rawTargets = requestedInputs.targets;
+  if (!name || name.length > 80 || hasControlCharacter(name)) {
+    throw new Error('Feature Stack name must be 1-80 printable characters');
+  }
+  if (!Array.isArray(rawNumbers) || rawNumbers.length < 2 || rawNumbers.length > 20) {
+    throw new Error('Feature Stack needs 2-20 pull requests');
+  }
+  const sourcePrNumbers = rawNumbers.map((value) =>
+    typeof value === 'number' ? value : Number(String(value ?? ''))
+  );
+  if (sourcePrNumbers.some((value) => !Number.isSafeInteger(value) || value < 1 || value > 999_999_999)) {
+    throw new Error('Feature Stack contains an invalid pull request number');
+  }
+  if (new Set(sourcePrNumbers).size !== sourcePrNumbers.length) {
+    throw new Error('Feature Stack pull requests must be unique');
+  }
+  if (!Array.isArray(rawTargets) || rawTargets.length < 1 || rawTargets.length > 2) {
+    throw new Error('Feature Stack needs 1-2 target branches');
+  }
+  const targets = rawTargets.map((value) => String(value ?? '').trim());
+  if (targets.some((target) => !GIT_REF.test(target)) || new Set(targets).size !== targets.length) {
+    throw new Error('Feature Stack targets must be unique valid branches');
+  }
+
+  const [pullRequests] = await Promise.all([
+    Promise.all(
+      sourcePrNumbers.map((number) =>
+        githubRequest<FeatureStackPullRequest>(`/repos/${repository}/pulls/${number}`)
+      )
+    ),
+    Promise.all(
+      targets.map((target) =>
+        githubRequest(`/repos/${repository}/git/ref/heads/${encodeURIComponent(target)}`)
+      )
+    )
+  ]);
+  const plan = canonicalFeatureStackPlanFromPullRequests({
+    name,
+    sourcePrNumbers,
+    targets,
+    pullRequests,
+    repository
+  });
+  return { feature_stack_plan_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64') };
+};
+
 export const dispatchCiWorkflow = async (input: {
   workflow: CiWorkflowKey;
   ref?: string;
@@ -177,7 +291,10 @@ export const dispatchCiWorkflow = async (input: {
   externalId?: string;
   requestedAt?: Date;
 }) => {
-  const { workflowFile, inputs } = resolveCiWorkflowDispatch(input.workflow, input.inputs);
+  const requestedInputs = input.workflow === 'feature-stack'
+    ? await buildFeatureStackInputs(input.inputs ?? {})
+    : input.inputs;
+  const { workflowFile, inputs } = resolveCiWorkflowDispatch(input.workflow, requestedInputs);
   // workflow_dispatch loads its listener from `ref`. Keep that entrypoint on
   // the two reviewed product branches; an arbitrary feature ref could carry
   // executable YAML and would defeat the protected control plane.

@@ -15,14 +15,21 @@ connection record used by every live credential.
 ## What the tools can do
 
 - List, select, and disconnect connected Thingtime accounts.
-- Read token identity/scopes, retrieve exactly one Thing by ID, and list comments
-  attached to one known target ID.
-- Browse Things or use text search when the exact Thing ID is unknown.
-- Create, update, delete, comment, react, save, and share Things only when the
-  relevant personal access token permits it.
+- Read one or up to 100 exact Thing IDs without pagination ambiguity.
+- Browse/search, inspect targeted comments, schemas, relationships, threads,
+  and ACL-aware changed Things.
+- Validate typed Thing payloads before creation.
+- Preview signed multi-Thing before/after plans, then apply them with exact
+  scope and optimistic-concurrency checks only when the confirmed call carries
+  `confirmed: true`.
+- Inspect encrypted MCP mutation history and generate a fresh undo preview.
+- Discover and run bounded `Thingtime Capability` workflows made only from
+  registered create/update/delete primitives.
+- Use MCP prompts, account-scoped resources, and an embedded result/diff/raw UI
+  with an explicit apply gate.
 
-The server has no arbitrary-URL or generic API proxy tool. It only reaches
-explicitly allowed Thingtime origins and the focused Things operation list.
+The server has no arbitrary-URL or generic API proxy tool. Capability Things
+also reject raw routes, queries, code, and executable-looking operator keys.
 When a task supplies an exact Thing ID, use `get_thingtime_thing` rather than a
 paginated list or fuzzy search. When it supplies the parent ID for comments,
 use `list_thingtime_comments`; it targets that parent directly instead of

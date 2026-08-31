@@ -3,3 +3,4 @@
 # invariant is ever violated, fail closed instead of text-merging JSON.
 graphify-out/snapshots/** -merge
 graphify-out/cache/semantic-cas/** -merge
+graphify-out/graph.json merge=graphify
