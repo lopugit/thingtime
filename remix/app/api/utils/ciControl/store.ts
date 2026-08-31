@@ -10,6 +10,7 @@ import {
   type CiExecutionProvider,
   type CiWorkflowKey
 } from './automationPolicy';
+import type { CiPreviewEnvironment, CiPreviewPolicy } from './previewPolicyCore';
 import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export const CI_THINGTIME = CI_CONTROL_THINGTIME;
@@ -225,6 +226,67 @@ export const upsertCiEntity = async (
   };
 };
 
+export const listCiPreviewPolicies = async (repository: string): Promise<CiPreviewPolicy[]> => {
+  const rows = await readKind('ci-preview-policy', 500);
+  return rows
+    .filter((row: any) => row.repository === repository)
+    .map((row: any) => ({
+      id: String(row.id),
+      prNumber: Number(row.prNumber),
+      repository: String(row.repository),
+      develop: row.develop === true,
+      production: row.production === true,
+      headSha: typeof row.headSha === 'string' ? row.headSha : null,
+      headRef: typeof row.headRef === 'string' ? row.headRef : null,
+      updatedAt: typeof row.sourceUpdatedAt === 'string' ? row.sourceUpdatedAt : null,
+      updatedBy: typeof row.updatedBy === 'string' ? row.updatedBy : null
+    }))
+    .filter((row) => Number.isSafeInteger(row.prNumber) && row.prNumber > 0);
+};
+
+export const setCiPreviewPolicy = async (input: {
+  repository: string;
+  prNumber: number;
+  environment: CiPreviewEnvironment;
+  enabled: boolean;
+  headSha: string;
+  headRef: string;
+  actorId: string;
+}): Promise<CiPreviewPolicy> => {
+  const current = (await listCiPreviewPolicies(input.repository)).find((policy) => policy.prNumber === input.prNumber);
+  const develop = input.environment === 'develop' ? input.enabled : current?.develop === true;
+  const production = input.environment === 'production' ? input.enabled : current?.production === true;
+  const occurredAt = new Date();
+  const entity = await upsertCiEntity({
+    kind: 'ci-preview-policy',
+    provider: 'thingtime',
+    repository: input.repository,
+    externalId: String(input.prNumber),
+    title: `PR #${input.prNumber} preview environments`,
+    status: develop || production ? 'enabled' : 'disabled',
+    occurredAt,
+    data: {
+      prNumber: input.prNumber,
+      develop,
+      production,
+      headSha: input.headSha,
+      headRef: input.headRef,
+      updatedBy: boundedText(input.actorId, 180)
+    }
+  });
+  return {
+    id: entity.id,
+    prNumber: input.prNumber,
+    repository: input.repository,
+    develop,
+    production,
+    headSha: input.headSha,
+    headRef: input.headRef,
+    updatedAt: occurredAt.toISOString(),
+    updatedBy: boundedText(input.actorId, 180)
+  };
+};
+
 const readKind = async (kind: CiThingtime, limit: number) => {
   const things = await getHomeThingsCollection();
   const docs = await things
@@ -389,10 +451,11 @@ export const claimCiDispatchRoute = async (input: {
 };
 
 export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number; repository?: string }) => {
-  const limit = Math.min(250, Math.max(1, Math.floor(options?.limit ?? 100)));
+  const requestedLimit = Math.floor(options?.limit ?? 100);
+  const limit = requestedLimit === 0 ? 0 : Math.max(1, requestedLimit);
   const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
   const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
-  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =
+  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, previewPolicies, dispatches, events] =
     await Promise.all([
       readKind('ci-repository', 20),
       listCiAutomationPolicies(repository),
@@ -402,6 +465,7 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
       readKind('ci-workflow-run', limit),
       readKind('ci-deployment', limit),
       readKind('ci-preview', limit),
+      listCiPreviewPolicies(repository),
       readKind('ci-dispatch', limit),
       readKind('ci-event', eventLimit)
     ]);
@@ -418,6 +482,7 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
     workflowRuns,
     deployments,
     previews,
+    previewPolicies,
     dispatches,
     events,
     stats: {

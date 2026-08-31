@@ -5,22 +5,25 @@ import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATG
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
-	loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
-	action?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
+  loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
+  action?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
-	'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
-	'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
-	'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
-	'v1/admin/components/seed': () => import('../../../app/routes/api/v1/admin/components/seed/_seed'),
-	'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
-	'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
-	'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
-	'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
-	'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
-	'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
-	'v1/admin/moderation': () => import('../../../app/routes/api/v1/admin/moderation/_moderation'),
+  'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
+  'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
+  'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
+  'v1/admin/components/seed': () => import('../../../app/routes/api/v1/admin/components/seed/_seed'),
+  'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
+  'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/previews': () => import('../../../app/routes/api/v1/admin/ci/previews/_previews'),
+  'v1/admin/ci/stacks': () => import('../../../app/routes/api/v1/admin/ci/stacks/_stacks'),
+  'v1/admin/ci/credentials': () => import('../../../app/routes/api/v1/admin/ci/credentials/_credentials'),
+  'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
+  'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
+  'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
+  'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
+  'v1/admin/moderation': () => import('../../../app/routes/api/v1/admin/moderation/_moderation'),
 	'v1/admin/migrations/diagnostic': () => import('../../../app/routes/api/v1/admin/migrations/diagnostic/_diagnostic'),
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
@@ -36,6 +39,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_TOKEN_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/token/_token'),
   [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
+  'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
@@ -59,9 +63,6 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/content': () => import('../../../app/routes/api/v1/attachments/content/_content'),
   'v1/attachments/cleanup': () => import('../../../app/routes/api/v1/attachments/cleanup/_cleanup'),
   'v1/moderation/sweep': () => import('../../../app/routes/api/v1/moderation/sweep/_sweep'),
-  'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
-  'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
-  'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/attachments/delete': () => import('../../../app/routes/api/v1/attachments/delete/_delete'),
   'v1/attachments/uploads': () => import('../../../app/routes/api/v1/attachments/uploads/_uploads'),
   'v1/attachments/uploads/abort': () => import('../../../app/routes/api/v1/attachments/uploads/abort/_abort'),
@@ -152,173 +153,175 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/token': () => import('../../../app/routes/api/v1/oauth/token/_token'),
   'v1/oauth/scopes': () => import('../../../app/routes/api/v1/oauth/scopes/_scopes'),
   'v1/oauth/shared': () => import('../../../app/routes/api/v1/oauth/shared/_shared'),
-  'v1/oauth/token': () => import('../../../app/routes/api/v1/oauth/token/_token'),
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/actions/run': () => import('../../../app/routes/api/v1/actions/run/_run'),
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
+  'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
+  'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
+  'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
 		import('../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'),
-	'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
-	'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
-	'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
-	'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
-	'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
-	'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
-	'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
-	'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
-	'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
-	'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
-	'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
-	'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
-	'v1/things/comment': () => import('../../../app/routes/api/v1/things/comment/_comment'),
-	'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
-	'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
-	'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
-	'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
-	'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
+  'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
+  'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
+  'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
+  'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
+  'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
+  'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
+  'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
+  'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
+  'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
+  'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
+  'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
+  'v1/things/comment': () => import('../../../app/routes/api/v1/things/comment/_comment'),
+  'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
+  'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
+  'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
+  'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
+  'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
-	'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
-	'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),
-	'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
-	'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
-	'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
-	'v1/things/views': () => import('../../../app/routes/api/v1/things/views/_views'),
-	'v1/users/connections': () => import('../../../app/routes/api/v1/users/connections/_connections'),
-	'v1/users/follow': () => import('../../../app/routes/api/v1/users/follow/_follow'),
-	'v1/users/friend': () => import('../../../app/routes/api/v1/users/friend/_friend'),
-	'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
-	'v1/users/relationships': () => import('../../../app/routes/api/v1/users/relationships/_relationships'),
-	'v1/users/search': () => import('../../../app/routes/api/v1/users/search/_search'),
-	'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
-	'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
-	'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),
-	'v1/waitlist': () => import('../../../app/routes/api/v1/waitlist/_waitlist')
+  'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
+  'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),
+  'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
+  'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
+  'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
+  'v1/things/views': () => import('../../../app/routes/api/v1/things/views/_views'),
+  'v1/users/connections': () => import('../../../app/routes/api/v1/users/connections/_connections'),
+  'v1/users/follow': () => import('../../../app/routes/api/v1/users/follow/_follow'),
+  'v1/users/friend': () => import('../../../app/routes/api/v1/users/friend/_friend'),
+  'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
+  'v1/users/relationships': () => import('../../../app/routes/api/v1/users/relationships/_relationships'),
+  'v1/users/search': () => import('../../../app/routes/api/v1/users/search/_search'),
+  'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
+  'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
+  'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),
+  'v1/waitlist': () => import('../../../app/routes/api/v1/waitlist/_waitlist')
 };
 
 const normalizePath = (value: unknown, url?: string) => {
-	if (Array.isArray(value) && value.length) return value.join('/');
+  if (Array.isArray(value) && value.length) return value.join('/');
 
-	const fromParams = String(value || '').replace(/^\/+|\/+$/g, '');
-	if (fromParams) return fromParams;
+  const fromParams = String(value || '').replace(/^\/+|\/+$/g, '');
+  if (fromParams) return fromParams;
 
-	const pathname = new URL(url || '/', 'http://localhost').pathname;
-	return pathname.replace(/^\/api\/?/, '').replace(/^\/+|\/+$/g, '');
+  const pathname = new URL(url || '/', 'http://localhost').pathname;
+  return pathname.replace(/^\/api\/?/, '').replace(/^\/+|\/+$/g, '');
 };
 
 const jsonResponse = (value: unknown, init: ResponseInit = {}) => {
-	const headers = new Headers(init.headers);
-	if (!headers.has('Content-Type')) {
-		headers.set('Content-Type', 'application/json; charset=utf-8');
-	}
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+  }
 
-	return new Response(JSON.stringify(value), {
-		...init,
-		headers
-	});
+  return new Response(JSON.stringify(value), {
+    ...init,
+    headers
+  });
 };
 
 const normalizeResponse = (value: unknown) => {
-	if (value instanceof Response) {
-		return value;
-	}
+  if (value instanceof Response) {
+    return value;
+  }
 
-	if (value && typeof value === 'object' && 'body' in value && ('status' in value || 'headers' in value)) {
-		const legacy = value as {
-			status?: number;
-			headers?: HeadersInit;
-			body?: unknown;
-		};
+  if (value && typeof value === 'object' && 'body' in value && ('status' in value || 'headers' in value)) {
+    const legacy = value as {
+      status?: number;
+      headers?: HeadersInit;
+      body?: unknown;
+    };
 
-		return new Response(JSON.stringify(legacy.body ?? null), {
-			status: legacy.status || 200,
-			headers: {
-				'Content-Type': 'application/json; charset=utf-8',
-				...(legacy.headers as Record<string, string> | undefined)
-			}
-		});
-	}
+    return new Response(JSON.stringify(legacy.body ?? null), {
+      status: legacy.status || 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        ...(legacy.headers as Record<string, string> | undefined)
+      }
+    });
+  }
 
-	return jsonResponse(value ?? null);
+  return jsonResponse(value ?? null);
 };
 
 export default defineHandler(async (event) => {
-	const path = normalizePath(event.context.params?.path, event.req.url);
-	const method = event.req.method.toUpperCase();
+  const path = normalizePath(event.context.params?.path, event.req.url);
+  const method = event.req.method.toUpperCase();
 
-	if (path.endsWith('-docs')) {
-		if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
-			return new Response('Method not allowed', {
-				status: 405,
-				headers: { Allow: 'GET, POST' }
-			});
-		}
+  if (path.endsWith('-docs')) {
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+      return new Response('Method not allowed', {
+        status: 405,
+        headers: { Allow: 'GET, POST' }
+      });
+    }
 
-		// 🔮 the teapot's -docs twin is real but unlisted (claude-todo/10):
-		// it never appears in /docs/api, yet the self-describing convention holds
-		if (path === 'v1/teapot-docs') {
-			return jsonResponse({
-				ok: true,
-				endpoint: '/api/v1/teapot',
-				methods: ['GET', 'POST'],
-				summary: 'Politely declines to brew coffee.',
-				detail:
-					'RFC 2324 lives here. Every documented endpoint serves JSON docs at -docs — including the ones you were never told about. Congratulations on your curiosity. 🫖',
-				responses: [{ status: 418, description: 'Short and stout, with a brew-time haiku.' }]
-			});
-		}
+    // 🔮 the teapot's -docs twin is real but unlisted (claude-todo/10):
+    // it never appears in /docs/api, yet the self-describing convention holds
+    if (path === 'v1/teapot-docs') {
+      return jsonResponse({
+        ok: true,
+        endpoint: '/api/v1/teapot',
+        methods: ['GET', 'POST'],
+        summary: 'Politely declines to brew coffee.',
+        detail:
+          'RFC 2324 lives here. Every documented endpoint serves JSON docs at -docs — including the ones you were never told about. Congratulations on your curiosity. 🫖',
+        responses: [{ status: 418, description: 'Short and stout, with a brew-time haiku.' }]
+      });
+    }
 
-		// lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
-		// the rare -docs request, not to every instance's cold start
-		const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
-		const doc = getApiDocByPath(path);
-		if (!doc) {
-			return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });
-		}
+    // lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
+    // the rare -docs request, not to every instance's cold start
+    const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
+    const doc = getApiDocByPath(path);
+    if (!doc) {
+      return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });
+    }
 
-		return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
-	}
+    return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
 
-	if (shouldProxyApiToFallback(event.req)) {
-		return proxyApiRequestToFallback(event.req);
-	}
+  if (shouldProxyApiToFallback(event.req)) {
+    return proxyApiRequestToFallback(event.req);
+  }
 
-	const loadModule = routeModules[path];
+  const loadModule = routeModules[path];
 
-	if (!loadModule) {
-		// 🔮 even the 404 speaks Lopu (claude-todo/10) — same {ok, error} envelope
-		// as every other API response instead of a bare text body
-		return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
-	}
+  if (!loadModule) {
+    // 🔮 even the 404 speaks Lopu (claude-todo/10) — same {ok, error} envelope
+    // as every other API response instead of a bare text body
+    return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
+  }
 
-	const route = await loadModule();
-	const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
+  const route = await loadModule();
+  const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
 
-	if (!handler) {
-		return new Response('Method not allowed', {
-			status: 405,
-			headers: {
-				Allow: [route.loader ? 'GET' : undefined, route.action ? 'POST' : undefined].filter(Boolean).join(', ')
-			}
-		});
-	}
+  if (!handler) {
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: {
+        Allow: [route.loader ? 'GET' : undefined, route.action ? 'POST' : undefined].filter(Boolean).join(', ')
+      }
+    });
+  }
 
-	// Establish the request's MongoDB endpoint context (the `tt_mongo` session
-	// cookie / `x-tt-mongo-url` header — see api/utils/mongodb/endpoint.ts) so
-	// the data plane below the handler resolves the session's active endpoint.
-	// Admin routes are exempt: migrations and other admin writes must always
-	// operate on the home deployment, never on an override DB.
-	const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
+  // Establish the request's MongoDB endpoint context (the `tt_mongo` session
+  // cookie / `x-tt-mongo-url` header — see api/utils/mongodb/endpoint.ts) so
+  // the data plane below the handler resolves the session's active endpoint.
+  // Admin routes are exempt: migrations and other admin writes must always
+  // operate on the home deployment, never on an override DB.
+  const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
 
-	try {
+  try {
 		return await runWithMongoEndpoint(mongoEndpoint, async () => normalizeResponse(await handler({ request: event.req })));
-	} catch (err) {
-		if (err instanceof Response) {
-			return err;
-		}
+  } catch (err) {
+    if (err instanceof Response) {
+      return err;
+    }
 
-		throw err;
-	}
+    throw err;
+  }
 });

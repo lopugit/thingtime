@@ -438,8 +438,10 @@ export const ingestVercelWebhook = async (input: {
   const data = payload.payload ?? payload.data ?? payload;
   const deployment = data.deployment ?? data;
   const meta = deployment.meta ?? data.meta ?? {};
+  const githubOrg = safeString(meta.githubCommitOrg, 180);
+  const githubRepo = safeString(meta.githubCommitRepo, 180);
   const repository =
-    safeString(meta.githubCommitRepo, 300) ||
+    (githubOrg && githubRepo ? `${githubOrg}/${githubRepo}` : '') ||
     safeString(process.env.THINGTIME_GITHUB_REPOSITORY, 300) ||
     DEFAULT_REPOSITORY;
   const projectId = safeString(deployment.projectId ?? data.projectId, 180);
@@ -466,6 +468,9 @@ export const ingestVercelWebhook = async (input: {
         projectName: safeString(deployment.name ?? data.name, 180) || null,
         ref: safeString(meta.githubCommitRef, 300) || null,
         sha: safeString(meta.githubCommitSha, 64) || null,
+        prNumber: safeNumber(meta.githubPrId),
+        previewEnvironment: safeString(meta.thingtimePreviewEnvironment, 40) || null,
+        thingtimeAdminPrPreview: meta.thingtimeAdminPrPreview === '1',
         commitAuthor: safeString(meta.githubCommitAuthorLogin, 180) || null,
         target: safeString(deployment.target, 80) || null,
         readyState: status
@@ -491,6 +496,9 @@ export const ingestVercelWebhook = async (input: {
           projectId: projectId || null,
           ref: safeString(meta.githubCommitRef, 300) || null,
           sha: safeString(meta.githubCommitSha, 64) || null,
+          prNumber: safeNumber(meta.githubPrId),
+          previewEnvironment: safeString(meta.thingtimePreviewEnvironment, 40) || null,
+          thingtimeAdminPrPreview: meta.thingtimeAdminPrPreview === '1',
           target: safeString(deployment.target, 80) || null
         }
       },

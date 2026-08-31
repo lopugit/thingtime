@@ -2,6 +2,7 @@ import { createSign } from 'node:crypto';
 
 import type { CiWorkflowKey } from './automationPolicy';
 import { ciProviderReadiness } from './providerReadiness';
+import { featureStackTargetsForSource } from './featureStackRoutingCore';
 import { getCiAutomationPolicy, recordCiEvent, upsertCiEntity } from './store';
 import { ciFeatureIdentity } from './webhooks';
 
@@ -72,10 +73,7 @@ const installationToken = async (): Promise<string> => {
   return payload.token;
 };
 
-export const githubRequest = async <T = any>(
-  path: string,
-  init?: { method?: string; body?: unknown }
-): Promise<T> => {
+export const githubRequest = async <T = any>(path: string, init?: { method?: string; body?: unknown }): Promise<T> => {
   const response = await fetch(`https://api.github.com${path}`, {
     method: init?.method ?? 'GET',
     headers: {
@@ -95,8 +93,7 @@ export const githubRequest = async <T = any>(
   return payload as T;
 };
 
-export const repositoryName = () =>
-  (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
+export const repositoryName = () => (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
 
 const workflowFileByKey = {
   'feature-stack': 'resolve-pr-conflicts.yml',
@@ -152,15 +149,14 @@ export const resolveCiWorkflowDispatch = (
       .filter(([key]) => allowed.has(key))
       .map(([key, value]) => [
         key,
-        typeof value === 'boolean'
-          ? value
-          : String(value ?? '').slice(0, key === 'feature_stack_plan_b64' ? 24_000 : 300)
+				typeof value === 'boolean' ? value : String(value ?? '').slice(0, key === 'feature_stack_plan_b64' ? 60_000 : 300)
       ])
   ) as Record<string, string | boolean>;
 
-  const managerInputs = (maintenanceOperation: string) => ({
+	const managerInputs = (maintenanceOperation: string) =>
+		({
     maintenance_operation: maintenanceOperation
-  }) satisfies Record<string, string | boolean>;
+		} satisfies Record<string, string | boolean>);
   if (workflow === 'feature-stack') {
     const encoded = selected.feature_stack_plan_b64;
     if (typeof encoded !== 'string' || !encoded) throw new Error('Feature Stack plan is required');
@@ -200,6 +196,7 @@ type FeatureStackPullRequest = {
   state?: string;
   draft?: boolean;
   head?: { ref?: string; sha?: string; repo?: { full_name?: string } | null };
+	base?: { ref?: string };
 };
 
 export const canonicalFeatureStackPlanFromPullRequests = (input: {
@@ -208,53 +205,79 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
   targets: string[];
   pullRequests: FeatureStackPullRequest[];
   repository: string;
+	stackId: string;
+	autoDecideBranches: boolean;
 }) => {
   const headRefs = new Set<string>();
-  const sources = input.pullRequests.map((pr, index) => {
+	const sources = input.pullRequests.flatMap((pr, index) => {
     const number = input.sourcePrNumbers[index];
     const head = String(pr.head?.ref ?? '');
     const sha = String(pr.head?.sha ?? '');
-    const title = String(pr.title ?? '').trim().slice(0, 200);
+		const base = String(pr.base?.ref ?? '');
+		const title = String(pr.title ?? '')
+			.trim()
+			.slice(0, 200);
     if (
-      pr.number !== number || pr.state !== 'open' || pr.draft === true ||
-      pr.head?.repo?.full_name !== input.repository || !GIT_REF.test(head) ||
-      !/^[0-9a-f]{40}$/.test(sha) || !title || hasControlCharacter(title) || headRefs.has(head)
+			pr.number !== number ||
+			pr.state !== 'open' ||
+			pr.draft === true ||
+			pr.head?.repo?.full_name !== input.repository ||
+			!GIT_REF.test(head) ||
+			!GIT_REF.test(base) ||
+			!/^[0-9a-f]{40}$/.test(sha) ||
+			!title ||
+			hasControlCharacter(title) ||
+			headRefs.has(head)
     ) {
       throw new Error(`Feature Stack source PR #${number} is not an eligible immutable same-repository PR`);
     }
     headRefs.add(head);
-    return { head, pr: number, sha, title };
+		const targets = featureStackTargetsForSource(base, input.targets, input.autoDecideBranches);
+		return targets.length ? [{ base, head, pr: number, sha, targets, title }] : [];
   });
   if (input.targets.some((target) => headRefs.has(target))) {
     throw new Error('A Feature Stack source branch cannot also be a target');
   }
-  return { autoMerge: true as const, name: input.name, sources, targets: input.targets, version: 1 as const };
+	if (!sources.length) {
+		throw new Error('No selected pull request is compatible with the selected target branches');
+	}
+	const targets = input.targets.filter((target) => sources.some((source) => source.targets.includes(target)));
+	return {
+		autoDecideBranches: input.autoDecideBranches,
+		autoMerge: true as const,
+		name: input.name,
+		sources,
+		stackId: input.stackId,
+		targets,
+		version: 2 as const
+	};
 };
 
-export const buildFeatureStackInputs = async (
-  requestedInputs: Record<string, unknown>
-): Promise<Record<string, unknown>> => {
+export const buildFeatureStackInputs = async (requestedInputs: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const repository = repositoryName();
   const name = typeof requestedInputs.name === 'string' ? requestedInputs.name.trim() : '';
   const rawNumbers = requestedInputs.source_pr_numbers;
   const rawTargets = requestedInputs.targets;
+	const stackId = typeof requestedInputs.stack_id === 'string' ? requestedInputs.stack_id.trim() : '';
+	const autoDecideBranches = requestedInputs.auto_decide_branches !== false;
   if (!name || name.length > 80 || hasControlCharacter(name)) {
     throw new Error('Feature Stack name must be 1-80 printable characters');
   }
-  if (!Array.isArray(rawNumbers) || rawNumbers.length < 2 || rawNumbers.length > 20) {
-    throw new Error('Feature Stack needs 2-20 pull requests');
+	if (!stackId || !/^ci-feature-stack-[0-9a-f-]{36}$/.test(stackId)) {
+		throw new Error('Feature Stack id is invalid');
   }
-  const sourcePrNumbers = rawNumbers.map((value) =>
-    typeof value === 'number' ? value : Number(String(value ?? ''))
-  );
+	if (!Array.isArray(rawNumbers) || rawNumbers.length < 1) {
+		throw new Error('Feature Stack needs at least one pull request');
+	}
+	const sourcePrNumbers = rawNumbers.map((value) => (typeof value === 'number' ? value : Number(String(value ?? ''))));
   if (sourcePrNumbers.some((value) => !Number.isSafeInteger(value) || value < 1 || value > 999_999_999)) {
     throw new Error('Feature Stack contains an invalid pull request number');
   }
   if (new Set(sourcePrNumbers).size !== sourcePrNumbers.length) {
     throw new Error('Feature Stack pull requests must be unique');
   }
-  if (!Array.isArray(rawTargets) || rawTargets.length < 1 || rawTargets.length > 2) {
-    throw new Error('Feature Stack needs 1-2 target branches');
+	if (!Array.isArray(rawTargets) || rawTargets.length < 1) {
+		throw new Error('Feature Stack needs at least one target branch');
   }
   const targets = rawTargets.map((value) => String(value ?? '').trim());
   if (targets.some((target) => !GIT_REF.test(target)) || new Set(targets).size !== targets.length) {
@@ -262,23 +285,17 @@ export const buildFeatureStackInputs = async (
   }
 
   const [pullRequests] = await Promise.all([
-    Promise.all(
-      sourcePrNumbers.map((number) =>
-        githubRequest<FeatureStackPullRequest>(`/repos/${repository}/pulls/${number}`)
-      )
-    ),
-    Promise.all(
-      targets.map((target) =>
-        githubRequest(`/repos/${repository}/git/ref/heads/${encodeURIComponent(target)}`)
-      )
-    )
+		Promise.all(sourcePrNumbers.map((number) => githubRequest<FeatureStackPullRequest>(`/repos/${repository}/pulls/${number}`))),
+		Promise.all(targets.map((target) => githubRequest(`/repos/${repository}/git/ref/heads/${encodeURIComponent(target)}`)))
   ]);
   const plan = canonicalFeatureStackPlanFromPullRequests({
     name,
     sourcePrNumbers,
     targets,
     pullRequests,
-    repository
+		repository,
+		stackId,
+		autoDecideBranches
   });
   return { feature_stack_plan_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64') };
 };
@@ -291,9 +308,7 @@ export const dispatchCiWorkflow = async (input: {
   externalId?: string;
   requestedAt?: Date;
 }) => {
-  const requestedInputs = input.workflow === 'feature-stack'
-    ? await buildFeatureStackInputs(input.inputs ?? {})
-    : input.inputs;
+	const requestedInputs = input.workflow === 'feature-stack' ? await buildFeatureStackInputs(input.inputs ?? {}) : input.inputs;
   const { workflowFile, inputs } = resolveCiWorkflowDispatch(input.workflow, requestedInputs);
   // workflow_dispatch loads its listener from `ref`. Keep that entrypoint on
   // the two reviewed product branches; an arbitrary feature ref could carry
@@ -387,10 +402,10 @@ export const dispatchCiWorkflow = async (input: {
         workflowRunId: workflowRun.runId
       };
     }
-    await githubRequest<void>(
-      `/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`,
-      { method: 'POST', body: { ref, inputs } }
-    );
+		await githubRequest<void>(`/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
+			method: 'POST',
+			body: { ref, inputs }
+		});
     await upsertCiEntity({
       kind: 'ci-dispatch',
       provider: 'thingtime',
@@ -724,5 +739,4 @@ export const reconcileGitHubRepository = async (actorId: string) => {
   };
 };
 
-export const githubAppConfigured = () =>
-  ciProviderReadiness().githubAppConfigured;
+export const githubAppConfigured = () => ciProviderReadiness().githubAppConfigured;

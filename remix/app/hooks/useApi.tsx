@@ -216,6 +216,18 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
+      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      mutateCiFeatureStack: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
+        [asyncFetcher]
+      ),
+      mutateCiCredential: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/credentials', errorContext: 'manage Lopu credential waterfall' }),
+        [asyncFetcher]
+      ),
       reconcileCiControl: useCallback(
         async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
         [asyncFetcher]
@@ -228,6 +240,11 @@ export function useApi() {
       setCiAutomationPolicy: useCallback(
         async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
+        [asyncFetcher]
+      ),
+      setCiPreviewPolicy: useCallback(
+        async (args: { prNumber: number; environment: 'develop' | 'production'; enabled: boolean; acknowledgeProductionData?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/previews', errorContext: `update ${args.environment} PR preview` }),
         [asyncFetcher]
       ),
       setPrConflictResolverModelWaterfall: useCallback(

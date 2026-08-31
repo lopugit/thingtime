@@ -65,6 +65,43 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
+- **Vercel now serves Thingtime's origin-scoped API capability manifest from
+  Nitro instead of the SPA shell.** The generic
+  `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
+  discovery ahead of the filesystem and `index.html` fallbacks, and the built
+  output verifier locks in that ordering. — Codex (AI), 2026-08-31
 - **The new Limitless MCP Lab turns the live connector contract into an
   interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
   in parallel, keeps the current release contract on first paint, demonstrates
@@ -100,6 +137,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
 
 ### Added
+
+- **Feature Stacks are now reusable, unlimited control-plane workflows.** Admin
+  CI Control can save and edit multiple stacks, run a one-feature stack, select
+  any number of live features and targets, see per-target PR progress, and use
+  a default-on branch router that keeps `github-actions`, `main`, and `develop`
+  sources in compatible lanes. The protected controller receives a v2 immutable
+  plan and filters it to one target-specific source manifest before Lopu merges.
+  PR statuses now use a Vercel-style multi-select; System model-order entries
+  edit in place; and the encrypted credential waterfall accepts built-in or
+  custom AI platform labels while GitHub keeps using the single stable router
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
+
+- **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
+  add, name, rotate, enable, remove, and reorder up to eight write-only Claude
+  Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only
+  redacted metadata to browsers, and delivers the ordered enabled bundle to a
+  fresh replay-protected HMAC-authenticated controller run. Lopu masks the
+  bundle, keeps it only for that run, and walks the array on classified account
+  capacity/credential failures, removing the need for one GitHub secret name
+  per Claude account. — Codex (AI), 2026-08-31
 
 - **Admin CI Control now batches features as a verified multi-target Feature
   Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
