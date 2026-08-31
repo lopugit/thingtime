@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_FIELD_CHARS: usize = 512;
@@ -457,6 +458,9 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
     if query.len() > candidate.len() {
         return typo_match(query, &candidate);
     }
+    if !contains_subsequence(query, &candidate) {
+        return typo_match(query, &candidate);
+    }
 
     let mut rows = vec![vec![None; candidate.len()]; query.len()];
 
@@ -572,19 +576,29 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         _ => {}
     }
 
+    let compact_query: Vec<char> = query
+        .iter()
+        .copied()
+        .filter(|character| character.is_alphanumeric())
+        .collect();
+    let compact_query = if compact_query.is_empty() {
+        query.to_vec()
+    } else {
+        compact_query
+    };
     let compact_candidate: Vec<char> = candidate
         .iter()
-        .filter(|glyph| !glyph.value.is_whitespace())
+        .filter(|glyph| glyph.value.is_alphanumeric())
         .map(|glyph| glyph.value)
         .collect();
     let coverage_bonus =
-        (((query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
+        (((compact_query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
     let contained_at = compact_candidate
-        .windows(query.len())
-        .position(|candidate_window| candidate_window == query);
-    let score = if compact_candidate.as_slice() == query {
+        .windows(compact_query.len())
+        .position(|candidate_window| candidate_window == compact_query);
+    let score = if compact_candidate == compact_query {
         EXACT_MATCH_SCORE
-    } else if compact_candidate.starts_with(query) {
+    } else if compact_candidate.starts_with(&compact_query) {
         PREFIX_MATCH_SCORE.saturating_sub(compact_candidate.len() as u64)
     } else if let Some(index) = contained_at {
         CONTAINED_MATCH_SCORE.saturating_sub(index as u64)
@@ -604,6 +618,19 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
 /// application, command, and extension search.
 pub fn fuzzy_text_score(query: &str, candidate: &str) -> Option<u64> {
     match_text(&fold_query(query), candidate).map(|text_match| text_match.score)
+}
+
+fn contains_subsequence(query: &[char], candidate: &[FoldedGlyph]) -> bool {
+    let mut query_index = 0;
+    for glyph in candidate {
+        if glyph.value == query[query_index] {
+            query_index += 1;
+            if query_index == query.len() {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[derive(Clone, Copy)]
@@ -633,6 +660,12 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         .map(|(index, glyph)| (glyph.value, index))
         .collect();
     if compact_candidate.is_empty() {
+        return None;
+    }
+    let maximum_distance = maximum_typo_distance(compact_query.len());
+    if character_overlap(&compact_query, &compact_candidate)
+        < compact_query.len().saturating_sub(maximum_distance)
+    {
         return None;
     }
 
@@ -708,7 +741,7 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
                 .then_with(|| left.start.cmp(&right.start))
         },
     )?;
-    if best.cost > maximum_typo_distance(compact_query.len()) || best.start >= end {
+    if best.cost > maximum_distance || best.start >= end {
         return None;
     }
     let start_glyph = compact_candidate[best.start].1;
@@ -720,6 +753,21 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         score: score.max(1),
         ranges: ranges_for_indices(candidate, &(start_glyph..=end_glyph).collect::<Vec<_>>()),
     })
+}
+
+fn character_overlap(query: &[char], candidate: &[(char, usize)]) -> usize {
+    let mut query_counts = HashMap::new();
+    for character in query {
+        *query_counts.entry(*character).or_insert(0_usize) += 1;
+    }
+    let mut candidate_counts = HashMap::new();
+    for (character, _) in candidate {
+        *candidate_counts.entry(*character).or_insert(0_usize) += 1;
+    }
+    query_counts
+        .into_iter()
+        .map(|(character, count)| count.min(candidate_counts.get(&character).copied().unwrap_or(0)))
+        .sum()
 }
 
 fn best_edit_cell(left: EditCell, right: EditCell, _end: usize) -> EditCell {
@@ -1011,6 +1059,21 @@ mod tests {
         assert_eq!(hits[0].item.id, "system");
         assert_eq!(hits[0].item.title, "Displays Settings");
         assert!(hits[0].score > hits[1].score);
+    }
+
+    #[test]
+    fn separator_equivalent_exact_title_beats_typo_siblings() {
+        let hits = search(&request(
+            "raycast stop",
+            vec![
+                item("start", "raycast-start"),
+                item("status", "raycast-status"),
+                item("stop", "raycast-stop"),
+            ],
+        ));
+
+        assert_eq!(hits[0].item.id, "stop");
+        assert_eq!(hits[0].score, EXACT_MATCH_SCORE);
     }
 
     #[test]

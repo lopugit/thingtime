@@ -35,7 +35,7 @@ const SCHEMA_VERSION: i64 = 3;
 const MAX_SOURCES: usize = 128;
 const MAX_IGNORE_RULES: usize = 512;
 const MAX_QUERY_RESULTS: usize = 1_000;
-const MAX_FUZZY_CANDIDATES: usize = 12_000;
+const MAX_COARSE_FUZZY_CANDIDATES: usize = 12_000;
 const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
 const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
@@ -404,7 +404,6 @@ impl IndexDatabase {
         let query_length = query.chars().count();
         let mut records = if query_length >= 3 {
             let mut matches = self.query_fts(query, &kinds, request.limit)?;
-            rank_records(&mut matches, query);
             if matches.is_empty() {
                 matches = self.query_coarse_fuzzy(query, &kinds, request.limit)?;
                 rank_records(&mut matches, query);
@@ -644,10 +643,19 @@ impl IndexDatabase {
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
+        self.query_fts_with_stats(query, kinds, limit)
+            .map(|(records, _)| records)
+    }
+
+    fn query_fts_with_stats(
+        &self,
+        query: &str,
+        kinds: &[IndexKind],
+        limit: usize,
+    ) -> Result<(Vec<IndexRecord>, usize), IndexerError> {
         let Some(fts_query) = fuzzy_fts_query(query) else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), 0));
         };
-        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
         let mut statement = self.connection.prepare(
             "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
              FROM records_fts
@@ -655,22 +663,26 @@ impl IndexDatabase {
              WHERE records_fts MATCH ?1
                AND ((?2 = 1 AND r.kind = 'application')
                  OR (?3 = 1 AND r.kind = 'file')
-                 OR (?4 = 1 AND r.kind = 'directory'))
-             ORDER BY bm25(records_fts), lower(r.name), r.path
-             LIMIT ?5",
+                 OR (?4 = 1 AND r.kind = 'directory'))",
         )?;
         let flags = kind_flags(kinds);
-        let rows = statement.query_map(
-            params![
-                fts_query,
-                flags.0,
-                flags.1,
-                flags.2,
-                i64::try_from(expanded_limit).unwrap_or(i64::MAX)
-            ],
-            row_to_record,
-        )?;
-        collect_rows(rows)
+        let rows =
+            statement.query_map(params![fts_query, flags.0, flags.1, flags.2], row_to_record)?;
+        let mut records = Vec::with_capacity(limit);
+        let mut candidates_evaluated = 0;
+        let prune_at = limit.saturating_mul(16).max(1_024);
+        for row in rows {
+            let mut record = row?;
+            candidates_evaluated += 1;
+            if rank_record(&mut record, query) {
+                records.push(record);
+                if records.len() >= prune_at {
+                    retain_best_ranked_records(&mut records, limit);
+                }
+            }
+        }
+        retain_best_ranked_records(&mut records, limit);
+        Ok((records, candidates_evaluated))
     }
 
     fn query_prefix(
@@ -811,7 +823,7 @@ impl IndexDatabase {
              LIMIT ?{limit_parameter}"
         );
         let flags = kind_flags(kinds);
-        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
+        let expanded_limit = limit.saturating_mul(12).min(MAX_COARSE_FUZZY_CANDIDATES);
         let mut parameters = prefixes.into_iter().map(SqlValue::Text).collect::<Vec<_>>();
         parameters.extend([
             SqlValue::Integer(flags.0),
@@ -1684,15 +1696,26 @@ fn rank_records(records: &mut Vec<IndexRecord>, query: &str) {
         });
         return;
     }
-    records.retain_mut(|record| {
-        let name_score = fuzzy_text_score(query, &record.name);
-        let parent_score = fuzzy_text_score(query, &record.parent).map(|score| score * 35 / 100);
-        let Some(score) = name_score.into_iter().chain(parent_score).max() else {
-            return false;
-        };
-        record.score = i64::try_from(score).unwrap_or(i64::MAX);
-        true
-    });
+    records.retain_mut(|record| rank_record(record, query));
+    sort_ranked_records(records);
+}
+
+fn rank_record(record: &mut IndexRecord, query: &str) -> bool {
+    let name_score = fuzzy_text_score(query, &record.name);
+    let parent_score = fuzzy_text_score(query, &record.parent).map(|score| score * 35 / 100);
+    let Some(score) = name_score.into_iter().chain(parent_score).max() else {
+        return false;
+    };
+    record.score = i64::try_from(score).unwrap_or(i64::MAX);
+    true
+}
+
+fn retain_best_ranked_records(records: &mut Vec<IndexRecord>, limit: usize) {
+    sort_ranked_records(records);
+    records.truncate(limit);
+}
+
+fn sort_ranked_records(records: &mut [IndexRecord]) {
     records.sort_by(|left, right| {
         right
             .score
@@ -2330,6 +2353,39 @@ mod tests {
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
+    }
+
+    #[test]
+    fn mixed_kind_query_has_no_pre_ranking_candidate_cap() {
+        let temp = TempDir::new().expect("tempdir");
+        create_dir_all(temp.path().join("raycast-stop.app")).expect("exact application");
+        for index in 0..64 {
+            write(
+                temp.path().join(format!("raycast-start-{index:02}.txt")),
+                "noise",
+            )
+            .expect("raycast noise");
+            write(temp.path().join(format!("stop-{index:02}.txt")), "noise").expect("stop noise");
+        }
+        let mut database = database(&temp);
+        database
+            .index(&configuration(
+                temp.path(),
+                vec![IndexKind::Application, IndexKind::File],
+            ))
+            .expect("index");
+
+        let (records, candidates_evaluated) = database
+            .query_fts_with_stats(
+                "raycast stop",
+                &[IndexKind::Application, IndexKind::File],
+                1,
+            )
+            .expect("query");
+
+        assert_eq!(candidates_evaluated, 129);
+        assert_eq!(records[0].kind, IndexKind::Application);
+        assert_eq!(records[0].name, "raycast-stop");
     }
 
     #[test]

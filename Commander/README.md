@@ -175,6 +175,9 @@ size, expiry, custom cache-directory override, reveal, and clear. Cache files co
 owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
 into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes, so
 typing never has to blank or temporarily downgrade the list to catalog-only results.
+Live trigram search has no pre-ranking candidate-count ceiling: every matching FTS row is scored, while only the
+best requested results stay resident in memory. The indexer reader runs the active query plus only the latest queued
+refinement, so rapid typing cannot build a stale backlog of uncapped searches.
 
 ## Raycast companion command
 

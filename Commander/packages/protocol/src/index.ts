@@ -450,9 +450,11 @@ export function fuzzyTextScore(queryValue: string, candidateValue: string): numb
   const value = [...candidateValue.toLowerCase()].slice(0, 512).join('');
   if (!query) return 0;
   if (!value) return -1;
-  if (value === query) return 100_000;
-  if (value.startsWith(query)) return 80_000 - value.length;
-  const containedAt = value.indexOf(query);
+  const compactQuery = compactSearchText(query);
+  const compactValue = compactSearchText(value);
+  if (compactValue === compactQuery) return 100_000;
+  if (compactValue.startsWith(compactQuery)) return 80_000 - compactValue.length;
+  const containedAt = compactValue.indexOf(compactQuery);
   if (containedAt >= 0) return 60_000 - containedAt;
   let cursor = 0;
   let gaps = 0;
@@ -467,8 +469,6 @@ export function fuzzyTextScore(queryValue: string, candidateValue: string): numb
     cursor = found + 1;
   }
   if (subsequence) return 10_000 - gaps;
-  const compactQuery = compactSearchText(query);
-  const compactValue = compactSearchText(value);
   if (compactQuery.length < 3 || !compactValue) return -1;
   const distance = substringDamerauDistance(compactQuery, compactValue);
   return distance <= maximumTypoDistance(compactQuery.length) ? 8_000 - distance * 1_500 : -1;
