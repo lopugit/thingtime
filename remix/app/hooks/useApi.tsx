@@ -241,6 +241,11 @@ export function useApi() {
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
         [asyncFetcher]
       ),
+      setCiPreviewPolicy: useCallback(
+        async (args: { prNumber: number; environment: 'develop' | 'production'; enabled: boolean; acknowledgeProductionData?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/previews', errorContext: `update ${args.environment} PR preview` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]

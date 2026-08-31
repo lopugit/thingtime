@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { ciProviderReadiness } from '~/api/utils/ciControl/providerReadiness';
+import { ciAdminPreviewReadiness } from '~/api/utils/ciControl/adminPreviewDeployments';
 import { listCiDashboard } from '~/api/utils/ciControl/store';
 
 export const loader = ({ request }: { request: Request }) =>
@@ -12,6 +13,7 @@ export const loader = ({ request }: { request: Request }) =>
     const requestedLimit = Number(url.searchParams.get('limit') ?? 100);
     const dashboard = await listCiDashboard({ limit: requestedLimit });
     const readiness = ciProviderReadiness();
+    const previewReadiness = ciAdminPreviewReadiness();
     return json({
       ok: true,
       dashboard,
@@ -24,7 +26,9 @@ export const loader = ({ request }: { request: Request }) =>
         vercelRunnerConfigured: readiness.vercelRuntimeConfigured,
         providerRouterConfigured: readiness.providerRouterConfigured,
         vercelRunnerReady: readiness.vercelRunnerReady,
-        vercelRunnerMissing: readiness.missing
+        vercelRunnerMissing: readiness.missing,
+        previewBuilderConfigured: previewReadiness.configured,
+        previewBuilderMissing: previewReadiness.missing
       }
     });
   });
