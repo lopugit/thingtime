@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   CHATGPT_MCP_PATH,
+  CHATGPT_MCP_METHOD_FEATURES,
   CHATGPT_MCP_TOOL_FEATURES,
   CHATGPT_PLUGIN_FEATURES,
   CHATGPT_PLUGIN_ROUTES,
@@ -190,7 +191,10 @@ test('capability discovery is origin scoped and every registered route has a sem
   }
   assert.deepEqual(
     discovery.capabilityManifest.operations,
-    Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({ transport: 'mcp-tool', name, feature }))
+    [
+      ...Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({ transport: 'mcp-tool', name, feature })),
+      ...Object.entries(CHATGPT_MCP_METHOD_FEATURES).map(([name, feature]) => ({ transport: 'mcp-method', name, feature }))
+    ]
   );
   for (const operation of discovery.capabilityManifest.operations) {
     assert.ok(operation.feature in CHATGPT_PLUGIN_FEATURES, `${operation.name} lacks a known capability feature`);

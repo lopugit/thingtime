@@ -2,7 +2,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
+import { authorizeCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
 
 const configPath = '.vercel/output/config.json';
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -40,6 +40,15 @@ config.routes = [
     headers: {
       'Content-Security-Policy': designBundlesCsp,
       'Access-Control-Allow-Origin': '*'
+    },
+    continue: true
+  },
+  // The sandboxed MCP review srcdoc inherits its parent CSP. Permit only the
+  // shipped review app's exact inline module hash on the Lab route.
+  {
+    src: '^/docs/mcp/?$',
+    headers: {
+      'Content-Security-Policy': mcpLabCsp
     },
     continue: true
   },

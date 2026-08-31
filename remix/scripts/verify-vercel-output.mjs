@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
+import { authorizeCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -204,11 +204,31 @@ if (designBundlesHeadersIndex === -1) {
 if (designBundlesHeadersIndex < cspHeadersIndex || designBundlesHeadersIndex > spaIndex) {
 	throw new Error('Vercel output does not apply the design-bundle CSP after the global policy and before routing.');
 }
+const mcpLabHeadersIndex = routes.findIndex(
+	(route) =>
+		route.continue === true &&
+		route.src === '^/docs/mcp/?$' &&
+		route.headers?.['Content-Security-Policy'] === mcpLabCsp
+);
+if (mcpLabHeadersIndex === -1) {
+	throw new Error('Vercel output config is missing the hash-scoped Limitless MCP Lab CSP.');
+}
+if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
+	throw new Error('Vercel output does not apply the Limitless MCP Lab CSP after the global policy and before routing.');
+}
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
 	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp) {
 		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside design bundles (route ${route.src}).`);
 	}
+}
+const mcpLabScriptSources = new Set(getDirectiveSources(mcpLabCsp, 'script-src'));
+if (
+	!mcpLabScriptSources.has(mcpLabScriptHash) ||
+	mcpLabScriptSources.has("'unsafe-inline'") ||
+	mcpLabScriptSources.has("'unsafe-eval'")
+) {
+	throw new Error('Limitless MCP Lab CSP lost its exact hash-only script exception.');
 }
 // Sets make these exact CSP-token checks. A string substring check would also
 // accept an attacker-controlled host that merely embeds the approved URL.
@@ -234,5 +254,5 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, ChatGPT discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, ChatGPT discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );

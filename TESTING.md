@@ -30,6 +30,57 @@ is fixed, and cite the checklist you ran in the PR description.
       known parent ID, `list_thingtime_comments` returns only directly attached
       comments and preserves `limit`/`cursor` pagination without fetching global
       comment rows.
+- [ ] `tools/list` exposes all 31 tools with the Thingtime MCP App output
+      template; prompts and static UI/contract resources work before OAuth,
+      while account-scoped resources return the OAuth challenge. In the app,
+      inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
+      select multiple rows, expand details, and verify Apply stays disabled
+      until the explicit confirmation checkbox is checked.
+- [ ] Preview a create/update/delete plan with least-privilege scopes. Change
+      one target after preview and verify apply returns 409 without performing
+      any operation; with fresh preconditions, verify serial apply, honest
+      partial failure receipts, encrypted history, and undo-as-a-new-preview.
+- [ ] Create a valid `Thingtime Capability` data Thing with `$input`
+      placeholders, start it, and verify its exact signed preview must match the
+      persisted workflow run. Reject missing inputs, duplicate targets, more
+      than 25 operations, raw query/operator keys, URLs/routes, and code.
+
+## Limitless MCP Lab (`/docs/mcp`)
+
+- [ ] On a production-CSP preview, the embedded review app renders its Result,
+      Diff, and Raw tabs instead of remaining on the empty placeholder; the
+      route CSP permits only the review module's exact SHA-256 hash and keeps
+      `unsafe-inline` / `unsafe-eval` absent.
+
+- [ ] Open `/docs/mcp` at desktop and 390px mobile widths. Confirm the live
+      contract badge resolves without replacing the optimistic release counts,
+      all six stat cards fit without horizontal overflow, and the docs drawer
+      opens, closes, and identifies **Limitless MCP Lab** as active.
+- [ ] Select all five missions. Each selection must update the prompt, expected
+      outcome, ordered tool pipeline, and embedded review cards without a page
+      reload; **Copy** copies only the selected prompt.
+- [ ] In the embedded shipped MCP App, inspect Result, Diff, and Raw; select a
+      row, expand Full details, and scroll to the bottom. The read-only morning
+      mission must not show an Apply control. Write-composing missions must keep
+      Apply disabled until the confirmation checkbox is selected, then fail
+      closed with the host-only message rather than mutating data.
+- [ ] Load the page with MCP discovery unavailable. The release contract and
+      workflow cards remain immediately usable, the page shows the quiet
+      release-contract state, and no spinner, blank page, recursive request,
+      iframe error, or console exception appears.
+
+## Admin integration vault + policy proxy
+
+- [ ] Sign in as an admin and open **/admin → External integrations**. Without
+      `THINGTIME_ADMIN_VAULT_KEY`, the visible warning explains setup and
+      **Save secret** is disabled; no browser request reveals a credential.
+- [ ] With a disposable 32-byte base64url vault key, save a labelled Vercel
+      token. Refresh and confirm its row shows only label/id/date—not masked or
+      plaintext value. Deletion is blocked while an endpoint references it.
+- [ ] Save a Vercel endpoint with read + **Create new items only**, then verify
+      an existing environment key is blocked before POST and the redacted audit
+      contains only operation, path, status, and outcome—never body, token, or
+      secret value. Generic endpoints cannot claim create-only semantics.
 
 ## Admin integration vault + policy proxy
 
@@ -1956,6 +2007,10 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with
       the page scroll — the bottom of the menu stays reachable.
+- [ ] At desktop widths, the drawer header starts directly below the global
+      navigation with no duplicated top spacer, and its collapse control sits
+      in the Thingtime Docs title row. At mobile widths, opening the full-screen
+      drawer keeps its close control visible in that same header row.
 
 ## API docs Try-it runner (`remix/app/routes/docs/ApiTryIt.tsx`, `api.tsx`)
 
