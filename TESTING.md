@@ -114,9 +114,12 @@ is fixed, and cite the checklist you ran in the PR description.
       no platform sheet; correct password → the browser/1Password/iCloud sheet
       opens and the saved passkey appears in the list with provider name,
       created date, and your nickname. Cancelling the sheet shows NO error
-      toast (cancel is silent).
+      toast (cancel is silent). Inspect both registration and login options and
+      confirm `userVerification: "required"` matches the server verifier; a
+      completed Face ID/Touch ID/1Password ceremony must not return a generic
+      verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      44/44 — full software-authenticator ceremony: registration, duplicate
+      49/49 — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -2339,6 +2342,12 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
       rows on first render without a spinner, then reconciles in the background.
       A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Grow CI event/run/deployment history beyond MongoDB's 32 MiB blocking-sort
+      threshold and confirm `/api/v1/admin/ci?limit=0` still returns through the
+      repository-scoped `things_ci_repository_updated` index. While that
+      snapshot is unavailable, load a saved stack: every saved PR number stays
+      visible as restoring, its count remains honest, and the rows rehydrate in
+      order when the live snapshot recovers without another click.
 - [ ] Anonymous and non-admin callers receive the standard admin denial from
       all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
       them and the webhook routes do not accept a browser session as authority.
@@ -2404,7 +2413,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
       preview origin. Confirm its `origin` matches exactly, every generated API
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `2.1.0`, admin credentials are `2.0.0`, signed credential delivery is
+      `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
+      are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
       `1.1.0`, saved stacks are `1.0.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.

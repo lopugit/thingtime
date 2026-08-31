@@ -65,6 +65,7 @@ import {
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { resolveFeatureStackSources, sameNumberOrder } from './featureStackDraftCore';
 import { featureStackTargetsForSource } from '~/api/utils/ciControl/featureStackRoutingCore';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -509,6 +510,7 @@ type FeatureStackDraft = {
 	id: string | null;
   name: string;
   selectedFeatureIds: string[];
+	pendingSourcePrNumbers?: number[];
   targets: string[];
 	autoDecideBranches: boolean;
 };
@@ -552,6 +554,7 @@ type FeatureStackLiveSnapshot = {
 type FeatureStackComposerProps = {
   name: string;
   selected: { feature: CiEntity; pr: CiEntity }[];
+	pendingSourcePrNumbers: number[];
   targets: string[];
   branchOptions: string[];
 	autoDecideBranches: boolean;
@@ -579,6 +582,7 @@ type FeatureStackComposerProps = {
 const FeatureStackComposer = ({
   name,
   selected,
+	pendingSourcePrNumbers,
   targets,
   branchOptions,
 	autoDecideBranches,
@@ -603,6 +607,7 @@ const FeatureStackComposer = ({
   onSubmit
 }: FeatureStackComposerProps) => {
   const availableTargets = branchOptions.filter((branch) => !targets.includes(branch));
+	const selectedCount = selected.length + pendingSourcePrNumbers.length;
 	const ready = selected.length >= 1 && targets.length >= 1 && name.trim().length > 0;
   return (
 		<Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" mb={4} overflow="hidden">
@@ -618,7 +623,7 @@ const FeatureStackComposer = ({
           <Flex align="center" gap={2}>
             <FiLayers />
             <Heading size="sm">Feature Stack</Heading>
-						<Badge colorScheme={selected.length >= 1 ? 'purple' : 'gray'}>{selected.length} selected</Badge>
+						<Badge colorScheme={selectedCount >= 1 ? 'purple' : 'gray'}>{selectedCount} selected</Badge>
           </Flex>
           <Text mt={1} fontSize="xs" opacity={0.6}>
 						{autoDecideBranches
@@ -746,7 +751,17 @@ const FeatureStackComposer = ({
                 />
               </Flex>
             ))}
-						{!selected.length ? <EmptyLine>Use the checkboxes below to add one or more features.</EmptyLine> : null}
+						{pendingSourcePrNumbers.map((prNumber, index) => (
+							<Flex key={`pending-pr-${prNumber}`} align="center" gap={2} minW={0} opacity={0.68}>
+								<Badge borderRadius="999px" minW="22px" textAlign="center">
+									{selected.length + index + 1}
+								</Badge>
+								<Text fontSize="xs" fontWeight="600" noOfLines={1} flex="1">
+									#{prNumber} · restoring from the live repository snapshot…
+								</Text>
+							</Flex>
+						))}
+						{selectedCount === 0 ? <EmptyLine>Use the checkboxes below to add one or more features.</EmptyLine> : null}
           </Stack>
 					</Box>
         </FormControl>
@@ -1026,7 +1041,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			readLocalCache<FeatureStackDraft>(stackCacheKey) ?? {
 				id: null,
       name: 'Feature Stack',
-      selectedFeatureIds: [],
+				selectedFeatureIds: [],
+				pendingSourcePrNumbers: [],
 				targets: ['develop', 'main'],
 				autoDecideBranches: true
     },
@@ -1053,6 +1069,9 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 	const [activeFeatureStackId, setActiveFeatureStackId] = React.useState<string | null>(initialStackDraft.id ?? null);
   const [featureStackName, setFeatureStackName] = React.useState(initialStackDraft.name);
   const [featureStackIds, setFeatureStackIds] = React.useState(initialStackDraft.selectedFeatureIds);
+	const [pendingFeatureStackPrNumbers, setPendingFeatureStackPrNumbers] = React.useState(
+		initialStackDraft.pendingSourcePrNumbers ?? []
+	);
   const [featureStackTargets, setFeatureStackTargets] = React.useState(initialStackDraft.targets);
 	const [featureStackAutoDecide, setFeatureStackAutoDecide] = React.useState(initialStackDraft.autoDecideBranches !== false);
   const [collapsedSections, setCollapsedSections] = React.useState<Set<string>>(
@@ -1077,10 +1096,19 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			id: activeFeatureStackId,
       name: featureStackName,
       selectedFeatureIds: featureStackIds,
+			pendingSourcePrNumbers: pendingFeatureStackPrNumbers,
 			targets: featureStackTargets,
 			autoDecideBranches: featureStackAutoDecide
     } satisfies FeatureStackDraft);
-	}, [activeFeatureStackId, featureStackAutoDecide, featureStackIds, featureStackName, featureStackTargets, stackCacheKey]);
+	}, [
+		activeFeatureStackId,
+		featureStackAutoDecide,
+		featureStackIds,
+		featureStackName,
+		featureStackTargets,
+		pendingFeatureStackPrNumbers,
+		stackCacheKey
+	]);
 
 	const loadSavedFeatureStacks = React.useCallback(async (options?: { signal?: AbortSignal }) => {
 		const next = await apiRef.current.v1.admin.ciFeatureStacks(options);
@@ -1329,11 +1357,31 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		}, 5000);
 		return () => window.clearInterval(interval);
 	}, [featureStackLiveSnapshot?.live, load, loadSavedFeatureStacks]);
+	React.useEffect(() => {
+		if (!activeFeatureStackId || dashboard?.features.length || pendingFeatureStackPrNumbers.length) return;
+		const activeSavedStack = savedFeatureStacks.find((stack) => stack.id === activeFeatureStackId);
+		if (!activeSavedStack?.sourcePrNumbers.length) return;
+		setFeatureStackIds([]);
+		setPendingFeatureStackPrNumbers(activeSavedStack.sourcePrNumbers);
+	}, [activeFeatureStackId, dashboard?.features.length, pendingFeatureStackPrNumbers.length, savedFeatureStacks]);
   React.useEffect(() => {
-    if (!dashboard) return;
+    if (!dashboard || dashboard.features.length === 0) return;
     const valid = new Set(dashboard.features.map((feature) => feature.id));
     setFeatureStackIds((current) => current.filter((id) => valid.has(id)));
   }, [dashboard]);
+	React.useEffect(() => {
+		if (!dashboard || dashboard.features.length === 0 || pendingFeatureStackPrNumbers.length === 0) return;
+		const resolved = resolveFeatureStackSources(pendingFeatureStackPrNumbers, dashboard.pullRequests);
+		if (resolved.selectedFeatureIds.length) {
+			setFeatureStackIds((current) => [
+				...current,
+				...resolved.selectedFeatureIds.filter((id) => !current.includes(id))
+			]);
+		}
+		setPendingFeatureStackPrNumbers((current) =>
+			sameNumberOrder(current, resolved.pendingSourcePrNumbers) ? current : resolved.pendingSourcePrNumbers
+		);
+	}, [dashboard, pendingFeatureStackPrNumbers]);
 	const selectedRuns = dashboard ? dashboard.workflowRuns.filter((run) => matchesEntity(run, selectedPr)).slice(0, 10) : [];
 	const selectedPreviews = dashboard ? dashboard.previews.filter((preview) => matchesEntity(preview, selectedPr)).slice(0, 5) : [];
 	const relatedIds = new Set(
@@ -1358,12 +1406,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setFeatureStackName(stack.name);
 		setFeatureStackTargets(stack.targets);
 		setFeatureStackAutoDecide(stack.autoDecideBranches);
-		if (dashboard) {
-			const ids = stack.sourcePrNumbers.flatMap((number) => {
-				const pr = dashboard.pullRequests.find((candidate) => Number(candidate.number) === number);
-				return pr?.parentId ? [pr.parentId] : [];
-			});
-			setFeatureStackIds(ids);
+		if (dashboard?.features.length) {
+			const resolved = resolveFeatureStackSources(stack.sourcePrNumbers, dashboard.pullRequests);
+			setFeatureStackIds(resolved.selectedFeatureIds);
+			setPendingFeatureStackPrNumbers(resolved.pendingSourcePrNumbers);
+		} else {
+			setFeatureStackIds([]);
+			setPendingFeatureStackPrNumbers(stack.sourcePrNumbers);
 		}
 	};
 
@@ -1371,6 +1420,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setActiveFeatureStackId(null);
 		setFeatureStackName('Feature Stack');
 		setFeatureStackIds([]);
+		setPendingFeatureStackPrNumbers([]);
 		setFeatureStackTargets(['develop', 'main']);
 		setFeatureStackAutoDecide(true);
 	};
@@ -1701,6 +1751,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       <FeatureStackComposer
         name={featureStackName}
         selected={featureStackSelection}
+				pendingSourcePrNumbers={pendingFeatureStackPrNumbers}
         targets={featureStackTargets}
         branchOptions={featureStackBranchOptions}
 				autoDecideBranches={featureStackAutoDecide}

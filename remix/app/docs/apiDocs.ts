@@ -81,6 +81,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
+    featureVersion: '1.0.1',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
@@ -1411,11 +1412,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey registration',
     endpoint: '/api/v1/auth/passkeys/register-options',
+    featureVersion: '1.0.1',
     summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
     detail:
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
       'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
-      'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
+      'Options request a DISCOVERABLE credential (residentKey required) with user verification required, matching ' +
+      'the verification policy used when the response returns. Discoverability is what makes usernameless ' +
       'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
       'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
       'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
@@ -1433,7 +1436,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Creation options (challenge cookie set).',
-        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'required' } } }
       },
       { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
     ]
@@ -1477,11 +1480,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey login',
     endpoint: '/api/v1/auth/passkeys/login-options',
+    featureVersion: '1.0.1',
     summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
     detail:
       'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
       'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
-      'whatever Thingtime passkeys it holds (no username, no enumeration surface) — this is also the ' +
+      'whatever Thingtime passkeys it holds (no username, no enumeration surface). User verification is required ' +
+      'in the browser because the assertion verifier requires it too. This is also the ' +
       'options payload for conditional-UI autofill: request it on login-form mount with ' +
       'mediation:"conditional" and Safari/Chrome surface the iCloud Keychain / 1Password passkey popup ' +
       'directly on the username field.',
@@ -1494,7 +1499,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
     responseExamples: [
-      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'required' } } }
     ]
   }),
   endpoint({

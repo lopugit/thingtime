@@ -27,6 +27,7 @@ import {
 	serializeLoginChallengeCookie,
 	serializeRegistrationChallengeCookie
 } from './webauthnChallenge';
+import { PASSKEY_USER_VERIFICATION } from './webauthnPolicy';
 
 // WebAuthn passkeys, everything-is-a-thing edition (FUNDAMENTALS §3):
 //   • `passkey` things — one per registered credential, ownerId = the account
@@ -301,7 +302,7 @@ export const startPasskeyRegistration = async (
 		userDisplayName: user.displayName || user.username,
 		attestationType: 'none',
 		excludeCredentials,
-		authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' }
+		authenticatorSelection: { residentKey: 'required', userVerification: PASSKEY_USER_VERIFICATION }
 	});
 
 	return { ok: true, options, setCookies: [await serializeRegistrationChallengeCookie({ challenge: options.challenge, userId: String(user.id), rpID })] };
@@ -403,7 +404,7 @@ export const startPasskeyLogin = async (
 	// Empty allowCredentials: discoverable credentials only. The authenticator
 	// lists whatever passkeys it holds for this rpID — no username needed, no
 	// account enumeration surface.
-	const options = await generateAuthenticationOptions({ rpID, userVerification: 'preferred', allowCredentials: [] });
+	const options = await generateAuthenticationOptions({ rpID, userVerification: PASSKEY_USER_VERIFICATION, allowCredentials: [] });
 	return { ok: true, options, setCookies: [await serializeLoginChallengeCookie({ challenge: options.challenge, rpID })] };
 };
 
