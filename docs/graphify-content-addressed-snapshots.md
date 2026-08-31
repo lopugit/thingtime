@@ -68,6 +68,7 @@ scripts/graphify query "conflict resolver Graphify refresh"
 scripts/graphify ensure
 scripts/graphify fingerprint
 scripts/graphify snapshot
+scripts/graphify prune
 scripts/graphify cache-migrate
 ```
 
@@ -77,15 +78,23 @@ the report and HTML, finalizes an immutable snapshot, and refreshes ignored
 root aliases. Plain `graphify query` continues to work after activation because
 those aliases expose the selected snapshot at Graphify's conventional paths.
 
+Every successful mutation or `ensure` also applies bounded retention. The
+default is one active portable snapshot in the checked-out tree. Set
+`GRAPHIFY_SNAPSHOT_RETENTION` to a positive integer to retain a larger bounded
+set for an explicit local workflow. Invalid, zero, and unbounded values fail
+closed. `scripts/graphify prune` applies the same policy without rebuilding.
+
 `extract --no-cluster` is rejected because Graphify has historically been able
 to replace a large graph with only the newly extracted nodes in that mode.
 
 ## Merge behavior
 
-Snapshot paths are additive. Distinct source or output hashes never touch the
-same path, and a matching path must contain identical bytes. `.gitattributes`
-uses `-merge` as a fail-closed hash-invariant check rather than attempting a
-line merge.
+Snapshot paths are additive while independent branches are in flight. Distinct
+source or output hashes never touch the same path, and a matching path must
+contain identical bytes. `.gitattributes` uses `-merge` as a fail-closed
+hash-invariant check rather than attempting a line merge. After a branch is
+activated, bounded retention removes superseded snapshot paths from that
+branch's current tree.
 
 After a successful source merge, Lopu runs the trusted snapshot router against
 the merged tree and publishes the new snapshot separately. Old pre-migration
@@ -94,9 +103,14 @@ legacy generated directory and regenerates it under the immutable layout.
 
 ## Retention
 
-Snapshots are portable build outputs, not source authority. A future garbage
-collector may remove snapshots that are unreachable from open PR heads and the
-protected branch tips while retaining semantic-cache variants that remain
-reachable from retained snapshots. Garbage
-collection must run only after that reachability proof; normal branch work is
-append-only.
+Snapshots are portable build outputs, not source authority. The current tree
+keeps the active source fingerprint and, by default, no superseded portable
+snapshots. Deleted snapshot paths remain recoverable from Git history, and an
+open PR or another branch retains its own snapshot until that ref adopts the
+new policy. This makes pruning branch-local and safe without querying or
+rewriting another ref.
+
+The semantic CAS is intentionally not pruned with portable snapshots. It is
+small relative to full graphs, makes fresh-clone semantic rebuilds LLM-free,
+and may be shared by future source fingerprints. A separate CAS collector would
+need a real reachability proof before removing those variants.

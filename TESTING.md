@@ -1112,6 +1112,12 @@ is fixed, and cite the checklist you ran in the PR description.
       one artifact path. Finalize two valid variants for one source fingerprint
       and confirm both remain immutable while the deterministic selector picks
       the richer graph.
+- [ ] Seed several valid portable snapshots, select a non-richest snapshot as
+      active, and run `scripts/graphify prune`. Confirm the active snapshot is
+      retained, the checked-out store is bounded to one snapshot by default,
+      empty fingerprint directories are removed, compatibility aliases resolve,
+      and `GRAPHIFY_SNAPSHOT_RETENTION=0` fails closed. Confirm deleted paths
+      remain readable from the prior Git commit.
 - [ ] Create two branches that each add a distinct
       `graphify-out/snapshots/v1/<source>/<artifact>/` path. Merge them in a
       fresh clone without installing a custom merge driver and confirm Git

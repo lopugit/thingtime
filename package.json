@@ -18,6 +18,7 @@
     "test:vercel-root": "node --test scripts/vercel-root-flow.test.mjs",
     "graphify": "scripts/graphify",
     "graphify:ensure": "scripts/graphify ensure",
+    "graphify:prune": "scripts/graphify prune",
     "test:graphify-cas": "node --test scripts/graphify-cas.test.mjs",
     "electron": "pnpm --dir electron dev",
     "build-electron": "pnpm --dir electron build",
