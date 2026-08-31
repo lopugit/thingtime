@@ -11,7 +11,12 @@ import {
   type CiWorkflowKey
 } from './automationPolicy';
 import type { CiPreviewEnvironment, CiPreviewPolicy } from './previewPolicyCore';
-import { CI_DASHBOARD_UPDATED_SORT, ciDashboardKindFilter } from './dashboardQueryCore';
+import {
+  CI_DASHBOARD_UPDATED_SORT,
+  ciDashboardFieldFilter,
+  ciDashboardKindFilter,
+  ciDashboardReadLimit
+} from './dashboardQueryCore';
 import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export const CI_THINGTIME = CI_CONTROL_THINGTIME;
@@ -298,6 +303,48 @@ const readKind = async (kind: CiThingtime, limit: number, repository: string) =>
   return docs.map(publicCrystal);
 };
 
+const countCiDashboardStats = async (repository: string) => {
+  const things = await getHomeThingsCollection();
+  const [openPullRequests, conflicting, activeRuns, readyPreviews] = await Promise.all([
+    things.countDocuments(ciDashboardFieldFilter('ci-pull-request', repository, 'state', ['OPEN', 'open'])),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-pull-request', repository, 'status', [
+        'conflicting',
+        'CONFLICTING',
+        'dirty',
+        'DIRTY',
+        'blocked',
+        'BLOCKED'
+      ])
+    ),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-workflow-run', repository, 'status', [
+        'queued',
+        'QUEUED',
+        'requested',
+        'REQUESTED',
+        'waiting',
+        'WAITING',
+        'in_progress',
+        'IN_PROGRESS',
+        'pending',
+        'PENDING'
+      ])
+    ),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-preview', repository, 'status', [
+        'ready',
+        'READY',
+        'success',
+        'SUCCESS',
+        'succeeded',
+        'SUCCEEDED'
+      ])
+    )
+  ]);
+  return { openPullRequests, conflicting, activeRuns, readyPreviews };
+};
+
 const policyFromEntity = (workflow: CiWorkflowKey, entity: any | null): CiAutomationPolicy => {
   const fallback = defaultCiAutomationPolicy(workflow);
   if (!entity) return fallback;
@@ -453,26 +500,23 @@ export const claimCiDispatchRoute = async (input: {
 
 export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number; repository?: string }) => {
   const requestedLimit = Math.floor(options?.limit ?? 100);
-  const limit = requestedLimit === 0 ? 0 : Math.max(1, requestedLimit);
   const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
   const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
-  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, previewPolicies, dispatches, events] =
+  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, previewPolicies, dispatches, events, stats] =
     await Promise.all([
       readKind('ci-repository', 20, repository),
       listCiAutomationPolicies(repository),
-      readKind('ci-feature', limit, repository),
-      readKind('ci-branch', limit, repository),
-      readKind('ci-pull-request', limit, repository),
-      readKind('ci-workflow-run', limit, repository),
-      readKind('ci-deployment', limit, repository),
-      readKind('ci-preview', limit, repository),
+      readKind('ci-feature', ciDashboardReadLimit('ci-feature', requestedLimit), repository),
+      readKind('ci-branch', ciDashboardReadLimit('ci-branch', requestedLimit), repository),
+      readKind('ci-pull-request', ciDashboardReadLimit('ci-pull-request', requestedLimit), repository),
+      readKind('ci-workflow-run', ciDashboardReadLimit('ci-workflow-run', requestedLimit), repository),
+      readKind('ci-deployment', ciDashboardReadLimit('ci-deployment', requestedLimit), repository),
+      readKind('ci-preview', ciDashboardReadLimit('ci-preview', requestedLimit), repository),
       listCiPreviewPolicies(repository),
-      readKind('ci-dispatch', limit, repository),
-      readKind('ci-event', eventLimit, repository)
+      readKind('ci-dispatch', ciDashboardReadLimit('ci-dispatch', requestedLimit), repository),
+      readKind('ci-event', eventLimit, repository),
+      countCiDashboardStats(repository)
     ]);
-
-  const statusCount = (values: any[], accepted: string[]) =>
-    values.filter((value) => accepted.includes(String(value.status ?? '').toLowerCase())).length;
   const latest = events[0]?.occurredAt ?? events[0]?.updatedAt ?? null;
   return {
     repositories,
@@ -486,12 +530,7 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
     previewPolicies,
     dispatches,
     events,
-    stats: {
-      openPullRequests: pullRequests.filter((pr: any) => pr.state === 'OPEN' || pr.state === 'open').length,
-      conflicting: statusCount(pullRequests, ['conflicting', 'dirty', 'blocked']),
-      activeRuns: statusCount(workflowRuns, ['queued', 'requested', 'waiting', 'in_progress', 'pending']),
-      readyPreviews: statusCount(previews, ['ready', 'success', 'succeeded'])
-    },
+    stats,
     freshness: {
       latestEventAt: latest,
       stale: !latest || Date.now() - new Date(latest).getTime() > 15 * 60 * 1000
