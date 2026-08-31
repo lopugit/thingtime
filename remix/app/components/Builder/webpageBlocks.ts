@@ -6,16 +6,20 @@
 // component things resolved through /api/v1/webpages/resolve and drawn by the
 // sanitising allowlist renderers, one budget per block.
 
-export type WebpageBlockType = 'component' | 'container' | 'text' | 'native';
+export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html';
 export type WebpageContainerDirection = 'column' | 'row' | 'grid';
 export type WebpageTextStyle = 'body' | 'heading' | 'eyebrow';
 export type WebpageBlockAlign = 'start' | 'center' | 'end' | 'stretch';
+export type WebpageMediaKind = 'image' | 'video' | 'audio';
 
 export interface WebpageBlock {
 	id: string;
 	type: WebpageBlockType;
 	align?: WebpageBlockAlign;
 	maxWidth?: number;
+	// Figma-style custom CSS: kebab-case property → value, applied to the
+	// block's box (mirrors the server gate's css sanitizer)
+	css?: Record<string, string>;
 	// component
 	component?: string;
 	args?: Record<string, string | number | boolean>;
@@ -27,6 +31,14 @@ export interface WebpageBlock {
 	// text
 	text?: string;
 	style?: WebpageTextStyle;
+	// text: rendered element override (h1…h6/p/span/…) + rich WYSIWYG HTML
+	// (render-side sanitised through the allowlist renderer — never trusted raw)
+	tag?: string;
+	html?: string;
+	// media
+	src?: string;
+	alt?: string;
+	media?: WebpageMediaKind;
 	// native
 	native?: string;
 }
@@ -177,10 +189,25 @@ export const componentBlockFor = (componentRef: string, existing: Set<string>): 
 	component: componentRef
 });
 
+export const defaultMediaBlock = (existing: Set<string>, src = '', media: WebpageMediaKind = 'image'): WebpageBlock => ({
+	id: newBlockId('media', existing),
+	type: 'media',
+	media,
+	src
+});
+
+export const defaultHtmlBlock = (existing: Set<string>): WebpageBlock => ({
+	id: newBlockId('html', existing),
+	type: 'html',
+	html: '<div style="padding: 16px; border: 1px dashed #ececef; border-radius: 12px;">\n  <strong>Custom HTML</strong> — edit me in the inspector 🛠️\n</div>'
+});
+
 // Human label for the boundary chip / tree rows.
 export const blockLabel = (block: WebpageBlock): string => {
 	if (block.type === 'component') return block.component || 'component';
 	if (block.type === 'container') return `${block.direction || 'column'}${block.type === 'container' && block.direction === 'grid' && block.columns ? ` ×${block.columns}` : ''}`;
 	if (block.type === 'text') return block.style === 'heading' ? 'heading' : block.style === 'eyebrow' ? 'eyebrow' : 'text';
+	if (block.type === 'media') return block.media || 'media';
+	if (block.type === 'html') return 'html';
 	return `native · ${block.native || '?'}`;
 };

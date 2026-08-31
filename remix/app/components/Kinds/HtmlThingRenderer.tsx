@@ -37,6 +37,15 @@ const ALLOWED_TAGS = new Set([
 	'strong',
 	'em',
 	'small',
+	// inline formatting produced by WYSIWYG editing / rich paste — pure
+	// text-level semantics, no URL or script surface
+	'b',
+	'i',
+	'u',
+	's',
+	'mark',
+	'sub',
+	'sup',
 	'code',
 	'pre',
 	'blockquote',

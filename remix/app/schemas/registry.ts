@@ -1018,11 +1018,22 @@ export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
 export const MAX_WEBPAGE_TEXT_CHARS = 2000;
 export const MAX_WEBPAGE_BLOCKS_BYTES = 48 * 1024;
 export const MAX_WEBPAGE_ROUTE_CHARS = 120;
-export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native'] as const;
+export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html'] as const;
 export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
 export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
 export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
 export const WEBPAGE_ROUTE_PATTERN = /^\/[a-z0-9\-/_]*$/;
+// Figma-style per-block custom CSS + rich/raw HTML bounds. HTML is never
+// trusted at render (the client parses it through the sanitising allowlist
+// renderer); the gate bounds size and blocks the classic CSS escape hatches.
+export const MAX_WEBPAGE_CSS_PROPS = 40;
+export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
+export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
+export const MAX_WEBPAGE_HTML_CHARS = 20000;
+export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
+export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
+export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
+export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
 
 const componentSchema: ThingtimeSchema = {
 	id: 'component',
@@ -3796,6 +3807,26 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 // where a built-in app screen renders and only ever resolve on the matching
 // site route — /p/ pages ignore them.
 
+// One css declaration value: no nested rules/markup, no expression()/@import,
+// no javascript: url — url() only with https/site-relative/data-image targets.
+const isSafeWebpageCssValue = (value: string): boolean => {
+	// no markup/nested-rule characters; `;` stays legal (data: URIs need it, and
+	// values are applied per-property through style objects, where a semicolon
+	// can never open a second declaration)
+	if (/[<>{}]/.test(value)) return false;
+	const lower = value.toLowerCase();
+	if (lower.includes('expression(') || lower.includes('@import') || lower.includes('javascript:')) return false;
+	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
+	for (const match of urlMatches) {
+		const target = (match[1] || '').trim();
+		if (!/^(https:\/\/|\/(?!\/)|data:image\/)/.test(target)) return false;
+	}
+	return true;
+};
+
+const isSafeWebpageMediaSrc = (value: string): boolean =>
+	/^(https:\/\/|\/(?!\/))/.test(value) && !/\s/.test(value);
+
 const sanitizeWebpageBlock = (
 	input: unknown,
 	depth: number,
@@ -3836,6 +3867,30 @@ const sanitizeWebpageBlock = (
 			return fail(400, `Block ${id} maxWidth must be 120–1680`);
 		}
 		block.maxWidth = maxWidth;
+	}
+	if (raw.css !== undefined && raw.css !== null) {
+		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
+			return fail(400, `Block ${id} css must be an object of css property → value`);
+		}
+		const entries = Object.entries(raw.css as Record<string, unknown>);
+		if (entries.length > MAX_WEBPAGE_CSS_PROPS) {
+			return fail(400, `Block ${id} css can hold at most ${MAX_WEBPAGE_CSS_PROPS} properties`);
+		}
+		const css: Record<string, string> = {};
+		for (const [key, value] of entries) {
+			if (!WEBPAGE_CSS_KEY_PATTERN.test(key) || key.length > MAX_WEBPAGE_CSS_KEY_CHARS) {
+				return fail(400, `Block ${id} css key "${key.slice(0, 40)}" must be a kebab-case css property`);
+			}
+			if (typeof value !== 'string' || !value.trim()) continue;
+			if (value.length > MAX_WEBPAGE_CSS_VALUE_CHARS) {
+				return fail(400, `Block ${id} css value for ${key} is too long (max ${MAX_WEBPAGE_CSS_VALUE_CHARS})`);
+			}
+			if (!isSafeWebpageCssValue(value)) {
+				return fail(400, `Block ${id} css value for ${key} contains a blocked construct`);
+			}
+			css[key] = value.trim();
+		}
+		if (Object.keys(css).length) block.css = css;
 	}
 
 	if (type === 'component') {
@@ -3897,8 +3952,17 @@ const sanitizeWebpageBlock = (
 
 	if (type === 'text') {
 		const text = typeof raw.text === 'string' ? raw.text : '';
-		if (!text.trim()) return fail(400, `Block ${id} needs text`);
+		const html = typeof raw.html === 'string' ? raw.html : '';
+		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
 		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
+		if (html.trim()) {
+			// rich WYSIWYG content — size-bounded here; the client renders it ONLY
+			// through the sanitising allowlist renderer (tags/props/urls/styles)
+			if (html.length > MAX_WEBPAGE_HTML_CHARS) {
+				return fail(400, `Block ${id} rich text is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
+			}
+			block.html = html;
+		}
 		const style = typeof raw.style === 'string' ? raw.style : '';
 		if (style) {
 			if (!(WEBPAGE_TEXT_STYLES as readonly string[]).includes(style)) {
@@ -3906,6 +3970,41 @@ const sanitizeWebpageBlock = (
 			}
 			block.style = style;
 		}
+		const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : '';
+		if (tag) {
+			if (!(WEBPAGE_TEXT_TAGS as readonly string[]).includes(tag)) {
+				return fail(400, `Block ${id} tag must be ${WEBPAGE_TEXT_TAGS.join('/')}`);
+			}
+			block.tag = tag;
+		}
+		return { ok: true, block };
+	}
+
+	if (type === 'media') {
+		const src = typeof raw.src === 'string' ? raw.src.trim() : '';
+		if (src && (src.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageMediaSrc(src))) {
+			return fail(400, `Block ${id} src must be an https or site-relative URL`);
+		}
+		block.src = src;
+		const media = typeof raw.media === 'string' ? raw.media : 'image';
+		if (!(WEBPAGE_MEDIA_KINDS as readonly string[]).includes(media)) {
+			return fail(400, `Block ${id} media must be ${WEBPAGE_MEDIA_KINDS.join('/')}`);
+		}
+		block.media = media;
+		const alt = typeof raw.alt === 'string' ? raw.alt.trim() : '';
+		if (alt) block.alt = alt.slice(0, 300);
+		return { ok: true, block };
+	}
+
+	if (type === 'html') {
+		const html = typeof raw.html === 'string' ? raw.html : '';
+		if (!html.trim()) return fail(400, `Block ${id} needs html`);
+		if (html.length > MAX_WEBPAGE_HTML_CHARS) {
+			return fail(400, `Block ${id} html is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
+		}
+		// stored verbatim, never rendered raw: the client parses it into the
+		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
+		block.html = html;
 		return { ok: true, block };
 	}
 

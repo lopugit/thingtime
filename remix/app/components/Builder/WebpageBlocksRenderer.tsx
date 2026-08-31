@@ -7,6 +7,8 @@ import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { useTtActionClicks } from '../Actions/useTtActionClicks';
+import { htmlToNode } from './htmlToNode';
+import { InlineTextEditor } from './InlineTextEditor';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
 
 // Draws a webpage block tree. Component blocks resolve their referenced
@@ -49,6 +51,23 @@ export type BuilderChrome = {
 	onInsert: (containerId: string | null, index: number, anchor: HTMLElement) => void;
 	// drag/drop reorder — move block `id` to (containerId, index)
 	onMove: (id: string, containerId: string | null, index: number) => void;
+	// inline edits (WYSIWYG text, media src) patch the block draft in place
+	onUpdate?: (id: string, patch: Partial<WebpageBlock>) => void;
+	// OS file drops upload through the attachments API, then land as media
+	// blocks at (containerId, index)
+	onDropFiles?: (files: File[], containerId: string | null, index: number) => void;
+};
+
+// Figma-style custom css record → React inline style (kebab → camel, custom
+// properties pass through). Values were bounded by the server gate.
+export const cssRecordToStyle = (css?: Record<string, string>): React.CSSProperties | undefined => {
+	if (!css) return undefined;
+	const out: Record<string, string> = {};
+	for (const [key, value] of Object.entries(css)) {
+		if (!value || typeof value !== 'string') continue;
+		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = value;
+	}
+	return Object.keys(out).length ? (out as React.CSSProperties) : undefined;
 };
 
 const DRAG_MIME = 'application/x-tt-block-id';
@@ -139,9 +158,9 @@ const InsertZone = ({
 				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
 			}}
 			onDragOver={(event) => {
-				if (event.dataTransfer.types.includes(DRAG_MIME)) {
+				if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
 					event.preventDefault();
-					event.dataTransfer.dropEffect = 'move';
+					event.dataTransfer.dropEffect = event.dataTransfer.types.includes(DRAG_MIME) ? 'move' : 'copy';
 					setActive(true);
 				}
 			}}
@@ -153,6 +172,13 @@ const InsertZone = ({
 					event.preventDefault();
 					event.stopPropagation();
 					chrome.onMove(id, containerId, index);
+					return;
+				}
+				const files = Array.from(event.dataTransfer.files || []);
+				if (files.length && chrome.onDropFiles) {
+					event.preventDefault();
+					event.stopPropagation();
+					chrome.onDropFiles(files, containerId, index);
 				}
 			}}
 		>
@@ -233,9 +259,9 @@ const DropWell = ({
 				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
 			}}
 			onDragOver={(event) => {
-				if (event.dataTransfer.types.includes(DRAG_MIME)) {
+				if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
 					event.preventDefault();
-					event.dataTransfer.dropEffect = 'move';
+					event.dataTransfer.dropEffect = event.dataTransfer.types.includes(DRAG_MIME) ? 'move' : 'copy';
 					setActive(true);
 				}
 			}}
@@ -247,6 +273,13 @@ const DropWell = ({
 					event.preventDefault();
 					event.stopPropagation();
 					chrome.onMove(id, containerId, index);
+					return;
+				}
+				const files = Array.from(event.dataTransfer.files || []);
+				if (files.length && chrome.onDropFiles) {
+					event.preventDefault();
+					event.stopPropagation();
+					chrome.onDropFiles(files, containerId, index);
 				}
 			}}
 		>
@@ -303,6 +336,7 @@ const BlockFrame = ({
 			alignSelf={alignSelfOf(block)}
 			maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
 			marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
+			style={cssRecordToStyle(block.css)}
 			outline={selected ? `2px solid ${tone}` : hovered ? `1px dashed ${tone}` : '1px dashed transparent'}
 			outlineOffset="2px"
 			borderRadius="var(--tt-radius-xs, 7px)"
@@ -322,7 +356,7 @@ const BlockFrame = ({
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
 				const target = event.target as HTMLElement;
-				if (target.closest?.('.ttInsertZone, .ttDropWell')) return;
+				if (target.closest?.('.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttWysiwygToolbar')) return;
 				// nested frames: capture runs OUTERMOST-first, so an ancestor frame
 				// sees the click before the frame that was actually clicked. Only
 				// the innermost frame containing the click may handle it — anyone
@@ -478,7 +512,79 @@ const BlockView = (
 
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
-		body = <Text {...(TEXT_STYLES[block.style || 'body'] as any)}>{block.text}</Text>;
+		const { as: defaultAs, ...typo } = TEXT_STYLES[block.style || 'body'] as Record<string, unknown> & { as?: string };
+		const asTag = block.tag || defaultAs || 'p';
+		if (chrome && chrome.selectedId === block.id && chrome.onUpdate) {
+			// selected text edits IN PLACE — WYSIWYG, caret and all. The editor
+			// element is ALWAYS a div: flipping the rendered tag mid-edit would
+			// swap the DOM node under the mount-only init effect and eat the text.
+			body = (
+				<InlineTextEditor
+					html={block.html}
+					text={block.text}
+					typography={typo}
+					onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
+				/>
+			);
+		} else if (block.html) {
+			const node = htmlToNode(block.html);
+			// rich text renders as a styled flow container (never inside a <p> —
+			// pasted markup may hold block elements)
+			body = (
+				<Box as={block.tag || 'div'} {...(typo as any)}>
+					{node ? <HtmlThingRenderer node={node} /> : block.text}
+				</Box>
+			);
+		} else {
+			body = (
+				<Text as={asTag as any} {...(typo as any)}>
+					{block.text}
+				</Text>
+			);
+		}
+	} else if (block.type === 'media') {
+		const src = block.src || '';
+		if (!src) {
+			body = (
+				<Flex
+					alignItems="center"
+					justifyContent="center"
+					columnGap={2}
+					border="1px dashed var(--tt-border, #ececef)"
+					borderRadius="var(--tt-radius-md, 12px)"
+					padding={6}
+					color="var(--tt-muted, #9a9aa6)"
+					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+					fontSize="12px"
+				>
+					🖼 {block.media || 'media'} — set a source in the inspector or drop a file here
+				</Flex>
+			);
+		} else if (block.media === 'video') {
+			body = <Box as="video" src={src} controls maxWidth="100%" borderRadius="var(--tt-radius-md, 12px)" />;
+		} else if (block.media === 'audio') {
+			body = <Box as="audio" src={src} controls width="100%" />;
+		} else {
+			body = <Box as="img" src={src} alt={block.alt || ''} maxWidth="100%" borderRadius="var(--tt-radius-md, 12px)" />;
+		}
+	} else if (block.type === 'html') {
+		const node = htmlToNode(block.html || '');
+		body = node ? (
+			<HtmlThingRenderer node={node} />
+		) : (
+			<Flex
+				alignItems="center"
+				columnGap={2}
+				border="1px dashed var(--tt-border, #ececef)"
+				borderRadius="var(--tt-radius-md, 12px)"
+				padding={4}
+				color="var(--tt-muted, #9a9aa6)"
+				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+				fontSize="12px"
+			>
+				{'</>'} empty html block — write markup in the inspector
+			</Flex>
+		);
 	} else if (block.type === 'component') {
 		body = <ComponentBlockView block={block} component={componentsByRef[block.component || ''] ?? null} interactive={!!interactive} />;
 	} else if (block.type === 'native') {
@@ -549,6 +655,7 @@ const BlockView = (
 				alignSelf={alignSelfOf(block)}
 				maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
 				marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
+				style={cssRecordToStyle(block.css)}
 			>
 				{body}
 			</Box>

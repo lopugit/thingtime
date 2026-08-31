@@ -6,6 +6,8 @@ import { CARD_STYLES } from '../../theme/card';
 import {
 	componentBlockFor,
 	defaultContainerBlock,
+	defaultHtmlBlock,
+	defaultMediaBlock,
 	defaultTextBlock,
 	newBlockId,
 	type WebpageBlock
@@ -38,7 +40,9 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 	},
 	{ key: 'column', icon: '⬇️', label: 'Column', make: (existing) => defaultContainerBlock(existing, 'column') },
 	{ key: 'row', icon: '➡️', label: 'Row', make: (existing) => defaultContainerBlock(existing, 'row') },
-	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') }
+	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') },
+	{ key: 'media', icon: '🖼', label: 'Media', make: (existing) => defaultMediaBlock(existing) },
+	{ key: 'html', icon: '🧬', label: 'HTML', make: (existing) => defaultHtmlBlock(existing) }
 ];
 
 export const BlockInsertMenu = (props: {

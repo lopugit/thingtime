@@ -13,9 +13,34 @@ import {
 	type WebpageBlock,
 	type WebpageBlockAlign,
 	type WebpageContainerDirection,
+	type WebpageMediaKind,
 	type WebpageTextStyle
 } from './webpageBlocks';
 import type { UseWebpageDraft } from './useWebpage';
+
+// ——— Figma-style css editing ————————————————————————————————————————————
+// Every block carries a free-form `css` record (kebab property → value).
+// Dedicated fields below edit well-known properties; the Custom CSS textarea
+// edits the whole record. One storage model, many handles.
+
+const TEXT_TAG_OPTIONS = ['', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'];
+
+const cssRecordToLines = (css?: Record<string, string>): string =>
+	Object.entries(css || {})
+		.map(([key, value]) => `${key}: ${value}`)
+		.join('\n');
+
+const cssLinesToRecord = (text: string): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const line of text.split(/\n|;/)) {
+		const split = line.indexOf(':');
+		if (split <= 0) continue;
+		const key = line.slice(0, split).trim().toLowerCase();
+		const value = line.slice(split + 1).trim();
+		if (key && value && /^(--)?[a-z][a-z0-9-]*$/.test(key)) out[key] = value;
+	}
+	return out;
+};
 
 // The builder's right-side drawer: page settings + the inspector for the
 // selected block. Fixed to the right viewport edge (flush top/right/bottom,
@@ -154,6 +179,70 @@ const ArgField = ({
 	);
 };
 
+// A labelled input bound to one css property on the block — commits on every
+// keystroke (drafts are local, saving is explicit).
+const CssField = ({
+	label,
+	cssKey,
+	block,
+	onCss,
+	placeholder,
+	flexBasis
+}: {
+	label: string;
+	cssKey: string;
+	block: WebpageBlock;
+	onCss: (key: string, value: string) => void;
+	placeholder?: string;
+	flexBasis?: string;
+}) => (
+	<Flex flexDirection="column" rowGap={1} flex={flexBasis ? `1 1 ${flexBasis}` : '1 1 45%'} minWidth="80px">
+		<Text color="var(--tt-muted, #9a9aa6)" fontSize="10px" fontWeight={600} textTransform="uppercase" letterSpacing="0.06em">
+			{label}
+		</Text>
+		<Input
+			{...inputStyles}
+			value={block.css?.[cssKey] ?? ''}
+			placeholder={placeholder || 'auto'}
+			onChange={(event) => onCss(cssKey, event.target.value)}
+			data-testid={`css-${cssKey}`}
+		/>
+	</Flex>
+);
+
+// The whole css record as editable `property: value` lines — the native-code
+// escape hatch. Local state while typing, committed on blur.
+const CustomCssEditor = ({ block, onCommit }: { block: WebpageBlock; onCommit: (css: Record<string, string>) => void }) => {
+	const [text, setText] = React.useState(() => cssRecordToLines(block.css));
+	const editedRef = React.useRef(false);
+	React.useEffect(() => {
+		// a different block selected → show its css (never clobber mid-edit text)
+		if (!editedRef.current) setText(cssRecordToLines(block.css));
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- block identity change resets the buffer
+	}, [block.id]);
+	return (
+		<FieldRow label="Custom CSS (property: value per line)">
+			<Textarea
+				{...inputStyles}
+				rows={5}
+				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+				fontSize="12px"
+				placeholder={'padding: 24px\nbackground: #fff5fa\nborder-radius: 16px'}
+				value={text}
+				onChange={(event) => {
+					editedRef.current = true;
+					setText(event.target.value);
+				}}
+				onBlur={() => {
+					editedRef.current = false;
+					onCommit(cssLinesToRecord(text));
+				}}
+				data-testid="css-custom-editor"
+			/>
+		</FieldRow>
+	);
+};
+
 const BlockInspector = ({
 	draft,
 	block,
@@ -164,6 +253,12 @@ const BlockInspector = ({
 	onDeselect: () => void;
 }) => {
 	const patch = (fields: Partial<WebpageBlock>) => draft.setBlocks(updateBlock(draft.blocks, block.id, fields));
+	const setCss = (key: string, value: string) => {
+		const css = { ...(block.css || {}) };
+		if (!value.trim()) delete css[key];
+		else css[key] = value;
+		patch({ css: Object.keys(css).length ? css : undefined });
+	};
 	const component = block.type === 'component' ? draft.componentsByRef[block.component || ''] : null;
 	const specs = React.useMemo(() => sanitizeArgSpecs(component?.crystal?.args), [component?.crystal?.args]);
 
@@ -224,17 +319,83 @@ const BlockInspector = ({
 
 			{block.type === 'text' ? (
 				<>
-					<FieldRow label="Text">
-						<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
-					</FieldRow>
-					<FieldRow label="Style">
-						<Select {...inputStyles} value={block.style || 'body'} onChange={(event) => patch({ style: event.target.value as WebpageTextStyle })}>
-							<option value="body">body</option>
-							<option value="heading">heading</option>
-							<option value="eyebrow">eyebrow</option>
-						</Select>
-					</FieldRow>
+					{block.html ? (
+						<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.6">
+							✍️ This block holds rich text — click it on the canvas to edit inline (select text for the formatting toolbar).
+						</Text>
+					) : (
+						<FieldRow label="Text">
+							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+						</FieldRow>
+					)}
+					<Flex columnGap={2}>
+						<FieldRow label="Style">
+							<Select {...inputStyles} value={block.style || 'body'} onChange={(event) => patch({ style: event.target.value as WebpageTextStyle })}>
+								<option value="body">body</option>
+								<option value="heading">heading</option>
+								<option value="eyebrow">eyebrow</option>
+							</Select>
+						</FieldRow>
+						<FieldRow label="Tag">
+							<Select {...inputStyles} value={block.tag || ''} onChange={(event) => patch({ tag: event.target.value || undefined })}>
+								{TEXT_TAG_OPTIONS.map((tag) => (
+									<option key={tag || 'auto'} value={tag}>
+										{tag || 'auto'}
+									</option>
+								))}
+							</Select>
+						</FieldRow>
+					</Flex>
+					<Flex flexWrap="wrap" gap={2}>
+						<CssField label="Font size" cssKey="font-size" block={block} onCss={setCss} placeholder="16px" />
+						<CssField label="Weight" cssKey="font-weight" block={block} onCss={setCss} placeholder="400" />
+						<CssField label="Line height" cssKey="line-height" block={block} onCss={setCss} placeholder="1.65" />
+						<CssField label="Letter spacing" cssKey="letter-spacing" block={block} onCss={setCss} placeholder="0" />
+						<CssField label="Color" cssKey="color" block={block} onCss={setCss} placeholder="#16161a" />
+						<CssField label="Text align" cssKey="text-align" block={block} onCss={setCss} placeholder="left" />
+						<CssField label="Font family" cssKey="font-family" block={block} onCss={setCss} placeholder="inherit" flexBasis="100%" />
+					</Flex>
 				</>
+			) : null}
+
+			{block.type === 'media' ? (
+				<>
+					<FieldRow label="Source URL (https or /path — drop a file on the canvas to upload)">
+						<Input
+							{...inputStyles}
+							value={block.src || ''}
+							placeholder="https://…/image.png"
+							onChange={(event) => patch({ src: event.target.value.trim() })}
+							data-testid="media-src-input"
+						/>
+					</FieldRow>
+					<Flex columnGap={2}>
+						<FieldRow label="Kind">
+							<Select {...inputStyles} value={block.media || 'image'} onChange={(event) => patch({ media: event.target.value as WebpageMediaKind })}>
+								<option value="image">image</option>
+								<option value="video">video</option>
+								<option value="audio">audio</option>
+							</Select>
+						</FieldRow>
+						<FieldRow label="Alt text">
+							<Input {...inputStyles} value={block.alt || ''} onChange={(event) => patch({ alt: event.target.value || undefined })} />
+						</FieldRow>
+					</Flex>
+				</>
+			) : null}
+
+			{block.type === 'html' ? (
+				<FieldRow label="HTML (sanitised at render — scripts/iframes never run)">
+					<Textarea
+						{...inputStyles}
+						rows={10}
+						fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+						fontSize="12px"
+						value={block.html || ''}
+						onChange={(event) => patch({ html: event.target.value })}
+						data-testid="html-block-editor"
+					/>
+				</FieldRow>
 			) : null}
 
 			{block.type === 'container' ? (
@@ -303,31 +464,58 @@ const BlockInspector = ({
 
 			{block.type !== 'native' ? (
 				<>
-					<FieldRow label="Align">
-						<Select
-							{...inputStyles}
-							value={block.align || ''}
-							onChange={(event) => patch({ align: (event.target.value || undefined) as WebpageBlockAlign | undefined })}
-						>
-							{ALIGN_OPTIONS.map((option) => (
-								<option key={option || 'auto'} value={option}>
-									{option || 'auto'}
-								</option>
-							))}
-						</Select>
-					</FieldRow>
-					<FieldRow label="Max width (px)">
-						<Input
-							{...inputStyles}
-							type="number"
-							placeholder="auto"
-							value={block.maxWidth ?? ''}
-							onChange={(event) => {
-								const raw = event.target.value;
-								patch({ maxWidth: raw === '' ? undefined : Math.max(120, Math.min(1680, Number(raw) || 120)) });
-							}}
-						/>
-					</FieldRow>
+					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
+						<Eyebrow>Layout</Eyebrow>
+						<Flex flexDirection="column" rowGap={2}>
+							<Flex columnGap={2}>
+								<FieldRow label="Align">
+									<Select
+										{...inputStyles}
+										value={block.align || ''}
+										onChange={(event) => patch({ align: (event.target.value || undefined) as WebpageBlockAlign | undefined })}
+									>
+										{ALIGN_OPTIONS.map((option) => (
+											<option key={option || 'auto'} value={option}>
+												{option || 'auto'}
+											</option>
+										))}
+									</Select>
+								</FieldRow>
+								<FieldRow label="Max width (px)">
+									<Input
+										{...inputStyles}
+										type="number"
+										placeholder="auto"
+										value={block.maxWidth ?? ''}
+										onChange={(event) => {
+											const raw = event.target.value;
+											patch({ maxWidth: raw === '' ? undefined : Math.max(120, Math.min(1680, Number(raw) || 120)) });
+										}}
+									/>
+								</FieldRow>
+							</Flex>
+							<Flex flexWrap="wrap" gap={2}>
+								<CssField label="Width" cssKey="width" block={block} onCss={setCss} />
+								<CssField label="Height" cssKey="height" block={block} onCss={setCss} />
+								<CssField label="Padding" cssKey="padding" block={block} onCss={setCss} placeholder="0" />
+								<CssField label="Margin" cssKey="margin" block={block} onCss={setCss} placeholder="0" />
+							</Flex>
+						</Flex>
+					</Box>
+					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
+						<Eyebrow>Appearance</Eyebrow>
+						<Flex flexWrap="wrap" gap={2}>
+							<CssField label="Background" cssKey="background" block={block} onCss={setCss} placeholder="transparent" />
+							<CssField label="Radius" cssKey="border-radius" block={block} onCss={setCss} placeholder="0" />
+							<CssField label="Border" cssKey="border" block={block} onCss={setCss} placeholder="none" />
+							<CssField label="Shadow" cssKey="box-shadow" block={block} onCss={setCss} placeholder="none" />
+							<CssField label="Opacity" cssKey="opacity" block={block} onCss={setCss} placeholder="1" />
+						</Flex>
+					</Box>
+					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
+						<Eyebrow>Native code</Eyebrow>
+						<CustomCssEditor block={block} onCommit={(css) => patch({ css: Object.keys(css).length ? css : undefined })} />
+					</Box>
 				</>
 			) : null}
 		</Flex>
