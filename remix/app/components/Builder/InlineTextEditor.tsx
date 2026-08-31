@@ -108,9 +108,10 @@ export const InlineTextEditor = ({
 				data-testid="inline-text-editor"
 				contentEditable
 				suppressContentEditableWarning
-				outline="2px solid var(--tt-accent, hotpink)"
-				outlineOffset="3px"
-				borderRadius="var(--tt-radius-xs, 7px)"
+				// the selected BlockFrame already draws the selection outline — a
+				// second outline here reads as a double border once the block has
+				// its own padding
+				outline="none"
 				minWidth="40px"
 				minHeight="1em"
 				cursor="text"

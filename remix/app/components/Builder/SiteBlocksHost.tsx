@@ -13,7 +13,7 @@ import {
 	NativeSectionView
 } from './nativeSections';
 import { WebpageBlocksRenderer, type ComponentsByRef } from './WebpageBlocksRenderer';
-import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
+import { BuilderDrawer, InspectorReopenPill, useBuilderDrawerWidth } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { resolveWebpageClient, useWebpageDraft, type ResolvedWebpage } from './useWebpage';
 import type { WebpageBlock } from './webpageBlocks';
@@ -261,6 +261,32 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 	const globalChrome = useBuilderChrome(globalDraft);
 	const [pageName, setPageName] = React.useState('');
 	const namedForRef = React.useRef<string | null>(null);
+	const drawerWidth = useBuilderDrawerWidth();
+
+	// Edit mode owns file drag/drop for the WHOLE window: without this the
+	// browser navigates to (opens) any file dropped outside a zone or frame.
+	// Zones/frames stopPropagation, so this only catches unhandled drops —
+	// those upload and append to the end of the page draft.
+	const pageDropRef = React.useRef({ upload: pageChrome.uploadToPosition, length: pageDraft.blocks.length });
+	pageDropRef.current = { upload: pageChrome.uploadToPosition, length: pageDraft.blocks.length };
+	React.useEffect(() => {
+		const hasFiles = (event: DragEvent) => !!event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+		const onDragOver = (event: DragEvent) => {
+			if (hasFiles(event)) event.preventDefault();
+		};
+		const onDrop = (event: DragEvent) => {
+			if (!hasFiles(event)) return;
+			event.preventDefault();
+			const files = Array.from(event.dataTransfer?.files || []);
+			if (files.length) pageDropRef.current.upload(files, null, pageDropRef.current.length);
+		};
+		window.addEventListener('dragover', onDragOver);
+		window.addEventListener('drop', onDrop);
+		return () => {
+			window.removeEventListener('dragover', onDragOver);
+			window.removeEventListener('drop', onDrop);
+		};
+	}, []);
 
 	// one selection across both regions — picking in one clears the other
 	React.useEffect(() => {
@@ -360,7 +386,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		<>
 			<Box
 				width="100%"
-				paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0}
+				paddingRight={drawerOpen ? [0, `${drawerWidth}px`] : 0}
 				whiteSpace="normal"
 				// the canvas owns its wash: collapsed insert zones and shrunk nav
 				// clearance are transparent, and a white body bar between the
@@ -467,6 +493,7 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 				onSaveAll={saveAll}
 				anyDirty={pageDraft.dirty || globalDraft.dirty}
 				regionLabel={activeIsGlobal ? '🌐 global block' : 'this page'}
+				onUploadToBlock={activeChrome.uploadToBlock}
 			/>
 			) : null}
 			{pageChrome.insertMenu}

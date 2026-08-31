@@ -17,6 +17,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 5).
+- **Media lands anywhere**: dropping a file ONTO any block frame uploads it
+  (media blocks swap their src in place, containers take it inside, others
+  get it inserted after); window-level edit-mode guards stop the browser
+  from opening dropped files — unhandled drops append to the page;
+  ⌘/Ctrl+V of clipboard files uploads at the selected block (text paste is
+  never hijacked). Media inspector gains ⬆️ Upload file + URL input.
+- **Figma-parity inspector controls** (`FigmaControls.tsx` + pure
+  `figmaControlValues.ts`, node-tested): padding/margin with uniform ▢ /
+  linked-axes ⬍⬌ / independent-sides ⛶ modes, per-corner radius, border
+  (style/width/color) and shadow (X/Y/blur/spread/color) composers,
+  segmented text-align — all writing css shorthands into the bounded
+  per-block css record. Min width/height fields added.
+- **Alignment actually visible**: aligned blocks shrink to fit-content and
+  use justify-self in grid cells (align-self alone was invisible on
+  100%-wide blocks and wrong-axis in grids).
+- **Editor.js rich editing**: 📝 Rich editor modal on text blocks — full
+  Editor.js block vocabulary, converted doc↔html (`editorJsHtml.ts`);
+  rendered html still passes only through the sanitising allowlist
+  renderer. Component blocks: double-click any rendered text to edit the
+  matching arg in an inline popover.
+- **Drawer**: drag-resizable via the left edge (persisted width shared with
+  the canvas padding); paired fields wrap instead of crushing selects
+  ("imag/e" cutoff fixed); placeholders muted; inline editor no longer
+  draws a second outline inside the selected frame.
+
 ### 2026-08-31 — Builder round 4: Figma-layer styling, WYSIWYG, layout fixes — Claude (AI)
 
 - Grouped summary; full detail in the PR note

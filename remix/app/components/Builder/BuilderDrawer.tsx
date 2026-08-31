@@ -1,9 +1,30 @@
 import React from 'react';
-import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
+import {
+	Box,
+	Button,
+	Flex,
+	Input,
+	Modal,
+	ModalBody,
+	ModalCloseButton,
+	ModalContent,
+	ModalFooter,
+	ModalHeader,
+	ModalOverlay,
+	Select,
+	Switch,
+	Text,
+	Textarea
+} from '@chakra-ui/react';
+
+import { LongTextEditor, type LongTextValue } from '../Editor/LongTextEditor';
+import { isEditorJsDoc } from '../Editor/editorJsValue';
+import { editorJsToHtml, htmlToEditorJs, htmlToPlainText } from './editorJsHtml';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
 import {
 	blockLabel,
 	findBlock,
@@ -48,6 +69,54 @@ const cssLinesToRecord = (text: string): Record<string, string> => {
 // z-band so the two drawers coexist — one per side.
 
 export const BUILDER_DRAWER_WIDTH = 320;
+
+// ——— drag-resizable drawer width ————————————————————————————————————————
+// One persisted width shared by every builder surface. The drawer's left
+// edge is the drag handle; consumers (canvas padding) subscribe through
+// useBuilderDrawerWidth so the page re-flows live while dragging.
+const DRAWER_WIDTH_KEY = 'tt-builder-drawer-width';
+const DRAWER_MIN_WIDTH = 280;
+const DRAWER_MAX_WIDTH = 720;
+const DRAWER_WIDTH_EVENT = 'thingtime:builder-drawer-width';
+
+const readBuilderDrawerWidth = (): number => {
+	try {
+		const raw = Number(window.localStorage.getItem(DRAWER_WIDTH_KEY));
+		if (Number.isFinite(raw) && raw >= DRAWER_MIN_WIDTH && raw <= DRAWER_MAX_WIDTH) return Math.round(raw);
+	} catch {
+		// storage unavailable — default width
+	}
+	return BUILDER_DRAWER_WIDTH;
+};
+
+const setBuilderDrawerWidth = (width: number) => {
+	const clamped = Math.round(Math.max(DRAWER_MIN_WIDTH, Math.min(DRAWER_MAX_WIDTH, width)));
+	try {
+		window.localStorage.setItem(DRAWER_WIDTH_KEY, String(clamped));
+	} catch {
+		// storage unavailable — width still applies for this session
+	}
+	try {
+		window.dispatchEvent(new CustomEvent(DRAWER_WIDTH_EVENT, { detail: clamped }));
+	} catch {
+		// non-browser runtimes
+	}
+};
+
+export const useBuilderDrawerWidth = (): number => {
+	const [width, setWidth] = React.useState(() =>
+		typeof window === 'undefined' ? BUILDER_DRAWER_WIDTH : readBuilderDrawerWidth()
+	);
+	React.useEffect(() => {
+		const onWidth = (event: Event) => {
+			const next = Number((event as CustomEvent).detail);
+			if (Number.isFinite(next)) setWidth(next);
+		};
+		window.addEventListener(DRAWER_WIDTH_EVENT, onWidth);
+		return () => window.removeEventListener(DRAWER_WIDTH_EVENT, onWidth);
+	}, []);
+	return width;
+};
 
 // Floating reopen affordance shared by every surface with a collapsible
 // builder drawer — closing the drawer must never exit the editing surface.
@@ -104,12 +173,23 @@ const FieldRow = ({ label, children }: { label: string; children: React.ReactNod
 	</Flex>
 );
 
+// Side-by-side field pairs that WRAP instead of crushing their controls —
+// a select squeezed below its min-content width wraps its own option text
+// ("imag/e"). Every child gets a sane flex basis and minimum.
+const FieldPair = ({ children }: { children: React.ReactNode }) => (
+	<Flex columnGap={2} rowGap={2} flexWrap="wrap" sx={{ '& > *': { flex: '1 1 120px', minWidth: '120px' } }}>
+		{children}
+	</Flex>
+);
+
 const inputStyles = {
 	size: 'sm' as const,
 	border: '1px solid',
 	borderColor: 'var(--tt-border, #ececef)',
 	borderRadius: 'var(--tt-radius-sm, 9px)',
-	background: 'var(--tt-card, #ffffff)'
+	background: 'var(--tt-card, #ffffff)',
+	// placeholders must read as hints, never as real values
+	_placeholder: { color: 'var(--tt-faint, #b6b6c0)' }
 };
 
 const ALIGN_OPTIONS: Array<WebpageBlockAlign | ''> = ['', 'start', 'center', 'end', 'stretch'];
@@ -243,15 +323,80 @@ const CustomCssEditor = ({ block, onCommit }: { block: WebpageBlock; onCommit: (
 	);
 };
 
+// The Editor.js long-form editor for a text block: opens the full block
+// editor (headers, lists, tables, quotes, code, images, inline formatting) in
+// a modal; Apply converts the document to the block's sanitised-at-render
+// `html` (+ plain-text fallback), and reopening converts the html back into
+// editable Editor.js blocks.
+const RichTextEditorButton = ({
+	block,
+	patch
+}: {
+	block: WebpageBlock;
+	patch: (fields: Partial<WebpageBlock>) => void;
+}) => {
+	const [open, setOpen] = React.useState(false);
+	const [value, setValue] = React.useState<LongTextValue>('');
+	const openEditor = () => {
+		setValue(block.html ? htmlToEditorJs(block.html) : block.text || '');
+		setOpen(true);
+	};
+	const apply = () => {
+		if (isEditorJsDoc(value)) {
+			const html = editorJsToHtml(value);
+			patch({ html, text: htmlToPlainText(html).slice(0, 2000) });
+		} else {
+			patch({ text: String(value || ''), html: undefined });
+		}
+		setOpen(false);
+	};
+	return (
+		<>
+			<Button size="sm" variant="outline" onClick={openEditor} data-testid="rich-text-editor-open" alignSelf="flex-start">
+				📝 Rich editor (Editor.js)
+			</Button>
+			<Modal isOpen={open} onClose={() => setOpen(false)} size="3xl" scrollBehavior="inside">
+				<ModalOverlay zIndex={DRAWER_Z + 20} />
+				<ModalContent containerProps={{ zIndex: DRAWER_Z + 21 }} data-testid="rich-text-editor-modal">
+					<ModalHeader fontSize="sm">Rich text ✍️</ModalHeader>
+					<ModalCloseButton />
+					<ModalBody>
+						<LongTextEditor
+							value={value}
+							onValueChange={setValue}
+							placeholder="Write something lovely ✨"
+							minHeight="280px"
+							blockTypes={{ style: false, embed: false, warning: false }}
+						/>
+					</ModalBody>
+					<ModalFooter columnGap={2}>
+						<Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+							Cancel
+						</Button>
+						<Button size="sm" onClick={apply} data-testid="rich-text-editor-apply">
+							Apply
+						</Button>
+					</ModalFooter>
+				</ModalContent>
+			</Modal>
+		</>
+	);
+};
+
 const BlockInspector = ({
 	draft,
 	block,
-	onDeselect
+	onDeselect,
+	onUploadToBlock
 }: {
 	draft: UseWebpageDraft;
 	block: WebpageBlock;
 	onDeselect: () => void;
+	// wired to the builder chrome's uploader — the inspector's Upload button
+	// sends files AT this block (media blocks swap src in place)
+	onUploadToBlock?: (blockId: string, files: File[]) => void;
 }) => {
+	const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
 	const patch = (fields: Partial<WebpageBlock>) => draft.setBlocks(updateBlock(draft.blocks, block.id, fields));
 	const setCss = (key: string, value: string) => {
 		const css = { ...(block.css || {}) };
@@ -328,7 +473,8 @@ const BlockInspector = ({
 							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
-					<Flex columnGap={2}>
+					<RichTextEditorButton block={block} patch={patch} />
+					<FieldPair>
 						<FieldRow label="Style">
 							<Select {...inputStyles} value={block.style || 'body'} onChange={(event) => patch({ style: event.target.value as WebpageTextStyle })}>
 								<option value="body">body</option>
@@ -345,22 +491,62 @@ const BlockInspector = ({
 								))}
 							</Select>
 						</FieldRow>
-					</Flex>
+					</FieldPair>
 					<Flex flexWrap="wrap" gap={2}>
 						<CssField label="Font size" cssKey="font-size" block={block} onCss={setCss} placeholder="16px" />
 						<CssField label="Weight" cssKey="font-weight" block={block} onCss={setCss} placeholder="400" />
 						<CssField label="Line height" cssKey="line-height" block={block} onCss={setCss} placeholder="1.65" />
 						<CssField label="Letter spacing" cssKey="letter-spacing" block={block} onCss={setCss} placeholder="0" />
 						<CssField label="Color" cssKey="color" block={block} onCss={setCss} placeholder="#16161a" />
-						<CssField label="Text align" cssKey="text-align" block={block} onCss={setCss} placeholder="left" />
-						<CssField label="Font family" cssKey="font-family" block={block} onCss={setCss} placeholder="inherit" flexBasis="100%" />
+						<CssField label="Font family" cssKey="font-family" block={block} onCss={setCss} placeholder="inherit" />
 					</Flex>
+					<SegmentedControl
+						label="Text align"
+						value={block.css?.['text-align'] || ''}
+						onChange={(next) => setCss('text-align', next)}
+						testIdPrefix="text-align"
+						options={[
+							{ value: 'left', label: '⇤', title: 'Align left' },
+							{ value: 'center', label: '↔', title: 'Align center' },
+							{ value: 'right', label: '⇥', title: 'Align right' },
+							{ value: 'justify', label: '☰', title: 'Justify' }
+						]}
+					/>
 				</>
 			) : null}
 
 			{block.type === 'media' ? (
 				<>
-					<FieldRow label="Source URL (https or /path — drop a file on the canvas to upload)">
+					<FieldRow label="Media">
+						<Flex columnGap={2} alignItems="center">
+							<Button
+								size="sm"
+								flexShrink={0}
+								onClick={() => uploadInputRef.current?.click()}
+								isDisabled={!onUploadToBlock}
+								data-testid="media-upload-button"
+							>
+								⬆️ Upload file
+							</Button>
+							<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.4">
+								or paste (⌘/Ctrl+V), drop a file on the block, or set a URL below
+							</Text>
+						</Flex>
+						<Box
+							as="input"
+							type="file"
+							accept="image/*,video/*,audio/*"
+							display="none"
+							ref={uploadInputRef}
+							data-testid="media-upload-input"
+							onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+								const files = Array.from(event.target.files || []);
+								if (files.length && onUploadToBlock) onUploadToBlock(block.id, files);
+								event.target.value = '';
+							}}
+						/>
+					</FieldRow>
+					<FieldRow label="…or media URL (https or /path)">
 						<Input
 							{...inputStyles}
 							value={block.src || ''}
@@ -369,7 +555,7 @@ const BlockInspector = ({
 							data-testid="media-src-input"
 						/>
 					</FieldRow>
-					<Flex columnGap={2}>
+					<FieldPair>
 						<FieldRow label="Kind">
 							<Select {...inputStyles} value={block.media || 'image'} onChange={(event) => patch({ media: event.target.value as WebpageMediaKind })}>
 								<option value="image">image</option>
@@ -380,7 +566,7 @@ const BlockInspector = ({
 						<FieldRow label="Alt text">
 							<Input {...inputStyles} value={block.alt || ''} onChange={(event) => patch({ alt: event.target.value || undefined })} />
 						</FieldRow>
-					</Flex>
+					</FieldPair>
 				</>
 			) : null}
 
@@ -466,8 +652,8 @@ const BlockInspector = ({
 				<>
 					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
 						<Eyebrow>Layout</Eyebrow>
-						<Flex flexDirection="column" rowGap={2}>
-							<Flex columnGap={2}>
+						<Flex flexDirection="column" rowGap={3}>
+							<FieldPair>
 								<FieldRow label="Align">
 									<Select
 										{...inputStyles}
@@ -493,23 +679,32 @@ const BlockInspector = ({
 										}}
 									/>
 								</FieldRow>
-							</Flex>
+							</FieldPair>
 							<Flex flexWrap="wrap" gap={2}>
 								<CssField label="Width" cssKey="width" block={block} onCss={setCss} />
 								<CssField label="Height" cssKey="height" block={block} onCss={setCss} />
-								<CssField label="Padding" cssKey="padding" block={block} onCss={setCss} placeholder="0" />
-								<CssField label="Margin" cssKey="margin" block={block} onCss={setCss} placeholder="0" />
+								<CssField label="Min width" cssKey="min-width" block={block} onCss={setCss} />
+								<CssField label="Min height" cssKey="min-height" block={block} onCss={setCss} />
 							</Flex>
+							<SidesControl label="Padding" value={block.css?.padding} onChange={(next) => setCss('padding', next)} testIdPrefix="padding" />
+							<SidesControl label="Margin" value={block.css?.margin} onChange={(next) => setCss('margin', next)} testIdPrefix="margin" />
 						</Flex>
 					</Box>
 					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
 						<Eyebrow>Appearance</Eyebrow>
-						<Flex flexWrap="wrap" gap={2}>
-							<CssField label="Background" cssKey="background" block={block} onCss={setCss} placeholder="transparent" />
-							<CssField label="Radius" cssKey="border-radius" block={block} onCss={setCss} placeholder="0" />
-							<CssField label="Border" cssKey="border" block={block} onCss={setCss} placeholder="none" />
-							<CssField label="Shadow" cssKey="box-shadow" block={block} onCss={setCss} placeholder="none" />
-							<CssField label="Opacity" cssKey="opacity" block={block} onCss={setCss} placeholder="1" />
+						<Flex flexDirection="column" rowGap={3}>
+							<Flex flexWrap="wrap" gap={2}>
+								<CssField label="Background" cssKey="background" block={block} onCss={setCss} placeholder="transparent" />
+								<CssField label="Opacity" cssKey="opacity" block={block} onCss={setCss} placeholder="1" />
+							</Flex>
+							<CornersControl
+								label="Corner radius"
+								value={block.css?.['border-radius']}
+								onChange={(next) => setCss('border-radius', next)}
+								testIdPrefix="radius"
+							/>
+							<BorderControl value={block.css?.border} onChange={(next) => setCss('border', next)} testIdPrefix="border" />
+							<ShadowControl value={block.css?.['box-shadow']} onChange={(next) => setCss('box-shadow', next)} testIdPrefix="shadow" />
 						</Flex>
 					</Box>
 					<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
@@ -541,6 +736,9 @@ export const BuilderDrawer = (props: {
 	onSaveAll?: () => Promise<{ ok: boolean; error?: string }>;
 	anyDirty?: boolean;
 	regionLabel?: string;
+	// upload files at the selected block (media blocks swap src in place) —
+	// powers the inspector's ⬆️ Upload button
+	onUploadToBlock?: (blockId: string, files: File[]) => void;
 }) => {
 	const {
 		title,
@@ -556,9 +754,11 @@ export const BuilderDrawer = (props: {
 		onSaved,
 		onSaveAll,
 		anyDirty,
-		regionLabel
+		regionLabel,
+		onUploadToBlock
 	} = props;
 	const lopu = useLopu();
+	const drawerWidth = useBuilderDrawerWidth();
 	const [saving, setSaving] = React.useState(false);
 	// name/visibility edits live here (not in the block draft), so they mark
 	// the page saveable on their own
@@ -600,7 +800,7 @@ export const BuilderDrawer = (props: {
 			top={0}
 			right={0}
 			bottom={0}
-			width={[`min(${BUILDER_DRAWER_WIDTH}px, calc(100vw - 56px))`, `${BUILDER_DRAWER_WIDTH}px`]}
+			width={[`min(${drawerWidth}px, calc(100vw - 56px))`, `${drawerWidth}px`]}
 			zIndex={DRAWER_Z}
 			flexDirection="column"
 			background="var(--tt-card, #ffffff)"
@@ -610,6 +810,31 @@ export const BuilderDrawer = (props: {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + 12px)"
 			overflowY="auto"
 		>
+			{/* left-edge drag handle — the whole edge resizes the drawer */}
+			<Box
+				position="absolute"
+				left={0}
+				top={0}
+				bottom={0}
+				width="7px"
+				cursor="col-resize"
+				zIndex={2}
+				data-testid="builder-drawer-resize"
+				sx={{ touchAction: 'none', userSelect: 'none' }}
+				_hover={{ background: 'var(--tt-accent, hotpink)', opacity: 0.35 }}
+				onPointerDown={(event: React.PointerEvent<HTMLElement>) => {
+					event.preventDefault();
+					try {
+						(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+					} catch {
+						// pointer capture unsupported — move events still flow while over the handle
+					}
+				}}
+				onPointerMove={(event: React.PointerEvent) => {
+					if ((event.buttons & 1) === 0) return;
+					setBuilderDrawerWidth(window.innerWidth - event.clientX);
+				}}
+			/>
 			<Flex alignItems="center" justifyContent="space-between" paddingX={4} paddingBottom={3} borderBottom="1px solid" borderColor="var(--tt-border-light, #f0f0f2)">
 				<Text color="var(--tt-ink, #16161a)" fontFamily="heading" fontSize="sm" fontWeight={800}>
 					{title}
@@ -644,7 +869,7 @@ export const BuilderDrawer = (props: {
 								{regionLabel}
 							</Text>
 						) : null}
-						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} />
+						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} />
 					</>
 				) : (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">

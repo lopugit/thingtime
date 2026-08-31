@@ -56,6 +56,9 @@ export type BuilderChrome = {
 	// OS file drops upload through the attachments API, then land as media
 	// blocks at (containerId, index)
 	onDropFiles?: (files: File[], containerId: string | null, index: number) => void;
+	// files dropped/pasted ONTO a block: media blocks swap src in place,
+	// containers take the media inside, others get it inserted right after
+	onMediaToBlock?: (blockId: string, files: File[]) => void;
 };
 
 // Figma-style custom css record → React inline style (kebab → camel, custom
@@ -304,6 +307,35 @@ const DropWell = ({
 const alignSelfOf = (block: WebpageBlock): string | undefined =>
 	block.align === 'center' ? 'center' : block.align === 'end' ? 'flex-end' : block.align === 'start' ? 'flex-start' : block.align === 'stretch' ? 'stretch' : undefined;
 
+// Align must be VISIBLE: a 100%-wide box centers to nothing, and grid cells
+// place on the inline axis with justify-self, not align-self. An aligned
+// block therefore shrinks to fit-content (unless stretching) and gets the
+// right placement prop for its parent's layout model. Rows keep flex sizing —
+// there align works on the cross axis.
+const selfPlacement = (block: WebpageBlock, parentDirection: ParentDirection) => {
+	const align = block.align;
+	const inRow = parentDirection === 'row';
+	const fit = !inRow && !!align && align !== 'stretch';
+	return {
+		width: inRow ? 'auto' : fit ? 'fit-content' : '100%',
+		flex: inRow ? '1 1 0%' : undefined,
+		minWidth: inRow ? 0 : undefined,
+		maxWidth: block.maxWidth ? `${block.maxWidth}px` : fit ? '100%' : undefined,
+		alignSelf: alignSelfOf(block),
+		justifySelf:
+			parentDirection === 'grid' && align
+				? align === 'center'
+					? 'center'
+					: align === 'end'
+						? 'end'
+						: align === 'stretch'
+							? 'stretch'
+							: 'start'
+				: undefined,
+		marginX: block.align === 'center' ? 'auto' : undefined
+	} as const;
+};
+
 type ParentDirection = 'column' | 'row' | 'grid';
 
 const BlockFrame = ({
@@ -329,50 +361,48 @@ const BlockFrame = ({
 	const selected = chrome.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
-	const inRow = parentDirection === 'row';
-	const gridDropProps =
-		parentDirection === 'grid'
-			? {
-					onDragOver: (event: React.DragEvent) => {
-						if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
-							event.preventDefault();
-							event.stopPropagation();
-							setDropTarget(true);
-						}
-					},
-					onDragLeave: () => setDropTarget(false),
-					onDrop: (event: React.DragEvent) => {
-						setDropTarget(false);
-						const id = event.dataTransfer.getData(DRAG_MIME);
-						if (id && id !== block.id) {
-							event.preventDefault();
-							event.stopPropagation();
-							chrome.onMove(id, containerId, indexInParent);
-							return;
-						}
-						const files = Array.from(event.dataTransfer.files || []);
-						if (files.length && chrome.onDropFiles) {
-							event.preventDefault();
-							event.stopPropagation();
-							chrome.onDropFiles(files, containerId, indexInParent);
-						}
-					}
-			  }
-			: {};
+	// EVERY frame is a file-drop target (media blocks swap their src, others
+	// receive the upload via onMediaToBlock) — otherwise the browser opens the
+	// dropped file. Grid cells additionally accept block drags (insert-before),
+	// since grids have no between-cell zones. Innermost frame wins via
+	// stopPropagation.
+	const acceptsBlockDrag = parentDirection === 'grid';
+	const dropProps = {
+		onDragOver: (event: React.DragEvent) => {
+			const hasFiles = event.dataTransfer.types.includes('Files');
+			const hasBlock = acceptsBlockDrag && event.dataTransfer.types.includes(DRAG_MIME);
+			if (hasFiles || hasBlock) {
+				event.preventDefault();
+				event.stopPropagation();
+				event.dataTransfer.dropEffect = hasBlock ? 'move' : 'copy';
+				setDropTarget(true);
+			}
+		},
+		onDragLeave: () => setDropTarget(false),
+		onDrop: (event: React.DragEvent) => {
+			setDropTarget(false);
+			const id = event.dataTransfer.getData(DRAG_MIME);
+			if (id && id !== block.id && acceptsBlockDrag) {
+				event.preventDefault();
+				event.stopPropagation();
+				chrome.onMove(id, containerId, indexInParent);
+				return;
+			}
+			const files = Array.from(event.dataTransfer.files || []);
+			if (files.length && chrome.onMediaToBlock) {
+				event.preventDefault();
+				event.stopPropagation();
+				chrome.onMediaToBlock(block.id, files);
+			}
+		}
+	};
 	return (
 		<Box
-			{...gridDropProps}
+			{...dropProps}
 			className="ttBlockFrame"
 			data-block-id={block.id}
 			position="relative"
-			// row children share the line (grow evenly, never force 100% width);
-			// column children and grid cells fill their track
-			width={inRow ? 'auto' : '100%'}
-			flex={inRow ? '1 1 0%' : undefined}
-			minWidth={inRow ? 0 : undefined}
-			alignSelf={alignSelfOf(block)}
-			maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
-			marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
+			{...selfPlacement(block, parentDirection)}
 			style={cssRecordToStyle(block.css)}
 			outline={
 				dropTarget
@@ -401,7 +431,7 @@ const BlockFrame = ({
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
 				const target = event.target as HTMLElement;
-				if (target.closest?.('.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttWysiwygToolbar')) return;
+				if (target.closest?.('.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttWysiwygToolbar, .ttArgEditPopover')) return;
 				// nested frames: capture runs OUTERMOST-first, so an ancestor frame
 				// sees the click before the frame that was actually clicked. Only
 				// the innermost frame containing the click may handle it — anyone
@@ -480,26 +510,70 @@ const TEXT_STYLES: Record<string, Record<string, unknown>> = {
 const ComponentBlockView = ({
 	block,
 	component,
-	interactive
+	interactive,
+	chrome
 }: {
 	block: WebpageBlock;
 	component: ComponentThingLike | null;
 	interactive: boolean;
+	chrome?: BuilderChrome | null;
 }) => {
 	const onTtAction = useTtActionClicks();
 	const crystal = component?.crystal;
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
 	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
+	const argValues = React.useMemo(
+		() => ({
+			...defaultsFromArgs(specs),
+			...(crystal?.savedArgs && typeof crystal.savedArgs === 'object' ? crystal.savedArgs : {}),
+			...(block.args || {})
+		}),
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
+		[specs, valuesKey]
+	);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
-		const values = {
-			...defaultsFromArgs(specs),
-			...(crystal.savedArgs && typeof crystal.savedArgs === 'object' ? crystal.savedArgs : {}),
-			...(block.args || {})
-		};
-		return resolveTemplate(crystal.render, values);
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
-	}, [crystal?.render, specs, valuesKey]);
+		return resolveTemplate(crystal.render, argValues);
+	}, [crystal?.render, argValues]);
+
+	// Inline text editing INSIDE components: double-click a piece of rendered
+	// text and, when it matches a string/text arg's current value verbatim, a
+	// small in-place editor patches that arg — every text a component shows
+	// stays clickable-editable, not just text blocks.
+	const [argEdit, setArgEdit] = React.useState<{ name: string; value: string; left: number; top: number; width: number } | null>(null);
+	const commitArgEdit = React.useCallback(() => {
+		setArgEdit((current) => {
+			if (current && chrome?.onUpdate) {
+				const args = { ...(block.args || {}) };
+				args[current.name] = current.value;
+				chrome.onUpdate(block.id, { args });
+			}
+			return null;
+		});
+	}, [block.args, block.id, chrome]);
+	const handleDoubleClick = chrome
+		? (event: React.MouseEvent) => {
+				const target = event.target as HTMLElement;
+				const text = (target.textContent || '').trim();
+				if (!text || text.length > 400) return;
+				const spec = specs.find(
+					(candidate) =>
+						(candidate.type === 'string' || candidate.type === 'text' || !candidate.type) &&
+						String(argValues[candidate.name] ?? '').trim() === text
+				);
+				if (!spec) return;
+				event.preventDefault();
+				event.stopPropagation();
+				const rect = target.getBoundingClientRect();
+				setArgEdit({
+					name: spec.name,
+					value: String(argValues[spec.name] ?? ''),
+					left: Math.min(rect.left, Math.max(8, window.innerWidth - 260)),
+					top: rect.bottom + 6,
+					width: Math.max(220, Math.min(420, rect.width))
+				});
+		  }
+		: undefined;
 
 	if (!component || !crystal?.render) {
 		return (
@@ -519,12 +593,56 @@ const ComponentBlockView = ({
 	}
 
 	return (
-		<Box onClickCapture={interactive ? onTtAction : undefined} width="100%">
+		<Box onClickCapture={interactive ? onTtAction : undefined} onDoubleClickCapture={handleDoubleClick} width="100%">
 			{isChakraThingNode(resolved) ? (
 				<ChakraThingRenderer node={resolved as ChakraThingNode} />
 			) : (
 				<HtmlThingRenderer node={resolved as HtmlThingNode} />
 			)}
+			{argEdit ? (
+				<Box
+					className="ttArgEditPopover"
+					position="fixed"
+					left={`${argEdit.left}px`}
+					top={`${argEdit.top}px`}
+					width={`${argEdit.width}px`}
+					zIndex={10200}
+					padding="6px"
+					borderRadius="var(--tt-radius-md, 12px)"
+					border="1px solid"
+					borderColor="var(--tt-border, #ececef)"
+					background="var(--tt-card, #ffffff)"
+					boxShadow="var(--tt-shadow-popover, 0 12px 32px rgba(0, 0, 0, 0.12))"
+				>
+					<Box
+						as="input"
+						// eslint-disable-next-line jsx-a11y/no-autofocus -- the popover exists to type into
+						autoFocus
+						width="100%"
+						fontSize="13px"
+						padding="6px 8px"
+						border="1px solid var(--tt-border, #ececef)"
+						borderRadius="var(--tt-radius-sm, 9px)"
+						data-testid="component-arg-inline-input"
+						value={argEdit.value}
+						onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+							setArgEdit((current) => (current ? { ...current, value: event.target.value } : current))
+						}
+						onKeyDown={(event: React.KeyboardEvent) => {
+							if (event.key === 'Enter') {
+								event.preventDefault();
+								commitArgEdit();
+							}
+							if (event.key === 'Escape') {
+								event.preventDefault();
+								setArgEdit(null);
+							}
+						}}
+						onBlur={commitArgEdit}
+						onClick={(event: React.MouseEvent) => event.stopPropagation()}
+					/>
+				</Box>
+			) : null}
 		</Box>
 	);
 };
@@ -619,7 +737,7 @@ const BlockView = (
 					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
 					fontSize="12px"
 				>
-					🖼 {block.media || 'media'} — set a source in the inspector or drop a file here
+					🖼 {block.media || 'media'} — drop a file here, paste (⌘/Ctrl+V), or upload / set a URL in the inspector
 				</Flex>
 			);
 		} else if (block.media === 'video') {
@@ -648,7 +766,14 @@ const BlockView = (
 			</Flex>
 		);
 	} else if (block.type === 'component') {
-		body = <ComponentBlockView block={block} component={componentsByRef[block.component || ''] ?? null} interactive={!!interactive} />;
+		body = (
+			<ComponentBlockView
+				block={block}
+				component={componentsByRef[block.component || ''] ?? null}
+				interactive={!!interactive}
+				chrome={chrome}
+			/>
+		);
 	} else if (block.type === 'native') {
 		body = renderNative ? renderNative(block.native || '', block) : null;
 		if (!body && chrome) {
@@ -708,17 +833,8 @@ const BlockView = (
 		// native sections render BARE in view mode — a full-width wrapper would
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
-		const inRow = parentDirection === 'row';
 		return (
-			<Box
-				width={inRow ? 'auto' : '100%'}
-				flex={inRow ? '1 1 0%' : undefined}
-				minWidth={inRow ? 0 : undefined}
-				alignSelf={alignSelfOf(block)}
-				maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
-				marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
-				style={cssRecordToStyle(block.css)}
-			>
+			<Box {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css)}>
 				{body}
 			</Box>
 		);

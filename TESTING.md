@@ -2887,4 +2887,24 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Edit mode shows no white body bar between the 🌐 Global strip and the
       page region (canvas paints the surface wash) and the Global eyebrow has
       clear air below the navbar (view + edit).
+- [ ] Dropping an image FILE onto a media block replaces its src (never opens
+      the file in the browser); dropping anywhere else in edit mode uploads
+      and appends a media block (window-level guard); ⌘/Ctrl+V of a clipboard
+      image while a block is selected uploads at the selection, and plain
+      text paste into inputs/the inline editor is untouched.
+- [ ] Media inspector offers BOTH ⬆️ Upload file and a URL field; the Kind
+      select never wraps its option text (FieldPair min-width regression).
+- [ ] Inspector padding/margin mode toggles (▢/⬍⬌/⛶) write the css shorthand
+      and round-trip (axes ↔ sides keep values); per-corner radius, border
+      and shadow composers produce valid shorthands
+      (`pnpm --dir remix run test:webpages` → figmaControlValues).
+- [ ] Align=center on a block visibly centers it (fit-content + justify-self
+      in grids — regression: align-self alone did nothing on 100%-wide
+      blocks and was the wrong axis in grid cells).
+- [ ] Text block 📝 Rich editor (Editor.js) applies headers/lists/tables/code
+      as sanitised html and reopens editable; double-click on text inside a
+      component block opens the inline arg editor and patches the arg.
+- [ ] Drawer resizes by dragging its left edge; width persists across
+      reloads and the canvas padding follows live; selected inline text
+      editor shows ONE outline (no double border once padding is set).
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.

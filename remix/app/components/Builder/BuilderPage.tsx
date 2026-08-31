@@ -9,7 +9,7 @@ import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
 import { getNativeSection, NativeSectionView } from './nativeSections';
-import { BuilderDrawer, BUILDER_DRAWER_WIDTH, InspectorReopenPill } from './BuilderDrawer';
+import { BuilderDrawer, InspectorReopenPill, useBuilderDrawerWidth } from './BuilderDrawer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { useWebpageDraft } from './useWebpage';
 import { countBlocks, type WebpageBlock } from './webpageBlocks';
@@ -158,9 +158,33 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 	const draft = useWebpageDraft(
 		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
 	);
-	const { chrome, selectedId, deselect, insertMenu } = useBuilderChrome(draft);
+	const { chrome, selectedId, deselect, insertMenu, uploadToBlock, uploadToPosition } = useBuilderChrome(draft);
 	const [pageName, setPageName] = React.useState('');
 	const [isPublic, setIsPublic] = React.useState(false);
+	const drawerWidth = useBuilderDrawerWidth();
+
+	// the canvas owns window-level file drops — unhandled ones append to the
+	// end of the page instead of the browser opening the file
+	const dropRef = React.useRef({ upload: uploadToPosition, length: draft.blocks.length });
+	dropRef.current = { upload: uploadToPosition, length: draft.blocks.length };
+	React.useEffect(() => {
+		const hasFiles = (event: DragEvent) => !!event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+		const onDragOver = (event: DragEvent) => {
+			if (hasFiles(event)) event.preventDefault();
+		};
+		const onDrop = (event: DragEvent) => {
+			if (!hasFiles(event)) return;
+			event.preventDefault();
+			const files = Array.from(event.dataTransfer?.files || []);
+			if (files.length) dropRef.current.upload(files, null, dropRef.current.length);
+		};
+		window.addEventListener('dragover', onDragOver);
+		window.addEventListener('drop', onDrop);
+		return () => {
+			window.removeEventListener('dragover', onDragOver);
+			window.removeEventListener('drop', onDrop);
+		};
+	}, []);
 	// collapsible on small screens — closing the drawer never exits the canvas
 	const [drawerOpen, setDrawerOpen] = React.useState(true);
 	const namedForRef = React.useRef<string | null>(null);
@@ -193,7 +217,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				minHeight="100vh"
 				background="var(--tt-surface, #fafafb)"
 				paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
-				paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0}
+				paddingRight={drawerOpen ? [0, `${drawerWidth}px`] : 0}
 				whiteSpace="normal"
 			>
 				<Flex flexDirection="column" width="100%" maxWidth="960px" marginX="auto" paddingX={4} paddingY={8} flex={1}>
@@ -255,6 +279,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				onSaved={(id) => {
 					if (!isGlobal && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
 				}}
+				onUploadToBlock={uploadToBlock}
 			/>
 			) : null}
 			{insertMenu}

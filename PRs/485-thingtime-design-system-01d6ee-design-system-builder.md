@@ -273,3 +273,42 @@ real admin API (`POST /api/v1/admin/components/seed`, batches of 100) using a
 throwaway `seedbot485` admin enabled by a branch-scoped `ADMIN_USERNAMES`
 Vercel preview env var (scoped to `claude/thingtime-design-system-01d6ee`
 only).
+
+## Round 5 — media everywhere, Figma-parity controls, resizable drawer (2026-08-31)
+
+Owner QA asks, all landed:
+1. **Dropping an image on a media block opened it in the browser** — block
+   frames had no file-drop handling outside grids, and nothing guarded the
+   window. Now EVERY frame accepts file drops (media = replace src in place,
+   container = into, other = after), and edit-mode window listeners
+   preventDefault all file drags — unhandled drops upload + append to the
+   page. ⌘/Ctrl+V with clipboard files uploads at the selection (only when
+   files are present, so text paste into inputs/the inline editor is never
+   hijacked; defaultPrevented pastes are skipped).
+2. **Media inspector**: ⬆️ Upload file button (hidden file input →
+   uploadToBlock) OR a URL field.
+3. **Cut-off "imag/e" selects** — paired drawer fields sat in a rigid flex
+   row that crushed selects below min-content; FieldPair wraps with a sane
+   flex-basis/min-width.
+4. **Drag-resizable drawer** — left-edge handle, width persisted in
+   localStorage and broadcast via a custom event so the canvas padding
+   follows live (useBuilderDrawerWidth), 280–720px clamp.
+5. **Figma-parity property controls** — SidesControl (▢ uniform / ⬍⬌ axes /
+   ⛶ independent writing the css shorthand), CornersControl (per-corner
+   radius), BorderControl (style/width/color), ShadowControl
+   (X/Y/blur/spread/color), SegmentedControl text-align, min-width/height.
+   Pure shorthand math in figmaControlValues.ts with node tests
+   (expand/collapse round-trips, rgba-preserving shadow parse).
+6. **Align center did nothing** — align-self is invisible on a 100%-wide
+   block and the wrong axis in grid cells. selfPlacement now shrinks aligned
+   blocks to fit-content, adds justify-self for grids, keeps rows on flex.
+7. **Editor.js rich editing** (second ask): 📝 Rich editor modal on text
+   blocks (headers/lists/checklists/quotes/tables/code/images + inline
+   marker/underline/code), doc↔html via editorJsHtml.ts — html remains the
+   stored form and renders ONLY through the allowlist renderer; code blocks
+   escape their contents. Double-click text inside a COMPONENT block edits
+   the matching string arg in an inline popover (exact-match on the rendered
+   text; drawer args remain the fallback).
+8. **Double border on padded selected text** — the inline editor drew its own
+   outline inside the already-outlined frame; removed.
+9. **Muted placeholders** across all inspector inputs.

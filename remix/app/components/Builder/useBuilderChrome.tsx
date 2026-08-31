@@ -4,7 +4,16 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
 import { BlockInsertMenu, type InsertPick } from './BlockInsertMenu';
-import { collectBlockIds, insertBlock, moveBlock, newBlockId, updateBlock, type WebpageBlock } from './webpageBlocks';
+import {
+	collectBlockIds,
+	findBlock,
+	findParentId,
+	insertBlock,
+	moveBlock,
+	newBlockId,
+	updateBlock,
+	type WebpageBlock
+} from './webpageBlocks';
 import type { BuilderChrome } from './WebpageBlocksRenderer';
 import type { UseWebpageDraft } from './useWebpage';
 
@@ -18,7 +27,18 @@ export type UseBuilderChrome = {
 	deselect: () => void;
 	// render this after the canvas — the floating insert menu when open
 	insertMenu: React.ReactNode;
+	// upload files AT a block: media blocks swap their src in place, containers
+	// take the media inside, anything else gets it inserted right after —
+	// shared by on-block drops, Cmd/Ctrl+V paste, and the inspector's Upload
+	uploadToBlock: (blockId: string, files: File[]) => void;
+	// upload files to a position (canvas-wide drops outside any zone/block)
+	uploadToPosition: (files: File[], containerId: string | null, index: number) => void;
 };
+
+// Where an in-flight upload should land when it turns ready.
+type UploadTarget =
+	| { kind: 'insert'; containerId: string | null; index: number }
+	| { kind: 'replace'; blockId: string };
 
 export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
@@ -31,9 +51,10 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	const user = useCurrentUser();
 	const lopu = useLopu();
 
-	// OS file drops → attachment uploads → media blocks at the drop target.
-	// Targets are matched back by (name, size) when each upload turns ready.
-	const pendingDropsRef = React.useRef<Array<{ name: string; size: number; containerId: string | null; index: number }>>([]);
+	// OS file drops / pastes / inspector uploads → attachment uploads → media
+	// landing at their recorded target. Targets are matched back by
+	// (name, size) when each upload turns ready.
+	const pendingDropsRef = React.useRef<Array<{ name: string; size: number; target: UploadTarget }>>([]);
 	const consumedUploadsRef = React.useRef(new Set<string>());
 	const uploader = useAttachmentUploads(
 		user?.id,
@@ -43,6 +64,62 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	);
 	const { uploads, addFiles, markCommitted } = uploader;
 
+	const queueFiles = React.useCallback(
+		(files: File[], targetOf: (offset: number) => UploadTarget) => {
+			if (!files.length) return;
+			files.forEach((file, offset) => {
+				pendingDropsRef.current.push({ name: file.name, size: file.size, target: targetOf(offset) });
+			});
+			addFiles(files);
+			lopu({ title: `Uploading ${files.length === 1 ? files[0].name || 'pasted media' : `${files.length} files`}… ⬆️`, status: 'info' });
+		},
+		[addFiles, lopu]
+	);
+
+	const uploadToPosition = React.useCallback(
+		(files: File[], containerId: string | null, index: number) => {
+			queueFiles(files, (offset) => ({ kind: 'insert', containerId, index: index + offset }));
+		},
+		[queueFiles]
+	);
+
+	const uploadToBlock = React.useCallback(
+		(blockId: string, files: File[]) => {
+			const blocks = draftRef.current.blocks;
+			const block = findBlock(blocks, blockId);
+			if (!block) {
+				uploadToPosition(files, null, blocks.length);
+				return;
+			}
+			if (block.type === 'media') {
+				// first file replaces the media block's source, extras land after it
+				const parentId = findParentId(blocks, blockId);
+				const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
+				const index = siblings.findIndex((sibling) => sibling.id === blockId);
+				queueFiles(files, (offset) =>
+					offset === 0
+						? { kind: 'replace', blockId }
+						: { kind: 'insert', containerId: (parentId as string | null) ?? null, index: index + offset }
+				);
+				return;
+			}
+			if (block.type === 'container') {
+				const start = block.children?.length || 0;
+				queueFiles(files, (offset) => ({ kind: 'insert', containerId: blockId, index: start + offset }));
+				return;
+			}
+			const parentId = findParentId(blocks, blockId);
+			const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
+			const index = siblings.findIndex((sibling) => sibling.id === blockId);
+			queueFiles(files, (offset) => ({
+				kind: 'insert',
+				containerId: (parentId as string | null) ?? null,
+				index: (index === -1 ? siblings.length : index + 1) + offset
+			}));
+		},
+		[queueFiles, uploadToPosition]
+	);
+
 	React.useEffect(() => {
 		for (const upload of uploads) {
 			if (upload.status !== 'ready' || !upload.attachment || consumedUploadsRef.current.has(upload.localId)) continue;
@@ -50,26 +127,60 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			const pendingIndex = pendingDropsRef.current.findIndex(
 				(entry) => entry.name === upload.file.name && entry.size === upload.file.size
 			);
-			const target = pendingIndex >= 0 ? pendingDropsRef.current.splice(pendingIndex, 1)[0] : null;
+			const target = pendingIndex >= 0 ? pendingDropsRef.current.splice(pendingIndex, 1)[0].target : null;
 			const attachment = upload.attachment;
 			markCommitted([attachment.id]);
 			const current = draftRef.current;
 			const media: WebpageBlock['media'] =
 				attachment.contentType.startsWith('video/') ? 'video' : attachment.contentType.startsWith('audio/') ? 'audio' : 'image';
-			const block: WebpageBlock = {
-				id: newBlockId('media', collectBlockIds(current.blocks)),
-				type: 'media',
-				media,
-				src: `/api/v1/attachments/content?id=${encodeURIComponent(attachment.id)}`,
-				...(attachment.name ? { alt: attachment.name } : {})
-			};
-			current.setBlocks(
-				insertBlock(current.blocks, target?.containerId ?? null, target?.index ?? current.blocks.length, block)
-			);
-			setSelectedId(block.id);
-			lopu({ title: `${media === 'image' ? '🖼' : media === 'video' ? '🎬' : '🎵'} ${attachment.name} added to the page`, status: 'success' });
+			const src = `/api/v1/attachments/content?id=${encodeURIComponent(attachment.id)}`;
+			if (target?.kind === 'replace' && findBlock(current.blocks, target.blockId)?.type === 'media') {
+				current.setBlocks(
+					updateBlock(current.blocks, target.blockId, {
+						media,
+						src,
+						...(attachment.name ? { alt: attachment.name } : {})
+					})
+				);
+				setSelectedId(target.blockId);
+			} else {
+				const block: WebpageBlock = {
+					id: newBlockId('media', collectBlockIds(current.blocks)),
+					type: 'media',
+					media,
+					src,
+					...(attachment.name ? { alt: attachment.name } : {})
+				};
+				const insertAtTarget = target && target.kind === 'insert' ? target : null;
+				current.setBlocks(
+					insertBlock(current.blocks, insertAtTarget?.containerId ?? null, insertAtTarget?.index ?? current.blocks.length, block)
+				);
+				setSelectedId(block.id);
+			}
+			lopu({
+				title: `${media === 'image' ? '🖼' : media === 'video' ? '🎬' : '🎵'} ${attachment.name || 'media'} added to the page`,
+				status: 'success'
+			});
 		}
 	}, [uploads, lopu, markCommitted]);
+
+	// Cmd/Ctrl+V while a block is selected: clipboard FILES (screenshots,
+	// copied images/media) upload straight at the selection. Plain text pastes
+	// are untouched — this only fires when the clipboard carries files, and a
+	// paste someone else already handled (inputs, the inline text editor's
+	// rich paste) is skipped via defaultPrevented.
+	React.useEffect(() => {
+		if (!selectedId) return;
+		const onPaste = (event: ClipboardEvent) => {
+			if (event.defaultPrevented) return;
+			const files = Array.from(event.clipboardData?.files || []);
+			if (!files.length) return;
+			event.preventDefault();
+			uploadToBlock(selectedId, files);
+		};
+		window.addEventListener('paste', onPaste);
+		return () => window.removeEventListener('paste', onPaste);
+	}, [selectedId, uploadToBlock]);
 
 	const chrome = React.useMemo<BuilderChrome>(
 		() => ({
@@ -87,15 +198,10 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			onUpdate: (id, patch) => {
 				draftRef.current.setBlocks(updateBlock(draftRef.current.blocks, id, patch));
 			},
-			onDropFiles: (files, containerId, index) => {
-				files.forEach((file, offset) => {
-					pendingDropsRef.current.push({ name: file.name, size: file.size, containerId, index: index + offset });
-				});
-				addFiles(files);
-				lopu({ title: `Uploading ${files.length === 1 ? files[0].name : `${files.length} files`}… ⬆️`, status: 'info' });
-			}
+			onDropFiles: uploadToPosition ? (files, containerId, index) => uploadToPosition(files, containerId, index) : undefined,
+			onMediaToBlock: (blockId, files) => uploadToBlock(blockId, files)
 		}),
-		[hoverId, selectedId, addFiles, lopu]
+		[hoverId, selectedId, uploadToPosition, uploadToBlock]
 	);
 
 	// Escape deselects from anywhere in the canvas (the inline editor commits
@@ -138,6 +244,8 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		chrome,
 		selectedId,
 		deselect,
-		insertMenu
+		insertMenu,
+		uploadToBlock,
+		uploadToPosition
 	};
 };
