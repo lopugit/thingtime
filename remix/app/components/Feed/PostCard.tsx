@@ -37,6 +37,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
+import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
 import { mediaPageUrl } from '~/components/Attachments/attachmentUiCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
@@ -368,14 +370,22 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
+
+const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
+  const richText = getEditorJsDoc(post.richText);
+  if (richText) return <RichTextBlocks blocks={richText.blocks} bodyFontSize={compact ? 'sm' : 'md'} />;
+  if (!post.text) return null;
+  return (
+    <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="pre-wrap" overflowWrap="anywhere">
+      {post.text}
+    </Text>
+  );
+};
+
 const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
-    {post.text && (
-      <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
-        {post.text}
-      </Text>
-    )}
+    <PostTextBody post={post} compact={compact} />
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
     {post.type === 'marketplace' && <ListingBlock post={post} />}
     {/* thingtime: the thing leads; opted-in photos and listing follow. The
@@ -1175,12 +1185,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       return;
     }
     setEditing(false);
-    onChanged?.((prev) => ({ ...prev, text }));
+    onChanged?.((prev) => ({ ...prev, text, richText: null }));
     try {
-      await api.v1.things.update({ id: post.id, crystal: { text } });
+      await api.v1.things.update({ id: post.id, crystal: { text, richText: null } });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      onChanged?.((prev) => ({ ...prev, text: prevText, richText: post.richText }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
@@ -1602,11 +1612,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           </Flex>
         ) : post.isShare ? (
           <Flex flexDirection="column" rowGap={3}>
-            {post.text && (
-              <Text fontSize="md" color={TEXT} whiteSpace="normal">
-                {post.text}
-              </Text>
-            )}
+            <PostTextBody post={post} />
             <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
