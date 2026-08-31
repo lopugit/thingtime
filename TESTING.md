@@ -2196,10 +2196,30 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       recomputed conflict paths, source/target movement aborts publication, and
       a target-specific PR is opened with auto-merge while branch protection
       remains the final gate. Pause/opt-out labels must stop the batch.
+- [ ] In Claude credential waterfall, add two named OAuth tokens and confirm
+      neither value appears in GET/mutation responses, browser storage, page
+      text, logs, or copied metadata. Reorder them, reload, toggle one off,
+      rotate it, and delete it; ordering and enabled state remain stable.
+- [ ] Send a fresh exact-body HMAC request to
+      `/api/v1/integrations/ci/credentials` from each allowed protected/listener
+      workflow ref. Confirm the response is `no-store`, contains enabled tokens
+      in admin order, and the same nonce, a stale timestamp, another repository,
+      another workflow filename/ref, a changed body, or bad signature is
+      rejected without disclosing a credential.
+- [ ] With an empty vault and the legacy preferred/primary OAuth repository
+      secrets present, run one protected Lopu job and confirm they import once
+      with the intended names/order. Run again to prove no duplicates, then
+      remove the account-specific GitHub secrets and prove a Claude-backed job
+      fetches from Thingtime using only `THINGTIME_CI_ROUTER_SECRET`.
+- [ ] Force classified capacity failures through at least three enabled vault
+      rows and verify Lopu tries them strictly top-to-bottom. A non-retryable
+      model/tool failure must stop immediately. Max-turn continuation and
+      Graphify reuse the exact selected mode-0600 token without restarting the
+      waterfall or printing any value.
 - [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
       preview origin. Confirm its `origin` matches exactly, every generated API
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `1.1.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, credential features are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
@@ -2241,6 +2261,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       confirmation; verify long branch/feature names truncate without hiding
       their remove controls, the ordered list remains readable, every control
       is keyboard-focusable, and the full page has no horizontal overflow.
+- [ ] Desktop and 375px mobile: exercise every credential row control, the
+      add/rotate password fields, long labels, eight-row maximum, delete
+      confirmation, and error alerts. Scroll top-to-bottom; no credential
+      control clips, overlaps, or creates horizontal page overflow.
 - [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and
