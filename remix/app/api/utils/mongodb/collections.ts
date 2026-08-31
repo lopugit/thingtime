@@ -3,6 +3,7 @@ import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } 
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
 import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -501,6 +502,11 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
+    // Admin CI snapshots are repository-scoped and ordered by the latest
+    // provider update. Without this exact sort index, MongoDB must materialize
+    // every growing ci-event/run/deployment row before applying the dashboard
+    // limit and eventually trips its 32 MiB blocking-sort ceiling.
+    col.createIndex(CI_DASHBOARD_UPDATED_INDEX, { name: 'things_ci_repository_updated' }),
     // The unread-notification badge counts (thingtime, ownerId, readAt: null).
     // The general (thingtime, ownerId, createdAt, shareId) index above narrows
     // to the user's notifications, but readAt is not a key in it, so the count

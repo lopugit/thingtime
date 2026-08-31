@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Passkeys and the Admin CI snapshot now recover from the two mobile failure
+  modes seen in production.** Registration and login options require the same
+  on-device user verification enforced by the WebAuthn verifier, so a valid
+  iCloud Keychain or 1Password ceremony is no longer rejected after the
+  authenticator returns. CI entities are read per repository through a stable
+  compound sort index instead of a growing in-memory sort, and a saved Feature
+  Stack keeps its PR-number placeholders visible until a temporarily missing
+  live snapshot can rehydrate them. — Codex (AI), 2026-08-31
+
 - **[Admins can now opt a trusted PR into Develop and Production/Main previews
   independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
   Each switch builds the exact live same-repository SHA with
