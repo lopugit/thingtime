@@ -55,6 +55,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Feature Stacks are now reusable, unlimited control-plane workflows.** Admin
+  CI Control can save and edit multiple stacks, run a one-feature stack, select
+  any number of live features and targets, see per-target PR progress, and use
+  a default-on branch router that keeps `github-actions`, `main`, and `develop`
+  sources in compatible lanes. The protected controller receives a v2 immutable
+  plan and filters it to one target-specific source manifest before Lopu merges.
+  PR statuses now use a Vercel-style multi-select; System model-order entries
+  edit in place; and the encrypted credential waterfall accepts built-in or
+  custom AI platform labels while GitHub keeps using the single stable router
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
+
 - **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
   add, name, rotate, enable, remove, and reorder up to eight write-only Claude
   Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only

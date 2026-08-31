@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   normalizeCredentialName,
+  normalizeCredentialPlatform,
   normalizeBootstrapCredentials,
   normalizeCredentialOrder,
   parseLopuCredentialFetchRequest
@@ -21,6 +22,8 @@ const valid = {
 test('normalizes names and exact unique order arrays', () => {
   assert.equal(normalizeCredentialName('  Thingtime Claude  '), 'Thingtime Claude');
   assert.equal(normalizeCredentialName(''), null);
+  assert.equal(normalizeCredentialPlatform('  OpenAI  '), 'OpenAI');
+  assert.equal(normalizeCredentialPlatform('bad\nplatform'), null);
   assert.deepEqual(normalizeCredentialOrder(['a', 'b']), ['a', 'b']);
   assert.equal(normalizeCredentialOrder(['a', 'a']), null);
   assert.equal(normalizeCredentialOrder(new Array(9).fill(0).map((_, index) => `id-${index}`)), null);

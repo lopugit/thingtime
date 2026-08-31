@@ -1,16 +1,15 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-import {
-  getAdminIntegrationClaimsCollection,
-  getLopuCredentialsCollection
-} from '../mongodb/collections';
+import { getAdminIntegrationClaimsCollection, getLopuCredentialsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
 import {
   LOPU_CREDENTIAL_MAX_ITEMS,
   LOPU_CREDENTIAL_MAX_VALUE_BYTES,
   LOPU_CREDENTIAL_TYPE,
+	credentialTypeForPlatform,
   normalizeCredentialName,
   normalizeCredentialOrder,
+	normalizeCredentialPlatform,
   type LopuCredentialFetchRequest
 } from './credentialVaultCore';
 
@@ -20,7 +19,8 @@ const CLAIM_TTL_MS = 10 * 60 * 1000;
 export type PublicLopuCredential = {
   id: string;
   name: string;
-  credentialType: typeof LOPU_CREDENTIAL_TYPE;
+	platform: string;
+	credentialType: string;
   priority: number;
   enabled: boolean;
   createdAt: string;
@@ -31,7 +31,8 @@ export type PublicLopuCredential = {
 type StoredLopuCredential = {
   id: string;
   name: string;
-  credentialType: typeof LOPU_CREDENTIAL_TYPE;
+	platform?: string;
+	credentialType: string;
   cipherText: string;
   iv: string;
   tag: string;
@@ -82,6 +83,7 @@ const decrypt = (record: StoredLopuCredential) => {
 const publicCredential = (record: StoredLopuCredential): PublicLopuCredential => ({
   id: record.id,
   name: record.name,
+	platform: record.platform ?? 'Anthropic',
   credentialType: record.credentialType,
   priority: record.priority,
   enabled: record.enabled,
@@ -91,7 +93,9 @@ const publicCredential = (record: StoredLopuCredential): PublicLopuCredential =>
 });
 
 export const listLopuCredentials = async () => {
-  const rows = await (await getLopuCredentialsCollection())
+	const rows = await (
+		await getLopuCredentialsCollection()
+	)
     .find({}, { projection: { cipherText: 0, iv: 0, tag: 0 } })
     .sort({ priority: 1, createdAt: 1 })
     .limit(LOPU_CREDENTIAL_MAX_ITEMS)
@@ -101,25 +105,29 @@ export const listLopuCredentials = async () => {
 
 const requireValue = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > LOPU_CREDENTIAL_MAX_VALUE_BYTES) {
-    throw new Error('A non-empty Claude credential within the size limit is required.');
+		throw new Error('A non-empty credential within the size limit is required.');
   }
   return value.trim();
 };
 
-export const createLopuCredential = async (input: { name?: unknown; value?: unknown; enabled?: unknown }, actorId: string) => {
+export const createLopuCredential = async (input: { name?: unknown; platform?: unknown; value?: unknown; enabled?: unknown }, actorId: string) => {
   const name = normalizeCredentialName(input.name);
   if (!name) throw new Error('A credential name is required (80 characters maximum).');
+	const platform = normalizeCredentialPlatform(input.platform ?? 'Anthropic');
+	if (!platform) throw new Error('A platform name is required (80 characters maximum).');
   const value = requireValue(input.value);
   const collection = await getLopuCredentialsCollection();
   if (await collection.findOne({ name })) throw new Error('A credential with that name already exists.');
-  if (await collection.countDocuments({}) >= LOPU_CREDENTIAL_MAX_ITEMS) throw new Error(`At most ${LOPU_CREDENTIAL_MAX_ITEMS} credentials may be stored.`);
+	if ((await collection.countDocuments({})) >= LOPU_CREDENTIAL_MAX_ITEMS)
+		throw new Error(`At most ${LOPU_CREDENTIAL_MAX_ITEMS} credentials may be stored.`);
   const tail = await collection.find({}).sort({ priority: -1 }).limit(1).next();
   const id = `lopu_credential_${randomBytes(18).toString('base64url')}`;
   const now = new Date();
   const record: StoredLopuCredential = {
     id,
     name,
-    credentialType: LOPU_CREDENTIAL_TYPE,
+		platform,
+		credentialType: credentialTypeForPlatform(platform),
     ...encrypt(id, value),
     priority: Math.max(0, Number(tail?.priority ?? -1) + 1),
     enabled: input.enabled !== false,
@@ -155,7 +163,8 @@ export const reorderLopuCredentials = async (order: unknown) => {
     throw new Error('Credential order must include every stored credential exactly once.');
   }
   const now = new Date();
-  if (ids.length) await collection.bulkWrite(ids.map((id, priority) => ({ updateOne: { filter: { id }, update: { $set: { priority, updatedAt: now } } } })));
+	if (ids.length)
+		await collection.bulkWrite(ids.map((id, priority) => ({ updateOne: { filter: { id }, update: { $set: { priority, updatedAt: now } } } })));
 };
 
 export const deleteLopuCredential = async (id: unknown) => {
@@ -187,13 +196,25 @@ export const claimLopuCredentialFetch = async (request: LopuCredentialFetchReque
   }
 };
 
-export const fetchLopuCredentialBundle = async () => {
-  const rows = await (await getLopuCredentialsCollection())
-    .find({ enabled: true })
+export const fetchLopuCredentialBundle = async (platform = 'Anthropic') => {
+	const rows = await (
+		await getLopuCredentialsCollection()
+	)
+		.find(
+			platform.toLowerCase() === 'anthropic'
+				? { enabled: true, $or: [{ platform: { $in: ['Anthropic', 'anthropic', 'Claude', 'claude'] } }, { platform: { $exists: false } }] }
+				: { enabled: true, platform }
+		)
     .sort({ priority: 1, createdAt: 1 })
     .limit(LOPU_CREDENTIAL_MAX_ITEMS)
     .toArray();
-  return rows.map((row: StoredLopuCredential) => ({ id: row.id, name: row.name, credentialType: row.credentialType, value: decrypt(row) }));
+	return rows.map((row: StoredLopuCredential) => ({
+		id: row.id,
+		name: row.name,
+		platform: row.platform ?? 'Anthropic',
+		credentialType: row.credentialType,
+		value: decrypt(row)
+	}));
 };
 
 export const bootstrapLopuCredentialsIfEmpty = async (entries: Array<{ name: string; value: string }>, actorId: string) => {

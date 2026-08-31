@@ -4,13 +4,26 @@ export const LOPU_CREDENTIAL_MAX_VALUE_BYTES = 32 * 1024;
 export const LOPU_CREDENTIAL_FETCH_MAX_BYTES = 128 * 1024;
 export const LOPU_CREDENTIAL_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
-const boundedText = (value: unknown, max: number) =>
-  typeof value === 'string' && value.trim() && value.trim().length <= max ? value.trim() : null;
+const boundedText = (value: unknown, max: number) => (typeof value === 'string' && value.trim() && value.trim().length <= max ? value.trim() : null);
 
 export const normalizeCredentialName = (value: unknown) => {
   const name = boundedText(value, 80);
   const hasControlCharacter = name ? [...name].some((character) => character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127) : true;
   return name && !hasControlCharacter ? name : null;
+};
+
+export const normalizeCredentialPlatform = (value: unknown) => {
+	const platform = boundedText(value, 80);
+	const hasControlCharacter = platform ? [...platform].some((character) => character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127) : true;
+	return platform && !hasControlCharacter ? platform : null;
+};
+
+export const credentialTypeForPlatform = (platform: string) => {
+	const normalized = platform.toLowerCase();
+	if (normalized === 'anthropic' || normalized === 'claude') return LOPU_CREDENTIAL_TYPE;
+	if (normalized === 'openai') return 'openai-api-key';
+	if (normalized === 'google' || normalized === 'gemini') return 'google-ai-api-key';
+	return 'platform-token';
 };
 
 export const normalizeCredentialOrder = (value: unknown) => {
@@ -32,7 +45,8 @@ export const normalizeBootstrapCredentials = (value: unknown) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
     const name = normalizeCredentialName((entry as Record<string, unknown>).name);
     const credential = (entry as Record<string, unknown>).value;
-    if (!name || typeof credential !== 'string' || !credential.trim() || Buffer.byteLength(credential, 'utf8') > LOPU_CREDENTIAL_MAX_VALUE_BYTES) return null;
+		if (!name || typeof credential !== 'string' || !credential.trim() || Buffer.byteLength(credential, 'utf8') > LOPU_CREDENTIAL_MAX_VALUE_BYTES)
+			return null;
     if (rows.some((row) => row.name === name)) return null;
     rows.push({ name, value: credential.trim() });
   }
