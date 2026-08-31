@@ -9,6 +9,7 @@ export type ApiRequestExample = {
   description: string;
   method: ApiHttpMethod;
   query?: Record<string, string | number | boolean | null>;
+  headers?: Record<string, string>;
   body?: unknown;
 };
 
@@ -86,7 +87,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every current entity per kind for unlimited Feature Stack selection.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
@@ -117,10 +118,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '1.1.0',
+    featureVersion: '2.0.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, snapshots every source ref and SHA into a canonical immutable plan, and refuses ambiguous cross-branch routing. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -161,6 +162,49 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'GitHub could not accept the request.',
 				body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
 			}
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-feature-stacks',
+    group: 'admin',
+    title: 'Manage saved Feature Stacks',
+    endpoint: '/api/v1/admin/ci/stacks',
+    featureVersion: '1.0.0',
+    summary: 'Save, edit, list, run, and archive reusable multi-target Feature Stacks.',
+    detail:
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while run progress is reconciled from the resulting target pull requests and CI projections. POST run reloads live PR metadata and creates the immutable target-aware controller plan at execution time.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run to dispatch its current live plan, or delete to archive it.'],
+    requestExamples: [
+      { name: 'Save a stack', description: 'Sources and targets have no product-imposed count cap.', method: 'POST', body: { action: 'save', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true } },
+      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved' }] } }]
+  }),
+  endpoint({
+    id: 'admin-ci-credentials',
+    group: 'admin',
+    title: 'Manage the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/admin/ci/credentials',
+    featureVersion: '2.0.0',
+    summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
+    detail:
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the redacted ordered list.',
+      'POST create, rotate, set-enabled, reorder, or delete.',
+      'Use the CI Control page to manage the order without copying values back into the browser.'
+    ],
+    requestExamples: [
+      { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
+      { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   }),
   endpoint({
@@ -354,6 +398,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
       { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-credentials',
+    group: 'integrations',
+    title: 'Deliver the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/integrations/ci/credentials',
+    featureVersion: '1.1.0',
+    summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
+    detail:
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Create a fresh nonce and request timestamp in a workflow running from github-actions.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'On the first migration request only, the controller may include its existing OAuth slots; an empty vault imports them once.',
+      'Mask every returned value immediately and keep it only for the current job.'
+    ],
+    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { platform: 'Anthropic', repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
+    responseExamples: [
+      { status: 200, description: 'Ordered enabled credentials for the requested platform. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
+      { status: 409, description: 'Replay blocked.', body: { ok: false, error: 'Credential request was already used.' } }
     ]
   }),
   endpoint({
@@ -6532,7 +6599,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
-      'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. Circles resolve to the owner only until a relationship graph exists.',
+      'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. tt:userFriends resolves against the real friend graph (accepted friendships from /api/v1/users/friend); no family graph exists yet, so tt:userFamily still resolves to the owner only.',
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
@@ -8154,8 +8221,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Email accepted.',
-        body: { ok: true }
+        description: 'Email accepted — includes a welcome fortune from Lopu (deterministic, time-rotated).',
+        body: { ok: true, fortune: 'Tiny things become big things. Keep tending the little ones. ✨' }
       },
       {
         status: 400,
@@ -8264,6 +8331,247 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           total: 1,
           totalCapped: false
         }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'actions-run',
+    group: 'actions',
+    title: 'Run an action',
+    endpoint: '/api/v1/actions/run',
+    summary: 'Execute one action thing inside its declared capability + budget envelope.',
+    detail:
+      'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
+      'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
+      'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
+      'to the ordinary things API as the signed-in caller, so ACL, quotas and schema validation always apply and ' +
+      'an action can never do something its invoker couldn’t do by hand. One budget (deadline, operation count, ' +
+      'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
+      'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
+      '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
+      'budget usage and trace.',
+    auth: {
+      mode: 'session',
+      description: 'Session cookie required. PATs and app tokens are default-denied in v1.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { action: "<shareId or your actionKey>", inputs: { ... } }.',
+      'Add source: "component" when the run is DELEGATED — fired by a control inside rendered component markup rather than chosen from the ' +
+        'inspector. That narrows resolution to actions you own, so a template someone else authored cannot lend your authority to their ' +
+        'program by naming its id. Omit it for a deliberate run, which may also resolve any action you can read.',
+      'Inputs are validated against the action’s typed descriptors (400 on mismatch).',
+      'The executor runs the steps inside the budget; refs like "$input.name" and "$step.1.id" substitute whole values.',
+      'Read status ("ok" | "error"), result, trace, and budget usage from the response.',
+      'Fetch history later via GET /api/v1/actions/runs?action=<id>.'
+    ],
+    requestExamples: [
+      {
+        name: 'Run create-customer',
+        description: 'Execute an action by its key with typed inputs.',
+        method: 'POST',
+        body: { action: 'create-customer', inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run completed (status may still be "error" if a step failed — the envelope is ok).',
+        body: {
+          ok: true,
+          runId: 'action-run-4f6a…',
+          status: 'ok',
+          actionId: 'abc123',
+          result: { id: 'thing456', schema: 'customer' },
+          durationMs: 482,
+          opsUsed: 2,
+          depthUsed: 0,
+          childActionsUsed: 0,
+          trace: [{ step: '1', op: 'things.create', ms: 41, target: 'thing456' }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'actions-runs',
+    group: 'actions',
+    title: 'List action runs',
+    endpoint: '/api/v1/actions/runs',
+    summary: 'Your own action-run records, newest first — the inspectable audit trail.',
+    detail:
+      'action-run things are PROTECTED (executor-minted only, invisible to the generic thing reads), so run ' +
+      'history has this dedicated read model: the signed-in caller’s own runs, optionally filtered to one action ' +
+      'via action=<shareId>, newest first, limit ≤ 50. Each run carries status, startedAt, durationMs, budget ' +
+      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders. ' +
+      'The trail is retained, not permanent: the executor keeps the newest 50 records per action per owner and ' +
+      'prunes older ones after each run, and deleting the action deletes its run records with it — so treat run ' +
+      'history as a rolling window rather than a permanent log.',
+    auth: {
+      mode: 'session',
+      description: 'Session cookie required; you only ever see your own runs.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with optional action=<shareId> and limit (max 50).',
+      'Runs are newest-first; each entry links its actionId (targetId).',
+      'Handle 401 when signed out and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Latest runs of one action',
+        description: 'The last 20 runs of a specific action.',
+        method: 'GET',
+        query: { action: 'abc123', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run history returned.',
+        body: {
+          ok: true,
+          runs: [
+            {
+              id: 'action-run-4f6a…',
+              actionId: 'abc123',
+              status: 'ok',
+              startedAt: '2026-08-24T10:00:00.000Z',
+              durationMs: 482,
+              opsUsed: 2,
+              error: null,
+              trace: [{ step: '1', op: 'things.create', ms: 41, target: 'thing456' }],
+              result: { id: 'thing456' },
+              inputs: { name: 'Ada Lovelace' },
+              createdAt: '2026-08-24T10:00:01.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'components-browse',
+    group: 'components',
+    title: 'Browse UI components',
+    endpoint: '/api/v1/components/browse',
+    summary: 'Paginated browsing of component things — the UI library behind /components.',
+    detail:
+      'The read model behind /components: component things (thingtime ["component"]) with cursor pagination. ' +
+      'The platform library (1000+ system-seeded components styled after Ant Design, Bootstrap, MUI, shadcn/ui, ' +
+      'Untitled UI, daisyUI, React Flow, and the Thingtime house style) and user-published components ride one ' +
+      'query. sort=popular ranks by reaction count over a bounded window; q rides the same hardened text search ' +
+      'as /api/v1/things/search; lib= and category= filter the catalog on no-q pages; library=1 returns only the ' +
+      'caller’s saved components (save recency order); mine=1 returns only the caller’s own. Every entry carries ' +
+      'reactionCounts, viewerReactions, saved, and usageCount (visible saved versions sharing its componentKey). ' +
+      'Each crystal holds the arg descriptors and the render template the /components tester resolves live.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see public components; library=1 and mine=1 require auth.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with sort=newest|oldest|popular, optional q, limit (max 50).',
+      'Filter the catalog with lib=antd|bootstrap|mui|shadcn|untitled|daisyui|reactflow|thingtime and/or category=.',
+      'Page with the returned nextCursor until it is null (cursors are opaque).',
+      'Pass library=1 for the caller’s saved components, mine=1 for their own.',
+      'Handle 401 for library/mine without auth and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Newest MUI components',
+        description: 'First page of the Material-styled catalog.',
+        method: 'GET',
+        query: { lib: 'mui', limit: 20 }
+      },
+      {
+        name: 'Search components',
+        description: 'Relevance-ranked text search.',
+        method: 'GET',
+        query: { q: 'button', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Component page returned.',
+        body: {
+          ok: true,
+          components: [
+            {
+              id: 'component-mui-button-solid',
+              thingtime: ['component'],
+              crystal: {
+                name: 'Solid Button',
+                library: 'mui',
+                category: 'buttons',
+                componentKey: 'mui-button-solid',
+                args: [{ name: 'label', type: 'string', default: 'Get started' }],
+                render: { tag: 'button', props: {}, children: ['{label}'] }
+              },
+              reactionCounts: { '🔥': 3 },
+              viewerReactions: [],
+              saved: false,
+              usageCount: 2
+            }
+          ],
+          nextCursor: null,
+          total: 1,
+          totalCapped: false
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-components-seed',
+    group: 'admin',
+    title: 'Seed component library',
+    endpoint: '/api/v1/admin/components/seed',
+    summary: 'Upserts a batch of components-db definitions as system-owned public component things.',
+    detail:
+      'The write path that mirrors the repo’s components-db folder database into things: each definition ' +
+      'becomes (or refreshes) a system-owned public component thing with deterministic shareId component-<slug> ' +
+      '(the prefix is reserved against squatters), storageClass "control", acl ["tt:all"], and a hashed ' +
+      'component:<slug> uniqueKey. Crystals pass validateThingtimeCrystal(["component"]) — the exact write gate ' +
+      'user components clear — so seeded and user-authored components share one grammar. Idempotent and ' +
+      'self-healing: re-runs leave matching docs unchanged, refresh drifted crystals/tags in place, and skip ' +
+      '(never touch) foreign docs squatting a destination id. GET returns the seed census without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST { components: [definition, …] } with at most 100 definitions per call.',
+      'Each definition needs slug, name, library, category, args, and a render template.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded } to check progress without writing.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed a batch',
+        description: 'Upsert two library components.',
+        method: 'POST',
+        body: {
+          components: [
+            {
+              slug: 'thingtime-button-solid',
+              name: 'Solid Button',
+              library: 'thingtime',
+              category: 'buttons',
+              description: 'Filled primary action button in the Thingtime house style.',
+              args: [{ name: 'label', type: 'string', default: 'Get started' }],
+              render: { tag: 'button', props: {}, children: ['{label}'] }
+            }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: { ok: true, received: 1, created: 1, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 1 }
       }
     ]
   }),

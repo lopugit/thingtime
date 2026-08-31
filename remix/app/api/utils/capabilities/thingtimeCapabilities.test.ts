@@ -9,7 +9,10 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '1.1.0');
+  assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.0.0');
+  assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
+  assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.0.0');
+  assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
   for (const route of apiV1RouteKeys) assert.equal(operationPaths.has(`/api/${route}`), true, route);
