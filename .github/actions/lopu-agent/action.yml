@@ -24,6 +24,13 @@ inputs:
   claude-code-oauth-token-fallback:
     description: Secondary Claude Code OAuth token used only after an account-capacity or credential failure.
     required: false
+  thingtime-ci-router-secret:
+    description: Stable HMAC secret used to fetch the ordered credential waterfall from Thingtime.
+    required: false
+  thingtime-credential-vault-origin:
+    description: Thingtime origin hosting the Lopu credential vault API.
+    required: false
+    default: https://thingtime.com
   openai-api-key:
     description: OpenAI Platform project key when the Codex backend is selected.
     required: false
@@ -67,22 +74,32 @@ outputs:
     description: Human-readable provider and model label.
     value: ${{ steps.config.outputs.backend_label }}
   claude-credential-slot:
-    description: Safe identifier for the Claude credential slot that produced the current execution output.
+    description: Safe vault position for the Claude credential that produced the current execution output.
     value: ${{ steps.claude_result.outputs.credential_slot }}
+  claude-credential-name:
+    description: Non-sensitive admin label for the Claude credential that produced the current execution output.
+    value: ${{ steps.claude_result.outputs.credential_name }}
 
 runs:
   using: composite
   steps:
+    - name: Fetch the ordered Claude credential waterfall
+      id: credentials
+      if: inputs.backend == 'claude'
+      shell: bash
+      env:
+        THINGTIME_CI_ROUTER_SECRET: ${{ inputs.thingtime-ci-router-secret }}
+        THINGTIME_CREDENTIAL_VAULT_ORIGIN: ${{ inputs.thingtime-credential-vault-origin }}
+        LOPU_LEGACY_CLAUDE_TOKEN_PREFERRED: ${{ inputs.claude-code-oauth-token-preferred }}
+        LOPU_LEGACY_CLAUDE_TOKEN_PRIMARY: ${{ inputs.claude-code-oauth-token }}
+        LOPU_LEGACY_CLAUDE_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/lopu-credential-vault.mjs"
+
     - name: Validate the Lopu backend
       id: config
       shell: bash
       env:
         BACKEND: ${{ inputs.backend }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
-        CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ inputs.claude-code-oauth-token-preferred }}
-        ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
-        CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         CODEX_MODEL: ${{ inputs.codex-model }}
         CODEX_REASONING_EFFORT: ${{ inputs.codex-reasoning-effort }}
@@ -92,26 +109,14 @@ runs:
         set -euo pipefail
         case "$BACKEND" in
           claude)
-            preferred_available=false
-            primary_available=false
-            fallback_available=false
-            if [ -n "${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}" ]; then
-              preferred_available=true
-            fi
-            if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-              primary_available=true
-            fi
-            if [ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || [ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ]; then
-              fallback_available=true
-            fi
-            if [ "$preferred_available" != true ] && [ "$primary_available" != true ] && [ "$fallback_available" != true ]; then
-              echo "::error::Lopu's Claude backend requires a preferred, primary, or fallback Anthropic/Claude Code credential."
-              exit 1
-            fi
+            [ "${LOPU_CLAUDE_CREDENTIAL_COUNT:-0}" -ge 1 ] || { echo "::error::Lopu's Claude backend requires an enabled Thingtime vault credential."; exit 1; }
+            for slot in $(seq 1 8); do
+              token_var="LOPU_CLAUDE_TOKEN_$slot"
+              available=false
+              [ -n "${!token_var:-}" ] && available=true
+              echo "claude_${slot}_available=$available" >>"$GITHUB_OUTPUT"
+            done
             backend_label="Claude Code"
-            echo "claude_preferred_available=$preferred_available" >>"$GITHUB_OUTPUT"
-            echo "claude_primary_available=$primary_available" >>"$GITHUB_OUTPUT"
-            echo "claude_fallback_available=$fallback_available" >>"$GITHUB_OUTPUT"
             ;;
           codex)
             [ -n "${OPENAI_API_KEY:-}" ] || {
@@ -149,143 +154,231 @@ runs:
         echo "backend=$BACKEND" >>"$GITHUB_OUTPUT"
         echo "backend_label=$backend_label" >>"$GITHUB_OUTPUT"
 
-    - name: Run Lopu with the preferred Claude credential
-      id: claude_preferred
-      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_preferred_available == 'true'
+    - name: Run Lopu with Claude credential 1
+      id: claude_1
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_1_available == 'true'
       continue-on-error: true
       uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
       with:
-        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token-preferred }}
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_1 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
         prompt: ${{ inputs.prompt }}
         claude_args: ${{ inputs.claude-args }}
 
-    - name: Classify a preferred Claude credential failure
-      id: claude_preferred_failure
+    - name: Classify Claude credential 1 failure
+      id: claude_1_failure
       if: >-
         steps.config.outputs.backend == 'claude'
-        && steps.config.outputs.claude_preferred_available == 'true'
-        && steps.claude_preferred.outcome == 'failure'
+        && steps.claude_1.outcome == 'failure'
       shell: bash
       env:
-        EXECUTION_FILE: ${{ steps.claude_preferred.outputs.execution_file }}
+        EXECUTION_FILE: ${{ steps.claude_1.outputs.execution_file }}
       run: |
         set -euo pipefail
         execution_file="${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"
         node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" \
           "$execution_file" >>"$GITHUB_OUTPUT"
 
-    - name: Run Lopu with the primary Claude credential
-      id: claude_primary
+    - name: Run Lopu with Claude credential 2
+      id: claude_2
       if: >-
         steps.config.outputs.backend == 'claude'
-        && steps.config.outputs.claude_primary_available == 'true'
-        && (steps.config.outputs.claude_preferred_available != 'true'
-            || (steps.claude_preferred.outcome == 'failure'
-                && steps.claude_preferred_failure.outputs.retryable == 'true'))
+        && steps.config.outputs.claude_2_available == 'true'
+        && steps.claude_1.outcome == 'failure'
+        && steps.claude_1_failure.outputs.retryable == 'true'
       continue-on-error: true
       uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
       with:
-        anthropic_api_key: ${{ inputs.anthropic-api-key }}
-        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_2 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
         prompt: ${{ inputs.prompt }}
         claude_args: ${{ inputs.claude-args }}
 
-    - name: Classify a primary Claude credential failure
-      id: claude_primary_failure
+    - name: Classify Claude credential 2 failure
+      id: claude_2_failure
       if: >-
         steps.config.outputs.backend == 'claude'
-        && steps.config.outputs.claude_primary_available == 'true'
-        && steps.claude_primary.outcome == 'failure'
+        && steps.claude_2.outcome == 'failure'
       shell: bash
       env:
-        EXECUTION_FILE: ${{ steps.claude_primary.outputs.execution_file }}
+        EXECUTION_FILE: ${{ steps.claude_2.outputs.execution_file }}
       run: |
         set -euo pipefail
         execution_file="${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"
         node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" \
           "$execution_file" >>"$GITHUB_OUTPUT"
 
-    - name: Run Lopu with the fallback Claude credential
-      id: claude_fallback
+    - name: Run Lopu with Claude credential 3
+      id: claude_3
       if: >-
         steps.config.outputs.backend == 'claude'
-        && steps.config.outputs.claude_fallback_available == 'true'
-        && (steps.config.outputs.claude_preferred_available != 'true'
-            || (steps.claude_preferred.outcome == 'failure'
-                && steps.claude_preferred_failure.outputs.retryable == 'true'))
-        && (steps.config.outputs.claude_primary_available != 'true'
-            || (steps.claude_primary.outcome == 'failure'
-                && steps.claude_primary_failure.outputs.retryable == 'true'))
+        && steps.config.outputs.claude_3_available == 'true'
+        && steps.claude_2.outcome == 'failure'
+        && steps.claude_2_failure.outputs.retryable == 'true'
       continue-on-error: true
       uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
       with:
-        anthropic_api_key: ${{ inputs.anthropic-api-key-fallback }}
-        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token-fallback }}
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_3 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
         prompt: ${{ inputs.prompt }}
         claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 3 failure
+      id: claude_3_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_3.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_3.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude credential 4
+      id: claude_4
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_4_available == 'true' && steps.claude_3.outcome == 'failure' && steps.claude_3_failure.outputs.retryable == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_4 }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 4 failure
+      id: claude_4_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_4.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_4.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude credential 5
+      id: claude_5
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_5_available == 'true' && steps.claude_4.outcome == 'failure' && steps.claude_4_failure.outputs.retryable == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_5 }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 5 failure
+      id: claude_5_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_5.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_5.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude credential 6
+      id: claude_6
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_6_available == 'true' && steps.claude_5.outcome == 'failure' && steps.claude_5_failure.outputs.retryable == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_6 }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 6 failure
+      id: claude_6_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_6.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_6.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude credential 7
+      id: claude_7
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_7_available == 'true' && steps.claude_6.outcome == 'failure' && steps.claude_6_failure.outputs.retryable == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_7 }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 7 failure
+      id: claude_7_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_7.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_7.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude credential 8
+      id: claude_8
+      if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_8_available == 'true' && steps.claude_7.outcome == 'failure' && steps.claude_7_failure.outputs.retryable == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_8 }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Classify Claude credential 8 failure
+      id: claude_8_failure
+      if: steps.config.outputs.backend == 'claude' && steps.claude_8.outcome == 'failure'
+      shell: bash
+      env:
+        EXECUTION_FILE: ${{ steps.claude_8.outputs.execution_file }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/classify-claude-credential-failure.mjs" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}" >>"$GITHUB_OUTPUT"
 
     - name: Record the Claude credential slot and outcome
       id: claude_result
       if: always() && steps.config.outputs.backend == 'claude'
       shell: bash
       env:
-        PREFERRED_AVAILABLE: ${{ steps.config.outputs.claude_preferred_available }}
-        PREFERRED_OUTCOME: ${{ steps.claude_preferred.outcome }}
-        PRIMARY_AVAILABLE: ${{ steps.config.outputs.claude_primary_available }}
-        PRIMARY_OUTCOME: ${{ steps.claude_primary.outcome }}
-        FALLBACK_OUTCOME: ${{ steps.claude_fallback.outcome }}
+        OUTCOME_1: ${{ steps.claude_1.outcome }}
+        OUTCOME_2: ${{ steps.claude_2.outcome }}
+        OUTCOME_3: ${{ steps.claude_3.outcome }}
+        OUTCOME_4: ${{ steps.claude_4.outcome }}
+        OUTCOME_5: ${{ steps.claude_5.outcome }}
+        OUTCOME_6: ${{ steps.claude_6.outcome }}
+        OUTCOME_7: ${{ steps.claude_7.outcome }}
+        OUTCOME_8: ${{ steps.claude_8.outcome }}
       run: |
         set -euo pipefail
-        credential_slot=preferred
         successful=false
-        if [ "$FALLBACK_OUTCOME" = success ]; then
-          credential_slot=fallback
-          successful=true
-        elif [ "$PRIMARY_OUTCOME" = success ]; then
-          credential_slot=primary
-          successful=true
-        elif [ "$PREFERRED_OUTCOME" = success ]; then
-          credential_slot=preferred
-          successful=true
-        elif [ "$FALLBACK_OUTCOME" = failure ]; then
-          credential_slot=fallback
-        elif [ "$PRIMARY_AVAILABLE" != true ] && [ "$PREFERRED_AVAILABLE" != true ]; then
-          credential_slot=fallback
-        elif [ "$PREFERRED_AVAILABLE" != true ]; then
-          credential_slot=primary
-        fi
+        selected=0
+        for slot in $(seq 1 8); do
+          outcome_var="OUTCOME_$slot"
+          outcome="${!outcome_var:-}"
+          [ "$outcome" = failure ] && selected="$slot"
+          if [ "$outcome" = success ]; then selected="$slot"; successful=true; break; fi
+        done
+        [ "$selected" -ge 1 ] || { echo '::error::No Claude credential attempt ran.'; exit 1; }
+        credential_slot="vault-$selected"
+        name_var="LOPU_CLAUDE_NAME_$selected"
+        token_var="LOPU_CLAUDE_TOKEN_$selected"
+        credential_name="${!name_var}"
         printf '%s\n' "$credential_slot" >"$RUNNER_TEMP/lopu-claude-credential-slot"
+        printf '%s' "${!token_var}" >"$RUNNER_TEMP/lopu-claude-credential-token"
+        chmod 600 "$RUNNER_TEMP/lopu-claude-credential-token"
         echo "credential_slot=$credential_slot" >>"$GITHUB_OUTPUT"
+        echo "credential_name=$credential_name" >>"$GITHUB_OUTPUT"
         echo "successful=$successful" >>"$GITHUB_OUTPUT"
-        if [ "$credential_slot" = fallback ]; then
-          echo "::notice::Lopu used the fallback Claude credential slot."
-        elif [ "$credential_slot" = primary ] && [ "$PREFERRED_AVAILABLE" = true ]; then
-          echo "::notice::Lopu continued from the preferred Claude account to the existing primary slot."
-        fi
+        echo "::notice::Lopu used Claude credential $selected ($credential_name)."
 
     - name: Require a successful Claude execution
       if: always() && steps.config.outputs.backend == 'claude'
       shell: bash
       env:
         SUCCESSFUL: ${{ steps.claude_result.outputs.successful }}
-        PREFERRED_FAILURE_REASON: ${{ steps.claude_preferred_failure.outputs.reason }}
-        PRIMARY_FAILURE_REASON: ${{ steps.claude_primary_failure.outputs.reason }}
       run: |
         set -euo pipefail
         if [ "$SUCCESSFUL" != true ]; then
-          if [ -n "${PREFERRED_FAILURE_REASON:-}" ]; then
-            echo "::error::Lopu's Claude execution did not complete ($PREFERRED_FAILURE_REASON)."
-          elif [ -n "${PRIMARY_FAILURE_REASON:-}" ]; then
-            echo "::error::Lopu's Claude execution did not complete ($PRIMARY_FAILURE_REASON)."
-          else
-            echo "::error::Lopu's Claude execution did not complete."
-          fi
+          echo "::error::Lopu's Claude execution did not complete with any enabled vault credential."
           exit 1
         fi
 

@@ -41,11 +41,10 @@
 #
 # Token notes: the default GITHUB_TOKEN is enough. Its pushes intentionally
 # trigger no workflows, and Vercel still builds `all` because its GitHub App
-# watches branch pushes regardless of the pushing token. ANTHROPIC_API_KEY or
-# CLAUDE_CODE_OAUTH_TOKEN (the resolver's credential) enables the doctor;
-# ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK supplies the
-# optional second account. Without any Claude/Codex credential the union is
-# pushed unhealed, exactly as before.
+# watches branch pushes regardless of the pushing token.
+# THINGTIME_CI_ROUTER_SECRET fetches the admin-ordered Claude OAuth waterfall
+# for the doctor. Without a Claude/Codex credential the union is pushed
+# unhealed, exactly as before.
 
 name: Lopu internal all-branch integration
 
@@ -124,7 +123,7 @@ jobs:
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
         env:
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         shell: bash
         run: |
@@ -311,6 +310,7 @@ jobs:
           claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -400,6 +400,7 @@ jobs:
           claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -467,6 +468,7 @@ jobs:
           claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
