@@ -118,10 +118,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '2.0.0',
+    featureVersion: '2.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, snapshots every source ref and SHA into a canonical immutable plan, and refuses ambiguous cross-branch routing. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, safely omits selected sources and targets with no compatible partner, snapshots every remaining source ref and SHA into a canonical immutable plan, and rejects a plan with no compatible pair instead of crossing branch families. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -181,6 +181,45 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } }
     ],
     responseExamples: [{ status: 200, description: 'Redacted saved stack configuration.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved' }] } }]
+  }),
+  endpoint({
+    id: 'admin-ci-previews',
+    group: 'admin',
+    title: 'Manage opt-in PR preview environments',
+    endpoint: '/api/v1/admin/ci/previews',
+    featureVersion: '1.0.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    detail:
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'Select a same-repository open pull request.',
+      'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
+      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable a develop preview',
+        description: 'Build the exact current PR head with the develop Custom Environment.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'develop', enabled: true }
+      },
+      {
+        name: 'Enable a production-environment preview',
+        description: 'Explicitly allow this trusted PR to run with production environment values without assigning production domains.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'production', enabled: true, acknowledgeProductionData: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Policy stored and the exact-SHA deployment created or reused.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+      },
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+    ]
   }),
   endpoint({
     id: 'admin-ci-credentials',

@@ -131,6 +131,7 @@ export const router = createBrowserRouter([
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
       { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },
+      { path: 'admin/:section', lazy: lazyRoute(() => import('./routes/admin')) },
       // browse everything each connected app stores for you — no guard: it
       // renders its own signed-out quiet state, like /settings
       { path: 'apps', lazy: lazyRoute(() => import('./routes/apps')) },

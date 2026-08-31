@@ -9,9 +9,10 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.0.0');
+	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.1.0');
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.0.0');
+  assert.equal(manifest.features['api.admin-ci-previews']?.version, '1.0.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   for (const feature of [
     'api.things',
@@ -30,9 +31,10 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const route of apiV1DocsRouteKeys) assert.equal(operationPaths.has(`/api/${route}`), true, route);
   for (const doc of apiEndpointDocs) {
     assert.ok(manifest.features[`api.${doc.id}`], doc.id);
-    assert.ok(manifest.operations.some((operation) =>
-      operation.feature === `api.${doc.id}` && operation.path === doc.endpoint
-    ), doc.endpoint);
+		assert.ok(
+			manifest.operations.some((operation) => operation.feature === `api.${doc.id}` && operation.path === doc.endpoint),
+			doc.endpoint
+		);
   }
 });
 
