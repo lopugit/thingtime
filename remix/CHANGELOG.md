@@ -110,7 +110,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   PR statuses now use a Vercel-style multi-select; System model-order entries
   edit in place; and the encrypted credential waterfall accepts built-in or
   custom AI platform labels while GitHub keeps using the single stable router
-  secret. — Codex (AI), 2026-08-31
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
 
 - **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
   add, name, rotate, enable, remove, and reorder up to eight write-only Claude
