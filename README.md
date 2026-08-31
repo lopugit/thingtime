@@ -491,12 +491,16 @@ response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
 
-The read surface deliberately separates intent: `get_thingtime_thing({ id })`
-uses the Things API's exact-ID read and returns `thing_not_found` for a missing
-ID; `list_thingtime_comments({ targetId })` lists comments attached to that
-known target; `list_thingtime_things` and `search_thingtime_things` are only for
-browsing/discovery when the exact ID is unknown. This prevents known Things or
-their comments from disappearing behind unrelated pagination.
+The MCP publishes 31 bounded tools plus prompts, account-scoped resources, and
+an embedded review UI. Exact batch reads preserve requested IDs and report
+missing Things independently; schema discovery/validation, relationship and
+thread traversal, and ACL-aware change polling cover richer read workflows.
+For writes, composed operations produce a signed before/after preview first,
+then apply with scope checks and optimistic `updatedAt` preconditions only
+after the call explicitly supplies `confirmed: true`. Encrypted MCP history records partial outcomes and can
+produce a fresh undo preview. Reusable `Thingtime Capability` data Things may
+compose only the same registered create/update/delete grammar: arbitrary URLs,
+database queries, API routes, and executable payloads are rejected.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
