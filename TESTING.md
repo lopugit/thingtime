@@ -1811,8 +1811,9 @@ is fixed, and cite the checklist you ran in the PR description.
       scroll-to-top must skip hash navigations); schema results scroll to
       their /docs/schemas#schema-<id> card.
 - [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
-      like design mockups/components select the exact entry), and on mobile
-      tapping a result closes the drawer.
+      like design mockups/components select the exact entry). On mobile,
+      tapping a result keeps the drawer open so another destination can be
+      chosen; the explicit close button remains the only dismiss action.
 - [ ] The query lives in the URL (?q=) with replace-style updates: typing
       never stacks history entries, refresh restores the search, /docs?q=acl
       deep-links it, result clicks carry ?q= along (so the landed URL is
@@ -1826,6 +1827,11 @@ is fixed, and cite the checklist you ran in the PR description.
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with
       the page scroll — the bottom of the menu stays reachable.
+- [ ] At mobile widths, selecting a top-level docs route, nested API endpoint,
+      or query-param entry updates the active destination without dismissing
+      the drawer; only the header close button dismisses it. Desktop menu
+      navigation likewise leaves the drawer expanded until its collapse
+      button is pressed.
 - [ ] At desktop widths, the drawer header starts directly below the global
       navigation with no duplicated top spacer, and its collapse control sits
       in the Thingtime Docs title row. At mobile widths, opening the full-screen
