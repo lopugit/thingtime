@@ -276,6 +276,9 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		};
 		const onDrop = (event: DragEvent) => {
 			if (!hasFiles(event)) return;
+			// an inner surface (frame, zone, the app's own composer) already
+			// claimed this drop — appending a second copy would double-handle it
+			if (event.defaultPrevented) return;
 			event.preventDefault();
 			const files = Array.from(event.dataTransfer?.files || []);
 			if (files.length) pageDropRef.current.upload(files, null, pageDropRef.current.length);

@@ -25,13 +25,15 @@ export const collapseShorthand = (a: string, b: string, c: string, d: string): s
 export const BORDER_STYLES = ['', 'solid', 'dashed', 'dotted', 'double'];
 
 export const parseBorder = (value?: string): { width: string; style: string; color: string } => {
-	const tokens = (value || '').trim().split(/\s+/).filter(Boolean);
+	// paren-aware tokenizer — rgba(0, 0, 0, 0.5) must stay ONE color token,
+	// never leak its numbers into the width slot
+	const tokens = (value || '').trim().match(/(?:[^\s()]+(?:\([^)]*\))?)/g) || [];
 	let width = '';
 	let style = '';
 	const rest: string[] = [];
 	for (const token of tokens) {
 		if (!style && BORDER_STYLES.includes(token)) style = token;
-		else if (!width && /^[\d.]/.test(token)) width = token;
+		else if (!width && /^[\d.]/.test(token) && !token.includes('(')) width = token;
 		else rest.push(token);
 	}
 	return { width, style, color: rest.join(' ') };

@@ -32,6 +32,13 @@ test('parseBorder splits width/style/color regardless of order', () => {
 	assert.deepEqual(parseBorder('1px solid #ececef'), { width: '1px', style: 'solid', color: '#ececef' });
 	assert.deepEqual(parseBorder('dashed 2px hotpink'), { width: '2px', style: 'dashed', color: 'hotpink' });
 	assert.deepEqual(parseBorder(''), { width: '', style: '', color: '' });
+	// rgba() colors stay whole — their numbers must never leak into width
+	assert.deepEqual(parseBorder('solid rgba(0, 0, 0, 0.5)'), { width: '', style: 'solid', color: 'rgba(0, 0, 0, 0.5)' });
+	assert.deepEqual(parseBorder('2px solid rgba(255, 0, 128, 0.9)'), {
+		width: '2px',
+		style: 'solid',
+		color: 'rgba(255, 0, 128, 0.9)'
+	});
 });
 
 test('parseShadow keeps rgba() colors whole', () => {

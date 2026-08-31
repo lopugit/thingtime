@@ -315,7 +315,10 @@ const alignSelfOf = (block: WebpageBlock): string | undefined =>
 const selfPlacement = (block: WebpageBlock, parentDirection: ParentDirection) => {
 	const align = block.align;
 	const inRow = parentDirection === 'row';
-	const fit = !inRow && !!align && align !== 'stretch';
+	// fit-content ONLY when no maxWidth: blocks that pair align with a
+	// maxWidth were already visibly aligned the old way (100% width capped +
+	// auto margins) — shrinking those would re-layout saved pages
+	const fit = !inRow && !!align && align !== 'stretch' && !block.maxWidth;
 	return {
 		width: inRow ? 'auto' : fit ? 'fit-content' : '100%',
 		flex: inRow ? '1 1 0%' : undefined,
@@ -367,35 +370,44 @@ const BlockFrame = ({
 	// since grids have no between-cell zones. Innermost frame wins via
 	// stopPropagation.
 	const acceptsBlockDrag = parentDirection === 'grid';
-	const dropProps = {
-		onDragOver: (event: React.DragEvent) => {
-			const hasFiles = event.dataTransfer.types.includes('Files');
-			const hasBlock = acceptsBlockDrag && event.dataTransfer.types.includes(DRAG_MIME);
-			if (hasFiles || hasBlock) {
-				event.preventDefault();
-				event.stopPropagation();
-				event.dataTransfer.dropEffect = hasBlock ? 'move' : 'copy';
-				setDropTarget(true);
-			}
-		},
-		onDragLeave: () => setDropTarget(false),
-		onDrop: (event: React.DragEvent) => {
-			setDropTarget(false);
-			const id = event.dataTransfer.getData(DRAG_MIME);
-			if (id && id !== block.id && acceptsBlockDrag) {
-				event.preventDefault();
-				event.stopPropagation();
-				chrome.onMove(id, containerId, indexInParent);
-				return;
-			}
-			const files = Array.from(event.dataTransfer.files || []);
-			if (files.length && chrome.onMediaToBlock) {
-				event.preventDefault();
-				event.stopPropagation();
-				chrome.onMediaToBlock(block.id, files);
-			}
-		}
-	};
+	// locked frames (live native app screens) keep their hands off drops —
+	// the app inside owns them (e.g. the post composer's own file drop zone);
+	// unclaimed drops there fall through to the window guard
+	const dropProps = locked
+		? {}
+		: {
+				onDragOver: (event: React.DragEvent) => {
+					if (event.defaultPrevented) return;
+					const hasFiles = event.dataTransfer.types.includes('Files');
+					const hasBlock = acceptsBlockDrag && event.dataTransfer.types.includes(DRAG_MIME);
+					if (hasFiles || hasBlock) {
+						event.preventDefault();
+						event.stopPropagation();
+						event.dataTransfer.dropEffect = hasBlock ? 'move' : 'copy';
+						setDropTarget(true);
+					}
+				},
+				onDragLeave: () => setDropTarget(false),
+				onDrop: (event: React.DragEvent) => {
+					setDropTarget(false);
+					// a nested handler (composer drop zone, an inner frame) already
+					// claimed this drop
+					if (event.defaultPrevented) return;
+					const id = event.dataTransfer.getData(DRAG_MIME);
+					if (id && id !== block.id && acceptsBlockDrag) {
+						event.preventDefault();
+						event.stopPropagation();
+						chrome.onMove(id, containerId, indexInParent);
+						return;
+					}
+					const files = Array.from(event.dataTransfer.files || []);
+					if (files.length && chrome.onMediaToBlock) {
+						event.preventDefault();
+						event.stopPropagation();
+						chrome.onMediaToBlock(block.id, files);
+					}
+				}
+		  };
 	return (
 		<Box
 			{...dropProps}

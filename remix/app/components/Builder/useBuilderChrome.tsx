@@ -165,16 +165,23 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	}, [uploads, lopu, markCommitted]);
 
 	// Cmd/Ctrl+V while a block is selected: clipboard FILES (screenshots,
-	// copied images/media) upload straight at the selection. Plain text pastes
-	// are untouched — this only fires when the clipboard carries files, and a
-	// paste someone else already handled (inputs, the inline text editor's
-	// rich paste) is skipped via defaultPrevented.
+	// copied images/media) upload straight at the selection. Never steal a
+	// paste that belongs to a focused control: form fields and the Editor.js
+	// modal keep their native paste; the canvas inline text editor keeps
+	// pastes that carry text (rich copy) and only hands PURE file pastes to
+	// the uploader (a blob <img> pasted into contentEditable would die at the
+	// allowlist render anyway — uploading is strictly better).
 	React.useEffect(() => {
 		if (!selectedId) return;
 		const onPaste = (event: ClipboardEvent) => {
 			if (event.defaultPrevented) return;
 			const files = Array.from(event.clipboardData?.files || []);
 			if (!files.length) return;
+			const target = event.target as HTMLElement | null;
+			if (target?.closest?.('input, textarea, select, .codex-editor, [data-testid="rich-text-editor-modal"]')) return;
+			const types = Array.from(event.clipboardData?.types || []);
+			const carriesText = types.includes('text/html') || types.includes('text/plain');
+			if (carriesText && target?.closest?.('.ttInlineTextEditor')) return;
 			event.preventDefault();
 			uploadToBlock(selectedId, files);
 		};

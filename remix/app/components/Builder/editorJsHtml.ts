@@ -9,7 +9,45 @@ import { normalizeEditorJsHeadingLevel, type EditorJsBlock, type EditorJsDoc } f
 // never needs to be one.
 
 const escapeHtml = (text: string): string =>
-	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// Editor.js paragraphs render data.text as LIVE innerHTML inside the modal —
+// unlike the canvas, that render does NOT pass the allowlist renderer, so
+// every fragment handed to the editor is scrubbed first: executable/embed
+// tags are dropped, on* handler attributes and javascript:/data:text URLs are
+// stripped. The stored html itself stays untouched (render-side allowlist is
+// the page-level authority) — this guards only the editor sink.
+const SCRUB_DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'noscript', 'template']);
+
+const scrubElement = (el: Element): void => {
+	for (const child of Array.from(el.children)) {
+		if (SCRUB_DROP_TAGS.has(child.tagName.toLowerCase())) {
+			child.remove();
+			continue;
+		}
+		for (const attr of Array.from(child.attributes)) {
+			const name = attr.name.toLowerCase();
+			const value = attr.value.trim().toLowerCase();
+			if (name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href') && (value.startsWith('javascript:') || value.startsWith('data:text')))) {
+				child.removeAttribute(attr.name);
+			}
+		}
+		scrubElement(child);
+	}
+};
+
+const scrubbedInnerHtml = (el: Element): string => {
+	const clone = el.cloneNode(true) as Element;
+	scrubElement(clone);
+	return clone.innerHTML;
+};
+
+const scrubbedOuterHtml = (el: Element): string => {
+	const wrapper = el.ownerDocument.createElement('div');
+	wrapper.appendChild(el.cloneNode(true));
+	scrubElement(wrapper);
+	return wrapper.innerHTML;
+};
 
 type ListItem = string | { content?: string; items?: ListItem[] };
 
@@ -88,16 +126,17 @@ export const editorJsToHtml = (doc: EditorJsDoc): string =>
 const elementToBlocks = (el: Element): EditorJsBlock[] => {
 	const tag = el.tagName.toLowerCase();
 	if (/^h[1-6]$/.test(tag)) {
-		return [{ type: 'header', data: { text: el.innerHTML, level: Number(tag[1]) } }];
+		return [{ type: 'header', data: { text: scrubbedInnerHtml(el), level: Number(tag[1]) } }];
 	}
 	if (tag === 'ul' || tag === 'ol') {
 		const items = Array.from(el.children)
 			.filter((child) => child.tagName.toLowerCase() === 'li')
-			.map((li) => ({ content: li.innerHTML, meta: {}, items: [] }));
+			.map((li) => ({ content: scrubbedInnerHtml(li), meta: {}, items: [] }));
 		return [{ type: 'list', data: { style: tag === 'ol' ? 'ordered' : 'unordered', items } }];
 	}
 	if (tag === 'blockquote') {
 		const clone = el.cloneNode(true) as Element;
+		scrubElement(clone);
 		const footer = clone.querySelector('footer');
 		const caption = footer?.innerHTML || '';
 		footer?.remove();
@@ -112,17 +151,17 @@ const elementToBlocks = (el: Element): EditorJsBlock[] => {
 	if (tag === 'table') {
 		const rows = Array.from(el.querySelectorAll('tr'));
 		const withHeadings = !!el.querySelector('th');
-		const content = rows.map((row) => Array.from(row.children).map((cell) => cell.innerHTML));
+		const content = rows.map((row) => Array.from(row.children).map((cell) => scrubbedInnerHtml(cell)));
 		return content.length ? [{ type: 'table', data: { withHeadings, content } }] : [];
 	}
 	if (tag === 'figure') {
 		const img = el.querySelector('img');
 		if (img?.getAttribute('src')) {
 			return [
-				{ type: 'image', data: { url: img.getAttribute('src'), caption: el.querySelector('figcaption')?.innerHTML || '' } }
+				{ type: 'image', data: { url: img.getAttribute('src'), caption: scrubbedInnerHtml(el.querySelector('figcaption') || el.ownerDocument.createElement('span')) } }
 			];
 		}
-		return [{ type: 'paragraph', data: { text: el.innerHTML } }];
+		return [{ type: 'paragraph', data: { text: scrubbedInnerHtml(el) } }];
 	}
 	if (tag === 'img') {
 		const src = el.getAttribute('src');
@@ -135,10 +174,10 @@ const elementToBlocks = (el: Element): EditorJsBlock[] => {
 			/^(h[1-6]|ul|ol|blockquote|pre|hr|table|figure|div|p|section|article)$/.test(child.tagName.toLowerCase())
 		);
 		if (hasBlockChildren) return nodesToBlocks(el.childNodes);
-		return el.innerHTML.trim() ? [{ type: 'paragraph', data: { text: el.innerHTML } }] : [];
+		return el.innerHTML.trim() ? [{ type: 'paragraph', data: { text: scrubbedInnerHtml(el) } }] : [];
 	}
 	// p and any other leaf element becomes a paragraph with its inline html
-	return el.innerHTML.trim() || tag === 'br' ? [{ type: 'paragraph', data: { text: tag === 'br' ? '' : el.innerHTML } }] : [];
+	return el.innerHTML.trim() || tag === 'br' ? [{ type: 'paragraph', data: { text: tag === 'br' ? '' : scrubbedInnerHtml(el) } }] : [];
 };
 
 const nodesToBlocks = (nodes: NodeListOf<ChildNode> | ChildNode[]): EditorJsBlock[] => {
@@ -159,7 +198,7 @@ const nodesToBlocks = (nodes: NodeListOf<ChildNode> | ChildNode[]): EditorJsBloc
 		const tag = el.tagName.toLowerCase();
 		// inline elements join the current paragraph run
 		if (/^(b|i|u|s|strong|em|a|span|mark|code|sub|sup|small|br)$/.test(tag)) {
-			inlineRun.push(tag === 'br' ? '<br>' : el.outerHTML);
+			inlineRun.push(tag === 'br' ? '<br>' : scrubbedOuterHtml(el));
 			continue;
 		}
 		flushInline();
