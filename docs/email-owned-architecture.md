@@ -419,6 +419,18 @@ Use adaptive throttles:
   from `sendEmail()` is the smallest change that makes the append-only trail
   real, and it must land before provider webhooks start appending
   `delivered`/`bounced`/`complained` to the same stream.
+- **Wire the suppression writers too — the whole module is unreferenced.** It is
+  not only `recordEmailEvent()`: `email/events.ts` also exports
+  `suppressEmailAddress()` and `unsubscribeEmailAddress()`, and those are the
+  *only* writers to `email_suppression_list` and `email_unsubscribes` anywhere
+  in the app. Nothing imports any of the three. So `getSuppressedRecipients()`
+  runs on every send but queries two collections that no code path can populate,
+  and it will keep returning an empty list until a writer is wired. The check is
+  structurally present and behaviourally vacuous. Both writers already normalize
+  to trimmed lowercase, matching how `service.ts` normalizes recipients before
+  the `$in` lookup, so wiring them is a call-site problem rather than a data
+  problem. Land this alongside the event stream: bounce/complaint ingestion in
+  Phase 1 has nowhere to write until it exists.
 - Build deterministic template rendering tests.
 - Add dev/test email endpoints that cannot leak credentials or send to
   arbitrary addresses.
@@ -429,7 +441,10 @@ Exit criteria:
   verification are represented as queued message records.
 - Every send attempt creates an event trail — specifically, `email_events` is
   non-empty for every `email_messages` row, which is not true today.
-- Suppression checks happen before delivery.
+- Suppression checks happen before delivery **and can actually suppress** — a
+  row written by `suppressEmailAddress()` demonstrably drops a recipient from a
+  real send. Today the check runs against collections nothing writes to, so
+  "the check ran" is not evidence that suppression works.
 
 ### Phase 1: Compliance Core
 
