@@ -82,6 +82,19 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Admin integration vault + policy proxy
+
+- [ ] Sign in as an admin and open **/admin → External integrations**. Without
+      `THINGTIME_ADMIN_VAULT_KEY`, the visible warning explains setup and
+      **Save secret** is disabled; no browser request reveals a credential.
+- [ ] With a disposable 32-byte base64url vault key, save a labelled Vercel
+      token. Refresh and confirm its row shows only label/id/date—not masked or
+      plaintext value. Deletion is blocked while an endpoint references it.
+- [ ] Save a Vercel endpoint with read + **Create new items only**, then verify
+      an existing environment key is blocked before POST and the redacted audit
+      contains only operation, path, status, and outcome—never body, token, or
+      secret value. Generic endpoints cannot claim create-only semantics.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
@@ -460,7 +473,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+  scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -1070,7 +1083,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-    runner)`, while both required-context companion jobs have distinct
+  runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1764,6 +1777,138 @@ is fixed, and cite the checklist you ran in the PR description.
       unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
       routes keep the strict policy without `unsafe-eval`.
 
+## Installed-app Login with Thingtime (loopback + PKCE)
+
+- [ ] Register a disposable app with the exact callback origin
+      `http://127.0.0.1:<port>`, bind a loopback receiver before opening
+      `/authorize`, and pass `redirect_uri`, a random `state`, and an S256
+      `code_challenge`. Approving redirects to the exact callback path with only
+      `code` + the original `state`; no app access token appears in the browser
+      URL, page storage, or postMessage.
+- [ ] Exchange the code once at `POST /api/v1/oauth/token` with the original
+      verifier, clientId, and the same normalized redirectUri; call
+      `/api/v1/oauth/userinfo` with the returned Bearer token and confirm the
+      selected account/scopes. Replaying the code or changing the verifier,
+      clientId, redirect URI/path/port, or registered origin must return the same
+      bounded `invalid/expired/used/mismatched` 400 and mint no app session.
+- [ ] Reject HTTPS, `localhost`, `0.0.0.0`, non-loopback hosts, missing or
+      privileged ports, callback credentials/query/fragments, `plain` PKCE, and
+      malformed verifier/challenge lengths. Cancellation redirects with
+      `error=access_denied` and the original state but no code.
+- [ ] Present an `oauth-code` JWT as an Authorization Bearer token to
+      `/api/v1/auth/me`, `/api/v1/auth/accounts`, and an account-authenticated
+      write including `/api/v1/things`: it must never resolve as a
+      browser/account credential. Delete or
+      suspend the app, remove the callback origin, or delete the user between
+      issuance and exchange; exchange must fail closed.
+
+## Commander desktop launcher
+
+- [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
+      regex replacement escapes are decoded once, unsupported escapes remain
+      intact, and decoded backslashes are not decoded a second time.
+
+- [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
+      begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
+      Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
+      the launcher. Relaunch and verify the selected mode persists.
+- [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
+      app starts its bundled Node daemon and Rust search child, then open/close
+      the launcher repeatedly with the configured global shortcut. The search
+      input must already be focused and no blank WebKit frame may flash.
+- [ ] Force-terminate the Commander host and verify its parent watchdog stops
+      the Node/Rust children and releases port 47820. A subsequent verified
+      install must start a new host-owned daemon rather than accept stale health.
+- [ ] Search `settings`, press Return, and verify the separate native Settings
+      window. Exercise every General option, record a custom shortcut, quit and
+      relaunch, and confirm hotkey/menu-bar/login-item state is restored.
+- [ ] In General settings, turn “Open new Commander windows pinned” off, use
+      Open New Window, and verify that launcher dismisses on focus loss; turn
+      it on, open another window, and verify it remains visible on focus loss.
+- [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
+      with arrows, execute with Return, open Command-K, traverse actions, and
+      dismiss actions/launcher with Escape. Long names must not clip or create
+      horizontal scroll in default or compact mode.
+- [ ] Run a broad query with at least 30 path-backed results and move selection
+      quickly through the list. Results must stay interactive, rendering generic
+      or cached icons immediately and progressively resolving every visible
+      Finder icon (selected first) through the bounded queue. Rerun the query
+      to confirm cached icons return without a bridge burst; macOS must never
+      show a rainbow beachball once rows are visible.
+- [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat` across
+      apps, commands, extensions, files, and folders. Repeatedly choose a lower
+      equivalent result, rerun the same query, and verify device-local learned
+      ranking promotes it after a full Commander relaunch without changing an
+      unrelated query.
+- [ ] On a large mixed application/file index, search `raycast stop`; verify
+      the separator-equivalent `raycast-stop` application is present above
+      `raycast-start`, `raycast-status`, and noisy one-token file matches. Run
+      the indexer regression with a one-result output limit and verify all 129
+      matching FTS candidates are evaluated before ranking; rapid refinements
+      must keep only the active and latest uncapped query in flight.
+- [ ] Open Search Settings. Verify hidden files and unlimited entries are the
+      migrated defaults, the SQLite database footprint uses B/KB/MB/GB, and a
+      custom cap persists and can be cleared back to Unlimited. Index a hidden
+      file, extensionless executable, broken symlink, special Unix file, and
+      nested `.app`; verify each reference is searchable without following links
+      or recursively indexing package contents.
+- [ ] With more than one million indexed records, leave Search Settings open
+      across at least four two-second polls. Counts and database size must remain
+      populated without a five-second timeout or zero-state flash. Search a long
+      nonexistent term and verify the reader remains responsive or self-recovers
+      before the next status request.
+- [ ] Search `accessibility`; verify Accessibility Settings is the first
+      `System` result and Return opens the exact Privacy & Security →
+      Accessibility pane without changing any permission. Repeat with Screen
+      Recording, Full Disk Access, Login Items, and Displays; non-macOS
+      bootstrap catalogs must omit these platform-only entries.
+- [ ] Drag an application result into a disposable Terminal prompt and verify
+      the exact `.app` path is inserted through a native file-URL drag without
+      opening it. Clear the prompt without executing it; single and double click
+      on that result must still preserve normal selection/execution behavior.
+- [ ] In Extensions Settings, record, invoke, rebind, and Delete-clear a global
+      command shortcut. A duplicate command binding or collision with the
+      launcher hotkey must fail before persistence and restore the complete
+      previously working native registration set.
+- [ ] Bind Search Emoji & Symbols to Command-E. From another app, press
+      Command-E and immediately type `heart`; the picker must remain visible
+      and focused. Dismiss it, press Command-Space once, and verify the normal
+      launcher reappears. Hide Commander with Command-H and verify one
+      Command-Space press unhides and presents it again.
+- [ ] In Search Emoji & Symbols, type `ear` and verify WebKit/macOS shows no
+      spelling or autocorrection pill. With the input still focused, use every
+      arrow direction and verify only the emoji selection moves. Search `haert`
+      and `hert` and verify typo-tolerant heart results remain relevant.
+- [ ] Search `heart`, choose a non-leading heart twice, reopen the picker, and
+      repeat the query. The selected emoji must be promoted; quit/relaunch and
+      verify the same query-specific preference persists while unrelated
+      queries retain their own ranking.
+- [ ] Type a unique launcher query, launch a result, then hide and reopen with
+      the global shortcut. Verify the field clears while the launched command
+      is the first History row and its search term follows as a separate
+      full-width top-level row. Return on the command reruns it; Return on the
+      query restores it.
+      Create nine searches and verify the initial eight-session cap plus
+      interactive Show More/Show Less. History survives a complete
+      quit/relaunch without entering cloud-synced settings.
+- [ ] Run Close Commander Window and verify only the floating launcher hides;
+      then run Close Commander and verify the native host, daemon, and Rust
+      child exit and release port 47820. From Raycast, run
+      `Commander/extensions/raycast/`'s Open Commander no-view command and
+      verify it relaunches the installed app.
+- [ ] Browse the latest live Raycast Store feed, search a term, open the full
+      web catalog, and sideload a valid source folder. Malformed manifests and
+      unsupported view commands must show explicit compatibility errors; they
+      must never be reported as successfully executable.
+- [ ] Complete Thingtime PKCE login with two accounts, switch between them,
+      relaunch, and sync appearance/window preferences. Inspect the WebView and
+      loopback UI API: no Bearer token may be returned to React; Keychain items
+      must be separated by issuer, client ID, and user ID.
+- [ ] Resize Settings through its minimum and full-screen-adjacent sizes, visit
+      every tab, scroll top-to-bottom, and exercise Store, account, sync, and
+      Advanced dynamic states in light, dark, default-text, and large-text
+      modes. No content may overlap, clip, or escape the native window.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
@@ -2071,6 +2216,14 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the mint response report the fence; the settings row badges 🌐/🔒
       restricted tokens; combines with the 🧸 sandbox. Covered by section F
       of `node scripts/verify-pat-tokens.mjs`.
+- [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
+      as the Bearer credential rather than anonymously, the fenced answer
+      carries `private, no-store`, and the credential-less cacheable answer
+      carries `Vary: Authorization` — `public, s-maxage` is exactly what
+      licenses a shared cache to replay a stored response to an
+      Authorization-carrying request, so without the Vary a warm anon entry
+      reaches a fenced token without the origin ever being asked. Same
+      section F.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
@@ -2812,3 +2965,118 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
+
+- [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
+      passes end to end (browse + filters + docs twin, admin seed gate,
+      user save-version via the unified things path, react/save decoration).
+- [ ] /components paints the seeded library; every card renders its component
+      LIVE from the stored template (no raw JSON fallbacks), with the library
+      badge matching the card's visual style.
+- [ ] The library filter pills (Ant Design → Thingtime) rescope the browse and
+      the counts line; text search works and the lib filter is not silently
+      applied while a q is active.
+- [ ] "Args" expands the tester; editing a string arg re-renders live, an enum
+      swaps its mapped styles (e.g. tracking-timeline stage), a boolean toggles
+      its ttIf branch, and "reset to defaults" restores the original render.
+- [ ] "Schema" stays collapsed by default and expands to inherits chips, args
+      chips, on-create shape, thingtime-adds system fields, and the raw JSON
+      definition (scrollable, no page overflow).
+- [ ] "Save version" (signed in) pre-fills a name, saves privately by default,
+      shows the Lopu toast, bumps the source card's "saved versions" count, and
+      the version appears under Mine with its savedArgs snapshot rendering.
+- [ ] React + Add to library work optimistically on component cards and
+      reconcile with the server (flags survive a reload).
+- [ ] Drawer: Schemas and Components are separate top-level items; /components
+      highlights Components (not Schemas), /schemas highlights Schemas, and
+      Search's submenu no longer contains Schemas.
+- [ ] Mobile (375px): pills wrap, cards stay single-column, no horizontal
+      scroll, args/schema expanders stay inside the card.
+- [ ] Seeding is idempotent: re-running `node scripts/components-db/seed.mjs`
+      reports unchanged (not created) for an already-seeded library, and a
+      foreign doc squatting a `component-<slug>` shareId is skipped, never
+      overwritten.
+- [ ] Grouping: the default catalog shows ONE card per component family with a
+      "designs (N)" pill row; clicking a pill swaps the card's preview,
+      badge, and description to that library's rendition (args tweaks
+      survive the switch); a q-search collapses its result pages the same
+      way (no 8-duplicate walls).
+- [ ] Deep links: every card's Docs button opens /components/<familyKey>/docs
+      (scrolled to Docs); /components/<familyKey> shows the design switcher,
+      big preview, args tester, deep-link copy row, args reference, API
+      snippet, and definition; a componentKey slug and a component-<slug>
+      shareId resolve to the same family page; unknown keys get the friendly
+      not-found panel.
+- [ ] Tags: every seeded component card and detail page shows a tags row led by
+      the "✨ Made by Fable 5 Ultracode" attribution chip (bolder/filled),
+      followed by topical tags (component, library, category, per-component
+      topics); the attribution tag survives a reseed (it is stamped first so
+      per-definition tags can never squeeze it out).
+
+## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
+
+- [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
+      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
+      ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
+      run-time scope enforcement, shared budget across actions.invoke, direct +
+      ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
+      owner-private history, private-action 404, delegated (`source: 'component'`)
+      runs refusing a foreign action by id, docs twins).
+- [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
+      lists it, DELETE the action, and confirm the same query is now empty while
+      another action keeps its own runs. action-run is protected (no route deletes
+      one directly) and off-ledger, and the retention prune only fires during a run
+      OF THAT action — the delete cascade is the only thing that stops a
+      create/run/delete cycle stranding unaccounted records. Covered by
+      verify-actions.
+- [ ] Same lifecycle with a run STILL IN FLIGHT: start a run, DELETE the action
+      before it finishes, and confirm the run still returns its own result while
+      `GET /api/v1/actions/runs?action=<id>` AND the unfiltered history are both
+      empty of it. The record is written when the run ENDS, so the cascade cannot
+      see it — writeRunRecord removes a record whose action went away mid-run.
+      Covered by verify-actions.
+- [ ] Kind boundary: an action declaring an UNSCOPED `things.update` (or
+      `things.read`) whose step targets a non-data thing (a schema thing, an
+      action thing) is refused at run time ("not a data thing — actions read and
+      write Data Things only") and leaves the target unchanged; the action still
+      SAVES (save time can't resolve a dynamic id). Covered by verify-actions.
+- [ ] `node remix/scripts/seed-demo-app.mjs http://127.0.0.1:<nitro-port> <user>`
+      seeds the Customer/Invoice demo idempotently (re-run reports "exists").
+- [ ] /actions lists your actions with derived effect chips (creates/reads/
+      updates/invokes + the limits envelope) and schema IDs resolve to display
+      names; clicking a card opens /actions/:id.
+- [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
+      steps deep-link to the invoked action) / Can access / Cannot access (no
+      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
+      and the raw definition.
+- [ ] The Run panel renders one typed input per descriptor, runs the action,
+      and shows status + duration + ops/depth/child budget usage + the
+      hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
+      links; the Lopu toast fires on success and error.
+- [ ] Last runs refreshes after an in-page run and survives a reload (the
+      protected action-run trail).
+- [ ] A composed action (onboard-customer) consumes ONE shared budget: opsUsed
+      counts child ops, depthUsed 1, childActionsUsed 2.
+- [ ] /things: ⚡ action things render via the action kind renderer, the
+      Actions filter pill scopes the grid, and clicking an action opens the
+      inspector; data things created by runs render through their schema
+      {field} templates (the sent invoice shows "— sent" + sentAt).
+- [ ] Mobile (375px): /actions and the inspector have no horizontal scroll;
+      chips wrap; the run panel stays inside its card.
+- [ ] Builder: "⚡ New action" on /actions derives CAN ACCESS chips LIVE from
+      the steps (scoped when every step carries a literal schema, unscoped the
+      moment one step lacks one); saving lands on the new action's inspector;
+      a narrowed scope that no longer covers a step surfaces the registry
+      refusal verbatim in the Lopu toast.
+- [ ] ttAction: a component render node with ttAction/ttActionInputs draws as
+      data-tt-action/data-tt-action-inputs (the ONLY data-* attributes the
+      renderer allowlists) and the tt keys never survive as node keys; in the
+      /things PreviewModal clicking the control runs the action AS the viewer
+      (toast with ms · ops + Inspect link) and the target data thing mutates;
+      grid tiles stay pointerEvents:none (clicks select, never run).
+- [ ] /things component previews render RESOLVED templates (savedArgs over
+      defaults) via the kind renderer — never raw {token} text.
+- [ ] Used by: /actions/:key lists the viewer's components binding the action
+      via ttAction as clickable 🧩 chips; exact-token matching (an action key
+      that prefixes another never cross-matches).

@@ -17,6 +17,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
+
+- Multi-agent defensive security review of the Action Thing surface (report:
+  SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md). Three
+  findings, all fixed: action-created things now mint PRIVATE
+  (`acl: [ACL_OWNER]`) instead of inheriting createThing's public standalone
+  default; the /things PreviewModal passes `untrusted` for components the
+  viewer does not own, so foreign markup renders inert; and a ttAction click
+  (`source: 'component'`) resolves only actions the invoker owns, closing an
+  id-path hijack the actionKey branch was already hardened against. The
+  inspector also stopped asserting absolute negatives for composing actions.
+  Battery 73/73 (+8 security regressions), test:actions 27/27,
+  test:schemas 82/82. Verified live: a foreign component renders but does not
+  fire, an owned one still does, and onboard-customer's invoice is private.
+
+### 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design
+
+- "⚡ New action" builder on /actions with LIVE-DERIVED capabilities
+  (declaration always covers behavior — one unscoped step unscopes the
+  capability), ttAction component-render bindings (data-tt-action /
+  data-tt-action-inputs, the only allowlisted data-* attributes; /things
+  PreviewModal is the interactive surface), the Used-by back-reference
+  panel on the inspector, seven Lopu-review fixes across review rounds, unit
+  suites test:actions (23) + actionGrammar (15), and the v2
+  external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
+  Details: PRs/387-*.md. CI green; batteries 65/65 + 30/30. A functional
+  multi-review pass (correctness / UX-consistency / docs-accuracy) then
+  landed: optimistic cached paint on /actions/:key, ActionChip overflow
+  guards at 375px, family-consistent pink CTAs, design-doc reconciliation
+  with the shipped grammar/executor, input-default/type congruence
+  (save-time refusal + type-aware builder coercion), the ⚡ kind renderer
+  wired into /things tiles, inspector state reset on cross-action
+  navigation, and latest-revision resolution for duplicate actionKeys
+  (executor + inspector agree; test:actions 25, test:schemas 82).
+
+### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
+
+- New `action` + protected `action-run` kinds, executor
+  (`api/utils/actions/execute.ts`), `POST /api/v1/actions/run` +
+  `GET /api/v1/actions/runs`, /actions browse + inspector UI, ⚡ kind renderer
+  and Actions filter on /things, drawer entry, and the Customer/Invoice demo
+  seed (`scripts/seed-demo-app.mjs`). Verified by
+  `scripts/verify-actions.mjs` (52 live checks) + browser click-through.
+  Details: `PRs/action-thing-v1-design.md` and PR #387 (stacked on the
+  Components runtime split, PR #382).
+
 ### Changed
 
 - **Passkeys and the Admin CI snapshot now recover from the two mobile failure
@@ -131,8 +177,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   them per target, restricts AI edits to Git-reported conflicts, verifies merge
   topology and bytes, and opens branch-protected auto-merge PRs. The new
   origin-scoped API capability manifest advertises the additive dispatch
-  contract as `api.admin-ci-dispatch` 1.1.0. [Detailed PR #489 validation
-  note](../PRs/489-codex-feature-stack-main-add-verified-multi-target-feature-stacks.md).
+  contract as `api.admin-ci-dispatch` 1.1.0. Detailed validation notes:
+  [PR #487 (`develop`)](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md)
+  and [PR #489 (`main` promotion)](../PRs/489-codex-feature-stack-main-add-verified-multi-target-feature-stacks.md).
   — Codex (AI), 2026-08-30
 
 - **Thingtime’s MCP initialization now supplies connector-wide interaction
@@ -281,6 +328,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -356,6 +408,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
@@ -821,6 +877,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
   — Claude (AI), 2026-08-18
 
+- **Components library (/components) + 1000-component catalog**: new
+  first-class `component` thing kind (arg-templated render trees drawn through
+  the sanitising allowlist renderers), a /components browse page with a live
+  args tester, a hidden per-card Schema expander, and "Save version" (stores
+  the tester snapshot as a user-owned component thing). The platform catalog —
+  1000 components styled after Ant Design, Bootstrap, MUI, shadcn/ui,
+  Untitled UI, daisyUI, React Flow, and the Thingtime house style — lives in
+  the repo `components-db/` folder database (deterministic generator under
+  `scripts/components-db/`) and seeds into the dev DB as system things via the
+  admin `POST /api/v1/admin/components/seed` endpoint (idempotent,
+  self-healing, `component-` shareId prefix reserved). Drawer: Schemas moved
+  out of Search into its own top-level item, Components added beside it.
+  Verification: `remix/scripts/verify-components.mjs` (30 checks) + the new
+  Components checklist in `TESTING.md`. Follow-up in the same PR: component
+  families — the library renditions of one functional component share a
+  crystal `familyKey` and collapse into ONE card with a designs
+  click-through (server `group=family` aggregation + `family=` roster
+  fetch, client-side collapse for text search), and every family gets its
+  own deep-linked page at `/components/<key>` with a `/docs` twin the
+  cards' Docs buttons open. The catalog kept growing meanwhile
+  (tranche 2: 70 archetypes / 350 families / 2800 components seeded, every
+  one tagged "Made by Fable 5 Ultracode" and surfaced as tag chips on cards
+  and detail pages). — Claude (AI), 2026-08-17
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer
@@ -1034,6 +1114,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   asset runtime error. Generated Vercel routes now return the SPA HTML shell
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
+
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
 
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
@@ -1433,6 +1542,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Claude (AI), 2026-07-21.
 
 ### Added
+
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
 
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a

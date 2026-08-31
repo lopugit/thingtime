@@ -1,0 +1,30 @@
+[package]
+name = "commander-indexer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Portable filesystem metadata indexer for Commander and Thingtime desktop apps"
+license = "ISC"
+publish = false
+
+[lib]
+name = "commander_indexer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "commander-indexer"
+path = "src/main.rs"
+
+[dependencies]
+commander-core = { path = "../commander-core" }
+cpu-time = "=1.0.0"
+globset = "=0.4.18"
+ignore = "=0.4.25"
+memory-stats = { version = "=1.2.0", features = ["always_use_statm"] }
+regex = "1.11"
+rusqlite = { version = "0.32.1", features = ["bundled", "hooks"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

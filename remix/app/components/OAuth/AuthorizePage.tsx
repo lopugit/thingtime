@@ -287,7 +287,7 @@ export const AuthorizePage = () => {
     }
 
     if (desktopFlow && (!desktopRedirect || !desktopChallenge || !desktopState)) {
-      setInvalidReason('This desktop login link is missing its loopback callback, random state, or S256 PKCE challenge.');
+      setInvalidReason('This desktop login link is missing its registered callback, random state, or S256 PKCE challenge.');
       return;
     }
 
@@ -301,7 +301,10 @@ export const AuthorizePage = () => {
     }
 
     fetchJson(
-      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}&origin=${encodeURIComponent(origin)}` +
+      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}` +
+        (desktopFlow
+          ? `&redirect_uri=${encodeURIComponent(desktopRedirect!.uri)}`
+          : `&origin=${encodeURIComponent(origin)}`) +
         `&scope=${encodeURIComponent(scopeParam)}&optional_scope=${encodeURIComponent(optionalScopeParam)}`
     ).then((resp) => {
       if (resp?.ok && resp.app) {
@@ -510,7 +513,7 @@ export const AuthorizePage = () => {
     }
 
     if (desktopFlow) {
-      if (!desktopRedirect || !desktopChallenge || !desktopState) {
+      if (!verifiedOrigin || !desktopRedirect || !desktopChallenge || !desktopState) {
         setIssueError('This window could not verify the app’s loopback callback. Close it and start the sign-in again.');
         setIssuing(false);
         return;
@@ -938,7 +941,7 @@ export const AuthorizePage = () => {
 
         <Flex gap={2} alignItems="center" fontSize="13px" color="var(--tt-muted, #9a9aa6)">
           <Box>🔒</Box>
-          <Box>It only ever gets what’s ticked above — never your password, posts, or other apps’ data.</Box>
+          <Box>It only ever gets what’s ticked above — never your password, unselected items, or other apps’ data.</Box>
         </Flex>
 
         {issueError ? (
