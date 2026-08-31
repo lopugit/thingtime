@@ -81,6 +81,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-feature': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-feature-stack': ['title', 'repository', 'autoDecideBranches', 'revision', 'status', 'archived', 'createdBy', 'updatedBy', 'lastDispatchId', 'lastRunAt'],
+  'ci-feature-stack-entry': ['repository', 'revision', 'entryType', 'position', 'prNumber', 'branch'],
   'ci-branch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-pull-request': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-workflow-run': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],

@@ -87,7 +87,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every current entity per kind for unlimited Feature Stack selection.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
@@ -118,10 +118,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '1.1.0',
+    featureVersion: '2.0.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, snapshots every source ref and SHA into a canonical immutable plan, and refuses ambiguous cross-branch routing. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -165,14 +165,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-ci-feature-stacks',
+    group: 'admin',
+    title: 'Manage saved Feature Stacks',
+    endpoint: '/api/v1/admin/ci/stacks',
+    featureVersion: '1.0.0',
+    summary: 'Save, edit, list, run, and archive reusable multi-target Feature Stacks.',
+    detail:
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while run progress is reconciled from the resulting target pull requests and CI projections. POST run reloads live PR metadata and creates the immutable target-aware controller plan at execution time.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run to dispatch its current live plan, or delete to archive it.'],
+    requestExamples: [
+      { name: 'Save a stack', description: 'Sources and targets have no product-imposed count cap.', method: 'POST', body: { action: 'save', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true } },
+      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved' }] } }]
+  }),
+  endpoint({
     id: 'admin-ci-credentials',
     group: 'admin',
     title: 'Manage the ordered Lopu credential waterfall',
     endpoint: '/api/v1/admin/ci/credentials',
-    featureVersion: '1.0.0',
-    summary: 'Store, rotate, enable, delete, and reorder named Claude credentials without exposing their values.',
+    featureVersion: '2.0.0',
+    summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
     detail:
-      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. GET and every mutation response contain redacted metadata only. The ordered enabled entries become Lopu’s credential waterfall; at most eight entries are stored.',
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
@@ -181,11 +199,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Use the CI Control page to manage the order without copying values back into the browser.'
     ],
     requestExamples: [
-      { name: 'Add a named Claude account', description: 'The value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', value: '<oauth-token>', enabled: true } },
+      { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
       { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
     ],
     responseExamples: [
-      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
+      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
       { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   }),
@@ -387,10 +405,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'Deliver the ordered Lopu credential waterfall',
     endpoint: '/api/v1/integrations/ci/credentials',
-    featureVersion: '1.0.0',
+    featureVersion: '1.1.0',
     summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
     detail:
-      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, and a single-use nonce before decrypting the ordered entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
     auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
     methods: ['POST'],
     steps: [
@@ -399,9 +417,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'On the first migration request only, the controller may include its existing OAuth slots; an empty vault imports them once.',
       'Mask every returned value immediately and keep it only for the current job.'
     ],
-    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
+    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { platform: 'Anthropic', repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
     responseExamples: [
-      { status: 200, description: 'Ordered enabled credentials. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
+      { status: 200, description: 'Ordered enabled credentials for the requested platform. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
       { status: 409, description: 'Replay blocked.', body: { ok: false, error: 'Credential request was already used.' } }
     ]
   }),

@@ -13,20 +13,52 @@ test('Feature Stack snapshots preserve admin order and exact same-repository hea
     sourcePrNumbers: [12, 14],
     targets: ['develop', 'main'],
     repository: 'lopugit/thingtime',
+    stackId: 'ci-feature-stack-11111111-1111-4111-8111-111111111111',
+    autoDecideBranches: true,
     pullRequests: [
-      { number: 12, title: 'Search', state: 'open', draft: false, head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } },
-      { number: 14, title: 'Messenger', state: 'open', draft: false, head: { ref: 'feature/messenger', sha: 'b'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }
+      { number: 12, title: 'Search', state: 'open', draft: false, base: { ref: 'develop' }, head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } },
+      { number: 14, title: 'Messenger', state: 'open', draft: false, base: { ref: 'develop' }, head: { ref: 'feature/messenger', sha: 'b'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }
     ]
   });
   assert.deepEqual(plan.sources.map((source) => source.pr), [12, 14]);
-  assert.equal(JSON.stringify(plan), `{"autoMerge":true,"name":"Search + Messenger","sources":[{"head":"feature/search","pr":12,"sha":"${'a'.repeat(40)}","title":"Search"},{"head":"feature/messenger","pr":14,"sha":"${'b'.repeat(40)}","title":"Messenger"}],"targets":["develop","main"],"version":1}`);
+  assert.deepEqual(plan.sources.map((source) => source.targets), [['develop', 'main'], ['develop', 'main']]);
   assert.throws(
     () => canonicalFeatureStackPlanFromPullRequests({ ...plan, sourcePrNumbers: [12, 14], pullRequests: [
-      { number: 12, title: 'Search', state: 'open', head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'someone/fork' } } },
-      { number: 14, title: 'Messenger', state: 'open', head: { ref: 'feature/messenger', sha: 'b'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }
+      { number: 12, title: 'Search', state: 'open', base: { ref: 'develop' }, head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'someone/fork' } } },
+      { number: 14, title: 'Messenger', state: 'open', base: { ref: 'develop' }, head: { ref: 'feature/messenger', sha: 'b'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }
     ], repository: 'lopugit/thingtime' }),
     /not an eligible immutable same-repository PR/
   );
+});
+
+test('Feature Stack accepts one source and auto-routes mixed branch families', () => {
+  const common = {
+    name: 'Product + controller',
+    sourcePrNumbers: [21, 22],
+    targets: ['main', 'github-actions'],
+    repository: 'lopugit/thingtime',
+    stackId: 'ci-feature-stack-22222222-2222-4222-8222-222222222222',
+    autoDecideBranches: true
+  };
+  const mixed = canonicalFeatureStackPlanFromPullRequests({
+    ...common,
+    pullRequests: [
+      { number: 21, title: 'Product', state: 'open', draft: false, base: { ref: 'main' }, head: { ref: 'feature/product', sha: 'c'.repeat(40), repo: { full_name: common.repository } } },
+      { number: 22, title: 'Controller', state: 'open', draft: false, base: { ref: 'github-actions' }, head: { ref: 'feature/controller', sha: 'd'.repeat(40), repo: { full_name: common.repository } } }
+    ]
+  });
+  assert.deepEqual(mixed.sources.map((source) => source.targets), [['main'], ['github-actions']]);
+  const single = canonicalFeatureStackPlanFromPullRequests({
+    ...common,
+    name: 'One feature',
+    sourcePrNumbers: [21],
+    targets: ['main'],
+    pullRequests: [
+      { number: 21, title: 'Product', state: 'open', draft: false, base: { ref: 'main' }, head: { ref: 'feature/product', sha: 'c'.repeat(40), repo: { full_name: common.repository } } }
+    ]
+  });
+  assert.equal(single.sources.length, 1);
+  assert.deepEqual(single.sources[0].targets, ['main']);
 });
 
 test('workflow dispatches enter only through reviewed product branches', () => {
