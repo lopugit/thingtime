@@ -86,12 +86,15 @@ const useCoarsePointer = (): boolean => {
 };
 
 // A slim insert line between siblings — the WHOLE strip is the tap target
-// (44px when visible), the pill is just the label.
+// (44px when visible), the pill is just the label. Inside row containers the
+// zone turns vertical (a slim upright strip between side-by-side blocks) so
+// it never forces siblings onto separate lines.
 const InsertZone = ({
 	containerId,
 	index,
 	chrome,
 	alwaysVisible,
+	orientation = 'horizontal',
 	testIdPrefix
 }: {
 	containerId: string | null;
@@ -100,11 +103,13 @@ const InsertZone = ({
 	// empty containers and the end of the root list keep their zone visible —
 	// a canvas must never look like there is nothing to do
 	alwaysVisible?: boolean;
+	orientation?: 'horizontal' | 'vertical';
 	testIdPrefix?: string;
 }) => {
 	const [active, setActive] = React.useState(false);
 	const coarse = useCoarsePointer();
 	const visible = active || alwaysVisible || coarse;
+	const vertical = orientation === 'vertical';
 	return (
 		<Flex
 			as="button"
@@ -114,12 +119,16 @@ const InsertZone = ({
 			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}`}
 			alignItems="center"
 			justifyContent="center"
-			width="100%"
-			height={visible ? '44px' : '18px'}
-			marginY="3px"
+			width={vertical ? (visible ? '28px' : '14px') : '100%'}
+			height={vertical ? 'auto' : visible ? '44px' : '18px'}
+			alignSelf={vertical ? 'stretch' : undefined}
+			minHeight={vertical ? '44px' : undefined}
+			flex={vertical ? '0 0 auto' : undefined}
+			marginY={vertical ? 0 : '3px'}
+			marginX={vertical ? '1px' : 0}
 			opacity={active ? 1 : visible ? 0.8 : 0}
 			_hover={{ opacity: 1 }}
-			transition="opacity 0.12s ease, height 0.12s ease"
+			transition="opacity 0.12s ease, height 0.12s ease, width 0.12s ease"
 			position="relative"
 			zIndex={5}
 			cursor="pointer"
@@ -147,7 +156,11 @@ const InsertZone = ({
 				}
 			}}
 		>
-			<Box position="absolute" left={0} right={0} top="50%" height="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
+			{vertical ? (
+				<Box position="absolute" top={0} bottom={0} left="50%" width="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
+			) : (
+				<Box position="absolute" left={0} right={0} top="50%" height="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
+			)}
 			<Box
 				as="span"
 				position="relative"
@@ -156,8 +169,8 @@ const InsertZone = ({
 				fontSize="12px"
 				fontWeight={700}
 				lineHeight="1"
-				paddingX="14px"
-				paddingY="8px"
+				paddingX={vertical ? '6px' : '14px'}
+				paddingY={vertical ? '6px' : '8px'}
 				borderRadius="var(--tt-radius-pill, 999px)"
 				border="1px solid"
 				borderColor="var(--tt-accent, hotpink)"
@@ -165,7 +178,7 @@ const InsertZone = ({
 				color="var(--tt-accent, hotpink)"
 				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 			>
-				+ add block
+				{vertical ? '+' : '+ add block'}
 			</Box>
 		</Flex>
 	);
@@ -176,13 +189,19 @@ const InsertZone = ({
 // and it can never visually collide with sibling zones outside the container.
 const DropWell = ({
 	containerId,
+	index = 0,
 	chrome,
 	label,
+	compact,
 	testIdPrefix
 }: {
 	containerId: string | null;
+	// insert position (grids append via a trailing add-tile cell)
+	index?: number;
 	chrome: BuilderChrome;
 	label?: string;
+	// grid add-tile: sized like a modest cell, not a hero well
+	compact?: boolean;
 	testIdPrefix?: string;
 }) => {
 	const [active, setActive] = React.useState(false);
@@ -192,14 +211,14 @@ const DropWell = ({
 			type="button"
 			aria-label="Add the first block"
 			className="ttDropWell"
-			data-testid={`dropwell-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}`}
+			data-testid={`dropwell-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}${index ? `-${index}` : ''}`}
 			flexDirection="column"
 			alignItems="center"
 			justifyContent="center"
 			rowGap="6px"
 			width="100%"
-			minHeight="96px"
-			marginY="6px"
+			minHeight={compact ? '56px' : '96px'}
+			marginY={compact ? 0 : '6px'}
 			border="2px dashed"
 			borderColor={active ? 'var(--tt-accent, hotpink)' : 'var(--tt-border, #ececef)'}
 			borderRadius="var(--tt-radius-lg, 16px)"
@@ -211,7 +230,7 @@ const DropWell = ({
 			onClick={(event: React.MouseEvent<HTMLElement>) => {
 				event.preventDefault();
 				event.stopPropagation();
-				chrome.onInsert(containerId, 0, event.currentTarget as HTMLElement);
+				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
 			}}
 			onDragOver={(event) => {
 				if (event.dataTransfer.types.includes(DRAG_MIME)) {
@@ -227,7 +246,7 @@ const DropWell = ({
 				if (id) {
 					event.preventDefault();
 					event.stopPropagation();
-					chrome.onMove(id, containerId, 0);
+					chrome.onMove(id, containerId, index);
 				}
 			}}
 		>
@@ -252,26 +271,35 @@ const DropWell = ({
 const alignSelfOf = (block: WebpageBlock): string | undefined =>
 	block.align === 'center' ? 'center' : block.align === 'end' ? 'flex-end' : block.align === 'start' ? 'flex-start' : block.align === 'stretch' ? 'stretch' : undefined;
 
+type ParentDirection = 'column' | 'row' | 'grid';
+
 const BlockFrame = ({
 	block,
 	chrome,
 	locked,
+	parentDirection = 'column',
 	children
 }: {
 	block: WebpageBlock;
 	chrome: BuilderChrome;
 	locked?: boolean;
+	parentDirection?: ParentDirection;
 	children: React.ReactNode;
 }) => {
 	const hovered = chrome.hoverId === block.id;
 	const selected = chrome.selectedId === block.id;
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
+	const inRow = parentDirection === 'row';
 	return (
 		<Box
 			className="ttBlockFrame"
 			data-block-id={block.id}
 			position="relative"
-			width="100%"
+			// row children share the line (grow evenly, never force 100% width);
+			// column children and grid cells fill their track
+			width={inRow ? 'auto' : '100%'}
+			flex={inRow ? '1 1 0%' : undefined}
+			minWidth={inRow ? 0 : undefined}
 			alignSelf={alignSelfOf(block)}
 			maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
 			marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
@@ -293,7 +321,14 @@ const BlockFrame = ({
 				// chrome controls nested inside this frame (insert zones, dropwells)
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
-				if ((event.target as HTMLElement).closest?.('.ttInsertZone, .ttDropWell')) return;
+				const target = event.target as HTMLElement;
+				if (target.closest?.('.ttInsertZone, .ttDropWell')) return;
+				// nested frames: capture runs OUTERMOST-first, so an ancestor frame
+				// sees the click before the frame that was actually clicked. Only
+				// the innermost frame containing the click may handle it — anyone
+				// else lets the event keep capturing down.
+				const innermost = target.closest?.('[data-block-id]');
+				if (innermost && innermost !== event.currentTarget) return;
 				event.preventDefault();
 				event.stopPropagation();
 				chrome.onSelect(block.id, event.currentTarget as HTMLElement);
@@ -436,8 +471,10 @@ export type WebpageBlocksRendererProps = {
 	bare?: boolean;
 };
 
-const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean }) => {
-	const { block, componentsByRef, interactive, renderNative, chrome, insetNonNative, isRoot } = props;
+const BlockView = (
+	props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean; parentDirection?: ParentDirection }
+) => {
+	const { block, componentsByRef, interactive, renderNative, chrome, insetNonNative, isRoot, parentDirection = 'column' } = props;
 
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
@@ -464,7 +501,9 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; is
 			);
 		}
 	} else if (block.type === 'container') {
-		const children = <BlockList {...props} blocks={block.children || []} containerId={block.id} />;
+		const children = (
+			<BlockList {...props} blocks={block.children || []} containerId={block.id} parentDirection={block.direction || 'column'} />
+		);
 		if (block.direction === 'grid') {
 			body = (
 				<Grid templateColumns={`repeat(${block.columns || 2}, minmax(0, 1fr))`} gap={block.gap ?? 4} width="100%">
@@ -501,9 +540,12 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; is
 		// native sections render BARE in view mode — a full-width wrapper would
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
+		const inRow = parentDirection === 'row';
 		return (
 			<Box
-				width="100%"
+				width={inRow ? 'auto' : '100%'}
+				flex={inRow ? '1 1 0%' : undefined}
+				minWidth={inRow ? 0 : undefined}
 				alignSelf={alignSelfOf(block)}
 				maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
 				marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
@@ -513,20 +555,22 @@ const BlockView = (props: WebpageBlocksRendererProps & { block: WebpageBlock; is
 		);
 	}
 	return (
-		<BlockFrame block={block} chrome={chrome} locked={block.type === 'native'}>
+		<BlockFrame block={block} chrome={chrome} locked={block.type === 'native'} parentDirection={parentDirection}>
 			{body}
 		</BlockFrame>
 	);
 };
 
-const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | null }) => {
-	const { blocks, chrome, containerId } = props;
+const BlockList = (
+	props: WebpageBlocksRendererProps & { containerId: string | null; parentDirection?: ParentDirection }
+) => {
+	const { blocks, chrome, containerId, parentDirection = 'column' } = props;
 	const isRoot = containerId === null;
 	if (!chrome) {
 		return (
 			<>
 				{blocks.map((block) => (
-					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />
+					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection={parentDirection} />
 				))}
 			</>
 		);
@@ -535,7 +579,7 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 	// collide with sibling zones); the end of the root list keeps its zone
 	// visible so a page always invites another block
 	if (blocks.length === 0) {
-		return (
+		const well = (
 			<DropWell
 				containerId={containerId}
 				chrome={chrome}
@@ -543,18 +587,43 @@ const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | n
 				testIdPrefix={props.testIdPrefix}
 			/>
 		);
+		// in a grid the well must span every column, not sit in cell 1
+		return parentDirection === 'grid' ? <Box gridColumn="1 / -1">{well}</Box> : well;
 	}
+	if (parentDirection === 'grid') {
+		// grid children are CELLS — interleaved zones would occupy cells and
+		// shove real blocks into the wrong columns. Blocks flow in order and a
+		// trailing add-tile occupies the next free cell (click to insert, drop
+		// to move-to-end); reorder via drag onto the tile or inspector arrows.
+		return (
+			<>
+				{blocks.map((block) => (
+					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection="grid" />
+				))}
+				<DropWell
+					containerId={containerId}
+					index={blocks.length}
+					chrome={chrome}
+					label="add"
+					compact
+					testIdPrefix={props.testIdPrefix}
+				/>
+			</>
+		);
+	}
+	const vertical = parentDirection === 'row';
 	const zones: React.ReactNode[] = [
-		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} testIdPrefix={props.testIdPrefix} />
+		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} orientation={vertical ? 'vertical' : 'horizontal'} testIdPrefix={props.testIdPrefix} />
 	];
 	blocks.forEach((block, index) => {
-		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} />);
+		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection={parentDirection} />);
 		zones.push(
 			<InsertZone
 				key={`zone-${index + 1}`}
 				containerId={containerId}
 				index={index + 1}
 				chrome={chrome}
+				orientation={vertical ? 'vertical' : 'horizontal'}
 				alwaysVisible={isRoot && index === blocks.length - 1}
 				testIdPrefix={props.testIdPrefix}
 			/>

@@ -65,7 +65,9 @@ const GlobalBlocks = React.memo(function GlobalBlocks({
 		<Box
 			className="ttGlobalBlocks"
 			width="100%"
-			paddingTop={PAGE_TOP_CLEARANCE}
+			// the nav clearance alone puts content flush against the navbar —
+			// global blocks get an extra breath of air below it
+			paddingTop={`calc(${PAGE_TOP_CLEARANCE} + 14px)`}
 			paddingX={4}
 			background="var(--tt-surface, #fafafb)"
 		>
@@ -356,11 +358,19 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 
 	return (
 		<>
-			<Box width="100%" paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0} whiteSpace="normal">
+			<Box
+				width="100%"
+				paddingRight={drawerOpen ? [0, `${BUILDER_DRAWER_WIDTH}px`] : 0}
+				whiteSpace="normal"
+				// the canvas owns its wash: collapsed insert zones and shrunk nav
+				// clearance are transparent, and a white body bar between the
+				// global strip and the page would read as broken layout
+				background="var(--tt-surface, #fafafb)"
+			>
 				{/* 🌐 global region — blocks on every page, editable right here */}
 				<Box
 					width="100%"
-					paddingTop={PAGE_TOP_CLEARANCE}
+					paddingTop={`calc(${PAGE_TOP_CLEARANCE} + 14px)`}
 					paddingX={4}
 					paddingBottom={2}
 					background="var(--tt-surface, #fafafb)"
