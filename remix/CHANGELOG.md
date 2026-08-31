@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
 - **Moving preview and production aliases now self-heal stale client chunks.**
   Vite preload failures and React Router lazy imports share a one-reload
   session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,

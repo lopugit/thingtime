@@ -16,7 +16,8 @@ import {
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
-import { LongTextEditor } from '~/components/Editor/LongTextEditor';
+import { LongTextEditor, textToBlocks } from '~/components/Editor/LongTextEditor';
+import { blocksToText, isEditorJsDoc, type EditorJsDoc } from '~/components/Editor/editorJsValue';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
 import { canonicalLinkedImageUrls, createLinkedImageItem, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
@@ -32,7 +33,7 @@ import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from '
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
 // the viewer's avatar; expanded it grows type tabs (text/photos/marketplace/
 // thingtime), a block editor for the body (Editor.js — headings, lists,
-// quotes, checklists serialise to a plain string), image URL rows, listing
+// quotes, checklists, inline marks, whitespace, and style tunes), image URL rows, listing
 // fields, tag chips and a circle picker. The thingtime tab mounts the real
 // things editor (an embedded single-window EditorSplit) over the "New Thing"
 // draft branch of the global thingtime store (localforage-persisted, so
@@ -139,7 +140,12 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const [expanded, setExpanded] = React.useState(isComment || isEdit);
   const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
-  const [text, setText] = React.useState(editPost?.text || '');
+  const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
+    isEditorJsDoc(editPost?.richText)
+      ? editPost.richText
+      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
+  );
+  const text = blocksToText(postEditorValue.blocks);
 	// edit mode pre-fills the linked-image rows from the post's saved URLs
 	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>(() =>
 		(editPost?.images || []).map((url) => createLinkedImageItem(url))
@@ -318,7 +324,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		setSubmissionUncertain(false);
     setExpanded(isComment);
     setType('text');
-    setText('');
+    setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
     setComposerSession((session) => session + 1);
 		setLinkedImages([]);
     setTitle('');
@@ -353,6 +359,10 @@ export const PostComposer = (props: PostComposerProps) => {
 			: null;
 		const canonicalImages = showPhotos ? validImages : [];
 		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		const canonicalText = blocksToText(postEditorValue.blocks).trim();
+		const canonicalRichText: EditorJsDoc | null = canonicalText
+			? { ...postEditorValue, kind: 'rich-text' }
+			: null;
 		// gallery layout: auto stores null; spans are pruned to the visual
 		// attachments actually going out with this post
 		const visualIdsForLayout = (isEdit ? editAttachments : attachmentSnapshot.attachments)
@@ -377,7 +387,8 @@ export const PostComposer = (props: PostComposerProps) => {
 						ownerId: user.id,
 						crystal: {
 							type,
-							text: text.trim(),
+							text: canonicalText,
+							richText: canonicalRichText,
 							images: canonicalImages,
 							listing: canonicalListing,
 							thing: canonicalThing,
@@ -389,10 +400,11 @@ export const PostComposer = (props: PostComposerProps) => {
 				  }
 				: null;
 		const currentPayload: Record<string, unknown> = {
-        type,
-        text: text.trim(),
-        tags: parsedTags
-      };
+			type,
+			text: canonicalText,
+			richText: canonicalRichText,
+			tags: parsedTags
+		};
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
@@ -453,7 +465,8 @@ export const PostComposer = (props: PostComposerProps) => {
 					id: editPost!.id,
 					crystal: {
 						type,
-						text: text.trim(),
+						text: canonicalText,
+						richText: canonicalRichText,
 						images: canonicalImages,
 						listing: canonicalListing,
 						thing: canonicalThing,
@@ -614,8 +627,10 @@ export const PostComposer = (props: PostComposerProps) => {
         <Box flex="1" minWidth={0}>
           <LongTextEditor
             key={composerSession}
-            value={text}
-            onValueChange={(next) => setText(typeof next === 'string' ? next : '')}
+						value={postEditorValue}
+						onValueChange={(next) => {
+							if (isEditorJsDoc(next)) setPostEditorValue(next);
+						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
           />

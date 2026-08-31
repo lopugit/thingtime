@@ -2676,6 +2676,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       over generic image MIME/extensions (`🖼️`), ordinary photos/images use
       `🏞️`, known media/document/archive/install families are distinct, and an
       unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] Create and edit a Text post whose body contains hard line breaks,
+      repeated spaces, inline bold/italic/highlight/link marks, and at least
+      one block style tune. Verify the exact presentation survives save and
+      reload in Feed, profile, nested repost, comment, and `/post/:id` views at
+      desktop and mobile widths; legacy plain-text posts must still preserve
+      newline breaks without horizontal overflow.
 - [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
       a client change, then foreground/focus the old tab. It fetches the live
       alias HTML without cache and reloads only when the hashed `index-*.js`
