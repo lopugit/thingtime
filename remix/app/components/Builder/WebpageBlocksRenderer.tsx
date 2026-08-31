@@ -311,20 +311,57 @@ const BlockFrame = ({
 	chrome,
 	locked,
 	parentDirection = 'column',
+	containerId = null,
+	indexInParent = 0,
 	children
 }: {
 	block: WebpageBlock;
 	chrome: BuilderChrome;
 	locked?: boolean;
 	parentDirection?: ParentDirection;
+	// where this block lives — lets grid cells act as drop targets
+	// (drop = insert before this cell; grids have no between-cell zones)
+	containerId?: string | null;
+	indexInParent?: number;
 	children: React.ReactNode;
 }) => {
 	const hovered = chrome.hoverId === block.id;
 	const selected = chrome.selectedId === block.id;
+	const [dropTarget, setDropTarget] = React.useState(false);
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
 	const inRow = parentDirection === 'row';
+	const gridDropProps =
+		parentDirection === 'grid'
+			? {
+					onDragOver: (event: React.DragEvent) => {
+						if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
+							event.preventDefault();
+							event.stopPropagation();
+							setDropTarget(true);
+						}
+					},
+					onDragLeave: () => setDropTarget(false),
+					onDrop: (event: React.DragEvent) => {
+						setDropTarget(false);
+						const id = event.dataTransfer.getData(DRAG_MIME);
+						if (id && id !== block.id) {
+							event.preventDefault();
+							event.stopPropagation();
+							chrome.onMove(id, containerId, indexInParent);
+							return;
+						}
+						const files = Array.from(event.dataTransfer.files || []);
+						if (files.length && chrome.onDropFiles) {
+							event.preventDefault();
+							event.stopPropagation();
+							chrome.onDropFiles(files, containerId, indexInParent);
+						}
+					}
+			  }
+			: {};
 	return (
 		<Box
+			{...gridDropProps}
 			className="ttBlockFrame"
 			data-block-id={block.id}
 			position="relative"
@@ -337,7 +374,15 @@ const BlockFrame = ({
 			maxWidth={block.maxWidth ? `${block.maxWidth}px` : undefined}
 			marginX={block.align === 'center' && block.maxWidth ? 'auto' : undefined}
 			style={cssRecordToStyle(block.css)}
-			outline={selected ? `2px solid ${tone}` : hovered ? `1px dashed ${tone}` : '1px dashed transparent'}
+			outline={
+				dropTarget
+					? `2px dashed ${tone}`
+					: selected
+						? `2px solid ${tone}`
+						: hovered
+							? `1px dashed ${tone}`
+							: '1px dashed transparent'
+			}
 			outlineOffset="2px"
 			borderRadius="var(--tt-radius-xs, 7px)"
 			cursor="pointer"
@@ -506,9 +551,26 @@ export type WebpageBlocksRendererProps = {
 };
 
 const BlockView = (
-	props: WebpageBlocksRendererProps & { block: WebpageBlock; isRoot?: boolean; parentDirection?: ParentDirection }
+	props: WebpageBlocksRendererProps & {
+		block: WebpageBlock;
+		isRoot?: boolean;
+		parentDirection?: ParentDirection;
+		containerId?: string | null;
+		indexInParent?: number;
+	}
 ) => {
-	const { block, componentsByRef, interactive, renderNative, chrome, insetNonNative, isRoot, parentDirection = 'column' } = props;
+	const {
+		block,
+		componentsByRef,
+		interactive,
+		renderNative,
+		chrome,
+		insetNonNative,
+		isRoot,
+		parentDirection = 'column',
+		containerId = null,
+		indexInParent = 0
+	} = props;
 
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
@@ -662,7 +724,14 @@ const BlockView = (
 		);
 	}
 	return (
-		<BlockFrame block={block} chrome={chrome} locked={block.type === 'native'} parentDirection={parentDirection}>
+		<BlockFrame
+			block={block}
+			chrome={chrome}
+			locked={block.type === 'native'}
+			parentDirection={parentDirection}
+			containerId={containerId}
+			indexInParent={indexInParent}
+		>
 			{body}
 		</BlockFrame>
 	);
@@ -701,11 +770,19 @@ const BlockList = (
 		// grid children are CELLS — interleaved zones would occupy cells and
 		// shove real blocks into the wrong columns. Blocks flow in order and a
 		// trailing add-tile occupies the next free cell (click to insert, drop
-		// to move-to-end); reorder via drag onto the tile or inspector arrows.
+		// to move-to-end); dropping ONTO a cell inserts before it.
 		return (
 			<>
-				{blocks.map((block) => (
-					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection="grid" />
+				{blocks.map((block, index) => (
+					<BlockView
+						key={block.id}
+						{...props}
+						block={block}
+						isRoot={isRoot}
+						parentDirection="grid"
+						containerId={containerId}
+						indexInParent={index}
+					/>
 				))}
 				<DropWell
 					containerId={containerId}
