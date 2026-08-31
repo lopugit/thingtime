@@ -19,6 +19,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+
 - **Moving preview and production aliases now self-heal stale client chunks.**
   Vite preload failures and React Router lazy imports share a one-reload
   session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,

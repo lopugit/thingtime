@@ -97,6 +97,7 @@ export const CI_CONTROL_THINGTIME = [
   'ci-workflow-run',
   'ci-deployment',
   'ci-preview',
+  'ci-preview-policy',
   'ci-dispatch',
   'ci-event'
 ] as const;
@@ -1334,6 +1335,7 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),
   ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
   ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
+  ciEntitySchema('ci-preview-policy', 'CI preview policy', 'Admin-only develop and production-data preview choices for one pull request.'),
   ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
   {
     id: 'ci-event',

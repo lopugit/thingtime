@@ -130,7 +130,7 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
-CI Control also supports **Feature Stacks**. An admin checks 2–20 open feature
+CI Control also supports **Feature Stacks**. An admin checks one or more open feature
 PRs in the exact order they should be combined, chooses one or two live target
 branches (for example `develop` and `main`), confirms the batch, and dispatches
 it once. The server snapshots every selected same-repository PR head SHA. The
@@ -224,6 +224,29 @@ GitHub App credentials, provider-router secret, and Vercel runtime identity are
 all available; its API refuses to select Vercel before that complete capability
 is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
+
+The selected-PR detail panel also has independent, durable **Develop** and
+**Production / main** preview switches. Enabling either switch deploys the
+exact current same-repository PR SHA through Vercel; later `synchronize`,
+reopen, and ready-for-review deliveries rebuild every enabled environment.
+Production access requires an explicit admin acknowledgement and uses the
+project's Production environment values, but `autoAssignCustomDomains` remains
+false: the generated immutable `*.vercel.app` URL never replaces or aliases
+`thingtime.com`. Closing the PR removes only deployments carrying Thingtime's
+PR/environment ownership markers. Configure these server-only deployment
+values in every origin that hosts CI Control (placeholders only):
+
+```sh
+VERCEL_API_TOKEN="<Vercel-API-token>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+```
+
+Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
+only for the Develop switch; the other five values are required for both.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
@@ -1618,13 +1641,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` is reserved for a separate future production-preview
-controller. Do not point the develop controller at that suffix, copy the
-production S3 role into generic Preview, or let ordinary Vercel feature/fork
-previews assume the production AWS role. A production-preview controller must have its
-own trusted actors, protected control environment, exact production OIDC trust,
-deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
-activated.
+`*.previews.thingtime.com` remains unassigned. Admin CI Control can now create
+an opt-in production-environment preview for a trusted same-repository PR, but
+it deliberately keeps `autoAssignCustomDomains: false` and exposes only the
+generated immutable `*.vercel.app` deployment URL. Do not point the develop
+controller at that suffix, copy the production S3 role into generic Preview,
+or let ordinary Vercel feature/fork previews assume the production AWS role.
+Any future custom production-preview namespace still needs its own protected
+identity, exact production OIDC trust, cleanup, CORS probe, and bucket CORS
+rule before activation.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as
