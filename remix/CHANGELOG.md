@@ -55,6 +55,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
+  add, name, rotate, enable, remove, and reorder up to eight write-only Claude
+  Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only
+  redacted metadata to browsers, and delivers the ordered enabled bundle to a
+  fresh replay-protected HMAC-authenticated controller run. Lopu masks the
+  bundle, keeps it only for that run, and walks the array on classified account
+  capacity/credential failures, removing the need for one GitHub secret name
+  per Claude account. — Codex (AI), 2026-08-31
+
 - **Admin CI Control now batches features as a verified multi-target Feature
   Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
   live target branches, and dispatch once. The server snapshots exact live
