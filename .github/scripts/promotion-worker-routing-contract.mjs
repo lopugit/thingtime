@@ -82,8 +82,13 @@ const durableFleetQueue =
   /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
 assert.equal(
   [...workflow.matchAll(durableFleetQueue)].length,
-  4,
-  "every Feature Stack, review, promotion, and conflict worker uses the durable single-Lopu queue",
+  3,
+  "Feature Stack, review, and promotion workers use the durable ordinary Lopu queue",
+);
+assert.match(
+  workflow,
+  /matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*lopu-priority-main-develop-\{0\}[\s\S]*lopu-agent-fleet-\{0\}/,
+  "the conflict worker selects a dedicated serialized lane only for the standing synchronizer",
 );
 assert.match(workflow, /feature_stack_plan:\s+name: Validate the immutable Feature Stack/);
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);

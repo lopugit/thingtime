@@ -547,6 +547,21 @@ function assertWorkflowSource() {
     "priority synchronizer dispatches remain observable in the run log",
   );
   assert.match(
+    handoffBlock,
+    /priority_fleet_group="lopu-priority-main-develop-\$REPO"[\s\S]*?priority_owned_numbers[\s\S]*?\$ordinary \+ \$priority \| sort \| unique/u,
+    "detectors deduplicate exact synchronizer owners from the independent priority queue",
+  );
+  assert.match(
+    handoffBlock,
+    /grep -q 'HTTP 404'[\s\S]*?Could not read the priority synchronizer queue; deferring conflict dispatch/u,
+    "a missing priority group starts empty while other queue-read failures defer safely",
+  );
+  assert.match(
+    handoffBlock,
+    /priority_candidates="\$\(jq -c '[\s\S]*?sync\/main-into-develop[\s\S]*?ordinary_candidates="\$\(jq -c '[\s\S]*?available_slots[\s\S]*?\$priority \+ \$ordinary/u,
+    "priority synchronizers remain dispatchable when the ordinary Lopu fleet is full",
+  );
+  assert.match(
     source,
     /for priority_sync in true false; do[\s\S]*sort_by\(\.number\)[\s\S]*unique_by\(\.number\)[\s\S]*range\(0; length; 200\)/u,
     "each priority partition remains a canonical, bounded, number-sorted batch",
@@ -555,6 +570,11 @@ function assertWorkflowSource() {
     source.match(/pr_batch_b64:\$pr_batch_b64/g)?.length,
     2,
     "detector handoff and cascade both carry canonical PR batches",
+  );
+  assert.match(
+    resolveBlock,
+    /group: >-[\s\S]*?matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*?matrix\.pr\.base == 'develop'[\s\S]*?lopu-priority-main-develop-\{0\}[\s\S]*?lopu-agent-fleet-\{0\}[\s\S]*?queue: max[\s\S]*?cancel-in-progress: false/u,
+    "only the standing synchronizer bypasses the ordinary serialized model backlog",
   );
   // Per-PR retry intent lives INSIDE the canonical batch, so both dispatch
   // payloads pin the top-level flag to the literal false. Binding the lowercase

@@ -110,12 +110,15 @@ candidate to the automation-owned `sync/main-into-develop` branch and opens or
 refreshes a PR from that branch. It never uses protected `main` as the writable
 PR head. The ordinary Lopu conflict lane can therefore merge `develop` into
 the safe head, resolve it, rebuild Graphify, and publish without rewriting
-either primary branch. As soon as GitHub reports that exact published head as
-mergeable, the sync lane merges the PR explicitly; it does not rely on native
-auto-merge, which GitHub refuses to arm when `develop` has no protected-branch
-rule. The merger revalidates the PR repository, head/base names, all three
-branch SHAs, and that the head contains live `main`, then submits an exact-head
-merge and confirms the resulting `develop` still contains that `main` commit.
+either primary branch. That exact automation-owned branch uses an independent
+serialized resolver lane, so an older ordinary-conflict backlog cannot delay
+repository synchronization. As soon as GitHub reports that exact published
+head as mergeable, the sync lane merges the PR explicitly; it does not rely on
+native auto-merge, which GitHub refuses to arm when `develop` has no
+protected-branch rule. The merger revalidates the PR repository, head/base
+names, all three branch SHAs, and that the head contains live `main`, then
+submits an exact-head merge and confirms the resulting `develop` still contains
+that `main` commit.
 It polls through GitHub PR-object hydration lag while checking the live sync
 ref directly, and treats an ambiguous transient merge response as successful
 only after the merged PR and resulting `develop` ancestry prove the commit
