@@ -2348,6 +2348,13 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       snapshot is unavailable, load a saved stack: every saved PR number stays
       visible as restoring, its count remains honest, and the rows rehydrate in
       order when the live snapshot recovers without another click.
+- [ ] Force the CI snapshot reader to raise MongoDB code 292 and confirm the API
+      returns a private 503 with `Retry-After` and
+      `code: ci_dashboard_query_capacity`. The browser preserves cached rows,
+      coalesces overlapping 5s/30s refreshes, backs off 30s → 60s → 120s up to
+      five minutes, and a manual Refresh bypasses that wait. Runtime logs contain
+      `ci_dashboard_query_failed`, the route, and Mongo code 292 without query,
+      namespace, credential, or document details.
 - [ ] Anonymous and non-admin callers receive the standard admin denial from
       all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
       them and the webhook routes do not accept a browser session as authority.

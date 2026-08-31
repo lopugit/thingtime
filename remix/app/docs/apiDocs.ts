@@ -81,7 +81,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
-    featureVersion: '1.0.1',
+    featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
@@ -111,7 +111,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } },
+      {
+        status: 503,
+        description: 'A MongoDB blocking sort exceeded its memory ceiling. Retry-After is present and the client keeps its last-known cached snapshot.',
+        headers: { 'Retry-After': '30' },
+        body: {
+          ok: false,
+          error: 'CI dashboard data is temporarily unavailable. Last-known cached data remains safe to use.',
+          code: 'ci_dashboard_query_capacity',
+          retryable: true
+        }
+      }
     ]
   }),
   endpoint({
