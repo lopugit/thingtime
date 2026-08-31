@@ -492,6 +492,16 @@ function assertWorkflowSource() {
     readRetryCopies,
     "every gh_read_retry copy also treats transport-level resets as retryable",
   );
+  // A body truncated after a clean status line surfaces as gh's encoding/json
+  // decode error, not as a transport string, so the status-and-reset predicate
+  // still classified it as fatal (run 33316907281 reported red on #92 for an
+  // upstream blip). Pin the decode message per copy for the same reason the
+  // reset pattern is pinned: a copy that drops it silently restores the outage.
+  assert.equal(
+    source.match(/\|unexpected end of JSON input\|/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy retries a response body that ended mid-document",
+  );
   // Declaring the pattern is not the same as branching on it: a copy that
   // keeps `transport=` but drops the predicate reintroduces the exact
   // outage. Assert the predicate is actually wired into every retry branch,

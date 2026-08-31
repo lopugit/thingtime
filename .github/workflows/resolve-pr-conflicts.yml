@@ -1318,14 +1318,24 @@ jobs:
           # AND transport-level resets: a connection torn down before a status
           # line is parsed is the same recoverable edge failure, it just never
           # carries an HTTP code, so status-only matching made a retryable blip
-          # fatal. Keep every notice on stderr so command-substitution JSON
-          # stays clean, and surface auth/schema/permission failures
+          # fatal. A body torn down AFTER a clean status line is the same
+          # failure one layer up: run 33316907281 lost the PR inventory to
+          # `unexpected end of JSON input`, the encoding/json message gh emits
+          # for a response that ended mid-document. It reached the classifier as
+          # a decode error rather than a transport string, so the single attempt
+          # was fatal and the detector reported red on #92 for an upstream blip.
+          # Match that decode message too: only a body that stopped early
+          # produces it, while a genuinely malformed payload (an HTML error
+          # page, an auth/permission JSON error) fails with a different message
+          # and still surfaces immediately. Keep every notice on stderr so
+          # command-substitution JSON stays clean, and surface
+          # auth/schema/permission failures
           # immediately. Mutating API calls deliberately do not use this helper
           # because a blind retry could duplicate a side effect; every read
           # routed here is idempotent, so replaying a torn-down request is safe.
           gh_read_retry() {
             local attempt output errors delay transport
-            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -2906,7 +2916,7 @@ jobs:
           # stdout so command-substitution JSON remains parseable.
           gh_read_retry() {
             local attempt delay output errors transport
-            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -3938,7 +3948,7 @@ jobs:
 
           gh_read_retry() {
             local attempt delay output errors transport
-            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
             output="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
