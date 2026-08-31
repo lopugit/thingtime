@@ -65,6 +65,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **[Admin CI refreshes now fail softly and recover without a request
+  storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
+  The protected snapshot route turns MongoDB blocking-sort memory failures into
+  a retryable, private 503 with stable route/error-code telemetry, while the UI
+  keeps its cached state, deduplicates overlapping pollers, and exponentially
+  backs off automatic retries up to five minutes. — Codex (AI), 2026-08-31
+
 - **Passkeys and the Admin CI snapshot now recover from the two mobile failure
   modes seen in production.** Registration and login options require the same
   on-device user verification enforced by the WebAuthn verifier, so a valid

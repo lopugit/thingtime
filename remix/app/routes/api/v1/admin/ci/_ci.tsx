@@ -3,6 +3,7 @@ import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { ciProviderReadiness } from '~/api/utils/ciControl/providerReadiness';
 import { ciAdminPreviewReadiness } from '~/api/utils/ciControl/adminPreviewDeployments';
+import { ciDashboardCapacityFailure } from '~/api/utils/ciControl/dashboardFailure';
 import { listCiDashboard } from '~/api/utils/ciControl/store';
 
 export const loader = ({ request }: { request: Request }) =>
@@ -11,7 +12,18 @@ export const loader = ({ request }: { request: Request }) =>
     if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
     const url = new URL(request.url);
     const requestedLimit = Number(url.searchParams.get('limit') ?? 100);
-    const dashboard = await listCiDashboard({ limit: requestedLimit });
+    let dashboard: Awaited<ReturnType<typeof listCiDashboard>>;
+    try {
+      dashboard = await listCiDashboard({ limit: requestedLimit });
+    } catch (error) {
+      const failure = ciDashboardCapacityFailure(error);
+      if (!failure) throw error;
+      console.error('[ci-control-dashboard]', failure.log);
+      return json(failure.body, {
+        status: failure.status,
+        headers: { 'Retry-After': String(failure.retryAfterSeconds) }
+      });
+    }
     const readiness = ciProviderReadiness();
     const previewReadiness = ciAdminPreviewReadiness();
     return json({

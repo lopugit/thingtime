@@ -66,6 +66,13 @@ import {
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { resolveFeatureStackSources, sameNumberOrder } from './featureStackDraftCore';
+import {
+	CI_DASHBOARD_LIVE_POLL_INTERVAL_MS,
+	CI_DASHBOARD_POLL_INTERVAL_MS,
+	CiDashboardSingleFlight,
+	ciDashboardRetryDelayMs,
+	shouldPollCiDashboard
+} from './dashboardPollingCore';
 import { featureStackTargetsForSource } from '~/api/utils/ciControl/featureStackRoutingCore';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -1052,6 +1059,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [loading, setLoading] = React.useState(!response);
   const [refreshing, setRefreshing] = React.useState(false);
   const [loadFailed, setLoadFailed] = React.useState(false);
+	const [nextRetryAt, setNextRetryAt] = React.useState<number | null>(null);
+	const loadSingleFlightRef = React.useRef(new CiDashboardSingleFlight());
+	const loadFailureCountRef = React.useRef(0);
+	const nextRetryAtRef = React.useRef(0);
   const [query, setQuery] = React.useState('');
 	const [statusFilters, setStatusFilters] = React.useState<string[]>(() => [...ALL_PULL_REQUEST_STATUS_FILTER_IDS]);
   const [selectedFeatureId, setSelectedFeatureId] = React.useState<string | null>(response?.dashboard.features[0]?.id ?? null);
@@ -1116,24 +1127,43 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 	}, []);
 
 	const load = React.useCallback(
-		async (options?: { signal?: AbortSignal; foreground?: boolean }) => {
-    if (options?.foreground) setRefreshing(true);
-    try {
-				const next = await apiRef.current.v1.admin.ciControl({ limit: 0 }, { signal: options?.signal });
-      if (!next?.ok) throw new Error('CI snapshot unavailable');
-      setResponse(next);
-      writeLocalCache(cacheKey, next);
-      setLoadFailed(false);
-      setSelectedFeatureId((current) =>
-					current && next.dashboard.features.some((feature: CiEntity) => feature.id === current) ? current : next.dashboard.features[0]?.id ?? null
-      );
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+		(options?: { signal?: AbortSignal; foreground?: boolean }): Promise<void> => {
+			const foreground = options?.foreground === true;
+			if (!shouldPollCiDashboard(Date.now(), nextRetryAtRef.current, foreground)) return Promise.resolve();
+			const inFlight = loadSingleFlightRef.current.peek();
+			if (inFlight) {
+				if (!foreground) return inFlight;
+				setRefreshing(true);
+				return inFlight.finally(() => setRefreshing(false));
+			}
+			if (foreground) setRefreshing(true);
+			return loadSingleFlightRef.current.run(async () => {
+				try {
+					const next = await apiRef.current.v1.admin.ciControl({ limit: 0 }, { signal: options?.signal });
+					if (!next?.ok) throw new Error('CI snapshot unavailable');
+					setResponse(next);
+					writeLocalCache(cacheKey, next);
+					loadFailureCountRef.current = 0;
+					nextRetryAtRef.current = 0;
+					setNextRetryAt(null);
+					setLoadFailed(false);
+					setSelectedFeatureId((current) =>
+						current && next.dashboard.features.some((feature: CiEntity) => feature.id === current)
+							? current
+							: next.dashboard.features[0]?.id ?? null
+					);
+				} catch (error) {
+					if (error instanceof Error && error.name === 'AbortError') return;
+					loadFailureCountRef.current += 1;
+					const retryAt = Date.now() + ciDashboardRetryDelayMs(loadFailureCountRef.current, error);
+					nextRetryAtRef.current = retryAt;
+					setNextRetryAt(retryAt);
+					setLoadFailed(true);
+				} finally {
+					setLoading(false);
+					if (foreground) setRefreshing(false);
+				}
+			});
 		},
 		[cacheKey]
 	);
@@ -1144,7 +1174,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		loadSavedFeatureStacks({ signal: controller.signal }).catch(() => undefined);
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') load();
-    }, 30_000);
+    }, CI_DASHBOARD_POLL_INTERVAL_MS);
     return () => {
       controller.abort();
       window.clearInterval(interval);
@@ -1345,7 +1375,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			Promise.allSettled([load(), loadSavedFeatureStacks()]).finally(() => {
 				inFlight = false;
 			});
-		}, 5000);
+		}, CI_DASHBOARD_LIVE_POLL_INTERVAL_MS);
 		return () => window.clearInterval(interval);
 	}, [featureStackLiveSnapshot?.live, load, loadSavedFeatureStacks]);
 	React.useEffect(() => {
@@ -1664,7 +1694,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       {loadFailed ? (
         <Alert status="warning" mb={4} borderRadius="md" fontSize="sm">
           <AlertIcon />
-          Live refresh failed. Last-known cached state remains visible and will retry automatically.
+          Live refresh failed. Last-known cached state remains visible and will retry
+				{nextRetryAt
+					? ` after ${new Date(nextRetryAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`
+					: ' automatically'}.
         </Alert>
       ) : null}
 

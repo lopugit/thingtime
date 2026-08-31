@@ -111,7 +111,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } },
+      {
+        status: 503,
+        description: 'A MongoDB blocking sort exceeded its memory ceiling. Retry-After is present and the client keeps its last-known cached snapshot.',
+        headers: { 'Retry-After': '30' },
+        body: {
+          ok: false,
+          error: 'CI dashboard data is temporarily unavailable. Last-known cached data remains safe to use.',
+          code: 'ci_dashboard_query_capacity',
+          retryable: true
+        }
+      }
     ]
   }),
   endpoint({
