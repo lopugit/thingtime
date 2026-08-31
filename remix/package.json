@@ -49,7 +49,7 @@
     "test:messenger": "node --import tsx --test app/api/utils/messenger/*.test.ts",
     "test:mcp-demo": "node --import tsx --test app/routes/docs/mcpDemoCore.test.ts",
     "test:pat-scopes": "node --import tsx --test app/api/utils/auth/patScopes.test.ts",
-    "test:preview-build": "node --import tsx --test app/utils/previewBuildFreshness.test.ts",
+    "test:preview-build": "node --import tsx --test app/utils/previewBuildFreshness.test.ts app/utils/staleChunkRecovery.test.ts",
     "test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts",
     "test:quota": "node --import tsx --test app/api/utils/things/quotaCore.test.ts",
     "test:rate-limit": "node --import tsx --test app/api/utils/rateLimit/*.test.ts",
