@@ -11,6 +11,7 @@ import {
   type CiWorkflowKey
 } from './automationPolicy';
 import type { CiPreviewEnvironment, CiPreviewPolicy } from './previewPolicyCore';
+import { CI_DASHBOARD_UPDATED_SORT, ciDashboardKindFilter } from './dashboardQueryCore';
 import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export const CI_THINGTIME = CI_CONTROL_THINGTIME;
@@ -227,7 +228,7 @@ export const upsertCiEntity = async (
 };
 
 export const listCiPreviewPolicies = async (repository: string): Promise<CiPreviewPolicy[]> => {
-  const rows = await readKind('ci-preview-policy', 500);
+  const rows = await readKind('ci-preview-policy', 500, repository);
   return rows
     .filter((row: any) => row.repository === repository)
     .map((row: any) => ({
@@ -287,11 +288,11 @@ export const setCiPreviewPolicy = async (input: {
   };
 };
 
-const readKind = async (kind: CiThingtime, limit: number) => {
+const readKind = async (kind: CiThingtime, limit: number, repository: string) => {
   const things = await getHomeThingsCollection();
   const docs = await things
-    .find({ thingtime: kind })
-    .sort({ updatedAt: -1, shareId: 1 })
+    .find(ciDashboardKindFilter(kind, repository))
+    .sort(CI_DASHBOARD_UPDATED_SORT)
     .limit(limit)
     .toArray();
   return docs.map(publicCrystal);
@@ -457,17 +458,17 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
   const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
   const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, previewPolicies, dispatches, events] =
     await Promise.all([
-      readKind('ci-repository', 20),
+      readKind('ci-repository', 20, repository),
       listCiAutomationPolicies(repository),
-      readKind('ci-feature', limit),
-      readKind('ci-branch', limit),
-      readKind('ci-pull-request', limit),
-      readKind('ci-workflow-run', limit),
-      readKind('ci-deployment', limit),
-      readKind('ci-preview', limit),
+      readKind('ci-feature', limit, repository),
+      readKind('ci-branch', limit, repository),
+      readKind('ci-pull-request', limit, repository),
+      readKind('ci-workflow-run', limit, repository),
+      readKind('ci-deployment', limit, repository),
+      readKind('ci-preview', limit, repository),
       listCiPreviewPolicies(repository),
-      readKind('ci-dispatch', limit),
-      readKind('ci-event', eventLimit)
+      readKind('ci-dispatch', limit, repository),
+      readKind('ci-event', eventLimit, repository)
     ]);
 
   const statusCount = (values: any[], accepted: string[]) =>
