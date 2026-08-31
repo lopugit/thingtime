@@ -22,7 +22,8 @@
       and verify the learned ordering persists locally.
 - [ ] With a large mixed application/file index containing many one-token matches, search `raycast stop`; verify the
       separator-equivalent `raycast-stop` application is surfaced above `raycast-start`, `raycast-status`, and noisy
-      files instead of being dropped by the filesystem candidate limit.
+      files. Run the indexer regression with a one-result output limit and verify all 129 matching FTS candidates are
+      evaluated before ranking. Type several refinements quickly and verify only the active and latest query complete.
 - [ ] Create an extensionless executable named `raycast-start`, a hidden file, a broken symlink, and a nested `.app`
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.

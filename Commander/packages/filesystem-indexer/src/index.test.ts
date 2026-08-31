@@ -67,6 +67,30 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
+  it('runs the active query and only the latest queued query', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/slow-query-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-latest-query.sqlite3',
+      prefixArguments: [fixture],
+    });
+    try {
+      const request = (query: string) => ({ query, kinds: ['file' as const], limit: 10 });
+      const active = client.query(request('active'));
+      const superseded = client.query(request('superseded'));
+      const latest = client.query(request('latest'));
+
+      await expect(superseded).resolves.toEqual({ records: [] });
+      await expect(active).resolves.toMatchObject({ records: [{ name: 'active.txt' }] });
+      await expect(latest).resolves.toMatchObject({ records: [{ name: 'latest.txt' }] });
+    } finally {
+      await client.close();
+    }
+  });
+
   it('passes standalone machine resource limits through the JSON-lines protocol', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({

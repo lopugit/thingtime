@@ -1829,7 +1829,10 @@ is fixed, and cite the checklist you ran in the PR description.
       unrelated query.
 - [ ] On a large mixed application/file index, search `raycast stop`; verify
       the separator-equivalent `raycast-stop` application is present above
-      `raycast-start`, `raycast-status`, and noisy one-token file matches.
+      `raycast-start`, `raycast-status`, and noisy one-token file matches. Run
+      the indexer regression with a one-result output limit and verify all 129
+      matching FTS candidates are evaluated before ranking; rapid refinements
+      must keep only the active and latest uncapped query in flight.
 - [ ] Open Search Settings. Verify hidden files and unlimited entries are the
       migrated defaults, the SQLite database footprint uses B/KB/MB/GB, and a
       custom cap persists and can be cleared back to Unlimited. Index a hidden

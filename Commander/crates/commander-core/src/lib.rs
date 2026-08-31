@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_FIELD_CHARS: usize = 512;
@@ -457,6 +458,9 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
     if query.len() > candidate.len() {
         return typo_match(query, &candidate);
     }
+    if !contains_subsequence(query, &candidate) {
+        return typo_match(query, &candidate);
+    }
 
     let mut rows = vec![vec![None; candidate.len()]; query.len()];
 
@@ -616,6 +620,19 @@ pub fn fuzzy_text_score(query: &str, candidate: &str) -> Option<u64> {
     match_text(&fold_query(query), candidate).map(|text_match| text_match.score)
 }
 
+fn contains_subsequence(query: &[char], candidate: &[FoldedGlyph]) -> bool {
+    let mut query_index = 0;
+    for glyph in candidate {
+        if glyph.value == query[query_index] {
+            query_index += 1;
+            if query_index == query.len() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 #[derive(Clone, Copy)]
 struct EditCell {
     cost: usize,
@@ -643,6 +660,12 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         .map(|(index, glyph)| (glyph.value, index))
         .collect();
     if compact_candidate.is_empty() {
+        return None;
+    }
+    let maximum_distance = maximum_typo_distance(compact_query.len());
+    if character_overlap(&compact_query, &compact_candidate)
+        < compact_query.len().saturating_sub(maximum_distance)
+    {
         return None;
     }
 
@@ -718,7 +741,7 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
                 .then_with(|| left.start.cmp(&right.start))
         },
     )?;
-    if best.cost > maximum_typo_distance(compact_query.len()) || best.start >= end {
+    if best.cost > maximum_distance || best.start >= end {
         return None;
     }
     let start_glyph = compact_candidate[best.start].1;
@@ -730,6 +753,21 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         score: score.max(1),
         ranges: ranges_for_indices(candidate, &(start_glyph..=end_glyph).collect::<Vec<_>>()),
     })
+}
+
+fn character_overlap(query: &[char], candidate: &[(char, usize)]) -> usize {
+    let mut query_counts = HashMap::new();
+    for character in query {
+        *query_counts.entry(*character).or_insert(0_usize) += 1;
+    }
+    let mut candidate_counts = HashMap::new();
+    for (character, _) in candidate {
+        *candidate_counts.entry(*character).or_insert(0_usize) += 1;
+    }
+    query_counts
+        .into_iter()
+        .map(|(character, count)| count.min(candidate_counts.get(&character).copied().unwrap_or(0)))
+        .sum()
 }
 
 fn best_edit_cell(left: EditCell, right: EditCell, _end: usize) -> EditCell {

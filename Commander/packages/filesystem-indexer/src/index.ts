@@ -152,6 +152,14 @@ interface PendingRequest {
   onProgress?: (progress: IndexProgress) => void;
 }
 
+interface QueuedQuery {
+  key: string;
+  request: QueryRequest;
+  promise: Promise<QueryResponse>;
+  resolve(value: QueryResponse): void;
+  reject(error: Error): void;
+}
+
 export interface FileSystemIndexerClientOptions {
   binaryPath: string;
   databasePath: string;
@@ -185,6 +193,8 @@ export class FileSystemIndexerClient {
   // an accidental concurrent caller joins the same work instead of queueing a
   // duplicate whole-tree scan behind it.
   #indexOperation: Promise<IndexReport> | undefined;
+  #queryOperation: { key: string; promise: Promise<QueryResponse> } | undefined;
+  #queuedQuery: QueuedQuery | undefined;
   #restartAttempts = 0;
 
   constructor(options: FileSystemIndexerClientOptions) {
@@ -222,7 +232,19 @@ export class FileSystemIndexerClient {
   }
 
   query(request: QueryRequest): Promise<QueryResponse> {
-    return this.#request<QueryResponse>({ operation: 'query', request });
+    const key = JSON.stringify(request);
+    if (!this.#queryOperation) return this.#beginQuery(key, request);
+    if (this.#queryOperation.key === key) return this.#queryOperation.promise;
+    if (this.#queuedQuery?.key === key) return this.#queuedQuery.promise;
+    this.#queuedQuery?.resolve({ records: [] });
+    let resolve!: (value: QueryResponse) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<QueryResponse>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    this.#queuedQuery = { key, request, promise, resolve, reject };
+    return promise;
   }
 
   lookup(path: string, kind: IndexKind): Promise<IndexRecord | null> {
@@ -238,6 +260,8 @@ export class FileSystemIndexerClient {
     const child = this.#process;
     this.#process = undefined;
     this.#failPending(new Error('Filesystem indexer closed'));
+    this.#queuedQuery?.reject(new Error('Filesystem indexer closed'));
+    this.#queuedQuery = undefined;
     if (!child || child.exitCode !== null) return;
     child.kill('SIGTERM');
     await new Promise<void>((resolve) => {
@@ -280,6 +304,30 @@ export class FileSystemIndexerClient {
     child.once('exit', (code, signal) =>
       this.#failProcess(child, new Error(`Filesystem indexer exited (${signal ?? code ?? 'unknown'})`)),
     );
+  }
+
+  #beginQuery(key: string, request: QueryRequest): Promise<QueryResponse> {
+    const promise = this.#request<QueryResponse>({ operation: 'query', request });
+    const operation = { key, promise };
+    this.#queryOperation = operation;
+    void promise.then(
+      () => this.#finishQuery(operation),
+      () => this.#finishQuery(operation),
+    );
+    return promise;
+  }
+
+  #finishQuery(operation: { key: string; promise: Promise<QueryResponse> }): void {
+    if (this.#queryOperation !== operation) return;
+    this.#queryOperation = undefined;
+    const queued = this.#queuedQuery;
+    this.#queuedQuery = undefined;
+    if (!queued) return;
+    if (this.#closed) {
+      queued.reject(new Error('Filesystem indexer closed'));
+      return;
+    }
+    void this.#beginQuery(queued.key, queued.request).then(queued.resolve, queued.reject);
   }
 
   #request<T>(
