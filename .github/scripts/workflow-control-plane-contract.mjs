@@ -901,8 +901,22 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     codeqlBackfill,
-    /!TRANSIENT_READ_FAILURE\.test\(failure\)/u,
-    "the CodeQL inventory read helper branches on the widened classifier",
+    /const transient = TRANSIENT_READ_FAILURE\.test\(failure\)\n\s*\|\| isTruncatedJsonRead\(output, error\);\n\s*if \(attempt === attempts \|\| !transient\)/u,
+    "the CodeQL inventory read helper branches on the widened classifier and the truncation test",
+  );
+  // That message pattern can only classify the half gh decodes: Go reports every
+  // short body as `unexpected end of JSON input`, but when this script decodes,
+  // V8's message is position-specific, so a body cut mid-string or mid-number
+  // says `Unterminated string in JSON at position N` and matches no message
+  // list. Pin the structural test that classifies the half this script decodes
+  // -- comparing the parse position against the length received separates a
+  // valid-but-short prefix from a corrupt payload without tracking V8's
+  // wording, which has already changed once. Its behaviour is covered by the
+  // self-test executed below, so this assertion only guards its removal.
+  assert.match(
+    codeqlBackfill,
+    /export function isTruncatedJsonRead\(text, error\)[\s\S]*at position \(\\d\+\)[\s\S]*trimEnd\(\)\.length/u,
+    "the CodeQL inventory read helper classifies a short body by parse position, not by V8 wording",
   );
   // The dispatch POST must keep the narrow status-only classifier: a reset
   // proves nothing about whether GitHub already queued the scan, so replaying
