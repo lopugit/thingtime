@@ -208,3 +208,68 @@ whole-page native path and convert incrementally with the same recipe.
 
 Regression after each step: webpageBlocks 6/6, verify-webpages 25/25 (native
 assertion updated for sections), apiTests webpages 9/9, client build ✓.
+
+## Round 4 — Figma-layer styling + WYSIWYG + the "grid ×2" class of layout bugs (2026-08-31)
+
+Owner QA on the pr-485 preview surfaced four bugs and three feature asks; this
+round lands all of them.
+
+### Fixes (QA-found)
+1. **Nested blocks were unclickable** — `onClickCapture` runs OUTERMOST-first
+   in React's capture phase, so an ancestor container always selected itself
+   and stopped propagation before the clicked child's frame ever saw the
+   event. Now the innermost frame containing the click handles it; ancestors
+   let the event keep capturing down. Every nested block opens its inspector.
+2. **Grid children landed in the wrong cells** ("grid ×2 + heading shows on
+   the right; two blocks side-by-side impossible") — interleaved insert zones
+   were rendered as SIBLINGS inside the container, so in a grid each zone
+   consumed a cell (zone in cell 1 → first real block in cell 2). Grids now
+   render blocks as direct cells with one trailing compact add-tile in the
+   next free cell; the empty-grid dropwell spans all columns.
+3. **Row children stacked vertically** — every block frame forced
+   `width: 100%`, wrapping each row child onto its own line. Row children now
+   flex (`1 1 0`, min-width 0) and row insert zones turned into slim vertical
+   strips.
+4. **Cramped/ghost whitespace** — the 🌐 Global strip sat flush against the
+   navbar (+14px breathing room now, view + edit) and a white body bar showed
+   between the global strip and the page region (collapsed transparent insert
+   zones + shrunk nav clearance over the white body). The edit canvas now
+   paints the surface wash.
+
+### Features
+- **Figma-style inspector for every block**: bounded per-block `css` record
+  (kebab property → value) with dedicated Layout (width/height/padding/
+  margin), Appearance (background/radius/border/shadow/opacity), Typography
+  (size/weight/line-height/letter-spacing/color/align/family) panels and a
+  raw `property: value` Custom CSS editor. Write gate bounds keys/values and
+  rejects `expression()`, `@import`, `javascript:`, and non-https/relative
+  `url()` targets (`webpageBlockGate.test.ts` + 12-check live-API script).
+- **Inline WYSIWYG text editing**: click a text block and it edits in place
+  (contentEditable, caret preserved across draft commits — the editor element
+  stays a constant div because swapping the rendered tag mid-edit replaces
+  the DOM node under the mount-only init effect and eats the text). Enter and
+  Shift+Enter insert soft breaks; rich paste is kept; selecting text floats a
+  B/I/U/S/link/clear toolbar (`styleWithCSS` so output is span styles). Rich
+  text stores as `html` + plain-text fallback and renders ONLY through
+  `htmlToNode` → `HtmlThingRenderer` (allowlist gained b/i/u/s/mark/sub/sup).
+- **Media + HTML blocks**: `media` (image/video/audio; https or site-relative
+  src; alt) and `html` (raw markup ≤ 20KB, sanitised at render — scripts,
+  iframes, event handlers, and unsafe URLs never survive). Insert menu grew
+  🖼 Media and 🧬 HTML quick blocks. Dropping OS files on any insert zone or
+  dropwell uploads through the attachments multipart API and lands media
+  blocks at the drop position (`/api/v1/attachments/content?id=…`).
+- **Selection model**: re-clicking a selected block no longer toggles it off
+  (clicking into text to edit must keep selection); Escape deselects.
+- Editor.js remains the long-form editor elsewhere in the app; the builder's
+  inline editing intentionally uses direct contentEditable (the request
+  allowed either) — an Editor.js popup for long-form text blocks is a clean
+  follow-up since the deps already ship.
+
+### Component catalog seeding (dev DB)
+The preview's component searcher showed "no components matched" because the
+dev DB behind `*.previews.dev.thingtime.com` had zero seeded components. The
+2800-component catalog (lopugit/thingtime-components) is seeded through the
+real admin API (`POST /api/v1/admin/components/seed`, batches of 100) using a
+throwaway `seedbot485` admin enabled by a branch-scoped `ADMIN_USERNAMES`
+Vercel preview env var (scoped to `claude/thingtime-design-system-01d6ee`
+only).

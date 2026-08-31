@@ -2864,4 +2864,27 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       webpage- shareIds are refused on generic creates (reserved prefix).
 - [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
       builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Nested blocks select on click: with a container (grid/row/column) holding
+      children, clicking a CHILD selects the child (inspector shows its
+      fields), clicking the container's own area selects the container —
+      ancestors never steal the capture-phase click (regression: outermost
+      frame always won and stopped propagation).
+- [ ] Grid ×2 + two blocks: first block lands in the LEFT cell, second sits
+      beside it, the trailing add-tile takes the next free cell (regression:
+      interleaved insert zones consumed grid cells and shoved blocks right).
+- [ ] Row container with two text blocks: children share one line via flex
+      sizing (regression: width-100% frames wrapped each child onto its own
+      line); row insert zones are slim vertical strips.
+- [ ] Inline WYSIWYG: clicking a text block edits in place with the caret
+      preserved while typing (regression: tag flips mid-edit replaced the DOM
+      node under the mount-only init and ATE the text); Enter/Shift+Enter
+      insert soft breaks; selecting text floats the B/I/U/S/link toolbar;
+      formatting survives deselect (renders through the allowlist renderer).
+- [ ] Custom CSS/tag/html/media fields round-trip a save and the gate rejects
+      `expression()`, `@import`, `javascript:`, non-https `url()`, script/
+      iframe text tags, ftp/js media src, and >20KB html
+      (`pnpm --dir remix run test:schemas` → webpageBlockGate).
+- [ ] Edit mode shows no white body bar between the 🌐 Global strip and the
+      page region (canvas paints the surface wash) and the Global eyebrow has
+      clear air below the navbar (view + edit).
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.

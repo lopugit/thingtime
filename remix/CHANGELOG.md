@@ -17,6 +17,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-31 — Builder round 4: Figma-layer styling, WYSIWYG, layout fixes — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485
+  round 4).
+- **Layout/selection fixes**: nested blocks are clickable (innermost frame
+  wins the capture-phase click, ancestors no longer steal selection); grid
+  containers place children in cells correctly (insert zones no longer occupy
+  grid cells — side-by-side blocks work; trailing add-tile cell instead); row
+  children share the line via flex sizing; global strip gets breathing room
+  below the nav and the edit canvas paints the surface wash (no white body
+  bar between regions).
+- **Figma-layer styling**: every block carries a bounded `css` record edited
+  through inspector Layout/Appearance/Typography panels + a raw Custom CSS
+  editor; text blocks gain tag overrides + rich `html`; new `media` and
+  `html` block types; OS file drops upload via the attachments API into
+  media blocks. Server gate: `sanitizeWebpageBlock` bounds css keys/values
+  and blocks `expression()`/`@import`/`javascript:`/non-https `url()`;
+  coverage in `app/schemas/webpageBlockGate.test.ts`.
+- **Inline WYSIWYG**: selected text blocks edit in place (contentEditable,
+  Enter/Shift+Enter soft breaks, rich paste, floating B/I/U/S/link toolbar);
+  rendered rich text passes only through the sanitising allowlist renderer
+  (`htmlToNode` + `HtmlThingRenderer`, which gained the pure formatting tags
+  b/i/u/s/mark/sub/sup).
+
 ### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
 
 - Grouped summary; full detail in the PR note
