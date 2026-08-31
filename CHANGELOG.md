@@ -19,6 +19,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Hardened the standing `main` to `develop` PR merger against two live GitHub
+  consistency edges: the PR object's head may briefly lag the automation-owned
+  branch ref, and a transient merge API error may arrive after GitHub has
+  committed the merge. The merger now polls the first case and proves the
+  merged PR plus `develop` ancestry before recovering the second, avoiding
+  false deferrals and false-red runs without weakening the SHA fences. — Codex
+  (AI), 2026-08-31
 - Made the standing `main` to `develop` synchronization PR merge itself as soon
   as its exact published head becomes mergeable. Both the clean sync lane and
   Lopu conflict resolver now invoke one SHA-fenced terminal merger that verifies

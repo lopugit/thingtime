@@ -2,13 +2,16 @@
 
 import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SYNC_HEAD = "sync/main-into-develop";
 const SYNC_BASE = "develop";
+const EXPECTED_MERGE_REJECTIONS = new Set([405, 409, 422]);
+const TRANSIENT_GITHUB_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MERGE_ATTEMPTS = 3;
 
 class GitHubRequestError extends Error {
   constructor(message, status, payload) {
@@ -46,6 +49,7 @@ export function syncMergeDisposition({
   expectedDevelopSha,
   liveMainSha,
   liveDevelopSha,
+  liveHeadSha,
 }) {
   assertSyncPullRequestShape({ pull, repository, pullNumber });
 
@@ -55,7 +59,8 @@ export function syncMergeDisposition({
   }
   if (liveMainSha !== expectedMainSha) return { outcome: "deferred", reason: "main-moved" };
   if (liveDevelopSha !== expectedDevelopSha) return { outcome: "deferred", reason: "develop-moved" };
-  if (pull.head.sha !== expectedHeadSha) return { outcome: "deferred", reason: "head-moved" };
+  if (liveHeadSha !== expectedHeadSha) return { outcome: "deferred", reason: "head-moved" };
+  if (pull.head.sha !== expectedHeadSha) return { outcome: "pending", reason: "pr-refreshing" };
   if (pull.base.sha !== liveDevelopSha) return { outcome: "deferred", reason: "base-refreshing" };
   if (pull.mergeable === false) return { outcome: "conflicting" };
   if (pull.mergeable !== true) return { outcome: "pending" };
@@ -153,12 +158,28 @@ export async function mergeStandingSyncPullRequest({
   let pull = null;
   for (let attempt = 1; attempt <= pollAttempts; attempt += 1) {
     pull = await request({ repository, token, path: `pulls/${pullNumber}` });
-    const [mainRef, developRef] = await Promise.all([
+    if (pull.state !== "open") {
+      disposition = syncMergeDisposition({
+        pull,
+        repository,
+        pullNumber,
+        expectedHeadSha,
+        expectedMainSha,
+        expectedDevelopSha,
+        liveMainSha: expectedMainSha,
+        liveDevelopSha: expectedDevelopSha,
+        liveHeadSha: expectedHeadSha,
+      });
+      break;
+    }
+    const [mainRef, developRef, headRef] = await Promise.all([
       request({ repository, token, path: "git/ref/heads/main" }),
       request({ repository, token, path: "git/ref/heads/develop" }),
+      request({ repository, token, path: `git/ref/heads/${SYNC_HEAD}` }),
     ]);
     const liveMainSha = exactSha("live main SHA", mainRef.object?.sha || "");
     const liveDevelopSha = exactSha("live develop SHA", developRef.object?.sha || "");
+    const liveHeadSha = exactSha("live sync head SHA", headRef.object?.sha || "");
     disposition = syncMergeDisposition({
       pull,
       repository,
@@ -168,6 +189,7 @@ export async function mergeStandingSyncPullRequest({
       expectedDevelopSha,
       liveMainSha,
       liveDevelopSha,
+      liveHeadSha,
     });
     if (disposition.outcome !== "pending") break;
     if (attempt < pollAttempts) await sleep(pollIntervalMs);
@@ -207,23 +229,60 @@ export async function mergeStandingSyncPullRequest({
     return { outcome: "deferred", reason: "head-missing-main" };
   }
 
-  let merged;
-  try {
-    merged = await request({
-      repository,
-      token,
-      path: `pulls/${pullNumber}/merge`,
-      method: "PUT",
-      body: { sha: expectedHeadSha, merge_method: "merge" },
-    });
-  } catch (error) {
-    if (error instanceof GitHubRequestError && [405, 409, 422].includes(error.status)) {
-      writeOutput("outcome", "deferred");
-      writeOutput("reason", `github-${error.status}`);
-      warning(`GitHub deferred standing sync PR #${pullNumber}: ${error.message}`);
-      return { outcome: "deferred", reason: `github-${error.status}` };
+  let merged = null;
+  for (let mergeAttempt = 1; mergeAttempt <= MERGE_ATTEMPTS; mergeAttempt += 1) {
+    try {
+      merged = await request({
+        repository,
+        token,
+        path: `pulls/${pullNumber}/merge`,
+        method: "PUT",
+        body: { sha: expectedHeadSha, merge_method: "merge" },
+      });
+      break;
+    } catch (error) {
+      if (!(error instanceof GitHubRequestError)) throw error;
+      const expectedRejection = EXPECTED_MERGE_REJECTIONS.has(error.status);
+      const transientFailure = TRANSIENT_GITHUB_STATUSES.has(error.status);
+      if (!expectedRejection && !transientFailure) throw error;
+
+      try {
+        const postAttemptPull = await request({
+          repository,
+          token,
+          path: `pulls/${pullNumber}`,
+        });
+        assertSyncPullRequestShape({ pull: postAttemptPull, repository, pullNumber });
+        if (postAttemptPull.merged === true || postAttemptPull.merged_at) {
+          merged = {
+            merged: true,
+            sha: exactSha("recovered merge commit SHA", postAttemptPull.merge_commit_sha || ""),
+          };
+          notice(
+            `Recovered committed standing sync PR #${pullNumber} after GitHub returned HTTP ${error.status}.`,
+          );
+          break;
+        }
+      } catch (probeError) {
+        if (
+          !(probeError instanceof GitHubRequestError)
+          || !TRANSIENT_GITHUB_STATUSES.has(probeError.status)
+        ) {
+          throw probeError;
+        }
+        warning(
+          `Could not verify standing sync PR #${pullNumber} after HTTP ${error.status}: ${probeError.message}`,
+        );
+      }
+
+      if (expectedRejection || mergeAttempt === MERGE_ATTEMPTS) {
+        writeOutput("outcome", "deferred");
+        writeOutput("reason", `github-${error.status}`);
+        warning(`GitHub deferred standing sync PR #${pullNumber}: ${error.message}`);
+        return { outcome: "deferred", reason: `github-${error.status}` };
+      }
+      await sleep(Math.min(pollIntervalMs, 2000));
     }
-    throw error;
   }
 
   if (merged?.merged !== true || !SHA.test(merged.sha || "")) {
@@ -270,6 +329,7 @@ async function selfTest() {
     expectedDevelopSha: develop,
     liveMainSha: main,
     liveDevelopSha: develop,
+    liveHeadSha: head,
   };
 
   assert.deepEqual(syncMergeDisposition(input), { outcome: "ready" });
@@ -287,9 +347,13 @@ async function selfTest() {
     outcome: "deferred",
     reason: "develop-moved",
   });
-  assert.deepEqual(syncMergeDisposition({ ...input, pull: { ...pull, head: { ...pull.head, sha: main } } }), {
+  assert.deepEqual(syncMergeDisposition({ ...input, liveHeadSha: main }), {
     outcome: "deferred",
     reason: "head-moved",
+  });
+  assert.deepEqual(syncMergeDisposition({ ...input, pull: { ...pull, head: { ...pull.head, sha: main } } }), {
+    outcome: "pending",
+    reason: "pr-refreshing",
   });
   assert.deepEqual(syncMergeDisposition({ ...input, pull: { ...pull, state: "closed", merged: true } }), {
     outcome: "already-merged",
@@ -347,6 +411,7 @@ async function selfTest() {
       requests.push({ path, method, body });
       if (path === "pulls/475" && method === "GET") return pull;
       if (path === "git/ref/heads/main") return { object: { sha: main } };
+      if (path === `git/ref/heads/${SYNC_HEAD}`) return { object: { sha: head } };
       if (path === "git/ref/heads/develop") {
         developReads += 1;
         return { object: { sha: developReads === 1 ? develop : mergeSha } };
@@ -370,6 +435,66 @@ async function selfTest() {
     1,
     "the happy path submits exactly one terminal merge",
   );
+
+  const alreadyMergedResult = await mergeStandingSyncPullRequest({
+    repository,
+    token: "test-token",
+    pullNumber: 475,
+    expectedHeadSha: head,
+    expectedMainSha: main,
+    expectedDevelopSha: develop,
+    pollAttempts: 1,
+    pollIntervalMs: 0,
+    request: async ({ path, method = "GET" }) => {
+      if (path === "pulls/475" && method === "GET") {
+        return { ...pull, state: "closed", merged: true, merge_commit_sha: mergeSha };
+      }
+      throw new Error(`already-merged path should not read refs: ${method} ${path}`);
+    },
+  });
+  assert.deepEqual(alreadyMergedResult, { outcome: "already-merged" });
+
+  let mergeCommitted = false;
+  const recoveredResult = await mergeStandingSyncPullRequest({
+    repository,
+    token: "test-token",
+    pullNumber: 475,
+    expectedHeadSha: head,
+    expectedMainSha: main,
+    expectedDevelopSha: develop,
+    pollAttempts: 1,
+    pollIntervalMs: 0,
+    request: async ({ path, method = "GET", body }) => {
+      if (path === "pulls/475" && method === "GET") {
+        if (!mergeCommitted) return pull;
+        return {
+          ...pull,
+          state: "closed",
+          merged: true,
+          merged_at: "2026-08-31T09:32:41Z",
+          merge_commit_sha: mergeSha,
+        };
+      }
+      if (path === "git/ref/heads/main") return { object: { sha: main } };
+      if (path === `git/ref/heads/${SYNC_HEAD}`) return { object: { sha: head } };
+      if (path === "git/ref/heads/develop") {
+        return { object: { sha: mergeCommitted ? mergeSha : develop } };
+      }
+      if (path === `compare/${main}...${head}`) {
+        return { status: "ahead", merge_base_commit: { sha: main } };
+      }
+      if (path === "pulls/475/merge" && method === "PUT") {
+        assert.deepEqual(body, { sha: head, merge_method: "merge" });
+        mergeCommitted = true;
+        throw new GitHubRequestError("GitHub returned a transient gateway error", 502, null);
+      }
+      if (path === `compare/${main}...${mergeSha}`) {
+        return { status: "ahead", merge_base_commit: { sha: main } };
+      }
+      throw new Error(`unexpected recovery self-test request: ${method} ${path}`);
+    },
+  });
+  assert.deepEqual(recoveredResult, { outcome: "merged", mergeSha });
   process.stdout.write("main/develop sync merger: self-test OK\n");
 }
 
