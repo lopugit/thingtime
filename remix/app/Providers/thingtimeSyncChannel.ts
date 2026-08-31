@@ -7,6 +7,24 @@ import { parseThingtime, stringifyThingtime } from './thingtimeSerialization';
 // successfully applied path-level writes and feed received writes back through
 // ThingtimeProvider's existing mutation queue so every tab converges before its
 // next full-tree autosave.
+//
+// What crosses is the WRITE, never the local side effects that accompanied it.
+// ThingtimeProvider's `events` Subject is per-provider, so it is per-tab, and
+// nothing here forwards it. The case that bites is a key rename
+// (Thingtime.tsx's updatePath): it writes the rewritten parent — which must and
+// does cross — and then emits `path-renamed` so that everything bound to the old
+// path by STRING follows it (EditorSplit's window leaves, PostComposer's
+// draftPath). A peer applies the data and never sees the event, so its bound
+// windows go blank against a key that no longer exists — the exact failure the
+// local listener exists to prevent. No data is lost; the value is intact under
+// the new key, and re-pointing or a reload clears it.
+//
+// The fix is NOT to mark the rename tabLocal — a rename is user data, and
+// withholding it restores the whole-tree clobber this channel exists to fix. It
+// is to carry a second message type and re-emit it on the receiver's Subject,
+// which is an architecture decision (does this transport carry events, or only
+// writes?) rather than something to settle inside a review pass. Recorded here
+// with a guard test below that fails if anyone reaches for the wrong fix.
 
 export type ThingtimeSyncPath = string | string[];
 

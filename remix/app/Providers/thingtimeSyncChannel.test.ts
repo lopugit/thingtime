@@ -634,6 +634,40 @@ test('an escaped-bracket string path passes the guard and still lands as one lit
 	assert.deepEqual(smarts.parsePropertyPath('settings.__proto__.polluted'), ['settings', '__proto__', 'polluted']);
 });
 
+test('a key rename keeps syncing, and the transport still carries writes only', () => {
+	// The rename asymmetry recorded at the top of thingtimeSyncChannel.ts: the
+	// write crosses, the `path-renamed` event that compensates for it does not,
+	// so a peer's string-bound editor windows and composer draftPath go blank.
+	//
+	// This guards the WRONG fix. Marking the rename tabLocal would silence the
+	// blank windows by withholding a user-data write — restoring exactly the
+	// stale-tab clobber this channel exists to fix — and it would look like a
+	// tidy one-word change to whoever hits the symptom. Assert the write stays
+	// on the wire, in the same shape as the "saved configs keep syncing" and
+	// "drawer preferences keep syncing" guards above.
+	const thingtime = readFileSync(path.join(appDir, 'components/Thingtime/Thingtime.tsx'), 'utf8');
+	const rename = thingtime.slice(thingtime.indexOf('const updatePath = React.useCallback'));
+
+	const write = rename.match(/setThingtime\(parentPath, newObject,[\s\S]*?\);/);
+	assert.ok(write, 'expected updatePath to still write the rewritten parent through setThingtime');
+	assert.doesNotMatch(write[0], /tabLocal/, 'a rename is user data — withholding it restores the whole-tree clobber');
+
+	// Non-vacuous: the emit the peer never receives has to still be there, or
+	// the asymmetry this pins no longer exists and the note needs revisiting.
+	assert.match(rename.slice(0, rename.indexOf('focus next input')), /events\?\.next\?\.\(\{\s*type: 'path-renamed'/);
+
+	// ...and the transport is what makes it an asymmetry: writes only, no event
+	// hook. If a second message type ever lands, this fails and the note at the
+	// top of thingtimeSyncChannel.ts is what needs updating alongside it.
+	const channel = createThingtimeSyncChannel({ tabId: 'tab-a', channelName: uniqueChannelName(), onRemoteWrite: () => {} });
+	assert.ok(channel);
+	try {
+		assert.deepEqual(Object.keys(channel).sort(), ['close', 'publish']);
+	} finally {
+		channel.close();
+	}
+});
+
 test('BroadcastChannel absence degrades to the existing single-tab behavior', () => {
 	const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
 	Object.defineProperty(globalThis, 'BroadcastChannel', { configurable: true, writable: true, value: undefined });
