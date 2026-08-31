@@ -5,6 +5,7 @@ import { layeredPostCommentCounts, RELATED_CHILD_PROJECTION, visibleRelatedModer
 
 test('related child projection preserves rich comment media layouts', () => {
   assert.equal(RELATED_CHILD_PROJECTION['crystal.mediaLayout'], 1);
+  assert.equal(RELATED_CHILD_PROJECTION['crystal.richText'], 1);
 });
 
 test('related projections keep a pending comment visible to its owner', () => {

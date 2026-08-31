@@ -13,6 +13,8 @@
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -626,7 +628,13 @@ const postSchema: ThingtimeSchema = {
       type: 'string',
       required: false,
       max: MAX_TEXT_CHARS,
-      description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+      description: `Canonical plain-text post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+    },
+    {
+      name: 'richText',
+      type: 'record',
+      required: false,
+      description: 'Bounded native Editor.js document preserving inline marks, block styles, whitespace, and line breaks.'
     },
     {
       name: 'images',
@@ -666,7 +674,14 @@ const postSchema: ThingtimeSchema = {
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
     }
   ],
-  example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
+  example: {
+    type: 'text',
+    text: 'Everything is a thing ✨',
+    richText: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: '<mark>Everything</mark> is a thing ✨' } }] },
+    images: [],
+    listing: null,
+    thing: null
+  }
 };
 
 const attachmentSchema: ThingtimeSchema = {
@@ -2633,7 +2648,21 @@ const sanitizePostCrystal = (
 	const hasAnyAttachment = options.postAttachments?.hasAny === true;
 	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
-  const text = typeof input.text === 'string' ? input.text.trim() : '';
+  const richTextProvided = input.richText !== undefined;
+  let richText: Record<string, unknown> | null = null;
+  let text = typeof input.text === 'string' ? input.text.trim() : '';
+  if (richTextProvided && input.richText !== null) {
+    if (!input.richText || typeof input.richText !== 'object' || Array.isArray(input.richText)) {
+      return fail(400, 'richText must be a native rich-text document');
+    }
+    const sanitized = sanitizeDataValue(input.richText, { path: 'richText', depth: 2 });
+    if (sanitized.ok === false) return sanitized;
+    if (!isEditorJsDoc(sanitized.value) || !isEditorJsDocSafeToEdit(sanitized.value)) {
+      return fail(400, 'richText must be a safe native rich-text document');
+    }
+    richText = sanitized.value as Record<string, unknown>;
+    text = blocksToText(richText.blocks as any[]).trim();
+  }
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
 
   const rawImages = input.images;
@@ -2706,7 +2735,15 @@ const sanitizePostCrystal = (
 
 	return {
 		ok: true,
-		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+		crystal: {
+			type,
+			text,
+			...(richTextProvided ? { richText } : {}),
+			images,
+			listing,
+			thing,
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+		}
 	};
 };
 
