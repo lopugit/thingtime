@@ -65,6 +65,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Posting now flushes the live Editor.js document before freezing a post
+  payload.** Tapping Post immediately after changing a heading, colour,
+  alignment, size, whitespace, or line break can no longer publish the older
+  plain-text snapshot while the composer still shows the newer rich styling.
+  — Codex (AI), 2026-08-31
+
 - **[Admin CI refreshes now fail softly and recover without a request
   storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
   The protected snapshot route turns MongoDB blocking-sort memory failures into
