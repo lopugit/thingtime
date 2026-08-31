@@ -81,14 +81,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
-    featureVersion: '1.0.1',
+    featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every current entity per kind for unlimited Feature Stack selection.', method: 'GET', query: { limit: 0 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every selectable feature, branch, and pull request. Recent run, deployment, preview, and dispatch activity stays bounded; summary counts remain exact.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
