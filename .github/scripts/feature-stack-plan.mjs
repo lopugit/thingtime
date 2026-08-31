@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,60 +8,73 @@ import { join } from "node:path";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const REF = /^(?![./])(?!.*(?:\.\.|\/\.|\.\/|@\{|\\|[~^:?*\[]))[A-Za-z0-9._/-]{1,180}(?<![./])$/u;
-const MAX_SOURCES = 20;
-const MAX_TARGETS = 2;
 
 const exactKeys = (value, keys) =>
   value && !Array.isArray(value) && typeof value === "object" &&
   Object.keys(value).join(",") === keys.join(",");
 
 export function canonicalFeatureStackPlan(input) {
-  if (!exactKeys(input, ["autoMerge", "name", "sources", "targets", "version"]) || input.version !== 1) {
+  if (!exactKeys(input, ["autoDecideBranches", "autoMerge", "name", "sources", "stackId", "targets", "version"]) || input.version !== 2) {
     throw new Error("invalid feature stack envelope");
   }
-  if (input.autoMerge !== true || typeof input.name !== "string" || input.name.length < 1 || input.name.length > 80 ||
+  if (typeof input.autoDecideBranches !== "boolean" || input.autoMerge !== true ||
+      typeof input.stackId !== "string" || !/^ci-feature-stack-[0-9a-f-]{36}$/u.test(input.stackId) ||
+      typeof input.name !== "string" || input.name.length < 1 || input.name.length > 80 ||
       input.name !== input.name.trim() || /[\u0000-\u001f\u007f]/u.test(input.name)) {
     throw new Error("invalid feature stack metadata");
   }
-  if (!Array.isArray(input.sources) || input.sources.length < 2 || input.sources.length > MAX_SOURCES) {
-    throw new Error("feature stack needs 2-20 sources");
+  if (!Array.isArray(input.sources) || input.sources.length < 1) {
+    throw new Error("feature stack needs at least one source");
   }
-  if (!Array.isArray(input.targets) || input.targets.length < 1 || input.targets.length > MAX_TARGETS) {
-    throw new Error("feature stack needs 1-2 targets");
+  if (!Array.isArray(input.targets) || input.targets.length < 1) {
+    throw new Error("feature stack needs at least one target");
   }
+  const targetSet = new Set();
+  const targets = input.targets.map((target) => {
+    if (typeof target !== "string" || !REF.test(target) || targetSet.has(target)) throw new Error("invalid feature stack target");
+    targetSet.add(target);
+    return target;
+  });
   const sourceNumbers = new Set();
   const sourceRefs = new Set();
   const sources = input.sources.map((source) => {
-    if (!exactKeys(source, ["head", "pr", "sha", "title"]) ||
+    if (!exactKeys(source, ["base", "head", "pr", "sha", "targets", "title"]) ||
         !Number.isSafeInteger(source.pr) || source.pr < 1 || source.pr > 999999999 ||
+        typeof source.base !== "string" || !REF.test(source.base) ||
         typeof source.head !== "string" || !REF.test(source.head) ||
         typeof source.sha !== "string" || !SHA.test(source.sha) ||
         typeof source.title !== "string" || source.title.length < 1 || source.title.length > 200 ||
-        source.title !== source.title.trim() || /[\u0000-\u001f\u007f]/u.test(source.title)) {
+        source.title !== source.title.trim() || /[\u0000-\u001f\u007f]/u.test(source.title) ||
+        !Array.isArray(source.targets) || source.targets.length < 1 ||
+        source.targets.some((target) => !targetSet.has(target)) || new Set(source.targets).size !== source.targets.length) {
       throw new Error("invalid feature stack source");
     }
     if (sourceNumbers.has(source.pr) || sourceRefs.has(source.head)) throw new Error("duplicate feature stack source");
     sourceNumbers.add(source.pr);
     sourceRefs.add(source.head);
-    return { head: source.head, pr: source.pr, sha: source.sha, title: source.title };
+    const expectedTargets = !input.autoDecideBranches
+      ? targets
+      : source.base === "github-actions"
+        ? targets.filter((target) => target === "github-actions")
+        : source.base === "main"
+          ? targets.filter((target) => target === "main")
+          : source.base === "develop"
+            ? targets.filter((target) => target === "develop" || target === "main")
+            : targets.filter((target) => target === source.base);
+    if (JSON.stringify(source.targets) !== JSON.stringify(expectedTargets)) throw new Error("invalid feature stack source routing");
+    return { base: source.base, head: source.head, pr: source.pr, sha: source.sha, targets: source.targets, title: source.title };
   });
-  const targetSet = new Set();
-  const targets = input.targets.map((target) => {
-    if (typeof target !== "string" || !REF.test(target) || sourceRefs.has(target) || targetSet.has(target)) {
-      throw new Error("invalid feature stack target");
-    }
-    targetSet.add(target);
-    return target;
-  });
-  return { autoMerge: true, name: input.name, sources, targets, version: 1 };
+  if (targets.some((target) => sourceRefs.has(target))) throw new Error("invalid feature stack target");
+  if (targets.some((target) => !sources.some((source) => source.targets.includes(target)))) throw new Error("feature stack target has no routed source");
+  return { autoDecideBranches: input.autoDecideBranches, autoMerge: true, name: input.name, sources, stackId: input.stackId, targets, version: 2 };
 }
 
 export function decodeFeatureStackPlan(encoded) {
-  if (typeof encoded !== "string" || encoded.length < 8 || encoded.length > 24000 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded)) {
+  if (typeof encoded !== "string" || encoded.length < 8 || encoded.length > 60000 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded)) {
     throw new Error("invalid feature stack encoding");
   }
   const bytes = Buffer.from(encoded, "base64");
-  if (bytes.length > 16000 || bytes.toString("base64") !== encoded) throw new Error("invalid feature stack encoding");
+  if (bytes.length > 45000 || bytes.toString("base64") !== encoded) throw new Error("invalid feature stack encoding");
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const plan = canonicalFeatureStackPlan(JSON.parse(text));
   if (JSON.stringify(plan) !== text) throw new Error("feature stack plan is not canonical");
@@ -70,7 +82,7 @@ export function decodeFeatureStackPlan(encoded) {
 }
 
 export function featureStackId(plan) {
-  return createHash("sha256").update(JSON.stringify(canonicalFeatureStackPlan(plan))).digest("hex").slice(0, 16);
+  return canonicalFeatureStackPlan(plan).stackId;
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -78,11 +90,12 @@ const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 export function verifyFeatureStackHistory(plan, target, baseSha, head = "HEAD") {
   const canonical = canonicalFeatureStackPlan(plan);
   if (!canonical.targets.includes(target) || !SHA.test(baseSha)) throw new Error("invalid verification target");
+  const targetSources = canonical.sources.filter((source) => source.targets.includes(target));
   const commits = git("rev-list", "--first-parent", "--reverse", `${baseSha}..${head}`).split("\n").filter(Boolean);
-  assert.equal(commits.length, canonical.sources.length, "one merge commit is required per source");
+  assert.equal(commits.length, targetSources.length, "one merge commit is required per routed source");
   let previous = baseSha;
-  for (let index = 0; index < canonical.sources.length; index += 1) {
-    const source = canonical.sources[index];
+  for (let index = 0; index < targetSources.length; index += 1) {
+    const source = targetSources[index];
     const commit = commits[index];
     const parents = git("show", "-s", "--format=%P", commit).split(" ");
     assert.deepEqual(parents, [previous, source.sha], `source PR #${source.pr} must be the next exact merge parent`);
@@ -113,19 +126,23 @@ export function verifyFeatureStackHistory(plan, target, baseSha, head = "HEAD") 
 
 function selfTest() {
   const plan = canonicalFeatureStackPlan({
+    autoDecideBranches: true,
     autoMerge: true,
     name: "Search + Messenger",
     sources: [
-      { head: "feature/search", pr: 12, sha: "a".repeat(40), title: "Search" },
-      { head: "feature/messenger", pr: 14, sha: "b".repeat(40), title: "Messenger" }
+      { base: "develop", head: "feature/search", pr: 12, sha: "a".repeat(40), targets: ["develop", "main"], title: "Search" },
+      { base: "develop", head: "feature/messenger", pr: 14, sha: "b".repeat(40), targets: ["develop", "main"], title: "Messenger" }
     ],
+    stackId: "ci-feature-stack-11111111-1111-4111-8111-111111111111",
     targets: ["develop", "main"],
-    version: 1
+    version: 2
   });
   const encoded = Buffer.from(JSON.stringify(plan)).toString("base64");
   assert.deepEqual(decodeFeatureStackPlan(encoded), plan);
-  assert.equal(featureStackId(plan).length, 16);
+  assert.equal(featureStackId(plan), plan.stackId);
+  assert.equal(canonicalFeatureStackPlan({ ...plan, sources: [plan.sources[0]] }).sources.length, 1);
   assert.throws(() => canonicalFeatureStackPlan({ ...plan, targets: ["develop", "develop"] }), /target/);
+  assert.throws(() => canonicalFeatureStackPlan({ ...plan, sources: [{ ...plan.sources[0], targets: ["main"] }] }), /routing|target/);
   assert.throws(() => decodeFeatureStackPlan(Buffer.from(JSON.stringify({ ...plan, extra: true })).toString("base64")), /envelope/);
 
   const originalCwd = process.cwd();
@@ -154,14 +171,16 @@ function selfTest() {
     const sourceTwo = git("rev-parse", "HEAD");
 
     const historyPlan = canonicalFeatureStackPlan({
+      autoDecideBranches: true,
       autoMerge: true,
       name: "Verifier",
       sources: [
-        { head: "source-one", pr: 1, sha: sourceOne, title: "One" },
-        { head: "source-two", pr: 2, sha: sourceTwo, title: "Two" }
+        { base: "develop", head: "source-one", pr: 1, sha: sourceOne, targets: ["develop"], title: "One" },
+        { base: "develop", head: "source-two", pr: 2, sha: sourceTwo, targets: ["develop"], title: "Two" }
       ],
+      stackId: "ci-feature-stack-22222222-2222-4222-8222-222222222222",
       targets: ["develop"],
-      version: 1
+      version: 2
     });
     git("switch", "-q", "--detach", base);
     git("merge", "--no-ff", "-q", "-m", `Merge source one\n\nFeature-Stack-Source: pr=1 head=${sourceOne}`, sourceOne);

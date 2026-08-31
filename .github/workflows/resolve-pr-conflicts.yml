@@ -3230,17 +3230,20 @@ jobs:
             pr="$(jq -r '.pr' <<<"$source")"
             head="$(jq -r '.head' <<<"$source")"
             sha="$(jq -r '.sha' <<<"$source")"
+            base="$(jq -r '.base' <<<"$source")"
             live="$RUNNER_TEMP/feature-stack-pr-$pr.json"
             gh api "repos/$REPO/pulls/$pr" >"$live"
             jq -e \
               --arg repo "$REPO" \
               --arg head "$head" \
               --arg sha "$sha" \
+              --arg base "$base" \
               '.state == "open"
                and .draft == false
                and .head.repo.full_name == $repo
                and .head.ref == $head
                and .head.sha == $sha
+               and .base.ref == $base
                and ([.labels[].name] | index("no-ai-merge") == null)
                and ([.labels[].name] | index("ai-merge-paused") == null)' "$live" >/dev/null || {
                  echo "::error::Feature Stack source PR #$pr moved, closed, became a draft, or no longer matches its immutable snapshot."
@@ -3608,8 +3611,10 @@ jobs:
           decoded="$RUNNER_TEMP/feature-stack-decoded.json"
           plan="$RUNNER_TEMP/feature-stack-plan.json"
           node trusted/.github/scripts/feature-stack-plan.mjs decode "$PLAN_B64" >"$decoded"
-          jq -c '.plan' "$decoded" >"$plan"
-          jq -e --arg target "$TARGET_BRANCH" '.targets | index($target) != null' "$plan" >/dev/null
+          jq -c --arg target "$TARGET_BRANCH" \
+            '.plan | .targets = [$target] | .sources |= map(select(.targets | index($target)) | .targets = [$target])' "$decoded" >"$plan"
+          jq -e --arg target "$TARGET_BRANCH" \
+            '(.targets | index($target) != null) and (.sources | length > 0)' "$plan" >/dev/null
 
           integration="$GITHUB_WORKSPACE/integration"
           git init "$integration"
@@ -3832,11 +3837,13 @@ jobs:
             pr="$(jq -r '.pr' <<<"$source")"
             head="$(jq -r '.head' <<<"$source")"
             sha="$(jq -r '.sha' <<<"$source")"
+            base="$(jq -r '.base' <<<"$source")"
             gh api "repos/$REPO/pulls/$pr" | jq -e \
-              --arg repo "$REPO" --arg head "$head" --arg sha "$sha" \
+              --arg repo "$REPO" --arg head "$head" --arg sha "$sha" --arg base "$base" \
               '.state == "open" and .draft == false
                and .head.repo.full_name == $repo
                and .head.ref == $head and .head.sha == $sha
+               and .base.ref == $base
                and ([.labels[].name] | index("no-ai-merge") == null)
                and ([.labels[].name] | index("ai-merge-paused") == null)' >/dev/null || {
                  echo "::error::Source PR #$pr changed or was paused while the Feature Stack was running."

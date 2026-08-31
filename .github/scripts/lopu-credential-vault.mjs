@@ -20,14 +20,14 @@ const validate = (value) => {
   const ids = new Set();
   const names = new Set();
   return value.credentials.map((row, index) => {
-    if (!row || typeof row !== 'object' || row.credentialType !== 'claude-code-oauth-token') throw new Error('Thingtime returned an unsupported credential type.');
+    if (!row || typeof row !== 'object' || row.credentialType !== 'claude-code-oauth-token' || !['Anthropic', 'anthropic', 'Claude', 'claude'].includes(row.platform ?? 'Anthropic')) throw new Error('Thingtime returned an unsupported Claude credential type.');
     const id = typeof row.id === 'string' ? row.id.trim() : '';
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     const credential = typeof row.value === 'string' ? row.value.trim() : '';
     if (!id || !name || /[\u0000-\u001f\u007f]/.test(name) || !credential || /[\r\n]/.test(credential) || ids.has(id) || names.has(name)) throw new Error('Thingtime returned malformed or duplicate credentials.');
     ids.add(id);
     names.add(name);
-    return { id, name, credentialType: row.credentialType, value: credential, priority: index };
+    return { id, name, platform: row.platform ?? 'Anthropic', credentialType: row.credentialType, value: credential, priority: index };
   });
 };
 
@@ -54,6 +54,7 @@ const fetchBundle = async () => {
   origin.search = '';
   origin.hash = '';
   const body = JSON.stringify({
+    platform: 'Anthropic',
     repository: required('GITHUB_REPOSITORY'),
     workflowRef: required('GITHUB_WORKFLOW_REF'),
     runId: required('GITHUB_RUN_ID'),
