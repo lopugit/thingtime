@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Progress, Text } from '@chakra-ui/react';
-import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
+import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
+import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, Link2, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -33,6 +33,15 @@ export type AttachmentComposerProps = {
 	allowedContentTypes?: readonly string[];
 	ariaLabel?: string;
 	helperText?: string;
+	// show the add-by-URL row below the grid: each valid URL mints a linked
+	// attachment straight into this panel (image tile or file row, duplicates
+	// allowed). Available even while uploads await approval — linked media
+	// consumes no Thingtime storage.
+	allowLinkedUrls?: boolean;
+	// edit mode: the post's legacy crystal.images URLs, shown as linked tiles
+	// in this panel; the composer mints them into real linked attachments when
+	// the edit saves
+	initialLinkedSeeds?: readonly string[];
 	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
 	// on READY visual tiles only, bottom-left (grip top-left, X top-right,
 	// pencil bottom-right)
@@ -45,12 +54,20 @@ export type AttachmentComposerHandle = {
 
 const statusLabel = (upload: ComposerAttachmentUpload) => {
 	if (upload.status === 'queued') return 'Waiting…';
-	if (upload.status === 'preparing') return 'Preparing secure upload…';
+	if (upload.status === 'preparing') return upload.linked ? 'Linking…' : 'Preparing secure upload…';
 	if (upload.status === 'uploading') return `Uploading · ${upload.progress}%`;
 	if (upload.status === 'finalizing') return 'Verifying upload…';
 	if (upload.status === 'ready') return 'Ready';
-	return upload.error || 'Upload failed.';
+	return upload.error || (upload.linked ? 'Link failed.' : 'Upload failed.');
 };
+
+// Linked entries carry an empty synthetic File — bytes/kind live on the
+// attachment (or, mid-mint, on the optimistic preview); uploads keep the
+// original file.type bucketing.
+const uploadMediaKind = (upload: ComposerAttachmentUpload) =>
+	upload.linked ? upload.attachment?.mediaKind ?? (upload.previewUrl ? 'image' : 'file') : localFileMediaKind(upload.file);
+
+const uploadSizeLabel = (upload: ComposerAttachmentUpload) => (upload.linked ? 'Linked' : formatAttachmentBytes(upload.file.size));
 
 const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' | undefined => {
 	if (upload.status === 'error') return 'alert';
@@ -59,9 +76,19 @@ const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' 
 };
 
 const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
-	const kind = localFileMediaKind(upload.file);
+	const kind = uploadMediaKind(upload);
 	if (kind === 'image' && upload.previewUrl) {
-		return <Image src={upload.previewUrl} alt="" width="100%" height="100%" objectFit="cover" background="var(--tt-surface-alt, #f5f5f7)" />;
+		return (
+			<Image
+				src={upload.previewUrl}
+				alt=""
+				width="100%"
+				height="100%"
+				objectFit="cover"
+				background="var(--tt-surface-alt, #f5f5f7)"
+				{...(upload.linked ? { referrerPolicy: 'no-referrer' as const, loading: 'lazy' as const } : {})}
+			/>
+		);
 	}
 	if (kind === 'video' && upload.previewUrl) {
 		return (
@@ -195,7 +222,7 @@ const UploadVisualTile = React.memo(
 						role={uploadStatusRole(upload)}
 						whiteSpace="normal"
 					>
-						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+						{uploadSizeLabel(upload)} · {statusLabel(upload)}
 					</Text>
 				</Flex>
 				{busy ? (
@@ -291,7 +318,7 @@ const UploadFileRow = React.memo(
 							<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
 								{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
 								<Text fontSize="11px" color={MUTED} role={uploadStatusRole(upload)} whiteSpace="normal">
-									{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+									{uploadSizeLabel(upload)} · {statusLabel(upload)}
 								</Text>
 							</Flex>
 						) : null}
@@ -342,7 +369,7 @@ const UploadFileRow = React.memo(
 				</Flex>
 				{upload.status === 'error' ? (
 					<Text fontSize="11px" lineHeight="1.5" color="var(--tt-danger, #e5484d)" role="alert" marginTop={2} whiteSpace="normal">
-						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+						{uploadSizeLabel(upload)} · {statusLabel(upload)}
 					</Text>
 				) : null}
 			</Box>
@@ -366,6 +393,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		allowedContentTypes,
 		ariaLabel = 'Post attachments',
 		helperText,
+		allowLinkedUrls = false,
+		initialLinkedSeeds,
 		tileExtras
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
@@ -393,22 +422,33 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles, addLinkedUrl, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
 		disabled === true,
 		onCleanupDeferred,
-		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus }
+		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus, initialLinkedSeeds }
 	);
+	// the add-by-URL field below the grid — clears after each accepted Add so
+	// the next link goes straight in
+	const [linkUrl, setLinkUrl] = React.useState('');
+	const submitLinkedUrl = React.useCallback(() => {
+		const value = linkUrl.trim();
+		if (!value) return;
+		if (addLinkedUrl(value)) setLinkUrl('');
+	}, [addLinkedUrl, linkUrl]);
 	// Revocation stops new starts without hiding cleanup/retry controls for a
 	// draft already in progress. Server lifecycle routes remain independently
 	// usable after a scope is withheld.
 	const pickerDisabled = disabled || uploadsNotGranted || uploads.length >= boundedMaxFiles;
+	// linked mints stay available while uploads await approval — they consume
+	// no Thingtime object storage
+	const linkAddDisabled = disabled || uploads.length >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
-		if (localFileMediaKind(upload.file) === 'file') fileUploads.push(upload);
+		if (uploadMediaKind(upload) === 'file') fileUploads.push(upload);
 		else visualUploads.push(upload);
 	}
 
@@ -449,7 +489,9 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		[addFiles]
 	);
 
-	if (uploadsNotGranted && uploads.length === 0) {
+	// With the URL adder available, the panel stays useful before upload
+	// approval — file picking is disabled with the note, linked media works.
+	if (uploadsNotGranted && uploads.length === 0 && !allowLinkedUrls) {
 		return (
 			<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
@@ -479,7 +521,11 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			{uploadsNotGranted ? (
 				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
 					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
-						🔐 This upload scope was withheld. New files are disabled; you can still finish, retry, or remove the current draft safely.
+						{uploads.some((upload) => !upload.linked)
+							? '🔐 This upload scope was withheld. New files are disabled; you can still finish, retry, or remove the current draft safely.'
+							: `🔐 ${
+									uploadScope === 'private' ? 'Private' : 'Public'
+							  } media uploads need admin approval during the beta — an admin is notified after email verification. Linked media by URL works right away.`}
 					</Text>
 				</Box>
 			) : null}
@@ -585,6 +631,43 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								tileProps={tileProps}
 							/>
 						))}
+					</Flex>
+				) : null}
+
+				{allowLinkedUrls ? (
+					<Flex flexDirection="column" rowGap={1} paddingTop={2}>
+						<Flex columnGap={2} alignItems="center">
+							<Input
+								size="sm"
+								value={linkUrl}
+								placeholder="https://example.com/photo.jpg"
+								aria-label="Add media by URL"
+								borderRadius="var(--tt-radius-sm, 9px)"
+								background="var(--tt-card, #ffffff)"
+								isDisabled={linkAddDisabled}
+								onChange={(event) => setLinkUrl(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key !== 'Enter') return;
+									event.preventDefault();
+									submitLinkedUrl();
+								}}
+							/>
+							<Button
+								type="button"
+								size="sm"
+								minHeight="44px"
+								flexShrink={0}
+								borderRadius="var(--tt-radius-md, 12px)"
+								leftIcon={<Link2 size={14} />}
+								isDisabled={linkAddDisabled || !linkUrl.trim()}
+								onClick={submitLinkedUrl}
+							>
+								Add
+							</Button>
+						</Flex>
+						<Text fontSize="11px" color={MUTED} whiteSpace="normal">
+							Linked media stays on the original site and doesn&apos;t use your file-storage quota. Same URL twice adds it twice.
+						</Text>
 					</Flex>
 				) : null}
 			</Box>

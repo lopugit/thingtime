@@ -456,6 +456,24 @@ export function useApi() {
 				},
 				[asyncFetcher]
 			),
+			// mint a READY linked-attachment draft from an external media URL — it
+			// binds/orders/deletes like an upload but its bytes stay on the original
+			// site (duplicates allowed; unbound mints expire in 24h)
+			link: useCallback(
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+					const ret = asyncFetcher.submit(
+						{
+							url: args?.url,
+							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
+							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
+						},
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+					);
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			),
 			// owner title/description on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(

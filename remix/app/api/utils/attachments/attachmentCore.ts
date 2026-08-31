@@ -23,6 +23,13 @@ export const MAX_ATTACHMENT_OBJECT_KEY_CHARS = 1024;
 export const MAX_ATTACHMENT_OBJECT_VERSION_ID_CHARS = 1024;
 export const ATTACHMENT_REQUEST_FINGERPRINT_CHARS = 64;
 export const MAX_ATTACHMENT_FINALIZATION_LEASE_ID_CHARS = 128;
+// Linked attachments reference media by external URL instead of an S3 object.
+// Mirrors the post-crystal image URL bound (schemas/registry MAX_IMAGE_URL_CHARS).
+export const MAX_LINKED_ATTACHMENT_URL_CHARS = 2048;
+// Namespaced synthetic object key for linked docs — the real upload keys live
+// under objects/<id>, so a linked key can never collide with (or address) a
+// stored S3 object.
+export const LINKED_ATTACHMENT_OBJECT_KEY_PREFIX = 'linked/';
 
 export type AttachmentPublicMetadata = {
 	id: string;
@@ -41,9 +48,17 @@ export type AttachmentPublicMetadata = {
 	// Present (true) only when the server-side moderation pipeline stamped the
 	// attachment nsfw — the client renders it blurred behind a consent click
 	nsfw?: boolean;
+	// Linked attachments only: the external media URL. Content renders straight
+	// from the original site (safe sinks: img/video/anchor) — these bytes never
+	// touch Thingtime storage and the content endpoint never serves them.
+	url?: string;
+	// Projection-only (never persisted in the crystal, like nsfw): the owner's
+	// view of their OWN moderation-pending attachment. Everyone else still gets
+	// the fail-closed hide while analysis runs.
+	pending?: true;
 };
 
-export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
+export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id' | 'pending' | 'nsfw'>;
 
 export type AttachmentAnnotationPatch = {
 	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
@@ -69,6 +84,9 @@ export type AttachmentPrivateObjectFields = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// true only on linked (external URL) attachments — no S3 object exists, so
+	// every S3 lifecycle step is skipped and object bytes are always zero
+	attachmentLinked?: true;
 };
 
 export type AttachmentStorageCandidate = {
@@ -88,6 +106,7 @@ export type AttachmentStorageCandidate = {
 	attachmentMpuEmptyVerifiedAt?: unknown;
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
+	attachmentLinked?: unknown;
 };
 
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
@@ -148,6 +167,124 @@ export const attachmentMediaKindForContentType = (contentType: string): Attachme
 	if (SAFE_VIDEO_CONTENT_TYPES.has(contentType)) return 'video';
 	if (SAFE_AUDIO_CONTENT_TYPES.has(contentType)) return 'audio';
 	return 'file';
+};
+
+// Linked media renders only in safe sinks (img/video elements, plain anchors)
+// and the client can override the render hint after probing, so linked kinds
+// collapse to the three the renderers know.
+export type LinkedAttachmentMediaKind = 'image' | 'video' | 'file';
+
+export const isLinkedAttachmentMediaKind = (value: unknown): value is LinkedAttachmentMediaKind =>
+	value === 'image' || value === 'video' || value === 'file';
+
+// The same hygiene the post-crystal image URL sanitizer applies
+// (schemas/registry isHttpUrl): plain absolute http(s), no credentials, no
+// control/format/space characters, bounded length. Returns the trimmed URL or
+// null. The server NEVER fetches these URLs — no SSRF surface — so hostname
+// shape is deliberately not restricted beyond URL well-formedness.
+export const canonicalLinkedAttachmentUrl = (value: unknown): string | null => {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (
+		!trimmed ||
+		trimmed.length > MAX_LINKED_ATTACHMENT_URL_CHARS ||
+		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
+		trimmed.includes('\\') ||
+		!/^https?:\/\//i.test(trimmed)
+	) {
+		return null;
+	}
+	try {
+		const parsed = new URL(trimmed);
+		if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname || parsed.username || parsed.password) {
+			return null;
+		}
+		return trimmed;
+	} catch {
+		return null;
+	}
+};
+
+// Extension → (contentType, render hint) for linked URLs. Deliberately small:
+// it covers what the renderers can actually do something with; anything else
+// is an opaque linked file. The client mirrors this table
+// (attachmentUiCore linkedMediaTypeForUrl) — a pin test keeps them equal.
+export const LINKED_MEDIA_EXTENSION_TYPES: Record<string, { contentType: string; mediaKind: LinkedAttachmentMediaKind }> = {
+	apng: { contentType: 'image/png', mediaKind: 'image' },
+	avif: { contentType: 'image/avif', mediaKind: 'image' },
+	gif: { contentType: 'image/gif', mediaKind: 'image' },
+	jfif: { contentType: 'image/jpeg', mediaKind: 'image' },
+	jpeg: { contentType: 'image/jpeg', mediaKind: 'image' },
+	jpg: { contentType: 'image/jpeg', mediaKind: 'image' },
+	png: { contentType: 'image/png', mediaKind: 'image' },
+	webp: { contentType: 'image/webp', mediaKind: 'image' },
+	m4v: { contentType: 'video/x-m4v', mediaKind: 'video' },
+	mkv: { contentType: 'video/x-matroska', mediaKind: 'video' },
+	mov: { contentType: 'video/quicktime', mediaKind: 'video' },
+	mp4: { contentType: 'video/mp4', mediaKind: 'video' },
+	ogv: { contentType: 'video/ogg', mediaKind: 'video' },
+	webm: { contentType: 'video/webm', mediaKind: 'video' },
+	'7z': { contentType: 'application/x-7z-compressed', mediaKind: 'file' },
+	csv: { contentType: 'text/csv', mediaKind: 'file' },
+	doc: { contentType: 'application/msword', mediaKind: 'file' },
+	docx: { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', mediaKind: 'file' },
+	gz: { contentType: 'application/gzip', mediaKind: 'file' },
+	json: { contentType: 'application/json', mediaKind: 'file' },
+	md: { contentType: 'text/markdown', mediaKind: 'file' },
+	mp3: { contentType: 'audio/mpeg', mediaKind: 'file' },
+	pdf: { contentType: 'application/pdf', mediaKind: 'file' },
+	ppt: { contentType: 'application/vnd.ms-powerpoint', mediaKind: 'file' },
+	pptx: { contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', mediaKind: 'file' },
+	rar: { contentType: 'application/vnd.rar', mediaKind: 'file' },
+	svg: { contentType: 'image/svg+xml', mediaKind: 'file' },
+	txt: { contentType: 'text/plain', mediaKind: 'file' },
+	wav: { contentType: 'audio/wav', mediaKind: 'file' },
+	xls: { contentType: 'application/vnd.ms-excel', mediaKind: 'file' },
+	xlsx: { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', mediaKind: 'file' },
+	zip: { contentType: 'application/zip', mediaKind: 'file' }
+};
+
+const linkedUrlExtension = (url: string): string | null => {
+	try {
+		const pathname = new URL(url).pathname;
+		const basename = pathname.split('/').pop() || '';
+		const dot = basename.lastIndexOf('.');
+		if (dot <= 0 || dot === basename.length - 1) return null;
+		return basename.slice(dot + 1).toLowerCase();
+	} catch {
+		return null;
+	}
+};
+
+// Server-side detection for a linked URL. An unknown or missing extension
+// defaults to an IMAGE hint — that matches the legacy crystal.images behavior
+// (any URL rendered in an <img>), and the client may demote to 'file' after a
+// real load probe. mediaKind here is a render hint for external safe sinks,
+// never an inline-serving claim about bytes our server stores.
+export const linkedMediaTypeForUrl = (url: string): { contentType: string; mediaKind: LinkedAttachmentMediaKind } => {
+	const extension = linkedUrlExtension(url);
+	if (extension && LINKED_MEDIA_EXTENSION_TYPES[extension]) return LINKED_MEDIA_EXTENSION_TYPES[extension];
+	return { contentType: 'application/octet-stream', mediaKind: 'image' };
+};
+
+// A display name for the linked media, from the URL path basename (decoded
+// when possible), falling back to the hostname.
+export const linkedAttachmentNameForUrl = (url: string): string => {
+	try {
+		const parsed = new URL(url);
+		const rawBasename = parsed.pathname.split('/').filter(Boolean).pop() || '';
+		let basename = rawBasename;
+		try {
+			basename = decodeURIComponent(rawBasename);
+		} catch {
+			// keep the raw basename when percent-decoding fails
+		}
+		basename = basename.trim();
+		if (basename && !UNSAFE_FILENAME_CHAR_RE.test(basename)) return basename.slice(0, MAX_ATTACHMENT_NAME_CHARS);
+		return parsed.hostname.slice(0, MAX_ATTACHMENT_NAME_CHARS);
+	} catch {
+		return 'linked-media';
+	}
 };
 
 // Single-line owner text (titles): the same hygiene as filenames.
@@ -264,10 +401,41 @@ const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 's
 // Owner-authored presentation text plus the server-written sniffed container
 // type; each is validated below before a crystal counts as canonical.
 const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description', 'detectedContentType']);
+// Linked crystals swap detectedContentType (a stored-bytes sniff) for the
+// external url; every other key keeps the base hygiene.
+const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'title', 'description']);
+
+// Linked (external URL) crystal: size is always 0 (the bytes are not ours),
+// and mediaKind is a DECLARED render hint — the media renders in safe sinks
+// (img/video/anchor) straight from the original site, so the derive-from-
+// contentType rule that protects our own inline serving does not apply.
+const canonicalLinkedAttachmentCrystal = (raw: Record<string, unknown>): AttachmentCrystal | null => {
+	const url = canonicalLinkedAttachmentUrl(raw.url);
+	if (!url || raw.url !== url) return null;
+	if (REQUIRED_ATTACHMENT_CRYSTAL_KEYS.some((key) => !(key in raw))) return null;
+	if (Object.keys(raw).some((key) => !LINKED_ATTACHMENT_CRYSTAL_KEYS.has(key))) return null;
+	if (raw.size !== 0 || !isLinkedAttachmentMediaKind(raw.mediaKind)) return null;
+	const sanitized = sanitizeAttachmentPublicMetadata({
+		name: raw.name,
+		size: raw.size,
+		contentType: raw.contentType,
+		title: raw.title,
+		description: raw.description
+	});
+	if (!sanitized.ok) return null;
+	return raw.name === sanitized.crystal.name &&
+		raw.contentType === sanitized.crystal.contentType &&
+		raw.title === sanitized.crystal.title &&
+		raw.description === sanitized.crystal.description
+		? { ...sanitized.crystal, mediaKind: raw.mediaKind, url }
+		: null;
+};
 
 const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	if ('url' in (value as Record<string, unknown>)) return canonicalLinkedAttachmentCrystal(value as Record<string, unknown>);
 	const sanitized = sanitizeAttachmentPublicMetadata(value);
-	if (!sanitized.ok || !value || typeof value !== 'object' || Array.isArray(value)) return null;
+	if (!sanitized.ok) return null;
 	const raw = value as Record<string, unknown>;
 	const keys = Object.keys(raw);
 	// still a closed shape: every required key present, extras only from the
@@ -321,19 +489,44 @@ export const applyAttachmentAnnotationPatch = (
 		ok: true,
 		crystal: {
 			...sanitized.crystal,
+			// linked crystals keep their declared render hint and external URL —
+			// sanitize re-derives mediaKind from contentType, which only holds for
+			// stored-object crystals
+			...(before.url ? { mediaKind: before.mediaKind, url: before.url } : {}),
 			...(before.detectedContentType ? { detectedContentType: before.detectedContentType } : {})
 		}
 	};
 };
 
+// A moderation status that keeps the attachment out of public projections and
+// the client-facing bound-set contract. Shared with the PATCH attachment sync
+// so the projection and the cover check can never disagree about what a
+// client could possibly have seen.
+export const attachmentModerationHidesFromPublic = (moderation: unknown): boolean => {
+	const status = (moderation as { status?: unknown } | null | undefined)?.status;
+	return status === 'pending' || status === 'blocked';
+};
+
 // `moderation` is the protected root stamp (api/utils/moderation). Pending and
 // blocked attachments never project publicly: pending is the fail-closed
 // quarantine while analysis/retry runs; blocked is the final quarantine.
-export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown, moderation?: unknown): AttachmentPublicMetadata | null => {
+// ownerView (the viewer owns this attachment) keeps PENDING visible with a
+// `pending: true` badge so an owner's media never silently vanishes from
+// their own post while analysis runs — blocked stays hidden for everyone,
+// matching the text-thing rule.
+export const toAttachmentPublicMetadata = (
+	id: unknown,
+	crystal: unknown,
+	moderation?: unknown,
+	options: { ownerView?: boolean } = {}
+): AttachmentPublicMetadata | null => {
 	const canonical = canonicalAttachmentCrystal(crystal);
 	if (typeof id !== 'string' || !id || !canonical) return null;
 	const status = (moderation as { status?: unknown } | null | undefined)?.status;
-	if (status === 'pending' || status === 'blocked') return null;
+	if (status === 'blocked') return null;
+	if (status === 'pending') {
+		return options.ownerView === true ? { id, ...canonical, pending: true as const } : null;
+	}
 	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 
@@ -378,15 +571,26 @@ export const planAttachmentReorder = (
 	return { ok: true, orderedIds };
 };
 
-export type AttachmentSyncPlan = { ok: true; orderedIds: string[]; addedIds: string[] } | { ok: false; status: 400 | 409; error: string };
+export type AttachmentSyncPlan =
+	| { ok: true; orderedIds: string[]; addedIds: string[]; hiddenTrailingIds: string[] }
+	| { ok: false; status: 400 | 409; error: string };
 
 // A PATCH-time attachment list is the target's full desired display order:
-// every currently-bound id must still be present (removal stays a delete
+// every VISIBLE bound id must still be present (removal stays a delete
 // operation, never a side effect of saving an edit), and any id beyond the
 // bound set is a NEW ready draft the edit is adding to the post.
+//
+// hiddenBoundIds are bound docs the projection hides (moderation pending for
+// non-owners historically, blocked for everyone) — a client can never have
+// seen them, so their absence from the request is NOT a conflict. They keep
+// their binding and are re-stamped after the requested list, preserving their
+// stored relative order (pass them pre-sorted). A hidden id the client DOES
+// know (owner-visible pending) may appear in the request and then orders like
+// any other bound id.
 export const planAttachmentSync = (
 	requestedIds: readonly unknown[],
 	boundIds: readonly string[],
+	hiddenBoundIds: readonly string[],
 	maxAttachments: number
 ): AttachmentSyncPlan => {
 	const orderedIds: string[] = [];
@@ -395,18 +599,20 @@ export const planAttachmentSync = (
 		if (!id || id !== value) return { ok: false, status: 400, error: 'Invalid attachment id' };
 		orderedIds.push(id);
 	}
-	if (orderedIds.length > maxAttachments) {
-		return { ok: false, status: 400, error: `A post can contain at most ${maxAttachments} attachments` };
-	}
 	if (new Set(orderedIds).size !== orderedIds.length) {
 		return { ok: false, status: 400, error: 'attachmentIds cannot repeat an attachment' };
 	}
 	const requested = new Set(orderedIds);
-	if (boundIds.some((id) => !requested.has(id))) {
+	const hidden = new Set(hiddenBoundIds);
+	if (boundIds.some((id) => !requested.has(id) && !hidden.has(id))) {
 		return { ok: false, status: 409, error: 'The attachments on this post changed — refresh and try again' };
 	}
+	const hiddenTrailingIds = hiddenBoundIds.filter((id) => !requested.has(id));
+	if (orderedIds.length + hiddenTrailingIds.length > maxAttachments) {
+		return { ok: false, status: 400, error: `A post can contain at most ${maxAttachments} attachments` };
+	}
 	const bound = new Set(boundIds);
-	return { ok: true, orderedIds, addedIds: orderedIds.filter((id) => !bound.has(id)) };
+	return { ok: true, orderedIds, addedIds: orderedIds.filter((id) => !bound.has(id) && !hidden.has(id)), hiddenTrailingIds };
 };
 
 // undefined means "not an attachment" and therefore contributes no object
@@ -466,6 +672,33 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 		(doc.attachmentState !== 'deleting' || doc.uploadId !== undefined || doc.objectVersionId !== undefined)
 	) {
 		return null;
+	}
+	// Linked attachments are a closed variant: the marker, the namespaced
+	// synthetic key, the zero object size, the url-bearing crystal, and the
+	// absence of every S3 upload field all imply each other. Any partial
+	// combination is a forged or corrupt claim and fails closed.
+	if (doc.attachmentLinked !== undefined && doc.attachmentLinked !== true) return null;
+	const looksLinked =
+		doc.attachmentLinked === true ||
+		(typeof doc.objectKey === 'string' && doc.objectKey.startsWith(LINKED_ATTACHMENT_OBJECT_KEY_PREFIX)) ||
+		!!(doc.crystal && typeof doc.crystal === 'object' && !Array.isArray(doc.crystal) && 'url' in (doc.crystal as Record<string, unknown>));
+	if (looksLinked) {
+		if (
+			doc.attachmentLinked !== true ||
+			typeof doc.objectKey !== 'string' ||
+			!doc.objectKey.startsWith(LINKED_ATTACHMENT_OBJECT_KEY_PREFIX) ||
+			doc.objectSizeBytes !== 0 ||
+			doc.uploadId !== undefined ||
+			doc.objectVersionId !== undefined ||
+			doc.attachmentPartsIssuedAt !== undefined ||
+			doc.attachmentFinalizationLeaseId !== undefined ||
+			doc.attachmentProfileSlot !== undefined
+		) {
+			return null;
+		}
+		const linkedCrystal = canonicalAttachmentCrystal(doc.crystal);
+		if (!linkedCrystal || !linkedCrystal.url || linkedCrystal.size !== 0) return null;
+		return 0;
 	}
 	if (
 		doc.attachmentMpuEmptyVerifiedAt !== undefined &&

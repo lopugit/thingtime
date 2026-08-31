@@ -3432,6 +3432,62 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'attachment-link',
+		group: 'attachments',
+		title: 'Link external media',
+		endpoint: '/api/v1/attachments/link',
+		summary: 'Mints a ready linked-attachment draft from an external media URL.',
+		detail:
+			'A linked attachment is a first-class attachment Thing whose bytes stay on the original site: the crystal carries the external http(s) URL and clients render it directly (image tile, video player, or file row with an outbound download link). It binds into posts and rich comments through the same attachmentIds flows as uploads, reorders and annotates identically, and never touches Thingtime object storage or the upload-approval gate — only the metadata document counts toward the owner’s quota. The server derives contentType and a render hint from the URL’s file extension; a client may demote the hint to a plain file after a failed load probe, but can never promote a file extension to a visual kind. Duplicate URLs are allowed — each mint is its own attachment. Unbound mints expire on the standard 24-hour draft TTL. The server never fetches the URL.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the external http(s) media URL (up to 2048 characters).',
+			'Optionally send purpose ("post" default, or "comment") so the draft binds to the right surface, and mediaKind to demote an extensionless URL to "file".',
+			'Store the returned attachment id and url — the id goes into attachmentIds on post create or edit exactly like an uploaded attachment.',
+			'Remove an unwanted mint with /api/v1/attachments/delete; unbound mints expire on their own after 24 hours.'
+		],
+		requestExamples: [
+			{
+				name: 'Link a photo by URL',
+				description: 'Mint a ready linked attachment for an external image.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/photos/sunset.jpg'
+				}
+			},
+			{
+				name: 'Link a document for a comment',
+				description: 'A file-extension URL lands in the file row UI with an outbound download link.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/papers/spec.pdf',
+					purpose: 'comment'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'The minted linked attachment’s public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '9c1f5f68-3f0a-45f2-8f60-6f4a70b1a001',
+						name: 'sunset.jpg',
+						size: 0,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						url: 'https://example.com/photos/sunset.jpg'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
 		id: 'attachment-delete',
 		group: 'attachments',
 		title: 'Delete attachment',

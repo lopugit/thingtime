@@ -604,22 +604,44 @@ is fixed, and cite the checklist you ran in the PR description.
       shows no media/attachments panel until Photos is toggled on, and the
       saved post type is derived (things > marketplace > photos-with-visual >
       text) so files-only media still saves as a text post.
-- [ ] The linked-image URL adder sits BELOW the upload grid as a single input
-      with an `Add` button: a valid URL becomes a preview tile and the field
-      clears for the next one (Enter adds too); pasting several
-      whitespace-separated URLs adds them all; invalid input stays in the
-      field with an accessible message.
+- [ ] URL media is unified into the Media & files panel: the add-by-URL input
+      sits inside the panel below the upload grid with an `Add` button (Enter
+      adds too). Each valid URL mints a linked attachment via
+      `POST /api/v1/attachments/link` and lands in the SAME grid/file list as
+      uploads — image/video extensions become media tiles, file extensions
+      (pdf, zip, md…) become file rows, and extensionless URLs are probed
+      (image if it loads, file otherwise). The same URL added twice creates
+      two separate attachments. `javascript:`/credentialed/over-long URLs are
+      rejected; a `.pdf` can never claim a visual kind. URL adding works even
+      while uploads await beta approval (no storage is consumed).
+- [ ] Linked attachments render on cards exactly like uploads — same gallery,
+      layout modes, lightbox, reorder — but their bytes come straight from the
+      external URL (`referrerPolicy=no-referrer`); linked file rows and the
+      lightbox/media-page Download open the original URL in a new tab. Delete,
+      post-delete cascade, and draft reaping of linked media never touch S3
+      (works with private storage unconfigured).
 - [ ] Edit a post with 2+ attachments: the composer shows the reorderable
-      gallery AND the live upload panel, dragging or arrow keys reorder the
+      gallery AND the live media panel, dragging or arrow keys reorder the
       bound set, Save persists the order (card + `/post/:id` + reload agree),
       and saving with no changes sends no attachment sync. A stale edit saved
       after the post's attachments changed fails with the refresh-and-try 409
       rather than half-applying.
-- [ ] Edit a post and upload a new file: Save binds it into the post after the
-      existing media (PATCH attachmentIds = full desired order), the updated
-      card shows it immediately and after reload, and the same flow works on a
-      rich comment (purpose stays `comment`). Removals never happen via
-      Save — a list missing a bound id is rejected with the 409.
+- [ ] Edit a post and add a new upload AND a new URL: Save binds both into the
+      post after the existing media (PATCH attachmentIds = full desired
+      order), the updated card shows them immediately and after reload, and
+      the same flow works on a rich comment (purpose stays `comment`).
+      Removals never happen via Save — a list missing a VISIBLE bound id is
+      rejected with the 409, while moderation-hidden bound ids are exempt and
+      keep their binding + trailing order.
+- [ ] Edit a legacy post that still carries crystal.images URLs: they appear
+      in the media panel as linked tiles, reorder/remove like anything else,
+      and Save migrates them into linked attachments (crystal.images empties;
+      the card renders identically through the attachment gallery).
+- [ ] Upload an image where a moderation provider is configured: while
+      analysis runs the OWNER still sees the media with a "Checking…" badge
+      (card tile + file row + edit composer), other accounts don't see it yet,
+      and saving an edit during that window succeeds instead of 409ing.
+      Blocked media stays hidden for everyone including the owner.
 - [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
       failed part upload and a failed completion. No file is silently omitted,
       duplicated, charged twice, or left in a permanent uploading state.

@@ -196,7 +196,7 @@ export const MediaPage = () => {
 					) : null}
 					{attachment ? (
 						<Text fontSize="11px" color={MUTED}>
-							{attachment.name} · {formatAttachmentBytes(attachment.size)} · {attachment.contentType}
+							{attachment.name} · {attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachment.contentType}
 						</Text>
 					) : null}
 				</Flex>
@@ -253,8 +253,10 @@ export const MediaPage = () => {
 						{attachment && (
 							<Button
 								as="a"
-								href={attachmentContentUrl(attachment.id, true)}
-								download={attachment.name}
+								href={attachment.url || attachmentContentUrl(attachment.id, true)}
+								// cross-origin ignores the download attribute — linked media
+								// opens the original URL in a new tab instead
+								{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 								size="xs"
 								variant="ghost"
 								borderRadius="999px"

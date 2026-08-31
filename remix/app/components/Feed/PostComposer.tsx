@@ -18,8 +18,7 @@ import {
 } from '~/components/Attachments/attachmentUiCore';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
-import { canonicalLinkedImageUrls, createLinkedImageItem, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
+import { isLegacyLinkedSeedId } from '~/components/Attachments/useAttachmentUploads';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
@@ -157,10 +156,6 @@ export const PostComposer = (props: PostComposerProps) => {
 	const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
 	const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
   const [text, setText] = React.useState(editPost?.text || '');
-	// edit mode pre-fills the linked-image rows from the post's saved URLs
-	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>(() =>
-		(editPost?.images || []).map((url) => createLinkedImageItem(url))
-	);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
   const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
   const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
@@ -227,8 +222,6 @@ export const PostComposer = (props: PostComposerProps) => {
 		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
 
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
-
-	const validImages = canonicalLinkedImageUrls(linkedImages);
 
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
@@ -311,21 +304,15 @@ export const PostComposer = (props: PostComposerProps) => {
 	);
 
 	// The stored crystal type, derived from the live toggles. Photos alone
-	// counts only once visual media actually exists — a files-only or empty
-	// media panel stays a valid text post.
-	const type: PostType = thingOn
-		? 'thingtime'
-		: marketOn
-		? 'marketplace'
-		: photosOn && (validImages.length > 0 || hasReadyVisualAttachment)
-		? 'image'
-		: 'text';
+	// counts only once visual media actually exists (uploaded OR linked) — a
+	// files-only or empty media panel stays a valid text post.
+	const type: PostType = thingOn ? 'thingtime' : marketOn ? 'marketplace' : photosOn && hasReadyVisualAttachment ? 'image' : 'text';
 
 	const contentValid =
     type === 'text'
 			? text.trim().length > 0 || hasReadyAttachment
       : type === 'image'
-			? validImages.length > 0 || hasReadyVisualAttachment
+			? hasReadyVisualAttachment
         : type === 'thingtime'
 			? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing) && (!marketOn || listingValid)
           : listingValid;
@@ -340,7 +327,6 @@ export const PostComposer = (props: PostComposerProps) => {
     setThingOn(false);
     setText('');
     setComposerSession((session) => session + 1);
-		setLinkedImages([]);
     setTitle('');
     setPrice('');
     setCurrency('AUD');
@@ -369,7 +355,10 @@ export const PostComposer = (props: PostComposerProps) => {
 					sold: false
 			  }
 			: null;
-		const canonicalImages = showPhotos ? validImages : [];
+		// URL media is linked ATTACHMENTS now — new posts never write
+		// crystal.images, and saving an edit clears the legacy list (its URLs
+		// migrate into linked attachments via the seed mints below).
+		const canonicalImages: string[] = [];
 		const canonicalThing = type === 'thingtime' ? draftThing : null;
 		// gallery layout: auto stores null; spans are pruned to the visual
 		// attachments actually going out with this post
@@ -467,9 +456,25 @@ export const PostComposer = (props: PostComposerProps) => {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
 				// fields that no longer apply. Attachment changes ride along as the
-				// full desired id list — the reordered bound set plus any NEW ready
-				// uploads, which the PATCH attachment sync binds into this post.
-				const editAttachmentsChanged = currentAttachmentIds.length > 0 || editAttachmentOrderChanged;
+				// full desired id list — the reordered bound set plus the media
+				// panel's entries — which the PATCH attachment sync binds/orders.
+				// Legacy crystal.images URLs sat in the panel as LOCAL seed entries;
+				// mint them into real linked attachments now, in panel order (a
+				// failed PATCH afterwards just leaves 24h-TTL drafts behind).
+				const resolvedPanelIds = await Promise.all(
+					attachmentSnapshot.attachments.map(async (attachment) => {
+						if (!isLegacyLinkedSeedId(attachment.id)) return attachment.id;
+						if (!attachment.url) throw new Error('linked media url missing');
+						const minted = await api.v1.attachments.link({
+							url: attachment.url,
+							...(attachmentPurpose === 'comment' ? { purpose: 'comment' as const } : {})
+						});
+						const mintedId = typeof minted?.attachment?.id === 'string' ? minted.attachment.id : '';
+						if (!mintedId) throw new Error('linked media mint failed');
+						return mintedId;
+					})
+				);
+				const editAttachmentsChanged = resolvedPanelIds.length > 0 || editAttachmentOrderChanged;
 				const updated = await api.v1.things.update({
 					id: editPost!.id,
 					crystal: {
@@ -483,7 +488,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					tags: parsedTags,
 					visibility,
 					...(editAttachmentsChanged
-						? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...currentAttachmentIds] }
+						? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] }
 						: {})
 				});
 				finishPost(updated.post);
@@ -810,18 +815,11 @@ export const PostComposer = (props: PostComposerProps) => {
 							remainingBytes={user.storage.remainingBytes}
 							storageStatus={user.storage.status}
 							onChange={setAttachmentSnapshot}
+							allowLinkedUrls
+							initialLinkedSeeds={isEdit ? editPost?.images : undefined}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
 						/>
 					)}
-
-						<LinkedImageGallery
-							inline
-							items={linkedImages}
-							onChange={setLinkedImages}
-							disabled={posting || submissionUncertain}
-							inputLabel="Add an image by URL"
-							helperText="Linked images stay on the original site and don't use your private file-storage quota."
-              />
 
 					{/* gallery layout (crystal.mediaLayout) — meaningful from 2 visual
 					attachments; Auto keeps the masonry default (stored null) */}

@@ -3,7 +3,7 @@ import { Box, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '
 import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react';
 
-import { attachmentContentUrl, formatAttachmentBytes, mediaPageUrl } from './attachmentUiCore';
+import { attachmentContentUrl, attachmentMediaSrc, formatAttachmentBytes, mediaPageUrl } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 // Click-to-view lightbox for a post's visual attachments. Arrow keys / edge
@@ -78,8 +78,10 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 						/>
 						<IconButton
 							as="a"
-							href={attachmentContentUrl(attachment.id, true)}
-							download={attachment.name}
+							href={attachment.url || attachmentContentUrl(attachment.id, true)}
+							// cross-origin ignores the download attribute — linked media opens
+							// the original URL in a new tab instead
+							{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 							aria-label={`Download ${attachment.name}`}
 							title="Download"
 							icon={<Download size={16} />}
@@ -123,8 +125,9 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 						<Box
 							as="img"
 							key={attachment.id}
-							src={attachmentContentUrl(attachment.id)}
+							src={attachmentMediaSrc(attachment)}
 							alt={attachment.title || attachment.name}
+							referrerPolicy="no-referrer"
 							maxWidth="100%"
 							maxHeight="100%"
 							objectFit="contain"
@@ -167,7 +170,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							</Text>
 						) : null}
 						<Text fontSize="11px" color={MUTED}>
-							{attachment.name} · {formatAttachmentBytes(attachment.size)}
+							{attachment.name} · {attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)}
 						</Text>
 					</Flex>
 				</Flex>

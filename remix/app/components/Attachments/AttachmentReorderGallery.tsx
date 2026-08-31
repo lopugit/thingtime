@@ -5,7 +5,7 @@ import { File as FileIcon, GripVertical } from 'lucide-react';
 import { MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { movedToTargetPosition, nudgeTargetId, useMediaReorder, type MediaReorderNudge } from '~/components/Media/useMediaReorder';
-import { attachmentContentUrl, formatAttachmentBytes } from './attachmentUiCore';
+import { attachmentMediaSrc, formatAttachmentBytes } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -35,7 +35,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 		return (
 			<Box
 				as="img"
-				src={attachmentContentUrl(attachment.id)}
+				src={attachmentMediaSrc(attachment)}
 				alt=""
 				loading="lazy"
 				referrerPolicy="no-referrer"
@@ -49,7 +49,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 	return (
 		<Box
 			as="video"
-			src={attachmentContentUrl(attachment.id)}
+			src={attachmentMediaSrc(attachment)}
 			aria-label={`Preview of ${attachment.name}`}
 			width="100%"
 			height="100%"
@@ -178,7 +178,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 									{attachment.name}
 								</Text>
 								<Text fontSize="10px" color={MUTED} whiteSpace="normal">
-									{formatAttachmentBytes(attachment.size)}
+									{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)}
 								</Text>
 							</MediaGalleryTile>
 						))}
@@ -234,7 +234,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 											{attachment.name}
 										</Text>
 										<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-											{formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
+											{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
 										</Text>
 									</Box>
 									<AttachmentAnnotatePopover

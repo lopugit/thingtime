@@ -4,7 +4,7 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
-import { attachmentContentUrl, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import { attachmentContentUrl, attachmentMediaSrc, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
@@ -131,11 +131,33 @@ export const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
 	return `${cols} / ${rows}`;
 };
 
+// The owner's own moderation-pending media renders with this badge instead of
+// silently vanishing while analysis runs (other viewers don't receive it).
+const PendingBadge = () => (
+	<Text
+		fontFamily="mono"
+		fontSize="9px"
+		fontWeight={700}
+		letterSpacing="0.1em"
+		textTransform="uppercase"
+		color="var(--tt-ink, #16161a)"
+		background="rgba(255, 214, 102, 0.95)"
+		paddingX={1.5}
+		paddingY="1px"
+		borderRadius="999px"
+		flexShrink={0}
+	>
+		Checking…
+	</Text>
+);
+
+// Linked (external URL) rows open the original URL — the HTML download
+// attribute is ignored cross-origin, so they open in a new tab instead.
 const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => (
 	<Flex
 		as="a"
-		href={attachmentContentUrl(attachment.id, true)}
-		download={attachment.name}
+		href={attachment.url || attachmentContentUrl(attachment.id, true)}
+		{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 		alignItems="center"
 		columnGap={2.5}
 		minHeight="48px"
@@ -169,9 +191,10 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 				{attachment.title || attachment.name}
 			</Text>
 			<Text fontSize="10px" color={MUTED} noOfLines={1}>
-				{formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
+				{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
 			</Text>
 		</Box>
+		{attachment.pending ? <PendingBadge /> : null}
 		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
 	</Flex>
 );
@@ -185,7 +208,7 @@ const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment
 	return (
 		<Box
 			as="video"
-			src={attachmentContentUrl(attachment.id)}
+			src={attachmentMediaSrc(attachment)}
 			aria-label={attachment.title || attachment.name}
 			controls
 			playsInline
@@ -249,7 +272,7 @@ export const PostAttachments = ({
 		const image = (
 			<Box
 				as="img"
-				src={attachmentContentUrl(attachment.id)}
+				src={attachmentMediaSrc(attachment)}
 				alt={attachment.title || attachment.name || `Post image ${index + 1}`}
 				loading="lazy"
 				referrerPolicy="no-referrer"
@@ -292,6 +315,11 @@ export const PostAttachments = ({
 				) : (
 					image
 				)}
+				{attachment.pending ? (
+					<Box position="absolute" top={1.5} left={1.5}>
+						<PendingBadge />
+					</Box>
+				) : null}
 				{attachment.title && !shielded ? (
 					<Box
 						position="absolute"

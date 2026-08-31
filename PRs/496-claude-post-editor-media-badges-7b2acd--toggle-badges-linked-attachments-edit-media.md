@@ -1,0 +1,90 @@
+# PR #496 — Composer toggle badges, linked (URL) attachments, edit-mode media
+
+Branch `claude/post-editor-media-badges-7b2acd` → `develop`.
+https://github.com/lopugit/thingtime/pull/496
+
+Two rounds of owner requests.
+
+## Round 1 — toggles, edit-add, rename, URL adder placement
+
+- Post-type badges became additive TOGGLES (Text always on; Photos /
+  Marketplace / 📦 Things switch their field groups on top; the stored crystal
+  `type` is DERIVED: things > marketplace > photos-with-visual-media > text).
+  🌀 Thingtime renamed 📦 Things in `POST_TYPE_META`.
+- `PATCH /api/v1/things { id, attachmentIds }` upgraded from pure-permutation
+  reorder to a **sync**: full desired display order; must cover the bound set;
+  may append newly minted/uploaded READY drafts, bound with the create-time
+  fences plus an owner-fenced post-family target check (an edit can never bind
+  media onto someone else's thread). Edit composer mounts the live media panel
+  again.
+
+## Round 2 — URL media as first-class linked attachments + moderation fixes
+
+Owner QA found: URL images looked like a separate system, duplicate URLs were
+swallowed, an uploaded image vanished from a saved post, and an edit-save
+failed ("Post did not go through").
+
+**Root cause of the last two**: `markReady`/analyzer stamp
+`moderation: pending`; `toAttachmentPublicMetadata` hid pending from EVERYONE
+including the owner, while the PATCH sync's bound-set cover check counted them
+— a guaranteed 409 plus "my picture disappeared".
+
+### Linked attachments (new)
+
+- New attachment flavor: `attachmentLinked: true`, `objectKey: linked/<id>`,
+  `objectSizeBytes: 0`, crystal carries a validated external `url` and a
+  DECLARED render hint (`mediaKind`), state `ready` at mint, moderation
+  stamped `skipped` (no bytes to analyze; also guards the analyzer + sweep).
+  Accounting treats it as a closed variant (any partial/forged combination
+  fails closed); only the metadata doc bytes hit quota.
+- `POST /api/v1/attachments/link` (route + import map + apiDocs entry — docs
+  registry IS the Nitro registration — + `attachments.link` rate-limit row).
+  Purpose post|comment; server derives contentType/kind from the URL
+  extension; the client may DEMOTE to `file` after a failed image probe but
+  can never promote a file extension to a visual kind. Duplicates
+  deliberately allowed; unbound mints expire on the 24h draft TTL. The server
+  never fetches the URL (no SSRF surface). No upload-approval gate (parity
+  with the legacy crystal.images flow it replaces).
+- Lifecycle: `cleanupClaimedDoc` takes a lazy S3 getter and short-circuits
+  linked docs straight to the transactional remove+refund — delete, cancel,
+  reap, session-replacement sweep, and post-delete cascade all work without
+  S3. The content endpoint 302s linked ids to the external URL as a fallback;
+  renderers use `crystal.url` directly (`attachmentMediaSrc`).
+- Client: `useAttachmentUploads.addLinkedUrl` appends a linked entry to the
+  SAME uploads list (reorder/snapshot/markCommitted/remove all apply);
+  `AttachmentComposer` grew the in-panel URL input + Add button (clears per
+  add), linked-aware tile bucketing/labels ("Linked"), and stays useful while
+  uploads await beta approval. `LinkedImageGallery` usage removed from the
+  composer (component remains for kind renderers).
+- Legacy `crystal.images`: edit seeds them as LOCAL linked tiles
+  (`legacyurl-` ids, pre-committed so cleanup never fires); Save mints real
+  linked attachments in panel order and clears `images`. New posts never
+  write `crystal.images`.
+
+### Moderation visibility fixes
+
+- `toAttachmentPublicMetadata(..., { ownerView })`: pending stays visible to
+  the OWNER with `pending: true` (rendered as a "Checking…" badge);
+  blocked stays hidden for everyone. `resolvePostAttachments` threads
+  viewerId. Mirrors `visibleRelatedModerationClause` and the download route's
+  owner carve-out.
+- `planAttachmentSync(requested, bound, hiddenBound, max)`: moderation-hidden
+  bound ids are exempt from the cover requirement (clients can't send ids
+  they never saw) and re-stamp AFTER the requested list preserving relative
+  order — inside the same transaction as the bind.
+
+### Verified
+
+- Full `test:unit` green (attachmentCore grew linked-crystal, accounting
+  closed-union, ownerView, hidden-sync, extension-table pin suites; 133 in
+  test:attachments), `build:client` green, targeted ESLint green.
+- Live on the worktree stack (13510): duplicate URL → two tiles; `.pdf` URL →
+  linked file row with working download; extensionless URL → probe → image;
+  post → card renders linked media identically to uploads; edit → add URL →
+  Save binds via PATCH sync ("Post updated"); legacy 4-image post migrated on
+  save (`images: []`, 4 linked attachments); linked mint/delete round-trip
+  with NO S3 configured; validation rejects `javascript:`/credentialed URLs
+  and kind promotion. Desktop + 375px mobile, no overflow.
+- Not covered locally (no S3): real-byte upload E2E — unit-covered; TESTING.md
+  checklist items added for the preview pass, including the
+  moderation-pending owner-visibility window.

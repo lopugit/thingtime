@@ -3,7 +3,7 @@ import { Box, Button, Flex, IconButton, Input, Slider, SliderFilledTrack, Slider
 import { Minus, MoveDiagonal, Plus } from 'lucide-react';
 
 import { MAX_MEDIA_LAYOUT_ENTRIES, MAX_MEDIA_LAYOUT_TRACK, MEDIA_LAYOUT_SPAN_VALUES, type MediaLayoutSpan } from '~/schemas/registry';
-import { attachmentContentUrl } from './attachmentUiCore';
+import { attachmentMediaSrc } from './attachmentUiCore';
 import { mediaLayoutRows, spanAspect, spanColumns, spanRows } from './PostAttachments';
 import type { PublicAttachment } from './attachmentTypes';
 
@@ -333,7 +333,7 @@ export const MediaLayoutCanvas = ({
 						>
 							<Box
 								as="img"
-								src={attachmentContentUrl(attachment.id)}
+								src={attachmentMediaSrc(attachment)}
 								alt={attachment.title || attachment.name}
 								loading="lazy"
 								referrerPolicy="no-referrer"

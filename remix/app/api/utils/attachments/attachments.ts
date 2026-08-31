@@ -4,7 +4,11 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError } from '../storage/storageCore';
 import {
 	attachmentMediaKindForContentType,
+	canonicalLinkedAttachmentUrl,
 	isAttachmentObjectVersionId,
+	isLinkedAttachmentMediaKind,
+	linkedAttachmentNameForUrl,
+	linkedMediaTypeForUrl,
 	sanitizeAttachmentPublicMetadata,
 	toAttachmentPublicMetadata,
 	type AttachmentCrystal,
@@ -346,7 +350,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const cleanupClaimedDoc = async (
-		s3: AttachmentS3,
+		getS3: () => AttachmentS3,
 		doc: AttachmentDoc,
 		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
 	): Promise<AttachmentCleanupOutcome> => {
@@ -363,6 +367,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			claimed = await dependencies.store.claimDeleting(doc.ownerId, doc.shareId, [...allowedStates], scope);
 		}
 		if (!claimed) return { status: 'skipped' };
+		// Linked attachments never had an S3 object: no MPU to abort, no HEAD to
+		// verify, no version to delete. Straight to the transactional row removal
+		// and exact quota refund — S3 stays untouched (and unrequired, so linked
+		// cleanup works even where private storage is unconfigured).
+		if (claimed.attachmentLinked === true) {
+			return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
+		}
+		const s3 = getS3();
 		// A just-cancelled MPU remains billed until its retry-not-before. Part PUTs
 		// already in flight may finish after Abort; the later sweep repeats
 		// Abort/ListParts/HEAD before any refund.
@@ -385,14 +397,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
 	};
 
-	const cleanupExpiredOwned = async (s3: AttachmentS3, ownerId: string) => {
+	const cleanupExpiredOwned = async (getS3: () => AttachmentS3, ownerId: string) => {
 		const cleanupTime = dependencies.now();
 		const finalizingBefore = new Date(cleanupTime.getTime() - ATTACHMENT_FINALIZING_DELETE_GRACE_MS);
 		const expired = await dependencies.store.listExpiredOwned(ownerId, 5);
 		for (const doc of expired) {
 			try {
 				await cleanupClaimedDoc(
-					s3,
+					getS3,
 					doc,
 					doc.targetId
 						? { kind: 'target', targetId: doc.targetId }
@@ -425,14 +437,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!queue.length) {
 				return { ok: true, scanned: 0, deleted: 0, deferred: 0, skipped: 0, failed: 0, hasMore: false };
 			}
-			const s3 = dependencies.getS3();
+			// resolved lazily so a queue of linked-only drafts never needs S3
+			let s3: AttachmentS3 | null = null;
+			const getS3 = () => (s3 ??= dependencies.getS3());
 			let deleted = 0;
 			let deferred = 0;
 			let skipped = 0;
 			let failed = 0;
 			for (const doc of queue) {
 				try {
-					const outcome = await cleanupClaimedDoc(s3, doc, { kind: 'draft' });
+					const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'draft' });
 					if (outcome.status === 'deleted') deleted += 1;
 					else if (outcome.status === 'deferred') deferred += 1;
 					else skipped += 1;
@@ -483,7 +497,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				};
 			}
 
-			const s3 = dependencies.getS3();
+			// resolved lazily so a reap pass of linked-only drafts never needs S3
+			let s3Client: AttachmentS3 | null = null;
+			const getS3 = () => (s3Client ??= dependencies.getS3());
 			const queue = docs.slice(0, MAX_EXPIRED_ATTACHMENTS_PER_REAP);
 			const hasMoreFromLimit = docs.length > queue.length;
 			const startedAt = dependencies.clock();
@@ -504,7 +520,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					scanned += 1;
 					try {
 						const outcome = await cleanupClaimedDoc(
-							s3,
+							getS3,
 							doc,
 							doc.targetId
 								? { kind: 'target', targetId: doc.targetId }
@@ -750,7 +766,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 			const plan = attachmentPartPlan(sizeBytes);
 			const s3 = dependencies.getS3();
-			await cleanupExpiredOwned(s3, ownerId);
+			await cleanupExpiredOwned(() => s3, ownerId);
 
 			const id = requestedId ? attachmentIdForRequest(ownerId, requestedId) : dependencies.uuid();
 			const objectKey = `objects/${id}`;
@@ -833,7 +849,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				// safely age out under the bucket's seven-day lifecycle rule. Keep a
 				// durable objectless deletion intent, verify HEAD, and only then refund.
 				try {
-					await cleanupClaimedDoc(s3, reserved, { kind: 'draft' });
+					await cleanupClaimedDoc(() => s3, reserved, { kind: 'draft' });
 				} catch (cleanupError) {
 					unavailable('failed upload reservation cleanup', cleanupError);
 				}
@@ -1139,8 +1155,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const s3 = dependencies.getS3();
-			const outcome = await cleanupClaimedDoc(s3, existing, { kind: 'draft' });
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
@@ -1171,7 +1186,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const outcome = await cleanupClaimedDoc(dependencies.getS3(), existing, { kind: 'draft' });
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
@@ -1220,6 +1235,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					? await dependencies.canViewTarget(viewer, doc)
 					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');
+
+			// Linked attachments have no stored object — the content endpoint
+			// resolves them by redirecting to the external URL itself. Renderers
+			// normally use crystal.url directly; this keeps any consumer that still
+			// asks the endpoint working instead of 404ing.
+			if (doc.attachmentLinked === true) {
+				const linkedUrl = typeof doc.crystal.url === 'string' ? doc.crystal.url : '';
+				if (!linkedUrl) return fail(404, 'Attachment not found');
+				return { ok: true, url: linkedUrl, expiresAt: new Date(dependencies.now().getTime() + 60_000).toISOString() };
+			}
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1347,10 +1372,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// a home-object query or deletion.
 			if (dependencies.customMongoActive()) return { ok: true };
 			const docs = await dependencies.store.listForTarget(root.ownerId, root.shareId);
-			const s3 = docs.length ? dependencies.getS3() : null;
+			// resolved lazily so deleting a linked-only post never requires S3
+			let s3: AttachmentS3 | null = null;
+			const getS3 = () => (s3 ??= dependencies.getS3());
 			for (const doc of docs) {
-				if (!s3) break;
-				const outcome = await cleanupClaimedDoc(s3, doc, { kind: 'target', targetId: root.shareId });
+				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId });
 				if (outcome.status === 'deferred') {
 					throw new AttachmentServiceError(503, 'Attachment deletion is still settling — try again');
 				}
@@ -1442,6 +1468,65 @@ export const annotateAttachment = async (
 		return { ok: true, attachment };
 	} catch (error) {
 		return knownFailure(error) || unavailable('annotate', error);
+	}
+};
+
+// POST /api/v1/attachments/link — mint a READY linked-attachment draft from an
+// external media URL. It binds, orders, annotates, projects, and deletes like
+// any uploaded attachment, but no bytes ever touch Thingtime storage: the
+// crystal's url renders straight from the original site (img/video/anchor safe
+// sinks; the server never fetches it, so there is no SSRF surface). Duplicate
+// URLs are deliberately allowed — each mint is its own attachment thing.
+// Unbound mints expire on the same 24h draft TTL as uploads.
+export const linkAttachment = async (
+	ownerId: string,
+	input: unknown
+): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind'].includes(key))) {
+			return fail(400, 'Invalid linked media request');
+		}
+		const url = canonicalLinkedAttachmentUrl(record.url);
+		if (!url) return fail(400, 'Linked media must be a plain http(s) URL of at most 2048 characters');
+		const purpose = record.purpose === undefined ? 'post' : record.purpose;
+		if (purpose !== 'post' && purpose !== 'comment') {
+			return fail(400, 'Linked media is available on posts and comments');
+		}
+		const derived = linkedMediaTypeForUrl(url);
+		// The declared kind is a render hint the client may DEMOTE (an
+		// extensionless URL that failed an image probe becomes a plain file) but
+		// never promote: a known file extension cannot claim a visual kind.
+		let mediaKind = derived.mediaKind;
+		if (record.mediaKind !== undefined) {
+			if (!isLinkedAttachmentMediaKind(record.mediaKind)) return fail(400, 'Invalid linked media kind');
+			if (record.mediaKind !== 'file' && record.mediaKind !== derived.mediaKind) {
+				return fail(400, 'Linked media kind does not match the URL');
+			}
+			mediaKind = record.mediaKind;
+		}
+		const crystal: AttachmentCrystal = {
+			name: linkedAttachmentNameForUrl(url),
+			size: 0,
+			contentType: derived.contentType,
+			mediaKind,
+			url
+		};
+		const doc = await attachmentStore.insertLinkedReady({
+			id: randomUUID(),
+			ownerId,
+			crystal,
+			purpose,
+			expiresAt: new Date(Date.now() + ATTACHMENT_READY_DRAFT_TTL_MS)
+		});
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+		if (!attachment) return fail(409, 'Linked media failed validation after creation');
+		return { ok: true, attachment };
+	} catch (error) {
+		return knownFailure(error) || unavailable('link', error);
 	}
 };
 

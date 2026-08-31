@@ -13,6 +13,9 @@ import {
 	isAttachmentObjectVersionId,
 	planAttachmentReorder,
 	planAttachmentSync,
+	attachmentModerationHidesFromPublic,
+	attachmentStoredSortValue,
+	LINKED_ATTACHMENT_OBJECT_KEY_PREFIX,
 	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
@@ -68,6 +71,9 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// true only on linked (external URL) attachments: no S3 object exists, the
+	// crystal carries the url, and object bytes are always zero
+	attachmentLinked?: true;
 	// owner-chosen display position within the bound target (stamped at
 	// bind/reorder time; legacy bound docs without it sort by createdAt)
 	attachmentSortIndex?: number;
@@ -94,6 +100,14 @@ type PendingInput = {
 	requestFingerprint: string;
 	purpose: AttachmentPurpose;
 	profileSlot?: ProfileAttachmentSlot;
+	expiresAt: Date;
+};
+
+type LinkedReadyInput = {
+	id: string;
+	ownerId: string;
+	crystal: AttachmentCrystal;
+	purpose: AttachmentPurpose;
 	expiresAt: Date;
 };
 
@@ -144,6 +158,7 @@ const attachmentMatch = (id: string) => ({ shareId: id, thingtime: ATTACHMENT_TH
 
 export type AttachmentStore = {
 	reservePending(input: PendingInput): Promise<AttachmentDoc>;
+	insertLinkedReady(input: LinkedReadyInput): Promise<AttachmentDoc>;
 	claimUploadInitialization(ownerId: string, id: string, staleAtOrBefore: Date): Promise<AttachmentDoc | null>;
 	setUploadId(ownerId: string, id: string, uploadId: string): Promise<AttachmentDoc>;
 	markPartsIssued(ownerId: string, id: string, issuedAt: Date): Promise<AttachmentDoc>;
@@ -219,6 +234,45 @@ export const attachmentStore: AttachmentStore = {
 			attachmentPurpose: purpose,
 			...(profileSlot ? { attachmentProfileSlot: profileSlot } : {}),
 			attachmentExpiresAt: expiresAt,
+			createdAt: now,
+			updatedAt: now
+		};
+		const doc: AttachmentDoc = { ...unstamped, sizeBytes: thingStorageSizeBytes(unstamped) };
+
+		await withHomeMongoTransaction(async (session) => {
+			await applyUserStorageDelta(ownerId, doc.sizeBytes, session);
+			await (await getHomeThingsCollection()).insertOne(doc as any, { session });
+		});
+		return doc;
+	},
+
+	// A linked (external URL) attachment is born READY: there is no upload to
+	// finalize and no object bytes to verify — the crystal's url IS the media.
+	// It carries the same draft TTL as an uploaded ready draft, binds through
+	// the same fences, and only its JSON payload bytes hit the owner's quota.
+	// Moderation is stamped 'skipped' at mint: there are no stored bytes for
+	// the analyzer to fetch, and an unstamped doc would loop the sweep forever.
+	async insertLinkedReady({ id, ownerId, crystal, purpose, expiresAt }) {
+		const now = new Date();
+		const unstamped = {
+			shareId: id,
+			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+			thingtime: [ATTACHMENT_THINGTIME] as [typeof ATTACHMENT_THINGTIME],
+			crystal,
+			extended: null,
+			ownerId,
+			acl: [ACL_OWNER],
+			tags: [] as [],
+			storageClass: 'content' as const,
+			storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+			attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION,
+			attachmentState: 'ready' as const,
+			attachmentLinked: true as const,
+			objectSizeBytes: 0,
+			objectKey: `${LINKED_ATTACHMENT_OBJECT_KEY_PREFIX}${id}`,
+			attachmentPurpose: purpose,
+			attachmentExpiresAt: expiresAt,
+			moderation: { status: 'skipped' as const, categories: ['external-url'], provider: 'linked', analyzedAt: now },
 			createdAt: now,
 			updatedAt: now
 		};
@@ -910,13 +964,17 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 };
 
 // PATCH-time attachment sync: re-stamp display order AND bind any newly
-// uploaded ready drafts into an existing post/rich comment the owner is
-// editing. The requested list is the full desired order — it must cover every
-// bound id (planAttachmentSync rejects removals) and may append unbound ready
-// drafts, which bindReadyAttachmentsForPurpose claims with the same fences
-// create-time binding uses. The target must be an owned post-family thing:
-// binding to an arbitrary target id would let an edit deface another owner's
-// thread with the editor's own inherit-acl media.
+// uploaded/linked ready drafts into an existing post/rich comment the owner
+// is editing. The requested list is the full desired order — it must cover
+// every VISIBLE bound id (planAttachmentSync rejects removals) and may append
+// unbound ready drafts, which bindReadyAttachmentsForPurpose claims with the
+// same fences create-time binding uses. Bound docs the projection HIDES
+// (moderation pending the client predates, blocked) are exempt from the cover
+// requirement — the client can never have seen them — and are re-stamped
+// after the requested list so their binding and relative order survive the
+// save. The target must be an owned post-family thing: binding to an
+// arbitrary target id would let an edit deface another owner's thread with
+// the editor's own inherit-acl media.
 export const syncBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -930,23 +988,41 @@ export const syncBoundTargetAttachments = async (ownerId: string, targetId: stri
 	})) as { shareId: string; thingtime?: unknown } | null;
 	if (!target) throw new AttachmentBindingError(404, 'Post not found');
 	const bound = (await things
-		.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, { projection: { shareId: 1 } })
-		.toArray()) as Array<{ shareId: string }>;
+		.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, {
+			projection: { shareId: 1, moderation: 1, attachmentSortIndex: 1 }
+		})
+		.toArray()) as Array<{ shareId: string; moderation?: unknown; attachmentSortIndex?: unknown }>;
+	const hiddenBound = bound
+		.filter((doc) => attachmentModerationHidesFromPublic(doc.moderation))
+		.sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
 	const plan = planAttachmentSync(
 		requestedIds,
 		bound.map((doc) => String(doc.shareId)),
+		hiddenBound.map((doc) => String(doc.shareId)),
 		MAX_ATTACHMENTS_PER_TARGET
 	);
 	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
-	if (!plan.orderedIds.length) return;
-	if (!plan.addedIds.length) {
-		// pure permutation — keep the idempotent non-transactional stamp
-		await reorderBoundTargetAttachments(ownerId, targetId, plan.orderedIds);
-		return;
-	}
+	if (!plan.orderedIds.length && !plan.hiddenTrailingIds.length) return;
 	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
 	await withHomeMongoTransaction(async (session) => {
-		await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);
+		if (plan.orderedIds.length) {
+			await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);
+		}
+		if (plan.hiddenTrailingIds.length) {
+			const now = new Date();
+			const write = await things.bulkWrite(
+				plan.hiddenTrailingIds.map((shareId, index) => ({
+					updateOne: {
+						filter: { ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId, shareId },
+						update: { $set: { attachmentSortIndex: plan.orderedIds.length + index, updatedAt: now } }
+					}
+				})) as any,
+				{ session, ordered: true }
+			);
+			if (write.matchedCount !== plan.hiddenTrailingIds.length) {
+				throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and try again');
+			}
+		}
 	});
 };
 
