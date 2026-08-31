@@ -34,7 +34,7 @@ test('MCP tools/list publishes OAuth requirements before a user links Thingtime'
   });
   const payload: any = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(payload.result.tools.length, 15);
+  assert.equal(payload.result.tools.length, 31);
   assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
   assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
   const annotations = Object.fromEntries(payload.result.tools.map((tool: any) => [tool.name, tool.annotations]));
@@ -68,9 +68,25 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
       'remove_thingtime_account',
       'get_thingtime_profile',
       'get_thingtime_thing',
+      'get_thingtime_things',
       'list_thingtime_comments',
       'list_thingtime_things',
       'search_thingtime_things',
+      'list_thingtime_schemas',
+      'get_thingtime_schema',
+      'validate_thingtime_thing',
+      'list_thingtime_related',
+      'list_thingtime_changes',
+      'preview_thingtime_mutation',
+      'apply_thingtime_mutation',
+      'list_thingtime_history',
+      'get_thingtime_history',
+      'undo_thingtime_mutation',
+      'list_thingtime_capabilities',
+      'get_thingtime_capability_contract',
+      'start_thingtime_workflow',
+      'get_thingtime_workflow',
+      'cancel_thingtime_workflow',
       'create_thingtime_thing',
       'update_thingtime_thing',
       'delete_thingtime_thing',
@@ -86,6 +102,7 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
     assert.deepEqual(tool.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
     assert.deepEqual(tool._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
     assert.deepEqual(tool.outputSchema, { type: 'object', additionalProperties: true });
+    assert.equal(tool._meta['openai/outputTemplate'], 'ui://thingtime/review.html');
     assert.equal(CHATGPT_MCP_TOOL_FEATURES[tool.name as keyof typeof CHATGPT_MCP_TOOL_FEATURES] !== undefined, true);
   }
   assert.deepEqual(tools.map((tool: any) => tool.name), Object.keys(CHATGPT_MCP_TOOL_FEATURES));
@@ -124,6 +141,75 @@ test('exact Thing reads return a stable thing_not_found error', async (t) => {
     await callThingtimeTool('get_thingtime_thing', { id: 'missing-thing' }, connectedContext),
     { error: 'thing_not_found', status: 404 }
   );
+});
+
+test('bounded exact batch reads preserve input order and report missing IDs independently', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input) => {
+    const id = new URL(String(input)).searchParams.get('id');
+    if (id === 'missing') {
+      return new Response(JSON.stringify({ ok: false, error: 'Thing not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true, thing: { id } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+
+  const result: any = await callThingtimeTool('get_thingtime_things', { ids: ['two', 'missing', 'one'] }, connectedContext);
+  assert.deepEqual(result.results, [
+    { id: 'two', found: true, thing: { id: 'two' } },
+    { id: 'missing', found: false, error: 'thing_not_found' },
+    { id: 'one', found: true, thing: { id: 'one' } }
+  ]);
+});
+
+test('change polling uses the structured ACL-aware updatedAt search contract', async (t) => {
+  let requestBody: any;
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ ok: true, things: [], nextCursor: null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  await callThingtimeTool('list_thingtime_changes', {
+    since: '2026-08-29T00:00:00.000Z',
+    thingtime: 'data',
+    limit: 50
+  }, connectedContext);
+  assert.deepEqual(requestBody, {
+    conditions: [{ field: 'updatedAt', op: 'gte', value: '2026-08-29T00:00:00.000Z' }],
+    thingtime: 'data',
+    sort: 'newest',
+    cursor: null,
+    limit: 50
+  });
+});
+
+test('an unknown workflow run is rejected before a signed preview can mutate anything', async (t) => {
+  let fetches = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    fetches += 1;
+    return new Response(JSON.stringify({
+      ok: true,
+      thing: { id: 'todo-1', thingtime: ['data'], crystal: { done: false }, updatedAt: '2026-08-29T00:00:00.000Z' }
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  const context = {
+    ...connectedContext,
+    bundle: {
+      ...connectedContext.bundle,
+      connections: [{ ...connectedContext.bundle.connections[0], scopes: ['things.read', 'things.update'] }],
+      runs: []
+    }
+  } as any;
+  const previewed: any = await callThingtimeTool('preview_thingtime_mutation', {
+    operations: [{ action: 'update', id: 'todo-1', patch: { crystal: { done: true } } }]
+  }, context);
+  assert.equal(typeof previewed.receipt, 'string');
+  assert.equal(fetches, 1);
+
+  const notConfirmed = await callThingtimeTool('apply_thingtime_mutation', { receipt: previewed.receipt }, context);
+  assert.deepEqual(notConfirmed, { error: 'confirmed must be true after the user explicitly confirms the reviewed plan', status: 400 });
+  assert.equal(fetches, 1);
+
+  const applied = await callThingtimeTool('apply_thingtime_mutation', { receipt: previewed.receipt, confirmed: true, runId: 'unknown-run' }, context);
+  assert.deepEqual(applied, { error: 'Unknown Thingtime workflow run', status: 404 });
+  assert.equal(fetches, 1);
 });
 
 test('targeted comment reads bind the exact target id and comment kind upstream', async (t) => {
@@ -183,6 +269,44 @@ test('MCP initialize is available before OAuth so clients can negotiate the prot
   assert.match(payload.result.instructions, /select one explicitly/);
   assert.match(payload.result.instructions, /exact Thing ID.*get_thingtime_thing/i);
   assert.match(payload.result.instructions, /comment target ID.*list_thingtime_comments/i);
+  assert.deepEqual(payload.result.capabilities.prompts, { listChanged: false });
+  assert.deepEqual(payload.result.capabilities.resources, { subscribe: false, listChanged: false });
+});
+
+test('MCP publishes prompts and static resources before account authorization', async () => {
+  const invoke = async (method: string, params: Record<string, unknown> = {}) => {
+    const response = await handleChatGptMcp({
+      request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: method, method, params })
+      })
+    });
+    return (await response.json() as any).result;
+  };
+
+  const prompts = await invoke('prompts/list');
+  assert.equal(prompts.prompts.length, 5);
+  assert.deepEqual(prompts.prompts.map((prompt: any) => prompt.name), [
+    'thingtime_inbox_triage',
+    'thingtime_design_schema',
+    'thingtime_safe_change',
+    'thingtime_restore_history',
+    'thingtime_build_capability'
+  ]);
+  const prompt = await invoke('prompts/get', { name: 'thingtime_safe_change', arguments: { goal: 'archive done items' } });
+  assert.equal(prompt.messages[0].role, 'user');
+  assert.match(prompt.messages[0].content.text, /archive done items/);
+
+  const resources = await invoke('resources/list');
+  assert.deepEqual(resources.resources.map((resource: any) => resource.uri), [
+    'ui://thingtime/review.html',
+    'thingtime://capability-contract'
+  ]);
+  const ui = await invoke('resources/read', { uri: 'ui://thingtime/review.html' });
+  assert.equal(ui.contents[0].mimeType, 'text/html;profile=mcp-app');
+  assert.match(ui.contents[0].text, /Limitless, bounded/);
+  assert.equal(ui.contents[0].text.includes('test-token-not-returned-to-the-client'), false);
 });
 
 test('OAuth dynamic client registration signs only exact local loopback callbacks', async () => {
