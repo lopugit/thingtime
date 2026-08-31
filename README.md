@@ -22,13 +22,19 @@ files. `scripts/graphify` stores portable output under the immutable,
 content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
 snapshot through ignored compatibility aliases at the conventional root
 paths. Independent branches therefore add different files instead of
-line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`. After a
+successful activation, the wrapper keeps one current portable snapshot by
+default and removes superseded snapshots from the checked-out tree, so merged
+branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
 writers, validates each atomic output set, deduplicates identical artifacts,
 regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. See
+coexisting immutable variants. `scripts/graphify prune` applies the bounded
+retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer only when a local workflow deliberately needs more than one
+portable snapshot. See
 [`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
 for the rationale, layout, migration path, and retention model.
 

@@ -305,7 +305,10 @@ Rules:
   `graphify-out/snapshots/v1/`, hydrates a private semantic cache from immutable
   variants under `graphify-out/cache/semantic-cas/v1/`, and
   refreshes ignored root aliases so ordinary `graphify query` remains
-  compatible. Do not invoke mutating commands through the bare binary in this
+  compatible. It retains one active portable snapshot by default and prunes
+  superseded snapshots after successful activation; use
+  `GRAPHIFY_SNAPSHOT_RETENTION=<positive integer>` only for an explicit bounded
+  local need. Do not invoke mutating commands through the bare binary in this
   repository.
 - After modifying code, run `scripts/graphify update .` to keep the graph
   current (AST-only, no API cost). When Markdown, docs, PDFs, images, or another
@@ -313,7 +316,8 @@ Rules:
   Codex LLM proxy and then let the wrapper cluster/export the result.
 - Never commit mutable `graphify-out/graph.json`, `manifest.json`,
   `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
-  selected by the wrapper. Commit the immutable snapshot directory and any new
+  selected by the wrapper. Commit the selected immutable snapshot directory,
+  the wrapper's removal of superseded snapshots, and any new
   `graphify-out/cache/semantic-cas/` variants instead; the upstream mutable
   `graphify-out/cache/semantic/` directory stays ignored.
 - A commit SHA cannot name generated output included in that same commit.

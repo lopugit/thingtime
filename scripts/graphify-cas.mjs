@@ -10,6 +10,7 @@ import {
   readlinkSync,
   readdirSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -22,6 +23,7 @@ import { pathToFileURL } from "node:url"
 import { execFileSync, spawnSync } from "node:child_process"
 
 export const SNAPSHOT_SCHEMA = "thingtime.graphify-snapshot.v1"
+export const DEFAULT_SNAPSHOT_RETENTION = 1
 export const PORTABLE_FILES = [
   "graph.json",
   "manifest.json",
@@ -49,6 +51,7 @@ const INTERNAL_COMMANDS = new Set([
   "cache-migrate",
   "ensure",
   "fingerprint",
+  "prune",
   "snapshot",
 ])
 const DEFAULT_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -346,22 +349,102 @@ export function listSnapshots(root, sourceFingerprint = null) {
   return records
 }
 
+function compareSnapshotQuality(left, right) {
+  const nodeDelta =
+    Number(right.metadata.node_count ?? 0) -
+    Number(left.metadata.node_count ?? 0)
+  if (nodeDelta !== 0) return nodeDelta
+  const linkDelta =
+    Number(right.metadata.link_count ?? 0) -
+    Number(left.metadata.link_count ?? 0)
+  if (linkDelta !== 0) return linkDelta
+  return right.metadata.artifact_hash.localeCompare(
+    left.metadata.artifact_hash,
+  )
+}
+
 export function selectSnapshot(root, sourceFingerprint = null) {
   const records = listSnapshots(root, sourceFingerprint)
-  records.sort((left, right) => {
-    const nodeDelta =
-      Number(right.metadata.node_count ?? 0) -
-      Number(left.metadata.node_count ?? 0)
-    if (nodeDelta !== 0) return nodeDelta
-    const linkDelta =
-      Number(right.metadata.link_count ?? 0) -
-      Number(left.metadata.link_count ?? 0)
-    if (linkDelta !== 0) return linkDelta
-    return right.metadata.artifact_hash.localeCompare(
-      left.metadata.artifact_hash,
-    )
-  })
+  records.sort(compareSnapshotQuality)
   return records[0] ?? null
+}
+
+export function snapshotRetentionLimit(
+  value = process.env.GRAPHIFY_SNAPSHOT_RETENTION,
+) {
+  if (value === undefined || String(value).trim() === "") {
+    return DEFAULT_SNAPSHOT_RETENTION
+  }
+  const normalized = String(value).trim()
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
+    fail(
+      `GRAPHIFY_SNAPSHOT_RETENTION must be a positive integer, received ${JSON.stringify(value)}`,
+    )
+  }
+  const retention = Number(normalized)
+  if (!Number.isSafeInteger(retention)) {
+    fail("GRAPHIFY_SNAPSHOT_RETENTION exceeds JavaScript's safe integer range")
+  }
+  return retention
+}
+
+/**
+ * Bound portable snapshots in the current Git tree while keeping the active
+ * source snapshot. Removed snapshots remain recoverable from Git history and
+ * from any branch ref that still points to them.
+ */
+export function pruneSnapshots(
+  root,
+  activeSnapshot,
+  retention = snapshotRetentionLimit(),
+) {
+  if (!activeSnapshot?.path) fail("Cannot prune without an active snapshot")
+  if (!Number.isSafeInteger(retention) || retention < 1) {
+    fail("Snapshot retention must be a positive integer")
+  }
+
+  const records = listSnapshots(root)
+  const activePath = path.resolve(activeSnapshot.path)
+  if (!records.some((record) => path.resolve(record.path) === activePath)) {
+    fail(`Active snapshot is not a valid snapshot record: ${activePath}`)
+  }
+
+  records.sort((left, right) => {
+    const leftActive = path.resolve(left.path) === activePath
+    const rightActive = path.resolve(right.path) === activePath
+    if (leftActive !== rightActive) return leftActive ? -1 : 1
+    return compareSnapshotQuality(left, right)
+  })
+
+  const retained = records.slice(0, retention)
+  const retainedPaths = new Set(
+    retained.map((record) => path.resolve(record.path)),
+  )
+  const removed = []
+  for (const record of records) {
+    if (retainedPaths.has(path.resolve(record.path))) continue
+    rmSync(record.path, { recursive: true, force: true })
+    removed.push(record.path)
+  }
+
+  const snapshotsRoot = path.join(graphifyRoot(root), "snapshots", "v1")
+  if (existsSync(snapshotsRoot)) {
+    for (const sourceName of readdirSync(snapshotsRoot)) {
+      const sourceRoot = path.join(snapshotsRoot, sourceName)
+      if (
+        statSync(sourceRoot).isDirectory() &&
+        readdirSync(sourceRoot).length === 0
+      ) {
+        rmdirSync(sourceRoot)
+      }
+    }
+  }
+
+  return {
+    retention,
+    retained: retained.map((record) => record.path),
+    removed,
+  }
 }
 
 function copyPortableFiles(from, to) {
@@ -567,6 +650,15 @@ function isTracked(root, relativePath) {
   }
 }
 
+function isIgnored(root, relativePath) {
+  try {
+    runGit(root, ["check-ignore", "-q", "--", relativePath])
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Materialize compatibility aliases without putting mutable pointers in Git. */
 export function activateSnapshot(root, snapshot) {
   const outputRoot = graphifyRoot(root)
@@ -592,6 +684,11 @@ export function activateSnapshot(root, snapshot) {
       } else if (isTracked(root, relativeAlias)) {
         // Migration mode: never replace a still-tracked portable output.
         continue
+      } else if (isIgnored(root, relativeAlias)) {
+        // Older upstream hooks can materialize an ignored regular file at a
+        // fixed compatibility path. It is generated, recoverable, and safe to
+        // replace; unrelated untracked files still fail closed below.
+        rmSync(alias)
       } else {
         fail(`Refusing to replace non-symlink Graphify alias: ${alias}`)
       }
@@ -601,6 +698,7 @@ export function activateSnapshot(root, snapshot) {
 }
 
 function runMutation(root, args) {
+  const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const fingerprint = computeSourceFingerprint(root)
     const minimumNodeCount = args.includes("--force")
@@ -625,6 +723,7 @@ function runMutation(root, args) {
         minimumNodeCount,
       })
       activateSnapshot(root, snapshot)
+      pruneSnapshots(root, snapshot, retention)
       process.stdout.write(`${snapshot.path}\n`)
       return snapshot
     } catch (error) {
@@ -635,17 +734,13 @@ function runMutation(root, args) {
 }
 
 function ensureSnapshot(root) {
-  const fingerprint = computeSourceFingerprint(root)
-  const exact = selectSnapshot(root, fingerprint.sourceFingerprint)
-  if (exact) {
-    activateSnapshot(root, exact)
-    return exact
-  }
+  const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const current = computeSourceFingerprint(root)
     const existing = selectSnapshot(root, current.sourceFingerprint)
     if (existing) {
       activateSnapshot(root, existing)
+      pruneSnapshots(root, existing, retention)
       return existing
     }
 
@@ -669,11 +764,25 @@ function ensureSnapshot(root) {
         minimumNodeCount,
       })
       activateSnapshot(root, snapshot)
+      pruneSnapshots(root, snapshot, retention)
       return snapshot
     } catch (error) {
       rmSync(workingOutput, { recursive: true, force: true })
       throw error
     }
+  })
+}
+
+function pruneSnapshotStore(root) {
+  const retention = snapshotRetentionLimit()
+  return withRepositoryLock(root, () => {
+    const current = computeSourceFingerprint(root)
+    const snapshot =
+      selectSnapshot(root, current.sourceFingerprint) ?? selectSnapshot(root)
+    if (!snapshot) fail("No valid Graphify snapshot is available to retain")
+    activateSnapshot(root, snapshot)
+    const result = pruneSnapshots(root, snapshot, retention)
+    return { snapshot, ...result }
   })
 }
 
@@ -696,6 +805,18 @@ function runRouted(root, args) {
   }
   if (args[0] === "fingerprint") {
     process.stdout.write(`${JSON.stringify(computeSourceFingerprint(root))}\n`)
+    return
+  }
+  if (args[0] === "prune") {
+    const result = pruneSnapshotStore(root)
+    process.stdout.write(
+      `${JSON.stringify({
+        active: path.relative(root, result.snapshot.path),
+        retention: result.retention,
+        retained: result.retained.length,
+        removed: result.removed.length,
+      })}\n`,
+    )
     return
   }
   if (args[0] === "snapshot") {
