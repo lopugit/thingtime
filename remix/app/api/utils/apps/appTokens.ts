@@ -3,7 +3,7 @@ import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUserWithStorage } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
-import { appAllowsOrigin, appIsRevoked, findAppByClientId } from './apps';
+import { appAllowsTokenAudience, appIsRevoked, findAppByClientId } from './apps';
 import { sandboxPublicUser } from './sandbox';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
@@ -133,7 +133,7 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   }
 
   const app = await findAppByClientId(clientId);
-  if (!app || !appAllowsOrigin(app, origin)) return null;
+  if (!app || !appAllowsTokenAudience(app, origin)) return null;
   // Admin suspension: a revoked app's tokens die here even if the session
   // sweep hasn't caught them yet.
   if (appIsRevoked(app)) return null;

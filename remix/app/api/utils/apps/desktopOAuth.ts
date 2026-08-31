@@ -2,7 +2,7 @@ import { findUserById } from '../auth/users';
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession } from '../auth/sessions';
 import { getSessionsCollection } from '../mongodb/collections';
-import { appAllowsOrigin, appIsRevoked, findAppByClientId } from './apps';
+import { appAllowsDesktopRedirect, appIsRevoked, findAppByClientId } from './apps';
 import { issueAppToken } from './appTokens';
 import type { AppTokenGrant } from './appTokens';
 import { normalizeDesktopRedirectUri, normalizePkceVerifier, pkceVerifierMatches } from './desktopOAuthCore';
@@ -43,6 +43,10 @@ export const issueDesktopAuthorizationCode = async (
 			sharedThings: input.sharedThings ?? []
 		}
 	});
+
+	// The code is signed so a guessed jti is useless, while the backing session
+	// makes it revocable and one-time. It cannot act as a normal account token:
+	// resolveSessionUser rejects purpose `oauth-code`.
 	const code = await signJwt({ sub: userId, jti: session.jti, expiresIn: '5m' });
 	return { code, expiresAt };
 };
@@ -72,9 +76,14 @@ export const exchangeDesktopAuthorizationCode = async (input: {
 	if (meta.clientId !== clientId || meta.redirectUri !== redirect.uri || meta.origin !== redirect.origin) return invalidGrant();
 	if (meta.codeChallengeMethod !== 'S256' || !pkceVerifierMatches(verifier, meta.codeChallenge)) return invalidGrant();
 
+	// Re-check mutable authority at exchange time. Removing the callback origin,
+	// suspending/deleting the app, or deleting the user invalidates an issued but
+	// not-yet-exchanged code.
 	const [app, user] = await Promise.all([findAppByClientId(clientId), findUserById(claims.sub)]);
-	if (!app || appIsRevoked(app) || !appAllowsOrigin(app, redirect.origin) || !user) return invalidGrant();
+	if (!app || appIsRevoked(app) || !appAllowsDesktopRedirect(app, redirect) || !user) return invalidGrant();
 
+	// Consume before minting. The compare-and-set is the replay boundary: two
+	// racing exchanges can both validate PKCE, but only one can flip revokedAt.
 	const now = new Date();
 	const consumed = await sessions.findOneAndUpdate(
 		{

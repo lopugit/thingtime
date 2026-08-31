@@ -18,7 +18,9 @@ import {
 } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { RenderThing } from '~/components/Kinds';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
@@ -534,7 +536,16 @@ export const PreviewModal = ({
   thing: ThingsThing | null;
   onClose: () => void;
   onAction: (thing: ThingsThing, action: 'rename' | 'move' | 'share' | 'delete') => void;
-}) => (
+}) => {
+  const viewer = useCurrentUser();
+  // Ownership IS the trust boundary for the interactive render below. This
+  // modal opens on ANY thing the viewer can read — the ?preview=<id> deep link
+  // resolves foreign public things too — so a component authored by someone
+  // else must render INERT here, exactly like the feed/search surfaces. The
+  // check lives inside the modal rather than at the call site so a future
+  // caller cannot forget it.
+  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
+  return (
   <Modal isOpen={!!thing} onClose={onClose} size="lg">
     <ModalOverlay />
     {thing && (
@@ -557,7 +568,18 @@ export const PreviewModal = ({
               ))}
             </Flex>
             <Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" overflow="hidden" padding={3}>
-              <ThingView compact thing={thing.crystal} />
+              {thing.thingtime.includes('component') ? (
+                // the interactive surface for component instances: the kind
+                // renderer resolves the template AND its ttAction wrapper
+                // handles clicks (grid previews stay pointerEvents:none)
+                <RenderThing
+                  context={{ size: 'full', untrusted }}
+                  fallback={<ThingView compact thing={thing.crystal} />}
+                  thing={thing as unknown as Record<string, unknown>}
+                />
+              ) : (
+                <ThingView compact thing={thing.crystal} />
+              )}
             </Box>
           </Flex>
         </ModalBody>
@@ -578,4 +600,5 @@ export const PreviewModal = ({
       </ModalContent>
     )}
   </Modal>
-);
+  );
+};

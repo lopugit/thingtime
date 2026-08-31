@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { appAllowsOrigin, appIsRevoked, findAppByClientId } from '~/api/utils/apps/apps';
+import { appAllowsDesktopRedirect, appIsRevoked, findAppByClientId } from '~/api/utils/apps/apps';
 import { issueDesktopAuthorizationCode } from '~/api/utils/apps/desktopOAuth';
 import {
 	appendDesktopAuthorizationResult,
@@ -13,9 +13,10 @@ import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// Consent endpoint for installed public clients. It gives the browser only a
-// short-lived, single-use code at an RFC 8252 loopback callback; the daemon
-// must prove possession of the original S256 verifier at the token endpoint.
+// POST /api/v1/oauth/desktop/authorize — the first-party /authorize page uses
+// this after consent for installed apps. It returns a redirect containing a
+// short-lived, one-time code — never the app token. The loopback receiver must
+// exchange that code with the original S256 verifier at /api/v1/oauth/token.
 export const action = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +37,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json(
 			{
 				ok: false,
-				error: 'redirectUri must be an HTTP 127.0.0.1 or [::1] URL with an explicit unprivileged port and no query or fragment'
+				error: 'redirectUri must be an exact loopback callback or a registered reverse-domain native callback URI'
 			},
 			{ status: 400 }
 		);
@@ -64,8 +65,8 @@ export const action = async ({ request }: { request: Request }) => {
 	const app = await findAppByClientId(clientId);
 	if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
 	if (appIsRevoked(app)) return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
-	if (!appAllowsOrigin(app, redirect.origin)) {
-		return json({ ok: false, error: 'This loopback origin is not on the app’s allowlist' }, { status: 403 });
+	if (!appAllowsDesktopRedirect(app, redirect)) {
+		return json({ ok: false, error: 'This desktop callback is not registered on the app' }, { status: 403 });
 	}
 
 	const issued = await issueDesktopAuthorizationCode(user.id, {
