@@ -912,6 +912,11 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Editor.js docs render as rich text by default everywhere: a rich-text
       post body (feed + profile), a nested rich-text value inside a tree,
       and /search crystal chips (plain-text preview, never raw block JSON).
+- [ ] In the Text post composer, style several Editor.js blocks (heading,
+      colour, alignment, size, repeated whitespace, and a hard line break),
+      then tap Post immediately after the final style change. The new feed
+      card and `/post/:id` preserve the exact latest block document after a
+      reload; no heading appears as literal Markdown such as `## Posts`.
 - [ ] Untrusted (other users') things are only auto-rendered for the
       vetted-safe kinds (rich-text, image, audio, playlist, podcast, article,
       quote, book, movie, link, file, code, repository); every other kind —

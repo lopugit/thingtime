@@ -16,8 +16,9 @@ import {
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
-import { LongTextEditor, textToBlocks } from '~/components/Editor/LongTextEditor';
+import { LongTextEditor, textToBlocks, type LongTextEditorHandle } from '~/components/Editor/LongTextEditor';
 import { blocksToText, isEditorJsDoc, type EditorJsDoc } from '~/components/Editor/editorJsValue';
+import { capturePostEditorValue } from '~/components/Editor/postEditorSubmission';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
 import { canonicalLinkedImageUrls, createLinkedImageItem, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
@@ -185,6 +186,7 @@ export const PostComposer = (props: PostComposerProps) => {
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
+	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
 	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(null);
@@ -342,7 +344,19 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const handlePost = async () => {
 		if (!valid || posting || attachmentSnapshot.blocking) return;
+		setPosting(true);
 		setThingModalOpen(false);
+		let submittedEditorValue = postEditorValue;
+		if (!pendingPostSubmissionRef.current) {
+			try {
+				submittedEditorValue = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
+				setPostEditorValue(submittedEditorValue);
+			} catch {
+				setPosting(false);
+				lopu({ title: 'Rich text is still saving — please try again ✍️', status: 'error' });
+				return;
+			}
+		}
 
 		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
@@ -359,10 +373,14 @@ export const PostComposer = (props: PostComposerProps) => {
 			: null;
 		const canonicalImages = showPhotos ? validImages : [];
 		const canonicalThing = type === 'thingtime' ? draftThing : null;
-		const canonicalText = blocksToText(postEditorValue.blocks).trim();
+		const canonicalText = blocksToText(submittedEditorValue.blocks).trim();
 		const canonicalRichText: EditorJsDoc | null = canonicalText
-			? { ...postEditorValue, kind: 'rich-text' }
+			? { ...submittedEditorValue, kind: 'rich-text' }
 			: null;
+		if (!pendingPostSubmissionRef.current && type === 'text' && !canonicalText && !hasReadyAttachment) {
+			setPosting(false);
+			return;
+		}
 		// gallery layout: auto stores null; spans are pruned to the visual
 		// attachments actually going out with this post
 		const visualIdsForLayout = (isEdit ? editAttachments : attachmentSnapshot.attachments)
@@ -454,7 +472,6 @@ export const PostComposer = (props: PostComposerProps) => {
 			onPosted(created);
 		};
 
-		setPosting(true);
 		try {
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
@@ -626,6 +643,7 @@ export const PostComposer = (props: PostComposerProps) => {
         <UserAvatarCircle size="36px" fontSize="sm" />
         <Box flex="1" minWidth={0}>
           <LongTextEditor
+            ref={postTextEditorRef}
             key={composerSession}
 						value={postEditorValue}
 						onValueChange={(next) => {
