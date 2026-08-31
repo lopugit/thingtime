@@ -36,6 +36,7 @@ export type ApiEndpointDoc = {
   requestExamples: ApiRequestExample[];
   responseExamples: ApiResponseExample[];
   notes?: string[];
+  featureVersion?: string;
 };
 
 export type ApiPlatformExamples = {
@@ -116,9 +117,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
+    featureVersion: '1.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -132,6 +134,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Ask the develop listener to resolve one exact PR using the github-actions control plane.',
         method: 'POST',
         body: { workflow: 'resolve-conflicts', ref: 'develop', inputs: { pr_number: '190' } }
+      },
+      {
+        name: 'Merge a Feature Stack into develop and main',
+        description: 'Snapshot the selected PRs in this exact order and dispatch one verified integration job per target.',
+        method: 'POST',
+        body: {
+          workflow: 'feature-stack',
+          ref: 'develop',
+          inputs: {
+            name: 'Search + Messenger',
+            source_pr_numbers: [427, 434],
+            targets: ['develop', 'main']
+          }
+        }
       }
     ],
     responseExamples: [
@@ -187,14 +203,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection, exact Thing reads by ID, comments targeted by parent ID, browse/search discovery, and confirmed writes. Initialization tells agents to use get_thingtime_thing whenever an exact ID is known and list_thingtime_comments whenever a target ID is known, so neither operation depends on a recent/global page. It also requires explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements 31 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, and static UI/contract resources are public metadata and never return account data. Account resources and every tool call require a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
-      'POST JSON-RPC initialize, tools/list, and tools/call requests to this endpoint.',
-      'Use get_thingtime_thing for a known Thing ID and list_thingtime_comments for a known parent/target ID; reserve list/search for discovery.',
-      'Use a write tool only after the person in the chat confirms the intended change.'
+      'POST JSON-RPC initialize, tools/list, prompts/list, resources/list, resources/read, and tools/call requests to this endpoint.',
+      'Use get_thingtime_thing or get_thingtime_things for known IDs and list_thingtime_comments for a known target; reserve list/search for discovery.',
+      'For composed writes, preview the complete plan, review its UI diff, obtain confirmation, then apply the exact signed receipt.'
     ],
     requestExamples: [
       {
@@ -219,7 +235,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'This route does not proxy arbitrary URLs or generic Thingtime API paths. Endpoint origins and operations are explicitly allowlisted.',
-      'The capability manifest names independently versioned features: chatgpt.mcp, chatgpt.oauth, chatgpt.connections, chatgpt.things.read, and chatgpt.things.write. It also maps every executable MCP tool operation to its owning feature.'
+      'The capability manifest independently versions MCP, OAuth, connections, read/write Things, schemas, relationships, previews, resources, history, workflows, UI, changes, and Capability Things. It maps every executable tool and MCP method to its owning feature.',
+      'resources/subscribe is deliberately advertised as false: list_thingtime_changes is the compatible bounded polling contract, and MCP mutation deletions remain visible through encrypted history receipts.'
     ]
   }),
   endpoint({
@@ -6401,7 +6418,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
-      'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
+      'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
+      'DELETE ?id= (or body { id, expectedUpdatedAt? }) removes an owned thing; the optional precondition is checked atomically before cascade cleanup, attached comments/reactions go with it, and shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
     requestExamples: [
@@ -6516,6 +6534,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'PATCH merges crystal fields and can retarget the audience.',
         method: 'PATCH',
         body: { id: 'post_123', crystal: { text: 'Edited ✏️' }, acl: ['-tt:all', 'tt:userFamily', 'tt:user'] }
+      },
+      {
+        name: 'Apply a previewed patch safely',
+        description: 'Replace the crystal only if the exact previewed version is still current.',
+        method: 'PATCH',
+        body: { id: 'post_123', crystal: { type: 'text', text: 'Reviewed replacement' }, replaceCrystal: true, expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       },
       {
         name: 'Delete a thing',
@@ -6952,7 +6976,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the post id to delete.',
+      'POST the Thing id and, for a previewed mutation, its expectedUpdatedAt timestamp.',
       'The current user must own the post.',
       'On success, remove the post from feed and profile lists.',
       'Handle 401 unauthenticated and 404 for missing or unowned posts.'
@@ -6962,7 +6986,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Delete post',
         description: 'Delete a caller-owned post.',
         method: 'POST',
-        body: { id: 'post_123' }
+        body: { id: 'post_123', expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       }
     ],
     responseExamples: [
@@ -7245,7 +7269,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
-      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things (comments, reactions) keep their inherited audience.',
+      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7255,6 +7279,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the thing id plus any of crystal, extended, visibility, and tags.',
       'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'For a previewed update, send expectedUpdatedAt; a stale value returns 409 without writing. Set replaceCrystal only when whole-crystal replacement is intended.',
       'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
       'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
@@ -7271,6 +7296,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Swap the acl to friends-only without touching the crystal.',
         method: 'POST',
         body: { id: 'post_123', acl: ['-tt:all', 'tt:userFriends', 'tt:user'] }
+      },
+      {
+        name: 'Apply a previewed replacement',
+        description: 'Whole-crystal replacement guarded by the version inspected in the preview.',
+        method: 'POST',
+        body: { id: 'post_123', crystal: { type: 'text', text: 'Reviewed replacement' }, replaceCrystal: true, expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       }
     ],
     responseExamples: [
