@@ -344,6 +344,19 @@ Lifecycle and recovery:
   and cannot be saved through the policy API.
 - The dashboard is expected to remain empty until the GitHub App is installed,
   both webhooks are active, and an administrator runs Reconcile once.
+- A selected same-repository PR can opt into Develop, Production, or both from
+  its admin detail panel. The server builds the exact current head SHA, and the
+  signed pull-request webhook rebuilds enabled environments after synchronize,
+  reopen, or ready-for-review events.
+- Develop uses `VERCEL_CUSTOM_ENVIRONMENT_ID`; Production uses Vercel's
+  production target. Both set `autoAssignCustomDomains: false`, so the returned
+  immutable `*.vercel.app` URL never moves `dev.thingtime.com`,
+  `thingtime.com`, or another custom domain. Closing or disabling removes only
+  deployments bearing the matching Thingtime PR/environment markers.
+- Required server-only values are `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID`,
+  `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`, `VERCEL_GITHUB_REPO_ID`, and—for
+  Develop only—`VERCEL_CUSTOM_ENVIRONMENT_ID`. Values stay in Vercel settings;
+  no live identifier or credential is recorded here.
 
 ## Verified PR Previews
 

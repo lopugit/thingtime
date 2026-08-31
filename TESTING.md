@@ -241,6 +241,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Repository-root Vercel builds
 
+- [ ] Leave a custom-domain or Vercel preview tab open across an alias flip,
+      then navigate to a route whose chunk was not loaded before the deploy.
+      Chromium, Safari, and Firefox each perform exactly one hard reload and
+      land on the requested route instead of the dynamic-import error surface.
+      With the chunk request kept broken, the tab must not reload-loop; after
+      ten healthy seconds, a later alias flip can claim one new recovery.
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
       `github-actions` and generic Preview duplicate SHAs skip, the `develop`
@@ -2109,8 +2115,12 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
-      Account section shows the 🛠️ Admin item only for admins.
+      the dashboard for admins; `/admin/users`, `/admin/apps`,
+      `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
+      `/admin/external-integrations`, and `/admin/system` each open the exact
+      matching tab, remain correct through refresh/back/forward, and an unknown
+      admin section safely returns to `/admin`. The drawer's Account section
+      shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
       storage, and every count; multiple filters combine with AND and sorting
@@ -2226,7 +2236,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Mix PRs targeting `github-actions`, `main`, and `develop`, keep Auto
       decide branches selected, and prove the immutable plan routes controller
       sources only to `github-actions`, main sources only to `main`, and develop
-      sources only to selected product targets. Uncheck it and prove the
+      sources only to selected product targets. Include a selected source and a
+      selected target with no compatible partner: both are safely omitted while
+      the remaining compatible pairs still queue, and a zero-pair plan is rejected.
+      Confirm skipped saved targets are labelled skipped rather than running forever.
+      Uncheck it and prove the
       explicit merge-everywhere mode remains available.
 - [ ] In the protected Feature Stack run, confirm each target starts from its
       admitted SHA, every source becomes exactly one two-parent merge commit in
@@ -2258,13 +2272,30 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
       preview origin. Confirm its `origin` matches exactly, every generated API
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `2.0.0`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, saved stacks are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
-      breaking-major manifest before dispatch.
+      `2.1.0`, admin credentials are `2.0.0`, signed credential delivery is
+      `1.1.0`, saved stacks are `1.0.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      breaking-major manifest before dispatch. CI dispatch 2.1 adds
+      compatible-pair omission during automatic Feature Stack routing.
+- [ ] Select one trusted open PR and independently enable Develop and
+      Production/Main previews, including both at once. Develop must use only
+      the configured Custom Environment; Production must require the explicit
+      warning acknowledgement, use Production values server-side, expose only
+      a generated immutable Vercel URL, and never assign `thingtime.com` or
+      another custom domain. Neither response, browser state, log, nor status
+      event may contain a credential value.
+- [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
+      rebuilds each enabled environment at exactly the new live head SHA.
+      Drafts, forks, moved heads, another repository, and closed PRs fail
+      closed. Disable each environment and close the PR; cleanup must delete
+      only deployments carrying the exact Thingtime PR/environment markers,
+      while stable develop and production deployments remain untouched.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
-      GitHub-only rather than accepting an unsupported provider.
+      GitHub-only rather than accepting an unsupported provider. The section
+      presents Feature Stack, conflict repair, rebases, promotions, and sync as
+      operation lanes of the one Lopu PR manager; Web CI and Electron remain a
+      separate supporting-build group, never competing repository managers.
 - [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
       installation id, private key, router secret, and Vercel runtime identity).
       The Admin badge says setup is needed, names the missing server setting,
@@ -2293,11 +2324,33 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       that no provider events have been imported. Run Reconcile once and verify
       existing branches, open PRs, runs, deployments, and previews populate;
       subsequent GitHub/Vercel deliveries advance the same records and history.
-- [ ] Desktop: search and use the Vercel-style multi-select status filter,
-      including All statuses and every mixed combination; select a PR, open its GitHub and
+- [ ] Desktop: search and use the Vercel-style multi-select PR status filter,
+      including All statuses, Clean, Conflicting, Draft, Merged, Closed, Unknown,
+      and every mixed combination; confirm each choice matches the status badge exactly,
+      then select a PR, open its GitHub and
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Select and remove at least 30 Feature Stack PRs while the selectable PR
+      table is in view. The ordered stack and selectable PR table remain separate
+      scroll regions, the composer height stays fixed, and the row under the
+      pointer does not jump vertically after any selection.
+- [ ] Run a saved Feature Stack and keep it selected. Its live merge stream
+      refreshes dispatch, workflow/job, skipped-target, and target-PR updates
+      without a page reload; progress never decreases; links open the matching
+      GitHub run or PR; and the clearly labelled estimated finish uses the
+      browser's local timezone. Terminal success and failure stop live polling.
+- [ ] Collapse and expand the Lopu automation, AI credential waterfall, and
+      Feature Stack cards from their headings. Reload and navigate away/back;
+      the per-admin collapsed state persists, the closed cards consume only
+      their heading height, all heading toggles expose `aria-expanded`, and a
+      selected actively running Feature Stack automatically expands so its live
+      progress cannot remain hidden.
+- [ ] Open `/admin`, then every bookmarkable tab route (`/admin/users`,
+      `/admin/apps`, `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
+      `/admin/external-integrations`, `/admin/system`). Reload and use Back and
+      Forward; the selected tab and content must match the URL without a page
+      jump, and an unknown section must fail closed to Users.
 - [ ] Desktop and 375px mobile: add/remove Feature Stack rows and targets, save,
       load, edit, archive, toggle auto-decide, and inspect target progress;
       verify long branch/feature names truncate without hiding
@@ -2691,6 +2744,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       over generic image MIME/extensions (`🖼️`), ordinary photos/images use
       `🏞️`, known media/document/archive/install families are distinct, and an
       unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] Create and edit a Text post whose body contains hard line breaks,
+      repeated spaces, inline bold/italic/highlight/link marks, and at least
+      one block style tune. Verify the exact presentation survives save and
+      reload in Feed, profile, nested repost, comment, and `/post/:id` views at
+      desktop and mobile widths; legacy plain-text posts must still preserve
+      newline breaks without horizontal overflow.
 - [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
       a client change, then foreground/focus the old tab. It fetches the live
       alias HTML without cache and reloads only when the hashed `index-*.js`

@@ -240,6 +240,7 @@ export type PublicComment = {
   author: FeedAuthor | null;
   type: PostType;
   text: string;
+  richText: Record<string, any> | null;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
@@ -268,6 +269,7 @@ export type PublicPost = {
   visibility: PostVisibility;
   acl: string[];
   text: string;
+  richText: Record<string, any> | null;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
@@ -1348,6 +1350,7 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
 export type CreatePostInput = {
   type?: unknown;
   text?: unknown;
+  richText?: unknown;
   images?: unknown;
   listing?: unknown;
   thing?: unknown;
@@ -1374,7 +1377,15 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing, mediaLayout: input.mediaLayout },
+      crystal: {
+			type: input.type,
+			text: input.text,
+			richText: input.richText,
+			images: input.images,
+			listing: input.listing,
+			thing: input.thing,
+			mediaLayout: input.mediaLayout
+		},
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -1484,6 +1495,7 @@ export const RELATED_CHILD_PROJECTION = {
   thingtime: 1,
   tags: 1,
   'crystal.text': 1,
+  'crystal.richText': 1,
   'crystal.type': 1,
   'crystal.images': 1,
   // Rich comments use the same post crystal as top-level posts. Keeping this
@@ -1892,6 +1904,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       author: profiles.get(comment.userId) || null,
       type: (commentCrystal.type as PostType) || 'text',
       text: comment.text,
+      richText:
+        commentCrystal.richText && typeof commentCrystal.richText === 'object' && !Array.isArray(commentCrystal.richText)
+          ? (commentCrystal.richText as Record<string, any>)
+          : null,
       images: (commentCrystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(comment.id) || [],
 			mediaLayout: mediaLayoutOf(commentCrystal),
@@ -1932,6 +1948,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       text: String(crystal.text || ''),
+      richText:
+        crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
+          ? (crystal.richText as Record<string, any>)
+          : null,
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
 			mediaLayout: mediaLayoutOf(crystal),
@@ -3107,6 +3127,7 @@ export type AddCommentInput =
   | string
   | {
       text?: unknown;
+      richText?: unknown;
       // any of these makes it a RICH comment — a full ["post","comment"] thing
       // with the whole post vocabulary (photos, listing, thingtime thing)
       type?: unknown;
@@ -3163,6 +3184,7 @@ export const addComment = async (
   // ["post","comment"] thing (validated by the post crystal sanitizer)
 	const rich =
 		body.type !== undefined ||
+		body.richText !== undefined ||
 		body.images !== undefined ||
 		body.listing !== undefined ||
 		body.thing !== undefined ||
@@ -3172,7 +3194,15 @@ export const addComment = async (
 	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
-          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing, mediaLayout: body.mediaLayout },
+          crystal: {
+				type: body.type ?? 'text',
+				text: body.text,
+				richText: body.richText,
+				images: body.images,
+				listing: body.listing,
+				thing: body.thing,
+				mediaLayout: body.mediaLayout
+			},
           tags: body.tags,
 				shareId: body.shareId,
           targetId: target.shareId
@@ -3251,6 +3281,10 @@ export const addComment = async (
     author: profiles.get(viewerId) || null,
     type: (crystal.type as PostType) || 'text',
     text: String(crystal.text || ''),
+    richText:
+      crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
+        ? (crystal.richText as Record<string, any>)
+        : null,
     images: (crystal.images as string[]) || [],
 		attachments: options.attachments || [],
 		mediaLayout: mediaLayoutOf(crystal),
@@ -3884,6 +3918,15 @@ export const updateThing = async (
   }
   const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
+  // A plain-text client editing a rich-text post intentionally replaces the
+  // body. Clear the old document so it cannot override the newly supplied text.
+  if (
+    thingtime.includes('post') &&
+    Object.prototype.hasOwnProperty.call(patch, 'text') &&
+    !Object.prototype.hasOwnProperty.call(patch, 'richText')
+  ) {
+    nextCrystal.richText = null;
+  }
 	// Post edits validate with the same trusted attachment context creates get:
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".
