@@ -65,6 +65,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Vercel now serves Thingtime's origin-scoped API capability manifest from
+  Nitro instead of the SPA shell.** The generic
+  `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
+  discovery ahead of the filesystem and `index.html` fallbacks, and the built
+  output verifier locks in that ordering. — Codex (AI), 2026-08-31
 - **The new Limitless MCP Lab turns the live connector contract into an
   interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
   in parallel, keeps the current release contract on first paint, demonstrates
