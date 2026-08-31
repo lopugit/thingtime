@@ -2648,7 +2648,11 @@ jobs:
           # or rebase owner. The same inventory also bounds each fresh matrix
           # below GitHub's 100-pending-member group limit. Keeping ten slots in
           # reserve absorbs near-simultaneous stack/review maintenance without
-          # silently dropping a conflict job before it reaches a runner.
+          # silently dropping a conflict job before it reaches a runner. The
+          # standing main-to-develop synchronizer has its own serialized
+          # priority group below, so include that group's exact owner in the
+          # same duplicate inventory without charging it against this ordinary
+          # fleet's capacity.
           fleet_group="lopu-agent-fleet-$REPO"
           fleet_capacity=90
           fleet_group_encoded="$(jq -rn --arg value "$fleet_group" '$value | @uri')"
@@ -2669,6 +2673,37 @@ jobs:
               | sort
               | unique
             ' <<<"$fleet_state")"
+            priority_fleet_group="lopu-priority-main-develop-$REPO"
+            priority_fleet_group_encoded="$(jq -rn --arg value "$priority_fleet_group" '$value | @uri')"
+            priority_owned_numbers='[]'
+            priority_fleet_error="$RUNNER_TEMP/lopu-priority-fleet-read.err"
+            if priority_fleet_state="$(
+              gh api "repos/$REPO/actions/concurrency_groups/$priority_fleet_group_encoded" \
+                2>"$priority_fleet_error"
+            )"; then
+              priority_owned_numbers="$(jq -c '
+                [
+                  .group_members[]?
+                  | select(.status == "pending" or .status == "in_progress")
+                  | .job_name
+                  | (try capture("(^| / )Resolve PR #(?<number>[0-9]+)$") catch empty)
+                  | .number
+                  | tonumber
+                ]
+                | sort
+                | unique
+              ' <<<"$priority_fleet_state")"
+            elif ! grep -q 'HTTP 404' "$priority_fleet_error"; then
+              sed -n '1,12p' "$priority_fleet_error" >&2 || true
+              echo '::notice::Could not read the priority synchronizer queue; deferring conflict dispatch to avoid a duplicate owner.'
+              rm -f "$priority_fleet_error"
+              exit 0
+            fi
+            rm -f "$priority_fleet_error"
+            owned_numbers="$(jq -cn \
+              --argjson ordinary "$owned_numbers" \
+              --argjson priority "$priority_owned_numbers" \
+              '$ordinary + $priority | sort | unique')"
             if [ "$(jq 'length' <<<"$owned_numbers")" -gt 0 ]; then
               owned_label="$(jq -r 'map("#" + tostring) | join(", ")' <<<"$owned_numbers")"
               before_count="$(jq 'length' <<<"$PRS")"
@@ -2703,24 +2738,39 @@ jobs:
             exit 0
           }
           available_slots="$((fleet_capacity - fleet_count))"
-          if [ "$available_slots" -le 0 ]; then
-            echo "Durable Lopu fleet is at its ${fleet_capacity}-member admission cap; deferring all detected conflicts to the next scan."
-            exit 0
-          fi
-          PRS="$(jq -c '
-            sort_by(
-              if .head == "sync/main-into-develop" and .base == "develop"
-              then [0, .number]
-              else [1, .number]
-              end
-            )
+          priority_candidates="$(jq -c '
+            [
+              .[]
+              | select(.head == "sync/main-into-develop" and .base == "develop")
+            ]
+            | sort_by(.number)
           ' <<<"$PRS")"
-          candidate_count="$(jq 'length' <<<"$PRS")"
-          if [ "$candidate_count" -gt "$available_slots" ]; then
-            deferred_count="$((candidate_count - available_slots))"
-            PRS="$(jq -c --argjson available_slots "$available_slots" \
-              '.[0:$available_slots]' <<<"$PRS")"
-            echo "Durable Lopu fleet has $available_slots admission slot(s); dispatching those PRs and deferring $deferred_count conflict(s) to the next scan."
+          ordinary_candidates="$(jq -c '
+            [
+              .[]
+              | select(.head != "sync/main-into-develop" or .base != "develop")
+            ]
+            | sort_by(.number)
+          ' <<<"$PRS")"
+          ordinary_count="$(jq 'length' <<<"$ordinary_candidates")"
+          if [ "$available_slots" -le 0 ]; then
+            if [ "$ordinary_count" -gt 0 ]; then
+              echo "Durable Lopu fleet is at its ${fleet_capacity}-member admission cap; dispatching the independent priority synchronizer and deferring $ordinary_count ordinary conflict(s)."
+            fi
+            ordinary_candidates='[]'
+          elif [ "$ordinary_count" -gt "$available_slots" ]; then
+            deferred_count="$((ordinary_count - available_slots))"
+            ordinary_candidates="$(jq -c --argjson available_slots "$available_slots" \
+              '.[0:$available_slots]' <<<"$ordinary_candidates")"
+            echo "Durable Lopu fleet has $available_slots admission slot(s); dispatching those ordinary PRs and deferring $deferred_count conflict(s) to the next scan."
+          fi
+          PRS="$(jq -cn \
+            --argjson priority "$priority_candidates" \
+            --argjson ordinary "$ordinary_candidates" \
+            '$priority + $ordinary')"
+          if [ "$(jq 'length' <<<"$PRS")" -eq 0 ]; then
+            echo 'The ordinary Lopu fleet is full and no priority synchronizer needs dispatch; deferring to the next scan.'
+            exit 0
           fi
 
           # The standing main -> develop synchronizer is repository plumbing:
@@ -7088,10 +7138,16 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-    # This is shared with promotion and rebase workers, so a base-branch push
-    # cannot create a parallel fleet of Lopu model sessions.
+    # Ordinary conflicts share the promotion/rebase fleet. The exact
+    # automation-owned main-to-develop synchronizer gets one independent but
+    # still serialized priority lane, so unrelated historical conflicts cannot
+    # hold repository integration behind the global FIFO queue.
     concurrency:
-      group: lopu-agent-fleet-${{ github.repository }}
+      group: >-
+        ${{ matrix.pr.head == 'sync/main-into-develop'
+            && matrix.pr.base == 'develop'
+            && format('lopu-priority-main-develop-{0}', github.repository)
+            || format('lopu-agent-fleet-{0}', github.repository) }}
       queue: max
       cancel-in-progress: false
     strategy:

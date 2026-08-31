@@ -19,6 +19,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Gave the exact automation-owned `sync/main-into-develop` conflict worker its
+  own serialized priority lane. Detector deduplication now sees both that lane
+  and the ordinary Lopu fleet, while ordinary capacity limits no longer defer
+  the standing synchronizer; historical PR conflicts therefore cannot hold a
+  new `main` commit behind the global model FIFO queue. — Codex (AI),
+  2026-08-31
 - Hardened the standing `main` to `develop` PR merger against two live GitHub
   consistency edges: the PR object's head may briefly lag the automation-owned
   branch ref, and a transient merge API error may arrive after GitHub has
