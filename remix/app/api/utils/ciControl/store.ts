@@ -389,7 +389,8 @@ export const claimCiDispatchRoute = async (input: {
 };
 
 export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number; repository?: string }) => {
-  const limit = Math.min(250, Math.max(1, Math.floor(options?.limit ?? 100)));
+  const requestedLimit = Math.floor(options?.limit ?? 100);
+  const limit = requestedLimit === 0 ? 0 : Math.max(1, requestedLimit);
   const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
   const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
   const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =

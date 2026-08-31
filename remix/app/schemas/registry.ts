@@ -90,6 +90,8 @@ export const CI_CONTROL_THINGTIME = [
   'ci-repository',
   'ci-automation',
   'ci-feature',
+  'ci-feature-stack',
+  'ci-feature-stack-entry',
   'ci-branch',
   'ci-pull-request',
   'ci-workflow-run',
@@ -1600,6 +1602,42 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-repository', 'CI repository', 'Current integration and default-branch state for one repository.'),
   ciEntitySchema('ci-automation', 'CI automation policy', 'Current execution-provider policy for one allowlisted automation.'),
   ciEntitySchema('ci-feature', 'CI feature', 'A feature/stack grouping that relates source and promotion pull requests.'),
+  {
+    id: 'ci-feature-stack', version: 1, kind: 'crystal', collection: null,
+    title: 'Saved CI Feature Stack',
+    summary: 'An editable named Feature Stack configuration owned by the protected CI control plane.',
+    detail: 'The root stores fixed configuration and latest-run metadata. Ordered sources and targets are relational ci-feature-stack-entry Things published by revision, so edits never expose a partially replaced list.',
+    createdVia: '/api/v1/admin/ci/stacks',
+    fields: [
+      { name: 'title', type: 'string', required: true, max: 80 },
+      { name: 'repository', type: 'string', required: true, max: 300 },
+      { name: 'autoDecideBranches', type: 'boolean', required: true },
+      { name: 'revision', type: 'string', required: true, max: 80 },
+      { name: 'status', type: 'string', required: true, max: 120 },
+      { name: 'archived', type: 'boolean', required: true },
+      { name: 'createdBy', type: 'string', required: true, max: 180 },
+      { name: 'updatedBy', type: 'string', required: true, max: 180 },
+      { name: 'lastDispatchId', type: 'string', required: false, max: 180 },
+      { name: 'lastRunAt', type: 'date', required: false }
+    ],
+    example: { title: 'Search + Actions', repository: 'lopugit/thingtime', autoDecideBranches: true, revision: 'revision-id', status: 'saved', archived: false, createdBy: 'admin', updatedBy: 'admin' }
+  },
+  {
+    id: 'ci-feature-stack-entry', version: 1, kind: 'crystal', collection: null,
+    title: 'CI Feature Stack entry',
+    summary: 'One ordered source pull request or target branch related to a saved Feature Stack.',
+    detail: 'Each child belongs to one root and revision. entryType chooses either prNumber or branch; position preserves administrator order without embedding an unbounded list on the root.',
+    createdVia: '/api/v1/admin/ci/stacks',
+    fields: [
+      { name: 'repository', type: 'string', required: true, max: 300 },
+      { name: 'revision', type: 'string', required: true, max: 80 },
+      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'] },
+      { name: 'position', type: 'number', required: true, min: 0 },
+      { name: 'prNumber', type: 'number', required: false, min: 1 },
+      { name: 'branch', type: 'string', required: false, max: 180 }
+    ],
+    example: { repository: 'lopugit/thingtime', revision: 'revision-id', entryType: 'source', position: 0, prNumber: 427 }
+  },
   ciEntitySchema('ci-branch', 'CI branch', 'Current ref and head state for one repository branch.'),
   ciEntitySchema('ci-pull-request', 'CI pull request', 'Current topology, mergeability, and review state for one pull request.'),
   ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),

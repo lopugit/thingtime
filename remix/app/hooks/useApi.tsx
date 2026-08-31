@@ -217,6 +217,12 @@ export function useApi() {
         []
       ),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
+      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      mutateCiFeatureStack: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
+        [asyncFetcher]
+      ),
       mutateCiCredential: useCallback(
         async (args: Record<string, unknown>) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/credentials', errorContext: 'manage Lopu credential waterfall' }),

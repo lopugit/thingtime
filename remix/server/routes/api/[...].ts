@@ -16,6 +16,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/components/seed': () => import('../../../app/routes/api/v1/admin/components/seed/_seed'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/stacks': () => import('../../../app/routes/api/v1/admin/ci/stacks/_stacks'),
   'v1/admin/ci/credentials': () => import('../../../app/routes/api/v1/admin/ci/credentials/_credentials'),
   'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
   'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
