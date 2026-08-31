@@ -140,6 +140,19 @@ merge parent and clean-merge byte, then opens a target-specific PR with
 auto-merge enabled. Required checks and branch protection remain the final gate;
 the batch never pushes directly to a target branch.
 
+The same page owns Lopu’s **Claude credential waterfall**. Admins add a named
+Claude Code OAuth token once, enable or disable it, rotate it, and reorder up to
+eight accounts. Only redacted labels and timestamps return to the browser. The
+values are AES-256-GCM encrypted in Thingtime with
+`THINGTIME_ADMIN_VAULT_KEY`. A protected workflow fetches the ordered enabled
+bundle just in time through `/api/v1/integrations/ci/credentials`, using the
+same stable `THINGTIME_CI_ROUTER_SECRET` HMAC boundary and a fresh single-use
+nonce. It masks the values immediately, keeps the bundle at mode `0600` for the
+current run only, and advances accounts only for classified capacity or
+credential failures. The first controller run can import the old OAuth slots
+into an empty vault; after that proof, delete the account-specific GitHub
+secrets and retain only `THINGTIME_CI_ROUTER_SECRET`.
+
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
 router on GitHub. A GitHub selection continues normally. A Vercel selection
@@ -189,6 +202,12 @@ The signed compute-provider route is:
 
 ```text
 https://<your-thingtime-origin>/api/v1/integrations/ci/route
+```
+
+The signed Lopu credential delivery route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/credentials
 ```
 
 Store each secret directly in the deployment environment. Also add the same
@@ -808,6 +827,12 @@ THINGTIME_ADMIN_VAULT_KEY="<base64url-32-byte-aes-256-gcm-key>"
 # Vercel is built in as https://api.vercel.com; localhost/private/IP hosts are always refused.
 THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS="api.example.com"
 ```
+
+This key also encrypts the dedicated Lopu credential collection. Keep the key
+stable across deploys: rotating the environment value without re-encrypting
+stored entries intentionally makes them undecryptable. For a fork, create a
+new random 32-byte base64url key and add Claude accounts through Admin → CI
+Control; never copy Thingtime’s encrypted rows or production tokens.
 
 Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
 accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
