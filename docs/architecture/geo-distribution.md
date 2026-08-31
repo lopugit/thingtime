@@ -136,9 +136,10 @@ flowchart LR
 
 - **One connection string** (Atlas SRV) — the driver discovers the topology
   and, with `readPreference` set, routes reads to the nearest node and writes
-  to the primary automatically. No app-level routing code. (Atlas auto-tags
-  nodes by provider/region/nodeType, so "read from my region's read-only
-  node" is literally a connection-option string — §7.)
+  to the primary automatically. No app-level routing code. (Plain `nearest`
+  with **no** `readPreferenceTags` is both sufficient and the only safe form
+  here — §7 shows why reaching for a `nodeType:READ_ONLY` tag to say "read from
+  my region's read-only node" would instead send every Sydney read to us-east.)
 - **Electable-node placement rule** (from Atlas's own latency guidance): all
   3 voting nodes stay in Sydney so `w: majority` acknowledges locally
   (~14ms); remote regions get *read-only* nodes. Spreading voters across
@@ -338,7 +339,7 @@ verify with live measurements — same curl methodology as PRs #157/#161).
 |---|---|---|---|
 | **0. Round-trip diets** | The open round-trip items in [performance/TODO.md](../../performance/TODO.md) — chiefly its "Database — N+1 and per-item round trips" and "connection lifecycle" sections, and the single-RT rate limiter | none | Shrinks every gap A leaves; makes B likely unnecessary for years |
 | **1. Paid tier + topology dry run** | M0 → M10 (Sydney, 3 electable). Add one us-east read-only node. Functions stay syd1-only. | budget: **~$112/mo** (§7) | No user-visible change; validates replication, lag metrics, backup story. Rollback: remove node. |
-| **2. Read-preference plumbing** | `nearest` + `maxStalenessSeconds` for data-plane reads; explicit `primary` for auth-critical + transactions; regional rate-limit strategy | Phase 1 | Still no user change (one region) — but code is now region-ready and dev-parity is proven |
+| **2. Read-preference plumbing** | `nearest` (**untagged** — §7) + `maxStalenessSeconds` for data-plane reads; explicit `primary` for auth-critical + transactions; regional rate-limit strategy | Phase 1 | Still no user change (one region) — but code is now region-ready and dev-parity is proven. Probe AU here too: this is the phase where a stray `readPreferenceTags` would silently move Sydney's reads offshore |
 | **3. Second function region** | `regions: ["syd1", "iad1"]` in the root `vercel.json` | **Vercel Pro plan** (multi-region isn't on Hobby, §7). Fluid Compute was the other prereq here and is already done (`"fluid": true` in the root `vercel.json`, confirmed 2026-08-26) | 🎉 US users: reads drop ~200ms → ~5ms. Measure from a US probe before/after (curl from a US VPS or Vercel cron in iad1). |
 | **4. Write forwarding (optional)** | Dispatcher-level forward of mutating routes to primary region | Phase 3 + real US-user write-latency data | US writes ≈ single hop |
 | **5. EU node/region (repeat 1+3)** | fra1/lhr1 + eu read node | traffic justifies | EU joins the party |
@@ -421,14 +422,32 @@ measurement of a multi-region change.
   ([latency strategies](https://www.mongodb.com/docs/atlas/architecture/current/latency-strategies/)).
   Read-only nodes never vote and exist exactly for "optimal local reads in
   their respective regions".
-- **Targeting local nodes is config, not code**: Atlas auto-tags every node
-  (`provider`, `region`, `nodeType`) and the driver read preference selects by
-  tag + lowest RTT, e.g.
-  `readPreference=nearest&readPreferenceTags=nodeType:READ_ONLY,` with a
-  trailing empty fallback
+- **Targeting local nodes is config, not code — and the config is bare
+  `nearest`**: `readPreference=nearest` with **no** `readPreferenceTags` is
+  exactly what makes "one global SRV connection string everywhere" work. The
+  driver ranks every node by measured RTT, so syd1 functions land on the Sydney
+  electables (~1ms) and iad1 functions land on the us-east read-only node
+  (~1ms) — no per-region config at all.
+  ⚠️ **Do not add `readPreferenceTags=nodeType:READ_ONLY` to express "my
+  region's read-only node".** Tag sets are matched **in order, first match
+  wins** — "MongoDB tries each document in succession until a match is found…
+  the remaining tag sets are ignored" — and latency is applied only *after* tag
+  filtering
+  ([read preference tag sets](https://www.mongodb.com/docs/manual/core/read-preference-tags/)).
+  Under Option A's topology the only `READ_ONLY` nodes are overseas, so that
+  tag set always matches, the empty fallback is never reached, and **every
+  Sydney read is routed to us-east** — a ~200ms regression for today's entire
+  user base, shipped by the phase §6 bills as "no user change". Alongside the
+  electable-placement rule in §5.1, this is the second configuration mistake
+  that would make this slower than today.
+  If tags are ever wanted deliberately (e.g. to keep ordinary reads off the
+  primary), two syntax facts: the empty fallback is a *separate*
+  `&readPreferenceTags=` parameter, not a trailing comma inside one tag set;
+  and correct targeting is by `region`, per Atlas's own example
+  `…&readPreferenceTags=provider:AWS,region:US_EAST_1&readPreferenceTags=`
   ([replica set tags](https://www.mongodb.com/docs/atlas/reference/replica-set-tags/)).
-  One global SRV connection string everywhere; each region's functions
-  naturally read their local node.
+  That is inherently *per-region* config — a connection option derived from
+  `VERCEL_REGION` at boot, not one global string.
 - **Pricing** (official calculator, AWS, 2026-08-08; cluster-only, backup off):
 
   | Config | ~Monthly |
