@@ -3431,7 +3431,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
 			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } later re-sorts a post’s bound set and binds newly uploaded ready drafts appended to it.'
 		],
 		requestExamples: [
 			{
@@ -3505,19 +3505,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
-		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		summary: 'Sets or clears an owned ready attachment’s display filename, title, and description.',
 		detail:
-			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+			'Every attachment is a searchable Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation metadata that page, post cards, and lightbox render: filenamePreview up to 255 single-line characters, title up to 200, and description up to 2000 characters (newlines allowed). The original filename remains immutable and is still used for downloads. Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id with title and/or description.',
+			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
 			'Store the returned attachment metadata (it includes the updated title/description).',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
@@ -3529,6 +3530,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				method: 'POST',
 				body: {
 					id: '3bda8208-625c-4f5d-941f-348020021848',
+					filenamePreview: 'Bay sunset.jpg',
 					title: 'Sunset over the bay',
 					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
 				}
@@ -3554,20 +3556,77 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
-		id: 'attachment-delete',
+		id: 'attachment-link',
 		group: 'attachments',
-		title: 'Delete attachment',
-		endpoint: '/api/v1/attachments/delete',
-		summary: 'Deletes an owned attachment object before refunding its storage.',
+		title: 'Link external media',
+		endpoint: '/api/v1/attachments/link',
+		summary: 'Mints a ready linked-attachment draft from an external media URL.',
 		detail:
-			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+			'A linked attachment is a first-class attachment Thing whose bytes stay on the original site: the crystal carries the external http(s) URL and clients render it directly (image tile, video player, or file row with an outbound download link). It binds into posts and rich comments through the same attachmentIds flows as uploads, reorders and annotates identically, and never touches Thingtime object storage or the upload-approval gate — only the metadata document counts toward the owner’s quota. The server derives contentType and a render hint from the URL’s file extension; a client may demote the hint to a plain file after a failed load probe, but can never promote a file extension to a visual kind. Duplicate URLs are allowed — each mint is its own attachment. Unbound mints expire on the standard 24-hour draft TTL. The server never fetches the URL.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id.',
+			'POST the external http(s) media URL (up to 2048 characters).',
+			'Optionally send purpose ("post" default, or "comment") so the draft binds to the right surface, and mediaKind to demote an extensionless URL to "file".',
+			'Store the returned attachment id and url — the id goes into attachmentIds on post create or edit exactly like an uploaded attachment.',
+			'Remove an unwanted mint with /api/v1/attachments/delete; unbound mints expire on their own after 24 hours.'
+		],
+		requestExamples: [
+			{
+				name: 'Link a photo by URL',
+				description: 'Mint a ready linked attachment for an external image.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/photos/sunset.jpg'
+				}
+			},
+			{
+				name: 'Link a document for a comment',
+				description: 'A file-extension URL lands in the file row UI with an outbound download link.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/papers/spec.pdf',
+					purpose: 'comment'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'The minted linked attachment’s public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '9c1f5f68-3f0a-45f2-8f60-6f4a70b1a001',
+						name: 'sunset.jpg',
+						size: 0,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						url: 'https://example.com/photos/sunset.jpg'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-delete',
+		featureVersion: '1.1.0',
+		group: 'attachments',
+		title: 'Delete attachment',
+		endpoint: '/api/v1/attachments/delete',
+		summary: 'Deletes an owned attachment object before refunding its storage.',
+		detail:
+			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
 			'On success, remove it from local draft state.',
 			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
 		],
@@ -3576,7 +3635,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				name: 'Delete file',
 				description: 'Delete one owned attachment.',
 				method: 'POST',
-				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
@@ -6406,7 +6465,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
-      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
+      'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
       'DELETE ?id= (or body { id, expectedUpdatedAt? }) removes an owned thing; the optional precondition is checked atomically before cascade cleanup, attached comments/reactions go with it, and shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'

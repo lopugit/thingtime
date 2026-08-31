@@ -1251,6 +1251,27 @@ test('explicit delete cannot remove an attachment after an ambiguously successfu
 	assert.equal(claimed, false);
 });
 
+test('explicit edit deletion requires and claims the exact bound target', async () => {
+	let claimScope: unknown;
+	const service = createAttachmentService({
+		store: {
+			getOwned: async () => attachmentDoc({ attachmentState: 'ready', targetId: 'post-1' }),
+			claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: unknown) => {
+				claimScope = scope;
+				return null;
+			}
+		} as any,
+		getS3: () => noopS3()
+	});
+	assert.deepEqual(await service.remove('user-1', { id: 'attachment-1', targetId: 'post-1' }), { ok: true, deferred: false });
+	assert.deepEqual(claimScope, { kind: 'target', targetId: 'post-1' });
+	assert.deepEqual(await service.remove('user-1', { id: 'attachment-1', targetId: 'post-2' }), {
+		ok: false,
+		status: 409,
+		error: 'Attached files must be removed from their post'
+	});
+});
+
 test('delete claim fences distinguish unattached drafts, expired drafts, and one exact target', () => {
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft' }), { targetId: { $exists: false } });
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', expiredAtOrBefore: now }), {
