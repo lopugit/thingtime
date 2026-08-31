@@ -73,6 +73,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Published posts and rich comments now retain their native Editor.js
+  document across the browser API boundary.** The request allowlist includes
+  `richText` alongside the canonical plain-text fallback, so headings no
+  longer reappear as literal Markdown such as `## Posts` after posting or
+  reloading. — Codex (AI), 2026-09-01
+
 - **Posting now flushes the live Editor.js document before freezing a post
   payload.** Tapping Post immediately after changing a heading, colour,
   alignment, size, whitespace, or line break can no longer publish the older

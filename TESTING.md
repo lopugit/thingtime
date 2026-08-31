@@ -917,6 +917,9 @@ is fixed, and cite the checklist you ran in the PR description.
       then tap Post immediately after the final style change. The new feed
       card and `/post/:id` preserve the exact latest block document after a
       reload; no heading appears as literal Markdown such as `## Posts`.
+- [ ] Repeat the same create-and-reload check with a rich comment. Inspect the
+      create request and exact-id readback: both must contain the complete
+      native `richText` document as well as the canonical `text` fallback.
 - [ ] Untrusted (other users') things are only auto-rendered for the
       vetted-safe kinds (rich-text, image, audio, playlist, podcast, article,
       quote, book, movie, link, file, code, repository); every other kind —
