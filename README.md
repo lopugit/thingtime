@@ -116,8 +116,11 @@ auto-merge, which GitHub refuses to arm when `develop` has no protected-branch
 rule. The merger revalidates the PR repository, head/base names, all three
 branch SHAs, and that the head contains live `main`, then submits an exact-head
 merge and confirms the resulting `develop` still contains that `main` commit.
-Any moving ref, unresolved conflict, or stale candidate defers safely to the
-next Lopu pass.
+It polls through GitHub PR-object hydration lag while checking the live sync
+ref directly, and treats an ambiguous transient merge response as successful
+only after the merged PR and resulting `develop` ancestry prove the commit
+landed. Any moving ref, unresolved conflict, or stale candidate defers safely
+to the next Lopu pass.
 
 The public manager coalesces event storms by semantic PR or branch key: GitHub
 keeps the active run plus the newest pending run, and
