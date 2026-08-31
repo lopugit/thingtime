@@ -6,8 +6,9 @@
 # - Conflicts or workflow-scope push refusal → a standing PR is opened from the
 #   automation-owned `sync/main-into-develop` branch. The branch is updated
 #   from an immutable, revalidated candidate and may be rewritten only with an
-#   exact force-with-lease. Lopu can safely merge `develop` into that head and
-#   resolve it without ever mutating the protected `main` branch.
+#   exact force-with-lease. A clean candidate is merged immediately; otherwise
+#   Lopu safely merges `develop` into that head, resolves it, and the resolver
+#   merges the exact verified PR without ever mutating protected `main`.
 #
 # Token notes (same trade-off documented in resolve-pr-conflicts.yml):
 # - GITHUB_TOKEN pushes are rejected whenever the merge brings ANY change
@@ -131,6 +132,7 @@ jobs:
           fi
 
       - name: Open or refresh the safe sync PR
+        id: sync_pr
         if: steps.merge.outputs.result == 'conflict' || steps.push.outputs.result == 'blocked'
         env:
           GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT }}
@@ -206,32 +208,60 @@ jobs:
           fi
           if [ -n "$existing" ]; then
             echo "Safe sync PR #$existing is already open and now points at candidate $CANDIDATE_SHA." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          else
+            sync_pr_body="Automated sync opened by **Lopu PR manager** because main could not be merged into develop directly (merge conflicts, or workflow-file push scope). The automation-owned \`$SYNC_BRANCH\` head carries the exact fenced candidate. Clean candidates merge immediately; when conflicts exist, Lopu merges \`develop\` into the head, resolves and verifies them, rebuilds Graphify, and merges the exact published PR without mutating \`main\`."
+            for attempt in 1 2 3; do
+              created=""
+              if created=$(gh api --method POST "repos/${{ github.repository }}/pulls" \
+                -f base=develop \
+                -f head="$SYNC_BRANCH" \
+                -f title="Sync main into develop" \
+                -f body="$sync_pr_body" \
+                --jq '.number'); then
+                existing="$created"
+                echo "Opened safe sync PR #$existing ($SYNC_BRANCH → develop)." >> "$GITHUB_STEP_SUMMARY"
+                break
+              fi
+
+              echo "::warning::Sync PR creation attempt $attempt failed; checking whether GitHub committed it despite the API error."
+              existing=""
+              if existing=$(find_sync_pr) && [ -n "$existing" ]; then
+                echo "Safe sync PR #$existing exists after a transient create error." >> "$GITHUB_STEP_SUMMARY"
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                sleep $((attempt * 3))
+              fi
+            done
           fi
 
-          sync_pr_body="Automated sync opened by **Lopu PR manager** because main could not be merged into develop directly (merge conflicts, or workflow-file push scope). The automation-owned \`$SYNC_BRANCH\` head carries the exact fenced candidate; Lopu may merge \`develop\` into it, resolve conflicts, rebuild Graphify, and push the result without mutating \`main\`."
-          for attempt in 1 2 3; do
-            created=""
-            if created=$(gh api --method POST "repos/${{ github.repository }}/pulls" \
-              -f base=develop \
-              -f head="$SYNC_BRANCH" \
-              -f title="Sync main into develop" \
-              -f body="$sync_pr_body" \
-              --jq '.number'); then
-              echo "Opened safe sync PR #$created ($SYNC_BRANCH → develop)." >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
+          [ -n "$existing" ] || {
+            echo "::error::Could not open or find the safe main → develop sync PR after bounded retries."
+            exit 1
+          }
+          {
+            echo "pr_number=$existing"
+            echo "head_sha=$CANDIDATE_SHA"
+          } >> "$GITHUB_OUTPUT"
 
-            echo "::warning::Sync PR creation attempt $attempt failed; checking whether GitHub committed it despite the API error."
-            existing=""
-            if existing=$(find_sync_pr) && [ -n "$existing" ]; then
-              echo "Safe sync PR #$existing exists after a transient create error." >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              sleep $((attempt * 3))
-            fi
-          done
+      - name: Check out the trusted sync merger
+        if: steps.sync_pr.outputs.pr_number != ''
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          path: workflow-control
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/merge-main-develop-sync-pr.mjs
+          sparse-checkout-cone-mode: false
 
-          echo "::error::Could not open or find the safe main → develop sync PR after bounded retries."
-          exit 1
+      - name: Merge the standing sync PR when ready
+        if: steps.sync_pr.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT }}
+          REPO: ${{ github.repository }}
+          SYNC_PR_NUMBER: ${{ steps.sync_pr.outputs.pr_number }}
+          EXPECTED_SYNC_HEAD_SHA: ${{ steps.sync_pr.outputs.head_sha }}
+          EXPECTED_MAIN_SHA: ${{ steps.merge.outputs.main_sha }}
+          EXPECTED_DEVELOP_SHA: ${{ steps.merge.outputs.develop_sha }}
+        run: node workflow-control/.github/scripts/merge-main-develop-sync-pr.mjs

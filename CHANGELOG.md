@@ -19,6 +19,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Made the standing `main` to `develop` synchronization PR merge itself as soon
+  as its exact published head becomes mergeable. Both the clean sync lane and
+  Lopu conflict resolver now invoke one SHA-fenced terminal merger that verifies
+  the repository, head/base names, live branch tips, and `main` ancestry before
+  merging, then verifies `develop` afterward; moving refs and remaining
+  conflicts defer safely instead of depending on unavailable native GitHub
+  auto-merge. — Codex (AI), 2026-08-31
 - Made Graphify scope exclusions compatible with the pinned `graphify 0.9.4`
   CLI. The immutable CAS wrapper now consumes and validates repository-local
   `--exclude` paths itself, atomically hides the nested trusted controller only

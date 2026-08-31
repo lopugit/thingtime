@@ -72,6 +72,9 @@ jobs:
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
+      - name: Validate main/develop sync merger
+        run: node .github/scripts/merge-main-develop-sync-pr.mjs --self-test
+
       - name: Validate Claude credential failover classification
         run: node .github/scripts/classify-claude-credential-failure.mjs --self-test
 
