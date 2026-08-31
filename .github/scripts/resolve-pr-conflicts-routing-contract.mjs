@@ -455,7 +455,7 @@ function assertWorkflowSource() {
   assert.match(admissionBlock, /ai-rebase-in-progress/);
   assert.equal(
     resolveBlock.match(/steps\.admission\.outputs\.current == 'true'/g)?.length,
-    18,
+    19,
     "every post-admission resolution step is gated",
   );
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);

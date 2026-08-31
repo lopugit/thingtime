@@ -8711,6 +8711,24 @@ jobs:
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
           fi
 
+      - name: Merge the verified main to develop sync PR
+        id: merge_main_develop_sync
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'published'
+          && matrix.pr.head == 'sync/main-into-develop'
+          && matrix.pr.base == 'develop'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          SYNC_PR_NUMBER: ${{ matrix.pr.number }}
+          EXPECTED_SYNC_HEAD_SHA: ${{ steps.push.outputs.remote_sha }}
+          EXPECTED_DEVELOP_SHA: ${{ matrix.pr.base_sha }}
+        run: |
+          set -euo pipefail
+          export EXPECTED_MAIN_SHA="$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')"
+          node trusted/.github/scripts/merge-main-develop-sync-pr.mjs
+
       - name: Comment on PR (resolved)
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'

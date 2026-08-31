@@ -1211,6 +1211,26 @@ export function assertControlPlaneContract() {
     /git merge-base --is-ancestor "\$EXPECTED_MAIN_SHA" "\$remote_sha"/u,
     "an already-resolved safe head containing current main is preserved",
   );
+  assert.match(
+    mainDevelopSync,
+    /id: sync_pr[\s\S]*echo "pr_number=\$existing"[\s\S]*echo "head_sha=\$CANDIDATE_SHA"/u,
+    "the standing sync PR publishes its exact identity for terminal merging",
+  );
+  assert.match(
+    mainDevelopSync,
+    /name: Check out the trusted sync merger[\s\S]*uses: actions\/checkout@[0-9a-f]{40} #[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "the terminal merger is loaded without credentials from the protected control branch",
+  );
+  assert.match(
+    mainDevelopSync,
+    /name: Merge the standing sync PR when ready[\s\S]*SYNC_PR_NUMBER: \$\{\{ steps\.sync_pr\.outputs\.pr_number \}\}[\s\S]*EXPECTED_SYNC_HEAD_SHA: \$\{\{ steps\.sync_pr\.outputs\.head_sha \}\}[\s\S]*EXPECTED_MAIN_SHA: \$\{\{ steps\.merge\.outputs\.main_sha \}\}[\s\S]*EXPECTED_DEVELOP_SHA: \$\{\{ steps\.merge\.outputs\.develop_sha \}\}[\s\S]*node workflow-control\/\.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "a clean standing sync PR merges only with the workflow's exact branch snapshots",
+  );
+  assert.doesNotMatch(
+    mainDevelopSync,
+    /gh pr merge[^\n]*--auto/u,
+    "main/develop synchronization does not depend on branch-protection-only native auto-merge",
+  );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
   const rebaseTriggers = rebase.slice(0, rebase.indexOf("\npermissions:\n"));
@@ -1299,6 +1319,11 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
   assert.match(resolver, /maintain_codeql_backfill:/);
+  assert.match(
+    resolver,
+    /name: Merge the verified main to develop sync PR[\s\S]*steps\.push\.outputs\.remote_state == 'published'[\s\S]*matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*matrix\.pr\.base == 'develop'[\s\S]*EXPECTED_SYNC_HEAD_SHA: \$\{\{ steps\.push\.outputs\.remote_sha \}\}[\s\S]*EXPECTED_DEVELOP_SHA: \$\{\{ matrix\.pr\.base_sha \}\}[\s\S]*git\/ref\/heads\/main[\s\S]*node trusted\/\.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "the resolver terminally merges only the exact published standing main/develop sync PR",
+  );
   assert.doesNotMatch(
     resolver,
     /actions\/workflows\/promote-features-to-main\.yml\/dispatches/u,
@@ -1529,8 +1554,8 @@ export function assertControlPlaneContract() {
   );
   assert.equal(
     resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
-    2,
-    "only a live-ref-proven publication may post success or cascade a stack",
+    3,
+    "only a live-ref-proven publication may post success, merge the standing sync PR, or cascade a stack",
   );
 
   assertUserControlledMergePause(resolver, rebase);
@@ -1595,7 +1620,8 @@ export function assertControlPlaneContract() {
 
 // The only paths this branch may hold at its root. `.github/**` is the point of
 // the branch; `graphify-out/` is a required portable repository map and
-// `.gitattributes` preserves its generated graph merge contract. The AI
+// `.gitattributes` preserves its generated graph merge contract. `PRs/` holds
+// the required detailed notes for large control-plane changes. The AI
 // instruction trio stays because agents work here too
 // (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
 // travel together or the links dangle).
@@ -1608,6 +1634,7 @@ export const CONTROL_PLANE_ROOTS = new Set([
   "CLAUDE.md",
   "README.md",
   "CHANGELOG.md",
+  "PRs",
   "vercel.json",
   "graphify-out",
 ]);
