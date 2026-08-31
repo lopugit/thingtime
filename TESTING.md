@@ -2190,19 +2190,27 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       requested → accepted (or failed) with a relational event. Arbitrary
       workflow names, non-allowlisted inputs, and feature-branch entry refs
       cannot reach GitHub. Rebase/release require the UI confirmation gate.
-- [ ] Build a Feature Stack by checking 2–20 feature rows in a deliberate
-      order, choose `develop`, `main`, or both, refresh/reload, and confirm the
-      draft order/name/targets persist while the destructive confirmation does
-      not. Dispatch once and verify the server snapshots the live same-repo PR
-      head refs/SHAs, rejects drafts/forks/moved refs/duplicate targets, and
-      forwards only canonical base64 through the thin `develop` listener.
+- [ ] Build and save multiple Feature Stacks with one or more feature rows and
+      one or more targets. Reload, edit each stack, and confirm order, name,
+      targets, auto-decide state, and target progress persist. Save & merge must
+      be enabled with exactly one valid source/target and have no product count
+      cap or hidden confirmation gate. Verify the server snapshots live
+      same-repo PR base/head refs and SHAs, rejects drafts/forks/moved refs and
+      duplicate targets, and forwards only canonical base64 through the thin
+      `develop` listener.
+- [ ] Mix PRs targeting `github-actions`, `main`, and `develop`, keep Auto
+      decide branches selected, and prove the immutable plan routes controller
+      sources only to `github-actions`, main sources only to `main`, and develop
+      sources only to selected product targets. Uncheck it and prove the
+      explicit merge-everywhere mode remains available.
 - [ ] In the protected Feature Stack run, confirm each target starts from its
       admitted SHA, every source becomes exactly one two-parent merge commit in
       list order, clean merges are byte-identical to Git, AI edits touch only
       recomputed conflict paths, source/target movement aborts publication, and
       a target-specific PR is opened with auto-merge while branch protection
       remains the final gate. Pause/opt-out labels must stop the batch.
-- [ ] In Claude credential waterfall, add two named OAuth tokens and confirm
+- [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
+      from the dropdown's Add value field. Add two named OAuth tokens and confirm
       neither value appears in GET/mutation responses, browser storage, page
       text, logs, or copied metadata. Reorder them, reload, toggle one off,
       rotate it, and delete it; ordering and enabled state remain stable.
@@ -2225,7 +2233,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
       preview origin. Confirm its `origin` matches exactly, every generated API
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `1.1.0`, credential features are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `2.0.0`, admin credentials are `2.0.0`, signed credential delivery is
+      `1.1.0`, saved stacks are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch.
 - [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
       and verify the cached dashboard updates optimistically and rolls back with
@@ -2259,18 +2268,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       that no provider events have been imported. Run Reconcile once and verify
       existing branches, open PRs, runs, deployments, and previews populate;
       subsequent GitHub/Vercel deliveries advance the same records and history.
-- [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
+- [ ] Desktop: search and use the Vercel-style multi-select status filter,
+      including All statuses and every mixed combination; select a PR, open its GitHub and
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
       bottom without clipping, overlap, or horizontal page overflow.
-- [ ] Desktop and 375px mobile: add/remove Feature Stack rows, targets, and the
-      confirmation; verify long branch/feature names truncate without hiding
+- [ ] Desktop and 375px mobile: add/remove Feature Stack rows and targets, save,
+      load, edit, archive, toggle auto-decide, and inspect target progress;
+      verify long branch/feature names truncate without hiding
       their remove controls, the ordered list remains readable, every control
       is keyboard-focusable, and the full page has no horizontal overflow.
 - [ ] Desktop and 375px mobile: exercise every credential row control, the
       add/rotate password fields, long labels, eight-row maximum, delete
       confirmation, and error alerts. Scroll top-to-bottom; no credential
       control clips, overlaps, or creates horizontal page overflow.
+- [ ] Admin → System: edit an existing non-default model row in place, change
+      model, effort, and speed, cancel once, apply once, reject a duplicate,
+      save, reload, and confirm its priority is preserved without delete/re-add.
 - [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and

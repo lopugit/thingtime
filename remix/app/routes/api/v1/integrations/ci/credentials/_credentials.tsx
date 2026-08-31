@@ -8,6 +8,7 @@ import {
 import {
   LOPU_CREDENTIAL_FETCH_MAX_BYTES,
   normalizeBootstrapCredentials,
+  normalizeCredentialPlatform,
   parseLopuCredentialFetchRequest
 } from '~/api/utils/ciControl/credentialVaultCore';
 import { verifyCiProviderRouteSignature } from '~/api/utils/ciControl/providerRouter';
@@ -41,12 +42,14 @@ export const action = async ({ request }: { request: Request }) => {
     allowedRefs: ['github-actions', 'develop', 'main']
   });
   if (!parsed) return json({ ok: false, error: 'Invalid or expired credential request.' }, { status: 400, headers: noStore });
+  const platform = normalizeCredentialPlatform((body as Record<string, unknown>).platform ?? 'Anthropic');
+  if (!platform) return json({ ok: false, error: 'Invalid credential platform.' }, { status: 400, headers: noStore });
   const bootstrapCredentials = normalizeBootstrapCredentials((body as Record<string, unknown>).bootstrapCredentials);
   if (!bootstrapCredentials) return json({ ok: false, error: 'Invalid bootstrap credentials.' }, { status: 400, headers: noStore });
   if (!(await claimLopuCredentialFetch(parsed))) {
     return json({ ok: false, error: 'Credential request was already used.' }, { status: 409, headers: noStore });
   }
   await bootstrapLopuCredentialsIfEmpty(bootstrapCredentials, 'github-actions[bot]');
-  const credentials = await fetchLopuCredentialBundle();
+  const credentials = await fetchLopuCredentialBundle(platform);
   return json({ ok: true, credentials }, { headers: noStore });
 };
