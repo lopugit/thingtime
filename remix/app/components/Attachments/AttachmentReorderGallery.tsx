@@ -1,11 +1,11 @@
 import React from 'react';
 import { Box, Flex, IconButton, Text } from '@chakra-ui/react';
-import { File as FileIcon, GripVertical } from 'lucide-react';
+import { File as FileIcon, GripVertical, Trash2 } from 'lucide-react';
 
 import { MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { movedToTargetPosition, nudgeTargetId, useMediaReorder, type MediaReorderNudge } from '~/components/Media/useMediaReorder';
-import { attachmentContentUrl, formatAttachmentBytes } from './attachmentUiCore';
+import { attachmentDisplayName, attachmentMediaSrc, formatAttachmentBytes } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -25,6 +25,8 @@ export type AttachmentReorderGalleryProps = {
 	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
 	// on visual tiles, bottom-left (grip top-left, pencil top-right)
 	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
+	embedded?: boolean;
+	onRemove?: (attachment: PublicAttachment) => void;
 };
 
 const gripLabel = (name: string, position: number, count: number) =>
@@ -35,7 +37,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 		return (
 			<Box
 				as="img"
-				src={attachmentContentUrl(attachment.id)}
+				src={attachmentMediaSrc(attachment)}
 				alt=""
 				loading="lazy"
 				referrerPolicy="no-referrer"
@@ -49,8 +51,8 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 	return (
 		<Box
 			as="video"
-			src={attachmentContentUrl(attachment.id)}
-			aria-label={`Preview of ${attachment.name}`}
+			src={attachmentMediaSrc(attachment)}
+			aria-label={`Preview of ${attachmentDisplayName(attachment)}`}
 			width="100%"
 			height="100%"
 			objectFit="cover"
@@ -63,7 +65,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 };
 
 export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) => {
-	const { attachments, onChange, disabled, ariaLabel = 'Reorder attachments', tileExtras } = props;
+	const { attachments, onChange, disabled, ariaLabel = 'Reorder attachments', tileExtras, embedded = false, onRemove } = props;
 
 	const attachmentsRef = React.useRef(attachments);
 	attachmentsRef.current = attachments;
@@ -111,6 +113,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 
 	return (
 		<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
+			{!embedded ? (
 			<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 					Media & files 📎
@@ -119,14 +122,20 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 					{reorderable ? 'Drag the ⠿ handle to set the order' : 'Attached to this post'}
 				</Text>
 			</Flex>
+			) : null}
 
-			<Box border="1px dashed var(--tt-border, #d8d8df)" borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+			<Box
+				border={embedded ? undefined : '1px dashed var(--tt-border, #d8d8df)'}
+				borderRadius={embedded ? undefined : 'var(--tt-radius-md, 12px)'}
+				background={embedded ? undefined : 'var(--tt-surface, #fafafb)'}
+				padding={embedded ? 0 : 3}
+			>
 				{visual.length > 0 ? (
 					<MediaGalleryGrid ariaLabel="Attached media">
 						{visual.map((attachment, index) => (
 							<MediaGalleryTile
 								key={attachment.id}
-								ariaLabel={attachment.name}
+								ariaLabel={attachmentDisplayName(attachment)}
 								dragging={draggingId === attachment.id}
 								dropTarget={dropTargetId === attachment.id}
 								containerProps={tileProps(attachment.id, 'edit-visual')}
@@ -135,7 +144,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 									<>
 										{reorderable && visual.length > 1 ? (
 											<IconButton
-												aria-label={gripLabel(attachment.name, index + 1, visual.length)}
+											aria-label={gripLabel(attachmentDisplayName(attachment), index + 1, visual.length)}
 												title="Drag to reorder"
 												icon={<GripVertical size={14} />}
 												size="sm"
@@ -166,6 +175,25 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 												background: 'rgba(255, 255, 255, 0.9)'
 											}}
 										/>
+										{onRemove ? (
+											<IconButton
+												aria-label={`Delete ${attachmentDisplayName(attachment)}`}
+												title="Delete media"
+												icon={<Trash2 size={14} />}
+												size="sm"
+												minWidth="44px"
+												height="44px"
+												position="absolute"
+												bottom={1}
+												right={1}
+												variant="solid"
+												background="rgba(255,255,255,0.9)"
+												color="var(--tt-danger, #e5484d)"
+												borderRadius="999px"
+												isDisabled={disabled}
+												onClick={() => onRemove(attachment)}
+											/>
+										) : null}
 										{tileExtras ? (
 											<Box position="absolute" bottom={1} left={1}>
 												{tileExtras(attachment)}
@@ -174,11 +202,11 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 									</>
 								}
 							>
-								<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.name}>
-									{attachment.name}
+								<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachmentDisplayName(attachment)}>
+									{attachmentDisplayName(attachment)}
 								</Text>
 								<Text fontSize="10px" color={MUTED} whiteSpace="normal">
-									{formatAttachmentBytes(attachment.size)}
+									{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)}
 								</Text>
 							</MediaGalleryTile>
 						))}
@@ -203,7 +231,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 								<Flex alignItems="center" columnGap={3} minWidth={0}>
 									{reorderable && files.length > 1 ? (
 										<IconButton
-											aria-label={gripLabel(attachment.name, index + 1, files.length)}
+										aria-label={gripLabel(attachmentDisplayName(attachment), index + 1, files.length)}
 											title="Drag to reorder"
 											icon={<GripVertical size={14} />}
 											size="sm"
@@ -230,11 +258,11 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 										<FileIcon size={20} aria-hidden />
 									</Flex>
 									<Box flex="1" minWidth={0}>
-										<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.name}>
-											{attachment.name}
+										<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachmentDisplayName(attachment)}>
+											{attachmentDisplayName(attachment)}
 										</Text>
 										<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-											{formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
+											{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
 										</Text>
 									</Box>
 									<AttachmentAnnotatePopover
@@ -243,6 +271,21 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 										onApply={handleAnnotated}
 										triggerProps={{ minWidth: '44px', height: '44px', flexShrink: 0 }}
 									/>
+									{onRemove ? (
+										<IconButton
+											aria-label={`Delete ${attachmentDisplayName(attachment)}`}
+											title="Delete file"
+											icon={<Trash2 size={14} />}
+											size="sm"
+											minWidth="44px"
+											height="44px"
+											variant="ghost"
+											color="var(--tt-danger, #e5484d)"
+											borderRadius="999px"
+											isDisabled={disabled}
+											onClick={() => onRemove(attachment)}
+										/>
+									) : null}
 								</Flex>
 							</Box>
 						))}

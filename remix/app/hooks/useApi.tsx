@@ -467,20 +467,42 @@ export function useApi() {
 				)
 			},
 			remove: useCallback(
-				async (args: { id: string }) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/attachments/delete', errorContext: 'remove a draft file' });
+				async (args: { id: string; targetId?: string }) => {
+					const ret = asyncFetcher.submit(
+						{ id: args?.id, ...(args.targetId ? { targetId: args.targetId } : {}) },
+						{ action: '/api/v1/attachments/delete', errorContext: args.targetId ? 'delete an attached file' : 'remove a draft file' }
+					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},
 				[asyncFetcher]
 			),
-			// owner title/description on a ready attachment (media page + lightbox
+			// mint a READY linked-attachment draft from an external media URL — it
+			// binds/orders/deletes like an upload but its bytes stay on the original
+			// site (duplicates allowed; unbound mints expire in 24h)
+			link: useCallback(
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+					const ret = asyncFetcher.submit(
+						{
+							url: args?.url,
+							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
+							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
+						},
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+					);
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			),
+			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; title?: string | null; description?: string | null }) =>
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
 					asyncFetcher.submit(
 						{
 							id: args?.id,
+							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
@@ -545,8 +567,9 @@ export function useApi() {
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
               ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
-              // attachment reorder — only send when the caller provides it
-              // (the ids must be a permutation of the post's bound set)
+              // attachment sync — only send when the caller provides it (the
+              // full desired order: every bound id plus any newly uploaded
+              // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
