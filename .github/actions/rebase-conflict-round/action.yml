@@ -45,6 +45,13 @@ inputs:
   claude-code-oauth-token-fallback:
     description: Secondary Claude Code OAuth token for account-capacity failover.
     required: false
+  thingtime-ci-router-secret:
+    description: Stable HMAC secret used to fetch the ordered Thingtime credential waterfall.
+    required: false
+  thingtime-credential-vault-origin:
+    description: Thingtime origin hosting the Lopu credential vault API.
+    required: false
+    default: https://thingtime.com
   openai-api-key:
     description: OpenAI Platform project key when the Codex backend is selected.
     required: false
@@ -315,6 +322,8 @@ runs:
         claude-code-oauth-token-preferred: ${{ inputs.claude-code-oauth-token-preferred }}
         anthropic-api-key-fallback: ${{ inputs.anthropic-api-key-fallback }}
         claude-code-oauth-token-fallback: ${{ inputs.claude-code-oauth-token-fallback }}
+        thingtime-ci-router-secret: ${{ inputs.thingtime-ci-router-secret }}
+        thingtime-credential-vault-origin: ${{ inputs.thingtime-credential-vault-origin }}
         openai-api-key: ${{ inputs.openai-api-key }}
         github-token: ${{ inputs.github-token }}
         allowed-bots: ${{ inputs.allowed-bots }}
@@ -385,34 +394,15 @@ runs:
       if: steps.prepare.outputs.needs_ai == 'true' && inputs.backend == 'claude' && steps.lopu.outcome == 'failure'
       shell: bash
       env:
-        PREFERRED_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token-preferred }}
-        PRIMARY_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
-        FALLBACK_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key-fallback }}
-        FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token-fallback }}
         MODEL_ARGS: ${{ inputs.model-args }}
       run: |
         set -euo pipefail
         IFS=$'\n\t'
 
-        credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
-        case "$credential_slot" in
-          preferred)
-            unset ANTHROPIC_API_KEY
-            export CLAUDE_CODE_OAUTH_TOKEN="$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN"
-            ;;
-          primary)
-            export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
-            export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
-            ;;
-          fallback)
-            export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
-            export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
-            ;;
-          *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
-        esac
-        [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
-        [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+        token_file="$RUNNER_TEMP/lopu-claude-credential-token"
+        [ -s "$token_file" ] || { echo "::error::Selected Lopu vault credential is unavailable."; exit 1; }
+        unset ANTHROPIC_API_KEY
+        export CLAUDE_CODE_OAUTH_TOKEN="$(<"$token_file")"
 
         classify_output() {
           node - "$1" <<'NODE'
@@ -549,11 +539,6 @@ runs:
         EXPECTED_DETERMINISTIC_PATHS: ${{ inputs.deterministic-conflict-paths }}
         ALLOW_UNRESOLVED: ${{ inputs.allow-unresolved }}
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
-        CLAUDE_CODE_OAUTH_TOKEN_PREFERRED: ${{ inputs.claude-code-oauth-token-preferred }}
-        ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
-        CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         ACTION_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
@@ -864,11 +849,12 @@ runs:
         }
 
         needles="$temp_dir/secret-needles"
-        : >"$needles"
-        for secret in "${CLAUDE_CODE_OAUTH_TOKEN_PREFERRED:-}" \
-          "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
-          "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
-          "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
+        if [[ -s "$RUNNER_TEMP/lopu-credential-vault.json" ]]; then
+          node "$GITHUB_ACTION_PATH/../../scripts/lopu-credential-vault.mjs" needles "$needles"
+        else
+          : >"$needles"
+        fi
+        for secret in "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
           [[ -n "$secret" ]] || continue
           {
             printf '%s\n' "$secret"

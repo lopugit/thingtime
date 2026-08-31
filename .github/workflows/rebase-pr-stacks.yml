@@ -28,10 +28,8 @@
 #   explicit old-parent -> new-parent cascade.
 #
 # Secrets are shared with the merge resolver:
-# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN powers Claude (one required
-#   only when a non-graphify conflict actually reaches the AI).
-# - ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK optionally
-#   supplies a second account after a primary capacity or credential failure.
+# - THINGTIME_CI_ROUTER_SECRET fetches the admin-ordered Claude Code OAuth
+#   waterfall from Thingtime only when a non-graphify conflict reaches AI.
 # - CONFLICT_RESOLVER_PAT is optional. GITHUB_TOKEN is sufficient unless the
 #   rewritten history changes .github/workflows/. A PAT used here needs
 #   contents/pull-request/issues/workflow access appropriate to this repository.
@@ -1479,6 +1477,7 @@ jobs:
           claude-code-oauth-token-preferred: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME }}
           anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
           claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
+          thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           model-args: ${{ steps.models.outputs.model_args }}
@@ -2112,22 +2111,12 @@ jobs:
         run: |
           set -euo pipefail
           cd -- "$REBASE_REPO"
-          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
-          case "$credential_slot" in
-            preferred)
-              unset ANTHROPIC_API_KEY
-              export CLAUDE_CODE_OAUTH_TOKEN="$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN"
-              ;;
-            primary)
-              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
-              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
-              ;;
-            fallback)
-              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
-              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
-              ;;
-            *) echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."; unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN ;;
-          esac
+          unset ANTHROPIC_API_KEY
+          if [ -s "$RUNNER_TEMP/lopu-claude-credential-token" ]; then
+            export CLAUDE_CODE_OAUTH_TOKEN="$(<"$RUNNER_TEMP/lopu-claude-credential-token")"
+          else
+            unset CLAUDE_CODE_OAUTH_TOKEN
+          fi
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
           [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
@@ -2259,11 +2248,8 @@ jobs:
           # Best-effort credential needle scan, matching the merge resolver's
           # backstop. The security boundary remains review on the PR branch.
           needles="$RUNNER_TEMP/graphify-secret-needles.txt"
-          : > "$needles"
-          for secret in "$PREFERRED_CLAUDE_CODE_OAUTH_TOKEN" \
-            "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
-            "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \
-            "${OPENAI_API_KEY:-}"; do
+          node "$GITHUB_WORKSPACE/trusted/.github/scripts/lopu-credential-vault.mjs" needles "$needles"
+          for secret in "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             {
               printf '%s\n' "$secret"

@@ -1445,18 +1445,18 @@ function assertAdminModelRouting(
   );
   assert.match(
     lopuActionSource,
-    /claude-code-oauth-token-preferred:[\s\S]*anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
-    "the protected Lopu action exposes preferred, existing-primary, and fallback Anthropic account slots",
+    /thingtime-ci-router-secret:[\s\S]*lopu-credential-vault\.mjs[\s\S]*LOPU_CLAUDE_TOKEN_8/u,
+    "the protected Lopu action fetches and exposes the bounded ordered Thingtime credential waterfall",
   );
   assert.match(
     lopuActionSource,
-    /classify-claude-credential-failure\.mjs[\s\S]*claude_preferred_failure\.outputs\.retryable == 'true'[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
+    /classify-claude-credential-failure\.mjs[\s\S]*claude_1_failure\.outputs\.retryable == 'true'[\s\S]*claude_7_failure\.outputs\.retryable == 'true'/u,
     "the protected Lopu action advances slots only after classified account-capacity or credential failures",
   );
   assert.match(
     rebaseActionSource,
-    /lopu-claude-credential-slot/u,
-    "rebase continuations stay on the Claude credential slot that owns the exact session",
+    /lopu-claude-credential-token/u,
+    "rebase continuations stay on the selected vault credential that owns the exact session",
   );
   assert.match(
     resolveBlock,
@@ -1497,7 +1497,7 @@ function assertAdminModelRouting(
   assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
   assert.match(
     promotionGraphify,
-    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$preferred_claude_code_oauth_token"[\s\S]*"\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
+    /lopu-credential-vault\.mjs" needles "\$needles"[\s\S]*for secret in "\$\{OPENAI_API_KEY:-\}"/u,
     "promotion Graphify scans every provider credential before committing derived output",
   );
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");

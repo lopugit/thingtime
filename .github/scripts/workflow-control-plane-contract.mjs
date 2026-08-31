@@ -533,13 +533,13 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   );
   assert.match(
     lopuAgent,
-    /steps\.claude_primary_failure\.outputs\.retryable == 'true'/u,
-    "fallback Claude execution is limited to classified credential or account-capacity failures",
+    /steps\.claude_1_failure\.outputs\.retryable == 'true'[\s\S]*steps\.claude_7_failure\.outputs\.retryable == 'true'/u,
+    "every later vault credential is limited to classified credential or account-capacity failures",
   );
   assert.match(
     lopuAgent,
-    /lopu-claude-credential-slot/u,
-    "the single Lopu action records the successful credential slot for exact-session continuation",
+    /lopu-claude-credential-token/u,
+    "the single Lopu action stores the selected credential for exact-session continuation",
   );
   for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
@@ -557,8 +557,8 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
   }, 0);
   assert.equal(
     claudeActionCount,
-    3,
-    "only the single Lopu action owns the ordered preferred, primary, and fallback Claude invocations",
+    8,
+    "only the single Lopu action owns the bounded eight-position Claude credential waterfall",
   );
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
@@ -1352,8 +1352,14 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql, merge-feature-stack\]/u,
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql, merge-feature-stack, verify-credential-vault\]/u,
     "manual Feature Stack, all-branch, and CodeQL recovery stay inside Lopu maintenance",
+  );
+
+  assert.match(
+    resolver,
+    /verify_credential_vault:[\s\S]*inputs\.maintenance_operation == 'verify-credential-vault'[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*lopu-credential-vault\.mjs[\s\S]*stat -c '%a'[\s\S]*no model was invoked/u,
+    'credential-vault maintenance must fetch the ordered Thingtime bundle through the stable router secret without invoking a model',
   );
   const featureStackMerge = resolver.slice(
     resolver.indexOf("\n  feature_stack_merge:"),
