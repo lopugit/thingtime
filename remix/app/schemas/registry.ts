@@ -350,6 +350,7 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   adminIntegrationEndpoints: 1,
   adminIntegrationClaims: 1,
   adminIntegrationAudit: 1,
+  lopuCredentials: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
   email_events: 1,
@@ -2046,6 +2047,31 @@ const adminIntegrationSecretSchema: ThingtimeSchema = {
   example: { id: 'secret_example', label: 'Vercel write-only token', cipherText: '<encrypted>', schemaVersion: 1 }
 };
 
+const lopuCredentialSchema: ThingtimeSchema = {
+  id: 'lopu-credential',
+  version: COLLECTION_SCHEMA_VERSIONS.lopuCredentials,
+  kind: 'collection',
+  collection: 'lopuCredentials',
+  title: 'Lopu ordered credential vault entry',
+  summary: 'Named Claude credential encrypted with AES-256-GCM and ordered for Lopu usage failover.',
+  detail:
+    'The browser receives metadata only. Credential values are decrypted solely for a fresh, replay-protected HMAC request from the protected GitHub Actions control plane.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque credential id.' },
+    { name: 'name', type: 'string', required: true, description: 'Non-sensitive admin label.' },
+    { name: 'credentialType', type: 'string', required: true, description: 'Closed credential type.' },
+    { name: 'cipherText', type: 'string', required: true, description: 'AES-GCM ciphertext. Never projected to a browser.' },
+    { name: 'iv', type: 'string', required: true, description: 'AES-GCM nonce. Never projected.' },
+    { name: 'tag', type: 'string', required: true, description: 'AES-GCM authentication tag. Never projected.' },
+    { name: 'priority', type: 'number', required: true, description: 'Zero-based waterfall position.' },
+    { name: 'enabled', type: 'boolean', required: true, description: 'Whether Lopu may use the credential.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Last metadata or value change.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { id: 'lopu_credential_example', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true, cipherText: '<encrypted>', schemaVersion: 1 }
+};
+
 const adminIntegrationEndpointSchema: ThingtimeSchema = {
   id: 'admin-integration-endpoint',
   version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationEndpoints,
@@ -2774,7 +2800,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   adminIntegrationSecretSchema,
   adminIntegrationEndpointSchema,
   adminIntegrationClaimSchema,
-  adminIntegrationAuditSchema
+  adminIntegrationAuditSchema,
+  lopuCredentialSchema
 ];
 
 export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;
