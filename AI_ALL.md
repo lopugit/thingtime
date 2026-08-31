@@ -296,6 +296,13 @@ Rules:
   `graphify-out/snapshots/v1/`, promote semantic responses into immutable
   `graphify-out/cache/semantic-cas/v1/<input-key>/<content-hash>.json`
   variants, and refresh ignored root compatibility aliases.
+- The router retains one active portable snapshot by default and prunes older
+  snapshot trees only after activating a valid replacement. Set
+  `GRAPHIFY_SNAPSHOT_RETENTION` to a positive integer when a branch deliberately
+  needs more retained snapshots; invalid, zero, or unbounded values fail closed.
+- Run `.github/scripts/graphify prune` to enforce the configured retention
+  without rebuilding. The active snapshot is always retained, and removed
+  snapshots remain recoverable from Git history.
 - After modifying code, run `.github/scripts/graphify update .` here. Use the
   configured semantic backend for Markdown/docs/non-code corpus changes, then
   let the router cluster and export the result.
