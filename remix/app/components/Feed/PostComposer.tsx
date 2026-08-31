@@ -5,8 +5,13 @@ import { PictureInPicture2, X } from 'lucide-react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
-import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
-import { MediaLayoutCanvas, MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
+import {
+	MediaLayoutCanvas,
+	MediaLayoutFinalPreview,
+	MediaLayoutPicker,
+	SpanCycleButton,
+	type ComposerLayoutMode
+} from '~/components/Attachments/MediaLayoutControls';
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
@@ -169,8 +174,8 @@ export const PostComposer = (props: PostComposerProps) => {
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
 	);
-	const [layoutPattern, setLayoutPattern] = React.useState(
-		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? editPost.mediaLayout.pattern.join('-') : '1-2'
+	const [layoutPattern, setLayoutPattern] = React.useState<number[]>(
+		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? [...editPost.mediaLayout.pattern] : [1, 2]
 	);
 	const [layoutColumns, setLayoutColumns] = React.useState(
 		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.columns ? editPost.mediaLayout.columns : 3
@@ -217,10 +222,34 @@ export const PostComposer = (props: PostComposerProps) => {
 		})
 	);
 	const [editAttachments, setEditAttachments] = React.useState<PublicAttachment[]>(editAttachmentsSeedRef.current);
+	const removeExistingAttachment = React.useCallback(
+		(attachment: PublicAttachment) => {
+			const originalIndex = editAttachments.findIndex((entry) => entry.id === attachment.id);
+			const originalSpan = layoutSpans[attachment.id];
+			setEditAttachments((current) => current.filter((entry) => entry.id !== attachment.id));
+			setLayoutSpans(
+				(current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== attachment.id)) as Record<string, MediaLayoutSpan>
+			);
+			api.v1.attachments.remove({ id: attachment.id, targetId: editPost?.id }).catch((error: any) => {
+				setEditAttachments((current) => {
+					if (current.some((entry) => entry.id === attachment.id)) return current;
+					const restored = [...current];
+					restored.splice(Math.max(0, Math.min(originalIndex, restored.length)), 0, attachment);
+					return restored;
+				});
+				if (originalSpan) setLayoutSpans((current) => ({ ...current, [attachment.id]: originalSpan }));
+				lopu({ title: error?.error || `Could not delete ${attachment.filenamePreview || attachment.name} 😞`, status: 'error' });
+			});
+		},
+		[api, editAttachments, editPost?.id, layoutSpans, lopu]
+	);
+	const remainingSeedAttachments = editAttachmentsSeedRef.current.filter((seed) =>
+		editAttachments.some((attachment) => attachment.id === seed.id)
+	);
 	const editAttachmentOrderChanged =
 		isEdit &&
-		editAttachments.length === editAttachmentsSeedRef.current.length &&
-		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
+		editAttachments.length === remainingSeedAttachments.length &&
+		editAttachments.some((attachment, index) => attachment.id !== remainingSeedAttachments[index].id);
 
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
@@ -284,19 +313,15 @@ export const PostComposer = (props: PostComposerProps) => {
 	// attachment-only post must stay saveable while its media is reordered
 	const composerAttachments = isEdit ? [...editAttachments, ...attachmentSnapshot.attachments] : attachmentSnapshot.attachments;
 	const hasReadyAttachment = composerAttachments.length > 0;
-	const hasReadyVisualAttachment = composerAttachments.some(
-		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-	);
+	const hasReadyVisualAttachment = composerAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
 
 	// gallery-layout picker visibility + the tier-2 per-tile size badge (grid)
-	const visualLayoutCount = composerAttachments.filter(
-		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-	).length;
+	const visualLayoutCount = composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video').length;
 	const layoutSpanBadge = React.useCallback(
 		(attachment: PublicAttachment) =>
 			attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? (
 				<SpanCycleButton
-					name={attachment.name}
+					name={attachment.filenamePreview || attachment.name}
 					span={layoutSpans[attachment.id] || 'normal'}
 					onChange={(next) => setLayoutSpans((current) => ({ ...current, [attachment.id]: next }))}
 				/>
@@ -373,7 +398,7 @@ export const PostComposer = (props: PostComposerProps) => {
 			visualIdsForLayout.length < 2 || layoutMode === 'auto'
 				? null
 				: layoutMode === 'rows'
-				? { mode: 'rows', pattern: parseLayoutPattern(layoutPattern) || [1, 2] }
+				? { mode: 'rows', pattern: layoutPattern }
 				: { mode: 'grid', columns: layoutColumns, ...(Object.keys(prunedSpans).length ? { spans: prunedSpans } : {}) };
 		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
 			(tag, index, all) => all.indexOf(tag) === index
@@ -488,9 +513,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					},
 					tags: parsedTags,
 					visibility,
-					...(editAttachmentsChanged
-						? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] }
-						: {})
+					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
 				});
 				finishPost(updated.post);
 			} else {
@@ -793,18 +816,6 @@ export const PostComposer = (props: PostComposerProps) => {
         <Flex flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
 
-					{/* edit mode: the post's already-bound attachments, reorderable in
-					place — new files join through the uploader below */}
-					{isEdit && editAttachments.length > 0 && (
-						<AttachmentReorderGallery
-							attachments={editAttachments}
-							onChange={setEditAttachments}
-							disabled={posting || submissionUncertain}
-							ariaLabel="Reorder this post's attachments"
-							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
-						/>
-					)}
-
 					{user && (
 						<AttachmentComposer
 							ref={attachmentComposerRef}
@@ -825,6 +836,9 @@ export const PostComposer = (props: PostComposerProps) => {
 								isEdit ? (editPost?.images || []).slice(0, Math.max(0, MAX_POST_ATTACHMENTS - editAttachmentsSeedRef.current.length)) : undefined
 							}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
+								existingAttachments={isEdit ? editAttachments : undefined}
+								onExistingChange={isEdit ? setEditAttachments : undefined}
+								onExistingRemove={isEdit ? removeExistingAttachment : undefined}
 						/>
 					)}
 
@@ -845,9 +859,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					{/* tier 3: the grid canvas — live preview with drag-resize handles */}
 					{visualLayoutCount >= 2 && layoutMode === 'grid' && (
 						<MediaLayoutCanvas
-							attachments={composerAttachments.filter(
-								(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-							)}
+								attachments={composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')}
 							columns={layoutColumns}
 							onColumns={setLayoutColumns}
 							spans={layoutSpans}
@@ -855,6 +867,13 @@ export const PostComposer = (props: PostComposerProps) => {
 							disabled={posting || submissionUncertain}
 						/>
 					)}
+						{visualLayoutCount >= 2 && layoutMode !== 'grid' && (
+							<MediaLayoutFinalPreview
+								attachments={composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')}
+								mode={layoutMode}
+								pattern={layoutPattern}
+							/>
+						)}
             </Flex>
       )}
 

@@ -166,6 +166,7 @@ export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKin
 
 const MAX_ATTACHMENT_TITLE_CHARS = 200;
 const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
+const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
 
 const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
 	if (typeof value !== 'string') return undefined;
@@ -183,6 +184,7 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
 	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
 	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
+	const filenamePreview = normalizedOwnerText(record.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS);
 	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
@@ -198,6 +200,7 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		// Linked attachments keep the server's declared render hint instead — their
 		// bytes render straight from the external URL in safe sinks.
 		mediaKind: linkedUrl ? safeLinkedMediaKind(record.mediaKind) : safeAttachmentMediaKind(contentType, record.mediaKind),
+		...(filenamePreview ? { filenamePreview } : {}),
 		...(title ? { title } : {}),
 		...(description ? { description } : {}),
 		// only an explicit server true survives — nothing client-side can set it
@@ -206,6 +209,9 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		...(record.pending === true ? { pending: true as const } : {})
 	};
 };
+
+export const attachmentDisplayName = (attachment: Pick<PublicAttachment, 'name' | 'filenamePreview'>): string =>
+	attachment.filenamePreview || attachment.name;
 
 // The stable deeplink to a media attachment's own Thing page.
 export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
@@ -244,9 +250,7 @@ const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
 
 export const attachmentTypeLabel = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string => {
 	const shown =
-		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType
-			? attachment.detectedContentType
-			: attachment.contentType;
+		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType ? attachment.detectedContentType : attachment.contentType;
 	if (!shown || shown === 'application/octet-stream') return 'File';
 	return FRIENDLY_CONTENT_TYPE_LABELS[shown] || shown;
 };
@@ -260,8 +264,7 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 // The src every renderer should use: linked attachments render straight from
 // their external URL; everything else goes through the authenticated content
 // endpoint.
-export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string =>
-	attachment.url || attachmentContentUrl(attachment.id);
+export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string => attachment.url || attachmentContentUrl(attachment.id);
 
 export const formatAttachmentBytes = (bytes: number): string => {
 	if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown size';

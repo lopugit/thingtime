@@ -26,6 +26,8 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// owner-selected display label; the original upload name remains immutable
+	filenamePreview?: string;
 	// owner-authored presentation text (media page + lightbox); absent = none
 	title?: string;
 	description?: string;

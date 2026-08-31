@@ -16,6 +16,7 @@ export const ATTACHMENT_MEDIA_KINDS = ['image', 'video', 'audio', 'file'] as con
 export type AttachmentMediaKind = (typeof ATTACHMENT_MEDIA_KINDS)[number];
 
 export const MAX_ATTACHMENT_NAME_CHARS = 255;
+export const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
 export const MAX_ATTACHMENT_TITLE_CHARS = 200;
 export const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
 export const MAX_ATTACHMENT_CONTENT_TYPE_CHARS = 127;
@@ -37,6 +38,7 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	filenamePreview?: string;
 	// owner-authored presentation metadata for the media's own Thing page and
 	// lightbox — optional, absent on legacy attachments, never empty strings
 	title?: string;
@@ -62,6 +64,7 @@ export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id' | 'pending' 
 
 export type AttachmentAnnotationPatch = {
 	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
+	filenamePreview?: string | null;
 	title?: string | null;
 	description?: string | null;
 };
@@ -293,11 +296,7 @@ export const linkedAttachmentNameForUrl = (url: string): string => {
 };
 
 // Single-line owner text (titles): the same hygiene as filenames.
-const sanitizeAttachmentLine = (
-	value: unknown,
-	maxChars: number,
-	label: string
-): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
@@ -311,11 +310,7 @@ const sanitizeAttachmentLine = (
 // Multi-line owner text (descriptions): newlines allowed, every other control
 // or format character still rejected.
 const UNSAFE_MULTILINE_CHAR_RE = /[\p{Cf}\p{Cs}]/u;
-const sanitizeAttachmentBlock = (
-	value: unknown,
-	maxChars: number,
-	label: string
-): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentBlock = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
@@ -364,6 +359,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 	if (title.ok === false) return title;
 	const description = sanitizeAttachmentBlock(raw.description, MAX_ATTACHMENT_DESCRIPTION_CHARS, 'description');
 	if (description.ok === false) return description;
+	const filenamePreview = sanitizeAttachmentLine(raw.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, 'filename preview');
+	if (filenamePreview.ok === false) return filenamePreview;
 
 	return {
 		ok: true,
@@ -374,6 +371,7 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 			// Always derive this from the normalized content type. A caller cannot
 			// label HTML/SVG/arbitrary bytes as inline-safe image or video content.
 			mediaKind: attachmentMediaKindForContentType(contentType),
+			...(filenamePreview.value ? { filenamePreview: filenamePreview.value } : {}),
 			// blank owner text is stored as ABSENT, never as an empty string
 			...(title.value ? { title: title.value } : {}),
 			...(description.value ? { description: description.value } : {})
@@ -405,10 +403,10 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
 // Owner-authored presentation text plus the server-written sniffed container
 // type; each is validated below before a crystal counts as canonical.
-const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description', 'detectedContentType']);
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType']);
 // Linked crystals swap detectedContentType (a stored-bytes sniff) for the
 // external url; every other key keeps the base hygiene.
-const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'title', 'description']);
+const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'filenamePreview', 'title', 'description']);
 
 // Linked (external URL) crystal: size is always 0 (the bytes are not ours),
 // and mediaKind is a DECLARED render hint — the media renders in safe sinks
@@ -425,13 +423,15 @@ const canonicalLinkedAttachmentCrystal = (raw: Record<string, unknown>): Attachm
 		size: raw.size,
 		contentType: raw.contentType,
 		title: raw.title,
-		description: raw.description
+		description: raw.description,
+		filenamePreview: raw.filenamePreview
 	});
 	if (!sanitized.ok) return null;
 	return raw.name === sanitized.crystal.name &&
 		raw.contentType === sanitized.crystal.contentType &&
 		raw.title === sanitized.crystal.title &&
-		raw.description === sanitized.crystal.description
+		raw.description === sanitized.crystal.description &&
+		raw.filenamePreview === sanitized.crystal.filenamePreview
 		? { ...sanitized.crystal, mediaKind: raw.mediaKind, url }
 		: null;
 };
@@ -467,7 +467,8 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 		raw.contentType === sanitized.crystal.contentType &&
 		raw.mediaKind === sanitized.crystal.mediaKind &&
 		raw.title === sanitized.crystal.title &&
-		raw.description === sanitized.crystal.description
+		raw.description === sanitized.crystal.description &&
+		raw.filenamePreview === sanitized.crystal.filenamePreview
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
@@ -476,10 +477,7 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 // crystal. The magic-byte detector's optional detectedContentType is
 // server-owned metadata: annotation must preserve it exactly, never accept it
 // from the patch and never silently erase it.
-export const applyAttachmentAnnotationPatch = (
-	value: unknown,
-	patch: AttachmentAnnotationPatch
-): AttachmentMetadataResult => {
+export const applyAttachmentAnnotationPatch = (value: unknown, patch: AttachmentAnnotationPatch): AttachmentMetadataResult => {
 	const before = canonicalAttachmentCrystal(value);
 	if (!before) return { ok: false, error: 'Attachment metadata is not canonical' };
 	const sanitized = sanitizeAttachmentPublicMetadata({
@@ -487,7 +485,8 @@ export const applyAttachmentAnnotationPatch = (
 		size: before.size,
 		contentType: before.contentType,
 		title: patch.title === undefined ? before.title : patch.title,
-		description: patch.description === undefined ? before.description : patch.description
+		description: patch.description === undefined ? before.description : patch.description,
+		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview
 	});
 	if (!sanitized.ok) return sanitized;
 	return {

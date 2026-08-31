@@ -885,7 +885,7 @@ const bindReadyAttachmentsForPurpose = async (
 	}
 };
 
-// Owner-authored title/description on a READY attachment. Ready-only on
+// Owner-authored display metadata on a READY attachment. Ready-only on
 // purpose: finalize (markReady) rebuilds the crystal from the verified S3
 // object, so annotating an in-flight upload would be silently clobbered.
 // Crystal bytes change, so the delta rides the same exact-accounting
@@ -903,6 +903,7 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);
 		const nextCrystal: AttachmentCrystal = annotated.crystal;
 		if (
+			nextCrystal.filenamePreview === before.crystal.filenamePreview &&
 			nextCrystal.title === before.crystal.title &&
 			nextCrystal.description === before.crystal.description &&
 			nextCrystal.name === before.crystal.name

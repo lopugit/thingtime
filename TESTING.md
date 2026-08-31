@@ -620,8 +620,9 @@ is fixed, and cite the checklist you ran in the PR description.
       lightbox/media-page Download open the original URL in a new tab. Delete,
       post-delete cascade, and draft reaping of linked media never touch S3
       (works with private storage unconfigured).
-- [ ] Edit a post with 2+ attachments: the composer shows the reorderable
-      gallery AND the live media panel, dragging or arrow keys reorder the
+- [ ] Edit a post with 2+ attachments: the composer shows exactly one Media &
+      files panel containing the original attachments and new-media controls;
+      no duplicate gallery or second drop zone appears. Dragging or arrow keys reorder the
       bound set, Save persists the order (card + `/post/:id` + reload agree),
       and saving with no changes sends no attachment sync. A stale edit saved
       after the post's attachments changed fails with the refresh-and-try 409
@@ -633,6 +634,10 @@ is fixed, and cite the checklist you ran in the PR description.
       Removals never happen via Save — a list missing a VISIBLE bound id is
       rejected with the 409, while moderation-hidden bound ids are exempt and
       keep their binding + trailing order.
+- [ ] In both new-post and edit-post composers, every ready uploaded or linked
+      attachment has a visible, keyboard-labelled delete button. Deleting an
+      existing bound attachment removes only that exact post binding and
+      attachment; a stale/mismatched target fails closed and restores the tile.
 - [ ] Edit a legacy post that still carries crystal.images URLs: they appear
       in the media panel as linked tiles, reorder/remove like anything else,
       and Save migrates them into linked attachments (crystal.images empties;
@@ -794,11 +799,13 @@ is fixed, and cite the checklist you ran in the PR description.
       404s safely, and `GET /api/v1/things?id=<attachmentId>` leaks no private
       object fields.
 - [ ] As the owner, use the pencil affordance on a ready composer tile, an
-      edit-gallery tile, and the `/media/:id` page to set/edit title (≤200) and
+      edit-gallery tile, and the `/media/:id` page to set/edit Filename preview
+      (≤255), title (≤200), and
       description (≤2000). The editor saves via `/api/v1/attachments/annotate`,
       updates optimistically (revert + Lopu toast on failure), clears fields
       when emptied, and the saved values survive reload on card, lightbox, and
-      media page. A non-owner and an unauthenticated caller get no pencil and a
+      media page. Filename preview replaces the rendered filename while the
+      immutable original remains the download filename. A non-owner and an unauthenticated caller get no pencil and a
       403/401 from the endpoint.
 - [ ] Annotate a legacy opaque attachment that already has a server-written
       `detectedContentType`. Title/description edits and clears preserve that
@@ -810,13 +817,20 @@ is fixed, and cite the checklist you ran in the PR description.
       shares have a real renderer, so the media card cannot create an empty
       feed share.
 - [ ] Media layout editor: on a post with 3+ images, switch Layout between
-      Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Rows accepts
-      a pattern like 1-2-3 (hero, two, three; extras repeat the last row size),
-      Grid gets a 1-6 column stepper plus per-tile size badges cycling
+      Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Auto and
+      Rows show the same labelled final-view preview as Grid. Rows uses visual
+      add/remove-row controls and +/- image counts rather than a text pattern;
+      extras repeat the last row size. Grid gets a 1-6 column stepper plus
+      visible clickable 1×1 per-tile badges cycling
       normal → wide → tall → big. Saved layouts persist through create, edit,
       reload, and render identically for a non-owner viewer; Auto clears
       `mediaLayout` from the crystal. Layout controls only appear with 2+
       visual attachments and never break the drag-reorder grips.
+- [ ] Search by the Reaction schema with Emoji contains `heart`: matching ❤️
+      reactions return their parent post cards even when the text query was
+      previously non-empty. Search `ReplacementBladesV2.3mf` (and an attachment
+      title, description, and Filename preview) from Commander/full search;
+      the Attachment schema is offered by default and opens the media Thing.
 - [ ] Media layout transport: after creating a post or rich comment through
       `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
       columns/pattern, and non-default spans survived the client request. A

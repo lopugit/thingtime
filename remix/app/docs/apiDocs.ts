@@ -3383,19 +3383,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
-		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		summary: 'Sets or clears an owned ready attachment’s display filename, title, and description.',
 		detail:
-			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+			'Every attachment is a searchable Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation metadata that page, post cards, and lightbox render: filenamePreview up to 255 single-line characters, title up to 200, and description up to 2000 characters (newlines allowed). The original filename remains immutable and is still used for downloads. Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id with title and/or description.',
+			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
 			'Store the returned attachment metadata (it includes the updated title/description).',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
@@ -3407,6 +3408,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				method: 'POST',
 				body: {
 					id: '3bda8208-625c-4f5d-941f-348020021848',
+					filenamePreview: 'Bay sunset.jpg',
 					title: 'Sunset over the bay',
 					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
 				}
@@ -3489,19 +3491,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
 		summary: 'Deletes an owned attachment object before refunding its storage.',
 		detail:
-			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id.',
+			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
 			'On success, remove it from local draft state.',
 			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
 		],
@@ -3510,7 +3513,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				name: 'Delete file',
 				description: 'Delete one owned attachment.',
 				method: 'POST',
-				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]

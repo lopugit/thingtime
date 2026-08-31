@@ -449,8 +449,11 @@ export function useApi() {
 				)
 			},
 			remove: useCallback(
-				async (args: { id: string }) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/attachments/delete', errorContext: 'remove a draft file' });
+				async (args: { id: string; targetId?: string }) => {
+					const ret = asyncFetcher.submit(
+						{ id: args?.id, ...(args.targetId ? { targetId: args.targetId } : {}) },
+						{ action: '/api/v1/attachments/delete', errorContext: args.targetId ? 'delete an attached file' : 'remove a draft file' }
+					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},
@@ -474,13 +477,14 @@ export function useApi() {
 				},
 				[asyncFetcher]
 			),
-			// owner title/description on a ready attachment (media page + lightbox
+			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; title?: string | null; description?: string | null }) =>
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
 					asyncFetcher.submit(
 						{
 							id: args?.id,
+							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},

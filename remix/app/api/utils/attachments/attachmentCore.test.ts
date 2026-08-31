@@ -305,11 +305,12 @@ test('moderation-hidden bound ids are exempt from the sync cover and re-stamp af
 	assert.equal(attachmentModerationHidesFromPublic(undefined), false);
 });
 
-test('owner title/description are optional, bounded, hygienic, and never stored empty', () => {
+test('owner display filename/title/description are optional, bounded, hygienic, and never stored empty', () => {
 	const annotated = sanitizeAttachmentPublicMetadata({
 		name: 'sunset.jpg',
 		size: 42,
 		contentType: 'image/jpeg',
+		filenamePreview: '  Bay sunset.jpg  ',
 		title: '  Sunset over the bay  ',
 		description: 'Line one\nline two 🍉'
 	});
@@ -320,16 +321,25 @@ test('owner title/description are optional, bounded, hygienic, and never stored 
 			size: 42,
 			contentType: 'image/jpeg',
 			mediaKind: 'image',
+			filenamePreview: 'Bay sunset.jpg',
 			title: 'Sunset over the bay',
 			description: 'Line one\nline two 🍉'
 		}
 	});
 	// blanks collapse to ABSENT keys
-	const blank = sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: '   ', description: '' });
+	const blank = sanitizeAttachmentPublicMetadata({
+		name: 'a.png',
+		size: 1,
+		contentType: 'image/png',
+		filenamePreview: '',
+		title: '   ',
+		description: ''
+	});
 	assert.equal(blank.ok, true);
 	if (blank.ok) {
 		assert.equal('title' in blank.crystal, false);
 		assert.equal('description' in blank.crystal, false);
+		assert.equal('filenamePreview' in blank.crystal, false);
 	}
 	// titles are single-line; descriptions allow newlines but no other controls
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'two\nlines' }).ok, false);
@@ -338,6 +348,7 @@ test('owner title/description are optional, bounded, hygienic, and never stored 
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 42 }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', filenamePreview: 'x'.repeat(256) }).ok, false);
 });
 
 test('annotated crystals stay canonical for projection and accounting; foreign keys still fail closed', () => {

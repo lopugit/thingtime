@@ -669,11 +669,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						// existing annotation exactly, and fail closed rather than erase a
 						// malformed value written by some other path.
 						const existingPresentation = doc.crystal as AttachmentCrystal & {
+							filenamePreview?: unknown;
 							title?: unknown;
 							description?: unknown;
 						};
 						const presentation: Record<string, string> = {};
-						for (const key of ['title', 'description'] as const) {
+						for (const key of ['filenamePreview', 'title', 'description'] as const) {
 							if (!Object.prototype.hasOwnProperty.call(existingPresentation, key)) continue;
 							const value = existingPresentation[key];
 							if (typeof value !== 'string') throw new AttachmentStoreConflictError(`Attachment ${key} is malformed`);
@@ -1179,22 +1180,28 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => key !== 'id')) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
 			const id = normalizeId(raw.id);
+			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
+			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
 			// A client may miss a successful post-create response and then try to
 			// clean up its former draft ids. Once bound, only post cascade deletion
 			// may remove the object; this check makes that ambiguous success safe.
-			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
+			if (existing.targetId && existing.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
+			if (existing.targetId && existing.attachmentPurpose && !['post', 'comment'].includes(existing.attachmentPurpose)) {
+				return fail(409, 'This attached file must be removed from its owning surface');
+			}
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
+			const reason = existing.targetId ? { kind: 'target' as const, targetId: existing.targetId } : { kind: 'draft' as const };
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
-				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
+				if (raced?.targetId && raced.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
 				if (raced?.attachmentState === 'finalizing') {
 					return fail(409, 'Attachment finalization is in progress — try again');
 				}
@@ -1435,19 +1442,16 @@ export const createReadyAttachmentPostInsertHook =
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
 
-// POST /api/v1/attachments/annotate — owner-authored title/description on a
+// POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (
-	ownerId: string,
-	input: unknown
-): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['id', 'title', 'description'].includes(key))) {
+		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description'].includes(key))) {
 			return fail(400, 'Invalid attachment annotation request');
 		}
 		const id = normalizeId(record.id);
@@ -1460,10 +1464,11 @@ export const annotateAttachment = async (
 		};
 		const title = patchField(record.title, 'title');
 		const description = patchField(record.description, 'description');
-		if (title === undefined && description === undefined) {
-			return fail(400, 'Provide a title or description to update');
+		const filenamePreview = patchField(record.filenamePreview, 'filename preview');
+		if (title === undefined && description === undefined && filenamePreview === undefined) {
+			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { title, description });
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description });
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
 		return { ok: true, attachment };
@@ -1479,10 +1484,7 @@ export const annotateAttachment = async (
 // sinks; the server never fetches it, so there is no SSRF surface). Duplicate
 // URLs are deliberately allowed — each mint is its own attachment thing.
 // Unbound mints expire on the same 24h draft TTL as uploads.
-export const linkAttachment = async (
-	ownerId: string,
-	input: unknown
-): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const linkAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');

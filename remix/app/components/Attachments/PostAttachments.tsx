@@ -4,7 +4,14 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
-import { attachmentContentUrl, attachmentMediaSrc, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import {
+	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentMediaSrc,
+	attachmentTypeLabel,
+	formatAttachmentBytes,
+	normalizePublicAttachment
+} from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
@@ -120,7 +127,7 @@ export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
 };
 
 // hero rows get a cinematic ratio; pairs a gentle landscape; 3+ go square
-const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
+export const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
 
 const spanFor = (layout: PostMediaLayout, id: string): MediaLayoutSpan => layout.spans?.[id] || 'normal';
 export const spanColumns = (span: MediaLayoutSpan, columns: number): number => (span === 'wide' || span === 'big' ? Math.min(2, columns) : 1);
@@ -186,16 +193,16 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 				fontWeight={650}
 				color="var(--tt-ink, #16161a)"
 				noOfLines={1}
-				title={attachment.title || attachment.name}
+				title={attachment.title || attachmentDisplayName(attachment)}
 			>
-				{attachment.title || attachment.name}
+				{attachment.title || attachmentDisplayName(attachment)}
 			</Text>
 			<Text fontSize="10px" color={MUTED} noOfLines={1}>
 				{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
 			</Text>
 		</Box>
 		{attachment.pending ? <PendingBadge /> : null}
-		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
+		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachmentDisplayName(attachment)}`} />
 	</Flex>
 );
 
@@ -209,7 +216,7 @@ const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment
 		<Box
 			as="video"
 			src={attachmentMediaSrc(attachment)}
-			aria-label={attachment.title || attachment.name}
+			aria-label={attachment.title || attachmentDisplayName(attachment)}
 			controls
 			playsInline
 			preload="metadata"
@@ -273,7 +280,7 @@ export const PostAttachments = ({
 			<Box
 				as="img"
 				src={attachmentMediaSrc(attachment)}
-				alt={attachment.title || attachment.name || `Post image ${index + 1}`}
+				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
 				referrerPolicy="no-referrer"
 				width="100%"
@@ -298,14 +305,14 @@ export const PostAttachments = ({
 				overflow="hidden"
 				cursor={shielded ? 'default' : 'zoom-in'}
 				sx={tileSx}
-				aria-label={shielded ? undefined : `View ${attachment.title || attachment.name}`}
+				aria-label={shielded ? undefined : `View ${attachment.title || attachmentDisplayName(attachment)}`}
 				// the lightbox skips shielded media, so open it at this image's index
 				// within that list rather than its attachment-order index
 				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
 			>
 				{shielded ? (
 					<NsfwShield
-						name={attachment.title || attachment.name}
+						name={attachment.title || attachmentDisplayName(attachment)}
 						compact={compact}
 						fill={fill}
 						onReveal={() => reveal(attachment.id)}
@@ -378,12 +385,7 @@ export const PostAttachments = ({
 			)}
 
 			{images.length > 0 && layout.mode === 'grid' && (
-				<Box
-					display="grid"
-					gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`}
-					gap="6px"
-					sx={{ gridAutoFlow: 'dense' }}
-				>
+				<Box display="grid" gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`} gap="6px" sx={{ gridAutoFlow: 'dense' }}>
 					{images.map((attachment, index) => {
 						const span = spanFor(layout, attachment.id);
 						return tile(
@@ -404,7 +406,7 @@ export const PostAttachments = ({
 			{videos.map((attachment) => {
 				const video = <AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />;
 				return attachment.nsfw && !revealedIds.has(attachment.id) ? (
-					<NsfwShield key={attachment.id} name={attachment.name} compact={compact} onReveal={() => reveal(attachment.id)}>
+					<NsfwShield key={attachment.id} name={attachmentDisplayName(attachment)} compact={compact} onReveal={() => reveal(attachment.id)}>
 						{video}
 					</NsfwShield>
 				) : (

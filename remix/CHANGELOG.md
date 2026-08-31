@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Post media editing now has one visual source of truth.** Auto and Rows show
+  final-view previews, Rows uses add/remove and per-row image-count controls,
+  Grid previews expose the clickable 1×1 span badge, and the single Media &
+  files panel owns reorder, metadata, and delete actions in create and edit.
+  Attachments are now default searchable level-one Things (including display
+  filename/title/description), while Reaction schema searches resolve human
+  emoji names such as “heart” to stored emoji and render the matching parent
+  posts. — Codex (AI), 2026-08-31
 - **The new Limitless MCP Lab turns the live connector contract into an
   interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
   in parallel, keeps the current release contract on first paint, demonstrates
