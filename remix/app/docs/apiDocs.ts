@@ -9,6 +9,7 @@ export type ApiRequestExample = {
   description: string;
   method: ApiHttpMethod;
   query?: Record<string, string | number | boolean | null>;
+  headers?: Record<string, string>;
   body?: unknown;
 };
 
@@ -161,6 +162,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'GitHub could not accept the request.',
 				body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
 			}
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-credentials',
+    group: 'admin',
+    title: 'Manage the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/admin/ci/credentials',
+    featureVersion: '1.0.0',
+    summary: 'Store, rotate, enable, delete, and reorder named Claude credentials without exposing their values.',
+    detail:
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. GET and every mutation response contain redacted metadata only. The ordered enabled entries become Lopu’s credential waterfall; at most eight entries are stored.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the redacted ordered list.',
+      'POST create, rotate, set-enabled, reorder, or delete.',
+      'Use the CI Control page to manage the order without copying values back into the browser.'
+    ],
+    requestExamples: [
+      { name: 'Add a named Claude account', description: 'The value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', value: '<oauth-token>', enabled: true } },
+      { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   }),
   endpoint({
@@ -354,6 +380,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
       { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-credentials',
+    group: 'integrations',
+    title: 'Deliver the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/integrations/ci/credentials',
+    featureVersion: '1.0.0',
+    summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
+    detail:
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, and a single-use nonce before decrypting the ordered entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Create a fresh nonce and request timestamp in a workflow running from github-actions.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'On the first migration request only, the controller may include its existing OAuth slots; an empty vault imports them once.',
+      'Mask every returned value immediately and keep it only for the current job.'
+    ],
+    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
+    responseExamples: [
+      { status: 200, description: 'Ordered enabled credentials. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
+      { status: 409, description: 'Replay blocked.', body: { ok: false, error: 'Credential request was already used.' } }
     ]
   }),
   endpoint({
