@@ -597,12 +597,29 @@ is fixed, and cite the checklist you ran in the PR description.
       step, Home/End jump to the edges. Tiles reorder live while dragging, a
       tile drag never triggers the panel's file-drop styling, and the posted
       card renders images and files in exactly the chosen order after reload.
-- [ ] Edit a post with 2+ attachments: the composer shows the read-only
-      reorderable gallery (no upload panel), dragging or arrow keys reorder it,
-      Save persists the order (card + `/post/:id` + reload agree), and saving
-      with no changes sends no attachment reorder. A stale edit saved after the
-      post's attachments changed fails with the refresh-and-reorder 409 rather
-      than half-applying.
+- [ ] Composer type badges are additive toggles: Text stays selected while
+      Photos, Marketplace, and 📦 Things each switch their field group on and
+      off independently (Things + Marketplace + Photos can all be live at
+      once); clicking Text switches every extra group off. A plain text post
+      shows no media/attachments panel until Photos is toggled on, and the
+      saved post type is derived (things > marketplace > photos-with-visual >
+      text) so files-only media still saves as a text post.
+- [ ] The linked-image URL adder sits BELOW the upload grid as a single input
+      with an `Add` button: a valid URL becomes a preview tile and the field
+      clears for the next one (Enter adds too); pasting several
+      whitespace-separated URLs adds them all; invalid input stays in the
+      field with an accessible message.
+- [ ] Edit a post with 2+ attachments: the composer shows the reorderable
+      gallery AND the live upload panel, dragging or arrow keys reorder the
+      bound set, Save persists the order (card + `/post/:id` + reload agree),
+      and saving with no changes sends no attachment sync. A stale edit saved
+      after the post's attachments changed fails with the refresh-and-try 409
+      rather than half-applying.
+- [ ] Edit a post and upload a new file: Save binds it into the post after the
+      existing media (PATCH attachmentIds = full desired order), the updated
+      card shows it immediately and after reload, and the same flow works on a
+      rich comment (purpose stays `comment`). Removals never happen via
+      Save — a list missing a bound id is rejected with the 409.
 - [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
       failed part upload and a failed completion. No file is silently omitted,
       duplicated, charged twice, or left in a permanent uploading state.

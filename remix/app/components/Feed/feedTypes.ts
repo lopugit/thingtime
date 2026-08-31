@@ -159,7 +159,8 @@ export const POST_TYPE_META: Record<PostType, { label: string; emoji: string }> 
   text: { label: 'Text', emoji: '📝' },
   image: { label: 'Photos', emoji: '🖼️' },
   marketplace: { label: 'Marketplace', emoji: '🏪' },
-  thingtime: { label: 'Thingtime', emoji: '🌀' }
+  // the stored type key stays 'thingtime'; the badge reads "Things"
+  thingtime: { label: 'Things', emoji: '📦' }
 };
 
 export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string; hint: string }> = {

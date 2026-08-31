@@ -3309,7 +3309,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
 			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } later re-sorts a post’s bound set and binds newly uploaded ready drafts appended to it.'
 		],
 		requestExamples: [
 			{
@@ -6282,7 +6282,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
-      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
+      'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
       'DELETE ?id= (or body { id, expectedUpdatedAt? }) removes an owned thing; the optional precondition is checked atomically before cascade cleanup, attached comments/reactions go with it, and shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'

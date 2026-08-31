@@ -527,8 +527,9 @@ export function useApi() {
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
               ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
-              // attachment reorder — only send when the caller provides it
-              // (the ids must be a permutation of the post's bound set)
+              // attachment sync — only send when the caller provides it (the
+              // full desired order: every bound id plus any newly uploaded
+              // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }

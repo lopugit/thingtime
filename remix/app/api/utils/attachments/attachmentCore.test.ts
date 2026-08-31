@@ -11,6 +11,7 @@ import {
 	isAttachmentObjectVersionId,
 	orderAttachmentDocsByStoredSort,
 	planAttachmentReorder,
+	planAttachmentSync,
 	sanitizeAttachmentPublicMetadata,
 	toAttachmentPublicMetadata
 } from './attachmentCore.ts';
@@ -233,6 +234,26 @@ test('an attachment reorder must be a pure permutation of the bound set', () => 
 	assert.equal(planAttachmentReorder([' a'], ['a'], 25).ok, false);
 	assert.equal(planAttachmentReorder([42], ['42'], 25).ok, false);
 	const overCap = planAttachmentReorder(['a', 'b', 'c'], ['a', 'b', 'c'], 2);
+	assert.equal(overCap.ok === false && overCap.status, 400);
+});
+
+test('an attachment sync covers every bound id and may only append new ids', () => {
+	// pure permutation — nothing to add
+	assert.deepEqual(planAttachmentSync(['b', 'a'], ['a', 'b'], 25), { ok: true, orderedIds: ['b', 'a'], addedIds: [] });
+	assert.deepEqual(planAttachmentSync([], [], 25), { ok: true, orderedIds: [], addedIds: [] });
+	// additions surface as addedIds, in the requested display order
+	assert.deepEqual(planAttachmentSync(['c', 'a', 'b'], ['a', 'b'], 25), { ok: true, orderedIds: ['c', 'a', 'b'], addedIds: ['c'] });
+	assert.deepEqual(planAttachmentSync(['a'], [], 25), { ok: true, orderedIds: ['a'], addedIds: ['a'] });
+	// removals are never a side effect of saving an edit
+	const missing = planAttachmentSync(['a'], ['a', 'b'], 25);
+	assert.equal(missing.ok === false && missing.status, 409);
+	// malformed ids, duplicates, and the per-target cap fail as bad requests
+	const duplicate = planAttachmentSync(['a', 'a'], ['a'], 25);
+	assert.equal(duplicate.ok === false && duplicate.status, 400);
+	assert.equal(planAttachmentSync([''], [], 25).ok, false);
+	assert.equal(planAttachmentSync([' a'], ['a'], 25).ok, false);
+	assert.equal(planAttachmentSync([42], ['42'], 25).ok, false);
+	const overCap = planAttachmentSync(['a', 'b', 'c'], ['a', 'b'], 2);
 	assert.equal(overCap.ok === false && overCap.status, 400);
 });
 

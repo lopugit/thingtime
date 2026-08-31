@@ -12,6 +12,7 @@ import {
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
 	planAttachmentReorder,
+	planAttachmentSync,
 	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
@@ -906,6 +907,47 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 	if (write.matchedCount !== plan.orderedIds.length) {
 		throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and reorder again');
 	}
+};
+
+// PATCH-time attachment sync: re-stamp display order AND bind any newly
+// uploaded ready drafts into an existing post/rich comment the owner is
+// editing. The requested list is the full desired order — it must cover every
+// bound id (planAttachmentSync rejects removals) and may append unbound ready
+// drafts, which bindReadyAttachmentsForPurpose claims with the same fences
+// create-time binding uses. The target must be an owned post-family thing:
+// binding to an arbitrary target id would let an edit deface another owner's
+// thread with the editor's own inherit-acl media.
+export const syncBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
+	if (isCustomMongoEndpointActive()) {
+		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+	}
+	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
+	const things = await getHomeThingsCollection();
+	// post-family only (posts, rich AND plain comments) — message, emoji and
+	// profile targets keep their dedicated purpose-bound routes
+	const target = (await things.findOne({ shareId: targetId, ownerId, thingtime: { $in: ['post', 'comment'] } } as any, {
+		projection: { shareId: 1, thingtime: 1 }
+	})) as { shareId: string; thingtime?: unknown } | null;
+	if (!target) throw new AttachmentBindingError(404, 'Post not found');
+	const bound = (await things
+		.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, { projection: { shareId: 1 } })
+		.toArray()) as Array<{ shareId: string }>;
+	const plan = planAttachmentSync(
+		requestedIds,
+		bound.map((doc) => String(doc.shareId)),
+		MAX_ATTACHMENTS_PER_TARGET
+	);
+	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
+	if (!plan.orderedIds.length) return;
+	if (!plan.addedIds.length) {
+		// pure permutation — keep the idempotent non-transactional stamp
+		await reorderBoundTargetAttachments(ownerId, targetId, plan.orderedIds);
+		return;
+	}
+	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
+	await withHomeMongoTransaction(async (session) => {
+		await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);
+	});
 };
 
 export const bindReadyAttachmentsToTarget = async (

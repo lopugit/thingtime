@@ -378,6 +378,37 @@ export const planAttachmentReorder = (
 	return { ok: true, orderedIds };
 };
 
+export type AttachmentSyncPlan = { ok: true; orderedIds: string[]; addedIds: string[] } | { ok: false; status: 400 | 409; error: string };
+
+// A PATCH-time attachment list is the target's full desired display order:
+// every currently-bound id must still be present (removal stays a delete
+// operation, never a side effect of saving an edit), and any id beyond the
+// bound set is a NEW ready draft the edit is adding to the post.
+export const planAttachmentSync = (
+	requestedIds: readonly unknown[],
+	boundIds: readonly string[],
+	maxAttachments: number
+): AttachmentSyncPlan => {
+	const orderedIds: string[] = [];
+	for (const value of requestedIds) {
+		const id = typeof value === 'string' ? value.trim() : '';
+		if (!id || id !== value) return { ok: false, status: 400, error: 'Invalid attachment id' };
+		orderedIds.push(id);
+	}
+	if (orderedIds.length > maxAttachments) {
+		return { ok: false, status: 400, error: `A post can contain at most ${maxAttachments} attachments` };
+	}
+	if (new Set(orderedIds).size !== orderedIds.length) {
+		return { ok: false, status: 400, error: 'attachmentIds cannot repeat an attachment' };
+	}
+	const requested = new Set(orderedIds);
+	if (boundIds.some((id) => !requested.has(id))) {
+		return { ok: false, status: 409, error: 'The attachments on this post changed — refresh and try again' };
+	}
+	const bound = new Set(boundIds);
+	return { ok: true, orderedIds, addedIds: orderedIds.filter((id) => !bound.has(id)) };
+};
+
 // undefined means "not an attachment" and therefore contributes no object
 // bytes. null means an attachment claim with an invalid server envelope; that
 // is never safe for current-stamp arithmetic or reconciliation. A number is the

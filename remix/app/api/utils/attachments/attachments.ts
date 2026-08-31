@@ -27,7 +27,7 @@ import {
 	bindReadyMessageAttachmentsToTarget,
 	annotateOwnedAttachment,
 	bindReadyAttachmentsToTarget,
-	reorderBoundTargetAttachments,
+	syncBoundTargetAttachments,
 	type AttachmentDoc,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -1445,10 +1445,13 @@ export const annotateAttachment = async (
 	}
 };
 
-// PATCH-time reorder: re-stamp the display order of a target's already-bound
-// attachments. Pure permutations only — the store helper rejects any set
-// change, so this can never bind, unbind, or leak an attachment.
-export const reorderReadyAttachmentsForTarget = async (
+// PATCH-time sync: re-stamp the display order of a target's bound attachments
+// AND bind any newly uploaded ready drafts an edit appends. The store helper
+// verifies target ownership, rejects removals (deletes stay their own
+// operation), and claims additions with the same fences create-time binding
+// uses — so this can never move an attachment onto a thing the editor does
+// not own.
+export const syncReadyAttachmentsForTarget = async (
 	ownerId: string,
 	targetId: unknown,
 	attachmentIds: readonly unknown[]
@@ -1459,10 +1462,10 @@ export const reorderReadyAttachmentsForTarget = async (
 		}
 		const normalizedTargetId = typeof targetId === 'string' ? targetId.trim() : '';
 		if (!normalizedTargetId) return fail(400, 'Thing id is required');
-		await reorderBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
+		await syncBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
 		return { ok: true };
 	} catch (error) {
-		return knownFailure(error) || unavailable('reorder', error);
+		return knownFailure(error) || unavailable('attachment update', error);
 	}
 };
 
