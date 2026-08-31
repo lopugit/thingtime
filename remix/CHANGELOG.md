@@ -72,7 +72,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   authenticator returns. CI entities are read per repository through a stable
   compound sort index instead of a growing in-memory sort, and a saved Feature
   Stack keeps its PR-number placeholders visible until a temporarily missing
-  live snapshot can rehydrate them. — Codex (AI), 2026-08-31
+  live snapshot can rehydrate them. Running Feature Stacks now also respect an
+  admin's collapsed-card choice instead of immediately forcing themselves open.
+  — Codex (AI), 2026-08-31
 
 - **[Admins can now opt a trusted PR into Develop and Production/Main previews
   independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**

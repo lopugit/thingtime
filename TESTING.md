@@ -2486,8 +2486,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       Feature Stack cards from their headings. Reload and navigate away/back;
       the per-admin collapsed state persists, the closed cards consume only
       their heading height, all heading toggles expose `aria-expanded`, and a
-      selected actively running Feature Stack automatically expands so its live
-      progress cannot remain hidden.
+      selected actively running Feature Stack can remain collapsed until the
+      admin deliberately opens it again.
 - [ ] Open `/admin`, then every bookmarkable tab route (`/admin/users`,
       `/admin/apps`, `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
       `/admin/external-integrations`, `/admin/system`). Reload and use Back and
