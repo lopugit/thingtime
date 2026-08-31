@@ -312,3 +312,22 @@ Owner QA asks, all landed:
 8. **Double border on padded selected text** — the inline editor drew its own
    outline inside the already-outlined frame; removed.
 9. **Muted placeholders** across all inspector inputs.
+
+### Round 5 adversarial review (44-agent workflow) + fixes
+A find→verify workflow (4 dimensions × 2-skeptic majority verification per
+finding) confirmed 10 defects; all are fixed in 995a00f96 + 27dbc3231 except
+one accepted low (double-click arg editing binds the FIRST arg whose value
+matches the clicked text — ambiguous only when two args hold identical
+values; the drawer remains the precise fallback). Highlights: inline editor
+now syncs EXTERNAL html changes without eating the caret (rich-modal Apply
+was silently reverted before); upload dedupe no longer swallows re-drops of
+the same OS file (fresh lastModified clones + retiring consumed uploads +
+15-min pending-target expiry); paste never steals from form fields/the
+Editor.js modal; window drop guards respect claimed drops (Editor.js
+preventDefaults but never stops propagation); Sides/Corners controls are
+keyed per block and show raw shorthands in uniform mode (no hidden-value
+destruction); calc()/rgb() survive the shorthand tokenizer; the drawer
+resize handle stays reachable (content scrolls, not the shell). QA on
+pr-485 via emulated input: drop-replace/paste-replace/window-append upload
+E2E (real attachments, image decodes), align-center + padding persisted
+through a save (source:user fork), component dblclick arg edit persisted.
