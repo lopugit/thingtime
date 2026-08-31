@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-31 — Bounded Graphify snapshot retention
+
+- Graphify now retains one active portable snapshot by default after successful
+  update, extract, cluster, and ensure runs, with fail-closed retention
+  overrides and an explicit prune command. The semantic content-addressed cache
+  remains reusable, while older snapshots stay recoverable from Git history.
+  — Codex (AI), 2026-08-31
+
 ### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
 
 - Multi-agent defensive security review of the Action Thing surface (report:
