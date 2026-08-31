@@ -2344,7 +2344,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       A failed refresh preserves those rows, says they are cached, and retries.
 - [ ] Grow CI event/run/deployment history beyond MongoDB's 32 MiB blocking-sort
       threshold and confirm `/api/v1/admin/ci?limit=0` still returns through the
-      repository-scoped `things_ci_repository_updated` index. While that
+      repository-scoped `things_ci_repository_updated` index. Confirm every
+      selectable feature, branch, and PR is returned, recent run/deployment/
+      preview/dispatch rows are capped, and the four summary totals remain exact
+      through independent counts. Leave the page foregrounded for at least two
+      30-second polls and confirm no live-refresh warning appears. While that
       snapshot is unavailable, load a saved stack: every saved PR number stays
       visible as restoring, its count remains honest, and the rows rehydrate in
       order when the live snapshot recovers without another click.

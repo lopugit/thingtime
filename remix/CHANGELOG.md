@@ -72,7 +72,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   authenticator returns. CI entities are read per repository through a stable
   compound sort index instead of a growing in-memory sort, and a saved Feature
   Stack keeps its PR-number placeholders visible until a temporarily missing
-  live snapshot can rehydrate them. Running Feature Stacks now also respect an
+  live snapshot can rehydrate them. Unlimited Feature Stack selection no longer
+  makes the same request fetch unlimited run, deployment, preview, and dispatch
+  history; activity stays bounded while the dashboard totals remain exact.
+  Running Feature Stacks now also respect an
   admin's collapsed-card choice instead of immediately forcing themselves open.
   — Codex (AI), 2026-08-31
 
