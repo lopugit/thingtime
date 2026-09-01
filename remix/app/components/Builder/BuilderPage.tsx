@@ -189,7 +189,12 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 		};
 	}, []);
 	// collapsible on small screens — closing the drawer never exits the canvas
-	const [drawerOpen, setDrawerOpen] = React.useState(true);
+	// phones: the drawer covers nearly the whole viewport, so edit mode
+	// starts with the CANVAS visible — selecting a block opens the drawer
+	// (existing effect), and the 🧱 Inspector pill reopens it any time
+	const [drawerOpen, setDrawerOpen] = React.useState(
+		() => typeof window === 'undefined' || window.innerWidth >= 768
+	);
 	const namedForRef = React.useRef<string | null>(null);
 
 	// selecting a block is a request to inspect it — reopen a collapsed drawer

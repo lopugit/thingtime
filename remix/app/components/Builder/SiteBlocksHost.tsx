@@ -307,7 +307,12 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 
 	// collapsible drawer — closing it never exits edit mode (the ✕ Done pill
 	// does that); selecting any block reopens it
-	const [drawerOpen, setDrawerOpen] = React.useState(true);
+	// phones: the drawer covers nearly the whole viewport, so edit mode
+	// starts with the CANVAS visible — selecting a block opens the drawer
+	// (existing effect), and the 🧱 Inspector pill reopens it any time
+	const [drawerOpen, setDrawerOpen] = React.useState(
+		() => typeof window === 'undefined' || window.innerWidth >= 768
+	);
 	React.useEffect(() => {
 		if (pageChrome.selectedId || globalChrome.selectedId) setDrawerOpen(true);
 	}, [pageChrome.selectedId, globalChrome.selectedId]);
@@ -433,7 +438,14 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 						>
 							🌐 Global · renders on every page
 						</Box>
-						<Box as="span" color="var(--tt-faint, #b6b6c0)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="9px" lineHeight="1">
+						<Box
+							as="span"
+							color="var(--tt-faint, #b6b6c0)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="9px"
+							lineHeight="1"
+							display={['none', 'inline']}
+						>
 							nav · drawer · footer are Thingtime chrome
 						</Box>
 					</Flex>
