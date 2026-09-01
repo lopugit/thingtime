@@ -1477,8 +1477,8 @@ change, and the hourly backstop. There is no second product-branch workflow:
   `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
   powers). If a rebuild still trips GitHub's workflow-file push restriction,
   the builder re-pins `.github` to the previous `all` state and retries.
-- Vercel builds `all` like any other product branch, so it doubles as a living
-  everything-preview.
+- Vercel no longer auto-builds `all`; use an explicitly requested
+  GitHub-built preview when the aggregate needs browser validation.
 
 ## Vercel deployment status
 
@@ -1533,19 +1533,27 @@ the controller. The controller remains responsible for the stable
 `pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
 comment, and marker-scoped cleanup.
 
-The workflow deliberately uses two stages. The product branches retain only a
+The workflow deliberately separates authorization, compilation, and
+publication. Product branches retain only a
 thin event listener pinned to the reusable implementation on the protected
 `github-actions` branch. Its `pull_request_target` job has no environment or
 Vercel secret, checks out no code, and emits only a bounded
-`repository_dispatch` payload. The privileged dispatch job runs in the trusted
-default-branch event context behind the `vercel-develop-pr-control` environment
-while checking out the controller from `github-actions`. It proves the
-source workflow path/run, repository, same-repository PR, head SHA, action, and
-triggering actor through GitHub's API, then re-reads the live PR. Both the PR
-author and triggering actor must be explicitly allowlisted, currently hold
-write/admin permission, and the non-draft PR must still target `develop`.
-Neither GitHub job checks out or executes PR-head code; Vercel performs the
-remote build only after those gates pass.
+`repository_dispatch` payload. The protected authorizer checks out only
+`github-actions`, proves the source workflow path/run, repository,
+same-repository PR, head SHA, action, and triggering actor through GitHub's API,
+then re-reads the live PR. Both the PR author and triggering actor must be
+explicitly allowlisted, currently hold write/admin permission, and the
+non-draft PR must still target `develop`.
+
+A separate environment-free GitHub job checks out exactly that authorized SHA,
+installs locked dependencies, and generates `.vercel/output` without any
+repository or Environment secrets. The protected publisher never executes the
+product checkout: it validates the short-lived archive's paths, links, size,
+routes, and Vite shell, then uses a pinned Vercel CLI with `--prebuilt` and
+`--skip-domain`. Only that controller process receives the Vercel token and S3
+CORS probe URL. Root `vercel.json` disables automatic Git deployments for
+every branch except exact `main` and `develop`, so feature pushes cannot create
+a second native Vercel build for the same SHA.
 
 The reusable implementation and controller script must first merge to the
 protected `github-actions` branch. The thin listener must then reach the
@@ -1602,13 +1610,10 @@ only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
 `https://pr-<number>.previews.dev.thingtime.com`.
 
-Generic Preview intentionally receives every runtime variable currently
-assigned to the `develop` Custom Environment, while retaining its existing
-Preview-only filesystem, CI, repository, webhook, and workflow variables. This
-includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
-the AI, SES/email, and Vercel API values that `develop` intentionally shares
-with Production. Production MongoDB, JWT, and S3 settings remain separate and
-are not assigned to Preview.
+Generic Preview retains the development runtime variables required by manual
+or prebuilt preview publication, but ordinary feature pushes no longer trigger
+automatic Vercel builds. Production MongoDB, JWT, and S3 settings remain
+separate and are not assigned to Preview.
 
 For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with

@@ -73,6 +73,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
+  now disables automatic deployments for every branch except exact `main` and
+  `develop`; eligible PR previews are compiled on GitHub and uploaded as
+  validated prebuilt bundles, while native production and stable-development
+  builds remain intact. — Codex (AI), 2026-09-01
+
 - **Running Feature Stacks now report durable Lopu progress into their own CI
   console.** The protected controller sends an immediate signed snapshot,
   phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
