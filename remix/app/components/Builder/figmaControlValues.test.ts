@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { collapseShorthand, expandShorthand, parseBorder, parseShadow } from './figmaControlValues';
+import {
+	collapseShorthand,
+	cssLinesToRecord,
+	cssRecordToLines,
+	expandShorthand,
+	parseBorder,
+	parseShadow,
+	splitCssDeclarations
+} from './figmaControlValues';
 import { editorJsToHtml } from './editorJsHtml';
 
 test('expandShorthand follows the css fallback chain', () => {
@@ -64,6 +72,41 @@ test('parseShadow keeps rgba() colors whole', () => {
 		color: 'rgba(0, 0, 0, 0.12)'
 	});
 	assert.deepEqual(parseShadow('2px 2px hotpink'), { x: '2px', y: '2px', blur: '', spread: '', color: 'hotpink' });
+});
+
+test('custom css declarations split on newlines and TOP-LEVEL semicolons', () => {
+	// the everyday habits the `;` split exists for
+	assert.deepEqual(cssLinesToRecord('padding: 24px;'), { padding: '24px' });
+	assert.deepEqual(cssLinesToRecord('padding: 24px; color: red'), { padding: '24px', color: 'red' });
+	assert.deepEqual(cssLinesToRecord('padding: 24px\ncolor: red'), { padding: '24px', color: 'red' });
+	// keys are screened by the write gate's own pattern; junk lines are dropped
+	assert.deepEqual(cssLinesToRecord('Padding : 24px\nnot a declaration\n: 4px\nwidth:'), { padding: '24px' });
+});
+
+test('a semicolon inside a value survives the split — data: URIs stay whole', () => {
+	// the write gate keeps `;` legal in a value precisely so data: URIs work;
+	// splitting on every `;` truncated this to `url(data:image/png` and the
+	// textarea committed that corruption on blur
+	const dataUri = 'url(data:image/png;base64,iVBORw0KGgo=)';
+	assert.deepEqual(cssLinesToRecord(`background-image: ${dataUri}`), { 'background-image': dataUri });
+	assert.deepEqual(cssLinesToRecord(`background-image: ${dataUri}; color: red`), {
+		'background-image': dataUri,
+		color: 'red'
+	});
+	// quoted values too, and an unterminated quote never swallows later lines
+	assert.deepEqual(cssLinesToRecord('content: "a;b"\ncolor: red'), { content: '"a;b"', color: 'red' });
+	assert.deepEqual(cssLinesToRecord('content: "oops\ncolor: red'), { content: '"oops', color: 'red' });
+	assert.deepEqual(splitCssDeclarations('a(;)b;c'), ['a(;)b', 'c']);
+});
+
+test('custom css round-trips through the textarea without losing a declaration', () => {
+	for (const css of [
+		{ padding: '24px', color: 'red' },
+		{ 'background-image': 'url(data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)' },
+		{ '--tt-block-accent': 'hotpink', 'box-shadow': '0 4px 12px rgba(0, 0, 0, 0.12)' }
+	]) {
+		assert.deepEqual(cssLinesToRecord(cssRecordToLines(css)), css);
+	}
 });
 
 test('editorJsToHtml renders the core block vocabulary', () => {

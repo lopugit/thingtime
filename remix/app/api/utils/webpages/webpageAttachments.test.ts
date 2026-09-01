@@ -35,6 +35,28 @@ test('extracts attachment ids from media srcs, html, and nested children', () =>
 	assert.deepEqual(ids.sort(), ['att_aaaaaaaabbbbbbbb', 'att_ccccccccdddddddd', 'att_eeeeeeeeffffffff']);
 });
 
+test('extracts ids from component arg values and per-block custom css', () => {
+	// the inspector is where an author pastes the URL the builder just minted —
+	// an arg or a css background reaps exactly like an unbound media src
+	const ids = extractWebpageAttachmentIds({
+		blocks: [
+			{
+				id: 'c1',
+				type: 'component',
+				component: 'thingtime-card',
+				args: { imageUrl: '/api/v1/attachments/content?id=att_aaaaaaaabbbbbbbb', label: 'no media here', count: 3 }
+			},
+			{
+				id: 'box',
+				type: 'container',
+				css: { 'background-image': 'url(/api/v1/attachments/content?id=att_ccccccccdddddddd)' },
+				children: [{ id: 't1', type: 'text', text: 'hi' }]
+			}
+		]
+	});
+	assert.deepEqual(ids.sort(), ['att_aaaaaaaabbbbbbbb', 'att_ccccccccdddddddd']);
+});
+
 test('ignores external, relative-non-content, and malformed references', () => {
 	assert.deepEqual(
 		extractWebpageAttachmentIds({

@@ -430,3 +430,50 @@ that exposed the id truncation). Remaining known items (logged, not
 shipped): keyboard-only block selection + focus-visible chrome, hover
 re-render memoization, SSR fallback for rich text, safe-area insets on the
 pills.
+
+## Round 9 (2026-09-01) — Lopu repository review of the PR head
+
+Full head-vs-`develop` review at `ff564594`. All 8 required checks were green
+(CodeQL clean, zero open alerts on this head), so nothing was diagnosed as a
+check failure. The security core held up under scrutiny: the block gate, the
+`htmlToNode` → `HtmlThingRenderer` allowlist chain, `source: 'component'` /
+`ownedOnly` ttAction narrowing, the `webpage-` reserved-id fence, and the
+webpage widening of `attachmentTargetAclAllows` (still `thingtime.length === 1`
++ `targetId: null` + the target's own ACL) are all correctly fenced. Three
+defects fixed:
+
+- *Data loss — Custom CSS textarea*: `cssLinesToRecord` split declarations on
+  `/\n|;/`, but the write gate deliberately keeps `;` legal **inside** a value
+  ("data: URIs need it"). `background-image: url(data:image/png;base64,…)`
+  therefore committed as `url(data:image/png` — and the field commits on blur
+  whether or not it was edited, so merely focusing it destroyed the
+  declaration, then re-saved the corruption past the gate (`data:image/` still
+  matches). Splitting is now paren/quote-aware (quotes never span a line, so an
+  unterminated one can't swallow the rest of the buffer), and the two pure
+  functions moved to `figmaControlValues.ts` where they get unit coverage; the
+  duplicated key regex is now the gate's own `WEBPAGE_CSS_KEY_PATTERN`.
+- *Cache eviction on a failed resolve*: `SiteBlocksView` wrote every result —
+  including `null`, which only ever means a FAILED resolve — into `routeCache`,
+  so one offline/429/5xx blanked the viewer's own blocks (and, on a sectioned
+  page, the whole doc-driven composition) until the next visit to that path.
+  Round 8 fixed exactly this for the global-blocks cache; the route cache now
+  follows the same rule and never lets a failure evict good state.
+- *Unbound media in args/css*: `extractWebpageAttachmentIds` scanned `src` and
+  `html` only, so a content URL pasted into a component arg (`imageUrl`) or a
+  `background-image: url(/api/v1/attachments/content?id=…)` was never claimed —
+  the same draft-reaper breakage the binder exists to prevent. Both scalar bags
+  are scanned now; the claim stays owner-scoped and tolerant.
+
+Verified: `test:webpages` 29/29 (4 new), `test:schemas` 109/109,
+`test:attachments` 141/141, `test:components` 16/16, `test:things` 24/24,
+typecheck ratchet at baseline (108, unchanged), eslint clean on the touched
+files, `vite build` ✓.
+
+Not changed, logged instead: `blocksAreFullySectioned`/`splitAroundNative`
+only inspect top-level blocks (a nested `native` renders nothing in view mode
+— unreachable through the UI, since native frames are locked and cannot be
+wrapped, and it degrades to the plain route render); `/p/` `previewBg` is
+screened at render by `isSafeCssText`, which is looser than the write gate's
+`isSafeWebpageCssValue` (fine today, since only the gate can author the field);
+and the binder's comment claims already-bound media is re-claimed when the
+filter requires `targetId: { $exists: false }`.

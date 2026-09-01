@@ -24,8 +24,19 @@ const collectFromString = (value: unknown, into: Set<string>) => {
 	for (const match of value.matchAll(CONTENT_URL_PATTERN)) into.add(match[1]);
 };
 
+// Scalar bags on a block (component `args`, the Figma-style `css` record) hold
+// author-typed strings, and the inspector is exactly where someone pastes the
+// content URL the builder just minted for them — an `imageUrl` arg or a
+// `background-image: url(/api/v1/attachments/content?id=…)` reaps identically
+// to an unbound media src if it is not claimed too.
+const collectFromRecord = (value: unknown, into: Set<string>) => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+	for (const entry of Object.values(value as Record<string, unknown>)) collectFromString(entry, into);
+};
+
 // Pure: every attachment id referenced by a webpage crystal's blocks — media
-// srcs plus any content URLs embedded in rich/raw html.
+// srcs, content URLs embedded in rich/raw html, component arg values, and
+// per-block custom css.
 export const extractWebpageAttachmentIds = (crystal: unknown): string[] => {
 	const ids = new Set<string>();
 	const walk = (blocks: unknown) => {
@@ -35,6 +46,8 @@ export const extractWebpageAttachmentIds = (crystal: unknown): string[] => {
 			const record = block as Record<string, unknown>;
 			collectFromString(record.src, ids);
 			collectFromString(record.html, ids);
+			collectFromRecord(record.args, ids);
+			collectFromRecord(record.css, ids);
 			walk(record.children);
 		}
 	};

@@ -7,6 +7,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
+import { cssLinesToRecord, cssRecordToLines } from './figmaControlValues';
 import {
 	blockLabel,
 	findBlock,
@@ -27,23 +28,6 @@ import type { UseWebpageDraft } from './useWebpage';
 // edits the whole record. One storage model, many handles.
 
 const TEXT_TAG_OPTIONS = ['', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'];
-
-const cssRecordToLines = (css?: Record<string, string>): string =>
-	Object.entries(css || {})
-		.map(([key, value]) => `${key}: ${value}`)
-		.join('\n');
-
-const cssLinesToRecord = (text: string): Record<string, string> => {
-	const out: Record<string, string> = {};
-	for (const line of text.split(/\n|;/)) {
-		const split = line.indexOf(':');
-		if (split <= 0) continue;
-		const key = line.slice(0, split).trim().toLowerCase();
-		const value = line.slice(split + 1).trim();
-		if (key && value && /^(--)?[a-z][a-z0-9-]*$/.test(key)) out[key] = value;
-	}
-	return out;
-};
 
 // The builder's right-side drawer: page settings + the inspector for the
 // selected block. Fixed to the right viewport edge (flush top/right/bottom,

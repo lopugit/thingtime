@@ -202,10 +202,16 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 		let cancelled = false;
 		(async () => {
 			const data = await resolveWebpageClient({ kind: 'path', path });
-			if (!cancelled) {
-				routeCache.set(path, data);
-				setEntry({ path, data });
-			}
+			if (cancelled) return;
+			// null is a FAILED resolve (offline, rate limited, a 5xx) — a
+			// doc-less success still returns a result. Same rule useGlobalBlocks
+			// applies to its cache: a failure must never EVICT good last-known
+			// state, or one flaky request blanks the viewer's own blocks (and,
+			// on a sectioned page, the whole doc-driven composition) until the
+			// next navigation back to this path.
+			if (data === null && routeCache.has(path)) return;
+			routeCache.set(path, data);
+			setEntry({ path, data });
 		})();
 		return () => {
 			cancelled = true;
