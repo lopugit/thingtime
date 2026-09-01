@@ -40,7 +40,18 @@
 
 5. **Replace Vercel status polling with Vercel webhooks.**
 
-   The footer status can poll while a deployment is actively building, but
+   ✅ **Code shipped 2026-07-21** (`claude/vercel-webhook-status`): signed
+   webhook receiver at `POST /api/v1/vercel/webhook` (HMAC sha1 over the raw
+   body, 404 when `VERCEL_WEBHOOK_SECRET` unset), latest status persisted per
+   git branch in the `settings` collection (`vercelWebhookStatus`, capped at 30
+   branches), and `getVercelDeploymentStatus` serves ready/error/canceled from
+   the persisted doc with zero Vercel API spend — mid-build states still live
+   poll for phase/progress. Remaining one-time setup (owner): create the
+   webhook in the Vercel dashboard for deployment created/succeeded/error/
+   canceled events pointing at `/api/v1/vercel/webhook`, and set
+   `VERCEL_WEBHOOK_SECRET` in the Vercel env. See `VERCEL_DEPLOYMENTS.md`.
+
+   Original report: the footer status can poll while a deployment is actively building, but
    ready deployments should not keep spending Vercel API calls just to detect
    a future build. Add a Vercel webhook endpoint for deployment created/ready/
    failed events, persist the latest project status server-side, and have the

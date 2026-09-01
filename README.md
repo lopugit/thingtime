@@ -1517,6 +1517,48 @@ VERCEL_DASHBOARD_TEAM_SLUG="<team-or-scope-slug>"
 Use `VERCEL_DASHBOARD_TEAM_SLUG` when tokenless dashboard links need to point to
 a Vercel team slug that differs from the GitHub repository owner.
 
+Deployment status can additionally be fed by a Vercel webhook instead of polling
+the Vercel REST API. This is optional and off by default:
+
+```sh
+VERCEL_WEBHOOK_SECRET="<signing-secret-shown-once-when-the-webhook-is-created>"
+```
+
+Create a project-scoped Vercel webhook for deployment created/succeeded/
+promoted/error/canceled events pointing at:
+
+```text
+https://<your-thingtime-origin>/api/v1/vercel/webhook
+```
+
+Forks: the helper script `remix/scripts/vercel/create-webhook.mjs` registers
+that webhook against `VERCEL_PROJECT_ID` / `VERCEL_TEAM_ID` (documented above).
+It falls back to this repository's own upstream project and team when those are
+unset, so set both to your own values before running it — otherwise the call is
+aimed at an account your token does not own. Creating the webhook by hand in the
+Vercel dashboard needs neither variable.
+
+While `VERCEL_WEBHOOK_SECRET` is unset the endpoint answers `404` and
+`/api/v1/vercel/status` behaves exactly as before (live API polling). Once it is
+set, the latest event per git branch is persisted server-side and a `ready`
+state is served from that record with no Vercel API calls; mid-build states
+still poll for phase and progress.
+
+A recorded `error`/`canceled` is only served when the record demonstrably
+belongs to the deployment answering the request (matched on `VERCEL_URL`, or on
+`VERCEL_GIT_COMMIT_SHA` when no URL is available). One branch can have several
+concurrent deployments sharing that single record — Thingtime builds one head
+SHA into both generic Preview and the `develop` Custom Environment — and a
+sibling's failure must not mark a healthy deployment as failed, since this also
+backs `/api/v1/health/vercel`. Unattributable failures fall back to polling.
+
+This is a **separate** webhook from the CI Control receiver at
+`/api/v1/integrations/vercel/webhook` (`THINGTIME_VERCEL_WEBHOOK_SECRET`)
+documented above, which ingests the same Vercel deployment events into the CI
+Control event log for a different purpose. Configuring one does not configure
+the other, and the two secrets are independent. If you only want deployment
+status in the footer, you only need this one.
+
 Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.

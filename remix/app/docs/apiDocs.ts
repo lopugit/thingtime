@@ -8295,6 +8295,58 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'vercel-webhook',
+    group: 'vercel',
+    title: 'Vercel webhook',
+    endpoint: '/api/v1/vercel/webhook',
+    summary: 'Receiver for Vercel deployment lifecycle events (created/succeeded/error/canceled).',
+    detail:
+      'Vercel pushes signed deployment events here; the latest status per git branch is persisted server-side so /api/v1/vercel/status can serve ready/error/canceled states without spending Vercel API calls. Configure the webhook in the Vercel dashboard pointing at this endpoint and set VERCEL_WEBHOOK_SECRET to the webhook secret.',
+    auth: {
+      mode: 'none',
+      description: 'HMAC-authenticated: the raw body must be signed with the webhook secret in x-vercel-signature (sha1 hex). 404 when VERCEL_WEBHOOK_SECRET is unset; 401 on bad signatures.'
+    },
+    methods: ['POST'],
+    steps: [
+      'Create a Vercel webhook for deployment.created, deployment.succeeded, deployment.promoted, deployment.error, and deployment.canceled pointing at this endpoint.',
+      'Set VERCEL_WEBHOOK_SECRET in the deployment environment to the webhook secret Vercel shows on creation.',
+      'Vercel signs each delivery; unsigned or tampered requests are rejected with 401.',
+      'Untracked event types are acknowledged with tracked: false so Vercel does not retry.'
+    ],
+    requestExamples: [
+      {
+        name: 'Deployment succeeded event',
+        description: 'Example Vercel envelope (sent by Vercel, signed with the webhook secret).',
+        method: 'POST',
+        body: {
+          type: 'deployment.succeeded',
+          createdAt: 1752986400000,
+          payload: {
+            target: 'production',
+            deployment: {
+              id: 'dpl_123',
+              url: 'thingtime-abc123.vercel.app',
+              meta: { githubCommitRef: 'main', githubCommitSha: 'abc1234' }
+            },
+            links: { deployment: 'https://vercel.com/lopu/thingtime/dpl_123' }
+          }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Event recorded.',
+        body: { ok: true, tracked: true, state: 'ready', branch: 'main' }
+      },
+      {
+        status: 401,
+        description: 'Missing or invalid x-vercel-signature.',
+        body: { ok: false, error: 'Invalid signature' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'waitlist',
     group: 'waitlist',
     title: 'Waitlist',

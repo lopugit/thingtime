@@ -200,6 +200,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
   'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
   'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),
+  'v1/vercel/webhook': () => import('../../../app/routes/api/v1/vercel/webhook/_webhook'),
   'v1/waitlist': () => import('../../../app/routes/api/v1/waitlist/_waitlist')
 };
 
