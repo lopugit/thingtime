@@ -49,8 +49,10 @@ const SkeletonCard = () => (
 // feed fires up to 200 session-deduped view/dwell updates, making the wasted
 // work quadratic in posts loaded.
 //
-// Hooks cannot live in a .map body, so the per-post callbacks move into this
-// component, where useCallback can key them on the post id. The parent's
+// `onChanged` is stable by construction now that PostCard takes the post id and
+// hands it back, so the parent's handler passes straight through. The ref still
+// has to close over the id, and hooks cannot live in a .map body — hence this
+// component, where useCallback can key it on the post id. The parent's
 // onPostChanged / onEngagement / observeView are all already useCallback-stable,
 // so these identities hold across renders and both memos actually stick. The
 // stale ref identity also stopped forcing observeView(null) + observeView(el)
@@ -72,7 +74,6 @@ const PostRow = React.memo(function PostRow({
   onEngagement?: (event: EngagementEvent) => void;
   observeView: (element: Element | null, thingId: string) => void;
 }) {
-  const handleChanged = React.useCallback((next: PostChange) => onPostChanged(post.id, next), [onPostChanged, post.id]);
   const setRef = React.useCallback((element: HTMLDivElement | null) => observeView(element, post.id), [observeView, post.id]);
 
   return (
@@ -87,7 +88,9 @@ const PostRow = React.memo(function PostRow({
       outlineOffset="3px"
       scrollMarginY="calc(var(--tt-nav-clearance, 54px) + 16px)"
     >
-      <PostCard post={post} onChanged={handleChanged} onEngagement={onEngagement} />
+      {/* onPostChanged already takes the post id, so the row passes it straight
+      through — no per-row wrapper closure to break PostCard's memo. */}
+      <PostCard post={post} onChanged={onPostChanged} onEngagement={onEngagement} />
     </Box>
   );
 });

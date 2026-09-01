@@ -1992,6 +1992,89 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
+### Performance
+
+- **PostCard's `React.memo` actually bails now** (TODO #12): `PostList` passed
+  a fresh per-card arrow for `onChanged`, so every engagement event / scroll
+  re-render repainted every card in the column. `PostCard`'s contract is now
+  `onChanged(id, next)` and `PostList` passes the consumers'
+  `useCallback`-stable `handlePostChanged` straight through (Feed and
+  ProfilePage reach PostCard through `PostList`, so they were already stable).
+  Live-verified: reactions, comments, and both consumers behave identically
+  — Claude (AI), 2026-07-21.
+
+  Every other `PostCard` consumer was migrated to the two-argument contract in
+  the same change: `routes/thing.tsx`, `routes/post.tsx`, `routes/media.tsx`
+  and `components/Search/SearchPage.tsx` each took `(change)` only, so after
+  the signature change they bound `change` to the post **id string** and wrote
+  it into state in place of the post — `/thing/:id`, `/post/:id`, `/media/:id`
+  and search results would have blanked out on any react/comment/share/delete.
+  The three route handlers now take `(id, change)` and ignore changes addressed
+  to a different post; SearchPage drops its per-card wrapper and passes the
+  already-stable `updateResultPost` straight through, which extends the memo
+  win to search — Lopu, 2026-08-28.
+
+  Six `onChanged` call sites *inside* `PostCardImpl` were still on the old
+  one-argument contract and were fixed in the same pass: `handleEditSave`'s
+  optimistic text write and its failure revert (L1180/L1185),
+  `handleVisibilityChange`'s optimistic flip, server reconcile and revert
+  (L1199/L1203/L1208), and the full-composer edit's `onPosted` (L1566). Each
+  passed the change into the `id` slot, so every consumer compared an id string
+  against a function/post object, matched nothing and dropped the update: on
+  feed, profile, search and the three routes, **editing a post's text or
+  changing its privacy showed a success toast while the card kept rendering
+  stale content** until the next refetch. Now all 17 card-level calls address
+  `post.id` — Lopu, 2026-08-28.
+
+  Correction to an earlier note in this entry: the stale handlers were *not*
+  invisible to the type checker. Parameter bivariance does not apply here —
+  neither `string` nor `PostChange` is assignable to the other, so `tsc` rejects
+  the swap even with `"strict": false` (verified against the repo's exact
+  compiler flags). CI genuinely saw all six: the run for the superseded head
+  `4f44384` logged
+  `PostCard.tsx(1180|1185|1199|1203|1208|1566): error TS2554: Expected 2
+  arguments, but got 1` and summarised `Typecheck ratchet WARNING: 144 tsc
+  errors vs baseline 143 (+1). This check is non-blocking.` The gap is that the
+  ratchet is deliberately advisory (`ci: make typecheck ratchet warning-only`),
+  so a real regression annotates and still goes green — worth revisiting as its
+  own change, not silently here — Lopu, 2026-08-28.
+
+  Those six are fixed as of `c8cbab7`, whose CI run reports `Typecheck ratchet:
+  138 errors, DOWN from baseline 143 🎉`; base `261072a` measures the same 138
+  with a byte-identical error set, so this change is exactly type-neutral. That
+  comparison also sharpens the point above: the superseded head's true
+  regression was **+6**, not the +1 the ratchet printed — develop had
+  independently dropped 5 errors and the stale 143 baseline netted the two off.
+  The confirmed number is now locked in
+  (`node scripts/typecheck-ratchet.mjs --update-baseline`, 143 → 138), so that
+  masking headroom is gone; a ratchet that diffed error *identities* instead of
+  totals would close the remaining gap and stays worth doing as its own change,
+  not here — Lopu, 2026-08-28.
+
+  Both halves of the fix are now pinned by `test:feed-contract`
+  (`app/components/Feed/postCardChangeContract.test.ts`): every post-level
+  `onChanged?.()` call must address `post.id` (and every comment-level
+  `onChanged()` call `comment.id`), and no PostCard consumer may bind
+  `onChanged` to an inline closure. tsc covers the arity but not which id a call
+  addresses — a wrong id compiles, matches no post in any consumer and silently
+  drops the update — and nothing at all caught a consumer re-introducing the
+  per-card arrow, which is the original TODO #12 regression. Verified by
+  mutation: reverting the prop to one argument, mis-addressing a call site, and
+  restoring PostList's closure each fail the suite — Lopu, 2026-08-28.
+
+  That guard had a gap in the one place this change actually regressed. Both
+  call-site checks read the id out of `onChanged(<id>, …)`, so they only ever
+  saw calls that *have* a second argument: a site reverting to the old
+  one-argument shape stopped being counted rather than failing, and the
+  remaining sites still all said `post.id`. That is precisely the shape of the
+  six regressions above, and the only thing that catches it — tsc's TS2554 — is
+  reported by the deliberately non-blocking ratchet, so it ships green. Each
+  test now also counts raw `onChanged` call sites and asserts every one is
+  addressed. Verified by mutation on top of the existing cases: dropping the id
+  from a post-level call (17 sites, 16 addressed) and from a comment-level one
+  (5 sites, 3 addressed) each failed, where both passed before
+  — Lopu, 2026-08-28.
+
 ### Fixed
 
 - **PR #99 persisted-state, CSP, and registration-body hardening**: persisted

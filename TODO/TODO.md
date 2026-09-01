@@ -165,6 +165,10 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     server-side for ranked pagination).
 
 12. **⚡ `React.memo` on `PostCard` is defeated → every card repaints on scroll.**
+    _✅ Done 2026-07-21: `PostCard`'s `onChanged` contract is now `(id, next)` so
+    `PostList` passes the consumers' already-`useCallback`-stable
+    `handlePostChanged` straight through — no per-card closure, memo bails
+    correctly. Feed + ProfilePage handlers already matched the new signature._
 
     `PostList.tsx` L78 passes a fresh inline closure
     `onChanged={(next) => onPostChanged(post.id, next)}` per render, so the

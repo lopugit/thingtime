@@ -200,8 +200,10 @@ ActionIcon.displayName = 'ActionIcon';
 export type PostCardProps = {
   post: PublicPost;
   // a value replaces the post (null = deleted); a function applies a delta to
-  // the freshest post (used by optimistic reactions)
-  onChanged?: (next: PostChange) => void;
+  // the freshest post (used by optimistic reactions). Takes the post id so the
+  // SAME handler identity can be passed to every card — a per-card closure
+  // would defeat React.memo below and repaint the whole column on any change.
+  onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
@@ -1286,7 +1288,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       await api.v1.things.remove({ id: post.id });
       lopu({ title: 'Post deleted 🗑️', status: 'success', duration: 6000 });
-      onChanged?.(null);
+      onChanged?.(post.id, null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Could not delete that post 😞', status: 'error' });
     }
@@ -1329,12 +1331,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     setEditing(false);
     // a plain-text inline edit drops any rich-text doc the post carried, and
     // re-syncs the tag set recomputed from the edited text above
-    onChanged?.((prev) => ({ ...prev, text, richText: null, tags }));
+    onChanged?.(post.id, (prev) => ({ ...prev, text, richText: null, tags }));
     try {
       await api.v1.things.update({ id: post.id, crystal: { text, richText: null }, tags });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText, richText: post.richText, tags: prevTags }));
+      onChanged?.(post.id, (prev) => ({ ...prev, text: prevText, richText: post.richText, tags: prevTags }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
@@ -1348,16 +1350,16 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
-    onChanged?.((prev) => ({ ...prev, visibility: next }));
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next }));
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
       }
       const meta = CIRCLE_META[next];
       lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
@@ -1401,7 +1403,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // Each updater notes its applied result in the reaction overlay so
     // background fetches snapshotted before the tap merge instead of
     // clobbering (idempotent under strict-mode double-invoke).
-    onChanged?.((prev) => {
+    onChanged?.(post.id, (prev) => {
       const next = applyReactionToggle(prev, token, adding);
       noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
       return next;
@@ -1409,7 +1411,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     const reconcileLocalToken = (reactionCounts: Record<string, number>, viewerReactions: string[]) => {
-      onChanged?.((current) => {
+      onChanged?.(post.id, (current) => {
         const next = reconcileReactionToken(current, token, reactionCounts, viewerReactions);
         noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
         return next;
@@ -1464,15 +1466,15 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // past the guards above, and only when the vote LANDS on this option (new
     // or moved); tapping your own option removes the vote — no burst
     if (prevTally && prevTally.viewerVote !== optionIndex) splash?.();
-    onChanged?.((prev) => applyPollVoteToggle(prev, optionIndex));
+    onChanged?.(post.id, (prev) => applyPollVoteToggle(prev, optionIndex));
     // a fresh vote is engagement of react strength for the feed algorithms
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     try {
       const resp = await api.v1.things.vote({ id: post.id, optionIndex });
-      onChanged?.((prev) => ({ ...prev, pollVotes: resp.pollVotes }));
+      onChanged?.(post.id, (prev) => ({ ...prev, pollVotes: resp.pollVotes }));
     } catch (err: any) {
-      onChanged?.((prev) => (prevTally ? { ...prev, pollVotes: prevTally } : prev));
+      onChanged?.(post.id, (prev) => (prevTally ? { ...prev, pollVotes: prevTally } : prev));
       lopu({ title: err?.error || 'Your vote did not go through 😞', status: 'error' });
     } finally {
       inFlightVoteRef.current = false;
@@ -1546,7 +1548,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     const pendingComment = buildPendingComment(user, post.id, text);
     clearCommentDraft();
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, pendingComment],
       commentCount: prev.commentCount + 1
@@ -1555,13 +1557,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.((prev) => ({
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
     } catch (err: any) {
-      onChanged?.((prev) => ({
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
         commentCount: Math.max(0, prev.commentCount - 1)
@@ -1574,7 +1576,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created comment (post-shaped — comments share the post schema)
   const handleRichCommented = (comment: PostComment) => {
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, comment],
       commentCount: prev.commentCount + 1
@@ -1585,7 +1587,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
   const handleCommentChanged = (id: string, change: CommentChange) => {
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: prev.comments.map((comment) => (comment.id === id ? applyCommentChange(comment, change) : comment))
     }));
@@ -1597,13 +1599,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const handleRepost = async () => {
     if (sharing) return;
     setSharing(true);
-    onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+    onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
     onEngagement?.({ thingId: post.id, signal: 'share' });
     lopu({ title: 'Reposted 🔁', status: 'success', duration: 6000 });
     try {
       await api.v1.things.share({ id: post.id, visibility: post.visibility });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
       lopu({ title: err?.error || 'Repost failed 😞', status: 'error' });
     }
     setSharing(false);
@@ -1626,7 +1628,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         visibility: quoteVisibility
       });
       lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
-      onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
       onEngagement?.({ thingId: post.id, signal: 'share' });
       setQuoteOpen(false);
       setQuoteText('');
@@ -1667,17 +1669,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     inFlightSaveRef.current = true;
 
     const prevSaved = post.viewerSaved === true;
-    onChanged?.((prev) => ({ ...prev, viewerSaved: !prevSaved }));
+    onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: !prevSaved }));
     try {
       const resp = await api.v1.things.save({ id: post.id });
-      onChanged?.((prev) => ({ ...prev, viewerSaved: resp.saved === true }));
+      onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: resp.saved === true }));
       lopu({
         title: resp.saved ? 'Saved to your library 🔖' : 'Removed from Saved 🌫️',
         status: 'success',
         duration: 4000
       });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, viewerSaved: prevSaved }));
+      onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: prevSaved }));
       lopu({ title: err?.error || 'Could not update your Saved library 😞', status: 'error' });
     } finally {
       inFlightSaveRef.current = false;
@@ -1807,7 +1809,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostComposer
             editPost={post}
             onPosted={(updated) => {
-              onChanged?.(updated);
+              // the composer edits this exact post, so address the change to
+              // post.id — `updated` replaces it wholesale
+              onChanged?.(post.id, updated);
               setEditing(false);
             }}
             onClose={() => setEditing(false)}

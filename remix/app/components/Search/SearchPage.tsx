@@ -350,10 +350,9 @@ const StandardThingResult = React.memo(function StandardThingResult({
   post: SearchPost | null;
   onPostChanged: (id: string, change: PostChange) => void;
 }) {
-  const handlePostChanged = React.useCallback(
-    (change: PostChange) => onPostChanged(thing.id, change),
-    [onPostChanged, thing.id]
-  );
+  // PostCard hands the post id back to `onChanged`, so the parent's
+  // useCallback-stable handler passes straight through — a per-card wrapper
+  // here would defeat PostCard's React.memo exactly like PostList's used to.
 
   if (post) {
     return (
@@ -363,7 +362,7 @@ const StandardThingResult = React.memo(function StandardThingResult({
             <RankedMatchScore score={thing.rankScore} />
           </Flex>
         ) : null}
-        <PostCard post={post} onChanged={handlePostChanged} />
+        <PostCard post={post} onChanged={onPostChanged} />
       </Box>
     );
   }
