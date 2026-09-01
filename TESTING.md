@@ -1897,6 +1897,48 @@ email whose link points at the attacker.
       (`app/components/Feed/feedTypes.test.ts`); this manual pass is for the
       wiring (which pager calls it, and with which `prev`).
 
+## Commander palette (`remix/app/components/Commander/CommanderV2.tsx`, `commanderCommands.ts`, `commanderShortcut.ts`)
+
+The `>` registry and the Cmd+K chord rule are unit-tested headlessly
+(`npm run test:commander`, including a route contract that every `>command`
+navigation target is a route the router declares). These are the browser-only
+halves.
+
+- [ ] `Cmd/Ctrl+K` from anywhere on the page (nothing focused, a button focused,
+      mid-scroll) opens AND focuses the nav Commander; pressing it again closes
+      it. Exactly one Commander reacts — the nav instance — with a second
+      Commander mounted on the page.
+- [ ] `Cmd/Ctrl+K` inside an Editor.js block opens the editor's **link tool
+      only** — the palette must not open on top of it or steal focus. Editor.js
+      binds `CMD+K` to its core link inline tool, so the editor wins inside its
+      own blocks (`targetOwnsCommanderChord`, keyed off the `.codex-editor`
+      holder). Everywhere else the palette still wins, because nothing else
+      binds the chord: check the login form, a comment box and the search field
+      still open the Commander, and that Cmd+K still closes the Commander while
+      its own input is focused.
+- [ ] Typing `>` flips the dropdown to command rows (usage + description) and
+      fires NO search request (check the network tab). Backspacing back to
+      ordinary text restores the pinned `Search things for…` row and the live
+      results.
+- [ ] Highlight a row (arrow keys or mouse), then edit the input across the `>`
+      boundary in BOTH directions. The highlight must never carry over onto an
+      unrelated row of the new list — Enter must not run a command the user
+      never selected (`>undo` sits at row index 2).
+- [ ] Highlight a row, then keep typing an ARGUMENT (`>the` → highlight
+      `>themes` → finish typing `>theme Midnight`). Arguments don't narrow the
+      rows, so the stale highlight must not win: Enter applies the Midnight
+      preset rather than navigating to /themes.
+- [ ] Enter runs the typed command even with no row highlighted: `>theme
+      Midnight` applies the preset, `>theme neon` lists the presets without
+      switching, `>undo`/`>redo` walk the timeline, `>help` toasts every
+      command, and an unknown `>xyz` toasts a pointer to `>help` instead of
+      falling through to the path/setter machinery.
+- [ ] Selecting a row: argument-less commands run and close the palette;
+      argument-taking rows (`>theme`, `>search`, `>docs`) complete to `>name `
+      and keep the palette open and focused.
+- [ ] Mobile (375×812): the command dropdown is full width with no overflow or
+      clipping, and the usage/description columns stay readable.
+
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
 - [ ] Build the Vercel output and exercise `/api/v1/things/search` from the
