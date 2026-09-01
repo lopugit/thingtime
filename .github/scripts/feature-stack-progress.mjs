@@ -68,10 +68,14 @@ export const targetProgress = (target, job, mergeGateJob = null) => {
 };
 
 export const progressSnapshot = ({ targets, jobs, startedAt, now = Date.now() }) => {
+  const findJob = (expectedName) => jobs.find((job) => {
+    const name = String(job?.name ?? '');
+    return name === expectedName || name.endsWith(` / ${expectedName}`);
+  });
   const rows = targets.map((target) => targetProgress(
     target,
-    jobs.find((job) => job?.name === `Merge Feature Stack into ${target}`),
-    jobs.find((job) => job?.name === `Confirm Feature Stack merged into ${target}`)
+    findJob(`Merge Feature Stack into ${target}`),
+    findJob(`Confirm Feature Stack merged into ${target}`)
   ));
   const progressPercent = Math.round(rows.reduce((total, row) => total + row.progressPercent, 0) / Math.max(1, rows.length));
   const terminal = rows.every((row) => TERMINAL_TARGET_STATUSES.has(row.status));
@@ -198,7 +202,7 @@ const run = async () => {
 
 const selfTest = () => {
   const jobs = [
-    { name: 'Merge Feature Stack into main', status: 'in_progress', html_url: 'https://github.com/lopugit/thingtime/actions/runs/1/job/2', steps: [{ name: 'Prepare immutable sources', status: 'completed' }, { name: 'Combine the Feature Stack with Lopu', status: 'in_progress' }] },
+    { name: 'control-plane / Merge Feature Stack into main', status: 'in_progress', html_url: 'https://github.com/lopugit/thingtime/actions/runs/1/job/2', steps: [{ name: 'Prepare immutable sources', status: 'completed' }, { name: 'Combine the Feature Stack with Lopu', status: 'in_progress' }] },
     { name: 'Merge Feature Stack into develop', status: 'queued', steps: [] }
   ];
   const snapshot = progressSnapshot({ targets: ['main', 'develop'], jobs, startedAt: Date.now() - 600_000 });

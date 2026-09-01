@@ -1,16 +1,16 @@
-# Graph Report - controller  (2026-09-01)
+# Graph Report - controller-opt  (2026-09-01)
 
 ## Corpus Check
-- 42 files · ~184,381 words
+- 42 files · ~184,679 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 837 nodes · 1711 edges · 97 communities (46 shown, 51 thin omitted)
+- 838 nodes · 1714 edges · 97 communities (46 shown, 51 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 15 edges (avg confidence: 0.56)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1905cd4d`
+- Built from commit: `8a2b650d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -116,7 +116,7 @@
 1. `selfTest()` - 49 edges
 2. `runPromotion()` - 36 edges
 3. `failureDetail()` - 28 edges
-4. `runSelfTest()` - 26 edges
+4. `runSelfTest()` - 27 edges
 5. `deploy()` - 26 edges
 6. `main()` - 20 edges
 7. `orphanedMergeHydrationIntegrationTest()` - 19 edges
@@ -156,7 +156,7 @@
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
-Nodes (102): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack(), assertVercelConfiguration() (+94 more)
+Nodes (103): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack(), assertVercelConfiguration() (+95 more)
 
 ### Community 1 - "graphify-cas.mjs"
 Cohesion: 0.09
@@ -347,7 +347,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
   _220 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.060805860805860805 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06019766397124888 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.09175920514319112 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
