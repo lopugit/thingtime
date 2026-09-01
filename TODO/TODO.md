@@ -181,15 +181,17 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     already has `post`) or memoise a per-card wrapper. Apply to other `PostList`
     consumers (`ProfilePage`).
 
-13. **🐛 Global Cmd/Ctrl+Z listener hijacks native text undo everywhere.**
+13. **✅ FIXED: Global Cmd/Ctrl+Z listener hijacks native text undo everywhere.**
 
-    `useThingtimeMachine.tsx` `keyListener` (L93–140, mounted app-wide via
-    `ThingtimeProvider` L149) `preventDefault()`s undo/redo window-wide with no
-    guard for editable targets. Native undo is broken inside the post composer,
-    comment boxes, and login form (a thingtime undo fires instead, mutating
-    unrelated state). Bail when `e.target` is INPUT/TEXTAREA/SELECT/contentEditable
-    or `e.isComposing`; also normalise `e.key.toLowerCase() === 'z'` (Shift+Z
-    reports `'Z'`, making the redo branch at L101 unreachable in most browsers).
+    Fixed on `claude/undo-editable-guard-s8` (2026-07-21):
+    `useThingtimeMachine.tsx` `keyListener` now bails before `preventDefault()`
+    whenever `e.target` is INPUT/TEXTAREA/SELECT/contentEditable or
+    `e.isComposing`, so native text undo wins inside the post composer, comment
+    boxes, the login form, and Editor.js blocks. The combo match also
+    normalises case (`e.key.toLowerCase() === 'z'`), which makes the redo
+    branch reachable — Shift+Z reports `'Z'`, so Cmd/Ctrl+Shift+Z previously
+    never redid anything. Checklist line in `TESTING.md` under "Feed thing
+    rendering".
 
 14. **✅ FIXED IN PR #115 — 🧹 Remove render-time debug leaks in the hot path.**
 

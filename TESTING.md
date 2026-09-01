@@ -1080,6 +1080,16 @@ email whose link points at the attacker.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
+- [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
+      inside the post composer, a comment box, the login form, and any
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      no thingtime state changes. With focus on the page background (no editable
+      focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
+      `e.key === 'Z'`, so redo was unreachable before this guard normalised
+      case). Mid-IME composition (Japanese/Chinese input) Cmd/Ctrl+Z never
+      triggers a thingtime undo. The guard predicate itself is covered by
+      `npm run test:editable-target` (`app/utils/editableTarget.ts`); this
+      manual pass is for the wiring and the real browser key codes.
 - [ ] A very large thing (deeply nested, hundreds of nodes) mounts COLLAPSED
       and scrolls within a bounded box — it never mass-mounts nodes or
       wall-of-texts the feed.
