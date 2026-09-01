@@ -111,112 +111,6 @@ const useCoarsePointer = (): boolean => {
 	return coarse;
 };
 
-// A slim insert line between siblings — the WHOLE strip is the tap target
-// (44px when visible), the pill is just the label. Inside row containers the
-// zone turns vertical (a slim upright strip between side-by-side blocks) so
-// it never forces siblings onto separate lines.
-const InsertZone = ({
-	containerId,
-	index,
-	chrome,
-	alwaysVisible,
-	orientation = 'horizontal',
-	testIdPrefix
-}: {
-	containerId: string | null;
-	index: number;
-	chrome: BuilderChrome;
-	// empty containers and the end of the root list keep their zone visible —
-	// a canvas must never look like there is nothing to do
-	alwaysVisible?: boolean;
-	orientation?: 'horizontal' | 'vertical';
-	testIdPrefix?: string;
-}) => {
-	const [active, setActive] = React.useState(false);
-	const coarse = useCoarsePointer();
-	const visible = active || alwaysVisible || coarse;
-	const vertical = orientation === 'vertical';
-	return (
-		<Flex
-			as="button"
-			type="button"
-			aria-label="Add a block here"
-			className="ttInsertZone"
-			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}`}
-			alignItems="center"
-			justifyContent="center"
-			width={vertical ? (visible ? '28px' : '14px') : '100%'}
-			height={vertical ? 'auto' : visible ? '44px' : '18px'}
-			alignSelf={vertical ? 'stretch' : undefined}
-			minHeight={vertical ? '44px' : undefined}
-			flex={vertical ? '0 0 auto' : undefined}
-			marginY={vertical ? 0 : '3px'}
-			marginX={vertical ? '1px' : 0}
-			opacity={active ? 1 : visible ? 0.8 : 0}
-			_hover={{ opacity: 1 }}
-			transition="opacity 0.12s ease, height 0.12s ease, width 0.12s ease"
-			position="relative"
-			zIndex={5}
-			cursor="pointer"
-			sx={CHROME_TOUCH_SX}
-			onClick={(event: React.MouseEvent<HTMLElement>) => {
-				event.preventDefault();
-				event.stopPropagation();
-				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
-			}}
-			onDragOver={(event) => {
-				if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
-					event.preventDefault();
-					event.dataTransfer.dropEffect = event.dataTransfer.types.includes(DRAG_MIME) ? 'move' : 'copy';
-					setActive(true);
-				}
-			}}
-			onDragLeave={() => setActive(false)}
-			onDrop={(event) => {
-				const id = event.dataTransfer.getData(DRAG_MIME);
-				setActive(false);
-				if (id) {
-					event.preventDefault();
-					event.stopPropagation();
-					chrome.onMove(id, containerId, index);
-					return;
-				}
-				const files = Array.from(event.dataTransfer.files || []);
-				if (files.length && chrome.onDropFiles) {
-					event.preventDefault();
-					event.stopPropagation();
-					chrome.onDropFiles(files, containerId, index);
-				}
-			}}
-		>
-			{vertical ? (
-				<Box position="absolute" top={0} bottom={0} left="50%" width="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
-			) : (
-				<Box position="absolute" left={0} right={0} top="50%" height="2px" background="var(--tt-accent, hotpink)" opacity={0.3} borderRadius="1px" pointerEvents="none" />
-			)}
-			<Box
-				as="span"
-				position="relative"
-				pointerEvents="none"
-				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-				fontSize="12px"
-				fontWeight={700}
-				lineHeight="1"
-				paddingX={vertical ? '6px' : '14px'}
-				paddingY={vertical ? '6px' : '8px'}
-				borderRadius="var(--tt-radius-pill, 999px)"
-				border="1px solid"
-				borderColor="var(--tt-accent, hotpink)"
-				background="var(--tt-card, #ffffff)"
-				color="var(--tt-accent, hotpink)"
-				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
-			>
-				{vertical ? '+' : '+ add block'}
-			</Box>
-		</Flex>
-	);
-};
-
 // An empty container (or an empty page) renders a tall, unmistakable
 // dropwell instead of a slim line — the whole well is tappable and droppable,
 // and it can never visually collide with sibling zones outside the container.
@@ -226,6 +120,7 @@ const DropWell = ({
 	chrome,
 	label,
 	compact,
+	trailing,
 	testIdPrefix
 }: {
 	containerId: string | null;
@@ -235,6 +130,8 @@ const DropWell = ({
 	label?: string;
 	// grid add-tile: sized like a modest cell, not a hero well
 	compact?: boolean;
+	// the root's trailing well: clear air between it and the last block
+	trailing?: boolean;
 	testIdPrefix?: string;
 }) => {
 	const [active, setActive] = React.useState(false);
@@ -252,6 +149,7 @@ const DropWell = ({
 			width="100%"
 			minHeight={compact ? '56px' : '96px'}
 			marginY={compact ? 0 : '6px'}
+			marginTop={trailing ? '28px' : undefined}
 			border="2px dashed"
 			borderColor={active ? 'var(--tt-accent, hotpink)' : 'var(--tt-border, #ececef)'}
 			borderRadius="var(--tt-radius-lg, 16px)"
@@ -308,6 +206,118 @@ const DropWell = ({
 	);
 };
 
+// Insert affordances as pure OVERLAYS on block edges: they participate in no
+// layout, so edit mode is geometrically IDENTICAL to view mode (true
+// WYSIWYG). A strip covers the seam before/after a block on its parent's
+// axis; hovering (or dragging over) reveals the accent line + pill, clicking
+// opens the insert menu at that position, dropping moves blocks / uploads
+// files there. Adjacent blocks' strips overlap on the same seam and resolve
+// to the same index, so whichever wins the event does the same thing.
+const EdgeInsertStrip = ({
+	side,
+	containerId,
+	index,
+	chrome,
+	testIdPrefix
+}: {
+	side: 'top' | 'bottom' | 'left' | 'right';
+	containerId: string | null;
+	index: number;
+	chrome: BuilderChrome;
+	testIdPrefix?: string;
+}) => {
+	const [active, setActive] = React.useState(false);
+	const coarse = useCoarsePointer();
+	const vertical = side === 'left' || side === 'right';
+	const rect =
+		side === 'top'
+			? { top: '-8px', left: 0, right: 0, height: '16px' }
+			: side === 'bottom'
+				? { bottom: '-8px', left: 0, right: 0, height: '16px' }
+				: side === 'left'
+					? { left: '-9px', top: 0, bottom: 0, width: '18px' }
+					: { right: '-9px', top: 0, bottom: 0, width: '18px' };
+	return (
+		<Flex
+			as="button"
+			type="button"
+			aria-label="Add a block here"
+			className="ttInsertZone"
+			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}${side === 'top' || side === 'left' ? '' : `-${side}`}`}
+			position="absolute"
+			{...rect}
+			zIndex={6}
+			alignItems="center"
+			justifyContent="center"
+			opacity={active ? 1 : coarse ? 0.45 : 0}
+			_hover={{ opacity: 1 }}
+			transition="opacity 0.1s ease"
+			cursor="copy"
+			sx={CHROME_TOUCH_SX}
+			onClick={(event: React.MouseEvent<HTMLElement>) => {
+				event.preventDefault();
+				event.stopPropagation();
+				chrome.onInsert(containerId, index, event.currentTarget as HTMLElement);
+			}}
+			onMouseEnter={() => setActive(true)}
+			onMouseLeave={() => setActive(false)}
+			onDragOver={(event) => {
+				if (event.dataTransfer.types.includes(DRAG_MIME) || event.dataTransfer.types.includes('Files')) {
+					event.preventDefault();
+					event.stopPropagation();
+					event.dataTransfer.dropEffect = event.dataTransfer.types.includes(DRAG_MIME) ? 'move' : 'copy';
+					setActive(true);
+				}
+			}}
+			onDragLeave={() => setActive(false)}
+			onDrop={(event) => {
+				setActive(false);
+				if (event.defaultPrevented) return;
+				const id = event.dataTransfer.getData(DRAG_MIME);
+				if (id) {
+					event.preventDefault();
+					event.stopPropagation();
+					chrome.onMove(id, containerId, index);
+					return;
+				}
+				const files = Array.from(event.dataTransfer.files || []);
+				if (files.length && chrome.onDropFiles) {
+					event.preventDefault();
+					event.stopPropagation();
+					chrome.onDropFiles(files, containerId, index);
+				}
+			}}
+		>
+			<Box
+				position="absolute"
+				{...(vertical ? { top: '2px', bottom: '2px', left: '50%', width: '2px' } : { left: '2px', right: '2px', top: '50%', height: '2px' })}
+				background="var(--tt-accent, hotpink)"
+				opacity={0.55}
+				borderRadius="1px"
+				pointerEvents="none"
+			/>
+			<Box
+				as="span"
+				position="relative"
+				pointerEvents="none"
+				fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+				fontSize="11px"
+				fontWeight={700}
+				lineHeight="1"
+				paddingX="6px"
+				paddingY="5px"
+				borderRadius="var(--tt-radius-pill, 999px)"
+				border="1px solid var(--tt-accent, hotpink)"
+				background="var(--tt-card, #ffffff)"
+				color="var(--tt-accent, hotpink)"
+				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+			>
+				+
+			</Box>
+		</Flex>
+	);
+};
+
 const alignSelfOf = (block: WebpageBlock): string | undefined =>
 	block.align === 'center' ? 'center' : block.align === 'end' ? 'flex-end' : block.align === 'start' ? 'flex-start' : block.align === 'stretch' ? 'stretch' : undefined;
 
@@ -352,16 +362,18 @@ const BlockFrame = ({
 	parentDirection = 'column',
 	containerId = null,
 	indexInParent = 0,
+	testIdPrefix,
 	children
 }: {
 	block: WebpageBlock;
 	chrome: BuilderChrome;
 	locked?: boolean;
 	parentDirection?: ParentDirection;
-	// where this block lives — lets grid cells act as drop targets
-	// (drop = insert before this cell; grids have no between-cell zones)
+	// where this block lives — powers the overlay insert strips and grid-cell
+	// drop targets without any layout participation
 	containerId?: string | null;
 	indexInParent?: number;
+	testIdPrefix?: string;
 	children: React.ReactNode;
 }) => {
 	const hovered = chrome.hoverId === block.id;
@@ -537,6 +549,22 @@ const BlockFrame = ({
 				</Flex>
 			)}
 			{children}
+			{/* overlay insert strips on the parent-axis seams — zero layout
+			    impact, so the edit canvas is pixel-identical to view mode */}
+			<EdgeInsertStrip
+				side={parentDirection === 'column' ? 'top' : 'left'}
+				containerId={containerId}
+				index={indexInParent}
+				chrome={chrome}
+				testIdPrefix={testIdPrefix}
+			/>
+			<EdgeInsertStrip
+				side={parentDirection === 'column' ? 'bottom' : 'right'}
+				containerId={containerId}
+				index={indexInParent + 1}
+				chrome={chrome}
+				testIdPrefix={testIdPrefix}
+			/>
 		</Box>
 	);
 };
@@ -916,6 +944,7 @@ const BlockView = (
 			parentDirection={parentDirection}
 			containerId={containerId}
 			indexInParent={indexInParent}
+			testIdPrefix={props.testIdPrefix}
 		>
 			{body}
 		</BlockFrame>
@@ -951,60 +980,42 @@ const BlockList = (
 		// in a grid the well must span every column, not sit in cell 1
 		return parentDirection === 'grid' ? <Box gridColumn="1 / -1">{well}</Box> : well;
 	}
-	if (parentDirection === 'grid') {
-		// grid children are CELLS — interleaved zones would occupy cells and
-		// shove real blocks into the wrong columns. Blocks flow in order and a
-		// trailing add-tile occupies the next free cell (click to insert, drop
-		// to move-to-end); dropping ONTO a cell inserts before it.
-		return (
-			<>
-				{blocks.map((block, index) => (
-					<BlockView
-						key={block.id}
-						{...props}
-						block={block}
-						isRoot={isRoot}
-						parentDirection="grid"
-						containerId={containerId}
-						indexInParent={index}
-					/>
-				))}
-				<DropWell
+	// TRUE WYSIWYG: blocks render exactly as view mode lays them out — insert
+	// affordances live on each frame as overlay edge strips (BlockFrame), so
+	// no chrome element ever participates in layout. Only the root keeps a
+	// trailing "+ add block" line BELOW the content (it shifts nothing above).
+	return (
+		<>
+			{blocks.map((block, index) => (
+				<BlockView
+					key={block.id}
+					{...props}
+					block={block}
+					isRoot={isRoot}
+					parentDirection={parentDirection}
 					containerId={containerId}
+					indexInParent={index}
+				/>
+			))}
+			{isRoot ? (
+				<DropWell
+					containerId={null}
 					index={blocks.length}
 					chrome={chrome}
-					label="add"
-					compact
+					label="Add a block"
+					trailing
 					testIdPrefix={props.testIdPrefix}
 				/>
-			</>
-		);
-	}
-	const vertical = parentDirection === 'row';
-	const zones: React.ReactNode[] = [
-		<InsertZone key="zone-0" containerId={containerId} index={0} chrome={chrome} orientation={vertical ? 'vertical' : 'horizontal'} testIdPrefix={props.testIdPrefix} />
-	];
-	blocks.forEach((block, index) => {
-		zones.push(<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection={parentDirection} />);
-		zones.push(
-			<InsertZone
-				key={`zone-${index + 1}`}
-				containerId={containerId}
-				index={index + 1}
-				chrome={chrome}
-				orientation={vertical ? 'vertical' : 'horizontal'}
-				alwaysVisible={isRoot && index === blocks.length - 1}
-				testIdPrefix={props.testIdPrefix}
-			/>
-		);
-	});
-	return <>{zones}</>;
+			) : null}
+		</>
+	);
 };
 
 export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => {
 	if (props.bare && !props.chrome) return <BlockList {...props} containerId={null} />;
+	// identical root spacing in both modes — WYSIWYG includes the gaps
 	return (
-		<Flex flexDirection="column" width="100%" rowGap={props.chrome ? 0 : 4}>
+		<Flex flexDirection="column" width="100%" rowGap={4}>
 			<BlockList {...props} containerId={null} />
 		</Flex>
 	);

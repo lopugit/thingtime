@@ -144,7 +144,7 @@ export const SidesControl = ({
 					{...inputStyles}
 					value={value || ''}
 					placeholder="0"
-					onChange={(event) => onChange(event.target.value.trim())}
+					onChange={(event) => onChange(event.target.value)}
 					data-testid={`${testIdPrefix}-all`}
 				/>
 			) : mode === 'axes' ? (
@@ -199,7 +199,7 @@ export const CornersControl = ({
 					{...inputStyles}
 					value={value || ''}
 					placeholder="0"
-					onChange={(event) => onChange(event.target.value.trim())}
+					onChange={(event) => onChange(event.target.value)}
 					data-testid={`${testIdPrefix}-all`}
 				/>
 			) : (

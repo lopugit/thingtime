@@ -396,32 +396,56 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 				// global strip and the page would read as broken layout
 				background="var(--tt-surface, #fafafb)"
 			>
-				{/* 🌐 global region — blocks on every page, editable right here */}
+				{/* 🌐 global region — blocks on every page, editable right here.
+				    TRUE WYSIWYG: the region label and the dashed region separator
+				    are absolute OVERLAYS (the label floats in the breathing band
+				    below the nav, the separator is a zero-height line), so this
+				    strip's content geometry is identical to view mode's
+				    GlobalBlocks. */}
 				<Box
 					width="100%"
+					position="relative"
 					paddingTop={`calc(${PAGE_TOP_CLEARANCE} + 14px)`}
 					paddingX={4}
-					paddingBottom={2}
 					background="var(--tt-surface, #fafafb)"
-					borderBottom="1px dashed var(--tt-border, #ececef)"
 				>
+					<Flex
+						position="absolute"
+						top={PAGE_TOP_CLEARANCE}
+						left={0}
+						right={0}
+						height="14px"
+						alignItems="center"
+						justifyContent="center"
+						columnGap={2}
+						pointerEvents="none"
+						zIndex={2}
+					>
+						<Box
+							as="span"
+							color="var(--tt-muted, #9a9aa6)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="9px"
+							fontWeight={700}
+							letterSpacing="0.12em"
+							textTransform="uppercase"
+							lineHeight="1"
+						>
+							🌐 Global · renders on every page
+						</Box>
+						<Box as="span" color="var(--tt-faint, #b6b6c0)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="9px" lineHeight="1">
+							nav · drawer · footer are Thingtime chrome
+						</Box>
+					</Flex>
+					<Box
+						position="absolute"
+						left={0}
+						right={0}
+						bottom="-1px"
+						borderTop="1px dashed var(--tt-border, #ececef)"
+						pointerEvents="none"
+					/>
 					<Box maxWidth="960px" marginX="auto">
-						<Flex alignItems="baseline" columnGap={2} marginBottom={1}>
-							<Box
-								as="span"
-								color="var(--tt-muted, #9a9aa6)"
-								fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
-								fontSize="10px"
-								fontWeight={700}
-								letterSpacing="0.12em"
-								textTransform="uppercase"
-							>
-								🌐 Global · renders on every page
-							</Box>
-							<Box as="span" color="var(--tt-faint, #b6b6c0)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="10px">
-								nav · drawer · footer are Thingtime chrome
-							</Box>
-						</Flex>
 						{globalDraft.loading && !globalDraft.blocks.length ? null : (
 							<WebpageBlocksRenderer
 								blocks={globalDraft.blocks}

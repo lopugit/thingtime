@@ -176,6 +176,52 @@ const inputStyles = {
 
 const ALIGN_OPTIONS: Array<WebpageBlockAlign | ''> = ['', 'start', 'center', 'end', 'stretch'];
 
+// Numeric fields must NEVER rewrite what the user is typing: clamping every
+// keystroke turns "3" into the minimum before "300" can exist. The raw draft
+// lives here while the field is focused; the clamped value commits on blur
+// or Enter.
+const ClampedNumberInput = ({
+	value,
+	min,
+	max,
+	placeholder,
+	onCommit,
+	testId
+}: {
+	value: number | undefined;
+	min: number;
+	max: number;
+	placeholder?: string;
+	onCommit: (next: number | undefined) => void;
+	testId?: string;
+}) => {
+	const [draft, setDraft] = React.useState<string | null>(null);
+	const commit = (raw: string) => {
+		setDraft(null);
+		if (raw.trim() === '') {
+			onCommit(undefined);
+			return;
+		}
+		const numeric = Number(raw);
+		if (!Number.isFinite(numeric)) return;
+		onCommit(Math.max(min, Math.min(max, Math.round(numeric))));
+	};
+	return (
+		<Input
+			{...inputStyles}
+			type="number"
+			placeholder={placeholder}
+			value={draft ?? (value === undefined ? '' : String(value))}
+			onChange={(event) => setDraft(event.target.value)}
+			onBlur={(event) => commit(event.target.value)}
+			onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+				if (event.key === 'Enter') (event.currentTarget as HTMLInputElement).blur();
+			}}
+			data-testid={testId}
+		/>
+	);
+};
+
 const ArgField = ({
 	spec,
 	value,
@@ -540,21 +586,11 @@ const BlockInspector = ({
 						</Select>
 					</FieldRow>
 					<FieldRow label="Gap">
-						<Input
-							{...inputStyles}
-							type="number"
-							value={block.gap ?? 4}
-							onChange={(event) => patch({ gap: Math.max(0, Math.min(12, Number(event.target.value) || 0)) })}
-						/>
+						<ClampedNumberInput value={block.gap ?? 4} min={0} max={12} onCommit={(next) => patch({ gap: next ?? 4 })} testId="container-gap" />
 					</FieldRow>
 					{block.direction === 'grid' ? (
 						<FieldRow label="Columns">
-							<Input
-								{...inputStyles}
-								type="number"
-								value={block.columns ?? 2}
-								onChange={(event) => patch({ columns: Math.max(1, Math.min(6, Number(event.target.value) || 1)) })}
-							/>
+							<ClampedNumberInput value={block.columns ?? 2} min={1} max={6} onCommit={(next) => patch({ columns: next ?? 2 })} testId="container-columns" />
 						</FieldRow>
 					) : null}
 				</>
@@ -610,15 +646,13 @@ const BlockInspector = ({
 									</Select>
 								</FieldRow>
 								<FieldRow label="Max width (px)">
-									<Input
-										{...inputStyles}
-										type="number"
+									<ClampedNumberInput
+										value={block.maxWidth}
+										min={120}
+										max={1680}
 										placeholder="auto"
-										value={block.maxWidth ?? ''}
-										onChange={(event) => {
-											const raw = event.target.value;
-											patch({ maxWidth: raw === '' ? undefined : Math.max(120, Math.min(1680, Number(raw) || 120)) });
-										}}
+										onCommit={(next) => patch({ maxWidth: next })}
+										testId="block-max-width"
 									/>
 								</FieldRow>
 							</FieldPair>
