@@ -1,22 +1,47 @@
+import { randomUUID } from 'node:crypto';
+
 import { json, readJsonBody } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
-import { dispatchCiWorkflow } from '~/api/utils/ciControl/githubClient';
+import { dispatchCiWorkflow, findFeatureStackWorkflowRunNear } from '~/api/utils/ciControl/githubClient';
 import {
 	archiveFeatureStack,
 	getFeatureStack,
 	listFeatureStacks,
 	markFeatureStackRun,
+	markFeatureStackRunLinkChecked,
+	reconcileLegacyFeatureStackRun,
 	saveFeatureStack
 } from '~/api/utils/ciControl/featureStackStore';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store, max-age=0' };
 
+const listFeatureStacksWithLegacyRunLinks = async () => {
+	const stacks = await listFeatureStacks();
+	const retryBefore = Date.now() - 15 * 60_000;
+	const candidate = stacks
+		.flatMap((stack) => stack.runs.filter((run) => !run.url).map((run) => ({ stack, run })))
+		.find(({ run }) => !run.linkCheckedAt || new Date(run.linkCheckedAt).getTime() < retryBefore);
+	if (!candidate) return stacks;
+	try {
+		const match = await findFeatureStackWorkflowRunNear(candidate.run.startedAt);
+		if (match) {
+			await reconcileLegacyFeatureStackRun(candidate.run.id, match);
+			return listFeatureStacks();
+		}
+	} catch {
+		// The saved stack remains usable from its local audit record. A later
+		// admin refresh will retry the bounded GitHub reconciliation.
+	}
+	await markFeatureStackRunLinkChecked(candidate.run.id);
+	return stacks;
+};
+
 export const loader = ({ request }: { request: Request }) =>
 	withAdminPrivateResponse(async () => {
 		const gate = await requireAdmin(request);
 		if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status, headers: privateHeaders });
-		return json({ ok: true, stacks: await listFeatureStacks() }, { headers: privateHeaders });
+		return json({ ok: true, stacks: await listFeatureStacksWithLegacyRunLinks() }, { headers: privateHeaders });
 	});
 
 export const action = ({ request }: { request: Request }) =>
@@ -35,20 +60,25 @@ export const action = ({ request }: { request: Request }) =>
 			}
 			if (body?.action === 'run') {
 				const stack = await getFeatureStack(body.id);
+				const requestedAt = new Date();
+				const runId = `feature-stack-run-${randomUUID()}`;
 				const result = await dispatchCiWorkflow({
 					workflow: 'feature-stack',
 					ref: 'develop',
 					actorId: gate.user.id,
-					externalId: `feature-stack:${stack.id}:${Date.now()}`,
+					externalId: `feature-stack:${stack.id}:${runId}`,
+					parentId: stack.id,
+					requestedAt,
 					inputs: {
 						name: stack.name,
 						stack_id: stack.id,
+						run_id: runId,
 						source_pr_numbers: stack.sourcePrNumbers,
 						targets: stack.targets,
 						auto_decide_branches: stack.autoDecideBranches
 					}
 				});
-				await markFeatureStackRun(stack.id, result.dispatchId);
+				await markFeatureStackRun(stack.id, result.dispatchId, runId, requestedAt);
 				return json({ ok: true, dispatch: result, stacks: await listFeatureStacks() }, { status: 202, headers: privateHeaders });
 			}
 			return json({ ok: false, error: 'Choose save, run, or delete.' }, { status: 400, headers: privateHeaders });

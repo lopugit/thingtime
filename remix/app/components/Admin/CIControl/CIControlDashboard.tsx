@@ -66,6 +66,7 @@ import {
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { resolveFeatureStackSources, sameNumberOrder } from './featureStackDraftCore';
+import { featureStackRunOutcome, legacyFeatureStackWorkflowRunId, sortFeatureStackTimeline } from './featureStackRunCore';
 import {
 	CI_DASHBOARD_LIVE_POLL_INTERVAL_MS,
 	CI_DASHBOARD_POLL_INTERVAL_MS,
@@ -105,7 +106,7 @@ const statusColor = (status: unknown) => {
   if (CONFLICT_STATUSES.has(normalized)) return 'red';
   if (ACTIVE_STATUSES.has(normalized)) return 'blue';
   if (READY_STATUSES.has(normalized)) return 'green';
-  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped') return 'orange';
+  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped' || normalized === 'needs-attention') return 'orange';
   return 'gray';
 };
 
@@ -531,8 +532,21 @@ type SavedFeatureStack = {
 	status: string;
 	lastDispatchId: string | null;
 	lastRunAt: string | null;
+	runs: SavedFeatureStackRun[];
 	createdAt: string;
 	updatedAt: string;
+};
+
+type SavedFeatureStackRun = {
+	id: string;
+	runId: string | null;
+	status: string;
+	title: string;
+	url: string | null;
+	workflowRunId: number | null;
+	startedAt: string;
+	completedAt: string | null;
+	linkCheckedAt?: string | null;
 };
 
 type FeatureStackTargetProgress = {
@@ -551,11 +565,14 @@ type FeatureStackLiveLine = {
 
 type FeatureStackLiveSnapshot = {
 	live: boolean;
+	needsAttention: boolean;
+	state: string;
 	percent: number;
 	summary: string;
 	finishLabel: string;
 	timeZone: string;
 	lines: FeatureStackLiveLine[];
+	runs: SavedFeatureStackRun[];
 };
 
 type FeatureStackComposerProps = {
@@ -803,7 +820,9 @@ const FeatureStackComposer = ({
 						<Flex align="center" gap={2}>
 							<FiActivity />
 							<Heading size="xs">Live merge stream</Heading>
-							<Badge colorScheme={liveSnapshot.live ? 'green' : 'gray'}>{liveSnapshot.live ? 'Live' : 'Latest run'}</Badge>
+							<Badge colorScheme={liveSnapshot.needsAttention ? 'orange' : liveSnapshot.live ? 'green' : 'gray'}>
+								{liveSnapshot.live ? 'Live' : liveSnapshot.needsAttention ? 'Needs attention' : 'Latest run'}
+							</Badge>
 						</Flex>
 						<Flex align="center" gap={1.5} fontSize="xs" opacity={0.68}>
 							<FiClock />
@@ -850,6 +869,52 @@ const FeatureStackComposer = ({
 										</Link>
 									) : (
 										<Text>{line.message}</Text>
+									)}
+								</Flex>
+							))}
+						</Stack>
+					</Box>
+					<Box mt={4} pt={4} borderTop="1px solid var(--tt-border, #e7e7eb)">
+						<Flex align="center" gap={2} mb={2}>
+							<FiGithub />
+							<Heading size="xs">Stack run status</Heading>
+							<StatusBadge status={liveSnapshot.state} />
+						</Flex>
+						{liveSnapshot.needsAttention ? (
+							<Alert status="warning" borderRadius="md" py={2} mb={3} fontSize="xs">
+								<AlertIcon />
+								The controller finished before any target branch PR was published. Open the GitHub run for its job-level result, then run this saved stack again after the workflow fix is deployed.
+							</Alert>
+						) : null}
+						<Stack spacing={2}>
+							{liveSnapshot.runs.map((run, index) => (
+								<Flex
+									key={run.id}
+									align={{ base: 'flex-start', md: 'center' }}
+									justify="space-between"
+									gap={2}
+									direction={{ base: 'column', md: 'row' }}
+									px={3}
+									py={2}
+									border="1px solid var(--tt-border, #e7e7eb)"
+									borderRadius="md"
+									bg="var(--tt-card, #fff)"
+								>
+									<Box minW={0}>
+										<Flex align="center" gap={2} wrap="wrap">
+											<Text fontSize="xs" fontWeight="700">{index === 0 ? 'Current run' : `Historical run ${index + 1}`}</Text>
+											<StatusBadge status={run.status} />
+										</Flex>
+										<Text fontSize="xs" opacity={0.62} noOfLines={1} mt={1}>
+											{formatTime(run.startedAt)}{run.completedAt ? ` · finished ${formatTime(run.completedAt)}` : ''}
+										</Text>
+									</Box>
+									{run.url ? (
+										<Button as={Link} href={run.url} isExternal size="xs" variant="outline" rightIcon={<FiExternalLink />} flex="0 0 auto">
+											Open GitHub run
+										</Button>
+									) : (
+										<Text fontSize="xs" opacity={0.5}>GitHub link pending</Text>
 									)}
 								</Flex>
 							))}
@@ -1270,45 +1335,54 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
 		const dispatchEvents = dashboard.events.filter((event) => event.parentId === stack.lastDispatchId);
-		const startedMs = startedAt.getTime();
-		const topLevelRuns = dashboard.workflowRuns
-			.filter((run) => {
-				if (String(run.entityType ?? '') === 'job' || normalizedStatus(run.event) !== 'workflow_dispatch') return false;
-				const runStarted = parseTime(run.startedAt ?? entityTime(run));
-				return runStarted && runStarted.getTime() >= startedMs - 30_000;
-			})
-			.sort((left, right) => {
-				const leftStarted = parseTime(left.startedAt ?? entityTime(left))?.getTime() ?? Number.MAX_SAFE_INTEGER;
-				const rightStarted = parseTime(right.startedAt ?? entityTime(right))?.getTime() ?? Number.MAX_SAFE_INTEGER;
-				return Math.abs(leftStarted - startedMs) - Math.abs(rightStarted - startedMs);
-			});
-		const run = topLevelRuns[0] ?? null;
+		const topLevelRuns = dashboard.workflowRuns.filter(
+			(candidate) => String(candidate.entityType ?? '') !== 'job' && normalizedStatus(candidate.event) === 'workflow_dispatch'
+		);
+		const allJobs = dashboard.workflowRuns.filter((candidate) => String(candidate.entityType ?? '') === 'job');
+		const storedRuns = stack.runs ?? [];
+		const currentStoredRun = storedRuns.find((candidate) => candidate.id === stack.lastDispatchId) ?? storedRuns[0] ?? null;
+		const linkedRunId = currentStoredRun?.workflowRunId ?? null;
+		const legacyRunId = linkedRunId
+			? null
+			: legacyFeatureStackWorkflowRunId({
+					startedAt: stack.lastRunAt,
+					runs: topLevelRuns,
+					jobs: allJobs
+			  });
+		const exactRunId = linkedRunId ?? legacyRunId;
+		const run = exactRunId ? topLevelRuns.find((candidate) => Number(candidate.runId) === exactRunId) ?? null : null;
 		const jobs = run?.runId
-			? dashboard.workflowRuns
-					.filter((candidate) => String(candidate.entityType ?? '') === 'job' && Number(candidate.runId) === Number(run.runId))
+			? allJobs
+					.filter((candidate) => Number(candidate.runId) === Number(run.runId))
 					.sort((left, right) => (parseTime(left.startedAt)?.getTime() ?? 0) - (parseTime(right.startedAt)?.getTime() ?? 0))
 			: [];
 		const completedJobs = jobs.filter((job) => terminalStatuses.has(normalizedStatus(job.status))).length;
 		const allTargetsFinished = activeTargets.length > 0 && completedTargets === activeTargets.length;
-		const runFinished = run ? terminalStatuses.has(normalizedStatus(run.status)) : false;
-		const live = !allTargetsFinished && !(runFinished && ['failure', 'failed', 'cancelled'].includes(normalizedStatus(run?.status)));
+		const runStatus = run?.status ?? currentStoredRun?.status ?? dispatch?.status ?? stack.status;
+		const hasPublishedTarget = activeTargets.some((entry) => Boolean(entry.url));
+		const outcome = featureStackRunOutcome({
+			runStatus,
+			allTargetsFinished,
+			hasPublishedTarget,
+			dispatchAccepted: Boolean(dispatch || currentStoredRun || stack.status === 'running')
+		});
 		let percent = dispatch ? 18 : 8;
-		if (run) percent = Math.max(percent, runFinished ? 55 : 30);
+		if (run) percent = Math.max(percent, terminalStatuses.has(normalizedStatus(run.status)) ? 65 : 30);
 		if (jobs.length) percent = Math.max(percent, 30 + Math.round((completedJobs / jobs.length) * 35));
 		if (activeTargets.length) percent = Math.max(percent, 30 + Math.round((completedTargets / activeTargets.length) * 70));
 		if (allTargetsFinished) percent = 100;
 		percent = Math.min(100, Math.max(5, percent));
+		const startedMs = startedAt.getTime();
 		const estimatedMinutes = Math.max(8, stack.sourcePrNumbers.length * 2 + Math.max(1, activeTargets.length) * 4);
 		const baselineFinish = new Date(startedMs + estimatedMinutes * 60_000);
-		const expectedFinish =
-			baselineFinish.getTime() > Date.now() ? baselineFinish : new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
+		const expectedFinish = baselineFinish.getTime() > Date.now() ? baselineFinish : new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
 		const latestFinishedAt = [run?.completedAt, ...targetRows.map((entry) => entry.updatedAt)]
 			.map(parseTime)
 			.filter((date): date is Date => Boolean(date))
 			.sort((left, right) => right.getTime() - left.getTime())[0];
 		const timeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 		const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
-		const lines: FeatureStackLiveLine[] = [
+		const lines = sortFeatureStackTimeline<FeatureStackLiveLine>([
 			{
 				key: 'queued',
 				at: stack.lastRunAt,
@@ -1350,19 +1424,39 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 						  }.`,
 				url: entry.url
 			}))
-		];
+		]);
+		const historicalRuns = storedRuns
+			.map((storedRun) => {
+				const resolvedRunId = storedRun.workflowRunId ?? (storedRun.id === stack.lastDispatchId ? legacyRunId : null);
+				const entity = resolvedRunId ? topLevelRuns.find((candidate) => Number(candidate.runId) === resolvedRunId) ?? null : null;
+				return {
+					...storedRun,
+					status: String(entity?.status ?? storedRun.status),
+					title: String(entity?.title ?? storedRun.title),
+					url: typeof entity?.url === 'string' ? entity.url : storedRun.url,
+					workflowRunId: resolvedRunId,
+					startedAt: String(entity?.startedAt ?? storedRun.startedAt),
+					completedAt: entity?.completedAt ? String(entity.completedAt) : storedRun.completedAt
+				};
+			})
+			.sort((left, right) => (parseTime(right.startedAt)?.getTime() ?? 0) - (parseTime(left.startedAt)?.getTime() ?? 0));
 		return {
-			live,
+			live: outcome.live,
+			needsAttention: outcome.needsAttention,
+			state: outcome.state,
 			percent,
-			summary: `${percent}% · ${completedTargets}/${activeTargets.length || stack.targets.length} target branches finished · ${completedJobs}/${
-				jobs.length
-			} visible workflow jobs finished`,
+			summary: outcome.needsAttention
+				? `${percent}% · controller completed but 0/${activeTargets.length || stack.targets.length} target branch PRs were published`
+				: `${percent}% · ${completedTargets}/${activeTargets.length || stack.targets.length} target branches finished · ${completedJobs}/${jobs.length} visible workflow jobs finished`,
 			finishLabel:
 				allTargetsFinished && latestFinishedAt
 					? `Finished ${timeFormatter.format(latestFinishedAt)}`
-					: `Estimated finish ${timeFormatter.format(expectedFinish)}`,
+					: outcome.needsAttention || (!outcome.live && latestFinishedAt)
+						? `Stopped ${timeFormatter.format(latestFinishedAt ?? startedAt)}`
+						: `Estimated finish ${timeFormatter.format(expectedFinish)}`,
 			timeZone,
-			lines
+			lines,
+			runs: historicalRuns
 		};
 	}, [activeSavedFeatureStack, dashboard, featureStackProgress]);
 
