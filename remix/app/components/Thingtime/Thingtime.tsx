@@ -189,6 +189,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const thingtimeRef = React.useRef();
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
+	// hover context on the key/property name itself (claude-todo 08 §5): shown
+	// after a short hover intent so casual mouse travel doesn't flash tooltips
+	const [showKeyPathContext, setShowKeyPathContext] = React.useState(false);
+	const keyPathHoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const onKeyPathHoverEnter = React.useCallback(() => {
+		clearTimeout(keyPathHoverTimerRef.current);
+		keyPathHoverTimerRef.current = setTimeout(() => setShowKeyPathContext(true), 450);
+	}, []);
+	const onKeyPathHoverLeave = React.useCallback(() => {
+		clearTimeout(keyPathHoverTimerRef.current);
+		setShowKeyPathContext(false);
+	}, []);
+	React.useEffect(() => () => clearTimeout(keyPathHoverTimerRef.current), []);
 	// the nearest ancestor's collapse-all/expand-all cascade — read via context
 	// (not element props) so children mounting in the same commit as the
 	// cascade update still see the fresh value
@@ -1508,7 +1521,38 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							onMouseEnter={() => setShowContextIcon(true)}
 							onMouseLeave={() => setShowContextIcon(false)}
 						>
-							<Flex className="thingPathDom-raw" data-tt-zone="key">
+							<Flex
+								className="thingPathDom-raw"
+								data-tt-zone="key"
+								position="relative"
+								onMouseEnter={onKeyPathHoverEnter}
+								onMouseLeave={onKeyPathHoverLeave}
+							>
+								{/* full dotted path on key hover — same treatment as the
+								add-child seedling row's context window */}
+								{showKeyPathContext && !!safeJoin(fullPath) && (
+									<Flex
+										position="absolute"
+										bottom="100%"
+										left={0}
+										zIndex={2}
+										color="var(--tt-muted, #9a9aa6)"
+										fontFamily="mono"
+										fontSize="12px"
+										background="var(--tt-surface-alt, #f5f5f7)"
+										borderRadius="var(--tt-radius-xs, 7px)"
+										pointerEvents="none"
+										whiteSpace="nowrap"
+										maxWidth="min(80vw, 560px)"
+										overflow="hidden"
+										textOverflow="ellipsis"
+										display="block"
+										paddingX={3}
+										paddingY={1}
+									>
+										{safeJoin(fullPath)}
+									</Flex>
+								)}
 								{pathDom}
 							</Flex>
 							{(editMode || codeView) && !props?.hideRootPath && (
