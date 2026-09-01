@@ -2,6 +2,7 @@ import { defineHandler } from 'nitro/h3';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
+import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -9,7 +10,7 @@ type RouteModule = {
   action?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
 };
 
-const routeModules: Record<string, () => Promise<RouteModule>> = {
+export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
   'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
@@ -26,6 +27,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/moderation': () => import('../../../app/routes/api/v1/admin/moderation/_moderation'),
 	'v1/admin/migrations/diagnostic': () => import('../../../app/routes/api/v1/admin/migrations/diagnostic/_diagnostic'),
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
+	'v1/admin/peers': () => import('../../../app/routes/api/v1/admin/peers/_peers'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
   'v1/admin/subscriptions': () => import('../../../app/routes/api/v1/admin/subscriptions/_subscriptions'),
@@ -33,6 +35,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/admin/users/overview': () => import('../../../app/routes/api/v1/admin/users/overview/_overview'),
   'v1/admin/users/public-uploads': () => import('../../../app/routes/api/v1/admin/users/public-uploads/_public-uploads'),
+  'v1/peers': () => import('../../../app/routes/api/v1/peers/_peers'),
+  'v1/peers/sync': () => import('../../../app/routes/api/v1/peers/sync/_sync'),
   'v1/integrations/github/webhook': () => import('../../../app/routes/api/v1/integrations/github/webhook/_webhook'),
   [CHATGPT_MCP_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/mcp/_mcp'),
   [CHATGPT_AUTHORIZE_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/authorize/_authorize'),
@@ -47,6 +51,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
+  'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
   'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
@@ -115,6 +120,18 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/settings': () => import('../../../app/routes/api/v1/chats/settings/_settings'),
   'v1/chats/update': () => import('../../../app/routes/api/v1/chats/update/_update'),
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
+	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
+	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
+	'v1/devices/commands': () => import('../../../app/routes/api/v1/devices/commands/_commands'),
+	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
+	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
+	'v1/devices/node/live-sync': () => import('../../../app/routes/api/v1/devices/node/live-sync/_live-sync'),
+	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
+	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
+	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
+	'v1/devices/pairing/claim': () => import('../../../app/routes/api/v1/devices/pairing/claim/_claim'),
+	'v1/devices/permissions': () => import('../../../app/routes/api/v1/devices/permissions/_permissions'),
+	'v1/devices/screen': () => import('../../../app/routes/api/v1/devices/screen/_screen'),
   'v1/communities': () => import('../../../app/routes/api/v1/communities/_communities'),
   'v1/communities/get': () => import('../../../app/routes/api/v1/communities/get/_get'),
   'v1/communities/invites': () => import('../../../app/routes/api/v1/communities/invites/_invites'),
@@ -145,10 +162,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/mongodb/status': () => import('../../../app/routes/api/v1/mongodb/status/_status'),
   'v1/mongodb/status-data': () => import('../../../app/routes/api/v1/mongodb/status-data/_status-data'),
   'v1/notifications': () => import('../../../app/routes/api/v1/notifications/_notifications'),
-  'v1/notifications/email/unsubscribe': () =>
-    import('../../../app/routes/api/v1/notifications/email/unsubscribe/_unsubscribe'),
-  'v1/notifications/email/weekly-summary': () =>
-    import('../../../app/routes/api/v1/notifications/email/weekly-summary/_weekly-summary'),
+	'v1/notifications/email/unsubscribe': () => import('../../../app/routes/api/v1/notifications/email/unsubscribe/_unsubscribe'),
+	'v1/notifications/email/weekly-summary': () => import('../../../app/routes/api/v1/notifications/email/weekly-summary/_weekly-summary'),
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
@@ -300,6 +315,14 @@ export default defineHandler(async (event) => {
     return proxyApiRequestToFallback(event.req);
   }
 
+	if (path === 'v1/capabilities') {
+		const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
+		const { getDeploymentDataEnvironment } = await import('../../../app/api/utils/deployment/dataEnvironment');
+		return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities'], getDeploymentDataEnvironment()), {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
+    });
+  }
+
   const loadModule = routeModules[path];
 
   if (!loadModule) {
@@ -333,6 +356,9 @@ export default defineHandler(async (event) => {
     if (err instanceof Response) {
       return err;
     }
+		if (err instanceof StorageMutationError) {
+			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
+		}
 
     throw err;
   }

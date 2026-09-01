@@ -42,7 +42,13 @@ import {
 	userSubscriptionLedgerEnvelopeIsTrusted,
 	userSubscriptionLedgerMatch
 } from '../subscriptions/subscriptionIdentity';
-import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS, storageSandboxState, thingStorageSizeBytes } from '../storage/storageCore';
+import {
+	InvalidAttachmentStorageEnvelopeError,
+	USER_STORAGE_ACCOUNTING_VERSION,
+	USER_STORAGE_STATUS,
+	storageSandboxState,
+	thingStorageSizeBytes
+} from '../storage/storageCore';
 import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
 import {
   ACL_ALL,
@@ -1774,9 +1780,21 @@ const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>)
 	return { rebuilt, quarantined };
 };
 
+// Both the pending census and the mutation pass must read the same complete
+// source document. Attachment accounting is intentionally defined by a closed
+// protected root envelope, including optional in-flight/delete fields. A
+// projection of ordinary Thing payload fields makes a valid attachment look
+// corrupt during the final fixed-point check even after it was stamped
+// successfully by the mutation pass.
+export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
+	things.find({ ownerId: { $type: 'string' } });
+
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
-	const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
+	// USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION enumerates the fields this
+	// pass needs; reading the whole document is the stronger form of the same
+	// guarantee, because no future protected root field can be dropped here.
+	const cursor = userStorageAccountingSourceCursor(things);
 	let pending = 0;
 	for await (const doc of cursor) {
 		// Every data-kind service-quota claim is counted independently above. An
@@ -2149,7 +2167,10 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
-			const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
+			// Same rule as the census pass: the mutation pass reads whole documents
+			// rather than USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION's field list,
+			// so a protected attachment root field can never be projected away.
+			const cursor = userStorageAccountingSourceCursor(things);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
 				if (initialSandboxState === 'sandbox') continue;
@@ -2175,7 +2196,18 @@ const backfillUserStorageAccounting: Migration = {
 							diagnosticObjectIds: [String(doc._id)]
 						});
 					}
-					const sizeBytes = thingStorageSizeBytes(doc as any);
+					let sizeBytes: number;
+					try {
+						sizeBytes = thingStorageSizeBytes(doc as any);
+					} catch (error) {
+						if (error instanceof InvalidAttachmentStorageEnvelopeError) {
+							throw new MigrationOperatorError('invalid_attachment_envelope', {
+								internalMessage: `Attachment Thing ${String(doc._id)} has an invalid protected storage envelope`,
+								diagnosticObjectIds: [String(doc._id)]
+							});
+						}
+						throw error;
+					}
 					if (
 						doc.storageClass === 'content' &&
 						doc.storageAccountingVersion === USER_STORAGE_ACCOUNTING_VERSION &&

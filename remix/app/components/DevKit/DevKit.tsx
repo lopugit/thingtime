@@ -1,6 +1,6 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { useNavigate, useRevalidator, useRouteLoaderData } from 'react-router';
+import { useLocation, useNavigate, useRevalidator, useRouteLoaderData } from 'react-router';
 import React from 'react';
 
 import { Icon } from '../Icon/Icon';
@@ -142,6 +142,7 @@ export const DevKit = (_props) => {
   const user = useCurrentUser();
   const api = useApi();
   const navigate = useNavigate();
+	const location = useLocation();
   const revalidator = useRevalidator();
   const lopu = useLopu();
   const pushLopuMusing = useLopuStream();
@@ -412,7 +413,11 @@ export const DevKit = (_props) => {
     pushLopuMusing('/api/v1/lopu/musing');
   }, [pushLopuMusing]);
 
-  if (!mounted || !devKit) return null;
+	// Messenger is a full-viewport interaction surface whose composer and row
+	// actions occupy the bottom-right at every breakpoint. The draggable dev
+	// trigger would necessarily cover one of those controls, so keep this
+	// development-only helper off the route rather than obscuring product UI.
+	if (!mounted || !devKit || location.pathname === '/messages' || location.pathname.startsWith('/messages/')) return null;
 
   return (
     <>

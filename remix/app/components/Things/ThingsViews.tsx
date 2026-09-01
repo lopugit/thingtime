@@ -5,6 +5,9 @@ import { ChevronRight, MoreHorizontal } from 'lucide-react';
 
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
+import { DeviceCard } from '~/components/Devices/DeviceCard';
+import { DeviceListRow } from '~/components/Devices/DeviceListRow';
+import type { DeviceRuntimeState } from '~/components/Devices/deviceTypes';
 import { CARD_STYLES } from '~/theme/card';
 
 import type {
@@ -56,11 +59,7 @@ const ThingPreviewBox = ({
   let body: React.ReactNode;
   if (schemaRender) {
     const node = interpolateRenderTree(schemaRender, thing.crystal || {});
-    body = isChakraThingNode(node) ? (
-      <ChakraThingRenderer node={node as ChakraThingNode} />
-    ) : (
-      <HtmlThingRenderer node={node as HtmlThingNode} />
-    );
+		body = isChakraThingNode(node) ? <ChakraThingRenderer node={node as ChakraThingNode} /> : <HtmlThingRenderer node={node as HtmlThingNode} />;
   } else {
     // component and action things pass WHOLE — the component kind renderer
     // resolves the template against savedArgs/defaults (raw crystal.render
@@ -127,6 +126,20 @@ export type ThingsItemHandlers = {
   onFolderDragLeave: (folderId: string | null) => void;
   onFolderDrop: (folderId: string | null, event: React.DragEvent) => void;
 };
+
+export type ThingsDevicePresentation = {
+	devices?: DeviceRuntimeState[];
+	deviceCounts?: Record<string, { commands: number; approvals: number }>;
+	selectedDeviceId?: string | null;
+	onDeviceSelect?: (deviceId: string) => void;
+};
+
+const pendingCommandCount = (state: DeviceRuntimeState): number =>
+	state.commands.filter((command) => ['queued', 'claimed', 'leased', 'running', 'streaming', 'needs-approval'].includes(command.status)).length;
+
+const pendingApprovalCount = (state: DeviceRuntimeState): number => state.approvals.filter((approval) => approval.status === 'pending').length;
+
+const noopDeviceSelect = () => {};
 
 const canRename = (thing: ThingsThing) => {
   const kind = primaryKindOf(thing);
@@ -209,12 +222,7 @@ const selectionStyles = (selected: boolean) =>
     : {};
 
 const KindChip = ({ thing }: { thing: ThingsThing }) => (
-  <Text
-    color="var(--tt-muted, #9a9aa6)"
-    fontFamily="var(--tt-font-mono, monospace)"
-    fontSize="10px"
-    textTransform="uppercase"
-  >
+	<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="10px" textTransform="uppercase">
     {primaryKindOf(thing)}
   </Text>
 );
@@ -235,17 +243,31 @@ export const ThingsGridView = ({
   items,
   handlers,
   displayMode,
-  schemaRenderFor
+	schemaRenderFor,
+	devices = [],
+	deviceCounts = {},
+	selectedDeviceId = null,
+	onDeviceSelect
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
-}) => (
-  <Grid
-    gap={3}
-    templateColumns={`repeat(auto-fill, minmax(${displayMode === 'preview' ? '230px' : '150px'}, 1fr))`}
-  >
+} & ThingsDevicePresentation) => (
+	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(${displayMode === 'preview' ? '230px' : '150px'}, 1fr))`}>
+		{devices.map((state) =>
+			state.summary ? (
+				<DeviceCard
+					device={state.summary}
+					key={`device:${state.deviceId}`}
+					onSelect={onDeviceSelect || noopDeviceSelect}
+					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
+					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
+					selected={selectedDeviceId === state.deviceId}
+					snapshot={state.snapshot}
+				/>
+			) : null
+		)}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
       const iconBlock = (
@@ -293,12 +315,7 @@ export const ThingsGridView = ({
           </Box>
           {displayMode === 'preview' ? (
             <Box marginTop={4} width="100%">
-              <ThingPreviewBox
-                fallback={iconBlock}
-                maxHeight="150px"
-                schemaRender={schemaRenderFor?.(thing) || null}
-                thing={thing}
-              />
+							<ThingPreviewBox fallback={iconBlock} maxHeight="150px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
             </Box>
           ) : (
             iconBlock
@@ -327,7 +344,11 @@ export const ThingsListView = ({
   onToggleAll,
   allSelected,
   displayMode,
-  schemaRenderFor
+	schemaRenderFor,
+	devices = [],
+	deviceCounts = {},
+	selectedDeviceId = null,
+	onDeviceSelect
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -335,7 +356,26 @@ export const ThingsListView = ({
   allSelected: boolean;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
-}) => (
+} & ThingsDevicePresentation) => (
+	<Flex direction="column" gap={devices.length && items.length ? 3 : 0}>
+		{devices.length ? (
+			<Box {...CARD_STYLES} overflow="hidden" padding={0}>
+				{devices.map((state) =>
+					state.summary ? (
+						<DeviceListRow
+							device={state.summary}
+							key={`device:${state.deviceId}`}
+							onSelect={onDeviceSelect || noopDeviceSelect}
+							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
+							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
+							selected={selectedDeviceId === state.deviceId}
+							snapshot={state.snapshot}
+						/>
+					) : null
+				)}
+			</Box>
+		) : null}
+		{items.length ? (
   <Box {...CARD_STYLES} overflow="hidden">
     <Flex
       alignItems="center"
@@ -432,18 +472,15 @@ export const ThingsListView = ({
         </Flex>
         {displayMode === 'preview' && !isFolder(thing) && (
           <Box marginLeft="44px" marginTop={2}>
-            <ThingPreviewBox
-              fallback={null}
-              maxHeight="120px"
-              schemaRender={schemaRenderFor?.(thing) || null}
-              thing={thing}
-            />
+									<ThingPreviewBox fallback={null} maxHeight="120px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
           </Box>
         )}
         </Flex>
       );
     })}
   </Box>
+		) : null}
+	</Flex>
 );
 
 // ---------------------------------------------------------------------------
@@ -457,7 +494,11 @@ export const ThingsColumnsView = ({
   onOpenFolderAt,
   handlers,
   displayMode,
-  schemaRenderFor
+	schemaRenderFor,
+	devices = [],
+	deviceCounts = {},
+	selectedDeviceId = null,
+	onDeviceSelect
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -467,15 +508,8 @@ export const ThingsColumnsView = ({
   handlers: ThingsItemHandlers;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
-}) => (
-  <Flex
-    {...CARD_STYLES}
-    alignItems="stretch"
-    minHeight="320px"
-    overflowX="auto"
-    padding={0}
-    sx={{ WebkitOverflowScrolling: 'touch' }}
-  >
+} & ThingsDevicePresentation) => (
+	<Flex {...CARD_STYLES} alignItems="stretch" minHeight="320px" overflowX="auto" padding={0} sx={{ WebkitOverflowScrolling: 'touch' }}>
     {path.map((folderId, depth) => {
       const items = itemsFor(folderId);
       const nextActive = activeFolderAt(depth);
@@ -491,6 +525,21 @@ export const ThingsColumnsView = ({
           sx={{ '&:last-of-type': { borderRight: 'none' } }}
           width={['85vw', '260px']}
         >
+					{depth === 0
+						? devices.map((state) =>
+								state.summary ? (
+									<DeviceListRow
+										device={state.summary}
+										key={`device:${state.deviceId}`}
+										onSelect={onDeviceSelect || noopDeviceSelect}
+										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
+										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
+										selected={selectedDeviceId === state.deviceId}
+										snapshot={state.snapshot}
+									/>
+								) : null
+						  )
+						: null}
           {(items || []).map((thing) => {
             const selected = handlers.selected.has(thing.id);
             const folder = isFolder(thing);
@@ -498,13 +547,7 @@ export const ThingsColumnsView = ({
             return (
               <Flex
                 key={thing.id}
-                background={
-                  isOpenPath
-                    ? 'var(--tt-surface, #fafafb)'
-                    : selected
-                      ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))'
-                      : 'transparent'
-                }
+								background={isOpenPath ? 'var(--tt-surface, #fafafb)' : selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
                 {...dragSourceProps(thing, handlers)}
                 {...dropTargetProps(thing, handlers)}
                 {...dropHighlight(thing, handlers)}
@@ -535,18 +578,13 @@ export const ThingsColumnsView = ({
                 </Flex>
                 {displayMode === 'preview' && !folder && (
                   <Box marginLeft="24px" marginTop={1}>
-                    <ThingPreviewBox
-                      fallback={null}
-                      maxHeight="90px"
-                      schemaRender={schemaRenderFor?.(thing) || null}
-                      thing={thing}
-                    />
+										<ThingPreviewBox fallback={null} maxHeight="90px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
                   </Box>
                 )}
               </Flex>
             );
           })}
-          {items && !items.length && (
+					{items && !items.length && !(depth === 0 && devices.length) && (
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px" paddingX={3} paddingY={2}>
               Empty ✨
             </Text>

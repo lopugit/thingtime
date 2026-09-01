@@ -192,6 +192,17 @@ crystal or hide them from the account ledger. An external profile image URL is
 only bounded metadata and never causes Thingtime to fetch or store the remote
 image bytes.
 
+All user-owned product content is billable, regardless of which dedicated API
+writes it. That includes posts, comments, reactions, shares, Messenger chats,
+messages, communities, memberships, sections, invites, custom emoji, follows,
+AI connection records, and every project/chat/message imported from a desktop
+AI source. Relational plumbing is still content: each row is charged to its
+root `ownerId`, so a membership or follow consumes the account that owns that
+edge. Replaying an idempotent import updates the same stamped rows and must not
+charge the bytes twice. A message or emoji row bills its bounded JSON payload;
+any uploaded object remains separately and exactly billed by its protected
+`attachment` Thing, so object bytes are neither omitted nor duplicated.
+
 `currentContentStorageSizeBytes()` is the shared proof used by every
 incremental writer: current schema + array `thingtime` + current content stamp
 

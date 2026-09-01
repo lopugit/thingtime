@@ -30,6 +30,17 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## Thingtime MCP
+
+The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
+normalizers. As a standalone MCP server it supports explicit current-chat
+handoff, private local staging, ChatGPT/Claude exports, and a portable connector
+manifest. The Electron app also bundles its read-only desktop connector: it can
+discover local ChatGPT Work/Codex history plus Claude sessions from the main and
+Thingtime desktop profiles, then import projects, chats, and visible messages
+through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
+for both workflows and their privacy boundaries.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON
@@ -286,7 +297,6 @@ After deployment and App installation, create both provider webhooks and click
 open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
 projection current. Until that first successful reconcile, an empty dashboard
 with zero counts is expected.
-
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -530,6 +540,41 @@ The local Electron shell reads `remix/.env`, `remix/.env.local`, and
 tokens in ignored env files or the launch environment only; commit placeholder
 examples in docs, not secrets.
 
+### Connect desktop AI history to Messenger
+
+In the signed-in Thingtime desktop app, open `/messages`, choose either Spaces
+or Chats, and select **✦ AI**. The connector presents three independent sources
+when present on the Mac: ChatGPT, the main Claude profile, and Claude Thingtime.
+
+- **Sync local chats** reads only visible local Work/Codex or Cowork/Claude Code
+  conversation records. It never reads provider cookies, passwords, hidden
+  reasoning, tool traffic, or browser storage, and raw local paths are not sent
+  to Thingtime.
+- **Import full export…** opens a native file chooser for an official ChatGPT
+  or Claude JSON/ZIP export. Cloud-only history is unavailable to the local
+  reader, so use the provider's official export when a conversation is not
+  stored on the Mac.
+- Projects/workspaces become Messenger Spaces, conversations become chats or
+  channels, and provider messages are read-only. Reactions, threads, and new
+  Thingtime replies remain local to Thingtime; they are not posted back to the
+  provider.
+- Sync runs in bounded batches and is idempotent. Repeating the same import
+  updates the same owner-scoped records without duplicating chats, messages, or
+  quota usage.
+
+Imported history is user-owned content and consumes the signed-in account's
+storage allowance just like posts and native Messenger rows. Message JSON is
+metered on the Messenger row; any Thingtime-hosted attachment object remains
+separately metered by its protected attachment record. A quota failure rolls
+back the current transactional unit and returns a storage error rather than
+silently importing unaccounted data.
+
+No connector-specific environment variable is required in the packaged app.
+For a fork/local build, keep the normal authenticated Thingtime origin and
+database configuration in ignored Electron/Remix env files; do not grant the
+web browser filesystem access. The browser version intentionally shows the
+desktop-app requirement instead of attempting local discovery.
+
 ## API self-documentation
 
 Every registered Thingtime API endpoint exposes a JSON documentation endpoint
@@ -661,6 +706,78 @@ MONGO_PASS="<password>"
 `MONGO_PASS` is only required when `MONGODB_CONNECTION_STRING` contains the
 literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
 placeholder using URL encoding so special characters in the password are safe.
+
+### Public data-environment identity
+
+Every deployed API must publish a safe identifier for its **database and
+authentication authority**. It is not a MongoDB host, database name, or
+credential; it lets browser bundles, Electron, account federation, and peer
+discovery distinguish deployments that share data from deployments that only
+look similar by URL. Set one public value for each Vercel target:
+
+```sh
+# Production target
+THINGTIME_DATA_ENV="production"
+
+# Preview + development targets that share the development database
+THINGTIME_DATA_ENV="development"
+
+# A separate named database/authentication authority
+THINGTIME_DATA_ENV="custom:demo"
+THINGTIME_DATA_AUTHORITY_ORIGIN="https://demo.thingtime.com"
+# Optional when multiple ids deliberately share one authority/database
+THINGTIME_FEDERATION_ID="demo"
+```
+
+`/api/v1/capabilities` (feature `api.capabilities` `1.1.0`) and root data
+publish only `{ id, kind, federationId, authorityOrigin }`. Clients must use
+that identity for sign-in and federation; `VERCEL_ENV`, branch names, URLs, and
+commit SHAs are diagnostics, never the data-authority contract.
+
+### Deployment peer discovery
+
+First-party production, preview, and development deployments can converge on a
+small mesh of live peers through `/api/v1/peers`. Configure the same discovery
+secret and a distinct persistent signing key on every participating deployment
+(never `PUBLIC_*`, never a browser variable):
+
+```sh
+THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
+# Base64url PKCS#8 Ed25519 private key; create and store it in the deployment's secret manager.
+THINGTIME_PEER_SIGNING_PRIVATE_KEY="replace-with-base64url-ed25519-pkcs8-private-key"
+THINGTIME_PUBLIC_ORIGIN="https://this-deployment.example.thingtime.com"
+# Required public data/authentication authority: production, development, or custom:<id>
+THINGTIME_DATA_ENV="development"
+# Optional; defaults to the authority origin for THINGTIME_DATA_ENV
+THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://dev.thingtime.com"
+# Optional comma-separated first-party host suffixes; defaults to thingtime.com,vercel.app
+THINGTIME_PEER_ALLOWED_HOST_SUFFIXES="thingtime.com,vercel.app"
+```
+
+Peers sign exact request method, path, timestamp, raw body, and federation id using HMAC, then
+also add an Ed25519 signature derived from that deployment's private key. The
+receiver verifies the public signature and pins the public key to the canonical
+origin after first HMAC-authenticated contact; a later key change fails closed.
+Every NDJSON peer event is independently Ed25519-signed too. The protocol
+rejects anonymous requests, expired or tampered signatures, non-first-party
+origins, credentials in URLs, and arbitrary outbound targets. Each origin is a
+separate `deploymentPeers` control-plane row with a ten-minute TTL lease. Only
+deployments with the same public federation id may discover one another. A
+signed `POST {"op":"sync"}` first announces to that data environment's authority,
+then probes a bounded breadth-first set of known peers; `GET` is capped,
+cursor-paginated NDJSON rather than an all-peers array. Run self-sync from a
+trusted deployment scheduler or deploy hook at a modest cadence (for example
+every five minutes). The checked-in Vercel cron advances the production
+bootstrap every five minutes using its existing `CRON_SECRET`; preview and
+non-Vercel deployments need the equivalent trusted deploy hook or scheduler.
+Do not expose either peer credential to clients or forks.
+
+Administrators can inspect the locally known lease projection at **Dev →
+Deployment peers** (`/peers`). The page calls a separate private,
+cursor-paginated admin endpoint—not the mesh protocol—and can filter every
+displayed public lease property in grid, card, or list form. It never returns
+HMAC material, private keys, signed request envelopes, or the persisted gossip
+cursor to a browser.
 
 For a local MongoDB instance you can instead use a complete URI with no password
 placeholder:

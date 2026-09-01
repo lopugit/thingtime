@@ -1,7 +1,7 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
 	COLLECTION_SCHEMA_VERSIONS,
-	MESSENGER_THINGTIME,
+	DEVICE_CONTROL_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
@@ -118,6 +118,7 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// User file bytes live in separately metered attachment Things, so message,
 	// comment and custom-emoji media cannot bypass account storage quotas.
 	...MESSENGER_THINGTIME,
+	...DEVICE_CONTROL_THINGTIME,
   'service-quota',
   'subscription',
   'subscription-tier',

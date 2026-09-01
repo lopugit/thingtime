@@ -22,6 +22,12 @@ export const serviceAccountAuthenticationAllowed = (user: any, now = Date.now())
 
 export type ResolvedTokenUser = { user: PublicUser; claims: JwtClaims };
 
+// Scoped credentials must opt into a dedicated resolver. Keeping the purpose
+// predicate exported gives every new credential family a pure regression test:
+// a device node can never become a full browser session merely because it uses
+// the shared sessions collection.
+export const isFullAccountSessionPurpose = (purpose: unknown): boolean => purpose === undefined || purpose === 'browser' || purpose === 'service';
+
 // Resolve a live session id to its user, or null. This is THE session→user
 // path: JWT resolution below and the account-switcher roster entries
 // (accounts.ts, which stores {userId, jti} references) both go through it, so

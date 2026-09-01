@@ -87,6 +87,21 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
+
+- [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
+      page retains current rows while Refresh runs, requests at most 25 rows,
+      and **Load next bounded page** advances only one opaque cursor page (no
+      all-peers request or automatic unbounded hydration).
+- [ ] Exercise Grid, Cards, and List at desktop and 390px widths. Search
+      origin, `active`/`expired`, a signing-key fragment, and each displayed
+      timestamp via the property selector; every view shows the same filtered
+      rows with no horizontal page overflow (the List table itself may scroll).
+- [ ] As a non-admin or signed-out user, `/peers` shows only the quiet access
+      gate and `GET /api/v1/admin/peers` returns 401/403 with private no-store
+      headers. Confirm no browser response contains `syncCursor`, request
+      signatures, a peer secret, or a private key.
+
 ## Admin integration vault + policy proxy
 
 - [ ] Sign in as an admin and open **/admin → External integrations**. Without
@@ -140,12 +155,34 @@ is fixed, and cite the checklist you ran in the PR description.
       deployment, a signed-out visit shows the "Continue as… ✨" corner card;
       picking an account routes to `/login?u=<username>` with the username
       prefilled and password focused; "Not now" snoozes it for a day; it never
-      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
-      while signed in.
+      renders on `/authorize`, `/reset-password`, or while signed in. On a
+      foreign `*.vercel.app` login/register page, the recovery card is the
+      intentional exception: it opens the matching first-party hub.
 - [ ] Hint liveness: log out on the OTHER deployment → the suggestion
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
+- [ ] Account-hint response privacy: both the same-origin endpoint and the
+      credentialed federated resolver send `Cache-Control: private, no-store`;
+      their `Vary` headers include `Cookie` (the resolver also includes
+      `Origin`) and a 429 retains its `Retry-After` header.
+- [ ] Cross-deployment account hint: the compact row names the deployment
+      environment (for example `Dev preview · PR #68`, never `Production` for
+      a preview); expand its chevron to reveal every environment badge, exact
+      origin, and last-active time without selecting or signing in as the
+      suggested account.
+- [ ] Vercel-preview account recovery: on a `*.vercel.app` login page, the
+      account card remains available and opens `https://dev.thingtime.com`
+      (not production) for the same development environment. The preview
+      itself cannot read the `.thingtime.com` cookie; the Dev Thingtime popup
+      must present its first-party signed-in account choices instead.
+- [ ] Data-authority identity: deploy a Preview whose branch name and
+      `VERCEL_ENV` disagree with its configured `THINGTIME_DATA_ENV`. Root
+      data and `/api/v1/capabilities` must expose the same safe
+      `{ id, kind, federationId, authorityOrigin }` identity; sign-in routing
+      must use that authority rather than infer an environment from Vercel
+      metadata. No database host, database name, connection string, or secret
+      may appear in either public response.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
@@ -1799,6 +1836,10 @@ email whose link points at the attacker.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
+- [ ] Whenever a builtin crystal schema is added, removed, or changes its
+      projected fields, run `npm run test:schemas`: the pinned projection table
+      must name the builtin and its exact retained fields so schema seeding
+      cannot drift silently or fail only in Web CI.
 - [ ] Unique-slot squat class (closed structurally): relationship dedupe
       rides the server-only root `uniqueKeys` namespace
       (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
@@ -1814,6 +1855,15 @@ email whose link points at the attacker.
       notes also census (never modify) data things carrying relationship
       names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] Desktop AI import hashes and device idempotency hashes also ride root
+      Binary `uniqueKeys`, never one unique index per crystal field. Run
+      `npm --prefix remix run test:collections`, `test:devices`, and
+      `test:messenger`; the complete home Things plan must remain at or below
+      60/64, repeated device/import writes must reuse the original row, and a
+      home bootstrap must backfill then retire the five
+      `things_{ai_connection,external_*,device_unique_keys}` generations.
+      A custom data endpoint must receive only the current additive index plan:
+      it must never run Thingtime's home-only backfill/drop migration.
 - [ ] The data-crystal namespace reserves NO names: a data thing carrying
       `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
       `friendKey`, or `voteKey` at its crystal root (any nesting, any value
@@ -2482,7 +2532,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       per-user sums and initializes aggregate last; two migration runners
       cannot overwrite a now-live aggregate.
 - [ ] Canonical account storage: create, grow, shrink, and delete first-party
-      Things, comments/reactions, themes, algorithms, and registered app data.
+      Things, posts, comments/reactions, themes, algorithms, every user-owned
+      Messenger row (including relationship edges), imported AI history, and
+      registered app data.
       Each mutation changes the protected subscription ledger by exactly the
       UTF-8 byte delta of `JSON.stringify({ crystal, extended, tags })` in the
       same transaction. App data changes the account, whole-app, and app-user
@@ -3230,18 +3282,340 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       count zero, and create/comment/reaction/share activity emits no home bell
       notification or email. Resetting to home restores normal telemetry/emits.
 
+## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
+      after launch without an `App.init()` nil-optional crash, and its recovery
+      store must render before the first refresh completes.
+- [ ] Recovery follows every GitHub Release `Link` page (no arbitrary history
+      cap) so older rollback bundles remain discoverable; a repeated next-page
+      URL fails closed instead of spinning or presenting a partial catalog.
+- [ ] Before publishing, production packaging must extract every desktop and
+      Recovery ZIP into a clean staging directory and run the same full
+      signed-app, Gatekeeper, and notarization checks used for the unpacked
+      artifact. A malformed ZIP must block release creation rather than
+      becoming a broken recovery option.
+- [ ] With all six Developer ID/notarization secrets absent, run the
+      owner-approved PR worker and confirm it produces only a SemVer suffix of
+      `.unsigned`, `UNSIGNED` desktop and Recovery asset names, and release
+      notes that direct people to **Privacy & Security → Open Anyway**. With a
+      partial secret set, it must stop before publishing. In Thingtime Recovery,
+      verify the UNSIGNED badge, explicit cache acknowledgement, cache entry,
+      launch, and atomic install path; it must never appear as a verified
+      update. With all six secrets present, repeat the strict signed/notarized
+      ZIP round-trip instead.
+- [ ] From an ad-hoc unsigned Recovery app, launch and atomically install an
+      explicitly acknowledged `isUnsigned: true` cached desktop bundle. The
+      detached helper must derive the unsigned lane from that cache manifest,
+      re-check the ad-hoc bundle before each use, and preserve the prior bundle
+      on failure. Remove that manifest marker and confirm it fails closed as a
+      signed release rather than silently downgrading verification.
+- [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
+      MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
+      Cancellation/timeout cases must terminate the connector child and mark
+      ambiguous in-flight work for review, while queue scheduling still lets
+      steer and interrupt overtake a blocked queued send. Keep a real connector
+      pipe active beyond two minutes: incremental `AsyncBytes` reads must
+      deliver output before EOF, and a stale reader generation must never clear
+      or terminate its replacement process.
+- [ ] Build with the repository's exact Corepack pnpm version. Confirm the
+      package-manager preflight and electron-builder's nested dependency
+      collector both resolve that same version even when a different global
+      pnpm is first on the inherited `PATH`; the temporary shim is removed on
+      success and failure.
+- [ ] Build the local app with a stable Apple Development identity, then run
+      strict deep `codesign` and the repository verifier against the unpacked
+      bundle. Install only that verified bundle with `install:local`, rerun
+      both checks against `~/Applications/Thingtime.app`, and compare the outer
+      app/node/bridge team identifiers, designated requirements, and executable
+      hashes between build and install.
+- [ ] Confirm electron-builder compiled `electron/build/Thingtime.icon` into
+      the installed app. Inspect Finder/Dock in light and dark appearance: both
+      must keep the exact green canopy/brown trunk artwork legible against the
+      adaptive background, with no stale generic Electron icon.
+- [ ] Inspect the embedded
+      `Contents/Helpers/Thingtime Node.app/Contents/Resources/ThingtimeNode.icns`
+      and its `CFBundleIconFile` declaration. The prompt/Finder artwork must
+      show three separated green canopy nodes and one brown trunk node, each
+      visibly joined to the central pink/red square. It must retain transparent
+      outer corners and remain recognizable at 16, 32, and 128 px instead of
+      showing the generic app blueprint.
+- [ ] Build with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT` set to the intended PR
+      deployment. In **Thingtime desktop** settings, confirm production,
+      development, and that preview are pre-populated; add at least two named
+      custom origins, select between them, remove an inactive custom entry, and
+      reject credentials/query/fragment/non-loopback HTTP. A selected endpoint
+      must serve `/api/v1/devices` (authenticated data or 401/403, never 404),
+      become the bundled server's API proxy target and the LaunchAgent API
+      origin together, and keep its Keychain/journal pairing scope isolated
+      from every other endpoint. The BrowserWindow itself must stay on the
+      packaged loopback renderer, never navigate to the selected remote API
+      origin, and still render the packaged interface with the API target
+      unavailable.
+- [ ] With a previously selected preview that returns a real API 404, open
+      desktop Settings and confirm the saved preview remains selected while its
+      compatibility line says it does not expose the computers API. No managed
+      node restart, registration, or endpoint rewrite may occur; all unrelated
+      settings remain interactive while the small **Check now** indicator is
+      active. Once the deployment returns authenticated `/api/v1/devices`
+      data (or 401/403), use **Check now** and confirm the app additionally
+      accepts it only when the bundled loopback proxy reports that exact
+      fallback origin. Repeat with a proxy fallback mismatch: it must remain
+      incompatible even when the remote route itself exists.
+- [ ] Fetch `/api/v1/capabilities` from production, development, and a PR
+      preview. It must return schema version 1, exactly one semver `api.*`
+      contract for every entry in the API-doc registry, and a `route.*` entry
+      for every executable API route (including intentionally undocumented
+      diagnostics), plus a valid explicit data-authority identity. Verify the
+      desktop accepts a
+      compatible `api.devices` minor/patch update, rejects a missing or new
+      major, and uses the legacy `/api/v1/devices` probe only when an older
+      deployment returns a manifest 404.
+- [ ] Configure the same private `THINGTIME_PEER_DISCOVERY_SECRET`, a distinct
+      persistent Ed25519 private key, and exact public origin on two first-party
+      deployments. A dual-signed announcement must create/renew only its own
+      relational peer lease and pin its public key; a changed public key for
+      the same origin must fail closed. `GET /api/v1/peers`
+      must return capped NDJSON peer rows plus an opaque cursor—never a single
+      unbounded JSON list—and must reject missing/expired/bad-body signatures,
+      non-first-party hostnames, and loopback origins in production. Trigger a
+      self-signed sync and verify it first announces to `thingtime.com`, then
+      discovers only the bounded peer budget; every NDJSON event must verify
+      against the sending deployment's public key. No browser request may
+      possess either private credential. Repeat against a deployment with a
+      different `federationId`: its signed request and peer rows must be
+      rejected rather than merging distinct production/development/custom
+      data environments.
+- [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
+      signed bundle, then install a build which omits or renames that endpoint
+      profile. `desktop-settings.json` must retain the normalized selected URL
+      and label, migrate schema-v1 IDs when their old metadata is available,
+      and never fall back to production merely because a build-specific ID is
+      missing. Verify the node registration still uses the same selected API
+      origin after every step.
+- [ ] Navigate the packaged loopback renderer directly to `/things` (including
+      a `?device=` drawer deep link) and press Cmd+R. Both `/` and the deep link
+      must return the bundled React shell with HTTP 200; the window must never
+      show `Client app has not been built yet.` or fetch a remote UI shell.
+- [ ] On an existing paired computer, confirm the account badge is softly green
+      and **Action permissions** starts on **Always allow** without hiding any
+      other device controls. In a disposable account/device pairing, change to
+      **Ask every time** and confirm the next supported command enters the
+      existing approval flow; change to **Deny** and confirm a new command is
+      rejected before leasing. Return to **Always allow** and confirm supported
+      commands no longer create repeated Thingtime approval cards. Pairing,
+      capability, locked-session, and macOS privacy/TCC gates must still block
+      unsafe work in every mode.
+- [ ] Explicitly register the installed node login service, verify its
+      plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
+      runtime resolve inside the verified installed app, and its registry
+      resolves to the exact private user-data file. Bootstrap must not issue an
+      unconditional immediate kickstart. Replace an exact old managed node,
+      then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] With **Auto-start node on Thingtime launch** left at its default-on
+      setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
+      stopped while the managed plist remains, then Cmd+Q/reopen the installed
+      Electron app. It must bootstrap exactly one node from that existing plist.
+      Turn the setting off and repeat: reopening Electron must leave it stopped;
+      turn it back on and confirm it converges immediately. A Mac with no
+      managed plist must still require the explicit **Start node** confirmation.
+- [ ] Open the exact installed Electron app, record its bundled loopback
+      renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
+      stop while the launchd node and
+      connector remain alive from the installed bundle for more than two
+      minutes. Signed-parent status must remain responsive; relaunch Electron
+      and unregister through the same confirmed UI without touching a foreign
+      agent/process.
+- [ ] In that exact installed app, verify the draggable desktop region stops at
+      the 52px titlebar background: Commander, nav controls, Lopu notification
+      text, and the notification's 28px close target remain selectable,
+      hoverable, and clickable. The titlebar order is drawer, Back, Forward,
+      home, search, account, notifications; Back/Forward must traverse real
+      renderer history. Kill or delay the async desktop-info response once:
+      the preload platform hint must still apply Electron titlebar mode on the
+      first paint, without a missing drawer/history row or right-side account
+      regression.
+      Pin, hover, and focus the drawer: its temporary z-index lift must remain
+      below the titlebar controls, its hover popup must use the same 10px top
+      and side gutter, and the first menu row must not retain extra Electron-only
+      top padding. Recheck the open and closed drawer at 390 CSS px and scroll
+      the page through the footer with no horizontal overflow.
+- [ ] Select every built-in menu-bar artwork (colour/template/black/white/pink/
+      blue tree and colour/template/black/white wordmark), plus one custom
+      image. Verify one image-only status item with a readable accessibility
+      label; a fresh settings file must choose the pink four-square variant,
+      while an existing choice survives upgrade. The full colour wordmark must
+      render from the bundled tightly cropped raster at 86x16pt, sit vertically
+      centred, and show no SVG rectangle-join seams. Open its menu and verify
+      `Refresh Status`, `Open Thingtime`, optional `Restart Thingtime`, and
+      `Quit Thingtime`; no `Thingtime Node` menu copy or private custom path may
+      reach renderer or cloud state. `Quit Thingtime` must boot out the managed
+      LaunchAgent rather than immediately respawning under KeepAlive; opening
+      Thingtime again may explicitly register/start it.
+- [ ] Exercise **Pair this Mac**, resume, unpair, and **Request access** through
+      the signed Electron app. Each presence-gated operation gets one native
+      confirmation and can remain open for normal human response time without
+      the one-shot bridge timing out. In Privacy & Security, click Apple's
+      **Quit & Reopen** only as the user: launchd must replace the helper with
+      exactly one node PID and one menu item; a direct LaunchServices start of
+      the embedded helper must exit instead of creating a duplicate.
+- [ ] Before network pairing, verify the exact signed helper can create, read,
+      and delete a disposable `AfterFirstUnlockThisDeviceOnly` item in the
+      traditional macOS login Keychain without `errSecMissingEntitlement`
+      (`-34018`). A forced local Keychain failure must end as
+      `credential_store_unavailable`, make no prepare/complete request, and
+      never surface the remote-ambiguity “response was not confirmed” copy.
+      After a successful pair, confirm the device appears under `/things`,
+      then Quit/relaunch Electron and verify the launchd node and pairing remain.
+- [ ] During pairing, inject one lost/ambiguous prepare or complete response.
+      The already-approved native operation must replay the exact same signed
+      claim internally, succeed without a second confirmation, and create only
+      one device relationship. Then exhaust all three bounded attempts: the
+      Keychain proof must remain durable, `/things` must refresh from **Pair
+      this account** to **Resume pairing**, and that explicit resume must
+      reconcile without generating a replacement pairing secret.
+- [ ] After a successful pairing, trigger a background local-node refresh. The
+      last-known `1 account paired` (or plural) badge, **Add Codex project**, and
+      every unrelated setup control must remain present and interactive; only a
+      small green checking spinner may be added. A real action may mark only its
+      own button as working.
+- [ ] Open a paired computer from `/things`. The page overlay may dim the page
+      behind the right drawer, but it must sit below the drawer portal: close,
+      scroll, and non-destructive drawer controls remain clickable at desktop
+      and 390 CSS px, with no invisible full-page interception.
+- [ ] On a paired online Mac, quick controls and Applications must open first;
+      Audio & routing, Network & connectivity, Node & pairing, Action
+      permissions, Power, Connectors, Screen, Approvals, and Command activity
+      must start collapsed and retain that layout per computer. Open the three
+      audio-route menus and choose a reported device, then verify microphone and
+      alerts/effects level and mute controls are shown only when that exact route
+      reports support. Use the Wi-Fi controls
+      only with a saved/open SSID (never a password), open an application's
+      **More** context menu for Focus/Open, Hide/Show, Quit, and the
+      approval-required **Force quit**. Use the Applications heading menu for
+      **Hide other apps**, and expose **Sleep** from Power. Menus must stay
+      above the drawer overlay and remain usable without clipping or horizontal
+      overflow at desktop and 390 CSS px.
+- [ ] In the exact installed Electron app, open that device drawer and click
+      its 44px X while it overlaps the native title-bar band. Reopen it and
+      confirm the left edge has an always-visible centred grip with a forgiving
+      in-panel hover target; drag that grip narrower and wider until both bounds
+      engage. Confirm both the accessible splitter value **and the visible
+      panel boundary** move together; a changing value behind an unchanged
+      full-width panel is a failure. Then focus the separator and use Left/Right
+      (Home resets). Collapse and reopen Node, observed state, applications,
+      connectors, screen, approvals, and command activity independently; no
+      section toggle may close the drawer or block another control. At 390 CSS
+      px the resize edge is absent, the drawer remains full width, and every
+      section still toggles without horizontal overflow.
+- [ ] On `/things`, collapse a different selection of sections and choose a
+      different width for two paired computers. Close/reopen each drawer and
+      refresh the page: only that computer's locally stored section layout and
+      width may return; device state, messages, approvals, and commands must
+      never be written into this layout preference. In a regular desktop web
+      browser, the drawer, home, Commander search, account, and notification
+      controls must all share the 52px nav bar's 36px centerline. The Commander
+      button must open the global Commander on web as well as Electron.
+- [ ] Pair two different Macs to one disposable Thingtime account, then pair
+      one disposable Mac to two different Thingtime accounts. Every pairing
+      link must remain one-use, but the Mac must retain both account credentials
+      in its bounded Keychain vault, advertise both opaque device IDs locally,
+      and maintain one isolated heartbeat/command/live-sync loop per account.
+      Each account's `/things` view must match only its own device ID, while
+      prompts/responses never cross accounts. Repeat from a renderer origin
+      different from the configured node origin: completion must fail before
+      claim with the two explicit origins in the error, then succeed after an
+      intentional endpoint switch. Existing single-account credentials must
+      migrate without re-pairing.
+- [ ] Permission preflight must not prompt. Without grants, Accessibility and
+      Screen Recording operations fail closed with actionable instructions.
+      The explicit **Request access** action must invoke the matching native
+      system request before opening the exact settings pane, then refresh after
+      focus/relaunch. After the user grants the exact installed signed bundle,
+      relaunch that bundle and prove one harmless protected Accessibility
+      focus/read and one real bounded frame capture. Never automate a TCC
+      toggle/reset, and do not invoke the system-lock action without explicit
+      confirmation.
+- [ ] Treat the local Apple Development result only as stable local/TCC proof.
+      Gatekeeper rejection is expected for that non-distribution identity.
+      Before any direct-distribution release, patch the protected
+      `github-actions` workflow, import a Developer ID Application identity in
+      its ephemeral keychain, provide notarization credentials, remove every
+      unsigned fallback, and require strict signature, Gatekeeper, and stapler
+      validation before assets publish.
+
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
 Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
 running dev stack (86 live-API checks: permissions, requests, receipts,
 reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
+- [ ] Run `npm run test:messenger` and `npm run test:storage` from `remix/`.
+      Against a disposable loopback MongoDB replica set only, run
+      `npm run verify:messenger-storage` with
+      `TT_MESSENGER_STORAGE_TEST_ALLOW_LOCAL=1` and a loopback-only
+      `MONGODB_CONNECTION_STRING`: posts, native Messenger rows, AI
+      projects/chats/messages, and relationship rows all increase the same
+      account ledger; identical re-import adds zero bytes; a 1-byte allowance
+      rolls back the container plus owner membership; the v2 backfill recounts
+      legacy Messenger content.
+
 - [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
       the viewport: no body scroll, no footer under the composer, nav
-      clearance intact at desktop and mobile widths.
+      clearance intact at desktop and mobile widths. In local/dev builds the
+      draggable DevKit trigger is omitted on this full-viewport route, so it
+      cannot cover message actions, Send, attachment, emoji, or textarea
+      controls.
 - [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
       Slack-style rows and Messenger bubbles; the choice survives reload
       (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] In the installed Thingtime Electron app, **✦ AI** opens the connection
+      modal in both Spaces and Chats modes. It independently identifies
+      ChatGPT, Claude, and Claude Thingtime; the browser build instead explains
+      that desktop discovery requires the app. At desktop and 390px mobile
+      widths, open every modal state, scroll top-to-bottom, and confirm buttons,
+      provider links, progress, and close controls neither clip nor overlap.
+- [ ] With a paired online Mac, **✦ AI** lists only its active bounded
+      connectors. Refresh a Codex connector, open one mirrored live chat,
+      create a chat under an opaque project id/label, and send while idle and
+      while a turn is active: Queue, Steer, and Stop map to distinct native
+      operations, stable request ids reconcile an ambiguous retry once, and
+      reopening/reloading the chat resumes from its event cursor without
+      repeating completed text.
+- [ ] In a live Codex chat, observe several exact streaming deltas (including
+      whitespace boundaries), a completed assistant item, and a command/file
+      approval. The activity panel updates without a spinner replacing cached
+      history. Reload with an approval pending: only its opaque/redacted safe
+      projection replays, and approve/deny still acts on that one request.
+      Completed visible user/assistant text survives event expiry as relational
+      quota-accounted Messenger messages, while reasoning, command lines/output,
+      tool payloads, cookies, credentials, and local paths never appear in UI,
+      API payloads, logs, or rows.
+- [ ] For a semantic Accessibility connector, permission preflight never
+      prompts on launch. Only the already-visible selected chat can be read;
+      create, send, or queue appears only when that exact connector advertises
+      the capability, and every semantic mutation first requires Thingtime
+      approval. Locked, denied, missing-permission, ambiguous-selector, or
+      selector-drift states fail closed. Steer, Interrupt, arbitrary app
+      selection, coordinates, AppleScript, and shell execution remain
+      unavailable unless a future connector explicitly implements and safely
+      advertises a narrower operation.
+- [ ] Sync one local source and one official JSON/ZIP export. Projects appear
+      as Spaces, grouped conversations as channels, ungrouped conversations as
+      chats, and user/assistant messages retain order and provider badges.
+      Provider rows cannot be edited/deleted; reactions, threads, and new
+      Thingtime replies work without posting back to the provider.
+- [ ] Repeat the exact sync, interrupt one multi-batch sync and resume it, then
+      compare row counts and account usage: stable source rows are reused,
+      no message is duplicated, read receipts/mute state survive, and quota
+      usage is unchanged after the identical replay. Fill the account and
+      confirm the next transactional unit 507s without an orphan Space/chat,
+      membership, partial invite redemption, or unmetered row.
+- [ ] Inspect the Electron boundary: renderer code receives normalized batches
+      only; the selected export path, app data roots, provider credentials,
+      cookies, hidden reasoning, tool traffic, and internal context do not
+      appear in network payloads, API responses, logs, or persisted connection
+      rows. Expired/cancelled sync ids cannot be read again.
 - [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
       sends, bubble shows yours right/theirs left, conversation pins to the
       BOTTOM of the pane even when short.
@@ -3380,6 +3754,47 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] A paired Mac appears at `/things` root and search from the dedicated
+      devices projection, with cached-first name/presence and current system,
+      volume, brightness, lock, open-app, permission, and connector state.
+      Open `?device=<id>` at desktop and exactly 390 CSS px, exercise every
+      drawer section, collapse/reopen each section, and resize the drawer from
+      its left edge at both widths. Confirm the generous edge target draws only
+      the slim hover/focus line (no grip pill), the visible boundary follows the
+      splitter value, and the 390px panel can shrink to 280px without clipping
+      or horizontal overflow. Scroll top-to-bottom: stale and offline state is
+      explicit, and desired controls confirm or revert against a newer observed
+      revision.
+- [ ] Device rows never enter generic selection, copy/move/share/delete,
+      context-menu, or preview flows. Capability, permission, lock, connector,
+      version, local-only, offline-queue, and approval policy each disable or
+      gate the relevant control before a command is sent. Approve and deny one
+      command, replay its request id, and confirm the node leases only approved
+      work and never blindly re-executes an expired/ambiguous lease.
+- [ ] Pairing uses prepare + complete with a server nonce and exact signed
+      claim. Simulate a server-committed complete response being lost, restart
+      the node, and confirm the persisted pending credential/proof replays into
+      one paired device. A changed proof, nonce, credential, or descriptor 409s;
+      the legacy unsigned claim is rejected. Treat this as key continuity and
+      replay fencing, not platform attestation.
+- [ ] Publish a newer complete connector snapshot that removes one connector,
+      then replay both the old snapshot and a same-revision changed snapshot:
+      the removal stays tombstoned, the changed replay 409s, and live sync is
+      rejected for a stale, removed, or revision-mismatched connector. Flood
+      bounded command/events in a disposable account and confirm count/byte
+      pruning plus TTL indexes prevent quota-neutral control rows becoming an
+      unmetered archive; submitted chat text remains once in the billed message.
+- [ ] In a disposable account, record storage before pairing and publishing a
+      persistent device/state/connector mirror. The canonical stored bytes
+      increase the same account ledger as posts and Messenger content; an
+      identical revision replay adds zero bytes, while attachments remain
+      separately metered and expiring command/event transport does not become
+      quota-free durable content.
+- [ ] Screen sharing says `not installed` and exposes no fake video stream when
+      peer transport is absent. The signed native capture primitive itself
+      preflights without prompting, refuses a locked/unapproved session, caps
+      display size/FPS/queue/frame bytes, disables audio and input injection,
+      and stops on permission loss or display disappearance.
 - [ ] A fresh browser landing directly on `/things` blocks first paint only
       long enough to create one temporary session user, then serves the real
       Things UI (never the logged-out sign-in hero). Reload and navigation

@@ -289,6 +289,14 @@ export function useApi() {
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
       setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
+			// A private, cursor-paged projection for the Developer → Deployment
+			// peers explorer. This intentionally differs from /api/v1/peers,
+			// whose HMAC + Ed25519 protocol is for deployments only.
+			peers: useCallback(
+				async (args?: { cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
+					getJson(`/api/v1/admin/peers${toQuery(args)}`, options),
+				[]
+			),
       users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),

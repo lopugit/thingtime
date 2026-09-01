@@ -31,6 +31,13 @@ export default defineNitroConfig({
     [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
   },
+  serverAssets: [
+    {
+      baseName: 'client',
+      dir: publicDir,
+      pattern: 'index.html'
+    }
+  ],
   publicAssets: [
     {
       baseURL: '/embed',

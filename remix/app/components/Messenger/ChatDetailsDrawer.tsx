@@ -20,6 +20,7 @@ import {
 } from '@chakra-ui/react';
 
 import { useLopu } from '../Lopu/useLopu';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { chatDisplayName, memberDisplayName, type ChatMember, type ChatSummary } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
@@ -141,8 +142,12 @@ export const ChatDetailsDrawer = ({
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} placement="right" size="sm">
-      <DrawerOverlay zIndex={10240} />
-      <DrawerContent zIndex={10250} background="var(--tt-card, #ffffff)" color="var(--tt-ink, #17171c)">
+      <DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
+      <DrawerContent
+        background="var(--tt-card, #ffffff)"
+        color="var(--tt-ink, #17171c)"
+        containerProps={{ zIndex: DRAWER_MODAL_Z }}
+      >
         <DrawerCloseButton />
         <DrawerHeader fontSize="15px">{chatDisplayName({ ...chat, members }, user?.id || null)}</DrawerHeader>
         <DrawerBody paddingBottom={8}>

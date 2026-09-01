@@ -213,6 +213,25 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // than things.write; membership/chat mutations share one bounded bucket.
   'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
   'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // A desktop sync is chunked into bounded JSON batches. The wider hourly
+  // window accommodates a first full-history import while still fencing a
+  // runaway renderer or replay loop.
+  'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
+	// Paired device mesh. Pairing creates credentials and therefore fails
+	// closed at the routes; state/command/event budgets are deliberately roomy
+	// enough for a live desktop while still bounding stuck pollers and replays.
+	'devices.read': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
+	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
+	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
+	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.permissions': { limit: 60, windowMs: 60_000, enabled: true },
+	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
+	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
   // message reactions mirror things.react but chats toggle faster in practice
   'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
   // read receipts fire on every focused chat scroll — cheap single-doc updates,

@@ -11,11 +11,12 @@ import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/uti
 // the built shell; per-page social meta carries the page identity instead.
 export default defineHandler(async (event) => {
   // assets:shell is the explicit server/assets mount (nitro.config.ts);
-  // assets:server stays as a fallback for older built layouts where nitro's
-  // default mount still resolved there.
+  // assets:server and assets:client stay as fallbacks for older built layouts
+  // where nitro's default mount still resolved to one of those instead.
   const html =
     (await useStorage('assets:shell').getItem<string>('index.html')) ??
-    (await useStorage('assets:server').getItem<string>('index.html'));
+    (await useStorage('assets:server').getItem<string>('index.html')) ??
+    (await useStorage('assets:client').getItem<string>('index.html'));
 
   if (!html) {
     return new Response('Client app has not been built yet.', { status: 503 });

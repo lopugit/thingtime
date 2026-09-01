@@ -14,6 +14,7 @@ import Index from './routes/_index';
 import Login from './routes/login';
 import MediaPage from './routes/media';
 import PostPage from './routes/post';
+import DeploymentPeersRoute from './routes/peers';
 import Profile from './routes/profile';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
@@ -58,6 +59,11 @@ const HydrateFallback = () => (
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
     ...init,
+    // Account/root responses are explicitly current-state reads. Electron's
+    // loopback origin can reuse a prior ephemeral port after relaunch, so a
+    // browser cache entry from a different endpoint must never determine the
+    // active account, branch label, or device pairing surface.
+    cache: init.cache || 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -173,6 +179,9 @@ export const router = createBrowserRouter([
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// Developer-only, admin-gated deployment mesh diagnostics. The page
+			// itself renders the same shareable quiet gate as /admin.
+			{ path: 'peers', element: <DeploymentPeersRoute /> },
 			// every attachment is a Thing — its own page with comments/reactions
 			// (post lightbox + file rows deeplink here)
 			{ path: 'media/:id', element: <MediaPage /> },
