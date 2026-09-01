@@ -111,8 +111,15 @@ assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$
 // rather than as one fixed sequence, so an added guard (for example the
 // already-merged-receipt `recovery` check) extends the condition without
 // silently retiring this contract.
+//
+// Bound the scan to this job's own block. A lazy `[\s\S]*?` walks straight
+// into the NEXT job's `if:` when feature_stack_merge has none of its own, and
+// feature_stack_progress carries all three of the conjuncts asserted below —
+// so deleting the merge worker's guard entirely would leave this contract
+// green while the property it exists to pin was gone. Consuming only lines
+// that are not a sibling job header keeps a missing guard failing closed.
 const featureStackMergeCondition = (
-	/\n {2}feature_stack_merge:[\s\S]*?\n {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow) ?? [, ""]
+	/\n {2}feature_stack_merge:\n(?:(?! {2}[A-Za-z0-9_-]+:\n).*\n)*? {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow) ?? [, ""]
 )[1];
 assert.match(
 	featureStackMergeCondition,
