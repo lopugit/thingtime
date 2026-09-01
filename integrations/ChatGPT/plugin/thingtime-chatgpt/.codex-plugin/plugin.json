@@ -1,7 +1,7 @@
 {
-  "name": "thingtime-chatgpt",
-  "version": "1.4.0+codex.20260830040452",
-  "description": "Secure multi-account Thingtime tools for ChatGPT and Codex.",
+  "name": "thingtime",
+  "version": "2.1.0+codex.20260901",
+  "description": "Composable, preview-first Thingtime tools for ChatGPT and Codex.",
   "author": {
     "name": "Thingtime",
     "url": "https://thingtime.com"
@@ -17,8 +17,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Thingtime",
-    "shortDescription": "Use selected Thingtime accounts securely in ChatGPT.",
-    "longDescription": "Connect one or more Thingtime accounts with scoped, revocable tokens. Retrieve exact Things by ID, list comments for a known target, browse, search, create, update, comment, react, save, share, and switch accounts without exposing a token in chat.",
+    "shortDescription": "Explore and safely compose work across Thingtime.",
+    "longDescription": "Connect named Thingtime accounts with scoped, revocable tokens. Read exact batches, schemas, relationships and changes; validate data; review signed diffs; apply confirmed mutation plans; inspect history; undo safely; and run bounded reusable Capability workflows without exposing tokens or arbitrary APIs.",
     "developerName": "Thingtime",
     "category": "Productivity",
     "capabilities": [
@@ -28,7 +28,7 @@
     "websiteURL": "https://thingtime.com",
     "defaultPrompt": [
       "Use my selected Thingtime account to help with my Things.",
-      "Retrieve a known Thing directly by ID, or search my Thingtime Things when I do not know the ID; ask for confirmation before any write."
+      "Retrieve known Things directly by ID, discover schemas and relationships, and show a signed before/after preview before any composed write."
     ]
   }
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -8,6 +8,8 @@ import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { RenderThing } from '~/components/Kinds';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import {
 	SensitiveThingReveal,
 	type SensitiveThingRevealDescriptor
@@ -16,6 +18,8 @@ import { apiErrorMessage } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
+import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -36,7 +40,7 @@ type MigrationDiagnostic = {
 
 type ThingViewData =
 	| { kind: 'diagnostic'; diagnostic: MigrationDiagnostic }
-	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null };
+	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null; parent: PublicPost | null };
 
 type ThingLoadState = {
 	key: string;
@@ -118,6 +122,12 @@ export default function ThingPage() {
 		data: null,
 		error: null
 	});
+	// Both representations are useful on a permalink: the preview is the
+	// human-facing surface, while the full JSON remains available for people
+	// inspecting a Thing's exact shape. They are independent so either one (or
+	// both) can stay visible without another route or mode switch.
+	const [showPreview, setShowPreview] = React.useState(true);
+	const [showData, setShowData] = React.useState(true);
 
 	// Hide prior-account data synchronously during the render that observes an
 	// identity change; the effect below then aborts the old request and refetches.
@@ -150,7 +160,8 @@ export default function ThingPage() {
 			: loadThing({ id }, { signal: controller.signal }).then((response: any) => ({
 					kind: 'thing' as const,
 					thing: thingFromResponse(response),
-					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null
+					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null,
+					parent: response?.parent ? mergeReactionOverlay(startedAt, response.parent as PublicPost) : null
 			  }));
 
 		request
@@ -174,7 +185,13 @@ export default function ThingPage() {
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
-	const post = visibleState.data?.kind === 'thing' ? visibleState.data.post : null;
+	const attachment = attachmentFromThing(thing);
+	// The API's attachment post projection exists for the interaction-focused
+	// `/media/:id` route. It is the attachment coerced into a post-shaped
+	// projection, not the attachment's parent post, so it must never become a
+	// blank "Post view" on this generic Thing permalink.
+	const post = visibleState.data?.kind === 'thing' && !attachment ? visibleState.data.post : null;
+	const references = attachment && visibleState.data?.kind === 'thing' ? directAttachmentReferences(visibleState.data.parent) : [];
 	const { error, loading } = visibleState;
 	const genericDetail = thing
 		? JSON.stringify(
@@ -195,6 +212,18 @@ export default function ThingPage() {
 		  )
 		: '';
 	const detail = diagnostic?.detail || genericDetail;
+	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
+	const thingPreview = thing ? (
+		thing.thingtime?.includes('component') ? (
+			<RenderThing
+				context={{ size: 'full', untrusted: !isThingOwner }}
+				fallback={<ThingView thing={thing.crystal} />}
+				thing={thing}
+			/>
+		) : (
+			<ThingView thing={thing.crystal} />
+		)
+	) : null;
 
 	const copyDetail = async () => {
 		try {
@@ -206,9 +235,10 @@ export default function ThingPage() {
 	};
 
 	const handlePostChanged = React.useCallback(
-		(change: PostChange) => {
+		(id: string, change: PostChange) => {
 			setLoadState((current) => {
 				if (current.key !== requestKey || current.data?.kind !== 'thing' || !current.data.post) return current;
+				if (current.data.post.id !== id) return current;
 				const next = typeof change === 'function' ? change(current.data.post) : change;
 				if (!next) {
 					navigate('/feed');
@@ -302,11 +332,43 @@ export default function ThingPage() {
 							</Flex>
 						</Box>
 
-						{post ? (
+						{thing ? (
+							<Flex
+								{...CARD_STYLES}
+								align={{ base: 'flex-start', sm: 'center' }}
+								gap={4}
+								justify="space-between"
+								p={{ base: 4, md: 5 }}
+								wrap="wrap"
+							>
+								<Box>
+									<Heading as="h2" fontSize="md">
+										Views
+									</Heading>
+									<Text color={MUTED} fontSize="sm" mt={1}>
+										Choose the human-friendly preview, the raw Thing data, or both.
+									</Text>
+								</Box>
+								<Flex align="center" gap={4} role="group" aria-label="Thing page views" wrap="wrap">
+									<Flex align="center" gap={2}>
+										<Switch aria-label="Show rendered preview" isChecked={showPreview} onChange={(event) => setShowPreview(event.target.checked)} />
+										<Text fontSize="sm">Rendered preview</Text>
+									</Flex>
+									<Flex align="center" gap={2}>
+										<Switch aria-label="Show Thing data" isChecked={showData} onChange={(event) => setShowData(event.target.checked)} />
+										<Text fontSize="sm">Thing data</Text>
+									</Flex>
+								</Flex>
+							</Flex>
+						) : null}
+
+						{showPreview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+
+						{showPreview && post ? (
 							<Stack spacing={3} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
 									<Heading as="h2" fontSize="md">
-										Post view
+										Rendered preview
 									</Heading>
 									<Button
 										as={Link}
@@ -324,29 +386,40 @@ export default function ThingPage() {
 							</Stack>
 						) : null}
 
-						<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
-							<Flex align="center" justify="space-between" gap={3} mb={3}>
-								<Heading as="h2" fontSize="md">
-									{diagnostic ? 'Full redacted error' : 'Thing data'}
+						{showPreview && thing && !post ? (
+							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
+								<Heading as="h2" fontSize="md" mb={3}>
+									Rendered preview
 								</Heading>
-							</Flex>
-							<Box
-								as="pre"
-								m={0}
-								p={{ base: 3, md: 4 }}
-								borderRadius="var(--tt-radius-lg, 14px)"
-								bg="var(--tt-surface-alt, #f5f5f7)"
-								color="var(--tt-ink, #16161a)"
-								fontFamily="mono"
-								fontSize={{ base: '11px', md: '12px' }}
-								lineHeight="1.65"
-								overflowX="auto"
-								overflowWrap="anywhere"
-								whiteSpace="pre-wrap"
-							>
-								{detail}
+								<Box minW={0}>{thingPreview}</Box>
 							</Box>
-						</Box>
+						) : null}
+
+						{showData ? (
+							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
+								<Flex align="center" justify="space-between" gap={3} mb={3}>
+									<Heading as="h2" fontSize="md">
+										{diagnostic ? 'Full redacted error' : 'Thing data'}
+									</Heading>
+								</Flex>
+								<Box
+									as="pre"
+									m={0}
+									p={{ base: 3, md: 4 }}
+									borderRadius="var(--tt-radius-lg, 14px)"
+									bg="var(--tt-surface-alt, #f5f5f7)"
+									color="var(--tt-ink, #16161a)"
+									fontFamily="mono"
+									fontSize={{ base: '11px', md: '12px' }}
+									lineHeight="1.65"
+									overflowX="auto"
+									overflowWrap="anywhere"
+									whiteSpace="pre-wrap"
+								>
+									{detail}
+								</Box>
+							</Box>
+						) : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal

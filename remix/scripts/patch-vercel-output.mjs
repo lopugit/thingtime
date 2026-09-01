@@ -2,7 +2,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
+import { authorizeCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
 
 const configPath = '.vercel/output/config.json';
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -12,8 +12,8 @@ const filesystemRoute = routes.find((route) => route.handle === 'filesystem');
 const apiRootDataRoute = routes.find((route) => route.src === '/api/root-data');
 const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
-const chatGptDiscoveryRoute = {
-  src: '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json)$',
+const wellKnownDiscoveryRoute = {
+  src: '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$',
   dest: '/__server'
 };
 const appShellHeaders = {
@@ -40,6 +40,15 @@ config.routes = [
     headers: {
       'Content-Security-Policy': designBundlesCsp,
       'Access-Control-Allow-Origin': '*'
+    },
+    continue: true
+  },
+  // The sandboxed MCP review srcdoc inherits its parent CSP. Permit only the
+  // shipped review app's exact inline module hash on the Lab route.
+  {
+    src: '^/docs/mcp/?$',
+    headers: {
+      'Content-Security-Policy': mcpLabCsp
     },
     continue: true
   },
@@ -82,10 +91,19 @@ config.routes = [
   },
   // OAuth and capability discovery are non-API paths. They must reach Nitro
   // before the static SPA fallback, otherwise ChatGPT receives index.html.
-  chatGptDiscoveryRoute,
+  wellKnownDiscoveryRoute,
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
+  // Social permalinks go through the Nitro shell handler (server/routes/[...].ts)
+  // so crawlers receive per-post/per-profile Open Graph tags; every other page
+  // keeps the plain static shell below.
+  ...(serverFallbackRoute
+    ? [
+        { src: '^/post/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest },
+        { src: '^/profile/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest }
+      ]
+    : []),
   { src: '/(?:.*)', headers: appShellHeaders, dest: '/index.html' }
 ];
 

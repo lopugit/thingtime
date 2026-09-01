@@ -6,6 +6,8 @@ import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys, newThingDoc, 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { fromBin } from '../auth/users.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { thingUniqueKey } from '../mongodb/uniqueKeys.ts';
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { validateThingtimeCrystal } from '~/schemas/registry';
 
 // Relationship dedupe rides the server-only root uniqueKeys namespace (the
@@ -82,6 +84,16 @@ test('group/channel chats (dmKey null) and unmapped kinds stay unstamped', () =>
 	assert.equal(relationshipUniqueKeys('follow', { followKey: 42 }), undefined);
 	assert.equal(relationshipUniqueKeys('follow', { followKey: '' }), undefined);
 	assert.equal(relationshipUniqueKeys('follow', null), undefined);
+});
+
+test('callers can add domain Binary keys without losing relationship stamps', () => {
+	const externalKey = thingUniqueKey('externalConversationKey', 'hash-1');
+	const importedDm = newThingDoc('chat', {
+		ownerId: 'u',
+		crystal: { chatType: 'dm', dmKey: 'a:b' },
+		uniqueKeys: [externalKey]
+	}) as any;
+	assert.deepEqual(importedDm.uniqueKeys.map(fromBin), ['dmKey:a:b', 'externalConversationKey:hash-1']);
 });
 
 test('relationship prefixes are disjoint from the other uniqueKeys families', () => {

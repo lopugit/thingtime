@@ -1,13 +1,43 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
-  checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
-  downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
-  getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
-  loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
-  platform: process.platform,
-  versions: {
-    chrome: process.versions.chrome,
-    electron: process.versions.electron
-  }
+	discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
+	beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
+	readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
+	cancelAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-cancel-sync', request),
+	checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
+	downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
+	listUpdateCatalog: () => ipcRenderer.invoke('thingtime-desktop:list-update-catalog'),
+	cacheReleaseBundle: (request) => ipcRenderer.invoke('thingtime-desktop:cache-release-bundle', request),
+	installCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:install-cached-release', request),
+	launchCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:launch-cached-release', request),
+	removeCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:remove-cached-release', request),
+	revealUpdateCache: () => ipcRenderer.invoke('thingtime-desktop:reveal-update-cache'),
+	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
+	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
+	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),
+	selectEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:select-endpoint', request),
+	checkEndpointCompatibility: () => ipcRenderer.invoke('thingtime-desktop:check-endpoint-compatibility'),
+	selectMenuBarIcon: (request) => ipcRenderer.invoke('thingtime-desktop:select-menu-bar-icon', request),
+	uploadMenuBarIcon: () => ipcRenderer.invoke('thingtime-desktop:upload-menu-bar-icon'),
+	setNodeAutoStart: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-auto-start', request),
+	loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
+	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
+	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
+	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),
+	nodeBeginPairing: () => ipcRenderer.invoke('thingtime-desktop:node-begin-pairing'),
+	nodeCompletePairing: (request) => ipcRenderer.invoke('thingtime-desktop:node-complete-pairing', request),
+	nodeResumePairing: (request) => ipcRenderer.invoke('thingtime-desktop:node-resume-pairing', request),
+	nodeUnpair: (request) => ipcRenderer.invoke('thingtime-desktop:node-unpair', request),
+	nodeGetPermissions: () => ipcRenderer.invoke('thingtime-desktop:node-permissions'),
+	nodeOpenPermissionSettings: (request) => ipcRenderer.invoke('thingtime-desktop:node-open-permission-settings', request),
+	nodeAddProject: () => ipcRenderer.invoke('thingtime-desktop:node-add-project'),
+	nodeConnector: (request) => ipcRenderer.invoke('thingtime-desktop:node-connector', request),
+	nodeDevice: (request) => ipcRenderer.invoke('thingtime-desktop:node-device', request),
+	platform: process.platform,
+	versions: {
+		chrome: process.versions.chrome,
+		electron: process.versions.electron
+	}
 });

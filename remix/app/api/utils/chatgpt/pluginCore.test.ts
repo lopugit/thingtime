@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   CHATGPT_MCP_PATH,
+  CHATGPT_MCP_METHOD_FEATURES,
   CHATGPT_MCP_TOOL_FEATURES,
   CHATGPT_PLUGIN_FEATURES,
   CHATGPT_PLUGIN_ROUTES,
@@ -10,6 +11,7 @@ import {
   isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
   normalizeDynamicClientRedirectUri,
+  normalizeRegisteredClientRedirectUri,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
@@ -80,12 +82,15 @@ test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () 
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
 });
 
-test('dynamic OAuth clients are bound to registered loopback callbacks only', () => {
+test('dynamic OAuth clients are bound to registered loopback or exact ChatGPT callbacks only', () => {
   const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
   assert.equal(normalizeDynamicClientRedirectUri(redirectUri), redirectUri);
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chatgpt.com/connector_platform_oauth_redirect'), 'https://chatgpt.com/connector_platform_oauth_redirect');
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chat.openai.com/connector_platform_oauth_redirect'), 'https://chat.openai.com/connector_platform_oauth_redirect');
   assert.equal(normalizeDynamicClientRedirectUri('http://localhost:49152/callback/thingtime_mcp_AbC123'), null);
   assert.equal(normalizeDynamicClientRedirectUri('https://127.0.0.1:49152/callback/thingtime_mcp_AbC123'), null);
   assert.equal(normalizeDynamicClientRedirectUri('http://127.0.0.1:49152/callback/thingtime_mcp_AbC123?next=https://attacker.invalid'), null);
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chatgpt.com/connector_platform_oauth_redirect/attacker'), null);
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -101,6 +106,12 @@ test('dynamic OAuth clients are bound to registered loopback callbacks only', ()
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, true);
   params.set('redirect_uri', 'http://127.0.0.1:49152/callback/other');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, false);
+
+  const chatGptRedirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  params.set('redirect_uri', chatGptRedirectUri);
+  const chatGptDynamicClient = { clientId: 'ttdcr-chatgpt-client-id', redirectUris: [chatGptRedirectUri] };
+  params.set('client_id', chatGptDynamicClient.clientId);
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', chatGptDynamicClient).ok, true);
 });
 
 test('Thingtime endpoint and encrypted-bundle parsing fail closed', () => {
@@ -190,7 +201,10 @@ test('capability discovery is origin scoped and every registered route has a sem
   }
   assert.deepEqual(
     discovery.capabilityManifest.operations,
-    Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({ transport: 'mcp-tool', name, feature }))
+    [
+      ...Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({ transport: 'mcp-tool', name, feature })),
+      ...Object.entries(CHATGPT_MCP_METHOD_FEATURES).map(([name, feature]) => ({ transport: 'mcp-method', name, feature }))
+    ]
   );
   for (const operation of discovery.capabilityManifest.operations) {
     assert.ok(operation.feature in CHATGPT_PLUGIN_FEATURES, `${operation.name} lacks a known capability feature`);

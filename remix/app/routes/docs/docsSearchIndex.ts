@@ -5,6 +5,7 @@ import { designEntries } from './designEntries';
 import { designSystemEntries } from './design-system/entries';
 import { conceptEntries } from './concepts/entries';
 import { embedGuideSections } from './embedSections';
+import { mcpDemoScenarios } from './mcpDemoCore';
 
 // The /docs drawer search index. Everything registry-backed (API endpoints,
 // schemas, mockups, components, concepts) is derived from the live registries,
@@ -52,6 +53,12 @@ export const docsSearchAreaColors: Record<DocsSearchArea, { bg: string; color: s
 
 // Section ids must match the card ids rendered by routes/docs/index.tsx.
 const overviewSections = [
+  {
+    title: 'Limitless MCP Lab',
+    content:
+      'Explore the live MCP contract through five composable workflows and the exact shipped review App ' +
+      'using synthetic non-mutating preview data.'
+  },
   {
     title: 'API reference',
     content:
@@ -112,6 +119,23 @@ const buildDocs = (): DocsSearchDoc[] => {
       sectionTitles: overviewSections.map((section) => section.title),
       content: joinText(overviewSections.map((section) => section.content)),
       to: '/docs'
+    },
+    {
+      id: 'page-mcp',
+      area: 'Guide',
+      title: 'Limitless MCP Lab',
+      meta: '/docs/mcp',
+      description: 'Live Thingtime MCP contract, composable use cases, and the embedded review UI.',
+      sectionTitles: mcpDemoScenarios.map((scenario) => scenario.title),
+      content: joinText(
+        mcpDemoScenarios.flatMap((scenario) => [
+          scenario.summary,
+          scenario.prompt,
+          scenario.result,
+          ...scenario.steps.flatMap((step) => [step.title, step.detail, step.tool])
+        ])
+      ),
+      to: '/docs/mcp'
     },
     {
       id: 'page-api',

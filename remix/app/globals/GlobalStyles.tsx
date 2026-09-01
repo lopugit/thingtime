@@ -85,11 +85,12 @@ export const GlobalStyles = () => {
 					'--thingtime-devkit-bottom-offset': 'var(--thingtime-visual-devkit-bottom-offset, 36px)'
 				},
 				'html.thingtime-native-webview .thingtimeFooter': {
-					paddingBottom:
-						'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'
+					paddingBottom: 'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'
 				},
 				'html.thingtime-electron-desktop .thingtimeTopNav': {
-					zIndex: '10050 !important',
+					// Keep the chrome above the drawer's temporary hover/focus lift
+					// (10120), while popovers and the trigger still sit above it.
+					zIndex: '10130 !important',
 					left: '0 !important',
 					right: '0 !important',
 					transform: 'none !important',
@@ -98,10 +99,13 @@ export const GlobalStyles = () => {
 					WebkitAppRegion: 'drag',
 					userSelect: 'none'
 				},
-				'html.thingtime-electron-desktop .thingtimeTopNavInner, html.thingtime-electron-desktop .thingtimeTopNav #commander, html.thingtime-electron-desktop .thingtimeTopNav .nav-left-section, html.thingtime-electron-desktop .thingtimeTopNav .nav-right-section':
+				// Only the 52px titlebar background is draggable. In particular,
+				// Commander lives below it when closed; marking that host as drag
+				// made toasts beneath the titlebar unclickable and unselectable.
+				'html.thingtime-electron-desktop .thingtimeTopNav #commander, html.thingtime-electron-desktop .thingtimeTopNav .nav-left-section, html.thingtime-electron-desktop .thingtimeTopNav .nav-right-section':
 					{
-						WebkitAppRegion: 'drag',
-						userSelect: 'none'
+						WebkitAppRegion: 'no-drag',
+						userSelect: 'auto'
 					},
 				'html.thingtime-electron-desktop .thingtimeTopNavInner': {
 					height: 'var(--thingtime-electron-titlebar-height, 52px) !important',
@@ -114,7 +118,9 @@ export const GlobalStyles = () => {
 					paddingRight: '0 !important'
 				},
 				'html.thingtime-electron-desktop .drawerTrigger': {
-					zIndex: '10070 !important',
+					// Above both the fixed titlebar and the drawer's temporary
+					// hover/focus lift, so the trigger cannot disappear beneath either.
+					zIndex: '10140 !important',
 					top: 'calc(var(--thingtime-safe-area-top, 0px) + 8px) !important',
 					left: 'var(--thingtime-electron-titlebar-left-inset, 88px) !important',
 					width: '36px !important',
@@ -130,12 +136,25 @@ export const GlobalStyles = () => {
 					paddingLeft: '0 !important',
 					zIndex: 10060
 				},
-				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-home-button, html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-search-button':
+				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-navigation-button, html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-home-button, html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-search-button':
 					{
 						width: '36px',
 						height: '36px',
 						borderRadius: '8px'
 					},
+				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-navigation-button, html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-account-button':
+					{
+						display: 'flex !important'
+					},
+				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-account-button': {
+					height: '36px',
+					paddingLeft: '8px',
+					paddingRight: '8px',
+					borderRadius: '8px'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav .nav-right-account-button': {
+					display: 'none !important'
+				},
 				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-home-button > a': {
 					display: 'flex',
 					alignItems: 'center',
@@ -152,7 +171,11 @@ export const GlobalStyles = () => {
 					display: 'none'
 				},
 				'html.thingtime-electron-desktop .drawerMenuScroll': {
-					paddingTop: '18px'
+					paddingTop: '0'
+				},
+				'html.thingtime-electron-desktop .lopuToast': {
+					WebkitAppRegion: 'no-drag',
+					userSelect: 'text'
 				},
 				'html.thingtime-electron-desktop #commander[data-commander-active="false"] #commander-suggestions': {
 					display: 'none'

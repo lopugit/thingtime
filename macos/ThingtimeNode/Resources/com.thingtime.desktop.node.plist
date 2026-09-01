@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thingtime.desktop.node</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/ThingtimeNode</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>THINGTIME_NODE_MACH_SERVICE</key>
+        <string>1</string>
+    </dict>
+    <key>MachServices</key>
+    <dict>
+        <key>com.thingtime.desktop.node.xpc</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

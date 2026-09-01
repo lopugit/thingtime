@@ -1,4 +1,10 @@
 import { normalizeDesktopState, normalizePkceChallenge } from '../apps/desktopOAuthRedirect';
+import {
+  MAX_LIMITLESS_HISTORY,
+  MAX_LIMITLESS_WORKFLOW_RUNS,
+  type ThingtimeMcpHistoryEntry,
+  type ThingtimeMcpWorkflowRun
+} from './pluginLimitlessCore';
 
 export const CHATGPT_MCP_PATH = '/api/v1/integrations/chatgpt/mcp';
 export const CHATGPT_AUTHORIZE_PATH = '/api/v1/integrations/chatgpt/oauth/authorize';
@@ -9,22 +15,48 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.2.0',
-  'chatgpt.oauth': '1.3.0',
-  'chatgpt.connections': '1.1.0',
-  'chatgpt.things.read': '1.2.0',
-  'chatgpt.things.write': '1.0.1'
+  'chatgpt.mcp': '1.3.0',
+  'chatgpt.oauth': '1.5.0',
+  'chatgpt.connections': '1.2.0',
+  'chatgpt.things.read': '1.3.0',
+  'chatgpt.things.write': '1.1.0',
+  'chatgpt.schemas': '1.0.0',
+  'chatgpt.relationships': '1.0.0',
+  'chatgpt.mutations.preview': '1.0.0',
+  'chatgpt.resources': '1.0.0',
+  'chatgpt.history': '1.0.0',
+  'chatgpt.workflows': '1.0.0',
+  'chatgpt.ui': '1.0.0',
+  'chatgpt.changes': '1.0.0',
+  'chatgpt.capabilities': '1.0.0'
 } as const;
 
 export const CHATGPT_MCP_TOOL_FEATURES = {
+  login_thingtime: 'chatgpt.connections',
   list_thingtime_accounts: 'chatgpt.connections',
   select_thingtime_account: 'chatgpt.connections',
   remove_thingtime_account: 'chatgpt.connections',
   get_thingtime_profile: 'chatgpt.connections',
   get_thingtime_thing: 'chatgpt.things.read',
+  get_thingtime_things: 'chatgpt.things.read',
   list_thingtime_comments: 'chatgpt.things.read',
   list_thingtime_things: 'chatgpt.things.read',
   search_thingtime_things: 'chatgpt.things.read',
+  list_thingtime_schemas: 'chatgpt.schemas',
+  get_thingtime_schema: 'chatgpt.schemas',
+  validate_thingtime_thing: 'chatgpt.schemas',
+  list_thingtime_related: 'chatgpt.relationships',
+  list_thingtime_changes: 'chatgpt.changes',
+  preview_thingtime_mutation: 'chatgpt.mutations.preview',
+  apply_thingtime_mutation: 'chatgpt.mutations.preview',
+  list_thingtime_history: 'chatgpt.history',
+  get_thingtime_history: 'chatgpt.history',
+  undo_thingtime_mutation: 'chatgpt.history',
+  list_thingtime_capabilities: 'chatgpt.capabilities',
+  get_thingtime_capability_contract: 'chatgpt.capabilities',
+  start_thingtime_workflow: 'chatgpt.workflows',
+  get_thingtime_workflow: 'chatgpt.workflows',
+  cancel_thingtime_workflow: 'chatgpt.workflows',
   create_thingtime_thing: 'chatgpt.things.write',
   update_thingtime_thing: 'chatgpt.things.write',
   delete_thingtime_thing: 'chatgpt.things.write',
@@ -34,8 +66,16 @@ export const CHATGPT_MCP_TOOL_FEATURES = {
   share_thingtime_thing: 'chatgpt.things.write'
 } as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
 
+export const CHATGPT_MCP_METHOD_FEATURES = {
+  'prompts/list': 'chatgpt.workflows',
+  'prompts/get': 'chatgpt.workflows',
+  'resources/list': 'chatgpt.resources',
+  'resources/templates/list': 'chatgpt.resources',
+  'resources/read': 'chatgpt.resources'
+} as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
+
 export const CHATGPT_MCP_INSTRUCTIONS =
-  'Thingtime operates only on named accounts connected through this app. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. When an exact Thing ID is supplied, always use get_thingtime_thing; never rely on a paginated or recent Things listing to locate a known ID. When a comment target ID is supplied, use list_thingtime_comments instead of listing global Things. Read and search may proceed on request; before any create, update, delete, comment, reaction, save, share, or disconnect, state the selected account, target, and effect and obtain clear confirmation.';
+  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. Every composed workflow and multi-Thing mutation must be previewed first; apply or undo only after stating the selected account, targets, effects, and obtaining clear confirmation. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
@@ -95,6 +135,8 @@ export type ChatGptCredentialBundle = {
   version: 1;
   defaultConnectionId: string;
   connections: ChatGptConnection[];
+  history?: ThingtimeMcpHistoryEntry[];
+  runs?: ThingtimeMcpWorkflowRun[];
 };
 
 export const CHATGPT_OAUTH_SCOPES = ['thingtime', 'offline_access'] as const;
@@ -192,8 +234,9 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
 };
 
 // Dynamic Client Registration is a compatibility path for Codex clients that
-// cannot use CIMD yet. A registration may contain only a loopback callback;
-// no arbitrary web, custom-scheme, or localhost redirect can become trusted.
+// cannot use CIMD yet, and for ChatGPT developer apps. A registration may use
+// only a native loopback callback or ChatGPT's exact connector callback; no
+// arbitrary web, custom-scheme, or localhost redirect can become trusted.
 export const normalizeDynamicClientRedirectUri = (value: unknown): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   try {
@@ -219,6 +262,15 @@ export const normalizeDynamicClientRedirectUri = (value: unknown): string | null
   }
 };
 
+// ChatGPT's current developer-app flow uses an opaque dynamically registered
+// public client and returns to its exact connector callback. Treat that callback
+// with the same registration binding as a native loopback client: it must be
+// included in the signed registration and in the later authorization request.
+// Nothing broad is accepted here; both supported ChatGPT callbacks are exact
+// constants above.
+export const normalizeRegisteredClientRedirectUri = (value: unknown): string | null =>
+  normalizeDynamicClientRedirectUri(value) || normalizeChatGptRedirectUri(value);
+
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   return isMcpResourceForOrigin(value, origin) ? value : null;
@@ -237,7 +289,7 @@ export const parseChatGptAuthorizationRequest = (
   if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
 
   const redirectUri = registeredDynamicClient
-    ? normalizeDynamicClientRedirectUri(params.get('redirect_uri'))
+    ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'))
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
       : normalizeChatGptRedirectUri(params.get('redirect_uri'));
@@ -294,7 +346,34 @@ export const parseCredentialBundle = (value: unknown): ChatGptCredentialBundle |
     typeof candidate.defaultConnectionId === 'string' && connections.some((connection) => connection.id === candidate.defaultConnectionId)
       ? candidate.defaultConnectionId
       : connections[0].id;
-  return { version: 1, defaultConnectionId, connections };
+  const history = Array.isArray(candidate.history)
+    ? candidate.history
+        .filter((entry): entry is ThingtimeMcpHistoryEntry =>
+          !!entry &&
+          typeof entry === 'object' &&
+          typeof entry.id === 'string' &&
+          typeof entry.accountId === 'string' &&
+          typeof entry.createdAt === 'string' &&
+          Array.isArray(entry.summaries) &&
+          Array.isArray(entry.results)
+        )
+        .slice(-MAX_LIMITLESS_HISTORY)
+    : undefined;
+  const runs = Array.isArray(candidate.runs)
+    ? candidate.runs
+        .filter((entry): entry is ThingtimeMcpWorkflowRun =>
+          !!entry &&
+          typeof entry === 'object' &&
+          typeof entry.id === 'string' &&
+          typeof entry.accountId === 'string' &&
+          typeof entry.capabilityThingId === 'string' &&
+          typeof entry.createdAt === 'string' &&
+          typeof entry.updatedAt === 'string' &&
+          Array.isArray(entry.summaries)
+        )
+        .slice(-MAX_LIMITLESS_WORKFLOW_RUNS)
+    : undefined;
+  return { version: 1, defaultConnectionId, connections, ...(history?.length ? { history } : {}), ...(runs?.length ? { runs } : {}) };
 };
 
 // Single definition for both plugin HTML surfaces (the connection page here
@@ -334,14 +413,21 @@ export const pluginDiscovery = (origin: string) => ({
     authorization_response_iss_parameter_supported: true
   },
   capabilityManifest: {
-    schemaVersion: '1.1.0',
+    schemaVersion: '1.2.0',
     origin,
     features: CHATGPT_PLUGIN_FEATURES,
     routes: CHATGPT_PLUGIN_ROUTES,
-    operations: Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({
-      transport: 'mcp-tool',
-      name,
-      feature
-    }))
+    operations: [
+      ...Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({
+        transport: 'mcp-tool',
+        name,
+        feature
+      })),
+      ...Object.entries(CHATGPT_MCP_METHOD_FEATURES).map(([name, feature]) => ({
+        transport: 'mcp-method',
+        name,
+        feature
+      }))
+    ]
   }
 });

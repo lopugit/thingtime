@@ -51,13 +51,19 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw
   Chakra `useToast` or `alert()`.
 
-The active build roadmap lives in `claude-todo/`. The owner's engineering
+The active build roadmap lives in `TODO/claude-todo/`. The owner's engineering
 decisions and thinking method are logged in `DECISIONS.md`; read it when
 product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
 
 ## Local development and worktrees
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
 
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, to start or restart the local web app — it is now the blessed lifecycle command (it cleans up the previous timestamped app and starts a fresh one). Do **not** use a raw `pm2 restart ecosystem.config.js`: the app name carries a clock-time suffix that is re-stamped on each config load, so a raw restart would spawn a duplicate instead of restarting in place. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
 - Worktree dev servers: `remix/scripts/worktree-ports.cjs` is the single source
@@ -122,6 +128,10 @@ commits.
 
 ## Browser and UI validation
 
+### Feature customization defaults
+
+- Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
+
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
   area the PR touches, and add a line there whenever a new bug class is fixed
@@ -172,6 +182,16 @@ commits.
   variables, also document the fork-safe setup steps in `README.md`. Use
   placeholder values only; never copy real tokens, passwords, project secrets,
   or account-specific credentials into public docs.
+- Thingtime email delivery work must stay aligned with the owned-stack plan in
+  `docs/email-owned-architecture.md`. App/auth code enqueues through the shared
+  email service boundary — `sendEmail()` in
+  `remix/app/api/utils/email/service.ts`, backed by the `email_messages` outbox
+  and its deliverability satellites (FUNDAMENTALS §3) — rather than calling SES,
+  SMTP, or another transport directly, so provider-backed and self-hosted
+  delivery share the same templates, events, suppressions, compliance checks,
+  and audit trail. New mail must map onto an existing `EmailStream`
+  (`transactional`, `newsletter`, `notification`) instead of adding a fourth
+  name for the same traffic.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
@@ -295,7 +315,10 @@ Rules:
   `graphify-out/snapshots/v1/`, hydrates a private semantic cache from immutable
   variants under `graphify-out/cache/semantic-cas/v1/`, and
   refreshes ignored root aliases so ordinary `graphify query` remains
-  compatible. Do not invoke mutating commands through the bare binary in this
+  compatible. It retains one active portable snapshot by default and prunes
+  superseded snapshots after successful activation; use
+  `GRAPHIFY_SNAPSHOT_RETENTION=<positive integer>` only for an explicit bounded
+  local need. Do not invoke mutating commands through the bare binary in this
   repository.
 - After modifying code, run `scripts/graphify update .` to keep the graph
   current (AST-only, no API cost). When Markdown, docs, PDFs, images, or another
@@ -303,7 +326,8 @@ Rules:
   Codex LLM proxy and then let the wrapper cluster/export the result.
 - Never commit mutable `graphify-out/graph.json`, `manifest.json`,
   `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
-  selected by the wrapper. Commit the immutable snapshot directory and any new
+  selected by the wrapper. Commit the selected immutable snapshot directory,
+  the wrapper's removal of superseded snapshots, and any new
   `graphify-out/cache/semantic-cas/` variants instead; the upstream mutable
   `graphify-out/cache/semantic/` directory stays ignored.
 - A commit SHA cannot name generated output included in that same commit.
@@ -327,7 +351,7 @@ Rules:
 
 - When finishing a branch update in this workspace, always report the pushed remote branch and the PR URL.
 - If a PR exists (or was created), include the PR URL in your completion response.
-- If Vercel preview deployment exists for that branch, include the most recent preview URL as well.
+- For every web-app branch or PR delivery, actively discover its Vercel preview before finishing: inspect the PR checks or deployment status first, then the Vercel project deployments when needed. Always include the most recent reachable branch preview as a clickable `Preview:` link in the completion response. If no reachable preview exists, is pending, or cannot be verified, explicitly say so and include the relevant PR check or deployment dashboard link with the reason; never silently omit preview status.
 - When making or validating deployment, Vercel, hydration, environment, or local
   runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
   under `[Unreleased]` before finishing.

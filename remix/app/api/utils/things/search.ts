@@ -1,6 +1,8 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
+import { fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
+  ACL_INHERIT,
   KEY_SEGMENT_PATTERN,
   MAX_TEXT_CHARS,
   PROTECTED_THINGTIME,
@@ -38,6 +40,7 @@ import {
   type Viewer
 } from './things';
 import { attachRankScores, type RankedSearchSource } from './searchRanking';
+import { emojiTokensForSearchTerm } from './emojiSearch';
 
 // Structured search over the things collection — the API behind /search.
 //
@@ -89,15 +92,17 @@ const DEFAULT_SEARCH_LIMIT = 20;
 // ranked text results page by offset within a bounded window (mirrors the
 // ranked feed's determinism trade-off)
 const MAX_RANKED_OFFSET = 500;
-// match counts are a UX nicety, never worth a collection scan hanging a request
-const COUNT_LIMIT = 1000;
-const COUNT_MAX_TIME_MS = 2000;
+// match-count ceiling + timeout live in ../mongodb/cappedTotal (fetchCappedTotal),
+// shared with the schema browser so /search and /schemas can't drift.
 // Engagement filters (min reactions/comments) can't be expressed as an indexed
 // match — counts live in child things (FUNDAMENTALS §3), so we score a bounded
 // window of the newest/best-matching candidates and page within it by offset.
 // Same determinism trade-off as the ranked feed's RANKED_CANDIDATE_WINDOW.
 const ENGAGEMENT_CANDIDATE_WINDOW = 400;
 const MAX_AUTHOR_CHARS = 64;
+// Attachments are level-one things and intentionally participate in generic
+// search. Other protected system kinds retain their existing exclusion.
+const GENERIC_SEARCH_EXCLUDED_THINGTIME = PROTECTED_THINGTIME.filter((kind) => kind !== 'attachment');
 
 // Root fields searchable by name; anything else lives under crystal (bare
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
@@ -300,6 +305,17 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
       }
       const literal = escapeRegex(value);
       const pattern = op === 'startsWith' ? `^${literal}` : op === 'endsWith' ? `${literal}$` : literal;
+      if (field === 'crystal.emoji' && op === 'contains') {
+        const namedTokens = emojiTokensForSearchTerm(value);
+        if (namedTokens.length) {
+          return {
+            $or: [
+              { [field]: { $regex: pattern, $options: 'i' } },
+              { [field]: { $in: namedTokens } }
+            ]
+          };
+        }
+      }
       return { [field]: { $regex: pattern, $options: 'i' } };
     }
   }
@@ -393,9 +409,22 @@ const projectVisiblePage = async (
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));
-  const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
+  const reactionTargets = await Promise.all(
+    visible.map(async (doc) =>
+      Array.isArray(doc.thingtime) && doc.thingtime.includes('reaction') && typeof doc.targetId === 'string'
+        ? lookup(doc.targetId)
+        : null
+    )
+  );
+  const targetPosts = reactionTargets.filter((doc): doc is ThingDoc => !!doc && isPostThing(doc));
+  const uniquePostDocs = [...new Map([...postDocs, ...targetPosts].map((doc) => [doc.shareId, doc])).values()];
+  const postProjections = uniquePostDocs.length ? await toPublicPosts(uniquePostDocs, viewer) : [];
   const posts: Record<string, PublicPost> = {};
   for (const post of postProjections) posts[post.id] = post;
+  visible.forEach((doc, index) => {
+    const target = reactionTargets[index];
+    if (target && posts[target.shareId]) posts[doc.shareId] = posts[target.shareId];
+  });
   return { things: attachRankScores(things, visible as RankedSearchSource[]), posts };
 };
 
@@ -442,7 +471,7 @@ export const searchThings = async (
   // scrape / account-existence + user-count oracle); theme/feed-algorithm/
   // waitlist things are owner-private and never meant to be searched. schema
   // things stay searchable — the schema browser relies on it.
-  clauses.push({ thingtime: { $nin: [...PROTECTED_THINGTIME] } });
+  clauses.push({ thingtime: { $nin: GENERIC_SEARCH_EXCLUDED_THINGTIME } });
 
   const tags = csvList(query.tags).map((tag) => tag.toLowerCase());
   if (tags.length) clauses.push({ tags: { $in: tags } });
@@ -519,7 +548,13 @@ export const searchThings = async (
   // Under the app lens the audience superset IS the namespace conjunction —
   // server-injected, never expressible from the client grammar (appId/acl stay
   // out of SEARCHABLE_ROOT_FIELDS).
-  const visibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
+  const directVisibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
+  // Inherited children (notably reactions) need their parent ACL evaluated by
+  // canViewInherited below; include them in this coarse DB-level superset.
+  const visibility =
+    !app && directVisibility && circles.length === 0
+      ? { $or: [directVisibility, { acl: ACL_INHERIT }] }
+      : directVisibility;
   if (!visibility) return emptyResult;
 
   const baseMatch = withMatch(visibility, ...clauses);
@@ -703,18 +738,12 @@ export const searchThings = async (
   // Capped count for the "N things match" readout — only on the FIRST page
   // (load-more keeps the total it already has), concurrent with the page find,
   // and approximate by design: it counts the DB visibility superset, so
-  // circle-restricted docs the exact acl pass rejects may be included.
-  const fetchTotal = async (): Promise<{ total: number | null; totalCapped: boolean }> => {
-    if (query.cursor) return { total: null, totalCapped: false };
-    try {
-      const count = await things.countDocuments(match as any, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-      return count > COUNT_LIMIT ? { total: COUNT_LIMIT, totalCapped: true } : { total: count, totalCapped: false };
-    } catch {
-      return { total: null, totalCapped: false };
-    }
-  };
-
-  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([fetchPage(), fetchTotal()]);
+  // circle-restricted docs the exact acl pass rejects may be included. Shared
+  // with the schema browser via fetchCappedTotal so both stay in lockstep.
+  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([
+    fetchPage(),
+    fetchCappedTotal(things, match, query.cursor)
+  ]);
   const page = docs.slice(0, limit);
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances

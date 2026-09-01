@@ -136,7 +136,9 @@ for (const input of [
   'promotion_lookback',
   'promotion_source_branch',
   'promotion_target_branch',
-  'promotion_path_prefix'
+  'promotion_path_prefix',
+  'feature_stack_plan_b64',
+  'feature_stack_run_id'
 ]) {
   assert.match(
     resolverCaller,

@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
 	USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION,
+	conversionReceiptCovers,
 	conversionThingSemanticallyEquals,
+	userStorageAccountingSourceCursor,
 	userStoragePrerequisites
 } from './migrations.ts';
 import { profileAttachmentRefsForUserRoot } from '../auth/users.ts';
@@ -59,6 +61,21 @@ test('whole-account storage accounting repairs builtin schema seeds first', () =
 	assert.ok(ids.indexOf('seed-builtin-schemas') < ids.indexOf('backfill-app-namespace-fields'));
 });
 
+test('whole-account storage accounting reads complete protected attachment envelopes', () => {
+	let receivedFilter: Record<string, unknown> | undefined;
+	const fullDocumentCursor = {
+		project: () => assert.fail('the migration must not project away protected attachment root fields')
+	};
+	const cursor = userStorageAccountingSourceCursor({
+		find: (filter: Record<string, unknown>) => {
+			receivedFilter = filter;
+			return fullDocumentCursor;
+		}
+	});
+	assert.equal(cursor, fullDocumentCursor);
+	assert.deepEqual(receivedFilter, { ownerId: { $type: 'string' } });
+});
+
 test('legacy user migration preserves managed profile attachment references and treats drift as non-equivalent', () => {
 	assert.deepEqual(
 		profileAttachmentRefsForUserRoot({
@@ -83,5 +100,61 @@ test('legacy user migration preserves managed profile attachment references and 
 		conversionThingSemanticallyEquals({ ...expected, avatarAttachmentId: undefined }, expected, false),
 		false,
 		'a migration must not delete the legacy source when its destination lost a managed-media reference'
+	);
+});
+
+// --------------------------------------------------------------------------
+// Conversion receipts are the only proof that lets the consume phase delete a
+// legacy source it did not itself verify byte-for-byte, so the predicate has to
+// fail closed on every shape that is not a positive certification. It is pure
+// and takes the receipt as data specifically so the per-doc lookup and the
+// page-batched one cannot drift apart in what they accept.
+
+test('an absent conversion receipt never certifies a source', () => {
+	const source = { _id: 'legacy-1', updatedAt: '2026-01-01T00:00:00.000Z' };
+	// findOne yields null for a miss; the batched Map yields undefined. Both are
+	// "no receipt" and must refuse to license a delete.
+	assert.equal(conversionReceiptCovers(null, source), false);
+	assert.equal(conversionReceiptCovers(undefined, source), false);
+	// present but not a completed receipt — no destination was ever recorded
+	assert.equal(conversionReceiptCovers({ sourceUpdatedAtMs: Date.parse(source.updatedAt) }, source), false);
+	assert.equal(conversionReceiptCovers({ destinationShareId: 42, sourceUpdatedAtMs: Date.parse(source.updatedAt) }, source), false);
+});
+
+test('a conversion receipt certifies a source only up to the state it recorded', () => {
+	const converted = Date.parse('2026-01-01T00:00:00.000Z');
+	const receipt = { destinationShareId: 'user-1', sourceUpdatedAtMs: converted, sourceDigest: 'digest-of-recorded-state' };
+	assert.equal(conversionReceiptCovers(receipt, { _id: 'legacy-1', updatedAt: new Date(converted) }), true);
+	assert.equal(conversionReceiptCovers(receipt, { _id: 'legacy-1', updatedAt: new Date(converted - 1000) }), true);
+	// the source has been edited since it was converted: the receipt covers an
+	// older state, so it must not license deleting the newer one
+	assert.equal(
+		conversionReceiptCovers(receipt, { _id: 'legacy-1', updatedAt: new Date(converted + 1000) }),
+		false,
+		'a receipt for an older source state must not certify a source edited after conversion'
+	);
+});
+
+test('a receipt falls back to the source digest only when a timestamp cannot decide', () => {
+	const source = { _id: 'legacy-1' }; // historical row, never had an updatedAt
+	// no usable time on either side → the digest decides, and a wrong one fails
+	assert.equal(conversionReceiptCovers({ destinationShareId: 'user-1', sourceDigest: 'not-this-source' }, source), false);
+	// an unusable receipt timestamp also routes to the digest rather than being
+	// read as a satisfied comparison
+	assert.equal(
+		conversionReceiptCovers(
+			{ destinationShareId: 'user-1', sourceUpdatedAtMs: null, sourceDigest: 'not-this-source' },
+			{ _id: 'legacy-1', updatedAt: '2026-01-01T00:00:00.000Z' }
+		),
+		false
+	);
+	// a source whose updatedAt is present but unparseable has no comparable
+	// time either, so it must not ride the numeric branch
+	assert.equal(
+		conversionReceiptCovers(
+			{ destinationShareId: 'user-1', sourceUpdatedAtMs: 0, sourceDigest: 'not-this-source' },
+			{ _id: 'legacy-1', updatedAt: 'soon' }
+		),
+		false
 	);
 });

@@ -56,9 +56,7 @@ const sameWaterfall = (left: PRConflictResolverModelId[], right: PRConflictResol
   left.length === right.length && left.every((modelId, index) => modelId === right[index]);
 
 const readCachedWaterfall = () =>
-  normalizePrConflictResolverModelWaterfall(
-    readLocalCache<unknown>(CACHE_KEY) ?? DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL
-  );
+	normalizePrConflictResolverModelWaterfall(readLocalCache<unknown>(CACHE_KEY) ?? DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL);
 
 export const PRConflictResolverModelWaterfallEditor = () => {
   const api = useApi();
@@ -72,6 +70,10 @@ export const PRConflictResolverModelWaterfallEditor = () => {
   const [pickedModelId, setPickedModelId] = React.useState('');
   const [pickedEffort, setPickedEffort] = React.useState<'' | AiModelEffort>('');
   const [pickedSpeed, setPickedSpeed] = React.useState<AiModelSpeed>('normal');
+	const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
+	const [editingModelId, setEditingModelId] = React.useState('');
+	const [editingEffort, setEditingEffort] = React.useState<'' | AiModelEffort>('');
+	const [editingSpeed, setEditingSpeed] = React.useState<AiModelSpeed>('normal');
   const editGenerationRef = React.useRef(0);
   const saveGenerationRef = React.useRef(0);
 
@@ -167,6 +169,37 @@ export const PRConflictResolverModelWaterfallEditor = () => {
     setMoveAnnouncement(`${entryName(pickedId)} added as Fallback ${waterfall.length}.`);
   }, [pickedId, updateWaterfall, waterfall]);
 
+	const startEditing = React.useCallback(
+		(index: number) => {
+			const choice = parseAiWorkflowModelOptionId(waterfall[index]);
+			if (!choice || choice.model === 'default') return;
+			setEditingIndex(index);
+			setEditingModelId(choice.model);
+			setEditingEffort(choice.effort ?? '');
+			setEditingSpeed(choice.speed);
+		},
+		[waterfall]
+	);
+
+	const changeEditingModel = React.useCallback((modelId: string) => {
+		setEditingModelId(modelId);
+		setEditingEffort('');
+		setEditingSpeed('normal');
+	}, []);
+
+	const applyEditing = React.useCallback(() => {
+		if (editingIndex === null) return;
+		const base = baseModelById.get(editingModelId);
+		if (!base) return;
+		const nextId = composePickedId(base.id, editingEffort, editingSpeed);
+		if (waterfall.some((entry, index) => index !== editingIndex && entry === nextId)) return;
+		const next = [...waterfall];
+		next[editingIndex] = nextId;
+		updateWaterfall(next);
+		setMoveAnnouncement(`${entryName(nextId)} updated in place.`);
+		setEditingIndex(null);
+	}, [editingEffort, editingIndex, editingModelId, editingSpeed, updateWaterfall, waterfall]);
+
   const save = async () => {
     if (!dirty || saving) return;
     saveGenerationRef.current += 1;
@@ -206,6 +239,10 @@ export const PRConflictResolverModelWaterfallEditor = () => {
     const label = choice?.label || modelId;
     const name = entryName(modelId);
     const priority = index === 0 ? 'Primary' : `Fallback ${index}`;
+		const isEditing = editingIndex === index;
+		const editingModel = isEditing ? baseModelById.get(editingModelId) : null;
+		const editingId = editingModel ? composePickedId(editingModel.id, editingEffort, editingSpeed) : '';
+		const editingDuplicate = !!editingId && waterfall.some((entry, entryIndex) => entryIndex !== index && entry === editingId);
 
     return {
       id: modelId,
@@ -242,6 +279,72 @@ export const PRConflictResolverModelWaterfallEditor = () => {
             ⋮⋮
           </Flex>
 
+					{isEditing && editingModel ? (
+						<Flex minWidth={0} flex="1 1 auto" gap={2} wrap="wrap" align="center">
+							<Select
+								size="xs"
+								width="auto"
+								maxW="240px"
+								aria-label={`Edit model for ${priority}`}
+								value={editingModelId}
+								onChange={(event) => changeEditingModel(event.target.value)}
+								isDisabled={saving}
+							>
+								{PICKER_PROVIDERS.map((provider) => (
+									<optgroup key={provider} label={AI_MODEL_PROVIDER_LABELS[provider]}>
+										{PICKER_MODELS.filter((model) => model.provider === provider).map((model) => (
+											<option key={model.id} value={model.id}>
+												{model.label}
+											</option>
+										))}
+									</optgroup>
+								))}
+							</Select>
+							{editingModel.efforts.length ? (
+								<Select
+									size="xs"
+									width="auto"
+									maxW="170px"
+									aria-label={`Edit effort for ${priority}`}
+									value={editingEffort}
+									onChange={(event) => setEditingEffort(event.target.value as '' | AiModelEffort)}
+									isDisabled={saving}
+								>
+									<option value="">Default effort</option>
+									{editingModel.efforts.map((effort) => (
+										<option key={effort} value={effort}>
+											{AI_MODEL_EFFORT_LABELS[effort]}
+										</option>
+									))}
+								</Select>
+							) : null}
+							{editingModel.speeds.includes('fast') ? (
+								<Select
+									size="xs"
+									width="auto"
+									maxW="120px"
+									aria-label={`Edit speed for ${priority}`}
+									value={editingSpeed}
+									onChange={(event) => setEditingSpeed(event.target.value as AiModelSpeed)}
+									isDisabled={saving}
+								>
+									<option value="normal">Normal</option>
+									<option value="fast">Fast</option>
+								</Select>
+							) : null}
+							<Button size="xs" colorScheme="purple" onClick={applyEditing} isDisabled={saving || editingDuplicate}>
+								Apply
+							</Button>
+							<Button size="xs" variant="ghost" onClick={() => setEditingIndex(null)} isDisabled={saving}>
+								Cancel
+							</Button>
+							{editingDuplicate ? (
+								<Text fontSize="xs" color="orange.500">
+									Already in the list.
+								</Text>
+							) : null}
+						</Flex>
+					) : (
           <Box minWidth={0} flex="1 1 auto">
             <Flex alignItems="center" columnGap={2} flexWrap="wrap">
               <Text fontSize="sm" fontWeight={650} noOfLines={1}>
@@ -264,6 +367,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
               {choice ? describeAiWorkflowModelChoice(choice) : 'Unknown entry'}
             </Text>
           </Box>
+					)}
 
           <Flex alignItems="center" columnGap={1} flexShrink={0}>
             <IconButton
@@ -298,6 +402,16 @@ export const PRConflictResolverModelWaterfallEditor = () => {
                 🔒
               </Flex>
             ) : (
+							<>
+								<IconButton
+									size="xs"
+									variant="ghost"
+									aria-label={`Edit ${name}`}
+									title={`Edit ${name}`}
+									icon={<Text aria-hidden="true">✎</Text>}
+									isDisabled={saving}
+									onClick={() => startEditing(index)}
+								/>
               <IconButton
                 size="xs"
                 variant="ghost"
@@ -307,6 +421,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
                 isDisabled={saving}
                 onClick={() => removeModel(modelId)}
               />
+							</>
             )}
           </Flex>
         </Flex>
@@ -314,22 +429,16 @@ export const PRConflictResolverModelWaterfallEditor = () => {
     };
   });
 
-  const status = dirty
-    ? 'Unsaved changes'
-    : refreshing
-      ? 'Checking saved order…'
-      : refreshFailed
-        ? 'Showing the last-known saved order'
-        : 'Saved';
+	const status = dirty ? 'Unsaved changes' : refreshing ? 'Checking saved order…' : refreshFailed ? 'Showing the last-known saved order' : 'Saved';
 
   return (
     <Flex flexDirection="column" rowGap={3}>
       <Box>
         <Text sx={eyebrow}>AI workflow model order</Text>
         <Text marginTop={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
-          The first entry is preferred across AI-backed Thingtime features: conflict resolution, stacked-PR rebases, semantic Graphify refreshes,
-          and Lopu musings. Add as many fallback entries as you like — every Claude and OpenAI model, with per-entry reasoning effort and
-          normal/fast mode.
+					The first entry is preferred across AI-backed Thingtime features: conflict resolution, stacked-PR rebases, semantic Graphify refreshes, and
+					Lopu musings. Add as many fallback entries as you like — every Claude and OpenAI model, with per-entry reasoning effort and normal/fast
+					mode.
         </Text>
         <Text marginTop={1} fontSize="xs" color="var(--tt-muted, #8a8a96)">
           Workflow conflict edits run Claude-capable entries and try later ones only on eligible model failures. Direct Anthropic features use the
@@ -430,11 +539,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
         <Button size="xs" variant="outline" isLoading={saving} isDisabled={!dirty} onClick={save}>
           Save model order 💾
         </Button>
-        <Text
-          aria-live="polite"
-          fontSize="xs"
-          color={dirty ? 'var(--tt-accent, #6558d3)' : 'var(--tt-muted, #8a8a96)'}
-        >
+				<Text aria-live="polite" fontSize="xs" color={dirty ? 'var(--tt-accent, #6558d3)' : 'var(--tt-muted, #8a8a96)'}>
           {status}
         </Text>
       </Flex>

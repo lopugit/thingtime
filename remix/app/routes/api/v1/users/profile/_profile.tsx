@@ -3,26 +3,65 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { findUserByUsername, toPublicProfile, updateUserProfile } from '~/api/utils/auth/users';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { getSharedTheme } from '~/api/utils/themes/themes';
 import { countPublicPosts } from '~/api/utils/things/things';
 
 // GET /api/v1/users/profile?username= — a user's public profile (safe
-// projection: never email/verification/storage) + their public post count.
-export const loader = async ({ request }: { request: Request }) => {
-	const params = new URL(request.url).searchParams;
-	const username = (params.get('username') || '').trim();
-	if (!username) {
-		return json({ ok: false, error: 'username is required' }, { status: 400 });
-	}
-
-	const user = await findUserByUsername(username);
-	if (!user) {
-		return json({ ok: false, error: 'User not found' }, { status: 404 });
-	}
-
-	const postCount = await countPublicPosts(String(user._id));
-
-	return json({ ok: true, profile: toPublicProfile(user), postCount });
+// projection: never email/verification/storage) + their public post count +
+// the theme they're wearing ("wear my theme", claude-todo/10 ✨).
+//
+// Injected like the action below (and the attachment/moderation loaders): the
+// worn-theme gate is a privacy boundary on an anonymous endpoint, so it needs
+// to be assertable without a database. `findUserByUsername` hands back the
+// FULL decoded user doc — email, passwordHash, meta.activeThemeId — and only
+// toPublicProfile plus the wornTheme projection stand between that and the
+// wire, which is exactly what profileRoute.test.ts pins.
+type ProfileLoaderDependencies = {
+	findUser: typeof findUserByUsername;
+	countPosts: typeof countPublicPosts;
+	getWornTheme: typeof getSharedTheme;
 };
+
+const defaultLoaderDependencies: ProfileLoaderDependencies = {
+	findUser: findUserByUsername,
+	countPosts: countPublicPosts,
+	getWornTheme: getSharedTheme
+};
+
+export const createProfileLoader = (overrides: Partial<ProfileLoaderDependencies> = {}) => {
+	const dependencies = { ...defaultLoaderDependencies, ...overrides };
+
+	return async ({ request }: { request: Request }) => {
+		const params = new URL(request.url).searchParams;
+		const username = (params.get('username') || '').trim();
+		if (!username) {
+			return json({ ok: false, error: 'username is required' }, { status: 400 });
+		}
+
+		const user = await dependencies.findUser(username);
+		if (!user) {
+			return json({ ok: false, error: 'User not found' }, { status: 404 });
+		}
+
+		const postCount = await dependencies.countPosts(String(user._id));
+
+		// The worn theme is resolved through the same public gate share links use
+		// (getSharedTheme), so a PRIVATE active theme yields null — the raw
+		// activeThemeId never rides the public profile payload, and a chip shows
+		// iff its ?apply link would resolve for the visitor.
+		const activeThemeId = typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null;
+		const worn = activeThemeId ? await dependencies.getWornTheme(activeThemeId) : null;
+
+		return json({
+			ok: true,
+			profile: toPublicProfile(user),
+			postCount,
+			wornTheme: worn ? { id: worn.id, name: worn.name } : null
+		});
+	};
+};
+
+export const loader = createProfileLoader();
 
 // Keep this mutation body bounded. Existing data:image values remain readable,
 // but new profile image writes use http(s) links or managed S3 attachments.

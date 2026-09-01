@@ -15,6 +15,7 @@ import type { OrderedEditorJsChangeQueue } from './editorJsChangeQueue';
 import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './editorJsChangeReconciliation';
 import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
+import { watchEditorJsBlockReorder } from './editorJsBlockDragDrop';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
@@ -43,6 +44,10 @@ export type { EditorJsBlock, EditorJsDoc } from './editorJsValue';
 // import inside an effect; SSR and non-DOM environments never touch it.
 
 export type LongTextValue = string | EditorJsDoc;
+
+export type LongTextEditorHandle = {
+	save: () => Promise<LongTextValue>;
+};
 
 // every togglable tool: block tools + the extra inline tools
 // (paragraph and the core bold/italic/link inline tools are always on)
@@ -282,7 +287,7 @@ type LongTextEditorInnerProps = Omit<LongTextEditorProps, 'onValueChange'> & {
 	allocateChangeSequence: () => number;
 };
 
-const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
+const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEditorInnerProps>((props, ref) => {
 	const holderRef = React.useRef<HTMLDivElement | null>(null);
 	const editorRef = React.useRef<any>(null);
 	const destroyedRef = React.useRef(false);
@@ -293,6 +298,9 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 	const readonlyRef = React.useRef(Boolean(props.readonly));
 	const blockTypesRef = React.useRef(props.blockTypes);
 	const rawInputCleanupRef = React.useRef<(() => void) | null>(null);
+	const saveCurrentValueRef = React.useRef<() => Promise<LongTextValue>>(async () => valueRef.current);
+
+	React.useImperativeHandle(ref, () => ({ save: () => saveCurrentValueRef.current() }), []);
 
 	React.useEffect(() => {
 		valueRef.current = props.value;
@@ -319,9 +327,11 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 		destroyedRef.current = false;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
+		let blockReorderCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
 		let saveEditorValue: (() => void) | undefined;
+		let captureEditorValue: (() => Promise<LongTextValue>) | undefined;
 
 		(async () => {
 			if (!holderRef.current) return;
@@ -433,16 +443,24 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				}
 			});
 
+			captureEditorValue = async () => {
+				const activeEditor = editor;
+				await activeEditor.isReady;
+				if (destroyedRef.current || editorRef.current !== activeEditor) return valueRef.current;
+				const saved = await activeEditor.save();
+				if (blockModeRef.current) {
+					const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
+					return { ...base, blocks: saved.blocks } as EditorJsDoc;
+				}
+				return blocksToText(saved.blocks as EditorJsDoc['blocks']);
+			};
+			saveCurrentValueRef.current = captureEditorValue;
+
 			saveEditorValue = () => {
 				if (!editor || destroyedRef.current) return;
 				const sequence = props.allocateChangeSequence();
 				editorChangeQueue?.enqueue(async () => {
-					const saved = await editor.save();
-					if (blockModeRef.current) {
-						const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
-						return { value: { ...base, blocks: saved.blocks } as EditorJsDoc, sequence };
-					}
-					return { value: blocksToText(saved.blocks as EditorJsDoc['blocks']), sequence };
+					return { value: await captureEditorValue!(), sequence };
 				});
 			};
 
@@ -479,6 +497,13 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			// the browser keeps native deletion and cursor movement in the field.
 			textFieldKeyboardCleanup = watchEditorJsTextFieldKeydowns(holderRef.current);
 
+			// Block reordering: drag / long-press the six-dot grip, or Alt+↑/↓.
+			// Explicitly settle one save after each completed move — Editor.js does
+			// not reliably emit onChange for programmatic blocks.move().
+			blockReorderCleanup = watchEditorJsBlockReorder(holderRef.current, () => editorRef.current, {
+				onMoved: () => saveEditorValue?.()
+			});
+
 			// register in the window.meta debug db (same convention as
 			// Thingtime.tsx) so devtools/tests can drive editor.js's own API
 			try {
@@ -507,6 +532,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 
 		return () => {
 			cancelled = true;
+			saveCurrentValueRef.current = async () => valueRef.current;
 			popoverViewportCleanup?.();
 			// Capture the final DOM state before teardown, then allow already-started
 			// saves to drain. The outer wrapper rejects stale results after an explicit
@@ -515,6 +541,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			const drained = editorChangeQueue?.close() ?? Promise.resolve();
 			destroyedRef.current = true;
 			textFieldKeyboardCleanup?.();
+			blockReorderCleanup?.();
 			rawInputCleanupRef.current?.();
 			rawInputCleanupRef.current = null;
 			const editor = editorRef.current;
@@ -540,6 +567,8 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 		<Box
 			className="long-text-editor"
 			ref={holderRef}
+			// anchor for the block-reorder drop indicator (absolute child)
+			position="relative"
 			onPointerUp={(event) => {
 				if (readonlyRef.current) return;
 				const holder = event.currentTarget;
@@ -574,7 +603,25 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				'.codex-editor__redactor': { paddingBottom: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
+				// the grip doubles as the block-drag handle: keep the browser from
+				// hijacking a touch long-press into page scroll, and hint the affordance
+				'.ce-toolbar__settings-btn': { touchAction: 'none', cursor: 'grab' },
 				'@media screen and (max-width: 650px)': {
+					// Editor.js normally puts its mobile + / settings action row after the
+					// active block. Keep the row on the same line at the inline end instead,
+					// and reserve its width so long or right-aligned text cannot overlap it.
+					'.codex-editor__redactor': {
+						boxSizing: 'border-box',
+						paddingInlineEnd: '80px'
+					},
+					'.codex-editor .ce-toolbar__actions': {
+						insetInlineStart: 'auto !important',
+						insetInlineEnd: '0 !important',
+						top: 'auto',
+						bottom: 0,
+						paddingInlineEnd: 0,
+						paddingRight: 0
+					},
 					// Editor.js fixes its mobile sheets to the layout viewport. Keep the
 					// opened top-level sheet inside iOS's keyboard/zoom visual viewport.
 					'.ce-popover.ce-popover--opened:not(.ce-popover--inline):not(.ce-popover--nested) > .ce-popover__container': {
@@ -638,13 +685,15 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			}}
 		/>
 	);
-};
+});
+LongTextEditorInner.displayName = 'LongTextEditorInner';
 
 // Outer wrapper: changing `blockTypes` needs an editor re-init (editor.js
 // cannot swap tools live), so we remount the inner editor keyed by the
 // enabled-tool set while carrying the latest edited value across the remount.
-const EditableLongTextEditor = (props: LongTextEditorProps) => {
+const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEditorProps>((props, ref) => {
 	const latestRef = React.useRef<LongTextValue | null>(null);
+	const innerRef = React.useRef<LongTextEditorHandle | null>(null);
 	const valueMode = isEditorJsDoc(props.value) ? 'blocks' : 'string';
 	const valueModeRef = React.useRef(valueMode);
 	const incomingSignature = getEditorJsValueSignature(props.value);
@@ -660,6 +709,11 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 		changeSequenceRef.current += 1;
 		return changeSequenceRef.current;
 	}, []);
+	React.useImperativeHandle(
+		ref,
+		() => ({ save: () => innerRef.current?.save() ?? Promise.resolve(latestRef.current ?? props.value) }),
+		[props.value]
+	);
 
 	// A caller can explicitly convert string <-> Editor.js while this wrapper
 	// remains mounted. Reset the carried value and remount the inner editor so
@@ -767,14 +821,17 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 	return (
 		<LongTextEditorInner
 			{...props}
+			ref={innerRef}
 			key={configKey}
 			value={latestRef.current ?? props.value}
 			allocateChangeSequence={allocateChangeSequence}
 			onValueChange={(next, sequence) => handleChange(next, { ...sourceRevision, configKey }, sequence)}
 		/>
 	);
-};
+});
+EditableLongTextEditor.displayName = 'EditableLongTextEditor';
 
-export const LongTextEditor = (props: LongTextEditorProps) => {
-	return <EditableLongTextEditor {...props} />;
-};
+export const LongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEditorProps>((props, ref) => {
+	return <EditableLongTextEditor {...props} ref={ref} />;
+});
+LongTextEditor.displayName = 'LongTextEditor';

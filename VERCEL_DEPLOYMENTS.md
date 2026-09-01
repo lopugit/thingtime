@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-08-17
+Last updated: 2026-09-01
 
 ## Project
 
@@ -31,10 +31,12 @@ Last updated: 2026-08-17
   `remix/.vercel/output`, stages it at root `.vercel/output`, and validates the
   staged artifact again.
 - Node.js: 24.x, matching `remix/package.json`.
-- Git deployment policy: the product config explicitly disables
-  `github-actions`; the thin branch's root config disables all Git deployments.
-  Its `ignoreCommand` is a second fail-safe, so control-plane feature branches
-  do not attempt to install or build product code.
+- Git deployment policy: automatic Git deployments are disabled for every
+  branch except `main` and `develop`. Those two exact branches retain Vercel's
+  native Production and stable-development builds. Eligible PR previews are
+  built on GitHub and uploaded with Vercel's prebuilt protocol; arbitrary
+  feature, `staging`, `all`, and control-plane pushes no longer spend Vercel
+  Build CPU. `ignoreCommand` remains a second fail-safe.
 - Source Files Outside of the Root Directory: no longer needed once Root
   Directory is the repository root; it may be disabled.
 
@@ -107,6 +109,28 @@ Last updated: 2026-08-17
   `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto. Vercel domain
   ownership and TLS are verified.
 
+## Develop environment
+
+- Branch: `develop` — the integration branch. Feature PRs merge into
+  `develop`, everything is tested on the develop deployment, and `develop` is
+  merged into `main` when it's ready to ship.
+- Branch alias: https://thingtime-git-develop-lopugits-projects.vercel.app
+- Database: `develop` has its OWN MongoDB (a dedicated free-tier Atlas
+  cluster), never the production cluster. Two branch-scoped env vars exist in
+  Vercel (target Preview, git branch `develop`) and currently hold
+  self-describing placeholders so develop can never accidentally reach the
+  production database:
+  - `MONGODB_CONNECTION_STRING` — replace with the develop Atlas URI (it may
+    contain the literal `<db_password>` placeholder).
+  - `MONGO_PASS` — replace with the develop DB password (only needed when the
+    URI contains `<db_password>`).
+  Update them at
+  https://vercel.com/lopugits-projects/thingtime/settings/environment-variables
+  (search "MONGO", the develop-scoped rows show the `develop` branch chip),
+  then redeploy the `develop` branch. Until real values are set, develop
+  deployments boot but `GET /api/v1/health/mongodb` reports a connection error
+  by design.
+
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
@@ -130,8 +154,9 @@ Last updated: 2026-08-17
   development attachment role. They never receive Production MongoDB, JWT, or
   S3 values.
 - The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
-- For feature branches, use the Vercel PR status URL or deployment URL from
-  the GitHub PR checks.
+- For eligible develop-target feature branches, use the controller-managed
+  `https://pr-<number>.previews.dev.thingtime.com` URL from the GitHub PR
+  status. Other feature branches do not receive automatic Vercel deployments.
 
 ### Development data and auth scope
 
@@ -156,35 +181,34 @@ role ARNs, and other private values remain outside this repository.
 
 ### Develop-target PR previews
 
-Vercel Custom Environment branch tracking matches the deployment's source
-branch. It automatically sends the `develop` branch to the `develop` Custom
-Environment, but a feature branch whose PR targets `develop` is otherwise a
-generic Preview. Thingtime now assigns the same current runtime-variable set to
-generic Preview as to `develop`, so newly built feature previews share the
-development MongoDB, JWT, S3, AI, email, and integration configuration.
+Vercel Custom Environment branch tracking automatically sends the exact
+`develop` branch to the `develop` Custom Environment. Automatic feature-branch
+Git deployments are disabled. The controller explicitly targets the same
+Custom Environment when it uploads an eligible GitHub-built prebuilt bundle,
+so those previews receive the development runtime without a Vercel build.
 
 The trusted `Develop S3 PR preview` workflow still adds a controlled stable
 alias and lifecycle around eligible changes. For a same-repository,
-trusted-author PR targeting `develop`, it asks Vercel to build the exact head
-SHA in the `develop` Custom Environment, publishes a transient GitHub
+trusted-author PR targeting `develop`, it builds the exact head SHA in a
+secret-free GitHub job, validates and uploads the Build Output bundle to the
+`develop` Custom Environment, publishes a transient GitHub
 Deployment, and maintains one sticky PR comment containing the deployment
 status and `https://pr-<number>.previews.dev.thingtime.com`. Forks, drafts,
 wrong-base PRs, and untrusted authors never receive that controller-managed
-alias, although any ordinary Preview Vercel chooses to build now uses the
-shared development runtime.
-The workflow never checks out or executes PR-head code on the GitHub runner;
-Vercel performs the remote build.
+alias.
 
-Its trust boundary is two-stage. Product branches retain only a thin listener
+Its trust boundary is three-stage. Product branches retain only a thin listener
 pinned to the reusable implementation on `github-actions`. The
 `pull_request_target` job has no GitHub Environment or Vercel secret, checks out
-no code, and emits a bounded `repository_dispatch`. The privileged
-default-branch job behind `vercel-develop-pr-control` checks out the controller
-from `github-actions` and verifies the source workflow path/run, repository,
-same-repository PR, source action, head SHA, and triggering actor against the
-live GitHub API before any Vercel API call or mutation. It then re-fetches the
-PR and repeats author/actor allowlist, live permission, eligibility, and SHA
-checks before creating or promoting a Vercel deployment.
+no code, and emits a bounded `repository_dispatch`. A protected authorizer
+checks out only `github-actions`, reads the Environment-scoped non-secret
+settings, and verifies the source workflow, repository, same-repository PR,
+head SHA, action, and actor against GitHub. A separate environment-free job
+checks out only that authorized SHA, builds `.vercel/output` without secrets,
+and uploads a short-lived artifact. Finally, the protected publisher validates
+archive paths, links, size, routes, and shell before a pinned Vercel CLI uploads
+it with `--prebuilt`; only that final controller process receives the Vercel
+token and unsigned S3 CORS probe URL.
 
 The controller exists only after its reusable implementation and script merge
 to `github-actions` and its thin listener reaches the default `main` branch via
@@ -344,8 +368,29 @@ Lifecycle and recovery:
   and cannot be saved through the policy API.
 - The dashboard is expected to remain empty until the GitHub App is installed,
   both webhooks are active, and an administrator runs Reconcile once.
+- A selected same-repository PR can opt into Develop, Production, or both from
+  its admin detail panel. The server builds the exact current head SHA, and the
+  signed pull-request webhook rebuilds enabled environments after synchronize,
+  reopen, or ready-for-review events.
+- Develop uses `VERCEL_CUSTOM_ENVIRONMENT_ID`; Production uses Vercel's
+  production target. Both set `autoAssignCustomDomains: false`, so the returned
+  immutable `*.vercel.app` URL never moves `dev.thingtime.com`,
+  `thingtime.com`, or another custom domain. Closing or disabling removes only
+  deployments bearing the matching Thingtime PR/environment markers.
+- Required server-only values are `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID`,
+  `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`, `VERCEL_GITHUB_REPO_ID`, and—for
+  Develop only—`VERCEL_CUSTOM_ENVIRONMENT_ID`. Values stay in Vercel settings;
+  no live identifier or credential is recorded here.
 
 ## Verified PR Previews
+
+- PR #554, branch `codex/rich-commander-previews`:
+  https://pr-554.previews.dev.thingtime.com
+  - Generated Vercel deployment from the GitHub Actions prebuilt upload:
+    https://thingtime-gt3r0i36w-lopugits-projects.vercel.app
+  - The stable custom domain is the canonical preview alias. The generated
+    Vercel URL is an artifact-hosting deployment, not a Git-tracked branch URL.
+  - Verified HTTP 200 at `/` on 2026-09-01.
 
 - PR #24, branch `codex/migrate-remix-to-nitro`, commit
   `b8e14222184706bfef101e3dedace793ffa2d198`:
@@ -353,3 +398,35 @@ Lifecycle and recovery:
   - Deployment id: `dpl_Z6ER3iuXGXQrzeTN6K45YTUSK69j`
   - Verified routes: `/`, `/index.html`, `/vercel`, `/api/root-data`,
     `/api/v1/vercel/deployments`, and `/assets/index-yPU6cX3C.js`.
+
+## Deployment-status webhook (TODO item 5)
+
+The footer/status endpoints no longer need to poll the Vercel API once the
+deployment webhook is configured:
+
+- Receiver: `POST /api/v1/vercel/webhook` (HMAC sha1 of the raw body in
+  `x-vercel-signature`; 404 while `VERCEL_WEBHOOK_SECRET` is unset, 401 on bad
+  signatures).
+- One-time setup (owner-run, deliberately not automated by any build step):
+  either run the one-shot script
+  `VERCEL_API_TOKEN=... node remix/scripts/vercel/create-webhook.mjs https://thingtime-lopugits-projects.vercel.app/api/v1/vercel/webhook`
+  (registers `deployment.created/succeeded/promoted/error/canceled` for the
+  project and prints the signing secret exactly once — credit: session 1's
+  closed PR #118), or create the same webhook manually in the Vercel dashboard
+  (team `lopugits-projects`, project `thingtime`). Then set
+  `VERCEL_WEBHOOK_SECRET` (the secret shown on creation) in the project's
+  environment variables and redeploy.
+- Behaviour: the latest event per git branch is persisted in the `settings`
+  collection (`vercelWebhookStatus`, capped at 30 branches).
+  `GET /api/v1/vercel/status` serves `ready` straight from that document (zero
+  Vercel API calls); building/queued states still use the live Vercel API for
+  phase/progress detail.
+- Failure attribution: a branch has one record but can have several concurrent
+  deployments — the "Develop-target PR previews" section above builds one head
+  SHA into both generic Preview and the `develop` Custom Environment, and both
+  emit events under the same `githubCommitRef`. A recorded `error`/`canceled`
+  is therefore only served when the record matches the deployment answering the
+  request (`VERCEL_URL`, or `VERCEL_GIT_COMMIT_SHA` when no URL is available);
+  otherwise the live poll decides. Without that check a failed sibling build
+  would show a healthy deployment as failed in the footer and in
+  `/api/v1/health/vercel` until the next event for that branch arrived.
