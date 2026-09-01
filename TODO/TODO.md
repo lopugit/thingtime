@@ -19,21 +19,23 @@
 
    The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
 
-2. **🟡 MOSTLY FIXED — Tighten verification-link origin trust.**
+2. **✅ FIXED — Tighten verification-link origin trust.**
 
-   Shipped (verified on main 2026-07-21, re-verified 2026-08-29):
-   `remix/app/api/utils/auth/appOrigin.ts` `resolveTrustedOrigin` prefers the
-   server-configured `APP_URL`.
-
-   **Still open — this is not just an ops checkbox.** When `APP_URL` is unset
-   the helper falls back to `new URL(request.url).origin`, i.e. the
-   caller-controlled `Host`, so the spoofing vector this item describes is still
-   live in exactly the deployments that lack `APP_URL`. Closing it takes both
-   the ops step (set `APP_URL` in production/preview) **and** the code-level
-   fallback hardening owned by PR #105
-   (`claude/todo2-verification-link-origin-s3`), which resolves the origin from
-   platform-injected values and a narrow Host allowlist instead of the caller.
-   Do not mark this item done on the `APP_URL` preference alone.
+   Largely done before this pass: `resolveTrustedOrigin`
+   (`remix/app/api/utils/auth/appOrigin.ts`) already prefers `APP_URL` and all
+   four email-link routes use it. Finished on
+   `claude/todo2-verification-link-origin-s3`: when `APP_URL` is unset the
+   origin is resolved from the platform rather than the caller. On Vercel the
+   Host header is not consulted at all — `VERCEL_BRANCH_URL`/`VERCEL_URL` (or
+   `VERCEL_PROJECT_PRODUCTION_URL` on a production target) name the deployment,
+   and those are server-injected. Off-platform (local dev) a narrow Host
+   allowlist still applies — `localhost`, `127.0.0.1`, `[::1]`,
+   `*.thingtime.com`, `*.ts.net` — and every other Host gets the canonical
+   `https://thingtime.com`. `*.vercel.app` is deliberately NOT a trusted Host
+   pattern: that namespace is multi-tenant, so trusting it would have left the
+   spoof open to anyone willing to deploy a free project. Covered by
+   `npm run test:auth-origin` and the `TESTING.md` "Emailed-link origin trust"
+   checklist. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 

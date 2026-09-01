@@ -1331,6 +1331,17 @@ CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
 APP_URL="https://your-deployment.com"   # absolute links in emails
 ```
 
+**Set `APP_URL` on every deployment that sends email.** Verification and
+password-reset links carry single-use auth tokens, so their origin is never
+taken from the request `Host` header. `resolveTrustedOrigin`
+(`remix/app/api/utils/auth/appOrigin.ts`) resolves, in order: `APP_URL`; then
+the hostname the platform reports for this deployment (`VERCEL_BRANCH_URL` /
+`VERCEL_URL`, or `VERCEL_PROJECT_PRODUCTION_URL` on a production target — all
+server-injected, never caller-supplied); then, only off-platform, a narrow Host
+allowlist for local development (`localhost`, `127.0.0.1`, `[::1]`,
+`*.thingtime.com`, `*.ts.net`); otherwise the canonical production origin.
+Forks should point `APP_URL` and the canonical origin at their own domain.
+
 The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
 `GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
 `Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.

@@ -275,6 +275,28 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
 - [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
       renders the SPA (the injected head block must not break the shell).
 
+## Emailed-link origin trust (`remix/app/api/utils/auth/appOrigin.ts`)
+
+Verification and password-reset links carry single-use auth tokens, so a
+`Host`-derived origin is an account-takeover primitive: the victim gets a real
+email whose link points at the attacker.
+
+- [ ] `npm run test:auth-origin` passes (APP_URL precedence, spoofed/lookalike
+      hosts, the multi-tenant `*.vercel.app` namespace, Vercel preview vs
+      production env precedence, and the local-dev host allowlist).
+- [ ] With `APP_URL` set, `curl -X POST .../api/v1/auth/password-reset -H 'Host:
+      attacker.example'` (and the same via `X-Forwarded-Host`) emails a link on
+      the `APP_URL` origin — never the supplied host.
+- [ ] With `APP_URL` UNSET on a Vercel preview, the emailed link uses the
+      deployment's own `VERCEL_BRANCH_URL`, and a spoofed `Host:
+      attacker-xyz.vercel.app` does not change it. Our own preview namespace is
+      NOT trusted from the Host header — anyone can deploy into `*.vercel.app`.
+- [ ] With `APP_URL` unset and no Vercel env (plain local dev), links use the
+      requested origin for `localhost`/`127.0.0.1`/`[::1]`/`*.thingtime.com`/
+      `*.ts.net`, and any other Host yields `https://thingtime.com`.
+- [ ] All four emailed-link routes stay on the helper: `register`,
+      `resend-verification`, `password-reset`, `service-account`.
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
