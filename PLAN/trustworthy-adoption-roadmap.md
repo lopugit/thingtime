@@ -100,6 +100,9 @@ again without expert guidance.
 - Provide example Things that are safe, editable copies rather than hidden
   writes to a user's account.
 - Explain privacy, persistence, export, and deletion at the moment they matter.
+- Treat [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md) as the
+  proof contract for export, restore, selective deletion, and account closure;
+  do not substitute a paginated list or custom-endpoint switch for portability.
 - Add keyboard, screen-reader, touch, reduced-motion, narrow-screen, and error
   recovery checks to the journey.
 - Validate with structured sessions before scaling acquisition.

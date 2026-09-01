@@ -45,6 +45,9 @@ experiment by itself.
   restore; do not build a second history path here.
 - [TODO 21](./21-app-composition-surface.md) owns folder-backed composed apps
   and the `app`/`appId` namespace constraint.
+- [TODO 23](./23-data-portability-and-exit.md) owns the independently verifiable
+  export, restore, selective deletion, and account-closure contract required
+  before “no lock-in” becomes a proven adoption claim.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

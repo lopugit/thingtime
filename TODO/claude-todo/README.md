@@ -32,6 +32,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 21 | Composed app surface — a folder of Things rendered as a working mini-app | 🔴 Not started | [21-app-composition-surface.md](./21-app-composition-surface.md) |
 | 21 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (48 in use, ~5 legacy-era slots reclaimable once the v1 read path retires, budget guard) | 🔴 Not started · no rush, headroom exists | [21-index-budget-consolidation.md](./21-index-budget-consolidation.md) |
 | 22 | Trustworthy adoption loop — define first value, useful return, consentful sharing, privacy-safe learning, and aligned sustainability gates | 🟣 Proposed · owner decision needed | [22-trustworthy-adoption-loop.md](./22-trustworthy-adoption-loop.md) |
+| 23 | Data portability and graceful exit — inventory, verified export, safe restore, selective deletion, and account closure | 🟣 Proposed · owner decision needed | [23-data-portability-and-exit.md](./23-data-portability-and-exit.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

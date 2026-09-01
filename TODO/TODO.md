@@ -274,3 +274,15 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     Raw signups, page views, time-on-site, and content volume are not north-star
     outcomes. Start with the evidence note and phased roadmap, then execute the
     bounded epic in `claude-todo/22-trustworthy-adoption-loop.md`.
+
+22. **🧳 Prove data portability and a graceful exit.**
+
+    Thingtime publicly promises open, always-exportable data and no lock-in,
+    while today's verified primitives are paginated Thing reads, per-item and
+    per-app deletion, private per-file downloads, and a split home/custom data
+    plane. Define one account-wide inventory, versioned open archive, offline
+    verifier, safe semantic restore, selective deletion, and resumable account
+    closure contract. Exclude credentials and foreign private data; never let
+    imported data grant authority; keep baseline exit available to every tier.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/23-data-portability-and-exit.md`.

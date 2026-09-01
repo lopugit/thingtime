@@ -10,6 +10,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | Plan | Horizon | Status |
 | --- | --- | --- |
 | [Trustworthy adoption roadmap](./trustworthy-adoption-roadmap.md) | Five gated milestones from outcome definition to sustainable scale | Proposed |
+| [Data portability and graceful-exit roadmap](./data-portability-and-exit-roadmap.md) | Contract approval through verified export, restore, deletion, and continuous exit drills | Proposed |
 
 ## Conventions
 
