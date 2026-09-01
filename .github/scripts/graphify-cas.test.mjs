@@ -191,6 +191,42 @@ test("source fingerprint never changes the caller's staged index", () => {
   }
 })
 
+test("source fingerprint ignores a co-located controller checkout", () => {
+  const root = fixture()
+  try {
+    const clean = computeSourceFingerprint(root)
+
+    // Controller jobs check this repository out a second time at ./trusted,
+    // inside the product worktree and covered by no ignore rule. Its HEAD must
+    // not key the product's snapshots, or no ordinary checkout could ever
+    // match the committed snapshot and every run would rebuild from scratch.
+    const nested = path.join(root, "trusted")
+    mkdirSync(nested, { recursive: true })
+    git(nested, ["init", "-q"])
+    git(nested, ["config", "user.name", "Lopu Test"])
+    git(nested, ["config", "user.email", "lopu-test@example.invalid"])
+    writeFileSync(path.join(nested, "controller.txt"), "one\n")
+    git(nested, ["add", "."])
+    git(nested, ["commit", "-qm", "controller"])
+    assert.deepEqual(computeSourceFingerprint(root), clean)
+
+    // A later, unrelated control-plane commit must not move the key either.
+    writeFileSync(path.join(nested, "controller.txt"), "two\n")
+    git(nested, ["add", "."])
+    git(nested, ["commit", "-qm", "controller update"])
+    assert.deepEqual(computeSourceFingerprint(root), clean)
+
+    // Real source still keys the snapshot.
+    writeFileSync(path.join(root, "source.txt"), "two\n")
+    assert.notEqual(
+      computeSourceFingerprint(root).sourceFingerprint,
+      clean.sourceFingerprint,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("immutable output variants coexist and richer valid output wins", () => {
   const root = fixture()
   try {

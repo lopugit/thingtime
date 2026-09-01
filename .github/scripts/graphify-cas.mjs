@@ -176,6 +176,33 @@ function sha256Parts(parts) {
 }
 
 /**
+ * Drop nested-repository gitlinks from the scratch fingerprint index.
+ *
+ * Controller jobs check a second copy of this repository out at ./trusted,
+ * inside the product worktree and matched by no ignore rule. `git add -A`
+ * records that directory as a mode-160000 gitlink whose SHA is the control
+ * plane's own HEAD, so the source key moved with every unrelated control-plane
+ * commit and no ordinary checkout could reproduce it. This repository has no
+ * submodules: a gitlink here is always a co-located checkout, never source.
+ */
+function dropNestedRepositories(root, env) {
+  const staged = runGit(root, ["ls-files", "--stage", "-z"], { env })
+  const links = staged
+    .split("\0")
+    .filter((entry) => entry.startsWith("160000 "))
+    .map((entry) => entry.slice(entry.indexOf("\t") + 1))
+    .filter(Boolean)
+  for (let index = 0; index < links.length; index += 100) {
+    runGit(
+      root,
+      ["update-index", "--force-remove", "--", ...links.slice(index, index + 100)],
+      { env },
+    )
+  }
+  return links
+}
+
+/**
  * Build a Git tree from the actual worktree/index while excluding graphify-out.
  *
  * A commit SHA cannot key its own generated output: committing that output
@@ -203,6 +230,7 @@ export function computeSourceFingerprint(root) {
       ["add", "-A", "--", ".", ":(exclude)graphify-out"],
       { env },
     )
+    dropNestedRepositories(root, env)
     const sourceTree = runGit(root, ["write-tree"], { env })
     const sourceFingerprint = sha256Parts([
       `${SNAPSHOT_SCHEMA}\0`,
