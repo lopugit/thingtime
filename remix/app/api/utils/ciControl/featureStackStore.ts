@@ -292,6 +292,8 @@ const linkDispatchWorkflowRun = async (dispatch: any, input: WorkflowRunLink) =>
 
 export const linkFeatureStackWorkflowRun = async (input: {
 	runId: string;
+	stackId?: string;
+	repository?: string;
 	workflowRunId: number;
 	url: string | null;
 	title: string;
@@ -300,7 +302,12 @@ export const linkFeatureStackWorkflowRun = async (input: {
 	completedAt?: string | Date | null;
 }) => {
 	if (!/^feature-stack-run-[0-9a-f-]{36}$/.test(input.runId)) return false;
-	const dispatch = await (await getHomeThingsCollection()).findOne({ thingtime: 'ci-dispatch', 'crystal.featureStackRunId': input.runId });
+	const dispatch = await (await getHomeThingsCollection()).findOne({
+		thingtime: 'ci-dispatch',
+		'crystal.featureStackRunId': input.runId,
+		...(input.stackId ? { parentId: input.stackId } : {}),
+		...(input.repository ? { 'crystal.repository': input.repository } : {})
+	});
 	return dispatch ? linkDispatchWorkflowRun(dispatch, input) : false;
 };
 
