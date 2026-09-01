@@ -135,6 +135,29 @@ export const findFeatureStackWorkflowRunNear = async (value: string | Date): Pro
 
 export const repositoryName = () => (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
 
+export const cancelGitHubWorkflowRun = async (workflowRunId: number) => {
+	if (!Number.isSafeInteger(workflowRunId) || workflowRunId < 1) throw new Error('GitHub workflow run id is invalid');
+	const repository = repositoryName();
+	const path = `/repos/${repository}/actions/runs/${workflowRunId}`;
+	const current = await githubRequest<{ status?: string; conclusion?: string | null }>(path);
+	if (String(current.status ?? '').toLowerCase() === 'completed') {
+		return { cancelled: false as const, status: String(current.conclusion ?? current.status ?? 'completed') };
+	}
+	try {
+		await githubRequest<void>(`${path}/cancel`, { method: 'POST' });
+		return { cancelled: true as const, status: 'cancel_requested' };
+	} catch (error) {
+		// GitHub can finish a run between the status read and cancellation. That
+		// race is already the requested terminal outcome, so prove it before
+		// surfacing a false lifecycle failure.
+		const latest = await githubRequest<{ status?: string; conclusion?: string | null }>(path);
+		if (String(latest.status ?? '').toLowerCase() === 'completed') {
+			return { cancelled: false as const, status: String(latest.conclusion ?? latest.status ?? 'completed') };
+		}
+		throw error;
+	}
+};
+
 const workflowFileByKey = {
   'feature-stack': 'resolve-pr-conflicts.yml',
   'resolve-conflicts': 'resolve-pr-conflicts.yml',

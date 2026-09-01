@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { getHomeThingsCollection } from '../mongodb/collections';
+import { FEATURE_STACK_USER_HELD_STATUSES } from './featureStackLifecycleCore';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const STACK_KIND = 'ci-feature-stack';
@@ -190,7 +191,7 @@ export const saveFeatureStack = async (
 				'crystal.repository': repository,
 				'crystal.autoDecideBranches': autoDecideBranches,
 				'crystal.revision': revision,
-				'crystal.status': current?.crystal?.status === 'running' ? 'running' : 'saved',
+				'crystal.status': current?.crystal?.status && current.crystal.status !== 'archived' ? String(current.crystal.status) : 'saved',
 				'crystal.archived': false,
 				'crystal.updatedBy': actorId,
 				updatedAt: now
@@ -242,6 +243,29 @@ export const markFeatureStackRun = async (id: string, dispatchId: string, runId:
 	if (!result.matchedCount) throw new Error('Saved Feature Stack not found.');
 };
 
+export const markFeatureStackLifecycleStatus = async (
+	id: string,
+	status: 'paused' | 'stopped',
+	actorId: string,
+	actionAt = new Date()
+) => {
+	const result = await (
+		await getHomeThingsCollection()
+	).updateOne(
+		{ shareId: id, thingtime: STACK_KIND },
+		{
+			$set: {
+				'crystal.status': status,
+				'crystal.lastLifecycleAction': status,
+				'crystal.lastLifecycleActorId': actorId,
+				'crystal.lastLifecycleAt': actionAt,
+				updatedAt: actionAt
+			}
+		}
+	);
+	if (!result.matchedCount) throw new Error('Saved Feature Stack not found.');
+};
+
 type WorkflowRunLink = {
 	workflowRunId: number;
 	url: string | null;
@@ -283,7 +307,12 @@ const linkDispatchWorkflowRun = async (dispatch: any, input: WorkflowRunLink) =>
 				? 'controller-completed'
 				: 'running';
 		await things.updateOne(
-			{ shareId: stackId, thingtime: STACK_KIND, 'crystal.lastDispatchId': dispatch.shareId },
+			{
+				shareId: stackId,
+				thingtime: STACK_KIND,
+				'crystal.lastDispatchId': dispatch.shareId,
+				'crystal.status': { $nin: [...FEATURE_STACK_USER_HELD_STATUSES] }
+			},
 			{ $set: { 'crystal.status': stackStatus, updatedAt: now } }
 		);
 	}

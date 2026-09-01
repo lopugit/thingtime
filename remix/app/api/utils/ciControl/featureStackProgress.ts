@@ -1,4 +1,5 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
+import { FEATURE_STACK_USER_HELD_STATUSES } from './featureStackLifecycleCore';
 import { linkFeatureStackWorkflowRun } from './featureStackStore';
 import { recordCiEvent } from './store';
 
@@ -142,7 +143,8 @@ export const recordFeatureStackProgress = async (input: FeatureStackProgressRequ
 			{
 				shareId: input.stackId,
 				thingtime: 'ci-feature-stack',
-				'crystal.lastFeatureStackRunId': input.featureStackRunId
+				'crystal.lastFeatureStackRunId': input.featureStackRunId,
+				'crystal.status': { $nin: [...FEATURE_STACK_USER_HELD_STATUSES] }
 			},
 			{ $set: { 'crystal.status': input.status, updatedAt: input.reportedAt } }
 		);
