@@ -1,7 +1,7 @@
 # Graph Report - worktree  (2026-09-01)
 
 ## Corpus Check
-- 44 files · ~185,542 words
+- 44 files · ~185,700 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2f979c8e`
+- Built from commit: `1905cd4d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,9 +19,9 @@
 - [[_COMMUNITY_graphify-cas.mjs|graphify-cas.mjs]]
 - [[_COMMUNITY_promotion-pr-changelog.mjs|promotion-pr-changelog.mjs]]
 - [[_COMMUNITY_build-all-branch.mjs|build-all-branch.mjs]]
-- [[_COMMUNITY_API Suite Job|API Suite Job]]
 - [[_COMMUNITY_selfTest|selfTest]]
 - [[_COMMUNITY_workflow-control-plane-contract.mjs|workflow-control-plane-contract.mjs]]
+- [[_COMMUNITY_verify job|verify job]]
 - [[_COMMUNITY_lopu-pr-status.mjs|lopu-pr-status.mjs]]
 - [[_COMMUNITY_failureDetail|failureDetail]]
 - [[_COMMUNITY_runPromotion|runPromotion]]
@@ -31,64 +31,58 @@
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
 - [[_COMMUNITY_merge-main-develop-sync-pr.mjs|merge-main-develop-sync-pr.mjs]]
 - [[_COMMUNITY_promotion-worker-contract.sh|promotion-worker-contract.sh]]
-- [[_COMMUNITY_Lopu agent composite action|Lopu agent composite action]]
 - [[_COMMUNITY_rebase-related-edits.test.mjs|rebase-related-edits.test.mjs]]
 - [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
 - [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
-- [[_COMMUNITY_Clean Synchronization Lane|Clean Synchronization Lane]]
+- [[_COMMUNITY_Lopu agent composite action|Lopu agent composite action]]
 - [[_COMMUNITY_promotion-worker-routing-contract.mjs|promotion-worker-routing-contract.mjs]]
-- [[_COMMUNITY_Lopu internal maindevelop synchronization|Lopu internal main/develop synchronization]]
 - [[_COMMUNITY_recoverPromotionReviewCheckpoint|recoverPromotionReviewCheckpoint]]
 - [[_COMMUNITY_queueTrustedPromotionWorker|queueTrustedPromotionWorker]]
 - [[_COMMUNITY_stage-graphify-snapshots.mjs|stage-graphify-snapshots.mjs]]
-- [[_COMMUNITY_Publish or reconcile develop S3 preview job|Publish or reconcile develop S3 preview job]]
+- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
+- [[_COMMUNITY_API Suite Job|API Suite Job]]
 - [[_COMMUNITY_feature-stack-plan.mjs|feature-stack-plan.mjs]]
 - [[_COMMUNITY_lopu-credential-vault.mjs|lopu-credential-vault.mjs]]
 - [[_COMMUNITY_start.sh|start.sh]]
+- [[_COMMUNITY_controller job|controller job]]
+- [[_COMMUNITY_Lopu internal maindevelop synchronization|Lopu internal main/develop synchronization]]
 - [[_COMMUNITY_classify-claude-credential-failure.mjs|classify-claude-credential-failure.mjs]]
 - [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
+- [[_COMMUNITY_PR 506 — Auto-merge resolved main to develop sync PR|PR #506 — Auto-merge resolved main to develop sync PR]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_Analyze Job|Analyze Job]]
 - [[_COMMUNITY_electron-pr-release-contract.mjs|electron-pr-release-contract.mjs]]
 - [[_COMMUNITY_rebase-index-fingerprint.test.mjs|rebase-index-fingerprint.test.mjs]]
+- [[_COMMUNITY_PR 492 — Load Lopu credentials from the Thingtime vault|PR #492 — Load Lopu credentials from the Thingtime vault]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_resolve-canonical-instruction-type-conflicts.sh|resolve-canonical-instruction-type-conflicts.sh]]
 - [[_COMMUNITY_resolve-canonical-instruction-type-conflicts.test.mjs|resolve-canonical-instruction-type-conflicts.test.mjs]]
 - [[_COMMUNITY_Commander App Release workflow|Commander App Release workflow]]
-- [[_COMMUNITY_PM2 Dev Stack|PM2 Dev Stack]]
-- [[_COMMUNITY_GitHub Native Auto-Merge|GitHub Native Auto-Merge]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
 - [[_COMMUNITY_Graphify CLI|Graphify CLI]]
 - [[_COMMUNITY_Lopu Agent Action|Lopu Agent Action]]
-- [[_COMMUNITY_Delivery Messaging Rules|Delivery Messaging Rules]]
-- [[_COMMUNITY_iOS Release Flow|iOS Release Flow]]
-- [[_COMMUNITY_Fundamentals|Fundamentals]]
-- [[_COMMUNITY_lopu-credential-vault.test.mjs|lopu-credential-vault.test.mjs]]
-- [[_COMMUNITY_CodeQL PR handoff workflow|CodeQL PR handoff workflow]]
-- [[_COMMUNITY_Legacy PR conflict resolver (superseded)|Legacy PR conflict resolver (superseded)]]
-- [[_COMMUNITY_Develop PR Preview Deployment Script|Develop PR Preview Deployment Script]]
-- [[_COMMUNITY_Electron PR Release Workflow|Electron PR Release Workflow]]
-- [[_COMMUNITY_Testing Checklist|Testing Checklist]]
-- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
-- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
-- [[_COMMUNITY_Lopu PR Manager Workflow|Lopu PR Manager Workflow]]
-- [[_COMMUNITY_PR 506 — Auto-merge resolved main to develop sync PR|PR #506 — Auto-merge resolved main to develop sync PR]]
-- [[_COMMUNITY_PR 492 — Load Lopu credentials from the Thingtime vault|PR #492 — Load Lopu credentials from the Thingtime vault]]
 - [[_COMMUNITY_AI_ALL.md Canonical Instruction File|AI_ALL.md Canonical Instruction File]]
 - [[_COMMUNITY_API Endpoint Registration Convention|API Endpoint Registration Convention]]
+- [[_COMMUNITY_Delivery Messaging Rules|Delivery Messaging Rules]]
 - [[_COMMUNITY_FUNDAMENTALS|FUNDAMENTALS.md]]
+- [[_COMMUNITY_GitHub PR Policy|GitHub PR Policy]]
+- [[_COMMUNITY_Repository-Aware Graphify Router|Repository-Aware Graphify Router]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Immutable Graphify Snapshots|Immutable Graphify Snapshots]]
+- [[_COMMUNITY_iOS Release Flow|iOS Release Flow]]
 - [[_COMMUNITY_Lopu Toast Notifications|Lopu Toast Notifications]]
+- [[_COMMUNITY_PM2 Dev Stack|PM2 Dev Stack]]
 - [[_COMMUNITY_Root AGENTS.md and CLAUDE.md Symlinks|Root AGENTS.md and CLAUDE.md Symlinks]]
-- [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_Worktree Port Resolver|Worktree Port Resolver]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
-- [[_COMMUNITY_Graphify CAS and Snapshot Changes|Graphify CAS and Snapshot Changes]]
-- [[_COMMUNITY_Lopu Automation Changes|Lopu Automation Changes]]
-- [[_COMMUNITY_PR 492 Load Lopu credentials from Thingtime vault|PR #492 Load Lopu credentials from Thingtime vault]]
+- [[_COMMUNITY_Fundamentals|Fundamentals]]
+- [[_COMMUNITY_CodeQL PR handoff workflow|CodeQL PR handoff workflow]]
+- [[_COMMUNITY_Legacy PR conflict resolver (superseded)|Legacy PR conflict resolver (superseded)]]
+- [[_COMMUNITY_Clean Synchronization Lane|Clean Synchronization Lane]]
 - [[_COMMUNITY_develop Branch|develop Branch]]
 - [[_COMMUNITY_GitHub Exact-Head REST Merge|GitHub Exact-Head REST Merge]]
+- [[_COMMUNITY_GitHub Native Auto-Merge|GitHub Native Auto-Merge]]
 - [[_COMMUNITY_Semantic Graphify Extraction|Semantic Graphify Extraction]]
 - [[_COMMUNITY_Local Codex Proxy|Local Codex Proxy]]
 - [[_COMMUNITY_Lopu Conflict Resolver|Lopu Conflict Resolver]]
@@ -101,13 +95,19 @@
 - [[_COMMUNITY_syncmain-into-develop PR|sync/main-into-develop PR]]
 - [[_COMMUNITY_Thingtime Repository|Thingtime Repository]]
 - [[_COMMUNITY_Trusted Terminal Merger|Trusted Terminal Merger]]
-- [[_COMMUNITY_CodeQL Backfill Analyzer|CodeQL Backfill Analyzer]]
-- [[_COMMUNITY_Signed Desktop PR Release Workflow|Signed Desktop PR Release Workflow]]
-- [[_COMMUNITY_github-actions CI Control Plane|github-actions CI Control Plane]]
-- [[_COMMUNITY_Graphify Trusted Router|Graphify Trusted Router]]
-- [[_COMMUNITY_Lopu Principal Repository Manager|Lopu Principal Repository Manager]]
-- [[_COMMUNITY_OpenAI Backend Configuration|OpenAI Backend Configuration]]
-- [[_COMMUNITY_Vercel Deployment Kill Switch|Vercel Deployment Kill Switch]]
+- [[_COMMUNITY_Testing Checklist|Testing Checklist]]
+- [[_COMMUNITY_Lopu PR manager workflow|Lopu PR manager workflow]]
+- [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
+- [[_COMMUNITY_CodeQL triage and backfill|CodeQL triage and backfill]]
+- [[_COMMUNITY_Signed Desktop PR release|Signed Desktop PR release]]
+- [[_COMMUNITY_Develop PR preview pipeline|Develop PR preview pipeline]]
+- [[_COMMUNITY_Graphify CAS router|Graphify CAS router]]
+- [[_COMMUNITY_Lopu PR manager|Lopu PR manager]]
+- [[_COMMUNITY_Main to develop synchronization|Main to develop synchronization]]
+- [[_COMMUNITY_Promotion lanes|Promotion lanes]]
+- [[_COMMUNITY_PR 492 Load Lopu credentials from Thingtime vault|PR #492 Load Lopu credentials from Thingtime vault]]
+- [[_COMMUNITY_Electron PR Release Workflow|Electron PR Release Workflow]]
+- [[_COMMUNITY_github-actions CI control plane|github-actions CI control plane]]
 - [[_COMMUNITY_.githubactionslopu-agent|.github/actions/lopu-agent]]
 - [[_COMMUNITY_feature-stack-progress.mjs|feature-stack-progress.mjs]]
 - [[_COMMUNITY_PR 534 — Feature Stack progress heartbeat controller|PR #534 — Feature Stack progress heartbeat controller]]
@@ -170,15 +170,15 @@ Nodes (42): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, com
 Cohesion: 0.16
 Nodes (36): assertAllBranchWorkflowContract(), BASE_BRANCHES, buildMode(), checkMode(), completeRefspecs, countLeadingFailureMarkers(), doctorCommitMode(), doctorRecordMode() (+28 more)
 
-### Community 4 - "API Suite Job"
+### Community 4 - "selfTest"
 Cohesion: 0.09
 Nodes (33): botCommentsByLatestEvent(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), externalStackPromotionState(), findBotPromotionRetirement(), groupFailureMessages(), groupKeyFor() (+25 more)
 
-### Community 5 - "selfTest"
+### Community 5 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.13
 Nodes (27): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertAdminTransportCap(), assertAdminWaterfallGrammar() (+19 more)
 
-### Community 6 - "workflow-control-plane-contract.mjs"
+### Community 6 - "verify job"
 Cohesion: 0.20
 Nodes (10): actions/checkout, actions/github-script, comment-contract-advisories job, contract-advisories job, graphify-cas.test.mjs, merge-main-develop-sync-pr.mjs, verify job, Workflow control-plane CI workflow (+2 more)
 
@@ -218,111 +218,111 @@ Nodes (14): assertHeadContainsMain(), assertSyncPullRequestShape(), exactSha(), 
 Cohesion: 0.12
 Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay(), RESERVATION_SHA (+8 more)
 
-### Community 16 - "Lopu agent composite action"
+### Community 16 - "rebase-related-edits.test.mjs"
 Cohesion: 0.28
 Nodes (14): actionPath, copyTrustedTree(), extractVerifierScript(), filesUnder(), hashNamedFiles(), hashRebaseState(), hashTrustedTree(), makeStoppedRebase() (+6 more)
 
-### Community 17 - "rebase-related-edits.test.mjs"
+### Community 17 - "prepare-round.sh"
 Cohesion: 0.26
 Nodes (14): assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_paths(), has_coherent_zdiff3_markers(), hash_index_entries(), hash_rebase_state(), rebase_in_progress() (+6 more)
 
-### Community 18 - "prepare-round.sh"
+### Community 18 - "promotion-worker.sh"
 Cohesion: 0.35
 Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+4 more)
 
-### Community 19 - "promotion-worker.sh"
+### Community 19 - "Lopu agent composite action"
 Cohesion: 0.14
 Nodes (14): classify-claude-credential-failure.mjs, anthropics/claude-code-action, openai/codex-action, Lopu agent composite action, lopu-credential-vault.mjs, graphify-cas.mjs, prepare-round.sh, Lopu rebase conflict round composite action (+6 more)
 
-### Community 20 - "Clean Synchronization Lane"
+### Community 20 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.17
 Nodes (11): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, graphify, lopuAgent, mainDevelopSyncWorkflow, promoter (+3 more)
 
-### Community 21 - "promotion-worker-routing-contract.mjs"
+### Community 21 - "recoverPromotionReviewCheckpoint"
 Cohesion: 0.27
 Nodes (11): attestationMatches(), exactCheckpointPush(), inspectPromotionReviewCheckpoint(), isObjectId(), latestBotPromotionAttestationEvents(), liveRefShaWithActionsToken(), parsePromotionResolutionAttestations(), recoverPromotionReviewCheckpoint() (+3 more)
 
-### Community 22 - "Lopu internal main/develop synchronization"
+### Community 22 - "queueTrustedPromotionWorker"
 Cohesion: 0.24
 Nodes (10): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionBody(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation() (+2 more)
 
-### Community 23 - "recoverPromotionReviewCheckpoint"
+### Community 23 - "stage-graphify-snapshots.mjs"
 Cohesion: 0.40
 Nodes (9): addExisting(), filesUnder(), git(), LEGACY_ROOT, PORTABLE, restoreTrackedFromHead(), selfTest(), stageGraphifySnapshots() (+1 more)
 
-### Community 24 - "queueTrustedPromotionWorker"
+### Community 24 - "`github-actions` — the CI control plane"
 Cohesion: 0.12
 Nodes (14): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off (+6 more)
 
-### Community 25 - "stage-graphify-snapshots.mjs"
+### Community 25 - "API Suite Job"
 Cohesion: 0.25
 Nodes (8): API Suite Job, Build Typecheck Ratchet Unit Tests Job, Product Contract Advisories, Classify Web CI Scope Job, Web CI Workflow, Versioned MongoDB Collections, Thingtime API, Thin product branch listeners
 
-### Community 26 - "Publish or reconcile develop S3 preview job"
+### Community 26 - "feature-stack-plan.mjs"
 Cohesion: 0.64
 Nodes (7): canonicalFeatureStackPlan(), decodeFeatureStackPlan(), exactKeys(), featureStackId(), git(), selfTest(), verifyFeatureStackHistory()
 
-### Community 27 - "feature-stack-plan.mjs"
+### Community 27 - "lopu-credential-vault.mjs"
 Cohesion: 0.61
 Nodes (7): exportBundle(), fetchBundle(), legacyCredentials(), main(), required(), safeCache(), validate()
 
-### Community 28 - "lopu-credential-vault.mjs"
+### Community 28 - "start.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
-### Community 29 - "start.sh"
+### Community 29 - "controller job"
 Cohesion: 0.38
 Nodes (7): build job, controller job, deploy-develop-pr-preview.mjs, dispatch job, extract-vercel-prebuilt.py, prepare job, Develop S3 PR preview implementation workflow
 
-### Community 30 - "classify-claude-credential-failure.mjs"
+### Community 30 - "Lopu internal main/develop synchronization"
 Cohesion: 0.33
 Nodes (7): ci-provider-router.yml, merge-main-develop-sync-pr.mjs, route job, sync job, Lopu internal main/develop synchronization, Lopu internal develop promotion, Lopu internal feature promotion
 
-### Community 31 - "verify-promotion-source-authority.sh"
+### Community 31 - "classify-claude-credential-failure.mjs"
 Cohesion: 0.48
 Nodes (6): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest()
 
-### Community 32 - "vercel.json"
+### Community 32 - "verify-promotion-source-authority.sh"
 Cohesion: 0.33
 Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_SYSTEM, verify-promotion-source-authority.sh script
 
-### Community 33 - "Analyze Job"
+### Community 33 - "PR #506 — Auto-merge resolved main to develop sync PR"
 Cohesion: 0.33
 Nodes (5): Operational proof gate, PR #506 — Auto-merge resolved main to develop sync PR, Problem, Resolution, Validation
 
-### Community 34 - "electron-pr-release-contract.mjs"
+### Community 34 - "vercel.json"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
-### Community 35 - "rebase-index-fingerprint.test.mjs"
+### Community 35 - "Analyze Job"
 Cohesion: 0.40
 Nodes (5): Analyze Job, github/codeql-action/analyze, github/codeql-action/init, Lopu CodeQL All Branches, Select One Analysis Owner
 
-### Community 36 - "rebase-ownership-routing-contract.sh"
+### Community 36 - "electron-pr-release-contract.mjs"
 Cohesion: 0.50
 Nodes (4): assertPrReleaseContract(), count(), here, workflow
 
-### Community 37 - "resolve-canonical-instruction-type-conflicts.sh"
+### Community 37 - "rebase-index-fingerprint.test.mjs"
 Cohesion: 0.80
 Nodes (4): rawIndexHash(), runGit(), semanticIndexHash(), sha256()
 
-### Community 38 - "resolve-canonical-instruction-type-conflicts.test.mjs"
+### Community 38 - "PR #492 — Load Lopu credentials from the Thingtime vault"
 Cohesion: 0.40
 Nodes (4): PR #492 — Load Lopu credentials from the Thingtime vault, Safety and regression focus, Scope, Validation log
 
-### Community 39 - "Commander App Release workflow"
+### Community 39 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
 
-### Community 42 - "Electron App Release Workflow"
+### Community 42 - "Commander App Release workflow"
 Cohesion: 0.67
 Nodes (3): build_and_run.sh, Commander App Release workflow, release-version.mjs
 
-### Community 43 - "Graphify CLI"
+### Community 43 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-### Community 82 - "Protected Lopu Entrypoint"
+### Community 82 - "Lopu PR manager workflow"
 Cohesion: 0.29
 Nodes (7): ai-merge-paused label, Post-resolution Graphify refresh, Lopu execution model, no-ai-merge label, Lopu PR manager workflow, .github/scripts/graphify, Lopu PR manager
 
@@ -352,7 +352,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Cohesion score 0.09175920514319112 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.10631229235880399 - nodes in this community are weakly interconnected._
-- **Should `API Suite Job` be split into smaller, more focused modules?**
-  _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
 - **Should `selfTest` be split into smaller, more focused modules?**
+  _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
+- **Should `workflow-control-plane-contract.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.12698412698412698 - nodes in this community are weakly interconnected._

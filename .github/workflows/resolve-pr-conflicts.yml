@@ -705,7 +705,10 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/lopu-credential-vault.mjs
+          sparse-checkout: |
+            .github/actions/lopu-agent
+            .github/scripts/classify-claude-credential-failure.mjs
+            .github/scripts/lopu-credential-vault.mjs
           sparse-checkout-cone-mode: false
 
       - name: Fetch and validate the ordered credential bundle
@@ -723,7 +726,28 @@ jobs:
           set -euo pipefail
           test "$CREDENTIAL_COUNT" -ge 1
           test "$(stat -c '%a' "$RUNNER_TEMP/lopu-credential-vault.json")" = 600
-          echo "Thingtime returned $CREDENTIAL_COUNT enabled credential(s); no model was invoked."
+          echo "Thingtime returned $CREDENTIAL_COUNT enabled credential(s); starting a live waterfall probe."
+
+      - name: Verify the credential waterfall with one live Claude turn
+        id: live_probe
+        uses: ./.github/actions/lopu-agent
+        with:
+          backend: claude
+          prompt: Return exactly credential-ok. Do not inspect the repository or use tools.
+          thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          claude-args: |
+            --effort low
+            --max-turns 1
+            --dangerously-skip-permissions
+            --allowedTools ""
+
+      - name: Report the live credential result
+        env:
+          CREDENTIAL_SLOT: ${{ steps.live_probe.outputs.claude-credential-slot }}
+          CREDENTIAL_NAME: ${{ steps.live_probe.outputs.claude-credential-name }}
+        run: echo "Live Claude authentication succeeded with $CREDENTIAL_SLOT ($CREDENTIAL_NAME)."
 
   route:
     if: >-

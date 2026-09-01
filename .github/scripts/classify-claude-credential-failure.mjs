@@ -21,8 +21,10 @@ const CAPACITY_PATTERNS = [
 
 const CREDENTIAL_PATTERNS = [
   /\bauthentication[_ -]?error\b/iu,
+  /\bfailed to authenticate\b/iu,
   /\binvalid (?:anthropic )?(?:api key|oauth token|access token|credential)\b/iu,
   /\b(?:oauth|access) token[^\n]{0,40}\b(?:expired|invalid|revoked)\b/iu,
+  /\boauth session[^\n]{0,80}\b(?:expired|invalid|revoked|could not be refreshed)\b/iu,
   /\b(?:unauthorized|not authorized)\b/iu,
   /\b(?:status|http|error)[^\n]{0,20}\b401\b/iu,
 ];
@@ -61,6 +63,7 @@ function selfTest() {
   }
   for (const sample of [
     { type: "result", is_error: true, error: "authentication_error: invalid OAuth token" },
+    { type: "result", is_error: true, result: "Failed to authenticate: OAuth session expired and could not be refreshed" },
     { status: 401, message: "Unauthorized" },
   ]) {
     assert.deepEqual(classifyClaudeCredentialFailure(sample), {
