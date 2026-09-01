@@ -79,6 +79,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   validated prebuilt bundles, while native production and stable-development
   builds remain intact. — Codex (AI), 2026-09-01
 
+- **Editor.js block controls now stay at the active line's right edge on
+  mobile.** The + and settings buttons no longer drop underneath post text,
+  and the editor reserves enough inline space to prevent overlap with long or
+  right-aligned blocks. — Codex (AI), 2026-09-01
+
 - **Running Feature Stacks now report durable Lopu progress into their own CI
   console.** The protected controller sends an immediate signed snapshot,
   phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
