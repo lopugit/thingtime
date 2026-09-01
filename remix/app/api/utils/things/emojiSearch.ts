@@ -1,4 +1,4 @@
-import emojiByEmojiJson from 'unicode-emoji-json/data-by-emoji.json';
+import emojiByEmojiJson from 'unicode-emoji-json/data-by-emoji.json' with { type: 'json' };
 
 type EmojiMetadata = { name?: unknown; slug?: unknown };
 // Keep this a static JSON import. Nitro can bundle it into the server chunk;
