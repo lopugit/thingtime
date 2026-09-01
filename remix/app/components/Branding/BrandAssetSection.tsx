@@ -310,7 +310,7 @@ export const BrandAssetSection = ({
             <Segmented
               label="Export format"
               value={format}
-              onChange={setFormat}
+              onChange={(next) => setFormat(next === 'svg' ? 'svg' : 'png')}
               options={[
                 { value: 'png', label: 'PNG' },
                 { value: 'svg', label: 'SVG' }

@@ -18,7 +18,7 @@ import {
 const countValues = (value: unknown): number => {
 	if (Array.isArray(value)) return 1 + value.reduce((sum: number, entry) => sum + countValues(entry), 0);
 	if (value && typeof value === 'object') {
-		return 1 + Object.values(value as Record<string, unknown>).reduce((sum: number, entry) => sum + countValues(entry), 0);
+		return 1 + Object.values(value as Record<string, unknown>).reduce<number>((sum, entry) => sum + countValues(entry), 0);
 	}
 	return 1;
 };

@@ -1,3 +1,4 @@
+import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -8,7 +9,9 @@ export type ApiRequestExample = {
   name: string;
   description: string;
   method: ApiHttpMethod;
+  headers?: Record<string, string>;
   query?: Record<string, string | number | boolean | null>;
+  headers?: Record<string, string>;
   body?: unknown;
 };
 
@@ -21,6 +24,8 @@ export type ApiResponseExample = {
 
 export type ApiEndpointDoc = {
   id: string;
+  /** Stable per-operation compatibility contract. Major changes are breaking. */
+  contractVersion: `${number}.${number}.${number}`;
   group: string;
   title: string;
   endpoint: string;
@@ -51,12 +56,608 @@ export type SerializedApiEndpointDoc = ApiEndpointDoc & {
   platformExamples: ApiPlatformExamples;
 };
 
-const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => ({
+const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>): ApiEndpointDoc => ({
   ...doc,
+  contractVersion: doc.contractVersion || '1.0.0',
   docsEndpoint: `${doc.endpoint}-docs`
 });
 
+const deviceEndpointDocs: ApiEndpointDoc[] = [
+	endpoint({
+		id: 'devices',
+		contractVersion: '1.8.0',
+		group: 'devices',
+		title: 'Paired devices',
+		endpoint: '/api/v1/devices',
+		summary: 'Lists safe paired-computer summaries or one detailed mirror.',
+		detail:
+			'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET'],
+		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
+		requestExamples: [{ name: 'One device', description: 'Load one safe device projection.', method: 'GET', query: { id: 'device-id' } }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Device mirror.',
+				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-permissions',
+		group: 'devices',
+		title: 'Device permission mode',
+		endpoint: '/api/v1/devices/permissions',
+		summary: 'Sets the current account’s execution preference for one paired computer.',
+		detail:
+			'Each account/device connection defaults to always-allow, so supported actions run without a repeated Thingtime approval prompt. ask-every-time retains the existing one-command approval flow; deny rejects new remote actions. Pairing, freshness, capability, locked-session and macOS privacy checks remain enforced in every mode.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['POST'],
+		steps: ['Choose a paired device.', 'Set its per-account execution mode.', 'Future commands follow the new preference.'],
+		requestExamples: [
+			{
+				name: 'Ask every time',
+				description: 'Require a prompt before each future command.',
+				method: 'POST',
+				body: { deviceId: 'device-id', mode: 'ask-every-time' }
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Preference saved.', body: { ok: true, deviceId: 'device-id', mode: 'ask-every-time' } }]
+	}),
+	endpoint({
+		id: 'devices-pairing',
+		group: 'devices',
+		title: 'Create device pairing challenge',
+		endpoint: '/api/v1/devices/pairing',
+		summary: 'Creates one strong, short-lived, single-use pairing challenge.',
+		detail:
+			'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; fail-closed rate limited.' },
+		methods: ['POST'],
+		steps: ['Create a challenge.', 'Transfer the secret to the local node over the QR/deep-link pairing channel.'],
+		requestExamples: [{ name: 'Pair computer', description: 'Create one challenge.', method: 'POST' }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Challenge created.',
+				body: { ok: true, pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-pairing-claim',
+		group: 'devices',
+		title: 'Claim device pairing',
+		endpoint: '/api/v1/devices/pairing/claim',
+		summary: 'Atomically pairs one node with a locally generated opaque credential.',
+		detail:
+			'The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
+		auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
+		methods: ['POST'],
+		steps: [
+			'Generate and persist the node credential locally.',
+			'POST the challenge, credential, descriptor and capabilities once.',
+			'Use the credential only as Bearer auth on node routes.'
+		],
+		requestExamples: [
+			{
+				name: 'Claim',
+				description: 'Pair a macOS node.',
+				method: 'POST',
+				body: {
+					pairingSecret: 'ttpair_…',
+					credential: 'ttnode_…',
+					device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
+					capabilities: ['session.read', 'session.send']
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Paired.', body: { ok: true, device: { id: 'device-id', name: 'MacBook Pro' }, credentialStored: true } },
+			{
+				status: 409,
+				description: 'Challenge was claimed with different content.',
+				body: { ok: false, error: 'This pairing challenge was already claimed with different device data' }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-node-state',
+		contractVersion: '1.8.0',
+		group: 'devices',
+		title: 'Publish device state',
+		endpoint: '/api/v1/devices/node/state',
+		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
+		detail:
+			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Increment the durable local revision.',
+			'Send the complete bounded state and connector snapshot.',
+			'Retry the exact body until acknowledged.'
+		],
+		requestExamples: [
+			{
+				name: 'Snapshot',
+				description: 'Publish device state.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					revision: 42,
+					state: {
+						locked: false,
+						volume: 0.5,
+						brightness: 0.8,
+						battery: { level: 0.82, charging: true, isExternalPower: true, isPreventingIdleSleep: false, isLowPowerModeEnabled: false },
+						powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
+						appleMusic: { isInstalled: true, isRunning: false },
+						spotify: { isInstalled: true, isRunning: false },
+						chromeYouTube: { isInstalled: true, isRunning: false },
+						displays: [{ id: 42, width: 1728, height: 1117, isMain: true, isBuiltIn: true, brightness: 0.8, brightnessControlSupported: true, currentMode: { id: '1728x1117@60000:0', width: 1728, height: 1117, refreshRate: 60 }, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
+						openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
+					},
+					connectors: [
+						{ id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read', 'session.send'] }
+					]
+				}
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
+	}),
+	endpoint({
+		id: 'devices-commands',
+		contractVersion: '1.8.0',
+		group: 'devices',
+		title: 'Device commands',
+		endpoint: '/api/v1/devices/commands',
+		summary: 'Lists or creates idempotent, typed commands for one device.',
+		detail:
+			'Unknown kinds and input fields are rejected. The typed vocabulary covers controlled apps; audio routing, mute, and levels; Wi-Fi; persistent per-display mode, layout, and mirroring controls; printer, camera, Bluetooth-device, VPN, and power controls; fixed Apple Music and Spotify playback and app-volume changes; fixed active-tab Chrome YouTube/YouTube Music volume; strict screen-relative pointer movement/click/scroll; bounded text entry; allowlisted keyboard shortcuts; lifecycle actions; and screen-session metadata. Every remote input command always needs a fresh approval and the node must have macOS Accessibility permission. Text is not exposed as a key log, and no clipboard, arbitrary script, shell, event tap, Input Monitoring, Full Disk Access, or root capability is requested. Every media volume action accepts only level: 0..1 and always needs a fresh approval plus macOS Automation consent. Chrome additionally requires the user-enabled Allow JavaScript from Apple Events setting and runs one fixed media-element command only; it never accepts a URL, selector, script, browser-profile input, or reports page data. AirDrop and global camera availability use two distinct fixed profile-proposal commands. They each accept only enabled: boolean, require a fresh approval, write exactly one local .mobileconfig, and open macOS profile review; the Mac user must separately install or decline it. The proposal cannot silently install a profile, create MDM enrollment, carry arbitrary profile content, or alter per-app camera TCC. Wi-Fi accepts only a visible SSID and never a password. HDR and Low Power Mode are read-only; Focus, Bluetooth radio state, per-app camera privacy, cross-origin browser embeds, generic global media playback, and live screen-pixel transport have no supported scoped setter. No arbitrary executable input exists. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
+		requestExamples: [
+			{
+				name: 'Move pointer',
+				description: 'Queue one approval-gated pointer event relative to a currently reported display.',
+				method: 'POST',
+				body: { deviceId: 'device-id', requestId: 'web-pointer-123', kind: 'input.pointer.move', input: { displayId: 42, x: 400, y: 300 } }
+			},
+			{
+				name: 'Queue chat message',
+				description: 'Queue, rather than steer, one session message.',
+				method: 'POST',
+				body: {
+					deviceId: 'device-id',
+					requestId: 'web-123',
+					kind: 'session.send',
+					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Please run the tests.', delivery: 'queue' }
+				}
+			},
+			{
+				name: 'Steer current turn',
+				description: 'Optimistically locks steering to the visible turn.',
+				method: 'POST',
+				body: {
+					deviceId: 'device-id',
+					requestId: 'web-124',
+					kind: 'session.send',
+					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Focus on auth.', delivery: 'steer', expectedTurnId: 'turn-9' }
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Command accepted.',
+				body: {
+					ok: true,
+					command: { id: 'command-id', status: 'queued', kind: 'session.send', requiresApproval: false, approvalState: 'not-required' },
+					idempotent: false
+				}
+			},
+			{ status: 409, description: 'requestId conflict.', body: { ok: false, error: 'requestId was already used for different command content' } }
+		]
+	}),
+	endpoint({
+		id: 'devices-node-commands',
+		contractVersion: '1.8.0',
+		group: 'devices',
+		title: 'Device command lease channel',
+		endpoint: '/api/v1/devices/node/commands',
+		summary: 'Claims, heartbeats and reports journal-backed device work.',
+		detail:
+			'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: ['Claim one command.', 'Journal before side effects.', 'Heartbeat while active.', 'Report with a stable eventId until acknowledged.'],
+		requestExamples: [
+			{
+				name: 'Claim',
+				description: 'Bounded long poll.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: { op: 'claim', waitMs: 20000 }
+			},
+			{
+				name: 'Report',
+				description: 'Report exact result metadata.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'report',
+					commandId: 'command-id',
+					leaseId: 'lease-secret',
+					eventId: 'journal-event-7',
+					status: 'succeeded',
+					outputRef: 'turn-10'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Command claimed.',
+				body: {
+					ok: true,
+					command: { id: 'command-id', leaseId: 'lease-secret', status: 'claimed', requiresApproval: true, approvalState: 'approved' },
+					serverTime: '2026-08-18T01:00:00.000Z'
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-node-sync',
+		group: 'devices',
+		title: 'Device chat mirror sync',
+		endpoint: '/api/v1/devices/node/sync',
+		summary: 'Maps one bounded native AI batch into quota-billed relational Messenger rows.',
+		detail:
+			'Same bounded batch vocabulary as /ai/connections, but owner/device identity comes from the node credential and the connector must already be active on that device. Device and connector are included in server-hashed idempotency namespaces. Edits update existing message segments and delete stale trailing segments transactionally, so retries neither duplicate nor leak quota.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Publish the connector in node/state.',
+			'Send projects, conversations, then messages.',
+			'Coalesce live deltas and retry batches unchanged.'
+		],
+		requestExamples: [
+			{
+				name: 'Sync message',
+				description: 'Upsert one mirrored message.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					source: { provider: 'chatgpt', sourceId: 'desktop', label: 'ChatGPT', connector: 'chatgpt-desktop', mode: 'local' },
+					groups: [],
+					conversations: [{ id: 'chat-1', title: 'Thingtime', groupId: null }],
+					messages: [{ id: 'message-1', conversationId: 'chat-1', role: 'assistant', text: 'Working…' }],
+					final: false
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Batch applied.', body: { ok: true, accepted: { groups: 0, conversations: 1, messages: 1, messageSegments: 1 } } }
+		]
+	}),
+	endpoint({
+		id: 'devices-node-live-sync',
+		group: 'devices',
+		title: 'Device live AI materialization',
+		endpoint: '/api/v1/devices/node/live-sync',
+		summary: 'Materializes bounded live desktop sessions, transcript pages and monotonic visible events.',
+		detail:
+			'Node identity fixes owner and device; connector metadata and capabilities come from the active device-connector row. sessions.upsert accepts up to 100 revisioned summaries with optional opaque projectId and projectLabel but never paths. transcript.page accepts up to 100 discriminated revisioned entries: completed visible user/assistant messages are quota-billed relational mirrors, while closed safe activity labels are retained briefly as control-plane history. events.append accepts 1..100 contiguous sequence events from the closed visible vocabulary: message.queued/submitted/delta, item.started/completed, turn.started/completed/interrupted, approval.requested/responded, and connector.warning. Accepted events enter /devices/events as ai.session-event payloads shaped {connectorId,sessionId,sequence,observedAt,turnId,itemId,type,payload}; reasoning, paths and tool input/output are rejected. Deltas preserve exact whitespace and expire, while each non-empty completed visible item and every submitted user prompt must carry a matching revisioned message envelope that reconciles in the same transaction. The envelope is never projected into the event payload. Equal revisions/hashes replay, changed equal revisions and stale revisions return 409, and shorter completed revisions delete trailing segments and refund their exact quota bytes.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Publish the AI connector through node/state.',
+			'Upsert revisioned session summaries.',
+			'Page discriminated visible history into transcript.page.',
+			'Append contiguous live events and include matching message envelopes on submitted/completed visible text.'
+		],
+		requestExamples: [
+			{
+				name: 'Session summary',
+				description: 'Create or refresh one live native session.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'sessions.upsert',
+					connectorId: 'chatgpt-desktop',
+					sessions: [
+						{
+							sessionId: 'session-1',
+							revision: 4,
+							title: 'Thingtime',
+							projectId: 'project-1',
+							projectLabel: 'Thingtime',
+							state: 'running',
+							updatedAt: '2026-08-18T01:00:00.000Z'
+						}
+					]
+				}
+			},
+			{
+				name: 'Transcript page',
+				description: 'Materialize completed visible messages and safe activity.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'transcript.page',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					page: { cursor: null, nextCursor: 'older-2', hasMore: true },
+					entries: [
+						{
+							type: 'message',
+							messageId: 'message-1',
+							revision: 1,
+							role: 'assistant',
+							text: 'Working…',
+							createdAt: null,
+							completedAt: '2026-08-18T01:00:02.000Z'
+						},
+						{
+							type: 'activity',
+							activityId: 'activity-1',
+							revision: 1,
+							turnId: 'turn-1',
+							activity: 'command',
+							label: 'Command execution',
+							status: 'completed',
+							observedAt: '2026-08-18T01:00:02.000Z'
+						}
+					]
+				}
+			},
+			{
+				name: 'Live delta',
+				description: 'Publish one exact visible assistant delta.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'events.append',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					events: [
+						{
+							eventId: 'event-1',
+							sequence: 1,
+							observedAt: '2026-08-18T01:00:03.000Z',
+							turnId: 'turn-1',
+							itemId: 'message-2',
+							type: 'message.delta',
+							payload: { delta: ' Running tests…' }
+						}
+					]
+				}
+			},
+			{
+				name: 'Submitted prompt',
+				description: 'Persist a remote user prompt while publishing its live delivery event.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'events.append',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					events: [
+						{
+							eventId: 'event-2',
+							sequence: 2,
+							observedAt: '2026-08-18T01:00:04.000Z',
+							turnId: 'turn-1',
+							itemId: null,
+							type: 'message.submitted',
+							payload: { commandId: 'command-1', mode: 'queue', text: 'Run the tests' },
+							message: {
+								messageId: 'command-1',
+								revision: 1,
+								role: 'user',
+								text: 'Run the tests',
+								createdAt: '2026-08-18T01:00:04.000Z',
+								completedAt: '2026-08-18T01:00:04.000Z'
+							}
+						}
+					]
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Events accepted.',
+				body: {
+					ok: true,
+					op: 'events.append',
+					acceptedEvents: 1,
+					replayedEvents: 0,
+					materializedMessages: 1,
+					idempotentMessages: 0,
+					messageSegments: 1,
+					lastSequence: 2
+				}
+			},
+			{ status: 409, description: 'Stale or gapped sequence.', body: { ok: false, error: 'Live event sequence 2 is required before 3' } }
+		]
+	}),
+	endpoint({
+		id: 'devices-approvals',
+		group: 'devices',
+		title: 'Device approvals',
+		endpoint: '/api/v1/devices/approvals',
+		summary: 'Lists approval requests or records one final decision.',
+		detail: 'Approvals are owner/device filtered. Repeating the same decision is a no-op; a conflicting or expired decision returns 409.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['GET pending approvals for a device.', 'POST approved or denied once.'],
+		requestExamples: [
+			{ name: 'Approve', description: 'Approve one local action.', method: 'POST', body: { approvalId: 'approval-id', decision: 'approved' } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'Decision saved.', body: { ok: true, approval: { id: 'approval-id', status: 'approved' }, idempotent: false } }
+		]
+	}),
+	endpoint({
+		id: 'devices-events',
+		group: 'devices',
+		title: 'Device event stream',
+		endpoint: '/api/v1/devices/events',
+		summary: 'Returns a reconnectable, cursor-ordered NDJSON device event feed.',
+		detail:
+			'The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET'],
+		steps: ['Open with deviceId and optional cursor.', 'Process newline-delimited events.', 'Reconnect with the final cursor.'],
+		requestExamples: [
+			{ name: 'Stream', description: 'Wait for events.', method: 'GET', query: { deviceId: 'device-id', cursor: null, waitMs: 20000, limit: 100 } }
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'application/x-ndjson stream.',
+				body: { type: 'cursor', cursor: 'opaque-cursor' },
+				headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-screen',
+		group: 'devices',
+		title: 'Screen session lifecycle',
+		endpoint: '/api/v1/devices/screen',
+		summary: 'Lists, starts or stops safe screen-session lifecycle metadata.',
+		detail:
+			'Stores only quota-billed requested/approval/connecting/active/terminal metadata. Frames, screenshots, audio, SDP, ICE and TURN credentials are rejected and never persist through this endpoint. Starting queues an allowlisted screen.start command requiring local approval.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['POST action=start with a stable requestId.', 'Wait for local approval and screen-status events.', 'POST action=stop when done.'],
+		requestExamples: [
+			{
+				name: 'Start view-only',
+				description: 'Request local approval.',
+				method: 'POST',
+				body: { action: 'start', deviceId: 'device-id', requestId: 'screen-1', viewOnly: true }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Lifecycle created.',
+				body: { ok: true, session: { id: 'screen-id', status: 'requested', viewOnly: true }, command: { kind: 'screen.start', status: 'queued' } }
+			}
+		]
+	})
+];
+
 export const apiEndpointDocs: ApiEndpointDoc[] = [
+	endpoint({
+		id: 'capabilities',
+		contractVersion: '1.1.0',
+		group: 'platform',
+		title: 'API capabilities',
+		endpoint: '/api/v1/capabilities',
+		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
+		detail:
+			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
+		auth: { mode: 'none', description: 'Public deployment metadata only: never an account, connection string, credential, or other database secret.' },
+		methods: ['GET'],
+		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
+		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Versioned capability manifest plus non-secret data authority.',
+				body: {
+					ok: true,
+					schemaVersion: 1,
+					features: { 'api.capabilities': '1.1.0', 'api.devices': '1.0.0' },
+					dataEnvironment: {
+						schemaVersion: 1,
+						id: 'development',
+						kind: 'development',
+						federationId: 'development',
+						authorityOrigin: 'https://dev.thingtime.com'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'peers',
+		contractVersion: '1.1.0',
+		group: 'platform',
+		title: 'Deployment peer discovery',
+		endpoint: '/api/v1/peers',
+		summary: 'Streams bounded, authenticated same-data-environment peer leases and accepts signed deployment announcements.',
+		detail:
+			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The signed envelope binds the stable public federationId, so production, development, and custom database authorities never gossip into each other. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, safe data-environment ids, and observed lease times.',
+		auth: { mode: 'bearer', description: 'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.' },
+		methods: ['GET', 'POST'],
+		steps: ['Sign the exact method, path, timestamp and raw request body.', 'GET pages NDJSON peer events with a maximum of 50 rows.', 'POST { op: "announce", origin } or a self-signed { op: "sync" }.'],
+		requestExamples: [
+			{ name: 'Stream one page', description: 'A trusted deployment reads a bounded peer page.', method: 'GET', query: { limit: 25 } },
+			{ name: 'Announce this deployment', description: 'A trusted peer renews only its own lease.', method: 'POST', body: { op: 'announce', origin: 'https://pr-68.previews.dev.thingtime.com' } }
+		],
+		responseExamples: [{ status: 200, description: 'NDJSON peer events followed by a page-complete cursor.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.']
+	}),
+	endpoint({
+		id: 'peers-sync',
+		group: 'platform',
+		title: 'Advance deployment peer discovery',
+		endpoint: '/api/v1/peers/sync',
+		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
+		detail:
+			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
+		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, THINGTIME_PUBLIC_ORIGIN, and THINGTIME_DATA_ENV in the deployment environment.',
+			'Let the scheduler invoke the route; do not expose its credentials to clients.'
+		],
+		requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
+		responseExamples: [{ status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
+	}),
+	endpoint({
+		id: 'admin-peers',
+		group: 'admin',
+		title: 'Deployment peer explorer',
+		endpoint: '/api/v1/admin/peers',
+		summary: 'Returns an administrator-only, cursor-paged diagnostic projection of locally known deployment leases.',
+		detail:
+			'Used by Developer → Deployment peers. It reuses the signed mesh cursor bounds while returning JSON only to an authenticated administrator. It never exposes HMAC material, private keys, request signatures, or a peer traversal cursor; each row contains only origin, pinned public key, lease timestamps, and a derived active or expired status.',
+		auth: { mode: 'session-or-bearer', description: 'Thingtime administrator session or bearer token.' },
+		methods: ['GET'],
+		steps: ['GET one bounded page (default 25, maximum 50).', 'Follow nextCursor deliberately when more diagnostic rows are needed.', 'Use the Developer → Deployment peers page for all-field filtering and grid, card, or list presentation.'],
+		requestExamples: [{ name: 'Read one peer page', description: 'Administrators only.', method: 'GET', query: { limit: 25 } }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Private diagnostic peer page.',
+				body: {
+					ok: true,
+					peers: [
+						{
+							origin: 'https://thingtime.com',
+							signingPublicKey: 'base64url-spki',
+							firstSeenAt: '2026-08-24T00:00:00.000Z',
+							lastSeenAt: '2026-08-24T00:05:00.000Z',
+							expiresAt: '2026-08-24T00:15:00.000Z',
+							status: 'active'
+						}
+					],
+					nextCursor: null
+				}
+			}
+		],
+		notes: ['The browser route is intentionally separate from /api/v1/peers. It cannot participate in gossip or access a deployment signing identity.']
+	}),
+	...deviceEndpointDocs,
   endpoint({
     id: 'docs',
     group: 'docs',
@@ -80,13 +681,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
+    featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every selectable feature, branch, and pull request. Recent run, deployment, preview, and dispatch activity stays bounded; summary counts remain exact.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
@@ -109,7 +711,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } },
+      {
+        status: 503,
+        description: 'A MongoDB blocking sort exceeded its memory ceiling. Retry-After is present and the client keeps its last-known cached snapshot.',
+        headers: { 'Retry-After': '30' },
+        body: {
+          ok: false,
+          error: 'CI dashboard data is temporarily unavailable. Last-known cached data remains safe to use.',
+          code: 'ci_dashboard_query_capacity',
+          retryable: true
+        }
+      }
     ]
   }),
   endpoint({
@@ -117,10 +730,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '1.1.0',
+    featureVersion: '2.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, safely omits selected sources and targets with no compatible partner, snapshots every remaining source ref and SHA into a canonical immutable plan, and rejects a plan with no compatible pair instead of crossing branch families. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -164,6 +777,90 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-ci-feature-stacks',
+    group: 'admin',
+    title: 'Manage saved Feature Stacks',
+    endpoint: '/api/v1/admin/ci/stacks',
+    featureVersion: '1.3.0',
+    summary: 'Save, edit, list, run, pause, stop, restart, and archive reusable multi-target Feature Stacks.',
+    detail:
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. GET includes a bounded stack-specific event stream so progress heartbeats remain visible even when unrelated repository activity exceeds the general dashboard event window. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time. Pause and stop cancel only the exact active linked workflow while preserving the saved definition and history; restart cancels active compute before dispatching a fresh immutable run.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run or restart to dispatch a current live plan.', 'POST pause or stop to cancel exact active compute while preserving history, or delete to archive it.'],
+    requestExamples: [
+      { name: 'Save a stack', description: 'Sources and targets have no product-imposed count cap.', method: 'POST', body: { action: 'save', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true } },
+      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } },
+      { name: 'Pause a stack', description: 'Cancel active compute and preserve the saved definition for restart.', method: 'POST', body: { action: 'pause', id: 'ci-feature-stack-example' } },
+      { name: 'Restart a stack', description: 'Cancel an active run if necessary and dispatch a fresh immutable plan.', method: 'POST', body: { action: 'restart', id: 'ci-feature-stack-example' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration with bounded workflow and progress-event history.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved', runs: [{ id: 'ci-dispatch-example', runId: 'feature-stack-run-example', status: 'success', workflowRunId: 123, url: 'https://github.com/lopugit/thingtime/actions/runs/123' }] }], events: [{ id: 'ci-event-example', parentId: 'ci-dispatch-example', eventType: 'feature_stack_progress', statusTo: 'in_progress', occurredAt: '2026-09-01T00:10:00.000Z', data: { message: 'Lopu progress: 1 active, 0 queued, 0/1 finished.', progressPercent: 45 } }] } }]
+  }),
+  endpoint({
+    id: 'admin-ci-previews',
+    group: 'admin',
+    title: 'Manage opt-in PR preview environments',
+    endpoint: '/api/v1/admin/ci/previews',
+    featureVersion: '1.0.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    detail:
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'Select a same-repository open pull request.',
+      'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
+      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable a develop preview',
+        description: 'Build the exact current PR head with the develop Custom Environment.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'develop', enabled: true }
+      },
+      {
+        name: 'Enable a production-environment preview',
+        description: 'Explicitly allow this trusted PR to run with production environment values without assigning production domains.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'production', enabled: true, acknowledgeProductionData: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Policy stored and the exact-SHA deployment created or reused.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+      },
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-credentials',
+    group: 'admin',
+    title: 'Manage the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/admin/ci/credentials',
+    featureVersion: '2.0.0',
+    summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
+    detail:
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the redacted ordered list.',
+      'POST create, rotate, set-enabled, reorder, or delete.',
+      'Use the CI Control page to manage the order without copying values back into the browser.'
+    ],
+    requestExamples: [
+      { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
+      { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-ci-automations',
     group: 'admin',
     title: 'Set a CI automation execution provider',
@@ -173,7 +870,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Stores one protected ci-automation Thing per allowlisted workflow. Vercel execution keeps the reviewed workflow definition on the protected github-actions branch and runs its Linux jobs on a short-lived Vercel Sandbox registered as a uniquely labelled GitHub self-hosted runner. Unsupported workloads remain locked to GitHub.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
-    steps: ['Choose an allowlisted workflow.', 'Choose github-actions or vercel-sandbox.', 'POST the policy and inspect the resulting audit event in CI Control.'],
+		steps: [
+			'Choose an allowlisted workflow.',
+			'Choose github-actions or vercel-sandbox.',
+			'POST the policy and inspect the resulting audit event in CI Control.'
+		],
     requestExamples: [
       {
         name: 'Run the conflict resolver on Vercel',
@@ -183,8 +884,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Policy updated.', body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } } },
-      { status: 409, description: 'Provider unsupported for this workflow.', body: { ok: false, error: 'This automation requires a GitHub-hosted runner' } },
+			{
+				status: 200,
+				description: 'Policy updated.',
+				body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } }
+			},
+			{
+				status: 409,
+				description: 'Provider unsupported for this workflow.',
+				body: { ok: false, error: 'This automation requires a GitHub-hosted runner' }
+			},
       {
         status: 409,
         description: 'Vercel provider setup is incomplete.',
@@ -203,14 +912,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection, exact Thing reads by ID, comments targeted by parent ID, browse/search discovery, and confirmed writes. Initialization tells agents to use get_thingtime_thing whenever an exact ID is known and list_thingtime_comments whenever a target ID is known, so neither operation depends on a recent/global page. It also requires explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` maps @Thingtime login to the host’s OAuth browser and registered callback; `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, and static UI/contract resources are public metadata and never return account data. Account resources and every tool call require a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
-      'POST JSON-RPC initialize, tools/list, and tools/call requests to this endpoint.',
-      'Use get_thingtime_thing for a known Thing ID and list_thingtime_comments for a known parent/target ID; reserve list/search for discovery.',
-      'Use a write tool only after the person in the chat confirms the intended change.'
+      'POST JSON-RPC initialize, tools/list, prompts/list, resources/list, resources/read, and tools/call requests to this endpoint.',
+      'Use get_thingtime_thing or get_thingtime_things for known IDs and list_thingtime_comments for a known target; reserve list/search for discovery.',
+      'For composed writes, preview the complete plan, review its UI diff, obtain confirmation, then apply the exact signed receipt.'
     ],
     requestExamples: [
       {
@@ -235,7 +944,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'This route does not proxy arbitrary URLs or generic Thingtime API paths. Endpoint origins and operations are explicitly allowlisted.',
-      'The capability manifest names independently versioned features: chatgpt.mcp, chatgpt.oauth, chatgpt.connections, chatgpt.things.read, and chatgpt.things.write. It also maps every executable MCP tool operation to its owning feature.'
+      'The capability manifest independently versions MCP, OAuth, connections, read/write Things, schemas, relationships, previews, resources, history, workflows, UI, changes, and Capability Things. It maps every executable tool and MCP method to its owning feature.',
+      'resources/subscribe is deliberately advertised as false: list_thingtime_changes is the compatible bounded polling contract, and MCP mutation deletions remain visible through encrypted history receipts.'
     ]
   }),
   endpoint({
@@ -307,7 +1017,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_TOKEN_PATH,
     summary: 'Exchange an OAuth code or rotate a refresh credential for an MCP-only bridge credential.',
     detail:
-      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. Success always returns a 30-day bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token.',
+      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. Success returns a non-expiring, server-revocable bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token. Since it does not expire, `expires_in` is omitted.',
     auth: { mode: 'none', description: 'The one-time code, exact binding, and PKCE verifier are the public-client proof.' },
     methods: ['POST'],
     steps: ['Verify state and issuer at the callback.', 'Exchange with the original S256 verifier.', 'Store only the returned bridge credential and, when issued, replace the previous refresh credential atomically.'],
@@ -326,7 +1036,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Revocable MCP-only bridge access token, plus a replacement refresh credential when offline access was granted.', body: { access_token: '<bridge-jwt>', token_type: 'Bearer', expires_in: 2592000, refresh_token: '<rotating-refresh-jwt>', scope: 'thingtime offline_access' } },
+      { status: 200, description: 'Non-expiring but server-revocable MCP-only bridge access token, plus a replacement refresh credential when offline access was granted.', body: { access_token: '<bridge-jwt>', token_type: 'Bearer', refresh_token: '<rotating-refresh-jwt>', scope: 'thingtime offline_access' } },
       { status: 400, description: 'Invalid, expired, used, or mismatched authorization or refresh grant.', body: { error: 'invalid_grant' } }
     ]
   }),
@@ -340,19 +1050,79 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'This internal endpoint never accepts arbitrary workflow paths or runners. It validates the signed raw body, freshness window, repository configuration, workflow allowlist, and stored automation policy. Vercel failures fall back to the already-waiting GitHub run and are recorded in ci-event history.',
     auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
     methods: ['POST'],
-    steps: ['Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.', 'POST within ten minutes of requestedAt.', 'Honor execute and executionProvider in the response.'],
+		steps: [
+			'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.',
+			'POST within ten minutes of requestedAt.',
+			'Honor execute and executionProvider in the response.'
+		],
     requestExamples: [
       {
         name: 'Route an automatic resolver trigger',
         description: 'The protected router job asks Thingtime whether this run should continue on GitHub or move to Vercel.',
         method: 'POST',
         headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' },
-        body: { workflow: 'resolve-conflicts', deliveryKey: '123:1:push', actorId: 'github-actions[bot]', requestedAt: '2026-08-10T01:00:00.000Z', inputs: { branch: 'develop' } }
+				body: {
+					workflow: 'resolve-conflicts',
+					deliveryKey: '123:1:push',
+					actorId: 'github-actions[bot]',
+					requestedAt: '2026-08-10T01:00:00.000Z',
+					inputs: { branch: 'develop' }
+				}
       }
     ],
     responseExamples: [
-      { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
+			{
+				status: 202,
+				description: 'Routing decision accepted.',
+				body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' }
+			},
       { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-credentials',
+    group: 'integrations',
+    title: 'Deliver the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/integrations/ci/credentials',
+    featureVersion: '1.1.0',
+    summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
+    detail:
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Create a fresh nonce and request timestamp in a workflow running from github-actions.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'On the first migration request only, the controller may include its existing OAuth slots; an empty vault imports them once.',
+      'Mask every returned value immediately and keep it only for the current job.'
+    ],
+    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { platform: 'Anthropic', repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
+    responseExamples: [
+      { status: 200, description: 'Ordered enabled credentials for the requested platform. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
+      { status: 409, description: 'Replay blocked.', body: { ok: false, error: 'Credential request was already used.' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-progress',
+    group: 'integrations',
+    title: 'Record a Feature Stack progress heartbeat',
+    endpoint: '/api/v1/integrations/ci/progress',
+    featureVersion: '1.0.0',
+    summary: 'Attach a fresh, signed Lopu progress update to the exact Feature Stack dispatch.',
+    detail:
+      'The protected github-actions controller reports immediately, on phase changes, every ten minutes, and at completion. Thingtime validates the exact HMAC-signed body, repository, run identifiers, freshness window, bounded target phases, and the stored run-to-stack relationship before appending a relational ci-event. The admin CI console formats the stored estimate in the viewer local timezone.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Poll the current protected workflow run with actions:read.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'POST the first snapshot, each phase change, every ten minutes, and the terminal snapshot.'
+    ],
+    requestExamples: [{ name: 'Report Feature Stack progress', description: 'One immutable update for the exact stack run.', method: 'POST', headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' }, body: { deliveryId: 'feature-stack-run-<uuid>:123:1:4', repository: 'lopugit/thingtime', stackId: 'ci-feature-stack-<uuid>', featureStackRunId: 'feature-stack-run-<uuid>', workflowRunId: 123, workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123', runAttempt: 1, startedAt: '2026-09-01T00:00:00.000Z', reportedAt: '2026-09-01T00:10:00.000Z', expectedFinishAt: '2026-09-01T00:30:00.000Z', status: 'in_progress', message: 'Lopu is resolving 1 of 2 target branches.', progressPercent: 48, targets: [{ target: 'main', status: 'in_progress', phase: 'Resolving conflicts with Lopu', progressPercent: 55, jobUrl: 'https://github.com/lopugit/thingtime/actions/runs/123/job/456' }] } }],
+    responseExamples: [
+      { status: 202, description: 'Progress event recorded or idempotently replayed.', body: { ok: true, dispatchId: 'ci-example', eventId: 'ci-event-example', inserted: true } },
+      { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid progress signature.' } },
+      { status: 404, description: 'The signed run does not belong to a stored Feature Stack dispatch.', body: { ok: false, error: 'Feature Stack run not found.' } }
     ]
   }),
   endpoint({
@@ -1023,6 +1793,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-account-hints',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Cross-deployment account hints',
     endpoint: '/api/v1/auth/account-hints',
@@ -1034,7 +1805,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'its session on the other deployment is live, and dead pointers are pruned (the cookie is rewritten). ' +
       'Responses carry only public profile hints (username, display name, avatar) — never emails, session ' +
       'ids, or tokens — and picking a suggestion still requires that account\'s password or passkey. ' +
-      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions.',
+      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions. Every response is ' +
+      'Cache-Control: private, no-store and Vary: Cookie, so a shared intermediary cannot retain another browser\'s hints.',
     auth: { mode: 'none', description: 'Cookie-driven; works signed out (that is its point).' },
     methods: ['GET'],
     steps: [
@@ -1048,6 +1820,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'One live account found on another deployment.',
+        headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' },
         body: {
           ok: true,
           hints: [
@@ -1064,6 +1837,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-account-hints-resolve',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Resolve own-origin hints (federated)',
     endpoint: '/api/v1/auth/account-hints/resolve',
@@ -1074,7 +1848,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(different database): the shared tt_hints cookie arrives on the same-site fetch, and THIS deployment ' +
       'resolves only the pointers its own origin wrote, through the same live roster/session chokepoints. ' +
       'Each environment answers only for its own sessions — the user\'s browser assembles the full picture; ' +
-      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies.',
+      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies. Every response is ' +
+      'Cache-Control: private, no-store and Vary: Origin, Cookie.',
     auth: { mode: 'none', description: 'Cookie-driven; answers only for pointers this origin minted.' },
     methods: ['GET'],
     steps: [
@@ -1087,6 +1862,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'This origin vouches for one live account.',
+        headers: { 'Cache-Control': 'private, no-store', Vary: 'Origin, Cookie' },
         body: { ok: true, hints: [{ user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null }, origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }], alreadyHere: false }] }
       },
       { status: 200, description: 'Nothing to vouch for.', body: { ok: true, hints: [] } }
@@ -1304,11 +2080,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey registration',
     endpoint: '/api/v1/auth/passkeys/register-options',
+    featureVersion: '1.0.1',
     summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
     detail:
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
       'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
-      'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
+      'Options request a DISCOVERABLE credential (residentKey required) with user verification required, matching ' +
+      'the verification policy used when the response returns. Discoverability is what makes usernameless ' +
       'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
       'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
       'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
@@ -1326,7 +2104,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Creation options (challenge cookie set).',
-        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'required' } } }
       },
       { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
     ]
@@ -1370,11 +2148,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey login',
     endpoint: '/api/v1/auth/passkeys/login-options',
+    featureVersion: '1.0.1',
     summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
     detail:
       'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
       'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
-      'whatever Thingtime passkeys it holds (no username, no enumeration surface) — this is also the ' +
+      'whatever Thingtime passkeys it holds (no username, no enumeration surface). User verification is required ' +
+      'in the browser because the assertion verifier requires it too. This is also the ' +
       'options payload for conditional-UI autofill: request it on login-form mount with ' +
       'mediation:"conditional" and Safari/Chrome surface the iCloud Keychain / 1Password passkey popup ' +
       'directly on the username field.',
@@ -1387,7 +2167,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
     responseExamples: [
-      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'required' } } }
     ]
   }),
   endpoint({
@@ -1932,6 +2712,62 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 503,
         description: 'No asymmetric public key is configured in this environment.',
         body: { keys: [] }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-introspect',
+    group: 'auth',
+    title: 'Token introspection',
+    endpoint: '/api/v1/auth/introspect',
+    summary: 'Reports whether a Thingtime token is still active (signed, unexpired, and not revoked server-side).',
+    detail:
+      'JWKS lets services verify a token signature, issuer, and expiry offline, but cannot see server-side revocation. POST the token here to check the live session record in Thingtime: active is true only while the session exists, is unexpired, and has not been revoked (for example by logout). Possession of the token is the authorization — you can only ask about tokens you already hold — and inactive tokens return a bare { "active": false } with no reason.',
+    auth: {
+      mode: 'none',
+      description: 'No cookie or separate credential — the introspected token itself is the input, sent in the body or as a Bearer header.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { "token": "<jwt>" } (or send the token as an Authorization: Bearer header with an empty JSON body).',
+      'Call it from your server: introspection is a back-channel check, and unlike /api/v1/oauth/userinfo this route sends no CORS headers, so browser JavaScript on another origin cannot read the response.',
+      'Thingtime verifies the signature, then checks the session record for revocation and expiry.',
+      'active: true includes sub (user id), jti (session id), purpose, iat/exp (epoch seconds; exp null means non-expiring), and iss.',
+      'active only means the session is live — it does not mean the credential is a full account session. Branch on purpose: browser and service are full account credentials; app, app-sandbox, pat, oauth-code, chatgpt-oauth-code, chatgpt-mcp, chatgpt-mcp-refresh, and chatgpt-mcp-connection are scoped credentials that other endpoints will still reject. Treat any purpose you do not recognise as scoped.',
+      'Treat { "active": false } as terminal — re-authenticate to obtain a new token; the response never says why a token is inactive.',
+      'Poll only when you need live revocation status; keep offline JWKS verification for routine signature checks.'
+    ],
+    requestExamples: [
+      {
+        name: 'Introspect a bearer token',
+        description: 'Check whether a stored token is still usable.',
+        method: 'POST',
+        body: { token: '<jwt>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The token is signed, unexpired, and its session is still live.',
+        body: {
+          active: true,
+          sub: '64f000000000000000000001',
+          jti: '3f1c2a34-5678-4abc-9def-0123456789ab',
+          purpose: 'browser',
+          iat: 1767225600,
+          exp: 1769817600,
+          iss: 'https://thingtime.com'
+        }
+      },
+      {
+        status: 200,
+        description: 'The token is invalid, expired, or its session was revoked.',
+        body: { active: false }
+      },
+      {
+        status: 400,
+        description: 'No token was provided in the body or Bearer header.',
+        body: { ok: false, error: 'Provide the token to introspect as { "token": "…" } or a Bearer header' }
       }
     ]
   }),
@@ -2821,6 +3657,141 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'deployment-links',
+    group: 'deployments',
+    title: 'Linked deployments',
+    endpoint: '/api/v1/deployment-links',
+    summary: 'Lists, creates, updates, and removes links to the caller’s accounts on other Thingtime deployments.',
+    detail:
+      'A deployment link stores a bearer token for the caller’s account on another Thingtime deployment so the two can sync. The remote token lives only in the user thing’s encrypted secure blob (meta.deploymentLinks) and is never projected onto the wire — every response returns the sanitized link shape. POST accepts either a token pasted from the other deployment’s /api/v1/deployment-links/token, or a remote username + password (which may answer { requiresOtp, challenge } for an email-2FA account, completed by re-POSTing { challenge, code }). A password link is upgraded to a non-expiring deployment-link token when the remote supports it, and the login-derived session is then revoked. Base URLs are fenced against SSRF: https only (http for localhost), origin only — no path, query, or credentials — and IP literals plus internal-only names are refused. Link/unlink/mint ride the fail-closed deployments.link limit, because they dial a caller-supplied host; PATCH dials nothing and rides the roomier deployments.update limit so retuning a link never spends the linking budget.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Links are always scoped to the calling user.'
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    steps: [
+      'GET to list the caller’s links (never includes a token).',
+      'POST { baseUrl, token } to link with a token minted on the other deployment, or POST { baseUrl, username, password } to log in over there.',
+      'When the remote account has email 2FA, the login answers { requiresOtp: true, challenge } — re-POST { baseUrl, challenge, code } to finish.',
+      'PATCH { id, name?, syncMode?, pathRules? } to retune a link; path rules are profile, things, or things/<kind>, each with mode push/pull/two-way/off.',
+      'DELETE { id } to unlink — the remote session is revoked best-effort so the stored token dies with the link.'
+    ],
+    requestExamples: [
+      {
+        name: 'Link with a pasted token',
+        description: 'Link an account using a token minted by the other deployment.',
+        method: 'POST',
+        body: { baseUrl: 'https://other.thingtime.com', name: 'Other deployment', token: '<remote token>' }
+      },
+      {
+        name: 'Retune a link',
+        description: 'Switch a link to pull-only and suppress one kind.',
+        method: 'PATCH',
+        body: { id: 'link_123', syncMode: 'pull', pathRules: [{ path: 'things/chat-message', mode: 'off' }] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The caller’s links, sanitized — no token field is ever present.',
+        body: {
+          ok: true,
+          links: [
+            {
+              id: 'link_123',
+              name: 'other.thingtime.com',
+              baseUrl: 'https://other.thingtime.com',
+              remoteUserId: '64f000000000000000000001',
+              remoteUsername: 'rick.deckard',
+              syncMode: 'two-way',
+              pathRules: [],
+              tokenExpiresAt: null,
+              lastSyncAt: null,
+              lastSyncSummary: null
+            }
+          ]
+        }
+      },
+      {
+        status: 400,
+        description: 'The base URL failed the SSRF fence, or the body named neither a token nor a username + password.',
+        body: { ok: false, error: 'Provide a token, or a username + password for that deployment' }
+      },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ],
+    notes: [
+      'Remote tokens never leave api/utils — routes project links through toPublicLink before responding.',
+      'At most 10 links per account, and at most 50 path rules per link.'
+    ]
+  }),
+  endpoint({
+    id: 'deployment-links-sync',
+    group: 'deployments',
+    title: 'Sync a linked deployment',
+    endpoint: '/api/v1/deployment-links/sync',
+    summary: 'Runs one bounded sync pass for a link, or previews it with dryRun.',
+    detail:
+      'Moves things and profile fields between this deployment and the linked one, keyed by shareId, honouring the link’s syncMode and path rules (first matching rule wins, then things, then the link mode). Dependencies are ordered so a comment never lands before its post and schemas land before the data things citing them. Content equality beats updatedAt, so re-running an unchanged sync plans zero operations instead of ping-ponging copies. A pass is bounded by both an operation count and a wall-clock budget, so a slow linked deployment ends the pass with a report instead of running until the function is killed — the report’s remaining count says whether another pass is needed — and per-thing errors (a shareId owned by a different account, a kind unknown to the destination registry) are reported rather than aborting the run. Rides the fail-closed deployments.sync limit.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Only the caller’s own links can be synced.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { id, dryRun: true } to preview the planned operations without writing anything.',
+      'POST { id } to run the pass; the link’s lastSyncAt and lastSyncSummary are updated on a real run.',
+      'Re-run while report.remaining is greater than zero to continue a bounded pass.'
+    ],
+    requestExamples: [
+      { name: 'Preview a sync', description: 'Plan the pass without writing.', method: 'POST', body: { id: 'link_123', dryRun: true } },
+      { name: 'Run a sync', description: 'Execute one bounded pass.', method: 'POST', body: { id: 'link_123' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The pass report plus the refreshed link projection.',
+        body: {
+          ok: true,
+          report: { dryRun: false, planned: 12, applied: 12, conflictsResolved: 1, remaining: 0, errors: [], finishedAt: '2026-08-30T00:00:00.000Z' },
+          link: { id: 'link_123', syncMode: 'two-way', lastSyncAt: '2026-08-30T00:00:00.000Z' }
+        }
+      },
+      { status: 404, description: 'No link with that id belongs to the caller.', body: { ok: false, error: 'Link not found' } },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'deployment-links-token',
+    group: 'deployments',
+    title: 'Mint a deployment link token',
+    endpoint: '/api/v1/deployment-links/token',
+    summary: 'Mints a non-expiring, revocable token for THIS deployment so another deployment can link to this account.',
+    detail:
+      'Returns a bearer token purpose-tagged deployment-link, backed by a null-expiry session document exactly like a service-account token — so it is revocable server-side at any time. Two callers use it: another deployment upgrading a login-derived link token, and a person copying a token to paste into another deployment’s link form. The token is returned exactly once and is never stored in readable form or shown again. Rides the fail-closed deployments.link limit.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. The token is minted for the calling user only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST with no body while signed in on the deployment you want to be linked TO.',
+      'Copy the returned token once — it is never shown again.',
+      'Paste it into the other deployment’s POST /api/v1/deployment-links as { baseUrl, token }.',
+      'Revoke it later like any other session; unlinking also revokes it best-effort.'
+    ],
+    requestExamples: [
+      { name: 'Mint a link token', description: 'Create a token to paste into another deployment.', method: 'POST', body: {} }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The token, shown exactly once.',
+        body: { ok: true, token: '<jwt>', tokenType: 'Bearer', expiresAt: null }
+      },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
     id: 'mongodb-endpoint',
     group: 'mongodb',
     title: 'MongoDB data endpoint',
@@ -3308,7 +4279,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
 			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } later re-sorts a post’s bound set and binds newly uploaded ready drafts appended to it.'
 		],
 		requestExamples: [
 			{
@@ -3382,19 +4353,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
-		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		summary: 'Sets or clears an owned ready attachment’s display filename, title, and description.',
 		detail:
-			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+			'Every attachment is a searchable Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation metadata that page, post cards, and lightbox render: filenamePreview up to 255 single-line characters, title up to 200, and description up to 2000 characters (newlines allowed). The original filename remains immutable and is still used for downloads. Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id with title and/or description.',
+			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
 			'Store the returned attachment metadata (it includes the updated title/description).',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
@@ -3406,6 +4378,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				method: 'POST',
 				body: {
 					id: '3bda8208-625c-4f5d-941f-348020021848',
+					filenamePreview: 'Bay sunset.jpg',
 					title: 'Sunset over the bay',
 					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
 				}
@@ -3431,20 +4404,77 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
-		id: 'attachment-delete',
+		id: 'attachment-link',
 		group: 'attachments',
-		title: 'Delete attachment',
-		endpoint: '/api/v1/attachments/delete',
-		summary: 'Deletes an owned attachment object before refunding its storage.',
+		title: 'Link external media',
+		endpoint: '/api/v1/attachments/link',
+		summary: 'Mints a ready linked-attachment draft from an external media URL.',
 		detail:
-			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+			'A linked attachment is a first-class attachment Thing whose bytes stay on the original site: the crystal carries the external http(s) URL and clients render it directly (image tile, video player, or file row with an outbound download link). It binds into posts and rich comments through the same attachmentIds flows as uploads, reorders and annotates identically, and never touches Thingtime object storage or the upload-approval gate — only the metadata document counts toward the owner’s quota. The server derives contentType and a render hint from the URL’s file extension; a client may demote the hint to a plain file after a failed load probe, but can never promote a file extension to a visual kind. Duplicate URLs are allowed — each mint is its own attachment. Unbound mints expire on the standard 24-hour draft TTL. The server never fetches the URL.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id.',
+			'POST the external http(s) media URL (up to 2048 characters).',
+			'Optionally send purpose ("post" default, or "comment") so the draft binds to the right surface, and mediaKind to demote an extensionless URL to "file".',
+			'Store the returned attachment id and url — the id goes into attachmentIds on post create or edit exactly like an uploaded attachment.',
+			'Remove an unwanted mint with /api/v1/attachments/delete; unbound mints expire on their own after 24 hours.'
+		],
+		requestExamples: [
+			{
+				name: 'Link a photo by URL',
+				description: 'Mint a ready linked attachment for an external image.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/photos/sunset.jpg'
+				}
+			},
+			{
+				name: 'Link a document for a comment',
+				description: 'A file-extension URL lands in the file row UI with an outbound download link.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/papers/spec.pdf',
+					purpose: 'comment'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'The minted linked attachment’s public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '9c1f5f68-3f0a-45f2-8f60-6f4a70b1a001',
+						name: 'sunset.jpg',
+						size: 0,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						url: 'https://example.com/photos/sunset.jpg'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-delete',
+		featureVersion: '1.1.0',
+		group: 'attachments',
+		title: 'Delete attachment',
+		endpoint: '/api/v1/attachments/delete',
+		summary: 'Deletes an owned attachment object before refunding its storage.',
+		detail:
+			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
 			'On success, remove it from local draft state.',
 			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
 		],
@@ -3453,7 +4483,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				name: 'Delete file',
 				description: 'Delete one owned attachment.',
 				method: 'POST',
-				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
@@ -3615,9 +4645,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'admin',
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
-		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
+		featureVersion: '1.1.0',
+		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
 		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
+			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
 			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
@@ -3626,7 +4657,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Configure CRON_SECRET only in the deployment environment.',
 			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed counts; later invocations safely retry anything still unstamped.'
+			'Monitor failed counts; a full failure-free batch immediately starts a durable continuation, while later hourly invocations safely retry anything still unstamped.'
 		],
 		requestExamples: [
 			{
@@ -3638,11 +4669,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [
 			{
 				status: 200,
-				description: 'One bounded sweep pass over both surfaces.',
+				description: 'One bounded sweep pass; continuationRunId is set when a durable self-draining workflow was started.',
 				body: {
 					ok: true,
 					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
-					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
+					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 },
+					continuationRunId: 'wrun_01moderationsweepexample'
 				}
 			},
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
@@ -3781,16 +4813,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'themes',
     title: 'Shared theme',
     endpoint: '/api/v1/themes/shared',
-    summary: 'Reads a shared theme by id/share id.',
-    detail: 'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id.',
+    summary: 'Reads a shared theme by id, or lists the public theme gallery without one.',
+    detail:
+      'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
     auth: {
       mode: 'optional',
       description: 'Anonymous public reads are allowed; auth cookie or bearer token can reveal caller-owned private themes.'
     },
     methods: ['GET'],
     steps: [
-      'Send id as a query parameter.',
-      'Use the returned theme to preview or apply a shared visual configuration.',
+      'Send id as a query parameter for a single theme, or omit it to list the public gallery.',
+      'Use the returned theme(s) to preview or apply a shared visual configuration.',
       'Treat 404 as not found without assuming whether a private theme exists.',
       'Authenticate only when reading one of your own private themes by id.'
     ],
@@ -3800,6 +4833,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Fetch a public shared theme.',
         method: 'GET',
         query: { id: 'theme_123' }
+      },
+      {
+        name: 'List the public gallery',
+        description: 'Fetch every public theme, newest first.',
+        method: 'GET',
+        query: { limit: '24' }
       }
     ],
     responseExamples: [
@@ -3813,6 +4852,91 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'No public or caller-owned theme found.',
         body: { ok: false, error: 'Theme not found' }
       }
+    ]
+  }),
+  endpoint({
+    id: 'ai-connections',
+    group: 'messenger',
+    title: 'AI desktop connections',
+    endpoint: '/api/v1/ai/connections',
+    summary: 'Lists linked ChatGPT/Claude sources or imports one idempotent Messenger sync batch.',
+    detail:
+      'GET lists the authenticated account’s consented AI desktop sources and latest completed counts. POST ' +
+      'accepts one bounded application/json batch from the Thingtime desktop bridge. External projects or ' +
+      'workspaces become private communities, their conversations become private channels, ungrouped ' +
+      'conversations become named group chats, and messages become relational chat-message Things. Provider ' +
+      'credentials, cookies, raw local paths, hidden reasoning and tool traffic are never accepted. Stable ' +
+      'server-hashed source keys make every batch safe to retry. Provider history is read-only; replies stay ' +
+      'inside Thingtime.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires a full Thingtime user account via auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Discover and approve a source in the signed Thingtime desktop app.',
+      'Send project records before their conversations and conversation records before their messages.',
+      'Keep each batch within 80 projects, 120 conversations, 240 messages and the 768 KiB body cap.',
+      'Set final true and include source totals on the last batch.',
+      'Retry an interrupted batch unchanged; source hashes prevent duplicate communities, chats, or messages.'
+    ],
+    requestExamples: [
+      {
+        name: 'Import one Claude batch',
+        description: 'Creates a project channel and its first imported message.',
+        method: 'POST',
+        body: {
+          source: {
+            provider: 'claude',
+            sourceId: 'claude-thingtime',
+            label: 'Claude Thingtime',
+            connector: 'claude-code-local',
+            mode: 'local'
+          },
+          groups: [{ id: 'project_01', name: 'Thingtime', kind: 'project' }],
+          conversations: [{ id: 'conversation_01', title: 'Messenger bridge', groupId: 'project_01' }],
+          messages: [
+            {
+              id: 'message_01',
+              conversationId: 'conversation_01',
+              role: 'assistant',
+              authorName: 'Claude',
+              text: 'The bridge is ready.'
+            }
+          ],
+          final: true,
+          totals: { groups: 1, conversations: 1, messages: 1 }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch accepted and connection status updated.',
+        body: {
+          ok: true,
+          connection: {
+            provider: 'claude',
+            sourceId: 'claude-thingtime',
+            label: 'Claude Thingtime',
+            status: 'connected',
+            readOnly: true,
+            groups: 1,
+            conversations: 1,
+            messages: 1
+          },
+          accepted: { groups: 1, conversations: 1, messages: 1, messageSegments: 1 }
+        }
+      },
+      {
+        status: 409,
+        description: 'A batch arrived before a referenced parent record.',
+        body: { ok: false, error: 'An imported message arrived before its conversation; retry the sync batch' }
+      }
+    ],
+    notes: [
+      'POST requires application/json and draws from the ai.sync rate-limit bucket (600 batches per hour).',
+      'Message text over the native chat cap is split into ordered, idempotent segments.'
     ]
   }),
   endpoint({
@@ -5083,6 +6207,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with credentials to list the caller algorithms and active id.',
       'POST a name, optional emoji, optional branchFrom id, and optional events to create an algorithm.',
       'Use branchFrom to copy an existing algorithm weight profile before further training.',
+      'branchFrom also accepts the share-link id of an algorithm someone else turned sharing on for — the weights are copied into your own private algorithm, which starts unshared. A 404 means the id is neither yours nor shared.',
       'Handle 401 for anonymous callers and 400 for invalid creation payloads.'
     ],
     requestExamples: [
@@ -5218,8 +6343,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Events were applied.',
-        body: { ok: true, trained: true, applied: 1 }
+        description:
+          'Events were applied. eventCount is the authoritative post-flush signal total for the trained algorithm, so a client can detect growth-stage crossings from (eventCount - applied) to eventCount.',
+        body: { ok: true, trained: true, applied: 1, eventCount: 101 }
       },
       {
         status: 400,
@@ -5233,8 +6359,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'algorithms',
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
-    summary: 'Renames or restyles one of the current user feed algorithms.',
-    detail: 'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
+    summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
+    detail:
+      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -5259,6 +6386,126 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Algorithm updated.',
         body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Home projects' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'embed-things',
+    group: 'embed',
+    title: 'Embedded things',
+    endpoint: '/api/v1/embed/things',
+    summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
+    detail:
+      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as kind: embed documents in the things collection.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Public GET by id is anonymous. Private reads, owner lists, creates, and updates require an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with id to load a public embedded thing, or authenticate to load a caller-owned private thing.',
+      'GET without id while authenticated to list the caller embedded things.',
+      'POST name, value, and visibility without id to create a thing.',
+      'POST id, the last-seen version, value, and optional metadata to update; reload after a 409 conflict.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load a public thing',
+        description: 'Fetch a thing for a script-tag embed.',
+        method: 'GET',
+        query: { id: '0df8c965-48a5-4a39-bc47-43c04d404615' }
+      },
+      {
+        name: 'Create an embedded thing',
+        description: 'Create an owner-controlled public thing.',
+        method: 'POST',
+        body: {
+          name: 'Website capability card',
+          visibility: 'public',
+          value: { title: 'Hello from Thingtime', enabled: true }
+        }
+      },
+      {
+        name: 'Update an embedded thing',
+        description: 'Save edits against the version that was loaded.',
+        method: 'POST',
+        body: {
+          id: '0df8c965-48a5-4a39-bc47-43c04d404615',
+          version: 1,
+          value: { title: 'Hello, world', enabled: true }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Thing loaded or saved.',
+        body: {
+          ok: true,
+          thing: {
+            id: '0df8c965-48a5-4a39-bc47-43c04d404615',
+            name: 'Website capability card',
+            value: { title: 'Hello from Thingtime', enabled: true },
+            visibility: 'public',
+            version: 1
+          }
+        }
+      },
+      {
+        status: 409,
+        description: 'Another client saved a newer version.',
+        body: { ok: false, error: 'Thing changed somewhere else. Load it before saving again.' }
+      },
+      {
+        status: 429,
+        description: 'Read budget exhausted (anonymous cross-origin callers are counted per IP).',
+        body: { ok: false, error: 'Too many embed reads — take a breather 🌸' }
+      },
+      {
+        status: 429,
+        description: 'Save budget exhausted for this account.',
+        body: { ok: false, error: 'Saving embeds very enthusiastically — take a breather 🌸' }
+      }
+    ],
+    notes: [
+      'Cross-origin public reads use CORS. Do not put a full-account bearer token in publicly served browser source.',
+      'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.',
+      'Both verbs are rate limited (embed.read / embed.write). A 429 sends Retry-After, and the read 429 keeps its CORS headers so a host page can read the status instead of seeing an opaque network error.'
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-shared',
+    group: 'algorithms',
+    title: 'Shared feed algorithm preview',
+    endpoint: '/api/v1/algorithms/shared',
+    summary: 'Reads the public preview of an explicitly shared feed algorithm ("try my feed brain").',
+    detail:
+      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — this preview never exposes weights or interests, and the algorithm doc itself is never readable. Branching is the disclosure: POST /api/v1/algorithms with branchFrom set to this id copies the owner’s learned weights into your own algorithm, where they surface as its topInterests, and that copy is independent of any later unshare. Unknown, unshared, and private ids all 404 identically.',
+    auth: {
+      mode: 'none',
+      description: 'Public and anonymous — possession of the share link plus the owner sharing flag is the gate.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send id (the share link id from /feed?algorithm=<id>) as a query parameter.',
+      'Show the preview and offer to branch a copy.',
+      'POST /api/v1/algorithms with { name, emoji, branchFrom: id } while authenticated to branch.',
+      'Treat 404 as not shared without assuming whether the algorithm exists.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read shared algorithm preview',
+        description: 'Fetch the branch-invitation preview.',
+        method: 'GET',
+        query: { id: 'algorithm_123' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Shared algorithm preview.',
+        body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Night Owl', emoji: '🦉', eventCount: 1234, ownerUsername: 'rick' } }
       }
     ]
   }),
@@ -5764,11 +7011,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/scopes',
     summary: 'The public catalog of permission-scope paths platforms can request.',
     detail:
-      'Anonymous. Scopes are hierarchical dot paths — granting an ancestor (profile) covers every ' +
-      'descendant (profile.avatar); profile.username is the always-granted baseline identity. Each ' +
-      'entry carries the consent-screen wording ({ id, title, description, kind, baseline }); kinds: ' +
-      'namespace, field, capability, picker. The authorize popup renders its permissions selector and ' +
-      '"share more" section from this catalog, so new scopes added here appear everywhere at once.',
+      'Anonymous, CORS-open (platforms feature-detect scopes here before opening the popup). Scopes ' +
+      'are hierarchical dot paths — granting an ancestor (profile) covers every descendant ' +
+      '(profile.avatar); profile.username is the always-granted baseline identity. Privacy-expanding ' +
+      'leaves are marked exact: true (profile.birthday, app-data.shared) — an ancestor grant never ' +
+      'covers them, the user must approve the literal path. Each entry carries the consent-screen ' +
+      'wording ({ id, title, description, kind, baseline, exact }); kinds: namespace, field, ' +
+      'capability, picker. The authorize popup renders its permissions selector and "share more" ' +
+      'section from this catalog, so new scopes added here appear everywhere at once.',
     auth: { mode: 'none', description: 'Anonymous — documentation data.' },
     methods: ['GET'],
     steps: ['GET the catalog.', 'Request paths via the SDK scopes/optionalScopes options.'],
@@ -6037,10 +7287,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with the app-scoped Bearer token. Returns the granted scopes plus a user object shaped ' +
       'field-by-field by the grant: id, username, and a profileUrl Thingtime link always ' +
       '(profile.username baseline); displayName, avatarUrl, bio, bannerUrl each under their ' +
-      'profile.<field> path (a granted profile namespace covers them all); email under the email ' +
-      'scope; sharedThings reports the picker count. Platforms call this to sync the account on ' +
-      'their side and light up features for whatever the user shared. Same CORS + origin binding as ' +
-      '/api/v1/app-data.',
+      'profile.<field> path (a granted profile namespace covers them all); birthday (YYYY-MM-DD) ' +
+      'under profile.birthday ONLY — an exact scope a plain profile grant never covers; email under ' +
+      'the email scope; sharedThings reports the picker count. Platforms call this to sync the ' +
+      'account on their side and light up features for whatever the user shared. Same CORS + origin ' +
+      'binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
     methods: ['GET'],
     steps: ['GET with the token from Thingtime.login(…).', 'Read user + scopes; email appears only under the email scope.'],
@@ -6260,6 +7511,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -6274,15 +7526,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST { thingtime: ["post"], crystal: { type, text, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'POST { thingtime: ["post"], crystal: { type, text, richText?, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'Post captions may include richText: a bounded native Editor.js document ({ kind: "rich-text", blocks: [...] }). The server derives crystal.text from those blocks as the canonical plain-text search, moderation, notification, and older-client fallback.',
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
-      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
-      'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
+      'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
+      'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
+      'DELETE ?id= (or body { id, expectedUpdatedAt? }) removes an owned thing; the optional precondition is checked atomically before cascade cleanup, attached comments/reactions go with it, and shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
     requestExamples: [
@@ -6295,6 +7549,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           crystal: { type: 'text', text: 'Everything is a thing ✨' },
           acl: ['tt:all'],
           tags: ['thingtime']
+        }
+      },
+      {
+        name: 'Create rich-text post',
+        description: 'Native blocks retain inline marks, block styles, whitespace, and line breaks; text is derived server-side.',
+        method: 'POST',
+        body: {
+          type: 'text',
+          richText: {
+            kind: 'rich-text',
+            blocks: [{ type: 'paragraph', data: { text: '<mark>Home network public ip:</mark><br>113.29.241.145' } }]
+          },
+          visibility: 'private'
         }
       },
       {
@@ -6397,6 +7664,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'PATCH merges crystal fields and can retarget the audience.',
         method: 'PATCH',
         body: { id: 'post_123', crystal: { text: 'Edited ✏️' }, acl: ['-tt:all', 'tt:userFamily', 'tt:user'] }
+      },
+      {
+        name: 'Apply a previewed patch safely',
+        description: 'Replace the crystal only if the exact previewed version is still current.',
+        method: 'PATCH',
+        body: { id: 'post_123', crystal: { type: 'text', text: 'Reviewed replacement' }, replaceCrystal: true, expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       },
       {
         name: 'Delete a thing',
@@ -6608,6 +7881,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
+    featureVersion: '1.1.1',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
@@ -6746,12 +8020,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
+			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -6833,7 +8108,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the post id to delete.',
+      'POST the Thing id and, for a previewed mutation, its expectedUpdatedAt timestamp.',
       'The current user must own the post.',
       'On success, remove the post from feed and profile lists.',
       'Handle 401 unauthenticated and 404 for missing or unowned posts.'
@@ -6843,7 +8118,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Delete post',
         description: 'Delete a caller-owned post.',
         method: 'POST',
-        body: { id: 'post_123' }
+        body: { id: 'post_123', expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       }
     ],
     responseExamples: [
@@ -6934,6 +8209,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -6965,6 +8241,80 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Feed page returned.',
         body: { ok: true, posts: [], nextCursor: null, ranked: false }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-trending',
+    group: 'things',
+    title: 'Trending posts',
+    endpoint: '/api/v1/things/trending',
+    summary: 'Returns the explore board: public posts from the last week ranked by time-decayed engagement.',
+    detail:
+      'Candidates are public (tt:all) posts created in the last 7 days — the newest 300 are scored in memory as (reactions×3 + comments×4 + pollVotes×2 + views×0.25 + 1) / (hoursOld + 2)^1.4, so fresh engagement outranks stale piles, and the top 30 come back as the same PublicPost projections the feed returns (reactions, comments, polls, and view stats all batch-aggregated). The pool is public-only regardless of who asks; a session only personalises viewer fields like viewerReactions and poll viewerVote.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers get the same board; authenticated callers additionally get their viewer-specific fields.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required.',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
+      'Render posts with the same components as the feed; generatedAt timestamps the scoring pass.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read trending',
+        description: 'Fetch the current trending board.',
+        method: 'GET',
+        query: { anon: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Trending board returned.',
+        body: { ok: true, posts: [], generatedAt: '2026-08-19T00:00:00.000Z' }
+      }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the board is served from the Vercel edge and can lag live engagement by a few minutes.'
+    ]
+  }),
+  endpoint({
+    id: 'things-rss',
+    group: 'things',
+    title: 'Public posts Atom feed',
+    endpoint: '/api/v1/things/rss',
+    summary: 'Returns an Atom (RSS) XML feed of the latest ~50 public posts, newest first.',
+    detail:
+      'Unlike every other endpoint in this API, the response body is NOT JSON: it is an Atom 1.0 XML document (Content-Type: application/atom+xml; charset=utf-8) suitable for any feed reader. Entries are the newest 50 public (tt:all) posts rendered as the anonymous viewer — the same acl walk and PublicPost projections trending uses, with no viewer-specific fields — each carrying the author handle plus truncated text (or poll question) as <title>, the full text as <content type="text">, the /post/<id> permalink as <link rel="alternate">, and RFC 3339 <published>/<updated> timestamps. All user text is XML-escaped and stripped of XML-invalid control characters.',
+    auth: {
+      mode: 'none',
+      description: 'Always anonymous — cookies and bearer tokens are ignored, so the feed only ever contains public posts.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint (or subscribe to it from a feed reader) — no parameters are required.',
+      'Parse the body as Atom XML, not JSON; each <entry> links to its /post/<id> permalink.',
+      'The app shell also advertises the feed via <link rel="alternate" type="application/atom+xml"> for reader auto-discovery.'
+    ],
+    requestExamples: [
+      {
+        name: 'Fetch the feed',
+        description: 'Fetch the Atom feed of the latest public posts.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Atom XML feed returned (shown here as a string; the raw body is the XML document itself, not JSON).',
+        headers: { 'Content-Type': 'application/atom+xml; charset=utf-8' },
+        body: '<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n  <title>Thingtime</title>\n  <updated>2026-08-19T00:00:00.000Z</updated>\n  <entry>...</entry>\n</feed>'
+      }
+    ],
+    notes: [
+      'Responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the feed is served from the Vercel edge and can lag new posts by a few minutes.'
     ]
   }),
   endpoint({
@@ -7018,7 +8368,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
       '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
       'library is personal by construction. Toggling an existing save removes it. List saved ' +
-      'schemas via /api/v1/schemas/browse?library=1, or raw saves via GET /api/v1/things?thingtime=save.',
+      'posts via GET /api/v1/things/saved, saved schemas via /api/v1/schemas/browse?library=1, ' +
+      'or raw saves via GET /api/v1/things?thingtime=save.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7043,6 +8394,99 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Save toggled.',
         body: { ok: true, saved: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-saved',
+    group: 'things',
+    title: 'Saved library',
+    endpoint: '/api/v1/things/saved',
+    summary: 'Lists the posts the current user saved to their library, newest-saved-first.',
+    detail:
+      'Reads the caller’s save things (written by POST /api/v1/things/save) newest first and batch-loads ' +
+      'their post-shaped targets in two indexed queries — never N+1. Targets that no longer resolve ' +
+      '(deleted, audience narrowed since the save, or not post-shaped, e.g. a saved schema) are silently ' +
+      'skipped rather than erroring — the library fails closed. Posts come back as the same PublicPost ' +
+      'projections the feed returns (reactions, comments, polls, view stats, viewerSaved: true), ordered by ' +
+      'when they were SAVED, not when they were posted. Pagination uses the feed’s stable ' +
+      '(createdAt, shareId) cursor over the save things; the cursor advances over the raw save page so ' +
+      'skipped rows are dropped, not resurfaced.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token — a library is personal by construction, so there is no anonymous view.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required for the first page (default limit 30, max 50).',
+      'Render posts with the same components as the feed; every entry carries viewerSaved: true.',
+      'Pass nextCursor back as cursor for the next page; null means the library is fully paged.',
+      'Handle 401 unauthenticated.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read the library',
+        description: 'Fetch the first page of saved posts.',
+        method: 'GET'
+      },
+      {
+        name: 'Next page',
+        description: 'Continue from a previous response’s nextCursor.',
+        method: 'GET',
+        query: { cursor: '1755500000000_post_123', limit: 30 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Saved posts returned, newest-saved-first.',
+        body: { ok: true, posts: [], nextCursor: null }
+      }
+    ],
+    notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
+  }),
+  endpoint({
+    id: 'things-vote',
+    group: 'things',
+    title: 'Vote on poll',
+    endpoint: '/api/v1/things/vote',
+    summary: 'Casts (or moves, or removes) the current user vote on a visible poll thing.',
+    detail:
+      'Polls are posts (or data things) whose thing carries a string question plus an options ' +
+      'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
+      'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
+      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
+      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
+      'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
+      'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Anonymous viewers see results only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the poll thing id and the zero-based optionIndex to vote for.',
+      'The poll must be visible to the current user and optionIndex must be inside its options list.',
+      'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+    ],
+    requestExamples: [
+      {
+        name: 'Cast a vote',
+        description: 'Vote for the second option of a poll.',
+        method: 'POST',
+        body: { id: 'poll_123', optionIndex: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vote recorded — the fresh tally comes back for immediate reconciliation.',
+        body: {
+          ok: true,
+          pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
+        }
       }
     ]
   }),
@@ -7081,6 +8525,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
@@ -7092,17 +8537,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the post id plus optional text and visibility.',
+      'POST the post id plus optional text, tags, and visibility.',
       'The source post must be public or owned/visible to the current user.',
+      'Optional tags (e.g. inline #hashtags harvested from the caption) merge with the tags carried from the original.',
       'Use the returned share post to update feed state.',
       'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
     ],
     requestExamples: [
       {
         name: 'Share post',
-        description: 'Create a repost with optional commentary.',
+        description: 'Create a repost with optional commentary — caption hashtags ride along as tags.',
         method: 'POST',
-        body: { id: 'post_123', text: 'Worth saving', visibility: 'public' }
+        body: { id: 'post_123', text: 'Worth saving #vibes', tags: ['vibes'], visibility: 'public' }
       },
       {
         name: 'Share to your friends only',
@@ -7121,12 +8567,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
-      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things (comments, reactions) keep their inherited audience.',
+      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7135,7 +8582,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST the thing id plus any of crystal, extended, visibility, and tags.',
-      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas. For posts, a text patch from an older/plain client that omits richText intentionally clears the previous rich-text document.',
+      'For a previewed update, send expectedUpdatedAt; a stale value returns 409 without writing. Set replaceCrystal only when whole-crystal replacement is intended.',
       'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
       'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
@@ -7152,6 +8600,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Swap the acl to friends-only without touching the crystal.',
         method: 'POST',
         body: { id: 'post_123', acl: ['-tt:all', 'tt:userFriends', 'tt:user'] }
+      },
+      {
+        name: 'Apply a previewed replacement',
+        description: 'Whole-crystal replacement guarded by the version inspected in the preview.',
+        method: 'POST',
+        body: { id: 'post_123', crystal: { type: 'text', text: 'Reviewed replacement' }, replaceCrystal: true, expectedUpdatedAt: '2026-08-30T01:02:03.000Z' }
       }
     ],
     responseExamples: [
@@ -7168,6 +8622,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
@@ -7343,7 +8798,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-			'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
+      'GET returns a stripped public projection that never includes email, verification fields, or the ' +
+      'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
+      'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
+      'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
+      'private attachment created for the exact profile slot; managed media remains in the private ' +
+      'bucket and is served through a stable same-origin content route. Birthday is YYYY-MM-DD, ' +
+      'private — stored in the secure blob and shared with apps only via the exact profile.birthday scope.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -7351,10 +8812,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName or bio independently of profile media.',
+			'POST displayName, bio, or birthday independently of profile media.',
 			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
 			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
 			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
+      'birthday must be a real YYYY-MM-DD date between 1900-01-01 and today (null clears it); it is never returned on public profiles.',
       'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
     ],
     requestExamples: [
@@ -7381,7 +8843,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public profile returned.',
-        body: { ok: true, profile: { username: 'rick.deckard', displayName: 'Rick Deckard' }, postCount: 0 }
+        body: {
+          ok: true,
+          profile: { username: 'rick.deckard', displayName: 'Rick Deckard' },
+          postCount: 0,
+          wornTheme: { id: 'theme_123', name: 'Neon Noir' }
+        }
       },
       {
         status: 401,
@@ -7591,6 +9058,53 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'users-activity',
+    group: 'profile',
+    title: 'Activity heatmap',
+    endpoint: '/api/v1/users/activity',
+    summary: 'Day-bucketed counts of a user’s viewer-visible things over the last year (the profile contribution graph).',
+    detail:
+      'Returns `days` — a map of UTC `YYYY-MM-DD` day strings to how many things the user created that ' +
+      'day — plus `total` and `firstDayUtc` (the first counted UTC day — the Sunday opening the 53-week ' +
+      'grid, so the window is exactly the days a Sunday-first contribution grid renders). Counts only: no content, ' +
+      'no kind breakdown. Visibility matches the profile post list exactly: logged out you count public ' +
+      'things only, friends additionally count friends-circle things, and owners count everything they ' +
+      'own. User actions (posts, comments, reactions, saves, poll votes, folders, schemas…) count; ' +
+      'server-minted control-plane records (notifications, friend/subscription state, messenger index ' +
+      'rows…) never do.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (public activity only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>.',
+      'Render `days` as a 53×7 contribution grid; missing days mean zero.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile activity',
+        description: 'A year of day-counts for a profile heatmap.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Day-counts for the last year.',
+        body: {
+          ok: true,
+          days: { '2026-08-01': 3, '2026-08-14': 1 },
+          total: 4,
+          firstDayUtc: '2025-08-17'
+        }
+      },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'users-connections',
     group: 'social',
     title: 'Connection lists',
@@ -7739,7 +9253,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
-      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
       '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
       'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
@@ -8051,6 +9565,58 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'vercel-webhook',
+    group: 'vercel',
+    title: 'Vercel webhook',
+    endpoint: '/api/v1/vercel/webhook',
+    summary: 'Receiver for Vercel deployment lifecycle events (created/succeeded/error/canceled).',
+    detail:
+      'Vercel pushes signed deployment events here; the latest status per git branch is persisted server-side so /api/v1/vercel/status can serve ready/error/canceled states without spending Vercel API calls. Configure the webhook in the Vercel dashboard pointing at this endpoint and set VERCEL_WEBHOOK_SECRET to the webhook secret.',
+    auth: {
+      mode: 'none',
+      description: 'HMAC-authenticated: the raw body must be signed with the webhook secret in x-vercel-signature (sha1 hex). 404 when VERCEL_WEBHOOK_SECRET is unset; 401 on bad signatures.'
+    },
+    methods: ['POST'],
+    steps: [
+      'Create a Vercel webhook for deployment.created, deployment.succeeded, deployment.promoted, deployment.error, and deployment.canceled pointing at this endpoint.',
+      'Set VERCEL_WEBHOOK_SECRET in the deployment environment to the webhook secret Vercel shows on creation.',
+      'Vercel signs each delivery; unsigned or tampered requests are rejected with 401.',
+      'Untracked event types are acknowledged with tracked: false so Vercel does not retry.'
+    ],
+    requestExamples: [
+      {
+        name: 'Deployment succeeded event',
+        description: 'Example Vercel envelope (sent by Vercel, signed with the webhook secret).',
+        method: 'POST',
+        body: {
+          type: 'deployment.succeeded',
+          createdAt: 1752986400000,
+          payload: {
+            target: 'production',
+            deployment: {
+              id: 'dpl_123',
+              url: 'thingtime-abc123.vercel.app',
+              meta: { githubCommitRef: 'main', githubCommitSha: 'abc1234' }
+            },
+            links: { deployment: 'https://vercel.com/lopu/thingtime/dpl_123' }
+          }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Event recorded.',
+        body: { ok: true, tracked: true, state: 'ready', branch: 'main' }
+      },
+      {
+        status: 401,
+        description: 'Missing or invalid x-vercel-signature.',
+        body: { ok: false, error: 'Invalid signature' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'waitlist',
     group: 'waitlist',
     title: 'Waitlist',
@@ -8129,6 +9695,63 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
       }
     ]
+  }),
+  endpoint({
+    id: 'network-probe-ping',
+    group: 'system',
+    title: 'Network probe ping',
+    endpoint: '/api/v1/network-probe/ping',
+    summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
+    detail:
+      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
+    requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'A 256-byte binary response.', headers: { 'Content-Type': 'application/octet-stream' } }]
+  }),
+  endpoint({
+    id: 'network-probe-download',
+    group: 'system',
+    title: 'Network probe download',
+    endpoint: '/api/v1/network-probe/download',
+    summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
+    detail:
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
+    requestExamples: [
+      { name: 'Download a 2 MiB packet', description: 'One member of the fixed speed-test ladder.', method: 'GET', query: { bytes: 2097152 } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'The requested fixed-size binary packet.', headers: { 'Content-Type': 'application/octet-stream' } }
+    ]
+  }),
+  endpoint({
+    id: 'network-probe-upload',
+    group: 'system',
+    title: 'Network probe upload',
+    endpoint: '/api/v1/network-probe/upload',
+    summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
+    detail:
+      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['POST'],
+    steps: [
+      'Pass one documented bytes value.',
+      'Send binary data with exactly that Content-Length.',
+      'Use the small JSON acknowledgement only after a 200.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upload a 500 KiB packet',
+        description: 'One member of the fixed speed-test ladder; set Content-Length to 512000.',
+        method: 'POST',
+        query: { bytes: 512000 }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Exact body accepted.', body: { ok: true, bytes: 512000 } }]
   }),
   endpoint({
     id: 'schemas-browse',
@@ -8720,6 +10343,37 @@ export const apiV1RouteKeys = apiEndpointDocs.filter((doc) => doc.endpoint.start
 
 export const apiV1DocsRouteKeys = apiV1RouteKeys.map((route) => `${route}-docs`);
 
+export type ApiCapabilitiesManifest = {
+	ok: true;
+	schemaVersion: 1;
+	features: Record<string, `${number}.${number}.${number}`>;
+	dataEnvironment: DeploymentDataEnvironment | null;
+};
+
+/** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
+export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.replace(/\//g, '.')}`;
+
+/**
+ * Generated from the canonical public API registry plus the active route map.
+ * `api.*` names are semantic, versioned client contracts; `route.*` names make
+ * every executable endpoint discoverable, including intentionally undocumented
+ * diagnostics and future routes while they are being documented.
+ */
+export const createApiCapabilitiesManifest = (
+	routeKeys: Iterable<string> = [],
+	dataEnvironment: DeploymentDataEnvironment | null = null
+): ApiCapabilitiesManifest => {
+  const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(
+    apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
+  );
+
+  for (const routeKey of routeKeys) {
+    features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
+  }
+
+	return { ok: true, schemaVersion: 1, features, dataEnvironment };
+};
+
 const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 
 const compactJson = (value: unknown) => JSON.stringify(value);
@@ -8768,7 +10422,7 @@ export const buildPlatformExamples = (doc: ApiEndpointDoc, origin = 'https://thi
   const method = example.method || doc.methods[0];
   const hasBody = example.body !== undefined;
   const url = makeUrl(origin, doc.endpoint, example.query);
-  const headers = buildHeaders(doc, hasBody);
+  const headers = { ...buildHeaders(doc, hasBody), ...(example.headers || {}) };
   const jsonBody = hasBody ? compactJson(example.body) : '';
   const prettyBody = hasBody ? prettyJson(example.body) : '';
   const headerEntries = Object.entries(headers);

@@ -3,8 +3,10 @@ import { json, readJsonBody } from '~/api/http';
 import { exchangeDesktopAuthorizationCode } from '~/api/utils/apps/desktopOAuth';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// Public-client authorization-code exchange. A desktop app cannot protect a
-// secret; one-time code, exact callback binding, and S256 PKCE are the proof.
+// POST /api/v1/oauth/token — public-client authorization-code exchange for
+// Thingtime desktop apps. No client secret is possible in an installed binary;
+// the one-time code, exact client/callback binding, and S256 verifier are the
+// proof. The resulting token is the existing origin-bound, revocable app token.
 export const action = async ({ request }: { request: Request }) => {
 	const limit = await enforceRateLimit(request, 'oauth.authorize', null);
 	if (!limit.allowed) {

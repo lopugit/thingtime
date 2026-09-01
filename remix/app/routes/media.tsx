@@ -9,7 +9,12 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { PostCard } from '~/components/Feed/PostCard';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
-import { attachmentContentUrl, formatAttachmentBytes, normalizePublicAttachment } from '~/components/Attachments/attachmentUiCore';
+import {
+	attachmentContentUrl,
+	attachmentDisplayName,
+	formatAttachmentBytes,
+	normalizePublicAttachment
+} from '~/components/Attachments/attachmentUiCore';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -17,7 +22,7 @@ import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 // /media/:id — every attachment is a Thing, and this is its own page: the
 // media large in a full Thingtime card with reactions, comments, and views of
 // its OWN (relational things targeting the attachment id), owner-editable
-// title/description (attachments/annotate), and a link back to the post the
+// display filename/title/description (attachments/annotate), and a link back to the post the
 // media is bound to. The lightbox and file rows deeplink here.
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -41,8 +46,9 @@ export const MediaPage = () => {
 	const [loading, setLoading] = React.useState(true);
 	const { observeView } = useViewTracking();
 
-	// owner title/description editing (attachments/annotate)
+	// owner display metadata editing (attachments/annotate)
 	const [editing, setEditing] = React.useState(false);
+	const [filenamePreviewDraft, setFilenamePreviewDraft] = React.useState('');
 	const [titleDraft, setTitleDraft] = React.useState('');
 	const [descriptionDraft, setDescriptionDraft] = React.useState('');
 	const [saving, setSaving] = React.useState(false);
@@ -95,9 +101,9 @@ export const MediaPage = () => {
 	// system with the feed (masonry/lightbox included via PostAttachments)
 	const displayPost = React.useMemo(() => (post && attachment ? { ...post, attachments: [attachment] } : null), [post, attachment]);
 
-	const handleChanged = (change: PostChange) => {
+	const handleChanged = (id: string, change: PostChange) => {
 		setData((prev) => {
-			if (!prev?.post) return prev;
+			if (!prev?.post || prev.post.id !== id) return prev;
 			const applied = typeof change === 'function' ? change({ ...prev.post, attachments: [prev.attachment] }) : change;
 			if (!applied) {
 				navigate(parentId ? `/post/${parentId}` : '/feed');
@@ -111,6 +117,7 @@ export const MediaPage = () => {
 
 	const startEditing = () => {
 		if (!attachment) return;
+		setFilenamePreviewDraft(attachment.filenamePreview || '');
 		setTitleDraft(attachment.title || '');
 		setDescriptionDraft(attachment.description || '');
 		setEditing(true);
@@ -122,11 +129,13 @@ export const MediaPage = () => {
 		try {
 			const resp = await api.v1.attachments.annotate({
 				id: attachment.id,
+				filenamePreview: filenamePreviewDraft.trim() || null,
 				title: titleDraft.trim() || null,
 				description: descriptionDraft.trim() || null
 			});
 			const updated = normalizePublicAttachment(resp?.attachment) || {
 				...attachment,
+				filenamePreview: filenamePreviewDraft.trim() || undefined,
 				title: titleDraft.trim() || undefined,
 				description: descriptionDraft.trim() || undefined
 			};
@@ -173,12 +182,12 @@ export const MediaPage = () => {
 							minWidth={0}
 							wordBreak="break-word"
 						>
-							{attachment?.title || attachment?.name || 'Media 🖼️'}
+							{attachment?.title || (attachment ? attachmentDisplayName(attachment) : '') || 'Media 🖼️'}
 						</Box>
 						{isOwner && !editing && !loading && (
 							<IconButton
-								aria-label="Edit media title and description"
-								title="Edit title & description"
+								aria-label="Edit media display filename, title and description"
+								title="Edit display filename, title & description"
 								icon={<Pencil size={14} />}
 								size="xs"
 								variant="ghost"
@@ -196,7 +205,7 @@ export const MediaPage = () => {
 					) : null}
 					{attachment ? (
 						<Text fontSize="11px" color={MUTED}>
-							{attachment.name} · {formatAttachmentBytes(attachment.size)} · {attachment.contentType}
+							{attachmentDisplayName(attachment)} · {attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachment.contentType}
 						</Text>
 					) : null}
 				</Flex>
@@ -211,6 +220,15 @@ export const MediaPage = () => {
 						borderRadius="var(--tt-radius-md, 12px)"
 						background="var(--tt-card, #ffffff)"
 					>
+						<Input
+							size="sm"
+							borderRadius={RADIUS_SM}
+							placeholder={attachment.name}
+							aria-label="Filename preview"
+							maxLength={255}
+							value={filenamePreviewDraft}
+							onChange={(event) => setFilenamePreviewDraft(event.target.value)}
+						/>
 						<Input
 							size="sm"
 							borderRadius={RADIUS_SM}
@@ -253,8 +271,10 @@ export const MediaPage = () => {
 						{attachment && (
 							<Button
 								as="a"
-								href={attachmentContentUrl(attachment.id, true)}
-								download={attachment.name}
+								href={attachment.url || attachmentContentUrl(attachment.id, true)}
+								// cross-origin ignores the download attribute — linked media
+								// opens the original URL in a new tab instead
+								{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 								size="xs"
 								variant="ghost"
 								borderRadius="999px"

@@ -6,7 +6,7 @@ import {
   createReadyAttachmentPostInsertHook,
   inspectReadyAttachmentsForPost,
   prepareAttachmentCascadeForThing,
-  reorderReadyAttachmentsForTarget
+  syncReadyAttachmentsForTarget
 } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import {
@@ -313,17 +313,25 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
-    // Reorder before the document update so the projection the client gets
-    // back already lists attachments in the new order. The reorder is an
-    // idempotent permutation stamp — a failed updateThing after it leaves
-    // nothing dangling, and a retry re-applies the same order safely.
-    if (attachmentRequest.present && attachmentRequest.kind === 'reorder') {
-      const reordered = await reorderReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
-      if (reordered.ok === false) {
-        return json({ ok: false, error: reordered.error }, { status: reordered.status, headers: cors });
+    // Sync attachments before the document update so the projection the
+    // client gets back already lists them in the new order — and so
+    // updateThing's boundAttachmentPresence sees freshly added media when it
+    // validates the crystal. The sync is idempotent (owner-fenced bind +
+    // order stamp of the full desired list), so a failed updateThing after
+    // it leaves nothing inconsistent and a retry re-applies the same list.
+    if (attachmentRequest.present && attachmentRequest.kind === 'sync') {
+      const synced = await syncReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
+      if (synced.ok === false) {
+        return json({ ok: false, error: synced.error }, { status: synced.status, headers: cors });
       }
     }
-    const result = await updateThing(viewer, body?.id, bodyForCreate, { replaceCrystal: false }, app);
+    const result = await updateThing(
+      viewer,
+      body?.id,
+      bodyForCreate,
+      { replaceCrystal: body?.replaceCrystal === true, expectedUpdatedAt: body?.expectedUpdatedAt },
+      app
+    );
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
@@ -334,8 +342,8 @@ export const action = async ({ request }: { request: Request }) => {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
-        ? { beforeCascade: prepareAttachmentCascadeForThing }
-        : undefined;
+        ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }
+        : { expectedUpdatedAt: body?.expectedUpdatedAt };
     const result = await deleteThing(viewer, id, app, attachmentHooks);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

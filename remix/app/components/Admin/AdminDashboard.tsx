@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import {
   Alert,
   AlertIcon,
@@ -37,6 +38,7 @@ import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorMo
 import { TierManager } from '~/components/Admin/TierManager';
 import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
 import type { AdminRowField } from '~/components/Admin/adminRowQuery';
+import { ADMIN_TABS, adminTabIndex, adminTabPath } from '~/components/Admin/adminRoutesCore';
 import {
 	exactByteLabel,
 	storageProjectionTitle,
@@ -828,6 +830,13 @@ const AppsTab = () => {
 
 export const AdminDashboard = () => {
   const user = useCurrentUser();
+  const navigate = useNavigate();
+  const { section } = useParams();
+  const selectedTabIndex = adminTabIndex(section);
+
+  React.useEffect(() => {
+    if (selectedTabIndex === null) navigate('/admin', { replace: true });
+  }, [navigate, selectedTabIndex]);
 
   // Same whole-page gate idiom as the MongoDB workbench (Raw.tsx): a card,
   // never a redirect, so the URL is shareable between admins.
@@ -861,15 +870,20 @@ export const AdminDashboard = () => {
       <Text fontSize="sm" opacity={0.65} mb={4}>
         Manage users, apps, subscription tiers, CI automation, external integrations, quotas, and ownership.
       </Text>
-      <Tabs variant="enclosed" size="sm" isLazy lazyBehavior="keepMounted">
+      <Tabs
+        variant="enclosed"
+        size="sm"
+        isLazy
+        lazyBehavior="keepMounted"
+        index={selectedTabIndex ?? 0}
+        onChange={(index) => navigate(adminTabPath(index))}
+      >
         <TabList flexWrap="wrap">
-          <Tab>Users</Tab>
-          <Tab>Apps</Tab>
-          <Tab>Moderation</Tab>
-          <Tab>Tiers</Tab>
-          <Tab>CI Control</Tab>
-          <Tab>External integrations</Tab>
-          <Tab>System</Tab>
+          {ADMIN_TABS.map((tab) => (
+            <Tab key={tab.slug} as={RouterLink} to={`/admin/${tab.slug}`}>
+              {tab.label}
+            </Tab>
+          ))}
         </TabList>
         <TabPanels>
           <TabPanel px={0}>

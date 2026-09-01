@@ -24,7 +24,9 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// Browser origins allowed to call this API. Comma-separated allowlist, e.g.
+// Cross-origin access is an explicit allowlist, never '*'.
+//
+// Browser origins allowed to call this API. Comma-separated, e.g.
 // CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
 // THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
 // Defaults to the local dev origin. A wildcard origin would let ANY site drive /v1/thing
@@ -33,6 +35,16 @@ import { Server } from 'socket.io';
 // widen the allowlist deliberately.
 // An explicitly empty value grants no cross-origin access at all, which is the safe setting
 // for a service that is no longer deployed.
+//
+// Nothing builds or runs this package any more — it moved under deprecated/ in
+// the repo consolidation, its pm2 entry is commented out in
+// ecosystem.config.js, the root `npm run api` script points at a directory that
+// no longer exists, and Vercel only ever builds remix/. That makes the wildcard
+// unexploitable TODAY, but it is still a genuinely permissive configuration
+// sitting in the tree: it re-flags on every scan, and it would be a live
+// world-readable API the moment anyone revived the server. A closed default is
+// the honest resolution — set CORS_ORIGINS to whatever a revival actually needs,
+// or to the empty string to keep it closed.
 const configuredOrigins = (
 	process.env.CORS_ORIGINS ??
 	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
@@ -57,7 +69,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 	await thingtime.init()
 
-	// Express middleware
+	// Express middleware — same allowlist as the socket.io server above
 	app.use(cors({
 		origin: corsOrigins,
 	}))

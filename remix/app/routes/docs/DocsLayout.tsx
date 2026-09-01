@@ -13,7 +13,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
@@ -29,6 +29,12 @@ const docsNav = [
     to: '/docs',
     icon: BookOpen,
     description: 'Docs home'
+  },
+  {
+    label: 'Limitless MCP Lab',
+    to: '/docs/mcp',
+    icon: Sparkles,
+    description: 'Live workflows + review UI'
   },
   {
     label: 'API reference',
@@ -119,11 +125,7 @@ const groupedApiDocs = apiEndpointDocs.reduce<Array<{ group: string; docs: ApiEn
   []
 );
 
-type DrawerDesignEntryListProps = {
-  onNavigate?: () => void;
-};
-
-const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
+const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = React.useState('');
   const selectedEntry =
@@ -148,7 +150,6 @@ const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList({ onNavi
     const next = new URLSearchParams(searchParams);
     next.set('entry', slug);
     setSearchParams(next);
-    onNavigate?.();
   };
 
   return (
@@ -246,11 +247,7 @@ const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList({ onNavi
   );
 });
 
-type DrawerApiEndpointListProps = {
-  onNavigate?: () => void;
-};
-
-const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
+const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList() {
   const location = useLocation();
   const activeHash = location.hash.replace(/^#/, '');
   const activePathname = location.pathname;
@@ -267,7 +264,6 @@ const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavi
               fontSize="10px"
               fontWeight="700"
               letterSpacing="0.14em"
-              onClick={onNavigate}
               to={apiGroupPath(group.group)}
               textTransform="uppercase"
               _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
@@ -295,7 +291,6 @@ const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavi
                   borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
                   color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
                   display="block"
-                  onClick={onNavigate}
                   px={2}
                   py={1.5}
                   to={docPath}
@@ -317,11 +312,7 @@ const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavi
   );
 });
 
-type DrawerDesignSystemListProps = {
-  onNavigate?: () => void;
-};
-
-const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
+const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getDesignSystemEntryBySlug(searchParams.get('component')) || designSystemEntries[0];
@@ -330,7 +321,6 @@ const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList({ onNa
     const next = new URLSearchParams(searchParams);
     next.set('component', slug);
     setSearchParams(next);
-    onNavigate?.();
   };
 
   return (
@@ -399,11 +389,7 @@ const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList({ onNa
   );
 });
 
-type DrawerConceptListProps = {
-  onNavigate?: () => void;
-};
-
-const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
+const DrawerConceptList = React.memo(function DrawerConceptList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getConceptEntryBySlug(searchParams.get('concept')) || conceptEntries[0];
@@ -412,7 +398,6 @@ const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: 
     const next = new URLSearchParams(searchParams);
     next.set('concept', slug);
     setSearchParams(next);
-    onNavigate?.();
   };
 
   return (
@@ -482,13 +467,22 @@ const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: 
 });
 
 type DocsDrawerContentProps = {
+  closeAriaLabel?: string;
+  closeIcon?: React.ElementType;
   closeTestId?: string;
-  onClose?: () => void;
+  onDismiss?: () => void;
   pathname: string;
   showClose?: boolean;
 };
 
-function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
+function DocsDrawerContent({
+  closeAriaLabel = 'Close docs navigation',
+  closeIcon = X,
+  closeTestId,
+  onDismiss,
+  pathname,
+  showClose = false
+}: DocsDrawerContentProps) {
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
   // The search query lives in the URL (?q=) so refresh persists it, searches
   // are deep-linkable, and both drawer instances (desktop + mobile) share one
@@ -589,10 +583,10 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
 
         {showClose ? (
           <IconButton
-            aria-label="Close docs navigation"
+            aria-label={closeAriaLabel}
             data-testid={closeTestId}
-            icon={<Icon as={X} boxSize={5} />}
-            onClick={onClose}
+            icon={<Icon as={closeIcon} boxSize={5} />}
+            onClick={onDismiss}
             size="md"
             type="button"
             variant="ghost"
@@ -600,7 +594,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         ) : null}
       </Flex>
 
-      <DocsSearch onNavigate={onClose} query={searchQuery} setQuery={setSearchQuery} />
+      <DocsSearch query={searchQuery} setQuery={setSearchQuery} />
 
       <Stack spacing={1}>
         {searching ? (
@@ -638,7 +632,6 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
                   display="block"
                   flex="1"
                   minW={0}
-                  onClick={onClose}
                   px={3}
                   py={2.5}
                 >
@@ -668,7 +661,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
               </Flex>
               {expanded ? (
                 <Box borderLeft="1px solid" borderColor="var(--tt-border, #ececef)" ml={5} mt={3} pb={2}>
-                  <DrawerApiEndpointList onNavigate={onClose} />
+                  <DrawerApiEndpointList />
                 </Box>
               ) : null}
             </Box>
@@ -676,9 +669,9 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         })}
       </Stack>
 
-      {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
-      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
-      {isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
+      {isDesignPath(pathname) ? <DrawerDesignEntryList /> : null}
+      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList /> : null}
+      {isConceptsPath(pathname) ? <DrawerConceptList /> : null}
     </Stack>
   );
 }
@@ -730,8 +723,8 @@ export default function DocsLayout() {
   }, [desktopDrawerOpen]);
 
   React.useEffect(() => {
-    setMobileDrawerOpen(false);
-
+    // Route changes intentionally preserve the drawer state so people can
+    // browse several docs destinations without reopening navigation.
     // Anchored navigations (docs search deep links) scroll to their target
     // via useDocsAnchorScroll / SchemasPage instead of the page top.
     if (!hash) {
@@ -800,19 +793,15 @@ export default function DocsLayout() {
               position={drawerFitsViewport ? 'sticky' : 'relative'}
               pr={2}
               ref={drawerContentRef}
-              top={drawerFitsViewport ? '96px' : undefined}
+              top={drawerFitsViewport ? 0 : undefined}
             >
-              <Flex justify="flex-end" mb={3}>
-                <IconButton
-                  aria-label="Collapse docs navigation"
-                  icon={<Icon as={PanelLeftClose} boxSize={4} />}
-                  onClick={() => setDesktopDrawerOpen(false)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                />
-              </Flex>
-              <DocsDrawerContent pathname={pathname} />
+              <DocsDrawerContent
+                closeAriaLabel="Collapse docs navigation"
+                closeIcon={PanelLeftClose}
+                onDismiss={() => setDesktopDrawerOpen(false)}
+                pathname={pathname}
+                showClose
+              />
             </Box>
 
             <Box
@@ -873,7 +862,7 @@ export default function DocsLayout() {
       >
         <DocsDrawerContent
           closeTestId="docs-mobile-drawer-close"
-          onClose={() => setMobileDrawerOpen(false)}
+          onDismiss={() => setMobileDrawerOpen(false)}
           pathname={pathname}
           showClose
         />
