@@ -128,6 +128,7 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
   const [bio, setBio] = React.useState(user.bio || '');
 	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.avatarUrl));
 	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.bannerUrl));
+  const [birthday, setBirthday] = React.useState(user.birthday || '');
   const [saving, setSaving] = React.useState(false);
 	const avatarMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
 	const bannerMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
@@ -155,7 +156,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
         displayName: displayName.trim() || null,
         bio: bio.trim() || null,
 				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
-				...profileMediaUpdateFields('banner', bannerMedia.mutation)
+				...profileMediaUpdateFields('banner', bannerMedia.mutation),
+        birthday: birthday.trim() || null
       });
 			if (!response?.user) throw new Error('invalid profile response');
 			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
@@ -226,6 +228,23 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 				storageStatus={user.storage.status}
 				onChange={setBannerMedia}
           />
+
+      <Flex flexDirection="column" rowGap={1}>
+        <FieldLabel>Birthday 🎂</FieldLabel>
+        <Input
+          size="sm"
+          type="date"
+          value={birthday}
+          min="1900-01-01"
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setBirthday(e.target.value)}
+          {...inputStyles}
+        />
+        <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)">
+          Private — never shown on your profile. Apps you log in to only see it if you approve the
+          birthday permission on their consent screen.
+        </Text>
+      </Flex>
 
       <Box>
 				<RainbowButton size="sm" minHeight="44px" isLoading={saving} isDisabled={avatarMedia.blocking || bannerMedia.blocking} onClick={handleSave}>

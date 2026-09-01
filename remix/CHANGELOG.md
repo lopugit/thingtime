@@ -418,6 +418,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Account birthday as private state with an exact `profile.birthday` scope**:
+  the birthday is a plain `YYYY-MM-DD` calendar date stored in the user thing's
+  secure blob (`meta.birthday`), editable from Settings, and excluded from
+  `PublicProfile` — other users and the public profile projection never see it.
+  Apps receive it from `/api/v1/oauth/userinfo` only under the literal
+  `profile.birthday` scope: it is marked `exact`, so a plain `profile` grant —
+  including every legacy token — never silently covers it.
+  `/api/v1/oauth/scopes` is now CORS-open so platforms can feature-detect the
+  scope before opening the popup. Details in
+  [`PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md`](../PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md).
+  — Claude (AI), 2026-08-24
 - **Unlimited AI workflow model waterfall**: Admin → System's model order now
   accepts any number of unique entries from a 33-model Claude + OpenAI
   catalog, each with a per-entry reasoning-effort tier and normal/fast mode

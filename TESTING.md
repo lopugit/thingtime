@@ -2287,6 +2287,25 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (sharedRead reflects the grant) and 403s with the plain no-live-grant
       explanation after disconnect.
 
+## Account birthday & profile.birthday scope (`api/utils/auth/birthday.ts`, `/api/v1/oauth/userinfo`)
+
+- [ ] Settings → Profile: set a birthday, Save — a reload shows it back; clear
+      the field, Save — it stays empty after reload (meta.birthday removed).
+- [ ] POST /api/v1/users/profile with `birthday: '2001-02-31'` (or a future
+      date, or `1899-12-31`) returns 400 and writes nothing; `'2024-02-29'`
+      saves (leap day).
+- [ ] The birthday NEVER appears on a public profile: GET
+      /api/v1/users/profile?username=… has no birthday field, the profile page
+      shows none, and /api/v1/users/search results carry none.
+- [ ] The consent screen lists "Birthday 🎂" as its own line; a grant of plain
+      `profile` does NOT cover `profile.birthday` (exact consent — no ancestor
+      coverage), so /oauth/userinfo omits birthday for profile-only grants.
+- [ ] A grant that ticked the birthday returns it from /oauth/userinfo and in
+      the authorize handoff user object; untick/decline and both omit it.
+- [ ] GET /api/v1/oauth/scopes from a cross-origin page (embedding platform)
+      succeeds — the catalog response carries CORS headers so platforms can
+      feature-detect `profile.birthday` before opening the popup.
+
 ## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
 
 - [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer

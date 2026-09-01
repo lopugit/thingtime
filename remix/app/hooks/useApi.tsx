@@ -835,7 +835,15 @@ export function useApi() {
       update: useCallback(
         async (args) => {
 					const body: Record<string, unknown> = {};
-					for (const key of ['displayName', 'bio', 'avatarUrl', 'bannerUrl', 'avatarAttachmentId', 'bannerAttachmentId'] as const) {
+					for (const key of [
+						'displayName',
+						'bio',
+						'avatarUrl',
+						'bannerUrl',
+						'avatarAttachmentId',
+						'bannerAttachmentId',
+						'birthday'
+					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
 					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });

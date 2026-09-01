@@ -1832,6 +1832,35 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'profile-get-never-leaks-birthday',
+    name: 'Public profile never leaks birthday',
+    description: 'The birthday is private state — the public projection must not carry the field at all.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile?username=rick.deckard',
+    expect: expectJson(
+      [200, 404],
+      (body) =>
+        (body?.ok === true && !Object.prototype.hasOwnProperty.call(body.profile ?? {}, 'birthday')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Public profile carried no birthday field (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-update-birthday-validates',
+    name: 'Profile update rejects malformed birthdays',
+    description: 'A birthday that is not a real YYYY-MM-DD date is a 400 before anything is written.',
+    group: 'profile',
+    method: 'POST',
+    path: '/api/v1/users/profile',
+    body: { birthday: '2001-02-31' },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Impossible birthday rejected with an error shape (400 signed in, 401 anonymous).'
+    )
+  },
+  {
     id: 'profile-update-guarded',
     name: 'Profile update requires auth',
     description: 'Updating profile fields without a session is rejected with a 401 error shape.',

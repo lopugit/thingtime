@@ -27,6 +27,7 @@ import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFro
 import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
+import { sanitizeBirthday } from './birthday';
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -83,6 +84,9 @@ export type PublicUser = {
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
 	bannerLinkedUrl: string | null;
+	// PRIVATE (secure-blob meta.birthday, YYYY-MM-DD): owner-facing responses and
+	// the scope-gated userinfo only — never part of PublicProfile.
+	birthday: string | null;
 	emailVerified: boolean;
 	createdAt: string;
 	accountKind: 'user' | 'service';
@@ -170,6 +174,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		bannerAttachmentId: profileAttachmentIdFromRecord(user, 'banner'),
 		avatarLinkedUrl: linkedProfileMediaUrl(user, 'avatar'),
 		bannerLinkedUrl: linkedProfileMediaUrl(user, 'banner'),
+		birthday: typeof user.meta?.birthday === 'string' ? user.meta.birthday : null,
 		emailVerified: !!user.emailVerified,
 		createdAt: new Date(user.createdAt).toISOString(),
 		accountKind: user.accountKind === 'service' ? 'service' : 'user',
@@ -1753,6 +1758,7 @@ export type UpdateProfileInput = {
 	bannerUrl?: unknown;
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
+	birthday?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1853,106 +1859,141 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched) {
+		// Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
+		// never in the public crystal, so it takes the secure write path below
+		// rather than the crystal/attachment transaction.
+		let birthday: string | null | undefined;
+		if (input.birthday !== undefined) {
+			birthday = sanitizeBirthday(input.birthday);
+			if (birthday === undefined) {
+				return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
+			}
+		}
+
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
-		try {
-			const mutated = await dependencies.withTransaction(async (session) => {
-				const things = await dependencies.getThings();
-				const thing = (await things.findOne({ shareId: String(userId) } as any, { session })) as any;
-				let kind: 'thing' | 'legacy';
-				let user: any;
-				let collection: any;
-				if (thing) {
-					if (
-						!Array.isArray(thing.thingtime) ||
-						thing.thingtime.length !== 1 ||
-						thing.thingtime[0] !== 'user' ||
-						thing.ownerId !== String(userId) ||
-						thing.targetId !== null
-					) {
-						return false;
-					}
-					kind = 'thing';
-					user = thing;
-					collection = things;
-				} else {
-					if (!ObjectId.isValid(userId)) return false;
-					collection = await dependencies.getUsers();
-					user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
-					if (!user) return false;
-					kind = 'legacy';
-				}
-
-				const current: ProfileAttachmentRefs = {
-					avatar: typeof user.avatarAttachmentId === 'string' && user.avatarAttachmentId ? user.avatarAttachmentId : null,
-					banner: typeof user.bannerAttachmentId === 'string' && user.bannerAttachmentId ? user.bannerAttachmentId : null
-				};
-				const desired: ProfileAttachmentRefs = { ...current };
-				const externalUrlUpdates: Partial<Record<'avatar' | 'banner', string | null>> = {};
-				for (const slot of ['avatar', 'banner'] as const) {
-					const request = media[slot];
-					if (!request.touched) continue;
-					if (request.attachmentIdPresent && request.attachmentId) {
-						desired[slot] = request.attachmentId;
-					} else {
-						desired[slot] = null;
-						// Explicit attachmentId:null removes managed media while preserving
-						// the existing external fallback. A URL field switches to (or clears)
-						// that fallback and also removes the managed reference.
-						if (request.urlPresent) externalUrlUpdates[slot] = request.url;
-					}
-				}
-				if (desired.avatar && desired.avatar === desired.banner) {
-					throw new AttachmentBindingError(400, 'Avatar and banner must use different attachments');
-				}
-
-				const now = dependencies.now();
-				if (media.avatar.touched || media.banner.touched) {
-					await dependencies.reconcileAttachments({ ownerId: userId, targetId: userId, current, desired, now, session });
-				}
-
-				const rootSet: Record<string, unknown> = {};
-				const rootUnset: Record<string, ''> = {};
-				const profileSet: Record<string, unknown> = { ...set };
-				for (const slot of ['avatar', 'banner'] as const) {
-					if (!media[slot].touched) continue;
-					if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
-						profileSet[`${slot}Url`] = externalUrlUpdates[slot] ?? null;
-					}
-					if (desired[slot]) rootSet[`${slot}AttachmentId`] = desired[slot];
-					else rootUnset[`${slot}AttachmentId`] = '';
-				}
-
-				if (kind === 'thing') {
-					const thingSet: Record<string, unknown> = { updatedAt: now, ...rootSet };
-					for (const [key, value] of Object.entries(profileSet)) thingSet[`crystal.${key}`] = value;
-					const write = await collection.updateOne(
-						{ _id: user._id, shareId: String(userId), thingtime: 'user', updatedAt: user.updatedAt } as any,
-						{ $set: thingSet, ...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {}) },
-						{ session }
-					);
-					if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
-				} else {
-					const write = await collection.updateOne(
-						{ _id: user._id, updatedAt: user.updatedAt },
-						{
-							$set: { ...profileSet, ...rootSet, updatedAt: now },
-							...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {})
-						},
-						{ session }
-					);
-					if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
-				}
-				return true;
+		// Secure-blob write first: it is a separate store from the crystal, so it
+		// runs outside the profile/attachment transaction below.
+		if (birthday !== undefined) {
+			const cleared = birthday === null;
+			const result = await mutateUserThingSecure(userId, (s) => {
+				if (cleared) delete s.meta!.birthday;
+				else s.meta!.birthday = birthday;
 			});
-			if (!mutated) return { ok: false, status: 400, error: 'Invalid user id' };
-		} catch (error) {
-			if (error instanceof AttachmentBindingError) {
-				return { ok: false, status: error.status, error: error.message };
+			if (result === 'contended') throw new SecureWriteContendedError(userId);
+			if (result === 'missing') {
+				if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+				await (await dependencies.getUsers()).updateOne(
+					{ _id: new ObjectId(userId) },
+					cleared
+						? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: dependencies.now() } }
+						: { $set: { 'meta.birthday': birthday, updatedAt: dependencies.now() } }
+				);
 			}
-			throw error;
+		}
+
+		// A birthday-only update never touches the crystal or attachments, so the
+		// transactional write below is skipped entirely for it.
+		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
+			try {
+				const mutated = await dependencies.withTransaction(async (session) => {
+					const things = await dependencies.getThings();
+					const thing = (await things.findOne({ shareId: String(userId) } as any, { session })) as any;
+					let kind: 'thing' | 'legacy';
+					let user: any;
+					let collection: any;
+					if (thing) {
+						if (
+							!Array.isArray(thing.thingtime) ||
+							thing.thingtime.length !== 1 ||
+							thing.thingtime[0] !== 'user' ||
+							thing.ownerId !== String(userId) ||
+							thing.targetId !== null
+						) {
+							return false;
+						}
+						kind = 'thing';
+						user = thing;
+						collection = things;
+					} else {
+						if (!ObjectId.isValid(userId)) return false;
+						collection = await dependencies.getUsers();
+						user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
+						if (!user) return false;
+						kind = 'legacy';
+					}
+
+					const current: ProfileAttachmentRefs = {
+						avatar: typeof user.avatarAttachmentId === 'string' && user.avatarAttachmentId ? user.avatarAttachmentId : null,
+						banner: typeof user.bannerAttachmentId === 'string' && user.bannerAttachmentId ? user.bannerAttachmentId : null
+					};
+					const desired: ProfileAttachmentRefs = { ...current };
+					const externalUrlUpdates: Partial<Record<'avatar' | 'banner', string | null>> = {};
+					for (const slot of ['avatar', 'banner'] as const) {
+						const request = media[slot];
+						if (!request.touched) continue;
+						if (request.attachmentIdPresent && request.attachmentId) {
+							desired[slot] = request.attachmentId;
+						} else {
+							desired[slot] = null;
+							// Explicit attachmentId:null removes managed media while preserving
+							// the existing external fallback. A URL field switches to (or clears)
+							// that fallback and also removes the managed reference.
+							if (request.urlPresent) externalUrlUpdates[slot] = request.url;
+						}
+					}
+					if (desired.avatar && desired.avatar === desired.banner) {
+						throw new AttachmentBindingError(400, 'Avatar and banner must use different attachments');
+					}
+
+					const now = dependencies.now();
+					if (media.avatar.touched || media.banner.touched) {
+						await dependencies.reconcileAttachments({ ownerId: userId, targetId: userId, current, desired, now, session });
+					}
+
+					const rootSet: Record<string, unknown> = {};
+					const rootUnset: Record<string, ''> = {};
+					const profileSet: Record<string, unknown> = { ...set };
+					for (const slot of ['avatar', 'banner'] as const) {
+						if (!media[slot].touched) continue;
+						if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
+							profileSet[`${slot}Url`] = externalUrlUpdates[slot] ?? null;
+						}
+						if (desired[slot]) rootSet[`${slot}AttachmentId`] = desired[slot];
+						else rootUnset[`${slot}AttachmentId`] = '';
+					}
+
+					if (kind === 'thing') {
+						const thingSet: Record<string, unknown> = { updatedAt: now, ...rootSet };
+						for (const [key, value] of Object.entries(profileSet)) thingSet[`crystal.${key}`] = value;
+						const write = await collection.updateOne(
+							{ _id: user._id, shareId: String(userId), thingtime: 'user', updatedAt: user.updatedAt } as any,
+							{ $set: thingSet, ...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {}) },
+							{ session }
+						);
+						if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
+					} else {
+						const write = await collection.updateOne(
+							{ _id: user._id, updatedAt: user.updatedAt },
+							{
+								$set: { ...profileSet, ...rootSet, updatedAt: now },
+								...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {})
+							},
+							{ session }
+						);
+						if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
+					}
+					return true;
+				});
+				if (!mutated) return { ok: false, status: 400, error: 'Invalid user id' };
+			} catch (error) {
+				if (error instanceof AttachmentBindingError) {
+					return { ok: false, status: error.status, error: error.message };
+				}
+				throw error;
+			}
 		}
 
 		const updated = await dependencies.findUser(userId);

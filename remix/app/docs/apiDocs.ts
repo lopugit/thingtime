@@ -6194,11 +6194,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/scopes',
     summary: 'The public catalog of permission-scope paths platforms can request.',
     detail:
-      'Anonymous. Scopes are hierarchical dot paths — granting an ancestor (profile) covers every ' +
-      'descendant (profile.avatar); profile.username is the always-granted baseline identity. Each ' +
-      'entry carries the consent-screen wording ({ id, title, description, kind, baseline }); kinds: ' +
-      'namespace, field, capability, picker. The authorize popup renders its permissions selector and ' +
-      '"share more" section from this catalog, so new scopes added here appear everywhere at once.',
+      'Anonymous, CORS-open (platforms feature-detect scopes here before opening the popup). Scopes ' +
+      'are hierarchical dot paths — granting an ancestor (profile) covers every descendant ' +
+      '(profile.avatar); profile.username is the always-granted baseline identity. Privacy-expanding ' +
+      'leaves are marked exact: true (profile.birthday, app-data.shared) — an ancestor grant never ' +
+      'covers them, the user must approve the literal path. Each entry carries the consent-screen ' +
+      'wording ({ id, title, description, kind, baseline, exact }); kinds: namespace, field, ' +
+      'capability, picker. The authorize popup renders its permissions selector and "share more" ' +
+      'section from this catalog, so new scopes added here appear everywhere at once.',
     auth: { mode: 'none', description: 'Anonymous — documentation data.' },
     methods: ['GET'],
     steps: ['GET the catalog.', 'Request paths via the SDK scopes/optionalScopes options.'],
@@ -6467,10 +6470,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with the app-scoped Bearer token. Returns the granted scopes plus a user object shaped ' +
       'field-by-field by the grant: id, username, and a profileUrl Thingtime link always ' +
       '(profile.username baseline); displayName, avatarUrl, bio, bannerUrl each under their ' +
-      'profile.<field> path (a granted profile namespace covers them all); email under the email ' +
-      'scope; sharedThings reports the picker count. Platforms call this to sync the account on ' +
-      'their side and light up features for whatever the user shared. Same CORS + origin binding as ' +
-      '/api/v1/app-data.',
+      'profile.<field> path (a granted profile namespace covers them all); birthday (YYYY-MM-DD) ' +
+      'under profile.birthday ONLY — an exact scope a plain profile grant never covers; email under ' +
+      'the email scope; sharedThings reports the picker count. Platforms call this to sync the ' +
+      'account on their side and light up features for whatever the user shared. Same CORS + origin ' +
+      'binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
     methods: ['GET'],
     steps: ['GET with the token from Thingtime.login(…).', 'Read user + scopes; email appears only under the email scope.'],
@@ -7808,7 +7812,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-			'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
+      'GET returns a stripped public projection that never includes email, verification fields, or the ' +
+      'birthday. POST updates the caller display name, bio, avatar, banner, or birthday. Avatar/banner ' +
+      'may use either one external http(s) URL or a ready private attachment created for the exact ' +
+      'profile slot; managed media remains in the private bucket and is served through a stable ' +
+      'same-origin content route. Birthday is YYYY-MM-DD, private — stored in the secure blob and ' +
+      'shared with apps only via the exact profile.birthday scope.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -7816,10 +7825,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName or bio independently of profile media.',
+			'POST displayName, bio, or birthday independently of profile media.',
 			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
 			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
 			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
+      'birthday must be a real YYYY-MM-DD date between 1900-01-01 and today (null clears it); it is never returned on public profiles.',
       'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
     ],
     requestExamples: [

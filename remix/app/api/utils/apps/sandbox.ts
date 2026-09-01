@@ -84,6 +84,7 @@ export const sandboxPublicUser = (ownerId: string, mintedAt: Date, username = 's
 	bannerAttachmentId: null,
 	avatarLinkedUrl: null,
 	bannerLinkedUrl: null,
+  birthday: null,
   emailVerified: false,
   createdAt: mintedAt.toISOString(),
   accountKind: 'user',
