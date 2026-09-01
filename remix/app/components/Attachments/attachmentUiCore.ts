@@ -216,6 +216,11 @@ export const attachmentDisplayName = (attachment: Pick<PublicAttachment, 'name' 
 // The stable deeplink to a media attachment's own Thing page.
 export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
 
+// Attachments are persisted Things too. Keep the generic Thing permalink
+// separate from the richer media page so callers can explicitly choose which
+// detail view they need.
+export const attachmentThingUrl = (id: string): string => `/thing/${encodeURIComponent(id)}`;
+
 // Display names for containers the server can sniff but never renders inline,
 // plus common claimed types; anything unmapped shows its raw MIME string.
 const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {

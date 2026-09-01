@@ -3,7 +3,14 @@ import { Box, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '
 import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react';
 
-import { attachmentContentUrl, attachmentDisplayName, attachmentMediaSrc, formatAttachmentBytes, mediaPageUrl } from './attachmentUiCore';
+import {
+	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentMediaSrc,
+	attachmentThingUrl,
+	formatAttachmentBytes,
+	mediaPageUrl
+} from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 // Click-to-view lightbox for a post's visual attachments. Arrow keys / edge
@@ -57,11 +64,29 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 		<Modal isOpen={isOpen} onClose={onClose} size="full" motionPreset="none" autoFocus={false}>
 			<ModalOverlay background="rgba(10, 10, 14, 0.92)" />
 			<ModalContent background="transparent" boxShadow="none" margin={0} height="100dvh" borderRadius={0} onClick={onClose}>
-				<Flex flexDirection="column" height="100%" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + 8px)">
+				<Flex
+					flexDirection="column"
+					height="100%"
+					// The persistent navigation sits above Chakra's full-screen modal.
+					// Keep the filename, download, and close controls below it.
+					paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 8px)"
+				>
 					{/* top bar */}
 					<Flex alignItems="center" columnGap={1} paddingX={3} paddingY={2} onClick={(event) => event.stopPropagation()}>
-						<Text fontSize="xs" color={MUTED} noOfLines={1} minWidth={0} flex="1" title={attachment.title || attachmentDisplayName(attachment)}>
-							{attachment.title || attachmentDisplayName(attachment)}
+						<Text
+							as={Link}
+							to={attachmentThingUrl(attachment.id)}
+							fontSize="xs"
+							color={MUTED}
+							noOfLines={1}
+							minWidth={0}
+							flex="1"
+							title={`Open ${attachmentDisplayName(attachment)} as a Thing`}
+							textDecoration="underline"
+							textUnderlineOffset="2px"
+							_hover={{ color: 'white' }}
+						>
+							{attachmentDisplayName(attachment)}
 							{count > 1 ? ` · ${Math.min(current, count - 1) + 1} of ${count}` : ''}
 						</Text>
 						<IconButton
@@ -92,7 +117,8 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							borderRadius="999px"
 						/>
 						<IconButton
-							aria-label="Close"
+							aria-label="Close image popup"
+							title="Close"
 							icon={<X size={18} />}
 							size="sm"
 							variant="ghost"

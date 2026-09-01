@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
 	attachmentContentUrl,
 	attachmentDisplayName,
+	attachmentThingUrl,
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
@@ -131,6 +132,7 @@ test('download rows label the sniffed container instead of application/octet-str
 test('content links are stable same-origin routes derived only from attachment ids', () => {
 	assert.equal(attachmentContentUrl('a/b ?'), '/api/v1/attachments/content?id=a%2Fb+%3F');
 	assert.equal(attachmentContentUrl('a/b ?', true), '/api/v1/attachments/content?id=a%2Fb+%3F&download=1');
+	assert.equal(attachmentThingUrl('a/b ?'), '/thing/a%2Fb%20%3F');
 });
 
 test('upload errors are fixed client-authored messages', () => {
