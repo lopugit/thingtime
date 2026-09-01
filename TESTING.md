@@ -832,6 +832,10 @@ is fixed, and cite the checklist you ran in the PR description.
       Esc, and backdrop close. Those toolbar controls sit below the persistent
       navigation at desktop and 375px mobile widths. Error-state tiles never
       open a broken lightbox.
+- [ ] Opening an image attachment's generic `/thing/:id` permalink shows the
+      raw, safe image in an attachment card — never a blank post-shaped card.
+      Its expandable "Referenced by" section stays compact and links to the
+      direct post or comment without rendering that reference inline.
 - [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
       max-width): large media, title/description, author, a link back to the
       parent post, plus working reactions and comments on the media thing
