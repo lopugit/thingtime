@@ -2028,6 +2028,58 @@ is fixed, and cite the checklist you ran in the PR description.
       Advanced dynamic states in light, dark, default-text, and large-text
       modes. No content may overlap, clip, or escape the native window.
 
+## Cross-tab Thingtime sync (`remix/app/Providers/thingtimeSyncChannel.ts`)
+
+- [ ] `npm run test:autosave` passes, including safe-codec Date/string/cycle
+      round-tripping, runtime-function stripping, explicit `undefined`,
+      malformed/foreign message rejection, self-echo suppression, channel
+      cleanup, and the no-`BroadcastChannel` fallback.
+- [ ] In two same-origin tabs, set a drawer preference in Tab A and a different
+      preference in Tab B. Each change appears in the other tab without reload;
+      then trigger another write from the formerly stale tab and confirm neither
+      preference is reverted by its next full-tree autosave.
+- [ ] Send at least 20 rapid path-level writes from one tab. Both tabs converge,
+      a reload restores the final values, undo/redo remains local to each tab,
+      and neither console shows an echo storm, serialization error, or channel
+      lifecycle error.
+- [ ] Make at least two local edits around an unrelated remote edit, then undo
+      locally. The restored data path reaches the peer, the peer's independent
+      value remains, and root `timemachine` metadata never crosses tabs.
+- [ ] In the Commander, assign the root itself (`tt = …` / `thingtime = …`) in
+      Tab A. Tab A replaces its own tree as before, but Tab B's tree and undo
+      timeline are untouched — a whole-tree replacement is never broadcast,
+      while a named child of the root (`tt.settings.…`) still syncs.
+- [ ] Repeat that root assignment through a doubled alias (`tt.tt = …`,
+      `thingtime.tt = …`) and write a doubled-alias timeline path
+      (`tt.tt.timemachine.… = …`). Neither crosses to Tab B: its root
+      `tt`/`thingtime` self-reference and its undo timeline both survive
+      intact, while `tt.tt.settings.…` still syncs as ordinary data.
+- [ ] View chrome stays in its own tab. With the Commander open and a query
+      half-typed in Tab B, open and then close the Commander in Tab A: Tab B's
+      palette neither opens, closes, steals focus, nor loses the typed query.
+      Open and close the nav drawer in Tab A: Tab B's drawer does not move.
+      Reload Tab B afterwards — both still restore from its own persisted
+      state, exactly as before the channel existed.
+- [ ] Drawer section selection follows each tab's own route. Put Tab A and Tab B
+      on routes under two different top-level drawer items, with both drawers
+      open, then click a third top-level item in Tab A. Tab B keeps its own
+      selection and submenu — it does not jump to Tab A's section, including
+      while Tab B's drawer is closed and after reopening it. Reload Tab B: it
+      still restores the section it last selected itself.
+- [ ] Editor open-config handoff stays in its own tab. With Tab B sitting on
+      `/editor` with windows open (and no config opened there since it loaded),
+      open a saved config from the drawer in Tab A. Tab B's layout is untouched.
+      Then set an intent in Tab B's drawer without navigating yet, open a config
+      in Tab A, and confirm Tab B still opens its own config when it arrives.
+- [ ] DevKit prefills stay in their own tab. With a real username/email/password
+      typed into the register form in Tab B, open DevKit in Tab A and click
+      "prefill register". Tab B's fields are untouched and its password field
+      stays masked. Repeat for the login form and "prefill login". In Tab A the
+      prefill still fills that tab's own form, and still does after a reload.
+- [ ] Drawer *preferences* still sync in the same session: change the width and
+      `opens.direction` in Tab A and confirm Tab B follows without a reload.
+      (This is the pair that distinguishes the fix from over-blocking.)
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"

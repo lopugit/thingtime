@@ -66,20 +66,21 @@
    failed events, persist the latest project status server-side, and have the
    footer/dashboard read the cached status instead of polling Vercel directly.
 
-6. **Add cross-tab sync for persisted thingtime state.**
+6. **✅ Done (reconciled 2026-08-18): cross-tab sync for persisted thingtime state.**
 
-   `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx`, persist
-   effect around lines 420–450) persists the ENTIRE thingtime object to
-   localforage on every state change, and loads it only once on mount. With
-   two tabs open on the same origin, each tab's writes clobber the other's
-   (last-writer-wins), and neither tab sees the other's changes until reload —
-   observed live: a second dev tab reverted drawer settings
-   (`thingtime.settings.drawer.*`) written by the first. Design and implement
-   cross-tab sync, e.g. a `BroadcastChannel('thingtime')` that publishes
-   changed paths and applies them in other tabs via the existing `setThingtime`
-   queue with `ignoreUndoRedo`, or storage-event-driven reload of changed
-   subtrees. Follow `FUNDAMENTALS.md` and keep the single persist path in
-   `ThingtimeProvider`. Full spec: `claude-todo/07-cross-tab-thingtime-sync.md`.
+   `BroadcastChannel('thingtime')`
+   (`remix/app/Providers/thingtimeSyncChannel.ts`) publishes each successfully
+   applied local `setThingtime` write. Payloads go through the active safe
+   `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
+   persisted/runtime function source never crosses tabs. Other tabs apply the
+   write through the existing mutation queue with `{ ignoreUndoRedo: true,
+   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+   internal root `timemachine` path is excluded from channel traffic, while
+   ordinary paths restored by undo/redo still converge across tabs. The
+   debounced latest-revision autosave in `ThingtimeProvider` remains the one
+   persist path. Unit and live two-tab verification are recorded in
+   `claude-todo/07-cross-tab-thingtime-sync.md`; optional cold-tab revision
+   reconciliation remains future hardening.
 
 ---
 

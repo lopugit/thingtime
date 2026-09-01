@@ -304,10 +304,28 @@ export const PostComposer = (props: PostComposerProps) => {
     // so the editor opens on a truly blank "Imagine.." slate instead of an
     // empty object rendering as {} chrome. Editing an existing thingtime post
     // seeds the draft with the post's thing as of mount (editSeedRef).
-    setThingtime(DRAFT_TMP_KEY, {
-      ...preserved,
-      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
-    });
+    //
+    // tabLocal because this REPLACES the whole `tmp` branch and the pruning
+    // above cannot tell an abandoned persisted session from another tab's live
+    // one — every `s<hex>` key is dropped. Broadcast, that lands on a peer as
+    // "your composer session no longer exists" and destroys a post someone is
+    // part-way through typing there. Pruning stale sessions out of the
+    // persisted blob is this tab's own housekeeping; `preserved` only copies
+    // user-authored `tmp` keys through unchanged, so nothing a peer needs is
+    // withheld by keeping it off the wire.
+    setThingtime(
+      DRAFT_TMP_KEY,
+      {
+        ...preserved,
+        [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+      },
+      // Passing options replaces setThingtime's default object, so restate the
+      // namespace this write has always used rather than silently dropping it.
+      { namespace: 'default', tabLocal: true }
+    );
+    // `thingOn` (not `type`): this branch's guard above reads `thingOn`, and the
+    // derived `type` const is declared further down, so naming it here would be
+    // a TDZ ReferenceError during render.
   }, [thingOn, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play — exactly the live toggles
@@ -501,7 +519,17 @@ export const PostComposer = (props: PostComposerProps) => {
       // the posted thing draft is spent — next thingtime tab starts fresh
       // (reset the whole session branch so the draft value is undefined again,
       // not an empty {} that would render as an object)
-			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
+      //
+      // tabLocal for the same reason the seed above is: `draftSessionId` is
+      // minted per mount, so this key names THIS composer's session and no peer
+      // has one. Broadcast, it lands in every other tab as a foreign `s<hex>`
+      // branch — inert, but persisted into that tab's next full-tree autosave
+      // and visible under `tt.tmp` in its tree editor until its own next
+      // composer mount happens to prune it. Local clear and persistence are
+      // unchanged; only the broadcast is suppressed. Passing options replaces
+      // setThingtime's default object, so restate the namespace this write has
+      // always used.
+			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {}, { namespace: 'default', tabLocal: true });
       // an edit keeps its pre-filled draft — the parent closes the composer
       if (!isEdit) reset();
 			onPosted(created);

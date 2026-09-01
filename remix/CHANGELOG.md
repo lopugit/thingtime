@@ -581,6 +581,74 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **Cross-tab persisted Thingtime state (PR #92)**: same-origin tabs now share
+  each successfully applied path-level write through one
+  `BroadcastChannel('thingtime')`, reusing the active safe Thingtime codec and
+  existing mutation queue. Remote writes skip the local undo timeline and
+  cannot echo; root `timemachine` metadata stays tab-local while ordinary paths
+  restored by undo/redo still converge. The debounced latest-revision
+  LocalForage autosave remains the only persistence path. This prevents a stale
+  open tab's next full-tree save from silently reverting newer drawer,
+  Commander, Content, or preference changes made elsewhere. See the
+  [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
+  — Claude (AI), 2026-08-20
+- **Cross-tab sync excludes view chrome (PR #92 review)**: writes that describe
+  what is open and focused in the current viewport — `settings.drawer.open` and
+  `settings.commander.<id>.commanderActive` — now pass `{ tabLocal: true }` to
+  `setThingtime`, which suppresses only the broadcast. Because `commanderId` is
+  a literal shared by every tab, broadcasting them let one tab toggle another's
+  palette and drawer; closing the palette in one tab ran the peer's toggle
+  effect, which clears its input under the default `clearCommanderOnToggle`,
+  destroying a query being typed there. All of it is still persisted, so a
+  reload restores it as before, and drawer width/direction/ordering and the
+  Commander's own preferences keep syncing. — Lopu (AI), 2026-08-30
+- **Cross-tab sync also excludes the drawer's selected section (PR #92 review)**:
+  `settings.drawer.selectedItem` now passes `{ tabLocal: true }` too. It is not a
+  preference — `DrawerContent` writes it from the current tab's `pathname`, so
+  two tabs on two routes hold two legitimately correct selections. Broadcasting
+  it swapped a peer's drawer to a section that peer was not on, and nothing there
+  restored it: the pathname-sync effect re-runs only on
+  `pathname`/`open`/`variant`/`loading` — none of which a remote write touches —
+  and returns early while that peer's drawer is closed. Still persisted, so each
+  tab's reload restores the section it last chose. The call-site guard test now
+  covers `open` and `selectedItem` together. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the editor's open-config handoff (PR #92 review)**:
+  both `settings.editor.openConfig` writes — the drawer's set and `EditorSplit`'s
+  consuming clear — now pass `{ tabLocal: true }`. An earlier note called this key
+  harmless because it is only read on mount; that was wrong. `openedConfigRef` is
+  a per-mount latch and the effect re-runs on the value, so a tab already on
+  `/editor` that had not yet consumed an intent would apply a *remote* config over
+  its own open windows. The key is a handoff to the writing tab's next navigation
+  (when the editor is already mounted the drawer uses the tab-local events bus
+  instead). Clearing had to be suppressed too, or consuming one tab's intent would
+  erase an intent another tab had not navigated to yet. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the DevKit form prefills (PR #92 review)**: both
+  `devKit.registerPrefill` and `devKit.loginPrefill` now pass `{ tabLocal: true }`.
+  A prefill fills the form in front of *that* DevKit, and `root.tsx` renders
+  DevKit for every session (not dev-only). `Login`/`Register` consume it from an
+  effect keyed on `_ts` — a fresh `Date.now()` per click, so it always re-fires —
+  meaning one click replaced the username/email/password a peer tab had typed
+  into its own form and called `setPasswordVisible(true)` there. Still persisted,
+  so the same DevKit still prefills after a reload. — Lopu (AI), 2026-08-30
+- **A broadcast failure can no longer discard a local write (PR #92 review)**:
+  `flushSetThingtimeQueue` published inside the callback whose return value *is*
+  the new state, and `drainThingtimeMutationQueue` drops any update whose apply
+  throws — so a throw on the publish path would have silently rolled back a write
+  that had already applied. The channel catches internally today, so this was not
+  a live defect; the publish is now contained in its own `try` so that stays true
+  independently of the transport. Sync is best-effort, the local write is not.
+  — Lopu (AI), 2026-08-30
+- **The composer's spent-draft clear is tab-local too (PR #92 review)**: the
+  post-submit `setThingtime('tmp.<draftSessionId>', {})` was the one half of the
+  `tmp` branch still on the wire — its sibling seed had already been made
+  `tabLocal`. `draftSessionId` is minted per mount, so the key names the writing
+  tab's own composer session and no peer owns one: it could not destroy a peer
+  draft, but it did land a foreign `s<hex>` branch in every other tab, which that
+  tab then persisted in its next full-tree autosave and displayed under `tt.tmp`
+  in the tree editor until its own next composer mount pruned it. Local clear and
+  persistence are unchanged; only the broadcast is suppressed. The composer guard
+  test now asserts the seed and the clear together so the pair cannot drift again.
+  — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.

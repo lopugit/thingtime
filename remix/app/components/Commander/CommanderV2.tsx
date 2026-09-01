@@ -299,14 +299,23 @@ export const CommanderV2 = (props) => {
 		return commandIncludesSuggestion;
 	}, [commandPath, suggestions]);
 
+	// Whether the palette is open is chrome for THIS viewport, not a shared
+	// preference — `commanderId` is a literal ('nav'/'global'), identical in
+	// every tab, so broadcasting it would toggle every other tab's palette and
+	// move its focus. Closing is the damaging direction: the peer's toggle
+	// effect below clears its input when `clearCommanderOnToggle` is set, which
+	// would destroy a query someone is mid-way through typing there. Commander
+	// *preferences* under the same key still sync normally.
+	// Passing options replaces setThingtime's default object, so restate the
+	// namespace these writes have always used rather than silently dropping it.
 	const openCommander = React.useCallback(() => {
-		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true, { namespace: 'default', tabLocal: true });
 	}, [setThingtime, commanderId]);
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
 			if (e?.defaultPrevented || !commanderActive) return;
-			setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
+			setThingtime(`settings.commander.${commanderId}.commanderActive`, false, { namespace: 'default', tabLocal: true });
 		},
 		[setThingtime, commanderId, commanderActive]
 	);

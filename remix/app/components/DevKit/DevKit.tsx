@@ -316,18 +316,34 @@ export const DevKit = (_props) => {
     toggleOpenFromTrigger(e);
   };
 
+  // tabLocal: a prefill fills the form in front of THIS DevKit, so it is an
+  // instruction to one viewport, not shared state. Login/Register consume it
+  // from an effect keyed on `_ts`, which is a fresh Date.now() every click — so
+  // broadcast, one click here overwrites the username/email/password a peer tab
+  // has typed into its own form and flips that tab's password field to visible.
+  // Persisted as before (the same DevKit still prefills after a reload); only
+  // the broadcast is suppressed. Passing options replaces setThingtime's default
+  // object, so restate the namespace these writes have always used.
   const prefillRegister = React.useCallback(() => {
     const rand = crypto.getRandomValues(new Uint32Array(1))[0];
-    setThingtime('devKit.registerPrefill', {
-      username: `rick.deckard${rand}`,
-      email: `rick.deckard+${rand}@thingtime.com`,
-      password: 'password1',
-      _ts: Date.now()
-    });
+    setThingtime(
+      'devKit.registerPrefill',
+      {
+        username: `rick.deckard${rand}`,
+        email: `rick.deckard+${rand}@thingtime.com`,
+        password: 'password1',
+        _ts: Date.now()
+      },
+      { namespace: 'default', tabLocal: true }
+    );
   }, [setThingtime]);
 
   const prefillLogin = React.useCallback(() => {
-    setThingtime('devKit.loginPrefill', { username: 'rick.deckard', password: 'password1', _ts: Date.now() });
+    setThingtime(
+      'devKit.loginPrefill',
+      { username: 'rick.deckard', password: 'password1', _ts: Date.now() },
+      { namespace: 'default', tabLocal: true }
+    );
   }, [setThingtime]);
 
   const verifyEmailDev = React.useCallback(async () => {

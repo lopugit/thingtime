@@ -17,6 +17,8 @@ import {
 	stringifyThingtime,
 	stringifyThingtimeForStorage
 } from './thingtimeSerialization';
+import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel';
+import type { ThingtimeSyncChannel, ThingtimeSyncPath } from './thingtimeSyncChannel';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
@@ -100,6 +102,19 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 	const [events] = React.useState(() => new Subject());
 
+	// Cross-tab sync (TODO/claude-todo/07): identify this tab so broadcasts can
+	// be ignored by their sender, and hold the channel + latest setThingtime in
+	// refs so the channel effect never has to re-subscribe.
+	const syncTabIdRef = React.useRef<string | null>(null);
+	if (!syncTabIdRef.current) {
+		syncTabIdRef.current =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `tt-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+	}
+	const syncChannelRef = React.useRef<ThingtimeSyncChannel | null>(null);
+	const setThingtimeSyncRef = React.useRef<((path: ThingtimeSyncPath, value: any) => void) | null>(null);
+
 	const undoRedo = useThingtimeLine(Everything);
 
 	const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
@@ -133,6 +148,14 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	type SetThingtimeOptions = {
 		ignoreUndoRedo?: boolean;
 		namespace?: string;
+		// Applied from another tab's broadcast — never re-published (no echo
+		// loops) and never entered into this tab's undo/redo timeline.
+		fromRemote?: boolean;
+		// Ephemeral view chrome for THIS viewport — what is currently open and
+		// focused here, as opposed to user data or a saved preference. Still
+		// persisted (a reload restores it), but never broadcast, so one tab's
+		// panel/focus state cannot actuate another tab's UI mid-session.
+		tabLocal?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -256,14 +279,32 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		const result = drainThingtimeMutationQueue(
 			thingtimeRef.current,
 			queue,
-			(workingThingtime, nextThingtime) =>
-				applyThingtimeUpdateRef.current?.(
-					workingThingtime,
-					nextThingtime.path,
-					nextThingtime.value,
-					nextThingtime.options,
-					nextThingtime.timestamp
-				) ?? workingThingtime,
+			(workingThingtime, nextThingtime) => {
+				const applyUpdate = applyThingtimeUpdateRef.current;
+				if (!applyUpdate) return workingThingtime;
+
+				const nextState = applyUpdate(workingThingtime, nextThingtime.path, nextThingtime.value, nextThingtime.options, nextThingtime.timestamp);
+
+				// Publish only after this update applied successfully. Remote writes use
+				// the same queue but never echo back onto the channel, and tab-local
+				// view chrome is persisted without ever actuating another tab.
+				//
+				// Contained in its own try: this callback's RETURN VALUE is the new
+				// state, and drainThingtimeMutationQueue drops an update whose apply
+				// throws. Letting a transport failure escape here would therefore
+				// discard a write that already applied — the user's own edit would
+				// vanish because a peer-facing broadcast failed. Sync is best-effort;
+				// the local write is not.
+				if (shouldPublishAppliedWrite(nextThingtime.options)) {
+					try {
+						syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
+					} catch (error) {
+						console.error('[tt] Failed to broadcast an applied Thingtime write', error);
+					}
+				}
+
+				return nextState;
+			},
 			(error) => console.error('[tt] There was an error applying a queued Thingtime update', error)
 		);
 		setThingtimeFlushScheduledRef.current = false;
@@ -443,6 +484,26 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
 	}, [setThingtime, events, getThingtime, loading, thingtimeState, setThingtimeObjectWrapper]);
+
+	// Keep the sync channel pointed at the current setThingtime without ever
+	// recreating the channel itself.
+	setThingtimeSyncRef.current = (path, value) => {
+		// Remote writes ride the normal queue (so pre-hydration messages are held
+		// in order) but skip this tab's undo timeline — undo stays per-tab.
+		setThingtime(path, value, { ignoreUndoRedo: true, fromRemote: true });
+	};
+
+	React.useEffect(() => {
+		const channel = createThingtimeSyncChannel({
+			tabId: syncTabIdRef.current as string,
+			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
+		});
+		syncChannelRef.current = channel;
+		return () => {
+			syncChannelRef.current = null;
+			channel?.close();
+		};
+	}, []);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;

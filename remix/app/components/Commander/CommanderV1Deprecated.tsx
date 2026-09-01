@@ -211,15 +211,18 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return commandIncludesSuggestion;
 	}, [safeJoin(commandPath), suggestions]);
 
+	// Still rendered from Thingtime.tsx, and it writes the same commanderActive
+	// keys as CommanderV2 — so it needs the same tab-local treatment or it would
+	// reopen the cross-tab palette-toggling hole from the other side.
 	const openCommander = React.useCallback(() => {
-		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true, { namespace: 'default', tabLocal: true });
 	}, [setThingtime, commanderId]);
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
 			if (!e?.defaultPrevented) {
 				if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-					setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
+					setThingtime(`settings.commander.${commanderId}.commanderActive`, false, { namespace: 'default', tabLocal: true });
 				}
 			}
 		},
