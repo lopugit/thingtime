@@ -227,6 +227,38 @@ test("source fingerprint ignores a co-located controller checkout", () => {
   }
 })
 
+test("source fingerprint reads an index past the default capture ceiling", () => {
+  const root = fixture()
+  try {
+    const clean = computeSourceFingerprint(root)
+
+    // Scanning for gitlinks captures the whole index in one read, and
+    // execFileSync throws ENOBUFS past its 1 MiB default — which would fail
+    // every fingerprint on a large tree rather than merely miss the cache.
+    // Long paths cross that ceiling with few enough files to stay fast.
+    const wide = path.join(root, "d".repeat(200))
+    mkdirSync(wide, { recursive: true })
+    for (let index = 0; index < 3000; index += 1) {
+      writeFileSync(path.join(wide, `${"f".repeat(200)}-${index}.txt`), "x")
+    }
+
+    // Guard the guard: a shorter tmpdir or a future git format must not let
+    // this test pass without actually exercising the ceiling.
+    git(root, ["add", "-A"])
+    const staged = execFileSync("git", ["-C", root, "ls-files", "--stage", "-z"], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    assert.ok(staged.length > 1024 * 1024, `index too small: ${staged.length}`)
+
+    const wideFingerprint = computeSourceFingerprint(root)
+    assert.match(wideFingerprint.sourceFingerprint, /^[0-9a-f]{64}$/)
+    assert.notEqual(wideFingerprint.sourceFingerprint, clean.sourceFingerprint)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("immutable output variants coexist and richer valid output wins", () => {
   const root = fixture()
   try {

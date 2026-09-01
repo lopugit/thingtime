@@ -160,6 +160,7 @@ function runGit(root, args, options = {}) {
     encoding: "utf8",
     stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
     env: options.env ?? process.env,
+    maxBuffer: options.maxBuffer ?? 1024 * 1024,
   }).trim()
 }
 
@@ -186,7 +187,15 @@ function sha256Parts(parts) {
  * submodules: a gitlink here is always a co-located checkout, never source.
  */
 function dropNestedRepositories(root, env) {
-  const staged = runGit(root, ["ls-files", "--stage", "-z"], { env })
+  // This is the only git call here that captures a whole index rather than a
+  // single line, and execFileSync throws ENOBUFS past its 1 MiB default. One
+  // entry costs 50 bytes plus its path, so the default ceiling would start
+  // failing every fingerprint — not just missing the cache — on a large tree.
+  // 64 MiB is what the other whole-tree control-plane readers already use.
+  const staged = runGit(root, ["ls-files", "--stage", "-z"], {
+    env,
+    maxBuffer: 64 * 1024 * 1024,
+  })
   const links = staged
     .split("\0")
     .filter((entry) => entry.startsWith("160000 "))
