@@ -4,6 +4,7 @@ import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 
@@ -98,6 +99,19 @@ export function useApi() {
       logout: useCallback(
         async (args?: { all?: boolean }) => {
 					await flushAttachmentDraftCleanups();
+          // owner-tier activity day-counts must not outlive the session that
+          // authorized them (shared-browser privacy) — unlike viewer-neutral
+          // tt-* caches (theme vars, emoji recents), which persist by design
+          clearLocalCachePrefix('tt-activity-');
+          // quick-switcher recents can name the viewer's private things —
+          // same shared-browser privacy bar as the activity counts
+          clearLocalCachePrefix('tt-quickswitch-');
+          // same shared-browser rule for "On this day" memories — cached tiles
+          // can carry private/circle post snippets for the signed-out viewer
+          clearLocalCachePrefix('tt-onthisday-');
+          // the Saved library cache can carry private/circle posts the
+          // signed-out viewer bookmarked — same shared-browser privacy bar
+          clearLocalCachePrefix('tt-saved-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -555,6 +569,9 @@ export function useApi() {
 		},
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      // the explore board — public trending posts; `anon: 1` keeps logged-out
+      // requests edge-cacheable, mirroring feed
+      trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
 			reveal: useCallback(
 				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
 					asyncFetcher.submit(
@@ -671,6 +688,14 @@ export function useApi() {
       ),
       // toggle a private "add to my library" save on any visible thing
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      // the viewer's Saved library — posts they bookmarked, newest-saved-first
+      saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
+      // cast/move/remove the caller's vote on a visible poll thing
+      vote: useCallback(
+        async (args: { id: string; optionIndex: number }) =>
+          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        [asyncFetcher]
+      ),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
@@ -689,7 +714,12 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) =>
-          asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
+          asyncFetcher.submit(
+            // tags: the quote caption's harvested inline #hashtags — merged
+            // server-side with the tags carried from the original post
+            { id: args?.id, text: args?.text, tags: args?.tags, acl: args?.acl, visibility: args?.visibility },
+            { action: '/api/v1/things/share' }
+          ),
         [asyncFetcher]
       ),
 			remove: useCallback(
@@ -830,6 +860,8 @@ export function useApi() {
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
+      // day-bucketed viewer-visible thing counts for the profile heatmap ({ username })
+      activity: useCallback(async (args) => getJson(`/api/v1/users/activity${toQuery(args)}`), []),
       // public people search (the /search People rail)
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(

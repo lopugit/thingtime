@@ -33,6 +33,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   // inputs + result + trace: records → dropped
   'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
   save: [], // marker schema
+  vote: ['optionIndex', 'voteKey'],
   folder: ['name', 'icon', 'description'],
   app: [
     'clientId',

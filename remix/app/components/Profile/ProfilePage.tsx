@@ -3,6 +3,7 @@ import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 import { SlidersHorizontal } from 'lucide-react';
 
+import { ActivityHeatmap } from './ActivityHeatmap';
 import { EditProfileModal } from './EditProfileModal';
 import { RelationshipControls } from './RelationshipControls';
 import {
@@ -577,6 +578,11 @@ export const ProfilePage = (props: ProfilePageProps) => {
           </Flex>
         ) : null}
       </Box>
+
+      {/* contribution heatmap of this profile's viewer-visible things — renders
+      nothing until counts exist, so profiles with no visible activity keep
+      their current layout */}
+      {!temporaryProfile && <ActivityHeatmap username={profile.username} />}
 
       <Box mt={8}>
         <Flex mb={3} px={[4, 6]} alignItems="center" columnGap={2}>

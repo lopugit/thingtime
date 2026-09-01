@@ -111,8 +111,19 @@ export type PublicPost = {
   // impressions/avgDwellMs secondary — see api/utils/things/views.ts
   viewCount?: number;
   viewStats?: { impressions: number; avgDwellMs: number };
+  // poll posts only: live per-option vote counts + the viewer's own vote
+  pollVotes?: PublicPollVotes;
+  // logged-in viewers only: has the viewer saved this post to their library?
+  // (absent for anonymous projections — the bookmark button hides with it)
+  viewerSaved?: boolean;
   createdAt: string;
 };
+
+// Live poll tally on poll posts (posts whose thing carries question/options):
+// per-option counts (index-aligned with the options), the total, and the
+// viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
+// api/utils/things/pollCore.ts.
+export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
 
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form

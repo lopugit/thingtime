@@ -30,6 +30,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
+  // poll vote toggles (POST /api/v1/things/vote) — same shape as reactions
+  'things.vote': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // embed SDK reads (GET /api/v1/embed/things) — the only anonymous
@@ -68,6 +70,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // like the other public reads (anonymous callers key by IP)
   'users.relationships': { limit: 120, windowMs: 60_000, enabled: true },
   'users.connections': { limit: 120, windowMs: 60_000, enabled: true },
+  // profile activity heatmap (/api/v1/users/activity) — one aggregation of
+  // day-counts per profile view, bounded like the other public reads
+  'users.activity': { limit: 120, windowMs: 60_000, enabled: true },
   // notifications: list backs the bell (poll + focus refetch), read flips
   // readAt, settings is a rare interactive toggle
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },

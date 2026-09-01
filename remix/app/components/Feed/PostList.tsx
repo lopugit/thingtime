@@ -19,6 +19,9 @@ export type PostListProps = {
   onPostChanged: (id: string, next: PostChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   emptyLabel?: string;
+  // keyboard-focused post (useFeedShortcuts j/k) — its wrapper draws a subtle
+  // accent ring; pages without shortcuts just omit this
+  focusedPostId?: string | null;
 };
 
 const SkeletonCard = () => (
@@ -52,13 +55,19 @@ const SkeletonCard = () => (
 // so these identities hold across renders and both memos actually stick. The
 // stale ref identity also stopped forcing observeView(null) + observeView(el)
 // for every wrapper on each of those re-renders.
+//
+// The j/k focus ring lives here too, as a plain boolean prop rather than the
+// focused id: only the row losing focus and the row gaining it change props,
+// so the memo still holds for every other mounted card.
 const PostRow = React.memo(function PostRow({
   post,
+  focused,
   onPostChanged,
   onEngagement,
   observeView
 }: {
   post: PublicPost;
+  focused: boolean;
   onPostChanged: (id: string, next: PostChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   observeView: (element: Element | null, thingId: string) => void;
@@ -67,14 +76,24 @@ const PostRow = React.memo(function PostRow({
   const setRef = React.useCallback((element: HTMLDivElement | null) => observeView(element, post.id), [observeView, post.id]);
 
   return (
-    <Box data-thing-id={post.id} ref={setRef}>
+    <Box
+      data-thing-id={post.id}
+      ref={setRef}
+      // keyboard focus ring (j/k) — theme-aware accent outline hugging the
+      // card's radius. useFeedShortcuts scrollIntoView()s the [data-thing-id]
+      // element, so the breathing room has to be on THIS box, not a wrapper.
+      borderRadius="var(--tt-radius-lg, 16px)"
+      outline={focused ? '2px solid var(--tt-accent, hotpink)' : undefined}
+      outlineOffset="3px"
+      scrollMarginY="calc(var(--tt-nav-clearance, 54px) + 16px)"
+    >
       <PostCard post={post} onChanged={handleChanged} onEngagement={onEngagement} />
     </Box>
   );
 });
 
 export const PostList = (props: PostListProps) => {
-  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel } = props;
+  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel, focusedPostId } = props;
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   // public view-count telemetry — wired here so every PostList surface (feed,
@@ -113,6 +132,7 @@ export const PostList = (props: PostListProps) => {
         <PostRow
           key={post.id}
           post={post}
+          focused={post.id === focusedPostId}
           onPostChanged={onPostChanged}
           onEngagement={onEngagement}
           observeView={observeView}

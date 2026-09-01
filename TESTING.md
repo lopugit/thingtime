@@ -238,6 +238,43 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`)
+
+Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
+Vite dev port serves the raw shell without injection; in production, Vercel
+routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
+`remix/scripts/patch-vercel-output.mjs`).
+
+- [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
+      `og:title` carrying the author + truncated text (or the poll question),
+      an `og:description` capped near 200 chars, an absolute `og:url` /
+      `og:image`, and `twitter:card summary` (`summary_large_image` when the
+      post has an image attachment or a legacy `images[0]` URL, which then
+      becomes the `og:image`).
+- [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
+      `/post/<garbage id>` both return ONLY the generic site block —
+      indistinguishable from each other, and no post text, author, or image
+      may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
+      a 404 Response from this middleware as "unhandled" and would fall
+      through to the raw source template — see `server/routes/[...].ts`.)
+- [ ] `curl -s <nitro>/profile/<username>` returns `og:type profile`, the
+      `displayName (@username)` title, the bio as description, and the avatar
+      as `og:image` when set; an unknown username gets the generic block.
+- [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
+      HTML-escaped and whitespace-collapsed inside `content="…"`.
+- [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
+      https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
+      URLs (the request-origin pattern, not a hardcoded host).
+- [ ] Every other page (`/`, `/feed`, deep unknown paths) carries the injected
+      site-default block (site_name Thingtime, generic description, brand
+      image, `twitter:card summary`) with absolute URLs, and responses from
+      the shell handler carry the `X-TT-Shell: social-meta` header.
+- [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
+      routes sit between the API routes and the SPA fallback and point at the
+      Nitro server function.
+- [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
+      renders the SPA (the injected head block must not break the shell).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -1043,6 +1080,39 @@ is fixed, and cite the checklist you ran in the PR description.
       token reads still return 404 (the owner recovery exception applies only
       to persisted `attachment` Things).
 
+## Poll voting (`remix/app/api/utils/things/vote.ts`, `PollRenderer`)
+
+- [ ] Compose a poll from the feed composer's 🗳️ Poll tab (question in the
+      main box, 2–6 option rows with add/remove) and post it: the card renders
+      the poll (question + tappable options), NOT the raw Thingtime tree.
+- [ ] Tap an option while logged in: the bar fills and the ✓/accent highlight
+      lands INSTANTLY (optimistic), then the server tally reconciles.
+      Tapping a different option MOVES the vote (totals unchanged); tapping
+      your own option again REMOVES it. `POST /api/v1/things/vote` returns
+      `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
+- [ ] One vote per user per poll survives races: double-tap fast / two tabs —
+      the `things_vote_key_unique` index keeps ONE vote doc per
+      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+- [ ] Logged out: the poll shows results only (bars + percentages visible,
+      no vote recorded); tapping toasts "Log in to vote 🗳️".
+- [ ] A poll on a private/friends-only post can't be voted on by a viewer
+      outside the audience (404 from the vote endpoint — acl + `tt:inherit`
+      chains re-checked per vote), and out-of-range `optionIndex` 400s.
+- [ ] Generic CRUD refuses the kind: `POST /api/v1/things` with
+      `thingtime: ["vote"]` answers 403 (votes mint only through the vote
+      endpoint, which writes the server-owned `voteKey`).
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/vote` once)
+      reverts the optimistic bars to the pre-tap tally and shows a Lopu
+      error toast — never a stuck wrong count.
+- [ ] A shared poll's nested sub-card shows the live tally read-only; voting
+      happens on the original's own card/permalink.
+- [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
+      docs pointing at the gone poll); vote docs never list as /things rows
+      and folder copy skips them like reactions/saves.
+- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
+      data crystal) makes the vote endpoint answer 409 — never a silent
+      `ok: true` that drops the vote.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the
@@ -1055,6 +1125,32 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] The design-system anatomy stories (/docs/design-system →
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
+
+## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
+
+- [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy
+      named "Copy of X" appears beside the original — in the ORIGINAL's own
+      folder, not the browsed folder — immediately (real server id painted
+      from the bulk response, reconciled by the refetch); the original keeps
+      its name, content, and folder. The menu row shows the 🐑 emoji (emoji
+      icon style) / copy-plus (lucide), never the 🤷‍♂️ fallback.
+- [ ] Duplicate from SEARCH results (type a query, right-click a result from a
+      different folder): the copy lands in that result's own folder, the
+      active search re-runs, and "Copy of X" appears in the results.
+- [ ] Duplicate from an ANCESTOR column in columns view: the copy appears in
+      the column you acted in (the original's folder), not the deepest one.
+- [ ] The per-item ⋯ kebab menu offers 🐑 Duplicate for duplicable things
+      (this is the only path on iOS/touch, where right-click never opens).
+- [ ] Multi-select N things → Duplicate N things duplicates all of them
+      (one bulk copy per source folder; "Duplicated N ✨" Lopu toast;
+      per-item failures report as "Duplicated n, m skipped" with the first
+      error).
+- [ ] Duplicating a folder copies its whole subtree (bounded server-side);
+      uncopyable child kinds inside are skipped with honest counts.
+- [ ] Uncopyable kinds (comment/reaction/save/share/vote — the server
+      UNCOPYABLE set) never show a Duplicate item in the context menu.
+- [ ] No ⌘D keyboard shortcut (that's the browser bookmark chord) — Duplicate
+      is context-menu only.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
@@ -1079,6 +1175,15 @@ is fixed, and cite the checklist you ran in the PR description.
       Click, hover, and touch-and-hold all open the quick-react popup on the
       POST button; picking an emoji applies optimistically (no wait), and ＋
       opens the full custom picker.
+- [ ] EMOJI SPLASH (`emojiSplash.ts`): ADDING a reaction (quick-tap heart,
+      quick-row pick, full-picker pick — post or comment) erupts 5–8 floating
+      copies of the chosen emoji from the react button; a live poll vote
+      bursts the option's leading emoji (🗳️ fallback) from the tapped row.
+      REMOVING a reaction / un-voting never bursts, guests never burst.
+      Spam-tap: at most 3 concurrent bursts (oldest culled) and the DOM
+      returns to its pre-tap node count within ~1.5s (no leaked spans).
+      With reduced motion emulated (or `--tt-motion: 0`), zero DOM is
+      created — same `motionOK()` gate as confetti.
 - [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
       revalidate in the background even when the cache already covers their
       reply count — reactions/edits made elsewhere reconcile in within a
@@ -1177,6 +1282,17 @@ is fixed, and cite the checklist you ran in the PR description.
       Log out 🗝️ (+ Resend verification when unverified): All settings
       navigates to /settings, and the buttons wrap cleanly on mobile with no
       overflow.
+- [ ] Activity heatmap (`ActivityHeatmap.tsx`, `/api/v1/users/activity`):
+      a profile with visible things shows the contribution grid between the
+      header and Posts (month labels, hover tooltip `<n> things · <date>`,
+      `<n> things in the last year 🌱` caption); logged out it counts public
+      things only while the owner's own view also counts private ones (create
+      a public + a private post and compare); a profile with zero visible
+      things renders no Activity section at all; on mobile the grid scrolls
+      inside its own container (auto-scrolled to today) without widening the
+      page; cell colors follow the active theme accent in light and dark
+      themes; server-minted records (the `user` doc, notifications, friend
+      state) never count while reactions/comments/votes do.
 
 ## Required Web CI contexts (`.github/workflows/web-ci.yml`)
 
@@ -1755,6 +1871,58 @@ is fixed, and cite the checklist you ran in the PR description.
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
 
+## Hashtags & tag chips (`remix/app/components/Feed/hashtags.ts`, `PostCard.tsx`, `PostComposer.tsx`)
+
+- [ ] Publishing a post whose body contains inline `#tags` stores them in the
+      post's `tags` array (lowercased, deduped case-insensitively, merged
+      after any comma-separated explicit tags, 12-tag cap) while the literal
+      `#Text` stays in the post body. The composer's chip preview shows
+      inline tags live as you type.
+- [ ] PostCard renders `post.tags` as tappable pill chips (feed, /explore,
+      /post/:id, comments with tags — all PostCard surfaces) and linkifies
+      inline `#tags` in post text and quote captions. Both land on
+      `/search?tags=<tag>` with a visible `tags is <tag>` filter row seeded
+      and the search already run; tapping the same chip twice in a row still
+      re-runs (the post-search URL cleanup resets the deep-link guard).
+- [ ] The linkifier never matches URL fragments (`example.com/page#section`),
+      HTML entities (`&#39;`), mid-word hashes (`foo#bar`), or pure numbers
+      (`#42`) — those render as plain text — and Unicode tags (`#日本語`)
+      linkify correctly (unit-tested in `hashtags.test.ts`; spot-check one).
+
+## @Mentions (`remix/app/utils/mentions.ts`, `MentionAutocomplete.tsx`, `api/utils/notifications/mentions.ts`)
+
+- [ ] Posting `hey @<user> 👋` (or commenting it) mints a `mention` bell
+      notification for that user — "mentioned you" + preview text, click
+      lands on the post — and sends the mention email when their email
+      channel is on. Self-mentions and unknown `@nobody` names emit nothing;
+      at most 10 unique mentions per text are honoured.
+- [ ] A mentioned user gets exactly ONE notification per event: mentioning
+      the post author inside a comment on their post yields only the
+      `comment` notification, and a mentioned friend/follower is skipped by
+      the post fan-out (no `mention` + `post-from-friend` double-ring).
+- [ ] Mentions are visibility-gated (`emitTextMentions` in
+      `api/utils/things/things.ts`): mentioning a user in a PRIVATE post
+      emits nothing for them (no bell, no email, no preview leak — verify
+      their `/api/v1/notifications` stays empty while the post 404s for
+      them); a friends-only post's mention rings only accepted friends of
+      the author; a `tt:user/<name>` acl grant makes that user's mention
+      ring; comments gate on the parent thread's effective (inherited) acl.
+- [ ] Editing a post/comment text to add a NEW `@name` notifies that user
+      (same visibility gate); names already present in the pre-edit text and
+      the direct target owner never re-ring, and an edit that only removes
+      or keeps mentions emits nothing.
+- [ ] Typing `@` + ≥1 char in the composer body (post AND comment composers)
+      pops the people dropdown under the caret (debounced users/search);
+      ArrowUp/Down move, Enter/Tab/click insert `@username ` at the caret
+      with no cursor jump, Escape closes. Emails (`bob@example.com`) never
+      trigger it.
+- [ ] PostCard linkifies `@username` tokens in post/comment text to
+      `/profile/<username>`, composing with `#hashtag` links in one pass —
+      no nested/double links, `#tag@name` seams stay plain, and the literal
+      `@Casing` text is preserved (grammar unit-tested in
+      `mentions.test.ts`). Mentions in Settings → Notifications has its own
+      push/email switch row.
+
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
 - [ ] As an admin (register a throwaway user, restart dev with
@@ -2192,6 +2360,35 @@ is fixed, and cite the checklist you ran in the PR description.
       navigation with no duplicated top spacer, and its collapse control sits
       in the Thingtime Docs title row. At mobile widths, opening the full-screen
       drawer keeps its close control visible in that same header row.
+
+## API docs Try-it runner (`remix/app/routes/docs/ApiTryIt.tsx`, `api.tsx`)
+
+- [ ] Every request example on /docs/api shows a "Try it" panel; nothing ever
+      auto-runs on page load or navigation — a request only fires from an
+      explicit Run click.
+- [ ] Run on a GET example (health or things/trending) shows a green
+      `HTTP 200` badge, a grey `<n> ms` timing badge, and pretty-printed JSON
+      in a dark code block with its copy button; the response headers list is
+      hidden behind the "Show response headers" toggle.
+- [ ] The things/rss example renders the Atom XML response as highlighted
+      raw text (content-type aware), not a JSON parse error.
+- [ ] Editing the query string input and re-running changes the request
+      (e.g. add `limit=1`); the URL is always the documented endpoint path —
+      typing an absolute URL (`https://evil.example/...`) or a
+      protocol-relative `//host` into the query input is rejected with an
+      inline error and no request is sent.
+- [ ] Invalid JSON typed into the body textarea shows an inline "not valid
+      JSON" error without sending; fixing the JSON clears the error.
+- [ ] Mutation examples (POST/PUT/PATCH/DELETE) are two-step: first click
+      arms a red "Really run" confirm with a cancel and a plain-English
+      warning; only the confirm click sends. GET examples run in one click.
+- [ ] The Run button is disabled (spinner) while a request is in flight and
+      never retries; a network failure or 30s timeout renders a friendly
+      inline message, not a toast or a crash.
+- [ ] Requests send the viewer's own session cookie (same-origin
+      credentials): logged out, a session-auth mutation answers 401 — and
+      that 401 renders as a normal red-badged response, the documented
+      teaching moment.
 
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
@@ -3291,6 +3488,126 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Explore / trending (`remix/app/components/Explore/ExplorePage.tsx`, `remix/app/api/utils/things/trending.ts`)
+
+- [ ] Logged OUT, open `/explore`: the Trending board renders public posts
+      only — no friends/family/private post ever appears, and
+      `GET /api/v1/things/trending` returns the same public-only `posts`
+      array with `ok: true` and a `generatedAt` timestamp.
+- [ ] Cards are real feed PostCards: reacting, commenting, and voting on a
+      poll all work in place on `/explore` (logged in), and the counts match
+      the same post viewed on `/feed`.
+- [ ] Engagement moves the board: a recent post that gains reactions/comments
+      outranks an older post with none, and a week-old post with stale
+      engagement decays below fresh activity (score =
+      (reactions×3 + comments×4 + votes×2 + views×0.25 + 1) / (hours+2)^1.4).
+- [ ] Optimistic first paint: revisit `/explore` after a prior visit — the
+      last-known board paints instantly from the `tt-explore` localStorage
+      cache with NO skeleton flash, then reconciles in the background;
+      skeletons appear only on a true cold start (cleared storage).
+- [ ] The drawer's Feed section shows "Explore 🔥" and navigates to
+      `/explore`; `/feed` itself still loads and paginates normally.
+
+## Saved library (`remix/app/components/Saved/SavedPage.tsx`, `remix/app/api/utils/things/saved.ts`, `GET /api/v1/things/saved`)
+
+- [ ] Logged in, every post card (feed, `/explore`, `/post/:id` permalink,
+      profile) shows a 🔖 bookmark button beside Share. Tapping it flips the
+      icon to filled/accent INSTANTLY (optimistic), toasts "Saved to your
+      library 🔖", and the state survives a reload (`viewerSaved` rides the
+      same batched projection as `viewerReactions` — one query per page, no
+      N+1). Tapping again unfills instantly and toasts the removal; a failed
+      toggle reverts the icon and toasts the error. Logged OUT, no bookmark
+      button renders anywhere and `PublicPost` carries no `viewerSaved` field.
+- [ ] `/saved` lists the viewer's saved posts newest-SAVED-first (save time,
+      not post time) as real PostCards — reactions, comments, polls, and the
+      bookmark itself work in place; unsaving a card removes it from the list
+      optimistically (a failed unsave restores it in place). Pagination loads
+      ~30 per page via `nextCursor`. Optimistic first paint from the
+      per-viewer `tt-saved-<viewerId>` localStorage cache (no skeleton flash
+      on revisit; skeleton only on a true cold start), and logout sweeps the
+      `tt-saved-` prefix so another account on the same browser never sees a
+      cached library.
+- [ ] Libraries are independent per user: two accounts saving different posts
+      each see only their own on `/saved`, and `GET /api/v1/things/saved`
+      401s logged out (`/saved` shows the quiet log-in state instead). A
+      saved post that is later DELETED (or its audience narrowed away from
+      the viewer) silently disappears from `/saved` — fail closed, no error
+      rows. The drawer's Feed section shows "Saved 🔖" (auth-only) linking to
+      `/saved`.
+
+## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
+
+- [ ] `GET /api/v1/things/rss` (logged in OR out) returns well-formed Atom XML
+      (`Content-Type: application/atom+xml; charset=utf-8`, edge cache headers)
+      of the latest ~50 PUBLIC posts only — no friends/family/private post ever
+      appears, cookies are ignored, and no viewer field leaks into entries.
+      Posts containing quotes, angle brackets (`"><script>` probes), emoji, or
+      control characters escape cleanly (feed still parses with xmllint), and
+      the shell `<head>` keeps the `<link rel="alternate"
+      type="application/atom+xml" href="/api/v1/things/rss">` discovery tag on
+      every page (it lives outside the swapped tt-social-meta block).
+
+## Feed keyboard shortcuts (`remix/app/hooks/useFeedShortcuts.ts`, `/feed` + `/explore`)
+
+- [ ] On `/feed` (desktop): `j`/`k` move an accent focus ring down/up the post
+      column (clamping at both ends, `scrollIntoView` keeping the card in
+      view), `l` toggles a ❤️ on the focused post optimistically (press again
+      to un-react; counts reconcile with the server), `c` does exactly what
+      the Show/Hide comments button does, `n` expands/focuses the composer's
+      editor, `?` opens the cheatsheet modal (Escape/backdrop closes it), and
+      Escape clears the focus ring. Same on `/explore` minus `n`.
+- [ ] Shortcuts are INERT while typing: with focus in the composer, a comment
+      box, the search field, any input/select/contenteditable, while any
+      modal/popover/menu is open, or while Commander is active, pressing
+      j/k/l/c/n/? types normally and never navigates or reacts. Modifier
+      chords (⌘/Ctrl/Alt + letter) always pass through to the browser.
+- [ ] Mobile is untouched: with no keyboard there is no focus ring, no
+      cheatsheet, and no visual change to the feed.
+
+## Feed "On this day" memories (`remix/app/components/Feed/MemoriesCard.tsx`, `/feed`)
+
+- [ ] Logged in with posts from this calendar day in previous years: a
+      dismissible "On this day" card sits between the composer and the post
+      column, showing up to 6 compact tiles (snippet + "N years ago today 🕰️")
+      that link to `/post/<id>`. Posts made TODAY (year offset 0) never appear
+      — this year is excluded from the query by construction. With no
+      anniversary posts (or logged out) the card renders NOTHING — zero layout
+      shift, no empty shell, no spinner.
+- [ ] ✕ dismisses the card for the rest of the LOCAL day (per viewer:
+      `tt-onthisday-<viewerId>` localCache) — reloading keeps it hidden; it
+      returns after the local date rolls over. Same-day revisits paint from the
+      cached entry instantly with no refetch (optimistic rendering); a stale
+      cached day refetches in the background. Logout sweeps the
+      `tt-onthisday-` prefix so another account on the same browser can never
+      see cached private-post snippets.
+- [ ] Query windows are the VIEWER's local calendar day per historical year
+      (local-midnight instants, DST-correct), not UTC days: a Sydney (UTC+10)
+      post from 09:00 local on this date last year appears, and a post from
+      08:00 local TOMORROW's date last year does not. "N years ago today" uses
+      the local year (a Jan 1 00:30 local post is Dec 31 UTC — label must not
+      be off by one).
+- [ ] A tab left open (or backgrounded) across local midnight rolls over
+      without a reload: at 00:00 yesterday's tiles/labels disappear, a
+      yesterday dismissal resets, and the new day's memories fetch on the
+      midnight timer or the next focus/visibility change.
+
+## Quick switcher (`remix/app/components/QuickSwitcher/`, global ⌘K)
+
+- [ ] `⌘K` / `Ctrl+K` from any page (including with focus in an input) opens
+      the centered palette; `Escape`, backdrop click, or `⌘K` again closes it.
+      Fuzzy-typing a page name ("expl", "msgs") surfaces the Pages section;
+      ArrowUp/Down move the highlight across sections and Enter navigates
+      client-side (no full reload). Typing a username fragment shows People
+      rows (avatar + name + @username → their profile); when logged in, a
+      matching own thing appears under "Your things" (title + kind →
+      `/thing/<id>`). Picks land in a per-viewer "Recent" section (localCache
+      `tt-quickswitch-<viewerId|anon>`, cap 8, swept on logout) shown when the
+      query is empty. The chord never fires while Commander is active or
+      another modal/menu is open; with the palette open, feed j/k/l/c
+      shortcuts stay parked (its `role="dialog"` trips the overlay check) and
+      Commander's own ⌘P behavior is untouched. The Nav bar's small ⌘ button
+      (mobile affordance) toggles the same palette.
 
 ## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
 

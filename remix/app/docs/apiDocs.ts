@@ -7427,6 +7427,80 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-trending',
+    group: 'things',
+    title: 'Trending posts',
+    endpoint: '/api/v1/things/trending',
+    summary: 'Returns the explore board: public posts from the last week ranked by time-decayed engagement.',
+    detail:
+      'Candidates are public (tt:all) posts created in the last 7 days — the newest 300 are scored in memory as (reactions×3 + comments×4 + pollVotes×2 + views×0.25 + 1) / (hoursOld + 2)^1.4, so fresh engagement outranks stale piles, and the top 30 come back as the same PublicPost projections the feed returns (reactions, comments, polls, and view stats all batch-aggregated). The pool is public-only regardless of who asks; a session only personalises viewer fields like viewerReactions and poll viewerVote.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers get the same board; authenticated callers additionally get their viewer-specific fields.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required.',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
+      'Render posts with the same components as the feed; generatedAt timestamps the scoring pass.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read trending',
+        description: 'Fetch the current trending board.',
+        method: 'GET',
+        query: { anon: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Trending board returned.',
+        body: { ok: true, posts: [], generatedAt: '2026-08-19T00:00:00.000Z' }
+      }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the board is served from the Vercel edge and can lag live engagement by a few minutes.'
+    ]
+  }),
+  endpoint({
+    id: 'things-rss',
+    group: 'things',
+    title: 'Public posts Atom feed',
+    endpoint: '/api/v1/things/rss',
+    summary: 'Returns an Atom (RSS) XML feed of the latest ~50 public posts, newest first.',
+    detail:
+      'Unlike every other endpoint in this API, the response body is NOT JSON: it is an Atom 1.0 XML document (Content-Type: application/atom+xml; charset=utf-8) suitable for any feed reader. Entries are the newest 50 public (tt:all) posts rendered as the anonymous viewer — the same acl walk and PublicPost projections trending uses, with no viewer-specific fields — each carrying the author handle plus truncated text (or poll question) as <title>, the full text as <content type="text">, the /post/<id> permalink as <link rel="alternate">, and RFC 3339 <published>/<updated> timestamps. All user text is XML-escaped and stripped of XML-invalid control characters.',
+    auth: {
+      mode: 'none',
+      description: 'Always anonymous — cookies and bearer tokens are ignored, so the feed only ever contains public posts.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint (or subscribe to it from a feed reader) — no parameters are required.',
+      'Parse the body as Atom XML, not JSON; each <entry> links to its /post/<id> permalink.',
+      'The app shell also advertises the feed via <link rel="alternate" type="application/atom+xml"> for reader auto-discovery.'
+    ],
+    requestExamples: [
+      {
+        name: 'Fetch the feed',
+        description: 'Fetch the Atom feed of the latest public posts.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Atom XML feed returned (shown here as a string; the raw body is the XML document itself, not JSON).',
+        headers: { 'Content-Type': 'application/atom+xml; charset=utf-8' },
+        body: '<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n  <title>Thingtime</title>\n  <updated>2026-08-19T00:00:00.000Z</updated>\n  <entry>...</entry>\n</feed>'
+      }
+    ],
+    notes: [
+      'Responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the feed is served from the Vercel edge and can lag new posts by a few minutes.'
+    ]
+  }),
+  endpoint({
     id: 'things-react',
     group: 'things',
     title: 'React to post',
@@ -7477,7 +7551,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
       '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
       'library is personal by construction. Toggling an existing save removes it. List saved ' +
-      'schemas via /api/v1/schemas/browse?library=1, or raw saves via GET /api/v1/things?thingtime=save.',
+      'posts via GET /api/v1/things/saved, saved schemas via /api/v1/schemas/browse?library=1, ' +
+      'or raw saves via GET /api/v1/things?thingtime=save.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7502,6 +7577,99 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Save toggled.',
         body: { ok: true, saved: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-saved',
+    group: 'things',
+    title: 'Saved library',
+    endpoint: '/api/v1/things/saved',
+    summary: 'Lists the posts the current user saved to their library, newest-saved-first.',
+    detail:
+      'Reads the caller’s save things (written by POST /api/v1/things/save) newest first and batch-loads ' +
+      'their post-shaped targets in two indexed queries — never N+1. Targets that no longer resolve ' +
+      '(deleted, audience narrowed since the save, or not post-shaped, e.g. a saved schema) are silently ' +
+      'skipped rather than erroring — the library fails closed. Posts come back as the same PublicPost ' +
+      'projections the feed returns (reactions, comments, polls, view stats, viewerSaved: true), ordered by ' +
+      'when they were SAVED, not when they were posted. Pagination uses the feed’s stable ' +
+      '(createdAt, shareId) cursor over the save things; the cursor advances over the raw save page so ' +
+      'skipped rows are dropped, not resurfaced.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token — a library is personal by construction, so there is no anonymous view.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required for the first page (default limit 30, max 50).',
+      'Render posts with the same components as the feed; every entry carries viewerSaved: true.',
+      'Pass nextCursor back as cursor for the next page; null means the library is fully paged.',
+      'Handle 401 unauthenticated.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read the library',
+        description: 'Fetch the first page of saved posts.',
+        method: 'GET'
+      },
+      {
+        name: 'Next page',
+        description: 'Continue from a previous response’s nextCursor.',
+        method: 'GET',
+        query: { cursor: '1755500000000_post_123', limit: 30 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Saved posts returned, newest-saved-first.',
+        body: { ok: true, posts: [], nextCursor: null }
+      }
+    ],
+    notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
+  }),
+  endpoint({
+    id: 'things-vote',
+    group: 'things',
+    title: 'Vote on poll',
+    endpoint: '/api/v1/things/vote',
+    summary: 'Casts (or moves, or removes) the current user vote on a visible poll thing.',
+    detail:
+      'Polls are posts (or data things) whose thing carries a string question plus an options ' +
+      'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
+      'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
+      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
+      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
+      'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
+      'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Anonymous viewers see results only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the poll thing id and the zero-based optionIndex to vote for.',
+      'The poll must be visible to the current user and optionIndex must be inside its options list.',
+      'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+    ],
+    requestExamples: [
+      {
+        name: 'Cast a vote',
+        description: 'Vote for the second option of a poll.',
+        method: 'POST',
+        body: { id: 'poll_123', optionIndex: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vote recorded — the fresh tally comes back for immediate reconciliation.',
+        body: {
+          ok: true,
+          pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
+        }
       }
     ]
   }),
@@ -7552,17 +7720,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the post id plus optional text and visibility.',
+      'POST the post id plus optional text, tags, and visibility.',
       'The source post must be public or owned/visible to the current user.',
+      'Optional tags (e.g. inline #hashtags harvested from the caption) merge with the tags carried from the original.',
       'Use the returned share post to update feed state.',
       'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
     ],
     requestExamples: [
       {
         name: 'Share post',
-        description: 'Create a repost with optional commentary.',
+        description: 'Create a repost with optional commentary — caption hashtags ride along as tags.',
         method: 'POST',
-        body: { id: 'post_123', text: 'Worth saving', visibility: 'public' }
+        body: { id: 'post_123', text: 'Worth saving #vibes', tags: ['vibes'], visibility: 'public' }
       },
       {
         name: 'Share to your friends only',
@@ -8066,6 +8235,53 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'users-activity',
+    group: 'profile',
+    title: 'Activity heatmap',
+    endpoint: '/api/v1/users/activity',
+    summary: 'Day-bucketed counts of a user’s viewer-visible things over the last year (the profile contribution graph).',
+    detail:
+      'Returns `days` — a map of UTC `YYYY-MM-DD` day strings to how many things the user created that ' +
+      'day — plus `total` and `firstDayUtc` (the first counted UTC day — the Sunday opening the 53-week ' +
+      'grid, so the window is exactly the days a Sunday-first contribution grid renders). Counts only: no content, ' +
+      'no kind breakdown. Visibility matches the profile post list exactly: logged out you count public ' +
+      'things only, friends additionally count friends-circle things, and owners count everything they ' +
+      'own. User actions (posts, comments, reactions, saves, poll votes, folders, schemas…) count; ' +
+      'server-minted control-plane records (notifications, friend/subscription state, messenger index ' +
+      'rows…) never do.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (public activity only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>.',
+      'Render `days` as a 53×7 contribution grid; missing days mean zero.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile activity',
+        description: 'A year of day-counts for a profile heatmap.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Day-counts for the last year.',
+        body: {
+          ok: true,
+          days: { '2026-08-01': 3, '2026-08-14': 1 },
+          total: 4,
+          firstDayUtc: '2025-08-17'
+        }
+      },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'users-connections',
     group: 'social',
     title: 'Connection lists',
@@ -8214,7 +8430,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
-      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
       '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
       'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +

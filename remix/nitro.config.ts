@@ -20,6 +20,10 @@ export default defineNitroConfig({
   serverDir: 'server',
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
+  // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
+  // mount resolves to <rootDir>/assets (which does not exist here), so the page
+  // catch-all reads the shell through this explicit assets:shell mount instead.
+  serverAssets: [{ baseName: 'shell', dir: 'server/assets' }],
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,

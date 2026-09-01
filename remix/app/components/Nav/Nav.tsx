@@ -1,9 +1,10 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { Search } from 'lucide-react';
+import { Command, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
+import { toggleQuickSwitcher } from '../QuickSwitcher/QuickSwitcher';
 import { Icon } from '../Icon/Icon';
 import { NotificationsBell } from './NotificationsBell';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
@@ -239,6 +240,30 @@ export const Nav = (props) => {
 					position="relative"
 					zIndex={10000}
 				>
+						{/* ⌘K quick switcher trigger — the touch/mobile way in (desktop
+						has the chord); sits by the search pill, styled like the other
+						nav icon buttons */}
+						<Center
+							className="nav-quick-switcher-button"
+							as="button"
+							type="button"
+							cursor="pointer"
+							opacity={0.55}
+							aria-label="Quick switcher (⌘K)"
+							title="Quick switcher (⌘K)"
+							_hover={{ opacity: 1 }}
+							sx={{
+								WebkitTapHighlightColor: 'transparent',
+								touchAction: 'manipulation'
+							}}
+							onClick={(event: React.MouseEvent) => {
+								event.preventDefault();
+								event.stopPropagation();
+								toggleQuickSwitcher();
+							}}
+						>
+							<Command size={14} strokeWidth={1.9} />
+						</Center>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"

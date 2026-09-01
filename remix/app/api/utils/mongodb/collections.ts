@@ -793,6 +793,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
+    // Poll voting DOES ship on this branch (things/vote.ts), but it does not
+    // get its old kind-blind things_vote_key_unique back — that index is the
+    // squat class this family just retired. 'vote' is already in
+    // RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, so one-vote-per-(poll, user) belongs
+    // in the protected root uniqueKeys stamp above, not on a crystal path.
+
     // One passkey app link per (passkey, app/origin): dedupe AND the
     // per-login upsert's read both ride root uniqueKeys
     // (`linkKey:<passkeyId>:<appKey>`, stamped in auth/passkeys.ts and served

@@ -3,7 +3,7 @@ import { Box, Flex, Tooltip } from '@chakra-ui/react';
 import { Subject } from 'rxjs';
 
 import { isKindSafeForUntrusted, resolveKindRender } from '../Kinds';
-import type { KindRenderer } from '../Kinds';
+import type { KindRenderer, PollRenderPollContext } from '../Kinds';
 import { Thingtime } from './Thingtime';
 import { useThingtime } from './useThingtime';
 
@@ -228,10 +228,13 @@ export type ThingViewProps = {
 	label?: string;
 	// tighter type sizing for nested contexts (shared-post sub-cards)
 	compact?: boolean;
+	// live poll wiring for poll things (server tally + optimistic vote handler,
+	// supplied by PostCard) — passed through to the kind renderer's context
+	poll?: PollRenderPollContext;
 };
 
 export const ThingView = (props: ThingViewProps) => {
-	const { thing, label, compact } = props;
+	const { thing, label, compact, poll } = props;
 	const { events } = useThingtime();
 
 	// resolve the renderer AND its adapted value in one pass (the registry
@@ -276,7 +279,7 @@ export const ThingView = (props: ThingViewProps) => {
 		const Component = resolved.renderer.render;
 		return (
 			<Box position="relative" maxWidth="100%">
-				<Component value={resolved.value} context={{ size: compact ? 'compact' : 'card', untrusted: true }} />
+				<Component value={resolved.value} context={{ size: compact ? 'compact' : 'card', untrusted: true, ...(poll ? { poll } : {}) }} />
 				<CornerToggle rendered rendererTitle={resolved.renderer.title} onToggle={() => setShowRendered(false)} />
 			</Box>
 		);

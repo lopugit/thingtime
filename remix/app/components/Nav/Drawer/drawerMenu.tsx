@@ -47,6 +47,8 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/feed',
 		children: [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
+			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
+			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
 		]

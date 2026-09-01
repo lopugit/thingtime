@@ -373,6 +373,24 @@ export const findUserByUsername = async (username: string) => {
 	return legacy;
 };
 
+// Batch form for @mention resolution (bounded at MENTION_CAP per text): same
+// two-store probe and Things-first precedence as findUserByUsername, but one
+// $in query per physical store instead of up to 2×N point reads on the
+// synchronous create path. Preserves caller order; unknown names simply drop
+// out. Mirrors findUsersByIds (same loose UserDoc-shaped `any` rows as every
+// resolver here — userThingToDoc is untyped by design until the migration).
+export const findUsersByUsernames = async (usernames: readonly string[]): Promise<any[]> => {
+	const unique = [...new Set(usernames.map((username) => username.trim().toLowerCase()).filter(Boolean))];
+	if (!unique.length) return [];
+	const [thingRows, legacyRows] = await Promise.all([
+		getThingsCollection().then((collection) => collection.find({ thingtime: 'user', 'crystal.username': { $in: unique } } as any).toArray()),
+		getUsersCollection().then((collection) => collection.find({ username: { $in: unique } } as any).toArray())
+	]);
+	const legacyByName = new Map(legacyRows.map((row: any) => [String(row.username), row]));
+	const thingsByName = new Map(thingRows.map((row: any) => [String(row?.crystal?.username), userThingToDoc(row)] as const));
+	return unique.map((name) => thingsByName.get(name) ?? legacyByName.get(name)).filter((row): row is NonNullable<typeof row> => !!row);
+};
+
 export const findUserByEmail = async (email: string) => {
 	// the hashed uniqueKey is the exact-match path — no email string in any index
 	const [thing, legacy] = await Promise.all([

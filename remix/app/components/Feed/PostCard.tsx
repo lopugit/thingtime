@@ -27,12 +27,14 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Bookmark, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
+import { FeedShortcutsContext } from '~/hooks/useFeedShortcuts';
+import type { FeedPostShortcutActions } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
@@ -46,11 +48,16 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
+import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
+import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
+import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
+import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
@@ -83,6 +90,31 @@ const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'v
   if (serverHas && !prevHas) viewerReactions = [...prev.viewerReactions, token];
   else if (!serverHas && prevHas) viewerReactions = prev.viewerReactions.filter((entry) => entry !== token);
   return { ...prev, reactionCounts, viewerReactions };
+};
+
+// Apply one poll-vote tap optimistically, on the FRESHEST post: your same
+// option removes the vote, a different option moves it, no vote yet adds it —
+// the exact semantics the server applies, so reconcile is usually a no-op.
+const applyPollVoteToggle = <T extends Pick<PublicPost, 'pollVotes'>>(prev: T, optionIndex: number): T => {
+	const tally = prev.pollVotes;
+	if (!tally || optionIndex < 0 || optionIndex >= tally.counts.length) return prev;
+	const counts = [...tally.counts];
+	let totalVotes = tally.totalVotes;
+	let viewerVote: number | null;
+	if (tally.viewerVote === optionIndex) {
+		counts[optionIndex] = Math.max(0, counts[optionIndex] - 1);
+		totalVotes = Math.max(0, totalVotes - 1);
+		viewerVote = null;
+	} else if (tally.viewerVote !== null && tally.viewerVote >= 0 && tally.viewerVote < counts.length) {
+		counts[tally.viewerVote] = Math.max(0, counts[tally.viewerVote] - 1);
+		counts[optionIndex] += 1;
+		viewerVote = optionIndex;
+	} else {
+		counts[optionIndex] += 1;
+		totalVotes += 1;
+		viewerVote = optionIndex;
+	}
+	return { ...prev, pollVotes: { counts, totalVotes, viewerVote } };
 };
 
 type ReactionTruth = Pick<PublicPost, 'id' | 'reactionCounts' | 'viewerReactions'>;
@@ -368,9 +400,81 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
   );
 };
 
+// Post text with inline #hashtags rendered as links to /search pre-filtered
+// to that tag, and @mentions rendered as links to /profile/<username>. Text is
+// otherwise plain (no markdown layer), so the linkifier IS the rendering
+// layer. Sequential passes — hashtags first, then mentions inside the
+// remaining plain-text segments: the grammars are disjoint (`@`/`#` are not
+// name characters in either, and both require a word start), so the passes can
+// never double-linkify or nest anchors, and every emitted segment is exactly
+// one of text/tag/mention. Non-link segments pass through verbatim and
+// concatenate back to the exact original string. URL fragments, HTML entities,
+// emails and mid-word #/@ never match (word-start rules — hashtags.ts /
+// ~/utils/mentions.ts); a post-hashtag segment passes precededByWordChar so a
+// "#tag@name" seam stays plain. Mentions linkify on grammar alone — no
+// client-side existence check (the render must stay cheap; the profile page
+// handles names nobody holds).
+const HashtagText = ({ text }: { text: string }) => {
+	const segments = React.useMemo(
+		() =>
+			splitHashtagSegments(text).flatMap((segment, index): Array<HashtagSegment | MentionSegment> =>
+				segment.kind === 'tag' ? [segment] : splitMentionSegments(segment.text, index > 0)
+			),
+		[text]
+	);
+	return (
+		<>
+			{segments.map((segment, index) =>
+				segment.kind === 'tag' ? (
+					<Link key={`${segment.tag}-${index}`} to={searchTagHref(segment.tag)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : segment.kind === 'mention' ? (
+					<Link key={`${segment.username}-${index}`} to={profileMentionHref(segment.username)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : (
+					<React.Fragment key={index}>{segment.text}</React.Fragment>
+				)
+			)}
+		</>
+	);
+};
+
+// The post's tags as tappable pills (the composer-preview pill style) linking
+// to /search seeded to filter by that tag. Marketplace category tags are real
+// tags on the doc, so they show — and are tappable — too.
+const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) => {
+	if (!tags?.length) return null;
+	return (
+		<Flex columnGap={1} rowGap={1} flexWrap="wrap">
+			{tags.map((tag) => (
+				<Box
+					key={tag}
+					as={Link}
+					to={searchTagHref(tag)}
+					fontSize={compact ? '11px' : 'xs'}
+					background="var(--tt-surface-alt, #f5f5f7)"
+					color={TEXT}
+					borderRadius="999px"
+					paddingX={2}
+					paddingY="2px"
+					_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+				>
+					#{tag}
+				</Box>
+			))}
+		</Flex>
+	);
+};
+
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -378,12 +482,25 @@ const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'r
   if (!post.text) return null;
   return (
     <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="pre-wrap" overflowWrap="anywhere">
-      {post.text}
+      <HashtagText text={post.text} />
     </Text>
   );
 };
 
-const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
+const PostBody = ({
+	post,
+	compact,
+	attachments,
+	poll
+}: {
+	post: PostBodyShape;
+	compact?: boolean;
+	attachments?: PublicPost['attachments'];
+	// live poll wiring for poll things (tally + optimistic vote handler) —
+	// supplied by the main card; nested/read-only surfaces pass a results-only
+	// context or nothing
+	poll?: PollRenderPollContext;
+}) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     <PostTextBody post={post} compact={compact} />
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
@@ -393,14 +510,17 @@ const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
+    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
     <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
+    <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
 
 // Compact bordered sub-card for the original post inside a share (no actions).
+// A shared poll shows its live tally read-only — voting happens on the
+// original's own card/page.
 const SharedPostCard = ({ post }: { post: PublicPost }) => (
   <Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
     <Flex alignItems="center" columnGap={2} marginBottom={2}>
@@ -415,7 +535,12 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         <TimestampLink id={post.id} createdAt={post.createdAt} />
       </Box>
     </Flex>
-    <PostBody post={post} compact attachments={post.attachments} />
+    <PostBody
+      post={post}
+      compact
+      attachments={post.attachments}
+      poll={post.pollVotes ? { ...post.pollVotes, canVote: false } : undefined}
+    />
   </Box>
 );
 
@@ -603,6 +728,8 @@ const CommentRow = (props: {
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the comment's react button (chips/picker anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
   const replyFocus = React.useContext(ReplyFocusContext);
   const threadFocus = React.useContext(ThreadFocusContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
@@ -673,6 +800,9 @@ const CommentRow = (props: {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
     // note every local mutation so background fetches snapshotted BEFORE it
     // merge through instead of clobbering (reactionOverlay contract)
     onChanged(comment.id, (current) => {
@@ -877,7 +1007,7 @@ const CommentRow = (props: {
   // the comment (default ReactionControl mode — no tapOpens); hover or
   // touch-and-hold still opens the quick-react popup.
   const reactControl = (
-    <Box position="relative" display="flex" flexShrink={0}>
+    <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
       <ReactionControl
         enabled={!!user && !pending}
         onQuickTap={() => handleReact('❤️')}
@@ -1135,6 +1265,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the merged react button (picker + chips anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
 	const circle = mediaThing
@@ -1184,13 +1316,25 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       setEditing(false);
       return;
     }
+    // Inline #hashtags render as live tag links, so an edit must keep the
+    // stored tags in step with the text (the composer harvests on publish —
+    // without this, an added '#newtag' would linkify but its own search would
+    // never find the post). Inline tags dropped from the text drop off; every
+    // other stored tag (explicit composer tags, the folded marketplace
+    // category) survives; canonicalPostTags dedupes the merge and caps it.
+    const prevTags = post.tags;
+    const nextInline = extractInlineHashtags(text);
+    const removedInline = new Set(extractInlineHashtags(prevText).filter((tag) => !nextInline.includes(tag)));
+    const tags = canonicalPostTags([...(prevTags || []).filter((tag) => !removedInline.has(tag)), ...nextInline]);
     setEditing(false);
-    onChanged?.((prev) => ({ ...prev, text, richText: null }));
+    // a plain-text inline edit drops any rich-text doc the post carried, and
+    // re-syncs the tag set recomputed from the edited text above
+    onChanged?.((prev) => ({ ...prev, text, richText: null, tags }));
     try {
-      await api.v1.things.update({ id: post.id, crystal: { text, richText: null } });
+      await api.v1.things.update({ id: post.id, crystal: { text, richText: null }, tags });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText, richText: post.richText }));
+      onChanged?.((prev) => ({ ...prev, text: prevText, richText: post.richText, tags: prevTags }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
@@ -1247,6 +1391,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
 
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
@@ -1297,6 +1444,47 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // One-tap poll voting — optimistic like reactions: the bars fill
+  // immediately, the server's authoritative tally reconciles when the
+  // response lands, and a failure reverts to the pre-tap tally + toasts.
+  const inFlightVoteRef = React.useRef(false);
+  const handleVote = async (optionIndex: number, splash?: () => void) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🗳️', status: 'info', duration: 6000 });
+      return;
+    }
+    // one vote slot per user — hold off further taps until the active request
+    // settles so response order can never invert the vote
+    if (inFlightVoteRef.current) return;
+    inFlightVoteRef.current = true;
+
+    const prevTally = post.pollVotes;
+    const adding = prevTally?.viewerVote === null;
+    // emoji-splash (thunk from PollRenderer) fires with the optimistic apply —
+    // past the guards above, and only when the vote LANDS on this option (new
+    // or moved); tapping your own option removes the vote — no burst
+    if (prevTally && prevTally.viewerVote !== optionIndex) splash?.();
+    onChanged?.((prev) => applyPollVoteToggle(prev, optionIndex));
+    // a fresh vote is engagement of react strength for the feed algorithms
+    if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
+
+    try {
+      const resp = await api.v1.things.vote({ id: post.id, optionIndex });
+      onChanged?.((prev) => ({ ...prev, pollVotes: resp.pollVotes }));
+    } catch (err: any) {
+      onChanged?.((prev) => (prevTally ? { ...prev, pollVotes: prevTally } : prev));
+      lopu({ title: err?.error || 'Your vote did not go through 😞', status: 'error' });
+    } finally {
+      inFlightVoteRef.current = false;
+    }
+  };
+
+  // wired into the poll renderer through ThingView's context (only poll posts
+  // carry pollVotes) — logged-out viewers get results-only + a login toast
+  const pollContext: PollRenderPollContext | undefined = post.pollVotes
+    ? { ...post.pollVotes, canVote: !!user, onVote: handleVote }
+    : undefined;
+
   // Opening shows the first page of comments (5); "Show more" reveals 5 more
   // per click. The revealed count is REMEMBERED across close/reopen (it's
   // component state); closing exits any drilled-in thread so a reopen starts
@@ -1314,6 +1502,19 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       onEngagement?.({ thingId: post.id, signal: 'expand' });
     }
   };
+
+  // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
+  // page (feed/explore mount the provider) the card lends its OWN handlers —
+  // handleReact for `l`, toggleComments for `c` — through a ref, so the hook
+  // always calls the freshest closures without re-registering per render.
+  // Outside a provider this is a no-op and the card renders exactly as before.
+  const shortcutsRegistry = React.useContext(FeedShortcutsContext);
+  const shortcutActionsRef = React.useRef<FeedPostShortcutActions | null>(null);
+  shortcutActionsRef.current = { react: handleReact, toggleComments };
+  React.useEffect(() => {
+    if (!shortcutsRegistry) return;
+    return shortcutsRegistry.register(post.id, shortcutActionsRef);
+  }, [shortcutsRegistry, post.id]);
 
   // Drill into a deep comment: it slides in as the panel's new top level.
   const focusThread = React.useCallback((comment: PostComment) => {
@@ -1413,9 +1614,15 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (sharing) return;
     setSharing(true);
     try {
+      const caption = quoteText.trim();
       await api.v1.things.share({
         id: post.id,
-        text: quoteText.trim() || undefined,
+        text: caption || undefined,
+        // the caption linkifies #tags (HashtagText), so harvest them into real
+        // tags exactly like the composer — otherwise a tapped caption tag's
+        // own search would exclude the quote post itself. The server merges
+        // these with the tags carried from the original.
+        tags: extractInlineHashtags(caption),
         visibility: quoteVisibility
       });
       lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
@@ -1445,6 +1652,35 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       if (err?.name === 'AbortError') return; // dismissed the share sheet
       // clipboard unavailable (http origin) — hand the link over anyway
       lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
+    }
+  };
+
+  // Bookmark toggle — save/unsave this post to the viewer's private library
+  // (/saved). Optimistic: the icon fills immediately, the server's saved
+  // boolean reconciles when the response lands, and a failure reverts + toasts.
+  // Same-button taps hold off while a toggle is in flight (the endpoint
+  // toggles rather than setting, so response order could invert the state).
+  const inFlightSaveRef = React.useRef(false);
+  const handleToggleSave = async () => {
+    if (!user) return; // the button is hidden logged-out; belt-and-braces
+    if (inFlightSaveRef.current) return;
+    inFlightSaveRef.current = true;
+
+    const prevSaved = post.viewerSaved === true;
+    onChanged?.((prev) => ({ ...prev, viewerSaved: !prevSaved }));
+    try {
+      const resp = await api.v1.things.save({ id: post.id });
+      onChanged?.((prev) => ({ ...prev, viewerSaved: resp.saved === true }));
+      lopu({
+        title: resp.saved ? 'Saved to your library 🔖' : 'Removed from Saved 🌫️',
+        status: 'success',
+        duration: 4000
+      });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, viewerSaved: prevSaved }));
+      lopu({ title: err?.error || 'Could not update your Saved library 😞', status: 'error' });
+    } finally {
+      inFlightSaveRef.current = false;
     }
   };
 
@@ -1612,6 +1848,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           </Flex>
         ) : post.isShare ? (
           <Flex flexDirection="column" rowGap={3}>
+            {/* quote captions linkify #tags too — PostTextBody does that for
+            every surface now; the chip row stays on the nested original (a
+            share copies a public original's tags, so a second chip row here
+            would just duplicate it) */}
             <PostTextBody post={post} />
             <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
@@ -1631,7 +1871,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
           </Flex>
         ) : (
-          <PostBody post={post} attachments={post.attachments} />
+          <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
         {/* tags — each chip links to that tag's public feed (claude-todo/10 ✨) */}
@@ -1673,7 +1913,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           />
 
           {user ? (
-            <Box position="relative" display="flex">
+            <Box ref={reactAnchorRef} position="relative" display="flex">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
               <ReactionControl
@@ -1792,6 +2032,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          {/* bookmark: save to the viewer's private library (/saved) —
+          filled/accent when saved, hidden logged-out (nothing to save into) */}
+          {user && (
+            <ActionIcon
+              icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
+              label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}
+              active={post.viewerSaved === true}
+              color={post.viewerSaved ? ACCENT : MUTED}
+              _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: post.viewerSaved ? ACCENT : INK }}
+              aria-pressed={post.viewerSaved === true}
+              onClick={handleToggleSave}
+            />
+          )}
 
           {/* public view stats (X-style, right edge): count = unique viewers;
           the tooltip carries impressions + average time on screen */}

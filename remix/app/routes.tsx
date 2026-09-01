@@ -8,6 +8,7 @@ import type { RootLoaderData } from './root-data.server';
 // catch-all tree viewer. These are either the first paint or one click from
 // it, so a separate chunk fetch would cost more than it saves.
 import Authorize from './routes/authorize';
+import Explore from './routes/explore';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
@@ -16,6 +17,7 @@ import PostPage from './routes/post';
 import Profile from './routes/profile';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
+import SavedRoute from './routes/saved';
 import ThingtimeUrl from './routes/$';
 import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
@@ -155,6 +157,8 @@ export const router = createBrowserRouter([
           { path: 'schemas', lazy: lazyRoute(() => import('./routes/docs/schemas')) }
         ]
       },
+      // public trending board — guest-visible like /feed
+      { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
@@ -184,6 +188,9 @@ export const router = createBrowserRouter([
       // (the emailed token/link is the credential, not the session)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
+      // the viewer's Saved library — no loader guard: it renders its own
+      // signed-out quiet state, like /apps
+      { path: 'saved', element: <SavedRoute /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },

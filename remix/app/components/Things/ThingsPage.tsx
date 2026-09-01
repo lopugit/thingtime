@@ -43,8 +43,8 @@ import {
 } from './thingsCore';
 
 const PAGE_SIZE = 50;
-// listing noise: reaction/save things are mechanical children, not content
-const HIDDEN_KINDS = new Set(['reaction', 'save']);
+// listing noise: reaction/save/vote things are mechanical children, not content
+const HIDDEN_KINDS = new Set(['reaction', 'save', 'vote']);
 // custom sort/group loads the whole folder (honest ordering needs the full
 // set) — bounded so a giant folder can't fetch forever
 const MAX_ARRANGE_THINGS = 1000;
@@ -126,6 +126,9 @@ export const ThingsPage = () => {
   const [q, setQ] = useState('');
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
+  // bumped after mutations (duplicate) so an active search re-fetches and the
+  // fresh copies appear in the results the user is actually looking at
+  const [searchSeq, setSearchSeq] = useState(0);
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
@@ -317,7 +320,7 @@ export const ThingsPage = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [q, kindFilter, user?.id, user?.username]);
+  }, [q, kindFilter, searchSeq, user?.id, user?.username]);
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
@@ -561,11 +564,12 @@ export const ThingsPage = () => {
     async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
       try {
         const resp = await apiRef.current.v1.things.bulk({ op, ids, folderId: destination ?? null });
-        const failures = (resp?.results || []).filter((entry: any) => !entry.ok);
-        return { ok: true as const, succeeded: resp?.succeeded || 0, failures };
+        const results: { id: string; ok: boolean; error?: string; newId?: string }[] = resp?.results || [];
+        const failures = results.filter((entry) => !entry.ok);
+        return { ok: true as const, succeeded: resp?.succeeded || 0, failures, results };
       } catch (err: any) {
         lopuRef.current({ title: 'That didn’t work 😔', description: err?.error || undefined, status: 'error' });
-        return { ok: false as const, succeeded: 0, failures: [] };
+        return { ok: false as const, succeeded: 0, failures: [], results: [] };
       }
     },
     []
@@ -611,6 +615,68 @@ export const ThingsPage = () => {
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
+
+  // one-click Duplicate: bulk-copy each target into ITS OWN folder (beside the
+  // original — NOT the browsed folder, which can differ when acting on search
+  // results or ancestor columns), no clipboard round-trip. Originals are
+  // untouched — the copy op mints NEW things through the real create path. The
+  // response's per-item newIds let the copies paint instantly with REAL server
+  // ids (createFolder pattern, never phantom rows) into the source folder's
+  // page; the refetch right after reconciles authoritative crystals and order.
+  const duplicateThings = useCallback(
+    async (targets: ThingsThing[]) => {
+      if (!targets.length) return;
+      // one bulk copy per source folder, so every copy lands beside its original
+      const groups = new Map<string | null, ThingsThing[]>();
+      for (const thing of targets) {
+        const sourceFolderId = thing.folderId ?? null;
+        const group = groups.get(sourceFolderId);
+        if (group) group.push(thing);
+        else groups.set(sourceFolderId, [thing]);
+      }
+      let succeeded = 0;
+      const failures: { error?: string }[] = [];
+      let anyOk = false;
+      const now = new Date().toISOString();
+      for (const [sourceFolderId, group] of groups) {
+        const result = await runBulk('copy', group.map((thing) => thing.id), sourceFolderId);
+        if (!result.ok) continue; // runBulk already toasted the transport error
+        anyOk = true;
+        succeeded += result.succeeded;
+        failures.push(...result.failures);
+        const newIdBySource = new Map(
+          result.results.filter((entry) => entry.ok && entry.newId).map((entry) => [entry.id, entry.newId as string])
+        );
+        if (!newIdBySource.size) continue;
+        const copies: ThingsThing[] = group
+          .filter((thing) => newIdBySource.has(thing.id))
+          .map((thing) => ({
+            ...thing,
+            id: newIdBySource.get(thing.id) as string,
+            folderId: sourceFolderId,
+            // mirror the server's top-level copy naming (Copy of X for named
+            // things) so the instant paint matches what the refetch confirms
+            crystal:
+              typeof thing.crystal?.name === 'string' && thing.crystal.name.trim()
+                ? { ...thing.crystal, name: `Copy of ${thing.crystal.name}`.slice(0, 120) }
+                : thing.crystal,
+            createdAt: now,
+            updatedAt: now
+          }));
+        const paintKey = folderKeyOf(sourceFolderId);
+        setFolderPages((prev) => ({ ...prev, [paintKey]: dedupeById([...copies, ...(prev[paintKey] || [])]) }));
+        rememberFolderMeta(copies);
+      }
+      if (!anyOk) return;
+      summarize('Duplicated', succeeded, failures);
+      setSelection(new Set());
+      refreshAfterMutation([...groups.keys()]);
+      // the search overlay hides folder pages — re-run the active search so the
+      // fresh "Copy of X" rows show up where the user is actually looking
+      if (searchMode) setSearchSeq((seq) => seq + 1);
+    },
+    [refreshAfterMutation, rememberFolderMeta, runBulk, searchMode, summarize]
+  );
 
   // one move path for the Move dialog, drag-and-drop, and cut-paste-into
   const moveIdsTo = useCallback(
@@ -784,6 +850,10 @@ export const ThingsPage = () => {
         case 'cut':
           copyToClipboard('cut', group.map((entry) => entry.id));
           break;
+        case 'duplicate':
+          // server-side per-item results skip uncopyable kinds honestly
+          duplicateThings(group);
+          break;
         case 'copyLink':
           copyLink(thing);
           break;
@@ -792,7 +862,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, openThing, selectedThings, selection]
+    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -911,6 +981,9 @@ export const ThingsPage = () => {
           break;
         case 'cut':
           onItemAction(menuThing, 'cut');
+          break;
+        case 'duplicate':
+          onItemAction(menuThing, 'duplicate');
           break;
         case 'paste-into':
           pasteClipboardTo(menuThing.id);

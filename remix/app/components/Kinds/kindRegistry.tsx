@@ -19,6 +19,25 @@ import React from 'react';
 // coincidental `render`/`kind` string that a renderer can't adapt cascades to
 // the next candidate instead of blanking the card.
 
+// Live poll wiring for the poll renderer: the host (PostCard) supplies the
+// server tally + the viewer's vote and an optimistic vote handler. Absent for
+// surfaces with no vote pipeline (docs galleries, previews) — the renderer
+// then falls back to its self-contained demo behavior.
+export type PollRenderPollContext = {
+	// per-option counts, index-aligned with the poll's options
+	counts: number[];
+	totalVotes: number;
+	// the viewer's current option (null = hasn't voted)
+	viewerVote: number | null;
+	// false for logged-out viewers — results only, taps route to onVote which
+	// may explain why (login toast)
+	canVote: boolean;
+	// splash is the renderer's emoji-burst thunk for the tapped option; the
+	// host invokes it only when the tap actually lands a vote (past its
+	// login/in-flight guards), so dropped taps never burst
+	onVote?: (optionIndex: number, splash?: () => void) => void;
+};
+
 export type KindRenderContext = {
 	// how much room the renderer has — 'card' (feed/search), 'full' (own page),
 	// 'compact' (inside a nested viewer row)
@@ -29,6 +48,8 @@ export type KindRenderContext = {
 	untrusted?: boolean;
 	// invoked when the renderer wants to open the raw nested data
 	onInspect?: () => void;
+	// live poll voting (PollRenderer) — see PollRenderPollContext
+	poll?: PollRenderPollContext;
 };
 
 export type KindRenderer<Props = any> = {
@@ -125,7 +146,10 @@ const UNTRUSTED_SAFE_KINDS = new Set([
 	'link',
 	'file',
 	'code',
-	'repository'
+	'repository',
+	// vetted: PollRenderer emits only text (question/option labels/counts) and
+	// the ProgressBar primitive — no href/src sinks anywhere in its output
+	'poll'
 ]);
 
 export const isKindSafeForUntrusted = (kind?: string | null): boolean =>

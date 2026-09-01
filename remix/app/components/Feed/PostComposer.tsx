@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
-import { PictureInPicture2, X } from 'lucide-react';
+import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -33,6 +33,8 @@ import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
+import { extractInlineHashtags } from './hashtags';
+import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
@@ -111,11 +113,27 @@ const thingHasContent = (value: unknown): boolean => {
   return value !== undefined;
 };
 
-const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
+// The tabs cover the post types plus the Poll mode — a poll publishes as a
+// thingtime post whose thing is { kind: 'poll', question, options }, so it
+// rides the existing publish path and renders through the poll kind renderer
+// (with live vote bars once the server aggregates vote things onto it).
+type ComposeMode = PostType | 'poll';
+
+const COMPOSE_MODE_META: Record<ComposeMode, { label: string; emoji: string }> = {
+	...POST_TYPE_META,
+	poll: { label: 'Poll', emoji: '🗳️' }
+};
+
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 6;
+const MAX_POLL_OPTION_CHARS = 80;
+
+const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
   text: "What's on your mind? ✨",
   image: 'Say something about these photos… 🖼️',
   marketplace: 'Describe your listing… 🏪',
-  thingtime: 'Say something about this thing… 📦 (optional)'
+  thingtime: 'Say something about this thing… 📦 (optional)',
+  poll: 'Ask your question… 🗳️'
 };
 
 export type PostComposerProps = {
@@ -164,6 +182,12 @@ export const PostComposer = (props: PostComposerProps) => {
   );
   const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
   const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
+  // Poll is the one EXCLUSIVE badge: a poll post's thing IS the poll, so it
+  // owns the thing slot the other groups build into. Compose-only — an
+  // existing poll edits through the Things badge, as its thing.
+  const [pollOn, setPollOn] = React.useState(false);
+  // poll mode: the main text box is the question; these are the option rows
+  const [pollOptions, setPollOptions] = React.useState<string[]>(['', '']);
   const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
     isEditorJsDoc(editPost?.richText)
       ? editPost.richText
@@ -199,6 +223,9 @@ export const PostComposer = (props: PostComposerProps) => {
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
+	// the Box around the body editor — MentionAutocomplete watches typing inside
+	// it and inserts `@username ` at the caret (posts and comments both)
+	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
@@ -260,7 +287,15 @@ export const PostComposer = (props: PostComposerProps) => {
 		editAttachments.length === remainingSeedAttachments.length &&
 		editAttachments.some((attachment, index) => attachment.id !== remainingSeedAttachments[index].id);
 
-	const parsedTags = canonicalPostTags(tagsInput.split(','));
+	// explicit comma-separated tags first, then #hashtags typed inline in the
+	// body (the literal #text stays in the post — PostCard linkifies it);
+	// canonicalPostTags dedupes the merge and enforces the 12-tag/40-char caps.
+	// Poll questions keep their hashtags too — the question renders on the card.
+	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
+
+	// poll mode: trimmed, bounded, non-empty option labels in row order
+	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
+
 
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
@@ -358,8 +393,17 @@ export const PostComposer = (props: PostComposerProps) => {
 
 	// The stored crystal type, derived from the live toggles. Photos alone
 	// counts only once visual media actually exists (uploaded OR linked) — a
-	// files-only or empty media panel stays a valid text post.
-	const type: PostType = thingOn ? 'thingtime' : marketOn ? 'marketplace' : photosOn && hasReadyVisualAttachment ? 'image' : 'text';
+	// files-only or empty media panel stays a valid text post. Poll wins
+	// outright: it owns the thing slot, so its badge switches the others off.
+	const type: ComposeMode = pollOn
+		? 'poll'
+		: thingOn
+		? 'thingtime'
+		: marketOn
+		? 'marketplace'
+		: photosOn && hasReadyVisualAttachment
+		? 'image'
+		: 'text';
 
 	const contentValid =
     type === 'text'
@@ -368,7 +412,9 @@ export const PostComposer = (props: PostComposerProps) => {
 			? hasReadyVisualAttachment
         : type === 'thingtime'
 			? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing) && (!marketOn || listingValid)
-          : listingValid;
+			: type === 'poll'
+				? text.trim().length > 0 && parsedPollOptions.length >= MIN_POLL_OPTIONS
+				: listingValid;
 	const valid = contentValid && !attachmentSnapshot.blocking;
 
   const reset = () => {
@@ -378,6 +424,8 @@ export const PostComposer = (props: PostComposerProps) => {
     setPhotosOn(false);
     setMarketOn(false);
     setThingOn(false);
+    setPollOn(false);
+    setPollOptions(['', '']);
     setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
     setComposerSession((session) => session + 1);
     setTitle('');
@@ -409,6 +457,13 @@ export const PostComposer = (props: PostComposerProps) => {
 
 		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
+		// polls publish as thingtime posts; the question lives on the thing (the
+		// poll card renders it), so the post text stays empty — no double render
+		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
+		// the captured snapshot, not the last-rendered `text` — capture flushes
+		// keystrokes Editor.js had not committed yet
+		const submittedText = blocksToText(submittedEditorValue.blocks).trim();
+		const canonicalText = type === 'poll' ? '' : submittedText;
 		const canonicalListing = showListing
 			? {
 					title: title.trim().slice(0, 120),
@@ -424,8 +479,15 @@ export const PostComposer = (props: PostComposerProps) => {
 		// crystal.images, and saving an edit clears the legacy list (its URLs
 		// migrate into linked attachments via the seed mints below).
 		const canonicalImages: string[] = [];
-		const canonicalThing = type === 'thingtime' ? draftThing : null;
-		const canonicalText = blocksToText(submittedEditorValue.blocks).trim();
+		// a poll's thing IS the poll: the question rides the thing (the poll
+		// kind renderer draws it above the live tally), which is why the post
+		// text stays empty for polls
+		const canonicalThing =
+			type === 'thingtime'
+				? draftThing
+				: type === 'poll'
+					? { kind: 'poll', question: submittedText, options: parsedPollOptions }
+					: null;
 		const canonicalRichText: EditorJsDoc | null = canonicalText
 			? { ...submittedEditorValue, kind: 'rich-text' }
 			: null;
@@ -456,7 +518,7 @@ export const PostComposer = (props: PostComposerProps) => {
 						shareId: currentPostShareId,
 						ownerId: user.id,
 						crystal: {
-							type,
+							type: apiType,
 							text: canonicalText,
 							richText: canonicalRichText,
 							images: canonicalImages,
@@ -470,7 +532,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				  }
 				: null;
 		const currentPayload: Record<string, unknown> = {
-			type,
+			type: apiType,
 			text: canonicalText,
 			richText: canonicalRichText,
 			tags: parsedTags
@@ -480,7 +542,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (!isComment) currentPayload.visibility = visibility;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
-		if (type === 'thingtime') currentPayload.thing = canonicalThing;
+		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
 		if (showListing) currentPayload.listing = canonicalListing;
 		if (canonicalMediaLayout) currentPayload.mediaLayout = canonicalMediaLayout;
 
@@ -492,7 +554,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				payload: clonePostJson(currentPayload),
 				expectation: clonePostJson(currentCommittedExpectation),
 				attachmentIds: currentAttachmentIds,
-				postType: type,
+				postType: apiType,
 				unknownOutcome: false
         };
       }
@@ -697,7 +759,9 @@ export const PostComposer = (props: PostComposerProps) => {
       {/* type badges — additive toggles that wrap on narrow screens. Text is
       the always-on base; Photos/Marketplace/Things each switch their field
       group on without deselecting the others, and clicking Text switches
-      every extra group off again. */}
+      every extra group off again. Poll is the exception: its thing IS the
+      poll, so it is mutually exclusive with the other groups, and it is
+      compose-only — an existing poll edits through the Things badge. */}
       <Flex columnGap={1} rowGap={1} alignItems="center" flexWrap="wrap">
 					<Button
 						size="xs"
@@ -708,6 +772,7 @@ export const PostComposer = (props: PostComposerProps) => {
 							setPhotosOn(false);
 							setMarketOn(false);
 							setThingOn(false);
+							setPollOn(false);
 						}}
 					>
 						{POST_TYPE_META.text.emoji} {POST_TYPE_META.text.label}
@@ -718,7 +783,10 @@ export const PostComposer = (props: PostComposerProps) => {
 						borderRadius={RADIUS_SM}
 						aria-pressed={photosOn}
 						title="Add photos, videos and files to this post"
-						onClick={() => setPhotosOn((on) => !on)}
+						onClick={() => {
+							setPollOn(false);
+							setPhotosOn((on) => !on);
+						}}
 					>
 						{POST_TYPE_META.image.emoji} {POST_TYPE_META.image.label}
 					</Button>
@@ -728,7 +796,10 @@ export const PostComposer = (props: PostComposerProps) => {
 						borderRadius={RADIUS_SM}
 						aria-pressed={marketOn}
 						title="Add marketplace listing fields to this post"
-						onClick={() => setMarketOn((on) => !on)}
+						onClick={() => {
+							setPollOn(false);
+							setMarketOn((on) => !on);
+						}}
 					>
 						{POST_TYPE_META.marketplace.emoji} {POST_TYPE_META.marketplace.label}
 					</Button>
@@ -738,10 +809,34 @@ export const PostComposer = (props: PostComposerProps) => {
 						borderRadius={RADIUS_SM}
 						aria-pressed={thingOn}
 						title="Build a structured thing into this post"
-						onClick={() => setThingOn((on) => !on)}
+						onClick={() => {
+							setPollOn(false);
+							setThingOn((on) => !on);
+						}}
 					>
 						{POST_TYPE_META.thingtime.emoji} {POST_TYPE_META.thingtime.label}
 					</Button>
+					{!isEdit && (
+						<Button
+							size="xs"
+							variant={pollOn ? 'solid' : 'ghost'}
+							borderRadius={RADIUS_SM}
+							aria-pressed={pollOn}
+							title="Ask a question with a poll — the poll is the post's thing"
+							onClick={() =>
+								setPollOn((on) => {
+									if (!on) {
+										setPhotosOn(false);
+										setMarketOn(false);
+										setThingOn(false);
+									}
+									return !on;
+								})
+							}
+						>
+							{COMPOSE_MODE_META.poll.emoji} {COMPOSE_MODE_META.poll.label}
+						</Button>
+					)}
         <IconButton
           aria-label="Close composer"
           icon={<X size={14} />}
@@ -763,10 +858,13 @@ export const PostComposer = (props: PostComposerProps) => {
 
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
-        <Box flex="1" minWidth={0}>
+        <Box flex="1" minWidth={0} ref={editorBoxRef}>
           <LongTextEditor
             ref={postTextEditorRef}
-            key={composerSession}
+            // Editor.js reads its placeholder once at init, so entering/leaving
+            // poll mode remounts the editor (the value prop reseeds it) — the
+            // question prompt must actually show for polls
+            key={`${composerSession}-${type === 'poll' ? 'poll' : 'post'}`}
 						value={postEditorValue}
 						onValueChange={(next) => {
 							if (isEditorJsDoc(next)) setPostEditorValue(next);
@@ -774,6 +872,7 @@ export const PostComposer = (props: PostComposerProps) => {
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
           />
+          <MentionAutocomplete containerRef={editorBoxRef} />
         </Box>
       </Flex>
 
@@ -865,6 +964,56 @@ export const PostComposer = (props: PostComposerProps) => {
               </Box>
             </ModalContent>
           </Modal>
+        </Flex>
+      )}
+
+      {/* poll options — the main text box above is the question */}
+      {type === 'poll' && (
+        <Flex flexDirection="column" rowGap={2}>
+          <Eyebrow>Options 🗳️</Eyebrow>
+          {pollOptions.map((option, idx) => (
+            <Flex key={idx} columnGap={2} alignItems="center">
+              <Input
+                size="sm"
+                borderRadius={RADIUS_SM}
+                placeholder={`Option ${idx + 1}`}
+                maxLength={MAX_POLL_OPTION_CHARS}
+                value={option}
+                onChange={(event) => {
+                  const next = [...pollOptions];
+                  next[idx] = event.target.value;
+                  setPollOptions(next);
+                }}
+              />
+              {pollOptions.length > MIN_POLL_OPTIONS && (
+                <IconButton
+                  aria-label={`Remove option ${idx + 1}`}
+                  icon={<X size={13} />}
+                  size="xs"
+                  variant="ghost"
+                  color={MUTED}
+                  borderRadius="8px"
+                  flexShrink={0}
+                  onClick={() => setPollOptions(pollOptions.filter((_entry, index) => index !== idx))}
+                />
+              )}
+            </Flex>
+          ))}
+          {pollOptions.length < MAX_POLL_OPTIONS && (
+            <Button
+              size="xs"
+              variant="ghost"
+              alignSelf="flex-start"
+              borderRadius={RADIUS_SM}
+              leftIcon={<Plus size={13} />}
+              onClick={() => setPollOptions([...pollOptions, ''])}
+            >
+              Add option
+            </Button>
+          )}
+          <Text fontSize="10px" color={MUTED}>
+            {MIN_POLL_OPTIONS}–{MAX_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
+          </Text>
         </Flex>
       )}
 
