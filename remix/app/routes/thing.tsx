@@ -16,6 +16,8 @@ import { apiErrorMessage } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
+import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -36,7 +38,7 @@ type MigrationDiagnostic = {
 
 type ThingViewData =
 	| { kind: 'diagnostic'; diagnostic: MigrationDiagnostic }
-	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null };
+	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null; parent: PublicPost | null };
 
 type ThingLoadState = {
 	key: string;
@@ -150,7 +152,8 @@ export default function ThingPage() {
 			: loadThing({ id }, { signal: controller.signal }).then((response: any) => ({
 					kind: 'thing' as const,
 					thing: thingFromResponse(response),
-					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null
+					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null,
+					parent: response?.parent ? mergeReactionOverlay(startedAt, response.parent as PublicPost) : null
 			  }));
 
 		request
@@ -174,7 +177,13 @@ export default function ThingPage() {
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
-	const post = visibleState.data?.kind === 'thing' ? visibleState.data.post : null;
+	const attachment = attachmentFromThing(thing);
+	// The API's attachment post projection exists for the interaction-focused
+	// `/media/:id` route. It is the attachment coerced into a post-shaped
+	// projection, not the attachment's parent post, so it must never become a
+	// blank "Post view" on this generic Thing permalink.
+	const post = visibleState.data?.kind === 'thing' && !attachment ? visibleState.data.post : null;
+	const references = attachment && visibleState.data?.kind === 'thing' ? directAttachmentReferences(visibleState.data.parent) : [];
 	const { error, loading } = visibleState;
 	const genericDetail = thing
 		? JSON.stringify(
@@ -301,6 +310,8 @@ export default function ThingPage() {
 								</Button>
 							</Flex>
 						</Box>
+
+						{attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
 						{post ? (
 							<Stack spacing={3} minW={0}>
