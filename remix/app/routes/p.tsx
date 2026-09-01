@@ -3,6 +3,7 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useParams } from 'react-router';
 
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { isSafeCssText } from '../components/Kinds/safeUrl';
 import { PageShell } from '../components/Layout/PageShell';
 import { WebpageBlocksRenderer } from '../components/Builder/WebpageBlocksRenderer';
 import { useWebpageDraft } from '../components/Builder/useWebpage';
@@ -18,6 +19,14 @@ export default function PublicWebpage() {
 	const draft = useWebpageDraft(React.useMemo(() => (id ? { kind: 'id' as const, id } : null), [id]));
 	const page = draft.resolved?.page || null;
 	const isOwner = !!user?.id && page?.author?.id === user.id;
+	// /p/ renders ANOTHER user's page, so previewBg is untrusted here. The write
+	// gate only bounds it (length, no <>, no javascript:); isSafeCssText is the
+	// shared render-time screen the component previews already apply to this
+	// same field, and the only thing blocking @import / expression().
+	const previewBg =
+		typeof page?.crystal?.previewBg === 'string' && isSafeCssText(page.crystal.previewBg)
+			? page.crystal.previewBg
+			: 'var(--tt-surface, #fafafb)';
 
 	React.useEffect(() => {
 		if (typeof document !== 'undefined' && page?.crystal?.name) {
@@ -49,7 +58,7 @@ export default function PublicWebpage() {
 			flexDirection="column"
 			width="100%"
 			minHeight="100vh"
-			background={page?.crystal?.previewBg || 'var(--tt-surface, #fafafb)'}
+			background={previewBg}
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={12}
 			whiteSpace="normal"

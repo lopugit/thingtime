@@ -77,3 +77,36 @@ test('html payloads are bounded', () => {
 	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, false);
 	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(MAX_WEBPAGE_HTML_CHARS + 1) }]).ok, false);
 });
+
+// previewBg is drawn on /p/<id>, where the viewer is not the author, so it has
+// to clear the same bar as every other author-supplied css value on the page —
+// not just the older "no angle brackets, no javascript:" component-era screen.
+const pageBg = (previewBg: string) => validateThingtimeCrystal(['webpage'], { name: 'Gate', version: 1, blocks: [], previewBg });
+
+test('previewBg accepts ordinary background values', () => {
+	for (const value of [
+		'#fafafb',
+		'linear-gradient(180deg, #fff 0%, #eee 100%)',
+		'radial-gradient(circle at 10% 20%, #fff, #000)',
+		'var(--tt-surface, #fafafb)',
+		'rgba(0, 0, 0, 0.5)',
+		'url("/img/dots.png") repeat',
+		'url(https://cdn.example.com/a.png) center/cover no-repeat'
+	]) {
+		assert.equal(pageBg(value).ok, true, `expected previewBg to accept ${value}`);
+	}
+});
+
+test('previewBg refuses rule breakout and unsafe url() targets', () => {
+	for (const value of [
+		'red; } body { display: none } .x {', // escapes the emitted rule entirely
+		'@import url(//evil.example/x.css)',
+		'expression(alert(1))',
+		'url(javascript:alert(1))',
+		'<script>',
+		'url(//protocol.relative/track.png)',
+		'url(http://plain.example/track.png)'
+	]) {
+		assert.equal(pageBg(value).ok, false, `expected previewBg to refuse ${value}`);
+	}
+});

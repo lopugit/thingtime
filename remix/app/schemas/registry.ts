@@ -4595,7 +4595,12 @@ const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; cry
 
 	if (input.previewBg !== undefined && input.previewBg !== null && input.previewBg !== '') {
 		const previewBg = typeof input.previewBg === 'string' ? input.previewBg.trim() : '';
-		if (!previewBg || previewBg.length > MAX_COMPONENT_PREVIEW_BG_CHARS || /[<>]|javascript:/i.test(previewBg)) {
+		// Same screen the per-block `css` values above get, not the looser
+		// component-era `[<>]|javascript:` check: a webpage's previewBg is drawn
+		// on /p/<id>, where the viewer is NOT the author, so it has to refuse
+		// nested-rule characters, expression()/@import, and off-site url()
+		// targets exactly like every other author-supplied css value on a page.
+		if (!previewBg || previewBg.length > MAX_COMPONENT_PREVIEW_BG_CHARS || !isSafeWebpageCssValue(previewBg)) {
 			return fail(400, 'previewBg must be a short CSS background value');
 		}
 		crystal.previewBg = previewBg;

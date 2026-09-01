@@ -6,6 +6,7 @@ import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '../../theme/card';
+import { isSafeCssText } from '../Kinds/safeUrl';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
 import { getNativeSection, NativeSectionView } from './nativeSections';
@@ -159,6 +160,13 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
 	);
 	const { chrome, selectedId, deselect, insertMenu, uploadToBlock, uploadToPosition } = useBuilderChrome(draft);
+	// ?page= can open someone else's page on the fork path, so previewBg is not
+	// necessarily the viewer's own. Screen it with the same shared render-time
+	// check the component previews apply to this field.
+	const canvasBg =
+		typeof draft.resolved?.page?.crystal?.previewBg === 'string' && isSafeCssText(draft.resolved.page.crystal.previewBg)
+			? draft.resolved.page.crystal.previewBg
+			: 'var(--tt-card, #ffffff)';
 	const [pageName, setPageName] = React.useState('');
 	const [isPublic, setIsPublic] = React.useState(false);
 	const drawerWidth = useBuilderDrawerWidth();
@@ -253,7 +261,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 						</Box>
 					</Flex>
 					<Box
-						background={draft.resolved?.page?.crystal?.previewBg || 'var(--tt-card, #ffffff)'}
+						background={canvasBg}
 						border="1px solid"
 						borderColor="var(--tt-border, #ececef)"
 						borderRadius="var(--tt-radius-lg, 16px)"
