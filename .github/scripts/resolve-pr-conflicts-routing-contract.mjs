@@ -1577,6 +1577,23 @@ function assertAdminModelRouting(
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
+      // The credential-vault verification probe is deliberately slot-free: it
+      // exists to prove that the Thingtime waterfall itself still authenticates,
+      // so handing it GitHub-secret fallbacks would let a broken vault pass a
+      // green probe. Exempt it, and pin the property that earns the exemption so
+      // a secret-bearing worker cannot inherit it by simply omitting its slots.
+      if (/\bid: live_probe\b/u.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
+        const nextStep = lines.slice(index + 1).findIndex((line) => /^\s*- name:/u.test(line));
+        const probeStep = lines
+          .slice(index, nextStep === -1 ? lines.length : index + 1 + nextStep)
+          .join("\n");
+        assert.doesNotMatch(
+          probeStep,
+          /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
+          `${path}:${index + 1}: the credential-vault probe must exercise only the Thingtime waterfall`,
+        );
+        continue;
+      }
       assert.match(
         call,
         /anthropic-api-key-fallback:/u,

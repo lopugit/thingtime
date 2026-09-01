@@ -104,10 +104,30 @@ assert.match(
 	"Feature Stack admission validates the run id inside the decoded immutable plan",
 );
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
+// The property under test is that the worker gates on `!cancelled()` plus an
+// explicit `result == 'success'` for each direct need, instead of GitHub's
+// default `success()` — that is what keeps it running when an *indirect*
+// dependency is legitimately skipped. Match each conjunct on its own line
+// rather than as one fixed sequence, so an added guard (for example the
+// already-merged-receipt `recovery` check) extends the condition without
+// silently retiring this contract.
+const featureStackMergeCondition = (
+	/\n {2}feature_stack_merge:[\s\S]*?\n {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow) ?? [, ""]
+)[1];
 assert.match(
-	workflow,
-	/feature_stack_merge:[\s\S]*?if: >-\s*!cancelled\(\)\s*&& needs\.feature_stack_plan\.result == 'success'\s*&& needs\.model_config\.result == 'success'/,
+	featureStackMergeCondition,
+	/^ {6}!cancelled\(\)$/mu,
 	"Feature Stack workers still run when skipped indirect dependencies are expected",
+);
+assert.match(
+	featureStackMergeCondition,
+	/^ {6}&& needs\.feature_stack_plan\.result == 'success'$/mu,
+	"Feature Stack workers require their plan to have succeeded explicitly",
+);
+assert.match(
+	featureStackMergeCondition,
+	/^ {6}&& needs\.model_config\.result == 'success'$/mu,
+	"Feature Stack workers require their model config to have succeeded explicitly",
 );
 assert.match(workflow, /feature-stack-plan\.mjs verify/);
 assert.match(workflow, /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"/);
