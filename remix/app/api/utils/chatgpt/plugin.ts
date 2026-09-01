@@ -60,8 +60,6 @@ const MCP_SESSION_PURPOSE = 'chatgpt-mcp';
 const MCP_REFRESH_SESSION_PURPOSE = 'chatgpt-mcp-refresh';
 const MCP_CONNECTION_PURPOSE = 'chatgpt-mcp-connection';
 const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
-const MCP_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-const MCP_REFRESH_TTL_MS = 1000 * 60 * 60 * 24 * 180;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_UPSTREAM_RESPONSE_BYTES = 512 * 1024;
 const MAX_ENCRYPTED_BUNDLE_PLAINTEXT_BYTES = 768 * 1024;
@@ -72,6 +70,13 @@ type Success<T> = { ok: true; value: T };
 type Result<T> = Failure | Success<T>;
 
 const noStoreHeaders = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
+
+// The bridge is revocable through its server-side session record, but it does
+// not expire by default. OAuth authorization codes stay short-lived and
+// PKCE-bound; only the connection credentials are persistent.
+const infiniteExpiryFilter = (now: Date) => ({
+  $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
+});
 
 const requestOrigin = (request: Request) => new URL(request.url).origin;
 
@@ -334,7 +339,7 @@ const createMcpConnection = async ({
 }): Promise<McpConnectionReference> => {
   const session = await createSession(userId, {
     purpose: MCP_CONNECTION_PURPOSE,
-    expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS),
+    expiresAt: null,
     meta: { clientId, resource, ciphertext, connectionId }
   });
   return { connectionId, sessionJti: session.jti };
@@ -351,12 +356,11 @@ const createMcpAccessGrant = async ({
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_SESSION_PURPOSE,
-    expiresAt: new Date(Date.now() + MCP_SESSION_TTL_MS),
+    expiresAt: null,
     meta: { resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
   return {
-    accessToken: await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' }),
-    expiresIn: Math.floor(MCP_SESSION_TTL_MS / 1000)
+    accessToken: await signJwt({ sub: userId, jti: session.jti, expiresIn: null })
   };
 };
 
@@ -373,10 +377,10 @@ const createMcpRefreshGrant = async ({
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_REFRESH_SESSION_PURPOSE,
-    expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS),
+    expiresAt: null,
     meta: { clientId, resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
-  return signJwt({ sub: userId, jti: session.jti, expiresIn: '180d' });
+  return signJwt({ sub: userId, jti: session.jti, expiresIn: null });
 };
 
 const resolveMcpBundle = async (session: SessionDoc, origin: string): Promise<Result<ResolvedMcpBundle>> => {
@@ -572,7 +576,6 @@ const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: s
     {
       access_token: access.accessToken,
       token_type: 'Bearer',
-      expires_in: access.expiresIn,
       scope: scopeText(offlineAccess),
       ...(refreshToken ? { refresh_token: refreshToken } : {})
     },
@@ -595,9 +598,9 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
     userId: claims.sub,
     purpose: MCP_REFRESH_SESSION_PURPOSE,
     revokedAt: null,
-    expiresAt: { $gt: now },
     'meta.clientId': clientId
   };
+  Object.assign(refreshFilter, infiniteExpiryFilter(now));
   if (resource) refreshFilter['meta.resource'] = resource;
   const consumed = await (await getSessionsCollection()).findOneAndUpdate(
     refreshFilter,
@@ -616,10 +619,10 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
       userId: claims.sub,
       purpose: MCP_CONNECTION_PURPOSE,
       revokedAt: null,
-      expiresAt: { $gt: now },
-      'meta.connectionId': connection.connectionId
+      'meta.connectionId': connection.connectionId,
+      ...infiniteExpiryFilter(now)
     },
-    { $set: { expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS), 'meta.updatedAt': now } }
+    { $set: { 'meta.updatedAt': now } }
   );
   if (!extended.matchedCount) return invalidGrant();
 
@@ -630,7 +633,6 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
     {
       access_token: access.accessToken,
       token_type: 'Bearer',
-      expires_in: access.expiresIn,
       refresh_token: nextRefreshToken,
       scope: scopeText(true)
     },
@@ -670,8 +672,8 @@ const persistMcpBundle = async (context: McpSession): Promise<Result<void>> => {
         userId: context.session.userId,
         purpose: MCP_CONNECTION_PURPOSE,
         revokedAt: null,
-        expiresAt: { $gt: now },
-        'meta.connectionId': reference.connectionId
+        'meta.connectionId': reference.connectionId,
+        ...infiniteExpiryFilter(now)
       },
       { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': now } }
     );
@@ -680,7 +682,7 @@ const persistMcpBundle = async (context: McpSession): Promise<Result<void>> => {
   }
 
   const updated = await sessions.updateOne(
-    { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null, expiresAt: { $gt: now } },
+    { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null, ...infiniteExpiryFilter(now) },
     { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': now } }
   );
   if (!updated.matchedCount) return { ok: false, status: 401, error: 'ChatGPT connection is no longer active' };
@@ -962,9 +964,16 @@ const protectedThingtimeTool = <T extends Record<string, unknown> & { name: Chat
 
 export const thingtimeToolDefinitions = [
   protectedThingtimeTool({
+    name: 'login_thingtime',
+    title: 'Log in to Thingtime',
+    description: 'Use for “@Thingtime login”. Without a current Thingtime connection, this OAuth-protected action makes ChatGPT or Codex open the native browser authorization flow and complete its registered callback. The connection page can add multiple named accounts.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
     name: 'list_thingtime_accounts',
     title: 'List connected Thingtime accounts',
-    description: 'List the Thingtime accounts connected to this ChatGPT connection. No token values are returned.',
+    description: 'Use for “@Thingtime list accounts”. List the authenticated named Thingtime accounts connected to this ChatGPT connection. No token values are returned.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
@@ -1187,6 +1196,14 @@ const mcpToolResult = (value: unknown, isError = false) => ({
 });
 
 export const callThingtimeTool = async (name: string, args: Record<string, unknown>, context: McpSession): Promise<unknown> => {
+  if (name === 'login_thingtime') {
+    return {
+      authenticated: true,
+      defaultAccountId: context.bundle.defaultConnectionId,
+      accounts: context.bundle.connections.map(publicConnection),
+      message: 'Thingtime is already authenticated. To add or replace accounts, use the host connection controls to reconnect; the OAuth page accepts multiple named accounts.'
+    };
+  }
   if (name === 'list_thingtime_accounts') {
     return { defaultAccountId: context.bundle.defaultConnectionId, accounts: context.bundle.connections.map(publicConnection) };
   }
@@ -1734,7 +1751,7 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
         prompts: { listChanged: false },
         resources: { subscribe: false, listChanged: false }
       },
-      serverInfo: { name: 'thingtime-chatgpt', version: CHATGPT_PLUGIN_FEATURES['chatgpt.mcp'] },
+      serverInfo: { name: 'thingtime', version: CHATGPT_PLUGIN_FEATURES['chatgpt.mcp'] },
       instructions: CHATGPT_MCP_INSTRUCTIONS
     }));
   }
