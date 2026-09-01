@@ -381,7 +381,14 @@ The preview E2E (drop-upload → public save → **anonymous** content fetch)
 caught the id capture truncating production ids: attachment ids are
 `att_` + sha256 hex = 68 chars and the regex capped the capture at 64, so
 every lookup missed while every short-id unit test passed. Cap now 128
-with a full-length-id regression test.
+with a full-length-id regression test. The SAME E2E then surfaced a second
+buried blocker: the content endpoint's target authorization
+(`attachmentAccess.ts`) only matched exactly-`['post']` targets, so media
+correctly bound to a public webpage still 404'd anonymously — the target
+lookup and the ACL shape check now accept exactly-`['webpage']` too,
+failing closed on everything else. Full chain verified live: drop-upload →
+public save → Mongo shows targetId + `tt:inherit` → anonymous content
+fetch 200.
 
 **Review batch.** A 49-agent find→2-skeptic-verify workflow over five fresh
 dimensions (touch/a11y, WYSIWYG parity, state/perf, save/data-integrity,

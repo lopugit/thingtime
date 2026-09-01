@@ -24,8 +24,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   referenced builder uploads to the page thing (`webpageAttachments.ts`,
   wired into things create + PATCH), so the draft reaper stops eating media
   off saved pages and a public `/p/` page serves its images anonymously via
-  acl inherit. A live-preview E2E caught the id capture truncating real
-  68-char attachment ids (`{8,64}` → `{8,128}`) — full-length-id test pins it.
+  acl inherit. A live-preview E2E caught TWO buried blockers: the id capture
+  truncated real 68-char attachment ids (`{8,64}` → `{8,128}`), and the
+  content endpoint's target authorization only recognized post targets —
+  `attachmentAccess.ts` now accepts exactly-`['webpage']` targets alongside
+  exactly-`['post']`, still failing closed otherwise. Verified end-to-end on
+  the preview: drop-upload → public save → bind stamped → anonymous 200.
 - **Adversarial review batch (49 agents, 16 confirmed findings fixed)**:
   edit/view WYSIWYG parity (root gaps, placeholder leaks, edit-only border
   radius), inspector typography actually reaching text, rendered-seam drag
