@@ -43,6 +43,7 @@ const TYPE_EMOJI: Record<string, string> = {
   reply: '↩️',
   reaction: '🤣',
   share: '🔁',
+  mention: '📣',
   groups: '👥'
 };
 
@@ -65,6 +66,8 @@ const verbOf = (item: BellNotification): string => {
       return item.preview ? `reacted ${item.preview}` : 'reacted to your post';
     case 'share':
       return 'reposted your post';
+    case 'mention':
+      return 'mentioned you';
     default:
       return 'did something ✨';
   }

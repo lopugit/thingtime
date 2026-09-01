@@ -81,6 +81,15 @@ export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 
 export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thing.thingtime.includes('folder');
 
+// Kinds the server refuses to copy (mirrors UNCOPYABLE in
+// api/utils/things/things.ts): attached children live under their target — a
+// duplicate would dangle. The menu hides Duplicate for these instead of
+// offering an action that can only fail.
+export const UNCOPYABLE_KINDS = ['comment', 'reaction', 'save', 'share', 'vote'] as const;
+
+export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
+  !UNCOPYABLE_KINDS.some((kind) => thing.thingtime.includes(kind));
+
 // The kinds the page lets you filter by; 'all' = no thingtime filter. Kept to
 // kinds the listing can actually contain (protected kinds never appear).
 export const THINGS_KIND_FILTERS = [

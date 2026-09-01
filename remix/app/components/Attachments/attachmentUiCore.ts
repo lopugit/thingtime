@@ -31,11 +31,21 @@ export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose
 
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
+// Like the server, tags are NFC-normalized (composed and decomposed spellings
+// of one visible tag share a bucket), the cap counts code points (never
+// bisecting a surrogate pair) and lone surrogates are dropped so a tag can
+// never make encodeURIComponent throw when rendered.
 export const canonicalPostTags = (values: readonly unknown[]): string[] => {
 	const tags: string[] = [];
 	for (const value of values) {
 		if (typeof value !== 'string') continue;
-		const tag = value.trim().toLowerCase().slice(0, MAX_POST_TAG_CHARS);
+		const tag = Array.from(value.trim().toLowerCase().normalize('NFC'))
+			.filter((char) => {
+				const codePoint = char.codePointAt(0) ?? 0;
+				return codePoint < 0xd800 || codePoint > 0xdfff;
+			})
+			.slice(0, MAX_POST_TAG_CHARS)
+			.join('');
 		if (tag && !tags.includes(tag)) tags.push(tag);
 		if (tags.length >= MAX_POST_TAGS) break;
 	}

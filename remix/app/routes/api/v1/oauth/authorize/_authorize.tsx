@@ -90,7 +90,8 @@ export const action = async ({ request }: { request: Request }) => {
       id: user.id,
       username: user.username,
       ...(has('profile.displayName') ? { displayName: user.displayName } : {}),
-			...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl) } : {})
+			...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl) } : {}),
+			...(has('profile.birthday') ? { birthday: user.birthday } : {})
     }
   });
 };

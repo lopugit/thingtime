@@ -140,8 +140,11 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 				return;
 			}
 
-			// remember which config to load, then head to the editor
-			setThingtime('settings.editor.openConfig', name, { namespace: 'editor' });
+			// remember which config to load, then head to the editor — a handoff to
+			// THIS tab's own next navigation, not a shared setting. A peer already on
+			// /editor that has not consumed an intent since mount would otherwise pick
+			// this one up and applyLayout over the windows someone has open there.
+			setThingtime('settings.editor.openConfig', name, { namespace: 'editor', tabLocal: true });
 			navigate(buildThingModeUrl('editor', parseThingPath(pathname)));
 			props.onNavigate?.();
 		},

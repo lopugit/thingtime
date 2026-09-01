@@ -7,7 +7,7 @@ const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
 export const thingtimeCapabilityManifest = (origin: string) => {
   const normalizedOrigin = new URL(origin).origin;
-  const features = Object.fromEntries([
+  const features: Record<string, { version: string }> = Object.fromEntries([
     ['api.capabilities', { version: '1.0.0' }],
     ...apiEndpointDocs.map((doc) => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])
   ]);

@@ -133,6 +133,10 @@ const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => stri
     subject: (actor) => `${actor} shared your post 🔁`,
     line: (actor) => `${actor} shared your post.`
   },
+  mention: {
+    subject: (actor) => `${actor} mentioned you on Thingtime 📣`,
+    line: (actor) => `${actor} mentioned you in a post.`
+  },
   groups: {
     subject: (actor) => `${actor} — group activity on Thingtime 👥`,
     line: (actor) => `${actor} did something in a group you're in.`

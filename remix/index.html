@@ -8,6 +8,29 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
     <link rel="icon" href="/favicon.ico" />
     <title>Thingtime</title>
+    <!-- Feed-reader auto-discovery for the public posts Atom feed
+         (GET /api/v1/things/rss — app/api/utils/things/rss.ts). Deliberately
+         OUTSIDE the tt-social-meta marker block below: that block is swapped
+         per-request and this link must survive on every page. -->
+    <link rel="alternate" type="application/atom+xml" title="Thingtime — public posts" href="/api/v1/things/rss" />
+    <!-- tt-social-meta:start — static site-wide defaults. The Nitro page
+         catch-all (server/routes/[...].ts) swaps this whole block per-request
+         with page-specific Open Graph / Twitter tags and absolute URLs
+         (app/api/utils/meta/socialMeta.ts). -->
+    <meta
+      name="description"
+      content="Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about."
+    />
+    <meta property="og:site_name" content="Thingtime" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Thingtime" />
+    <meta
+      property="og:description"
+      content="Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about."
+    />
+    <meta property="og:image" content="/android-icon-192x192.png" />
+    <meta name="twitter:card" content="summary" />
+    <!-- tt-social-meta:end -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

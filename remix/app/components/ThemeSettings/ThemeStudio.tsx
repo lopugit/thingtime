@@ -1,6 +1,6 @@
 import { Box, Flex, Input, Switch, Text } from '@chakra-ui/react';
 import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -376,7 +376,11 @@ export const ThemeStudio = () => {
 				</Text>
 				<Text marginTop="6px" fontSize="md" color="var(--tt-text, #5a5a66)">
 					Make Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it
-					with a link.
+					with a link — or browse everyone&rsquo;s public looks in the{' '}
+					<Text as={RouterLink} to="/themes/gallery" textDecoration="underline" _hover={{ color: 'var(--tt-ink, #16161a)' }}>
+						theme gallery ✨
+					</Text>
+					.
 				</Text>
 
 				{/* Presets */}
