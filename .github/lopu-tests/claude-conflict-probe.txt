@@ -1,0 +1,1 @@
+resolution: keep the main-compatible value
