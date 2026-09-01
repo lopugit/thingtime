@@ -6200,6 +6200,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with credentials to list the caller algorithms and active id.',
       'POST a name, optional emoji, optional branchFrom id, and optional events to create an algorithm.',
       'Use branchFrom to copy an existing algorithm weight profile before further training.',
+      'branchFrom also accepts the share-link id of an algorithm someone else turned sharing on for — the weights are copied into your own private algorithm, which starts unshared. A 404 means the id is neither yours nor shared.',
       'Handle 401 for anonymous callers and 400 for invalid creation payloads.'
     ],
     requestExamples: [
@@ -6351,8 +6352,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'algorithms',
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
-    summary: 'Renames or restyles one of the current user feed algorithms.',
-    detail: 'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
+    summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
+    detail:
+      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -6463,6 +6465,41 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Cross-origin public reads use CORS. Do not put a full-account bearer token in publicly served browser source.',
       'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.',
       'Both verbs are rate limited (embed.read / embed.write). A 429 sends Retry-After, and the read 429 keeps its CORS headers so a host page can read the status instead of seeing an opaque network error.'
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-shared',
+    group: 'algorithms',
+    title: 'Shared feed algorithm preview',
+    endpoint: '/api/v1/algorithms/shared',
+    summary: 'Reads the public preview of an explicitly shared feed algorithm ("try my feed brain").',
+    detail:
+      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — this preview never exposes weights or interests, and the algorithm doc itself is never readable. Branching is the disclosure: POST /api/v1/algorithms with branchFrom set to this id copies the owner’s learned weights into your own algorithm, where they surface as its topInterests, and that copy is independent of any later unshare. Unknown, unshared, and private ids all 404 identically.',
+    auth: {
+      mode: 'none',
+      description: 'Public and anonymous — possession of the share link plus the owner sharing flag is the gate.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send id (the share link id from /feed?algorithm=<id>) as a query parameter.',
+      'Show the preview and offer to branch a copy.',
+      'POST /api/v1/algorithms with { name, emoji, branchFrom: id } while authenticated to branch.',
+      'Treat 404 as not shared without assuming whether the algorithm exists.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read shared algorithm preview',
+        description: 'Fetch the branch-invitation preview.',
+        method: 'GET',
+        query: { id: 'algorithm_123' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Shared algorithm preview.',
+        body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Night Owl', emoji: '🦉', eventCount: 1234, ownerUsername: 'rick' } }
+      }
     ]
   }),
   endpoint({

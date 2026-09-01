@@ -1816,6 +1816,24 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'algorithms-shared-not-found',
+    name: 'Shared algorithm unknown id',
+    description: 'Unknown, unshared, and private algorithm ids all resolve to the same 404 error shape.',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared?id=not-a-real-algorithm-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared algorithm id returned a 404 error shape.')
+  },
+  {
+    id: 'algorithms-shared-empty-id',
+    name: 'Shared algorithm requires an id',
+    description: 'The shared preview without an id is a 404 error shape, never a listing (algorithms are private).',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Shared algorithm preview without an id returned a 404 error shape.')
+  },
+  {
     id: 'algorithms-delete-guarded',
     name: 'Algorithm delete is guarded',
     description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',

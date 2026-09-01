@@ -1076,7 +1076,7 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
   description:
     'Converts each legacy feedAlgorithms doc into a feed-algorithm thing (thingtime ' +
     '["feed-algorithm"]) shaped exactly like createAlgorithm writes new ones: the trained ' +
-    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt }, ALWAYS ' +
+    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt, shared }, ALWAYS ' +
     'private (acl ["tt:user"] — weights encode reading habits), targetId null so the ' +
     'reaction-unique partial index can never collide on crystal.emoji. shareIds are preserved so ' +
     'users.meta.activeFeedAlgorithmId pointers keep working. Each legacy doc is deleted only ' +
@@ -1099,7 +1099,13 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
           parentId: doc.parentId ?? null,
           weights: doc.weights && typeof doc.weights === 'object' ? doc.weights : { types: {}, tags: {}, authors: {} },
           eventCount: typeof doc.eventCount === 'number' && doc.eventCount >= 0 ? doc.eventCount : 0,
-          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null
+          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null,
+          // the "try my feed brain 🧠" branch invitation is owner state, not
+          // derived: dropping it here would silently revoke every share link a
+          // legacy-era owner had handed out, since the source doc is deleted
+          // once the twin verifies. Strict === true matches algorithmThingToDoc,
+          // so a pre-share doc migrates as unshared.
+          shared: doc.shared === true
         },
         ownerId: String(doc.ownerId),
         acl: [ACL_OWNER],

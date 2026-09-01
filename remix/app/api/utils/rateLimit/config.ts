@@ -258,7 +258,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // token introspection (POST /api/v1/auth/introspect) — read-only status
   // checks by external platforms; two cheap DB reads per call, keyed by IP for
   // anonymous callers, bounded like the other public reads
-  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true }
+  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true },
+  // the "try my feed brain 🧠" share-link preview (GET /api/v1/algorithms/shared)
+  // — public and anonymous, two DB reads per call (the algorithm lookup plus an
+  // owner-username resolve). The shareId is an unguessable uuid, so this is not
+  // an enumeration brake; it is the same "bound the anonymous public read"
+  // budget the other unauthenticated endpoints carry, keyed by hashed IP.
+  'algorithms.shared': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

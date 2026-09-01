@@ -49,6 +49,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
+  'v1/algorithms/shared': () => import('../../../app/routes/api/v1/algorithms/shared/_shared'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),

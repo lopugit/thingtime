@@ -159,7 +159,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
-  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
+  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
   waitlist: [] // marker schema — email lives in the secure root field
 };
 

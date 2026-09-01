@@ -146,6 +146,10 @@ export type PublicAlgorithm = {
   parentId: string | null;
   eventCount: number;
   lastTrainedAt: string | null;
+  // "try my feed brain 🧠": the owner-granted branch invitation. The algorithm
+  // itself stays private either way — mirrors PublicAlgorithm in
+  // api/utils/algorithms/algorithms.ts, which is what this projects.
+  shared: boolean;
   createdAt: string;
   updatedAt: string;
   topInterests: AlgorithmInterest[];
