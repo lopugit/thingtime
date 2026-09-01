@@ -1,4 +1,5 @@
 import { normalizeEditorJsHeadingLevel, type EditorJsBlock, type EditorJsDoc } from '../Editor/editorJsValue';
+import { isSafeUrl } from '../Kinds/safeUrl';
 
 // Editor.js doc ↔ HTML for builder text blocks: the rich-editor modal edits an
 // Editor.js document, storage stays the block's bounded `html` (rendered only
@@ -14,8 +15,13 @@ const escapeHtml = (text: string): string =>
 // Editor.js paragraphs render data.text as LIVE innerHTML inside the modal —
 // unlike the canvas, that render does NOT pass the allowlist renderer, so
 // every fragment handed to the editor is scrubbed first: executable/embed
-// tags are dropped, on* handler attributes and javascript:/data:text URLs are
-// stripped. The stored html itself stays untouched (render-side allowlist is
+// tags are dropped, on* handler attributes are stripped, and href/src values
+// must clear the same `isSafeUrl` gate the render-side allowlist uses. That
+// gate is an ALLOWLIST parsed by the URL parser (http/https/mailto/tel), not a
+// scheme prefix test: a denylist misses vbscript:, non-text data: payloads,
+// and whitespace-obfuscated schemes like `java&#9;script:`, which browsers
+// still execute because the parser strips control characters before reading
+// the scheme. The stored html itself stays untouched (render-side allowlist is
 // the page-level authority) — this guards only the editor sink.
 const SCRUB_DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'noscript', 'template']);
 
@@ -27,8 +33,8 @@ const scrubElement = (el: Element): void => {
 		}
 		for (const attr of Array.from(child.attributes)) {
 			const name = attr.name.toLowerCase();
-			const value = attr.value.trim().toLowerCase();
-			if (name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href') && (value.startsWith('javascript:') || value.startsWith('data:text')))) {
+			const isUrlAttribute = name === 'href' || name === 'src' || name === 'xlink:href';
+			if (name.startsWith('on') || (isUrlAttribute && !isSafeUrl(attr.value))) {
 				child.removeAttribute(attr.name);
 			}
 		}

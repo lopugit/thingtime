@@ -818,14 +818,24 @@ const FeatureStackComposer = ({
 										<Flex gap={1} mt={1} wrap="wrap">
 											{stack.targets.map((target) => {
 												const targetProgress = progress.find((item) => item.target === target);
+												const targetStatus = lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status;
+												const chip = STATUS_CHIP_STYLES[statusTone(targetStatus)];
 												return (
-												<Badge
+												<Box
+													as="span"
 													key={target}
-													colorScheme={statusColor(lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status)}
-													textTransform="none"
+													display="inline-block"
+													bg={chip.bg}
+													color={chip.color}
+													borderRadius="var(--tt-radius-pill, 999px)"
+													px={2}
+													py="2px"
+													fontSize="xs"
+													fontWeight={600}
+													whiteSpace="nowrap"
 												>
-													{target}: {lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status}
-													</Badge>
+													{target}: {targetStatus}
+													</Box>
 												);
 											})}
 										</Flex>
