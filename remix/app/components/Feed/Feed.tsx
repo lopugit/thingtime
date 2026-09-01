@@ -1,18 +1,22 @@
 import React from 'react';
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
+import { FeedShortcutsHelp } from './FeedShortcutsHelp';
+import { MemoriesCard } from './MemoriesCard';
 import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
 import { mergeReactionOverlays } from './reactionOverlay';
+import { appendPostsDeduped } from './feedTypes';
 import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 
 // The /feed page: composer + algorithm picker + filters over an infinite
@@ -56,6 +60,137 @@ export const FeedPage = () => {
     activeAlgorithmId: algorithmId
   });
 
+  // both URL-param features below — ?algorithm= branch invitations and ?tag=
+  // topic feeds — read and clear through this one hook instance
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // "try my feed brain 🧠" (claude-todo/10): /feed?algorithm=<shareId> shows a
+  // branch invitation. The preview endpoint only resolves explicitly shared
+  // algorithms and never returns weights — branching copies them into the
+  // visitor's OWN private algorithm.
+  const sharedAlgorithmParam = searchParams.get('algorithm');
+  const getSharedAlgorithm = api.v1.algorithms.getShared;
+  const [sharedPreview, setSharedPreview] = React.useState<{
+    id: string;
+    name: string;
+    emoji: string;
+    eventCount: number;
+    ownerUsername: string | null;
+  } | null>(null);
+  const [branchingShared, setBranchingShared] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!sharedAlgorithmParam) {
+      setSharedPreview(null);
+      return;
+    }
+    let cancelled = false;
+    getSharedAlgorithm({ id: sharedAlgorithmParam })
+      .then((resp: any) => {
+        if (cancelled) return;
+        setSharedPreview(resp?.ok && resp?.algorithm ? resp.algorithm : null);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setSharedPreview(null);
+        // getJson REJECTS on a non-2xx, so the revoked/unknown/private link —
+        // the one case worth explaining — arrives here as a 404, never as a
+        // resolved { ok: false } body. Stay quiet on anything else: a transient
+        // network blip must not accuse the owner of unsharing.
+        if (err?.status === 404) {
+          lopuRef.current({
+            title: 'That feed brain is no longer shared 🌫️',
+            description: 'The link may have been turned off by its owner.',
+            status: 'info'
+          });
+          return;
+        }
+        // 429 is the other knowable state, and it is the one this feature
+        // invites: the preview limiter keys off the hashed IP, so a link that
+        // actually travels can throttle visitors who merely share an egress
+        // (office NAT, carrier CGNAT) without any of them doing anything wrong.
+        // Silence would read as "this link is broken" — say it's temporary, and
+        // don't imply the owner unshared. Retry-After is already on the 429, so
+        // ThingtimeApiError.retryAfterSeconds carries the real wait.
+        if (err?.status === 429) {
+          const retryAfterSeconds = err?.retryAfterSeconds;
+          lopuRef.current({
+            title: 'Too many feed-brain lookups from your network 🌸',
+            description:
+              typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
+                ? `The link still works — reload in about ${retryAfterSeconds} seconds.`
+                : 'The link still works — reload in a moment.',
+            status: 'info'
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedAlgorithmParam, getSharedAlgorithm]);
+
+  const clearSharedParam = React.useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('algorithm');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  const handleBranchShared = React.useCallback(async () => {
+    if (!sharedPreview) return;
+    if (!user) {
+      lopuRef.current({
+        title: 'Log in to branch this feed brain 🗝️',
+        description: 'Your copy starts with the same taste and trains privately as you scroll.',
+        status: 'info',
+        link: { label: 'Log in 🗝️', href: '/login' }
+      });
+      return;
+    }
+    setBranchingShared(true);
+    try {
+      const created: any = await api.v1.algorithms.create({
+        name: sharedPreview.name,
+        emoji: sharedPreview.emoji,
+        branchFrom: sharedPreview.id
+      });
+      if (!created?.algorithm) throw created;
+      // The copy exists from here on. Activation is a second call that can fail
+      // on its own, so retire the invitation either way — reporting "Branch
+      // failed" for a branch that landed would invite a retry that silently
+      // creates a duplicate algorithm.
+      setSharedPreview(null);
+      clearSharedParam();
+      let activated = true;
+      try {
+        await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
+        setAlgorithmId(created.algorithm.id);
+      } catch {
+        activated = false;
+      }
+      lopuRef.current({
+        title: `Branched "${created.algorithm.name}" ${created.algorithm.emoji} 🌿`,
+        description: activated
+          ? 'It is now your active algorithm — it trains as you scroll and is yours alone.'
+          : 'Your copy is saved and yours alone — activate it from Settings ▸ Algorithms.',
+        status: activated ? 'success' : 'info',
+        duration: 8000
+      });
+    } catch (err: any) {
+      lopuRef.current({
+        title: 'Branch failed 😔',
+        description: err?.error || 'Please try again in a moment.',
+        status: 'error'
+      });
+    } finally {
+      setBranchingShared(false);
+    }
+  }, [sharedPreview, user, api.v1.algorithms, clearSharedParam]);
+
   // pager machinery — a sequence guard drops stale responses when the
   // filters/algorithm change mid-flight
   const requestSeqRef = React.useRef(0);
@@ -72,7 +207,6 @@ export const FeedPage = () => {
   // public tag feeds (claude-todo/10 ✨): /feed?tag=<tag> narrows the feed to
   // one tag — shareable, guest-visible topic hubs. Tag chips on PostCards link
   // here; the banner clears back to the full feed.
-  const [searchParams, setSearchParams] = useSearchParams();
   const tagParam = (searchParams.get('tag') || '').trim().toLowerCase() || null;
 
   // Advanced mode runs the other query grammar, and /things/search ORs its tag
@@ -127,11 +261,7 @@ export const FeedPage = () => {
           if (seq !== requestSeqRef.current) return;
 
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => {
-            if (reset) return pagePosts;
-            const seen = new Set(prev.map((post) => post.id));
-            return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
-          });
+          setPosts((prev) => appendPostsDeduped(reset ? [] : prev, pagePosts));
           setNextCursor(resp.nextCursor ?? null);
           setRanked(!!resp.ranked);
           return;
@@ -151,8 +281,10 @@ export const FeedPage = () => {
         if (seq !== requestSeqRef.current) return;
 
         setPosts((prev) => {
-          const page = mergeReactionOverlays(startedAt, resp.posts || []);
-          return reset ? page : [...prev, ...page];
+          // `feed` responses are untyped JSON; name the projection the same way
+          // the advanced-search branch above does so the pager stays PublicPost[].
+          const page: PublicPost[] = mergeReactionOverlays<PublicPost>(startedAt, (resp.posts || []) as PublicPost[]);
+          return appendPostsDeduped(reset ? [] : prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
         setRanked(!!resp.ranked);
@@ -225,6 +357,32 @@ export const FeedPage = () => {
     });
   }, [posts, observeCard]);
 
+  // keyboard shortcuts (j/k/l/c/n/?) — `n` walks into the composer: expand the
+  // collapsed pill if needed, then focus the Editor.js editable once it mounts
+  // (the editor loads async, so poll briefly instead of racing it)
+  const composerBoxRef = React.useRef<HTMLDivElement | null>(null);
+  const focusComposer = React.useCallback(() => {
+    const root = composerBoxRef.current;
+    if (!root) return;
+    const tryFocus = (attempt: number) => {
+      const editable = root.querySelector<HTMLElement>('.long-text-editor [contenteditable="true"]');
+      if (editable) {
+        editable.scrollIntoView({ block: 'center' });
+        editable.focus({ preventScroll: true });
+        return;
+      }
+      // no editor holder yet → the composer is collapsed; tap its pill once
+      if (attempt === 0 && !root.querySelector('.long-text-editor')) {
+        root.querySelector<HTMLButtonElement>('button')?.click();
+      }
+      if (attempt < 40) window.setTimeout(() => tryFocus(attempt + 1), 50);
+    };
+    tryFocus(0);
+  }, []);
+
+  const postIds = React.useMemo(() => posts.map((post) => post.id), [posts]);
+  const shortcuts = useFeedShortcuts({ postIds, onFocusComposer: user ? focusComposer : undefined });
+
   return (
     <Flex
       justifyContent="center"
@@ -279,6 +437,34 @@ export const FeedPage = () => {
             Feed 📰
           </Box>
         </Flex>
+
+        {sharedPreview && (
+          <Box p="1.5px" borderRadius="var(--tt-radius-md, 12px)" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}>
+            <Flex
+              alignItems="center"
+              columnGap={3}
+              rowGap={2}
+              flexWrap="wrap"
+              padding={3}
+              borderRadius="calc(var(--tt-radius-md, 12px) - 1.5px)"
+              background="var(--tt-card, #fff)"
+            >
+              <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+                {sharedPreview.ownerUsername ? `@${sharedPreview.ownerUsername} shared their` : 'Someone shared their'} feed
+                brain <strong>&ldquo;{sharedPreview.name}&rdquo; {sharedPreview.emoji}</strong>
+                {sharedPreview.eventCount > 0 ? ` — trained on ${sharedPreview.eventCount.toLocaleString()} scrolls` : ' — still an egg 🥚'}
+              </Text>
+              <Flex marginLeft="auto" columnGap={2}>
+                <Button size="sm" isLoading={branchingShared} onClick={handleBranchShared}>
+                  Branch a copy 🌿
+                </Button>
+                <Button size="sm" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={clearSharedParam}>
+                  Dismiss
+                </Button>
+              </Flex>
+            </Flex>
+          </Box>
+        )}
 
         {tagParam && (
           <Flex
@@ -340,25 +526,38 @@ export const FeedPage = () => {
           />
         )}
 
-        {user && <PostComposer onPosted={handlePosted} />}
+        {user && (
+          <Box ref={composerBoxRef}>
+            <PostComposer onPosted={handlePosted} />
+          </Box>
+        )}
+
+        {/* "On this day" memories — own-post anniversaries; renders nothing
+            when there are none, so the list below never shifts */}
+        {user && <MemoriesCard />}
 
         <Box ref={listRef}>
-          <PostList
-            posts={posts}
-            loading={loading}
-            hasMore={!!nextCursor}
-            onLoadMore={handleLoadMore}
-            onPostChanged={handlePostChanged}
-            onEngagement={recordEvent}
-            emptyLabel={
-              appliedAdvanced
-                ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
-                : ranked
-                  ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
-                  : 'Nothing here yet — be the first to post ✨'
-            }
-          />
+          <FeedShortcutsContext.Provider value={shortcuts.registry}>
+            <PostList
+              posts={posts}
+              loading={loading}
+              hasMore={!!nextCursor}
+              onLoadMore={handleLoadMore}
+              onPostChanged={handlePostChanged}
+              onEngagement={recordEvent}
+              focusedPostId={shortcuts.focusedPostId}
+              emptyLabel={
+                appliedAdvanced
+                  ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                  : ranked
+                    ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
+                    : 'Nothing here yet — be the first to post ✨'
+              }
+            />
+          </FeedShortcutsContext.Provider>
         </Box>
+
+        <FeedShortcutsHelp isOpen={shortcuts.helpOpen} onClose={shortcuts.closeHelp} />
       </Flex>
     </Flex>
   );

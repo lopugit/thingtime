@@ -72,6 +72,15 @@ export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
     kind: 'field'
   },
   {
+    id: 'profile.birthday',
+    title: 'Birthday',
+    description: 'Your date of birth — private on Thingtime, shared only if you approve it here.',
+    kind: 'field',
+    // The birthday is NOT public profile data, so a plain `profile` grant
+    // (including every legacy token) must never silently include it.
+    exact: true
+  },
+  {
     id: 'email',
     title: 'Email address',
     description: 'The email address on your Thingtime account.',

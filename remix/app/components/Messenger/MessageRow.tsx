@@ -17,12 +17,40 @@ import {
   type ChatMessage,
   type CustomEmoji,
   type CustomEmojiMap,
+  type ExternalAiSource,
   type MessengerMode
 } from './messengerTypes';
 
 const AVATAR_SIZE = 30;
 
-const Avatar = ({ profile, size = AVATAR_SIZE }: { profile: ChatMessage['author']; size?: number }) => {
+const Avatar = ({
+  profile,
+  externalSource,
+  size = AVATAR_SIZE
+}: {
+  profile: ChatMessage['author'];
+  externalSource?: ExternalAiSource | null;
+  size?: number;
+}) => {
+  if (externalSource) {
+    return (
+      <Flex
+        width={`${size}px`}
+        height={`${size}px`}
+        borderRadius="full"
+        align="center"
+        justify="center"
+        background={externalSource.provider === 'chatgpt' ? '#17171c' : '#d97757'}
+        color="white"
+        fontSize={`${Math.round(size * 0.48)}px`}
+        fontWeight={700}
+        flexShrink={0}
+        title={externalSource.label}
+      >
+        {externalSource.provider === 'chatgpt' ? '◎' : '✦'}
+      </Flex>
+    );
+  }
   const letter = (profile ? getUserDisplayName(profile) : '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
 		return (
@@ -89,7 +117,15 @@ export const MessageRow = (props: MessageRowProps) => {
   }
 
   const member = members.find((m) => m.userId === message.authorId) || null;
-  const displayName = member ? memberDisplayName(member) : message.author ? getUserDisplayName(message.author) : 'Someone';
+  const displayName = message.externalSource
+    ? message.externalSource.role === 'user'
+      ? `You · ${message.externalSource.label}`
+      : message.externalSource.authorName || message.externalSource.label
+    : member
+      ? memberDisplayName(member)
+      : message.author
+        ? getUserDisplayName(message.author)
+        : 'Someone';
   const bodyText = message.deleted ? null : renderTextWithEmojis(message.text, emojiByName, mode === 'messenger' ? 20 : 20);
 
   const reactionEntries = Object.entries(message.reactionCounts).sort((a, b) => b[1] - a[1]);
@@ -187,7 +223,7 @@ export const MessageRow = (props: MessageRowProps) => {
           🧵
         </Button>
       ) : null}
-      {(isMine && props.onEdit) || props.onDelete ? (
+      {!message.externalSource && ((isMine && props.onEdit) || props.onDelete) ? (
         <Menu isLazy placement="bottom-end">
           <MenuButton as={Button} size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)">
             ⋯
@@ -249,7 +285,7 @@ export const MessageRow = (props: MessageRowProps) => {
         >
           {!isMine ? (
             <Box width={`${AVATAR_SIZE}px`} flexShrink={0}>
-              {!grouped ? <Avatar profile={member?.profile || message.author} /> : null}
+              {!grouped ? <Avatar profile={member?.profile || message.author} externalSource={message.externalSource} /> : null}
             </Box>
           ) : null}
           <Box maxWidth="min(72%, 480px)">
@@ -312,7 +348,7 @@ export const MessageRow = (props: MessageRowProps) => {
     >
       <Flex gap={2} align="flex-start">
         <Box width={`${AVATAR_SIZE}px`} flexShrink={0} paddingTop="2px">
-          {!grouped ? <Avatar profile={member?.profile || message.author} /> : null}
+          {!grouped ? <Avatar profile={member?.profile || message.author} externalSource={message.externalSource} /> : null}
         </Box>
         <Box flex={1} minWidth={0}>
           {!grouped ? (
@@ -320,6 +356,19 @@ export const MessageRow = (props: MessageRowProps) => {
               <Box fontWeight={700} fontSize="13.5px">
                 {displayName}
               </Box>
+              {message.externalSource ? (
+                <Box
+                  as="span"
+                  fontSize="9px"
+                  lineHeight="16px"
+                  paddingX="6px"
+                  borderRadius="var(--tt-radius-pill, 999px)"
+                  background="var(--tt-surface-alt, #f2f2f5)"
+                  color="var(--tt-muted, #777782)"
+                >
+                  imported
+                </Box>
+              ) : null}
               <Box fontSize="11px" color="var(--tt-faint, #b9b9c3)">
                 {timeAgo(message.createdAt)}
               </Box>

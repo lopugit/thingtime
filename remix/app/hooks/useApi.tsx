@@ -3,7 +3,9 @@ import { useCallback } from 'react';
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 
@@ -13,14 +15,34 @@ const refreshRootData = () => {
 
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
+// Every call is recorded in the DevKit request log (method/path/status/ms).
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+  const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    recordApiCall({
+      at: Date.now(),
+      method: 'GET',
+      url,
+      status: 0,
+      ok: false,
+      aborted,
+      durationMs: Math.round(performance.now() - started)
+    });
+    if (aborted) throw error;
     throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
   }
+  recordApiCall({
+    at: Date.now(),
+    method: 'GET',
+    url,
+    status: response.status,
+    ok: response.ok,
+    durationMs: Math.round(performance.now() - started)
+  });
   const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
   if (!response.ok) {
     throw createApiFailure({
@@ -98,6 +120,19 @@ export function useApi() {
       logout: useCallback(
         async (args?: { all?: boolean }) => {
 					await flushAttachmentDraftCleanups();
+          // owner-tier activity day-counts must not outlive the session that
+          // authorized them (shared-browser privacy) — unlike viewer-neutral
+          // tt-* caches (theme vars, emoji recents), which persist by design
+          clearLocalCachePrefix('tt-activity-');
+          // quick-switcher recents can name the viewer's private things —
+          // same shared-browser privacy bar as the activity counts
+          clearLocalCachePrefix('tt-quickswitch-');
+          // same shared-browser rule for "On this day" memories — cached tiles
+          // can carry private/circle post snippets for the signed-out viewer
+          clearLocalCachePrefix('tt-onthisday-');
+          // the Saved library cache can carry private/circle posts the
+          // signed-out viewer bookmarked — same shared-browser privacy bar
+          clearLocalCachePrefix('tt-saved-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -254,6 +289,14 @@ export function useApi() {
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
       setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
+			// A private, cursor-paged projection for the Developer → Deployment
+			// peers explorer. This intentionally differs from /api/v1/peers,
+			// whose HMAC + Ed25519 protocol is for deployments only.
+			peers: useCallback(
+				async (args?: { cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
+					getJson(`/api/v1/admin/peers${toQuery(args)}`, options),
+				[]
+			),
       users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
@@ -392,6 +435,47 @@ export function useApi() {
         )
       }
     },
+    // cross-deployment account links (Settings → Linked deployments)
+    deploymentLinks: {
+      list: useCallback(async () => getJson('/api/v1/deployment-links'), []),
+      link: useCallback(
+        async (args?: {
+          baseUrl?: string;
+          name?: string;
+          token?: string;
+          username?: string;
+          password?: string;
+          challenge?: string;
+          code?: string;
+        }) => asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' }),
+        [asyncFetcher]
+      ),
+      update: useCallback(
+        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) =>
+          asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' }),
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args?: { id?: string }) =>
+          asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' }),
+        [asyncFetcher]
+      ),
+      sync: useCallback(
+        async (args?: { id?: string; dryRun?: boolean }) => {
+          const ret = asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links/sync' });
+          // a pull may have rewritten local things — refresh like login does
+          ret.then((result: any) => {
+            if (result?.report && !result.report.dryRun && result.report.pulled > 0) refreshRootData();
+          }).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      mintToken: useCallback(
+        async () => asyncFetcher.submit({}, { action: '/api/v1/deployment-links/token' }),
+        [asyncFetcher]
+      )
+    },
 		attachments: {
 			uploads: {
 				create: useCallback(
@@ -514,6 +598,9 @@ export function useApi() {
 		},
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      // the explore board — public trending posts; `anon: 1` keeps logged-out
+      // requests edge-cacheable, mirroring feed
+      trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
 			reveal: useCallback(
 				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
 					asyncFetcher.submit(
@@ -630,6 +717,14 @@ export function useApi() {
       ),
       // toggle a private "add to my library" save on any visible thing
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      // the viewer's Saved library — posts they bookmarked, newest-saved-first
+      saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
+      // cast/move/remove the caller's vote on a visible poll thing
+      vote: useCallback(
+        async (args: { id: string; optionIndex: number }) =>
+          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        [asyncFetcher]
+      ),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
@@ -648,7 +743,12 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) =>
-          asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
+          asyncFetcher.submit(
+            // tags: the quote caption's harvested inline #hashtags — merged
+            // server-side with the tags carried from the original post
+            { id: args?.id, text: args?.text, tags: args?.tags, acl: args?.acl, visibility: args?.visibility },
+            { action: '/api/v1/things/share' }
+          ),
         [asyncFetcher]
       ),
 			remove: useCallback(
@@ -724,6 +824,11 @@ export function useApi() {
     },
     algorithms: {
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      // share-link preview (identity + training size only, never weights)
+      getShared: useCallback(
+        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
+        []
+      ),
       create: useCallback(
         async (args) => {
           const { name, emoji, branchFrom, events } = args;
@@ -732,7 +837,8 @@ export function useApi() {
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji }, { action: '/api/v1/algorithms/update' }),
+        async (args) =>
+          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
         [asyncFetcher]
       ),
       remove: useCallback(
@@ -789,12 +895,22 @@ export function useApi() {
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
+      // day-bucketed viewer-visible thing counts for the profile heatmap ({ username })
+      activity: useCallback(async (args) => getJson(`/api/v1/users/activity${toQuery(args)}`), []),
       // public people search (the /search People rail)
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(
         async (args) => {
 					const body: Record<string, unknown> = {};
-					for (const key of ['displayName', 'bio', 'avatarUrl', 'bannerUrl', 'avatarAttachmentId', 'bannerAttachmentId'] as const) {
+					for (const key of [
+						'displayName',
+						'bio',
+						'avatarUrl',
+						'bannerUrl',
+						'avatarAttachmentId',
+						'bannerAttachmentId',
+						'birthday'
+					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
 					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
@@ -807,6 +923,14 @@ export function useApi() {
     themes: {
       list: useCallback(async () => getJson('/api/v1/themes'), []),
       getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), []),
+      // public gallery list (no id → every public theme, newest first). The
+      // arg is optional: callers that want the server default call this with
+      // no arguments at all.
+      listShared: useCallback(
+        async (args?: { limit?: number }) =>
+          getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
+        []
+      ),
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;

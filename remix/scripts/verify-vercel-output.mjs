@@ -4,11 +4,15 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { authorizeCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
 const bootScript = readFileSync('.vercel/output/static/tt-boot.js', 'utf8');
 const previewFreshnessScript = readFileSync('.vercel/output/static/tt-preview-freshness.js', 'utf8');
+const embedBundle = readFileSync('.vercel/output/static/embed/thingtime.min.js', 'utf8');
+const embedBridge = readFileSync('.vercel/output/static/embed/bridge.html', 'utf8');
+const embedDemo = readFileSync('.vercel/output/static/embed/demo.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
 const serverFunctionDir = '.vercel/output/functions/__server.func';
 
@@ -63,13 +67,15 @@ for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
 // HTML but silently blocked by the browser.
-const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
-	if (/\bsrc\s*=/i.test(attributes)) return false;
-	const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-	const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
-	return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
-});
-if (inlineExecutableScripts.length > 0) {
+const inlineExecutableScripts = (html) =>
+	[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
+		if (/\bsrc\s*=/i.test(attributes)) return false;
+		const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+		const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
+		return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
+	});
+
+if (inlineExecutableScripts(indexHtml).length > 0) {
 	throw new Error('Vercel shell contains an inline executable script that the strict CSP must block.');
 }
 if (!indexHtml.includes('src="/tt-boot.js"') || bootScript.trim().length === 0) {
@@ -92,6 +98,37 @@ if (previewFreshnessIndex === -1 || appEntryIndex === -1 || previewFreshnessInde
 	throw new Error('Vercel output does not load preview recovery before the application entry.');
 }
 
+if (!embedBundle.includes('Thingtime')) {
+	throw new Error('Vercel output is missing the standalone minified Thingtime embed bundle.');
+}
+
+const embedSourceMapAnnotation = findSourceMapAnnotation(embedBundle);
+if (embedSourceMapAnnotation) {
+	throw new Error(`Deployed embed bundle must not reference a separate source map; found "${embedSourceMapAnnotation}".`);
+}
+
+if (!embedBridge.includes('/embed/thingtime.min.js')) {
+	throw new Error('Vercel output is missing the secure Thingtime popup bridge.');
+}
+
+// The embed pages ship under the same strict application CSP as the shell
+// (patch-vercel-output stamps it on `/(?:.*)`), so an inline block here is
+// parsed into the page and then refused by the browser. It fails silently — the
+// demo's host-isolation verdict simply never resolves — and the dev server's
+// devCsp does allow inline scripts, so local QA cannot catch it.
+for (const [name, html] of [
+	['embed/demo.html', embedDemo],
+	['embed/bridge.html', embedBridge]
+]) {
+	if (inlineExecutableScripts(html).length > 0) {
+		throw new Error(`Deployed ${name} contains an inline executable script that the strict CSP will block.`);
+	}
+}
+
+if (!embedDemo.includes('src="/embed/demo-host.js"') || !embedDemo.includes('src="/embed/demo-integrity.js"')) {
+	throw new Error('Vercel output is missing the external Thingtime embed demo scripts.');
+}
+
 const hasFilesystemRoute = config.routes?.some((route) => route.handle === 'filesystem');
 if (!hasFilesystemRoute) {
 	throw new Error('Vercel output config does not check filesystem routes before server fallback.');
@@ -103,12 +140,19 @@ const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
+// the social-permalink and well-known discovery routes share the /__server dest,
+// so the final Nitro fallback is the one that is neither of those rewrites
+const isPermalinkSrc = (src) => typeof src === 'string' && /^\^\/(?:post|profile)\//.test(src);
+const postPermalinkIndex = routes.findIndex((route) => route.src === '^/post/[^/]+/?$' && route.dest === '/__server');
+const profilePermalinkIndex = routes.findIndex((route) => route.src === '^/profile/[^/]+/?$' && route.dest === '/__server');
 const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
 		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
-const serverFallbackIndex = routes.findIndex((route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex);
+const serverFallbackIndex = routes.findIndex(
+	(route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex && !isPermalinkSrc(route.src)
+);
 
 if (spaIndex === -1) {
 	throw new Error('Vercel output config does not route non-API app paths to /index.html.');
@@ -160,6 +204,29 @@ if (rootIndex > spaIndex) {
 
 if (serverFallbackIndex !== -1 && serverFallbackIndex < spaIndex) {
 	throw new Error('Vercel output checks the Nitro server fallback before the SPA shell.');
+}
+
+// Social permalinks must reach the Nitro shell handler (crawler-visible Open
+// Graph tags — server/routes/[...].ts) instead of the meta-less static shell.
+if (serverFallbackIndex !== -1) {
+	for (const [name, index] of [
+		['post permalink', postPermalinkIndex],
+		['profile permalink', profilePermalinkIndex]
+	]) {
+		if (index === -1) {
+			throw new Error(`Vercel output config does not route the ${name} pages to the Nitro social-meta handler.`);
+		}
+		if (index > spaIndex) {
+			throw new Error(`Vercel output checks the SPA fallback before the ${name} social-meta route.`);
+		}
+		if (index < apiIndex || index < filesystemIndex) {
+			throw new Error(`Vercel output routes ${name} pages to the Nitro social-meta handler before filesystem/API routes.`);
+		}
+		const headers = routes[index]?.headers;
+		if (headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
+			throw new Error(`Vercel output ${name} route does not disable browser caching for the HTML shell.`);
+		}
+	}
 }
 
 const authorizeHeadersIndex = routes.findIndex(
@@ -252,5 +319,5 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );

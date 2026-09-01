@@ -12,6 +12,7 @@ import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
+const embedBundlePath = fileURLToPath(new URL('./dist/embed/thingtime.min.js', import.meta.url));
 const thingtimeProductionOrigin = 'https://thingtime.com';
 const mongoPasswordPlaceholder = '<db_password>';
 
@@ -69,7 +70,23 @@ const rewriteProxyCookieForLocalDev = (cookie: string) => {
 
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
 const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
-const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
+const configuredApiFallback = (() => {
+  const value = process.env.THINGTIME_API_FALLBACK_ORIGIN?.trim();
+  if (!value) return thingtimeProductionOrigin;
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const loopback = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '::1';
+    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))) {
+      return thingtimeProductionOrigin;
+    }
+    return url.origin;
+  } catch {
+    return thingtimeProductionOrigin;
+  }
+})();
+const apiProxyTarget = shouldUseProductionApiProxy ? configuredApiFallback : localApiTarget;
 const previewFreshnessPath = '/tt-preview-freshness.js';
 const previewFreshnessScript = '(' + installPreviewBuildFreshness.toString() + ')();\n';
 
@@ -179,6 +196,26 @@ const designDocsStaticPlugin = () => ({
   }
 });
 
+const embedBundleDevPlugin = () => ({
+  name: 'thingtime-embed-bundle-dev',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== '/embed/thingtime.min.js' || !existsSync(embedBundlePath)) {
+        next();
+        return;
+      }
+
+      const stats = statSync(embedBundlePath);
+      res.statusCode = 200;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', String(stats.size));
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      createReadStream(embedBundlePath).pipe(res);
+    });
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -257,5 +294,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin()]
+  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });
