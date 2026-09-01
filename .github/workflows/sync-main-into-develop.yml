@@ -128,7 +128,18 @@ jobs:
             if git diff --quiet -- graphify-out/snapshots; then
               return 0
             fi
-            git add -A -- graphify-out/snapshots || return 1
+            # -u, not -A: prune only ever deletes already-tracked files, so
+            # restricting staging to tracked paths is exactly the operation.
+            # It also has to be -u. A branch carrying the broad
+            # `graphify-out/snapshots/` ignore rule that
+            # stage-graphify-snapshots.mjs force-adds around makes `git add -A`
+            # exit 1 on the ignored pathspec, which would fail-soft this whole
+            # helper and silently skip the prune it exists to apply. Plain
+            # --force would clear that error but start tracking the very files
+            # the ignore rules exclude on purpose — the derived ~27MB
+            # snapshots/**/graph.html and .staging-* scratch. -u sidesteps
+            # both: it never considers an untracked path at all.
+            git add -u -- graphify-out/snapshots || return 1
             git commit -qm "chore(graphify): bound snapshot retention after main sync" || return 1
           }
 
