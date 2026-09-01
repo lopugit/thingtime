@@ -6837,7 +6837,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.1.0',
+    featureVersion: '1.1.1',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
