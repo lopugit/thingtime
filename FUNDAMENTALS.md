@@ -310,7 +310,7 @@ JWTs stored anywhere). `tt_auth` stays the single ACTIVE credential; switching
 mints a fresh JWT from the chosen live session. Every roster account is
 independently revocable and validated by the same session→user path as
 `tt_auth`, and raw tokens never reach the client (the switcher API returns
-public users only). See `claude-todo/11-account-switcher.md`.
+public users only). See `TODO/claude-todo/11-account-switcher.md`.
 
 ## 6. Never leak secrets
 
