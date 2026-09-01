@@ -1908,10 +1908,15 @@ jobs:
           # stdout is captured as the first line of `$all_open`, and every later
           # `jq` over that variable dies on it. A PR big enough for GitHub to
           # refuse the file list (HTTP 422, "this diff is taking too long to
-          # generate" — permanent at that size, so gh_read_retry correctly does
-          # not retry it) is exactly the case that reaches this branch, and one
-          # such PR would otherwise take the whole repository-wide scan down
-          # rather than degrading to that PR's first 100 paths.
+          # generate") is the case that reaches this branch. That 422 is an
+          # intermittent server-side generation timeout, not a permanent
+          # property of the diff's size: #291's 2896-file list answered in full,
+          # all 29 pages, on a replay of the identical paginated read minutes
+          # after run 33565992797 lost the scan to it. Retrying it is therefore
+          # correct and is handled in gh_read_retry; this branch stays because a
+          # retry budget can still be exhausted, and one such PR must degrade to
+          # its first 100 paths instead of taking the whole repository-wide scan
+          # down for every open PR.
           complete_large_pr_files() {
             local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
