@@ -10,6 +10,7 @@ test('Feature Stack snapshots preserve admin order and exact same-repository hea
     targets: ['develop', 'main'],
     repository: 'lopugit/thingtime',
     stackId: 'ci-feature-stack-11111111-1111-4111-8111-111111111111',
+		runId: 'feature-stack-run-11111111-1111-4111-8111-111111111111',
     autoDecideBranches: true,
     pullRequests: [
 			{
@@ -75,6 +76,7 @@ test('Feature Stack accepts one source and auto-routes mixed branch families', (
     targets: ['main', 'github-actions'],
     repository: 'lopugit/thingtime',
     stackId: 'ci-feature-stack-22222222-2222-4222-8222-222222222222',
+		runId: 'feature-stack-run-22222222-2222-4222-8222-222222222222',
     autoDecideBranches: true
   };
   const mixed = canonicalFeatureStackPlanFromPullRequests({
@@ -129,6 +131,7 @@ test('Feature Stack auto-routing skips incompatible sources and empty targets wi
 		targets: ['main', 'github-actions'],
 		repository: 'lopugit/thingtime',
 		stackId: 'ci-feature-stack-33333333-3333-4333-8333-333333333333',
+		runId: 'feature-stack-run-33333333-3333-4333-8333-333333333333',
 		autoDecideBranches: true
 	};
 	const productOnly = canonicalFeatureStackPlanFromPullRequests({
@@ -230,13 +233,15 @@ test('repository maintenance dispatches through the one Lopu manager', () => {
 	assert.deepEqual(
 		resolveCiWorkflowDispatch('feature-stack', {
     feature_stack_plan_b64: featureStackPlan,
+			feature_stack_run_id: 'feature-stack-run-44444444-4444-4444-8444-444444444444',
     unexpected: 'discarded'
 		}),
 		{
     workflowFile: 'resolve-pr-conflicts.yml',
     inputs: {
       maintenance_operation: 'merge-feature-stack',
-      feature_stack_plan_b64: featureStackPlan
+      feature_stack_plan_b64: featureStackPlan,
+			feature_stack_run_id: 'feature-stack-run-44444444-4444-4444-8444-444444444444'
     }
 		}
 	);

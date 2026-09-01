@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { linkFeatureStackWorkflowRun } from './featureStackStore';
 import { recordCiEvent, upsertCiEntity, type CiEntityInput } from './store';
 
 const DEFAULT_REPOSITORY = 'lopugit/thingtime';
@@ -269,6 +270,8 @@ export const ingestGitHubWebhook = async (input: {
     const run = payload.workflow_run;
     const id = safeNumber(run.id);
     if (id) {
+			const title = safeString(run.display_title ?? run.name, 500) || `Run #${id}`;
+			const status = safeString(run.conclusion ?? run.status, 80) || 'unknown';
       remember(
         await upsert(
           {
@@ -276,14 +279,16 @@ export const ingestGitHubWebhook = async (input: {
             provider: 'github',
             repository,
             externalId: String(id),
-            title: safeString(run.name ?? run.display_title, 500) || `Run #${id}`,
-            status: safeString(run.conclusion ?? run.status, 80) || 'unknown',
+            title,
+            status,
             url: safeUrl(run.html_url),
             occurredAt: run.updated_at ?? run.created_at,
             data: {
               runId: id,
               runNumber: safeNumber(run.run_number),
               workflowId: safeNumber(run.workflow_id),
+					displayTitle: safeString(run.display_title, 500) || null,
+					workflowName: safeString(run.name, 500) || null,
               event: safeString(run.event, 80),
               status: safeString(run.status, 80),
               conclusion: safeString(run.conclusion, 80) || null,
@@ -297,6 +302,18 @@ export const ingestGitHubWebhook = async (input: {
           event
         )
       );
+			const featureStackRunId = title.match(/\b(feature-stack-run-[0-9a-f-]{36})\b/i)?.[1]?.toLowerCase();
+			if (featureStackRunId) {
+				await linkFeatureStackWorkflowRun({
+					runId: featureStackRunId,
+					workflowRunId: id,
+					url: safeUrl(run.html_url),
+					title,
+					status,
+					startedAt: run.run_started_at ?? run.created_at ?? event.occurredAt,
+					completedAt: run.status === 'completed' ? run.updated_at ?? null : null
+				});
+			}
     }
   }
 

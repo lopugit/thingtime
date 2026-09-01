@@ -2440,7 +2440,7 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, saved stacks are `1.0.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, saved stacks are `1.1.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Select one trusted open PR and independently enable Develop and
@@ -2507,6 +2507,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       without a page reload; progress never decreases; links open the matching
       GitHub run or PR; and the clearly labelled estimated finish uses the
       browser's local timezone. Terminal success and failure stop live polling.
+- [ ] Complete the public Feature Stack controller while deliberately skipping
+      its target worker. The timeline remains strictly chronological, the card
+      changes from Live to Needs attention without inventing another ETA, and
+      current plus bounded historical rows link only to their exact GitHub runs.
 - [ ] Collapse and expand the Lopu automation, AI credential waterfall, and
       Feature Stack cards from their headings. Reload and navigate away/back;
       the per-admin collapsed state persists, the closed cards consume only
