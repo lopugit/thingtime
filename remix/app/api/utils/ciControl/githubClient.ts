@@ -253,6 +253,14 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
   const headRefs = new Set<string>();
 	const sources = input.pullRequests.flatMap((pr, index) => {
     const number = input.sourcePrNumbers[index];
+		if (pr.number !== number) {
+			throw new Error(`Feature Stack source PR #${number} did not match the requested pull request`);
+		}
+		// Saved stacks are intentionally reusable. A source can merge or close
+		// between runs, so omit completed entries while preserving the exact
+		// order of every still-live source. Drafts remain selected in the saved
+		// definition but are not eligible for an immutable merge run yet.
+		if (pr.state !== 'open' || pr.draft === true) return [];
     const head = String(pr.head?.ref ?? '');
     const sha = String(pr.head?.sha ?? '');
 		const base = String(pr.base?.ref ?? '');
@@ -260,9 +268,6 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
 			.trim()
 			.slice(0, 200);
     if (
-			pr.number !== number ||
-			pr.state !== 'open' ||
-			pr.draft === true ||
 			pr.head?.repo?.full_name !== input.repository ||
 			!GIT_REF.test(head) ||
 			!GIT_REF.test(base) ||

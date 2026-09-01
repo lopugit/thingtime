@@ -73,6 +73,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Reusable Feature Stacks no longer fail because an older selected PR has
+  already completed.** Each run now omits merged, closed, and draft entries at
+  admission time, keeps every remaining live source in the saved order, and
+  rejects only when no compatible live source remains. The protected target
+  worker now stays active through branch protection until its generated stack
+  PR has actually merged. — Codex (AI), 2026-09-01
+
 - **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
   now disables automatic deployments with the recursive `**` branch glob for
   every branch except exact `main` and `develop`; eligible PR previews are
