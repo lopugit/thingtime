@@ -2,9 +2,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 // weird hack for remix client-side logic
 try {
-  window.process = {
-    env: {}
-  };
+  const browserWindow = window as any;
+  browserWindow.process = browserWindow.process || { env: {} };
+  browserWindow.process.env = browserWindow.process.env || {};
   // window.Buffer = () => {};
   // window.Buffer = Buffer
 } catch (err) {
@@ -2082,6 +2082,18 @@ export const setsmart = (obj, property, value, context?: any) => {
 		} else {
 			return value;
 		}
+	}
+
+	const forbiddenPathParts = new Set(['__proto__', 'prototype', 'constructor']);
+	if (property.some((part) => forbiddenPathParts.has(String(part)))) {
+		if (context) {
+			return {
+				value,
+				undefined: true,
+				err: 'unsafe property path'
+			};
+		}
+		return value;
 	}
 
 	// if no obj make obj

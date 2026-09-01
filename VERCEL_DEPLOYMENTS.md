@@ -109,6 +109,28 @@ Last updated: 2026-09-01
   `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto. Vercel domain
   ownership and TLS are verified.
 
+## Develop environment
+
+- Branch: `develop` — the integration branch. Feature PRs merge into
+  `develop`, everything is tested on the develop deployment, and `develop` is
+  merged into `main` when it's ready to ship.
+- Branch alias: https://thingtime-git-develop-lopugits-projects.vercel.app
+- Database: `develop` has its OWN MongoDB (a dedicated free-tier Atlas
+  cluster), never the production cluster. Two branch-scoped env vars exist in
+  Vercel (target Preview, git branch `develop`) and currently hold
+  self-describing placeholders so develop can never accidentally reach the
+  production database:
+  - `MONGODB_CONNECTION_STRING` — replace with the develop Atlas URI (it may
+    contain the literal `<db_password>` placeholder).
+  - `MONGO_PASS` — replace with the develop DB password (only needed when the
+    URI contains `<db_password>`).
+  Update them at
+  https://vercel.com/lopugits-projects/thingtime/settings/environment-variables
+  (search "MONGO", the develop-scoped rows show the `develop` branch chip),
+  then redeploy the `develop` branch. Until real values are set, develop
+  deployments boot but `GET /api/v1/health/mongodb` reports a connection error
+  by design.
+
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
@@ -376,3 +398,35 @@ Lifecycle and recovery:
   - Deployment id: `dpl_Z6ER3iuXGXQrzeTN6K45YTUSK69j`
   - Verified routes: `/`, `/index.html`, `/vercel`, `/api/root-data`,
     `/api/v1/vercel/deployments`, and `/assets/index-yPU6cX3C.js`.
+
+## Deployment-status webhook (TODO item 5)
+
+The footer/status endpoints no longer need to poll the Vercel API once the
+deployment webhook is configured:
+
+- Receiver: `POST /api/v1/vercel/webhook` (HMAC sha1 of the raw body in
+  `x-vercel-signature`; 404 while `VERCEL_WEBHOOK_SECRET` is unset, 401 on bad
+  signatures).
+- One-time setup (owner-run, deliberately not automated by any build step):
+  either run the one-shot script
+  `VERCEL_API_TOKEN=... node remix/scripts/vercel/create-webhook.mjs https://thingtime-lopugits-projects.vercel.app/api/v1/vercel/webhook`
+  (registers `deployment.created/succeeded/promoted/error/canceled` for the
+  project and prints the signing secret exactly once — credit: session 1's
+  closed PR #118), or create the same webhook manually in the Vercel dashboard
+  (team `lopugits-projects`, project `thingtime`). Then set
+  `VERCEL_WEBHOOK_SECRET` (the secret shown on creation) in the project's
+  environment variables and redeploy.
+- Behaviour: the latest event per git branch is persisted in the `settings`
+  collection (`vercelWebhookStatus`, capped at 30 branches).
+  `GET /api/v1/vercel/status` serves `ready` straight from that document (zero
+  Vercel API calls); building/queued states still use the live Vercel API for
+  phase/progress detail.
+- Failure attribution: a branch has one record but can have several concurrent
+  deployments — the "Develop-target PR previews" section above builds one head
+  SHA into both generic Preview and the `develop` Custom Environment, and both
+  emit events under the same `githubCommitRef`. A recorded `error`/`canceled`
+  is therefore only served when the record matches the deployment answering the
+  request (`VERCEL_URL`, or `VERCEL_GIT_COMMIT_SHA` when no URL is available);
+  otherwise the live poll decides. Without that check a failed sibling build
+  would show a healthy deployment as failed in the footer and in
+  `/api/v1/health/vercel` until the next event for that branch arrived.

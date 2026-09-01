@@ -9,6 +9,11 @@ import { getHomeThingsCollection as getThingsCollection } from '../mongodb/colle
 import { findUserById, findUserByUsername, toPublicProfile } from '../auth/users';
 import type { Fail} from './shared';
 import { fail, followKey, newThingDoc } from './shared';
+import {
+	HOME_MESSENGER_STORAGE_OPTIONS,
+	deleteMessengerThings,
+	insertMessengerThing
+} from './storage';
 
 export const isFollowing = async (followerId: string, followeeId: string): Promise<boolean> => {
   if (!followerId || !followeeId || followerId === followeeId) return false;
@@ -86,12 +91,16 @@ export const toggleFollow = async (
   const things = await getThingsCollection();
   const key = followKey(viewerId, targetId);
   if (!wantFollow) {
-    await things.deleteMany({ thingtime: 'follow', 'crystal.followKey': key } as any);
+    await deleteMessengerThings(things, { thingtime: 'follow', 'crystal.followKey': key } as any, HOME_MESSENGER_STORAGE_OPTIONS);
     return { ok: true, following: false, created: false, user: toPublicProfile(target) };
   }
   let created = false;
   try {
-    await things.insertOne(newThingDoc('follow', { ownerId: viewerId, targetId, crystal: { followKey: key } }) as any);
+    await insertMessengerThing(
+			things,
+			newThingDoc('follow', { ownerId: viewerId, targetId, crystal: { followKey: key } }) as any,
+			HOME_MESSENGER_STORAGE_OPTIONS
+		);
     created = true;
   } catch (err: any) {
     // duplicate = already following (race) — toggle-on is idempotent

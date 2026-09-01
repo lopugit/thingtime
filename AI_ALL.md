@@ -51,7 +51,7 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw
   Chakra `useToast` or `alert()`.
 
-The active build roadmap lives in `claude-todo/`. The owner's engineering
+The active build roadmap lives in `TODO/claude-todo/`. The owner's engineering
 decisions and thinking method are logged in `DECISIONS.md`; read it when
 product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
@@ -182,6 +182,16 @@ commits.
   variables, also document the fork-safe setup steps in `README.md`. Use
   placeholder values only; never copy real tokens, passwords, project secrets,
   or account-specific credentials into public docs.
+- Thingtime email delivery work must stay aligned with the owned-stack plan in
+  `docs/email-owned-architecture.md`. App/auth code enqueues through the shared
+  email service boundary — `sendEmail()` in
+  `remix/app/api/utils/email/service.ts`, backed by the `email_messages` outbox
+  and its deliverability satellites (FUNDAMENTALS §3) — rather than calling SES,
+  SMTP, or another transport directly, so provider-backed and self-hosted
+  delivery share the same templates, events, suppressions, compliance checks,
+  and audit trail. New mail must map onto an existing `EmailStream`
+  (`transactional`, `newsletter`, `notification`) instead of adding a fourth
+  name for the same traffic.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit

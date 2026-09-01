@@ -56,7 +56,11 @@ export const listGrants = async (userId: string): Promise<AppGrant[]> => {
   }
 
   const appDocs = await findAppsByClientIds([...byClient.keys()]);
-  const appsByClientId = new Map(appDocs.map((doc: any) => [doc.crystal?.clientId, doc]));
+  const appsByClientId = new Map<string, any>();
+  for (const doc of appDocs as any[]) {
+    const clientId = doc?.crystal?.clientId;
+    if (typeof clientId === 'string' && clientId) appsByClientId.set(clientId, doc);
+  }
 
   const grants: AppGrant[] = [];
   for (const [clientId, group] of byClient) {

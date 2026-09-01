@@ -73,10 +73,13 @@
    * }} options
    *   Scope paths are hierarchical — 'profile' covers every profile.* leaf;
    *   ask for exactly what you need ('profile.avatar', 'email', 'app-data',
-   *   'things' — the user hand-picks which things). Catalog:
-   *   GET /api/v1/oauth/scopes. Always read `session.scopes` for what the
-   *   user ACTUALLY granted — well-built platforms light features up
-   *   dynamically from it.
+   *   'things' — the user hand-picks which things). Privacy-expanding leaves
+   *   marked exact in the catalog ('profile.birthday', 'app-data.shared') are
+   *   NEVER covered by an ancestor — request them explicitly. Catalog:
+   *   GET /api/v1/oauth/scopes (CORS-open — feature-detect a scope there
+   *   before requesting it; unknown scopes 400 the popup). Always read
+   *   `session.scopes` for what the user ACTUALLY granted — well-built
+   *   platforms light features up dynamically from it.
    * @returns {Promise<{ token: string, tokenType: string, expiresAt: string,
    *   scopes: string[], sharedThings: number, sandbox?: boolean, user: Object }>}
    */
@@ -286,7 +289,8 @@
   /**
    * SSO identity lookup: resolve the user this token was granted for.
    * Returns { user: { id, username, displayName, avatarUrl, profileUrl,
-   * email? }, scopes } — email only when the user granted the 'email' scope.
+   * birthday?, email? }, scopes } — email only under the 'email' scope,
+   * birthday (YYYY-MM-DD) only under the exact 'profile.birthday' scope.
    * @param {string} token — the token from login()
    * @param {{ baseUrl?: string }} [options]
    */

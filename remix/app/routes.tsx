@@ -8,14 +8,17 @@ import type { RootLoaderData } from './root-data.server';
 // catch-all tree viewer. These are either the first paint or one click from
 // it, so a separate chunk fetch would cost more than it saves.
 import Authorize from './routes/authorize';
+import Explore from './routes/explore';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
 import MediaPage from './routes/media';
 import PostPage from './routes/post';
+import DeploymentPeersRoute from './routes/peers';
 import Profile from './routes/profile';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
+import SavedRoute from './routes/saved';
 import ThingtimeUrl from './routes/$';
 import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
@@ -56,6 +59,11 @@ const HydrateFallback = () => (
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
     ...init,
+    // Account/root responses are explicitly current-state reads. Electron's
+    // loopback origin can reuse a prior ephemeral port after relaunch, so a
+    // browser cache entry from a different endpoint must never determine the
+    // active account, branch label, or device pairing surface.
+    cache: init.cache || 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -155,6 +163,8 @@ export const router = createBrowserRouter([
           { path: 'schemas', lazy: lazyRoute(() => import('./routes/docs/schemas')) }
         ]
       },
+      // public trending board — guest-visible like /feed
+      { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
@@ -169,6 +179,9 @@ export const router = createBrowserRouter([
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// Developer-only, admin-gated deployment mesh diagnostics. The page
+			// itself renders the same shareable quiet gate as /admin.
+			{ path: 'peers', element: <DeploymentPeersRoute /> },
 			// every attachment is a Thing — its own page with comments/reactions
 			// (post lightbox + file rows deeplink here)
 			{ path: 'media/:id', element: <MediaPage /> },
@@ -184,6 +197,9 @@ export const router = createBrowserRouter([
       // (the emailed token/link is the credential, not the session)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
+      // the viewer's Saved library — no loader guard: it renders its own
+      // signed-out quiet state, like /apps
+      { path: 'saved', element: <SavedRoute /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
@@ -213,6 +229,7 @@ export const router = createBrowserRouter([
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
+      { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },

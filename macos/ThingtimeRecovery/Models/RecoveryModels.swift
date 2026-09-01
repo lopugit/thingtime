@@ -1,0 +1,187 @@
+import Foundation
+
+public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifiable {
+    case desktop
+    case recovery
+
+    public var id: String { rawValue }
+
+    public var appName: String {
+        switch self {
+        case .desktop: "Thingtime.app"
+        case .recovery: "Thingtime Recovery.app"
+        }
+    }
+
+    public var bundleIdentifier: String {
+        switch self {
+        case .desktop: "com.thingtime.desktop"
+        case .recovery: "com.thingtime.desktop.recovery"
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .desktop: "Thingtime Desktop"
+        case .recovery: "Thingtime Recovery"
+        }
+    }
+}
+
+public struct CacheManifest: Codable, Equatable {
+    public let format: Int
+    public var entries: [CacheManifestEntry]
+
+    public init(format: Int = 1, entries: [CacheManifestEntry] = []) {
+        self.format = format
+        self.entries = entries
+    }
+}
+
+public struct CacheManifestEntry: Codable, Hashable, Identifiable {
+    public let assetName: String?
+    public let branch: String?
+    public let cachedAt: String?
+    public let commit: String?
+    public let key: String
+    public let name: String?
+    public let pullRequestNumber: Int?
+    public let releaseUrl: String?
+    public let sourceSha256: String?
+    public let tag: String?
+    public let isUnsigned: Bool?
+    public let version: String?
+
+    public var id: String { key }
+
+    public init(
+        assetName: String? = nil,
+        branch: String? = nil,
+        cachedAt: String? = nil,
+        commit: String? = nil,
+        key: String,
+        name: String? = nil,
+        pullRequestNumber: Int? = nil,
+        releaseUrl: String? = nil,
+        sourceSha256: String? = nil,
+        tag: String? = nil,
+        isUnsigned: Bool? = nil,
+        version: String? = nil
+    ) {
+        self.assetName = assetName
+        self.branch = branch
+        self.cachedAt = cachedAt
+        self.commit = commit
+        self.key = key
+        self.name = name
+        self.pullRequestNumber = pullRequestNumber
+        self.releaseUrl = releaseUrl
+        self.sourceSha256 = sourceSha256
+        self.tag = tag
+        self.isUnsigned = isUnsigned
+        self.version = version
+    }
+}
+
+public struct CachedBundle: Hashable, Identifiable {
+    public let entry: CacheManifestEntry
+    public let appURL: URL
+    public let component: RecoveryComponent
+
+    public var id: String { "\(component.rawValue)-\(entry.key)" }
+    public var displayName: String { entry.name ?? entry.version ?? entry.tag ?? entry.key }
+}
+
+/// The cache records the distribution lane explicitly. A missing value is the
+/// legacy signed lane, so older cache manifests cannot silently downgrade a
+/// signed release into the unsigned path.
+public enum RecoveryBundleTrust: Hashable {
+    case signed
+    case unsigned
+}
+
+public struct RecoveryRelease: Hashable, Identifiable {
+    public let asset: RecoveryReleaseAsset
+    public let id: String
+    public let isPrerelease: Bool
+    public let isUnsigned: Bool
+    public let name: String
+    public let publishedAt: Date?
+    public let releaseURL: URL?
+    public let tag: String
+    public let version: String?
+
+    public init(asset: RecoveryReleaseAsset, id: String, isPrerelease: Bool, isUnsigned: Bool = false, name: String, publishedAt: Date?, releaseURL: URL?, tag: String, version: String?) {
+        self.asset = asset
+        self.id = id
+        self.isPrerelease = isPrerelease
+        self.isUnsigned = isUnsigned
+        self.name = name
+        self.publishedAt = publishedAt
+        self.releaseURL = releaseURL
+        self.tag = tag
+        self.version = version
+    }
+}
+
+public struct RecoveryReleaseAsset: Hashable {
+    public let downloadURL: URL
+    public let name: String
+    public let size: Int64?
+
+    public init(downloadURL: URL, name: String, size: Int64?) {
+        self.downloadURL = downloadURL
+        self.name = name
+        self.size = size
+    }
+}
+
+public struct CacheReleaseDescriptor: Hashable {
+    public let assetName: String?
+    public let branch: String?
+    public let commit: String?
+    public let id: String
+    public let name: String?
+    public let pullRequestNumber: Int?
+    public let releaseURL: String?
+    public let tag: String
+    public let isUnsigned: Bool
+    public let version: String?
+
+    public init(assetName: String? = nil, branch: String? = nil, commit: String? = nil, id: String, name: String? = nil, pullRequestNumber: Int? = nil, releaseURL: String? = nil, tag: String, isUnsigned: Bool = false, version: String? = nil) {
+        self.assetName = assetName
+        self.branch = branch
+        self.commit = commit
+        self.id = id
+        self.name = name
+        self.pullRequestNumber = pullRequestNumber
+        self.releaseURL = releaseURL
+        self.tag = tag
+        self.isUnsigned = isUnsigned
+        self.version = version
+    }
+
+    public init(release: RecoveryRelease) {
+        self.init(
+            assetName: release.asset.name,
+            id: release.id,
+            name: release.name,
+            releaseURL: release.releaseURL?.absoluteString,
+            tag: release.tag,
+            isUnsigned: release.isUnsigned,
+            version: release.version
+        )
+    }
+}
+
+public enum RecoveryError: LocalizedError {
+    case invalidPath(String)
+    case invalidPlan(String)
+    case operationFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidPath(let message), .invalidPlan(let message), .operationFailed(let message): message
+        }
+    }
+}

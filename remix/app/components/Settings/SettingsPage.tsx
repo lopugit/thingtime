@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } fro
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
@@ -127,6 +128,7 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
   const [bio, setBio] = React.useState(user.bio || '');
 	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.avatarUrl));
 	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(user.bannerUrl));
+  const [birthday, setBirthday] = React.useState(user.birthday || '');
   const [saving, setSaving] = React.useState(false);
 	const avatarMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
 	const bannerMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
@@ -154,7 +156,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
         displayName: displayName.trim() || null,
         bio: bio.trim() || null,
 				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
-				...profileMediaUpdateFields('banner', bannerMedia.mutation)
+				...profileMediaUpdateFields('banner', bannerMedia.mutation),
+        birthday: birthday.trim() || null
       });
 			if (!response?.user) throw new Error('invalid profile response');
 			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
@@ -225,6 +228,23 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
 				storageStatus={user.storage.status}
 				onChange={setBannerMedia}
           />
+
+      <Flex flexDirection="column" rowGap={1}>
+        <FieldLabel>Birthday 🎂</FieldLabel>
+        <Input
+          size="sm"
+          type="date"
+          value={birthday}
+          min="1900-01-01"
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setBirthday(e.target.value)}
+          {...inputStyles}
+        />
+        <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)">
+          Private — never shown on your profile. Apps you log in to only see it if you approve the
+          birthday permission on their consent screen.
+        </Text>
+      </Flex>
 
       <Box>
 				<RainbowButton size="sm" minHeight="44px" isLoading={saving} isDisabled={avatarMedia.blocking || bannerMedia.blocking} onClick={handleSave}>
@@ -526,6 +546,16 @@ export const SettingsPage = () => {
             description="Algorithms learn from what you linger on in the feed — the active one trains as you scroll. Keep a few for different moods, branch the ones you like, and switch anytime."
           >
             <AlgorithmManager key={user.id} />
+          </SettingsSection>
+        )}
+
+        {/* 3b · linked deployments (auth only) */}
+        {user && (
+          <SettingsSection
+            eyebrow="Linked deployments"
+            description="Link your account on another Thingtime deployment (production, develop, a fork…) and keep your data in sync — push, pull, two-way, or per-path rules."
+          >
+            <LinkedDeployments key={user.id} userId={user.id} />
           </SettingsSection>
         )}
 

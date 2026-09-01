@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Thingtime Node</string>
+    <key>CFBundleExecutable</key>
+    <string>ThingtimeNode</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.thingtime.desktop.node</string>
+    <key>CFBundleIconFile</key>
+    <string>ThingtimeNode.icns</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Thingtime Node</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Thingtime Node requests specifically approved fixed actions through macOS System Events, Apple Music, and Spotify. It never accepts arbitrary AppleScript.</string>
+	<key>ThingtimeNodeElectronManaged</key>
+    <false/>
+</dict>
+</plist>
