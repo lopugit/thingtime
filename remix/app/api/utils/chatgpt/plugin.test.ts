@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
 import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES } from './pluginCore';
+import { REVOKED_SESSION_REAP_MS, revokedSessionPatch } from '~/api/utils/auth/sessions';
 
 const connectedContext = {
   session: {},
@@ -357,4 +358,18 @@ test('OAuth dynamic client registration signs only exact local loopback callback
     })
   });
   assert.equal(invalid.status, 400);
+});
+
+test('revoking a never-expiring bridge session leaves a reap date for the sessions TTL index', () => {
+  const revokedAt = new Date('2026-01-01T00:00:00.000Z');
+  const patch = revokedSessionPatch(revokedAt);
+
+  // TTL skips expiresAt: null, so a disconnect must fill one in or the revoked
+  // bridge sessions accumulate in Mongo forever.
+  assert.equal(patch.revokedAt, revokedAt);
+  assert.deepEqual(patch.expiresAt, {
+    $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)]
+  });
+  // A session that already carries a real expiry keeps it.
+  assert.equal(patch.expiresAt.$ifNull[0], '$expiresAt');
 });

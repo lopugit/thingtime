@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
-import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
+import { createSession, getLiveSession, revokedSessionPatch, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
@@ -695,6 +695,12 @@ const revokeMcpConnection = async (context: McpSession) => {
   if (!reference) return revokeSession(context.session.jti);
   const sessions = await getSessionsCollection();
   const now = new Date();
+  // Bridge sessions no longer expire on their own, so a disconnect has to leave
+  // behind a reap date: the sessions TTL index skips expiresAt: null, and these
+  // revoked records would accumulate forever without one. revokedSessionPatch
+  // fills a missing expiry and preserves a real one (legacy bridge sessions
+  // minted before the infinite-expiry switch still carry theirs).
+  const revoked = [{ $set: revokedSessionPatch(now) }, { $set: { 'meta.revokedAt': now } }];
   await Promise.all([
     sessions.updateOne(
       {
@@ -704,7 +710,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionId': reference.connectionId
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     ),
     sessions.updateMany(
       {
@@ -713,7 +719,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionSessionJti': context.connection.jti
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     )
   ]);
 };

@@ -55,6 +55,20 @@ export const getLiveSession = async (jti: string) => {
   return session;
 };
 
+// Revoking is the authoritative kill switch — getLiveSession checks revokedAt
+// before expiry, so a revoked session is dead the moment this lands. The
+// never-expiring purposes (service accounts, PATs, the ChatGPT MCP bridge)
+// carry expiresAt: null, which the sessions TTL index deliberately skips, so a
+// revoked one would otherwise sit in Mongo forever. Stamp a reap date only when
+// there isn't one; a real expiry is left untouched. patTokens.ts does the same
+// on its own revoke path.
+export const REVOKED_SESSION_REAP_MS = 1000 * 60 * 60 * 24 * 30;
+
+export const revokedSessionPatch = (revokedAt: Date) => ({
+  revokedAt,
+  expiresAt: { $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)] }
+});
+
 export const revokeSession = async (jti: string) => {
-  await (await getSessionsCollection()).updateOne({ jti }, { $set: { revokedAt: new Date() } });
+  await (await getSessionsCollection()).updateOne({ jti }, [{ $set: revokedSessionPatch(new Date()) }]);
 };
