@@ -4011,6 +4011,41 @@ jobs:
           gh pr merge "$pr_url" --auto --merge
           echo "Feature Stack auto-merge PR: $pr_url"
 
+  feature_stack_progress:
+    name: Stream Feature Stack progress to Thingtime every 10 minutes
+    needs: [feature_stack_plan, model_config]
+    if: >-
+      !cancelled()
+      && needs.feature_stack_plan.result == 'success'
+      && needs.model_config.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    continue-on-error: true
+    permissions:
+      actions: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STACK_ID: ${{ needs.feature_stack_plan.outputs.stack_id }}
+      FEATURE_STACK_RUN_ID: ${{ inputs.feature_stack_run_id }}
+      FEATURE_STACK_MATRIX: ${{ needs.feature_stack_plan.outputs.matrix }}
+      THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+      THINGTIME_PROGRESS_ORIGIN: ${{ vars.THINGTIME_CREDENTIAL_VAULT_ORIGIN || 'https://thingtime.com' }}
+      HEARTBEAT_SECONDS: "600"
+      POLL_SECONDS: "60"
+    steps:
+      - name: Check out the trusted Feature Stack progress reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/feature-stack-progress.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Stream immediate, phase-change, ten-minute, and terminal updates
+        run: node .github/scripts/feature-stack-progress.mjs
+
   # Clean PRs still need a principal-engineering review. This batch worker is
   # intentionally reached through the same fixed control plane as conflict
   # resolution: one Lopu session receives every PR selected by one source

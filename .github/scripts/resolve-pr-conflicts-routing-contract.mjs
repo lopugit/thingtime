@@ -906,6 +906,18 @@ function assertWorkflowSource() {
   assert.match(progressBlock, /thingtime-lopu-status-native:v1/u, "new monitors retain the native dashboard marker");
   assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
 
+  const featureStackProgressBlock = source.slice(
+    source.indexOf("\n  feature_stack_progress:"),
+    source.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.match(featureStackProgressBlock, /name: Stream Feature Stack progress to Thingtime every 10 minutes/u);
+  assert.match(featureStackProgressBlock, /continue-on-error: true/u, 'stack telemetry cannot fail a valid merge');
+  assert.match(featureStackProgressBlock, /actions: read[\s\S]*contents: read/u);
+  assert.match(featureStackProgressBlock, /HEARTBEAT_SECONDS: "600"/u);
+  assert.match(featureStackProgressBlock, /POLL_SECONDS: "60"/u);
+  assert.match(featureStackProgressBlock, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
+  assert.match(featureStackProgressBlock, /feature-stack-progress\.mjs/u);
+
   for (const label of [
     "lopu: conflicting",
     "lopu: out-of-date",
