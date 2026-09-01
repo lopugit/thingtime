@@ -2996,7 +2996,11 @@ const relationalExternalPostSources: Migration = {
 						const result = await things.updateOne(
 							{ shareId: externalPostSourceShareId(postShareId, accountId), thingtime: 'external-post-source' } as any,
 							{
-								$set: { updatedAt: now },
+								// root parentId = the sourcing account: the feed and the
+								// tt:extsourced membership check both filter on it, riding the
+								// existing (thingtime, parentId, createdAt, shareId) index.
+								// In $set so a row created by an earlier run converges too.
+								$set: { updatedAt: now, parentId: accountId },
 								$setOnInsert: {
 									schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 									thingtime: ['external-post-source'],

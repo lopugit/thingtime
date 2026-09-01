@@ -193,7 +193,7 @@ export const upsertAccountAndLink = async (
   if (!existingLink) {
     const [userLinks, accountLinks] = await Promise.all([
       home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id }),
-      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountShareId })
+      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountShareId })
     ]);
     if (userLinks >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
     if (accountLinks >= MAX_LINKS_PER_ACCOUNT) {
@@ -258,6 +258,12 @@ export const upsertAccountAndLink = async (
     const linked = await home.updateOne(
       { shareId: linkId, thingtime: EXTERNAL_LINK_KIND },
       {
+        // the linked ACCOUNT as the relational parent, so "who links this
+        // account" rides (thingtime, parentId, createdAt, shareId) instead of
+        // scanning the whole link partition. $set (not $setOnInsert) heals
+        // links written by an earlier build; upsertedCount still reports
+        // whether THIS call created the link.
+        $set: { parentId: accountShareId },
         $setOnInsert: {
           schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
           shareId: linkId,
@@ -364,7 +370,7 @@ export const unlinkConnection = async (
     // Last link gone → retire the shared account thing (and any credentials
     // in its secure blob); synced external posts stay — they are inert
     // public/audience content other users' comments may hang off.
-    const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId });
+    const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountId });
     if (remaining === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
       // The account is gone, so no viewer can ever match its membership rows
@@ -373,7 +379,7 @@ export const unlinkConnection = async (
       // and existing comment threads may reference them); only this account's
       // claim on them disappears.
       const things = await getThingsCollection();
-      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, 'crystal.accountId': accountId } as any);
+      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, parentId: accountId } as any);
     }
   }
   return { ok: true, removed: true };
@@ -495,7 +501,13 @@ const upsertExternalPosts = async (
         updateOne: {
           filter: { shareId: externalPostSourceShareId(postShareId, accountShareId), thingtime: EXTERNAL_POST_SOURCE_KIND },
           update: {
-            $set: { updatedAt: now },
+            // parentId (the sourcing ACCOUNT) is what the feed pages and what
+            // the tt:extsourced membership check filters on — it rides the
+            // existing (thingtime, parentId, createdAt, shareId) index rather
+            // than costing the saturated Things index budget a new slot. It
+            // lives in $set, not $setOnInsert, so rows written by an earlier
+            // build converge on their next sync instead of needing a backfill.
+            $set: { updatedAt: now, parentId: accountShareId },
             $setOnInsert: {
               schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
               thingtime: [EXTERNAL_POST_SOURCE_KIND],
@@ -766,10 +778,11 @@ export const readConnectionsFeed = async (
     // the viewer's accounts, newest first, then fetch that page's posts. The
     // rows carry the post's publish time as their own createdAt, so this sorts
     // and cursors identically to paging the posts directly — and it rides the
-    // existing (thingtime, crystal.accountId, createdAt, shareId) index.
+    // existing (thingtime, parentId, createdAt, shareId) index, whose $in
+    // bounds keep the page sort index-provided instead of a blocking sort.
     const match: Record<string, any> = {
       thingtime: EXTERNAL_POST_SOURCE_KIND,
-      'crystal.accountId': { $in: accountIds }
+      parentId: { $in: accountIds }
     };
     // the shared chrono-cursor grammar from things.ts — one parser, one format
     const parsed = parseChronoCursor(query.cursor);

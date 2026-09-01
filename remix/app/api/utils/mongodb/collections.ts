@@ -801,23 +801,24 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // schema browse page scans the whole data partition
     col.createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
     col.createIndex({ thingtime: 1, 'crystal.schema': 1 }),
-    // Connections: the external-post-source feed read (the viewer's accounts'
-    // membership rows, newest first, chrono cursor) and external-account-link
-    // reverse lookups ("who links this account") both filter one kind +
-    // crystal.accountId — thingtime is the only multikey field, so the
-    // compound is legal. This is the hot connections-feed index.
-    col.createIndex({ thingtime: 1, 'crystal.accountId': 1, createdAt: -1, shareId: 1 }),
-    // One external post can arrive through MANY sources (two users' virtual
-    // channel lists, a real subscription + a public follow, …). Membership is
-    // RELATIONAL — one external-post-source row per (post, account) — so this
-    // serves the reverse question the tt:extsourced audience asks: "does this
-    // viewer's account source this exact post?". Its unbounded-array ancestor
-    // (root sourceIds, one element per sourcing account) is retired by the
-    // relational-external-post-sources migration.
-    col.createIndex(
-      { thingtime: 1, targetId: 1, 'crystal.accountId': 1 },
-      { partialFilterExpression: { targetId: { $type: 'string' } } }
-    ),
+    // CONNECTIONS ADDS NO INDEX OF ITS OWN — deliberately. This plan sits at
+    // exactly the indexBudget.test.ts ceiling (64 hard limit minus the 4-slot
+    // upgrade reserve), so a new feature has to ride the existing shapes or
+    // reclaim a slot. Connections rides two that already exist:
+    //   • the feed read (the viewer's accounts' membership rows, newest first,
+    //     chrono cursor) and the external-account-link reverse lookup ("who
+    //     links this account") are one kind + one ACCOUNT, so they page on
+    //     (thingtime, parentId, createdAt, shareId) above — the same relational
+    //     shape ci-events use, with the account as the parent entity;
+    //   • "does this viewer's account source this exact post?" narrows on
+    //     (targetId, thingtime) above, which is already exactly that post's
+    //     membership rows — one per sourcing account — leaving parentId a
+    //     residual over a handful of docs.
+    // That is why external-post-source/external-account-link stamp a root
+    // `parentId` (the account's shareId) alongside crystal.accountId, and why
+    // `thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1` stays RETIRED
+    // above instead of coming back: re-creating a name in that list would drop
+    // and rebuild the index on every single bootstrap.
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone
     col.createIndex({ acl: 1, createdAt: -1, shareId: 1 }),

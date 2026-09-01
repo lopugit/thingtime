@@ -929,7 +929,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   sourcing account), a canonical root-`targetId` child of the post,
   `uniqueKeys`-deduped, with the post's publish time denormalized onto the row
   so the connections feed pages membership directly on the existing
-  `(thingtime, crystal.accountId, createdAt, shareId)` index. The post's own
+  `(thingtime, parentId, createdAt, shareId)` index (the sourcing account is
+  the row's root `parentId` — the Things index budget is at its ceiling, so
+  connections adds no index of its own). The post's own
   ACL is now a CONSTANT — `tt:all` for public providers, `tt:extsourced` for
   personal ones — resolved live against the reader's links, so it names no
   account, discloses nothing, and never grows. Unlinking still revokes

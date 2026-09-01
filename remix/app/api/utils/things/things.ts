@@ -431,7 +431,10 @@ const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer>
   if (accountIds.length) {
     const things = await getThingsCollection();
     const hit = await things.findOne(
-      { thingtime: 'external-post-source', targetId: postId, 'crystal.accountId': { $in: accountIds } } as any,
+      // (targetId, thingtime) is already this exact post's membership rows —
+      // one per sourcing account — so parentId is a residual over a handful of
+      // docs on the existing index, not a new one.
+      { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
       { projection: { _id: 1 } }
     );
     if (hit) {
