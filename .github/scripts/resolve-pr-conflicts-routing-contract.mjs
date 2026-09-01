@@ -1572,25 +1572,48 @@ function assertAdminModelRouting(
     );
 
     const lines = runtime.split("\n");
+    // The credential-vault verification probe is deliberately slot-free: it
+    // exists to prove that the Thingtime waterfall itself still authenticates,
+    // so handing it GitHub-secret fallbacks would let a broken vault pass a
+    // green probe. Exempt it, and pin the property that earns the exemption so
+    // a secret-bearing worker cannot inherit it by simply omitting its slots.
+    //
+    // Key the exemption on the verify_credential_vault job, the way
+    // workflow-control-plane-contract.mjs already slices this probe out of its
+    // 500-turn budget rule. A bare `id: live_probe` is not an identity: any
+    // step in any job can adopt that id, and a real secret-bearing worker that
+    // did would silently lose all five of its credential slots while this
+    // contract stayed green. A job boundary cannot be adopted, and the job's
+    // own shape is pinned by the control-plane contract.
+    const isJobHeader = (line) => /^ {2}[A-Za-z0-9_-]+:$/u.test(line);
+    const vaultJobStart = lines.indexOf("  verify_credential_vault:");
+    const vaultJobEndOffset = vaultJobStart === -1
+      ? -1
+      : lines.slice(vaultJobStart + 1).findIndex(isJobHeader);
+    const vaultJobEnd = vaultJobStart === -1
+      ? -1
+      : (vaultJobEndOffset === -1 ? lines.length : vaultJobStart + 1 + vaultJobEndOffset);
     for (let index = 0; index < lines.length; index += 1) {
       if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
-      // The credential-vault verification probe is deliberately slot-free: it
-      // exists to prove that the Thingtime waterfall itself still authenticates,
-      // so handing it GitHub-secret fallbacks would let a broken vault pass a
-      // green probe. Exempt it, and pin the property that earns the exemption so
-      // a secret-bearing worker cannot inherit it by simply omitting its slots.
-      if (/\bid: live_probe\b/u.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
-        const nextStep = lines.slice(index + 1).findIndex((line) => /^\s*- name:/u.test(line));
+      if (vaultJobStart !== -1 && index > vaultJobStart && index < vaultJobEnd) {
+        const nextStepOffset = lines
+          .slice(index + 1, vaultJobEnd)
+          .findIndex((line) => /^\s*- name:/u.test(line));
         const probeStep = lines
-          .slice(index, nextStep === -1 ? lines.length : index + 1 + nextStep)
+          .slice(index, nextStepOffset === -1 ? vaultJobEnd : index + 1 + nextStepOffset)
           .join("\n");
         assert.doesNotMatch(
           probeStep,
           /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
           `${path}:${index + 1}: the credential-vault probe must exercise only the Thingtime waterfall`,
+        );
+        assert.match(
+          probeStep,
+          /^\s+thingtime-ci-router-secret:/mu,
+          `${path}:${index + 1}: the credential-vault probe must carry the router secret that fetches the Thingtime waterfall`,
         );
         continue;
       }
