@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Kept Feature Stack completion tracking attached to the stable published PR
+  instead of its first head SHA. An authorized repair push may now advance the
+  protected PR while the original wrapper is waiting; the gate revalidates the
+  exact head/base branch identity, follows that PR number, and reports its real
+  merge rather than waiting five hours on a stale SHA. — Codex (AI), 2026-09-01
 - Moved develop PR preview compilation from Vercel into a secret-free GitHub
   job. The exact authorized SHA now produces a symlink-preserving
   `.vercel/output` artifact; a separate protected publisher validates the
