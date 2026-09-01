@@ -78,6 +78,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   stack definition and historical run links; Restart safely cancels active
   compute before creating a fresh immutable run. Late webhook and progress
   receipts cannot overwrite a deliberate paused or stopped state.
+- **Feature Stack progress no longer disappears under a busy CI event feed.**
+  The saved-stack endpoint returns a bounded per-dispatch event stream, so
+  immediate, phase-change, and 10-minute Lopu heartbeats remain chronological
+  and visible while unrelated repository automation is active.
   Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
   — Codex (AI), 2026-09-01
 

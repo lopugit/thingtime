@@ -1210,6 +1210,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [savingWorkflow, setSavingWorkflow] = React.useState<CiWorkflowKey | null>(null);
   const [savingPreviewEnvironment, setSavingPreviewEnvironment] = React.useState<'develop' | 'production' | null>(null);
 	const [savedFeatureStacks, setSavedFeatureStacks] = React.useState<SavedFeatureStack[]>([]);
+	const [featureStackEvents, setFeatureStackEvents] = React.useState<CiEvent[]>([]);
 	const [activeFeatureStackId, setActiveFeatureStackId] = React.useState<string | null>(initialStackDraft.id ?? null);
   const [featureStackName, setFeatureStackName] = React.useState(initialStackDraft.name);
   const [featureStackIds, setFeatureStackIds] = React.useState(initialStackDraft.selectedFeatureIds);
@@ -1256,7 +1257,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
 	const loadSavedFeatureStacks = React.useCallback(async (options?: { signal?: AbortSignal }) => {
 		const next = await apiRef.current.v1.admin.ciFeatureStacks(options);
-		if (next?.ok && Array.isArray(next.stacks)) setSavedFeatureStacks(next.stacks);
+		if (next?.ok && Array.isArray(next.stacks)) {
+			setSavedFeatureStacks(next.stacks);
+			setFeatureStackEvents(Array.isArray(next.events) ? next.events : []);
+		}
 	}, []);
 
 	const load = React.useCallback(
@@ -1402,7 +1406,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const terminalStatuses = new Set(['merged', 'closed', 'completed', 'success', 'succeeded', 'failure', 'failed', 'cancelled']);
 		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
-		const dispatchEvents = dashboard.events.filter((event) => event.parentId === stack.lastDispatchId);
+		const dispatchEvents = [
+			...new Map(
+				[...featureStackEvents, ...dashboard.events]
+					.filter((event) => event.parentId === stack.lastDispatchId)
+					.map((event) => [event.id, event])
+			).values()
+		];
 		const heartbeat = latestFeatureStackHeartbeat(dispatchEvents);
 		const topLevelRuns = dashboard.workflowRuns.filter(
 			(candidate) => String(candidate.entityType ?? '') !== 'job' && normalizedStatus(candidate.event) === 'workflow_dispatch'
@@ -1542,7 +1552,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			lines,
 			runs: historicalRuns
 		};
-	}, [activeSavedFeatureStack, dashboard, featureStackProgress]);
+	}, [activeSavedFeatureStack, dashboard, featureStackEvents, featureStackProgress]);
 
 	React.useEffect(() => {
 		if (!featureStackLiveSnapshot?.live) return;

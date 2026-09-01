@@ -15,7 +15,7 @@ import {
 	reconcileLegacyFeatureStackRun,
 	saveFeatureStack
 } from '~/api/utils/ciControl/featureStackStore';
-import { recordCiEvent } from '~/api/utils/ciControl/store';
+import { listCiEventsForParents, recordCiEvent } from '~/api/utils/ciControl/store';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store, max-age=0' };
 
@@ -96,7 +96,9 @@ export const loader = ({ request }: { request: Request }) =>
 	withAdminPrivateResponse(async () => {
 		const gate = await requireAdmin(request);
 		if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status, headers: privateHeaders });
-		return json({ ok: true, stacks: await listFeatureStacksWithLegacyRunLinks() }, { headers: privateHeaders });
+		const stacks = await listFeatureStacksWithLegacyRunLinks();
+		const events = await listCiEventsForParents(stacks.flatMap((stack) => stack.lastDispatchId ? [stack.lastDispatchId] : []));
+		return json({ ok: true, stacks, events }, { headers: privateHeaders });
 	});
 
 export const action = ({ request }: { request: Request }) =>

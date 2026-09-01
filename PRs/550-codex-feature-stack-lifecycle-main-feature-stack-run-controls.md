@@ -27,6 +27,8 @@ and dispatch record.
 - Saved-stack cards expose labelled controls with mobile wrapping, busy states,
   and confirmations for Stop and active-run Restart.
 - Target badges show the held stack state instead of stale target progress.
+- The saved-stack read also returns a bounded per-dispatch event stream, so
+  Lopu's progress heartbeats cannot be evicted by unrelated global CI traffic.
 
 ## Verification
 
@@ -35,4 +37,3 @@ and dispatch record.
 - Typecheck-ratchet tests: 3 passed.
 - Targeted ESLint: passed.
 - Production client/server build and Vercel output verification: passed.
-

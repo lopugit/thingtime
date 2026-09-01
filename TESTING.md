@@ -2489,7 +2489,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       minutes while unchanged, and once when all target workers are terminal.
       Reload CI Control between updates: the stream must retain chronological
       messages, exact per-job GitHub links, progress percentage, and a refreshed
-      finish estimate in the browser's local timezone. A changed body, stale
+      finish estimate in the browser's local timezone, even after more than 500
+      unrelated CI events arrive between heartbeats. A changed body, stale
       timestamp, mismatched repository/stack/run, or replayed delivery ID must
       not create a second event, and reporter failure must not cancel the merge.
 - [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
