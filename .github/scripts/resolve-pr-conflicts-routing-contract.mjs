@@ -189,6 +189,54 @@ function assertRoute(name, input, expected) {
   }
 }
 
+// A shell function whose stdout is captured by command substitution owns that
+// stream. An annotation echoed on stdout is spliced into the caller's document
+// instead of the log, and the next `jq` over that variable dies on it.
+// `gh_read_retry` already documents the rule -- "Keep every notice on stderr so
+// command-substitution JSON stays clean" -- but `complete_large_pr_files` and
+// `read_jobs` each drifted from it independently, so the rule needs a guard
+// rather than a comment. The first drift was not cosmetic: one PR whose diff
+// GitHub refuses to generate (HTTP 422) poisoned the shared open-PR inventory
+// and took the repository-wide conflict scan down for *every* open PR, on every
+// push and every scheduled sweep, for as long as that PR stayed open.
+// Multi-line definitions only; the one-line helpers carry no diagnostic branch.
+function assertCapturedStdoutStaysClean(source, label) {
+  const lines = source.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const opened = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*$/u.exec(lines[index]);
+    if (!opened) {
+      continue;
+    }
+    const [, indent, name] = opened;
+    if (!new RegExp(`\\$\\(\\s*${name}\\b`, "u").test(source)) {
+      continue;
+    }
+    const closing = `${indent}}`;
+    let end = -1;
+    for (let scan = index + 1; scan < lines.length; scan += 1) {
+      if (lines[scan] === closing) {
+        end = scan;
+        break;
+      }
+    }
+    assert.notStrictEqual(
+      end,
+      -1,
+      `${label}:${index + 1}: ${name}() must close at its own indentation`,
+    );
+    for (let line = index; line <= end; line += 1) {
+      if (!/::(?:warning|notice|error)::/u.test(lines[line])) {
+        continue;
+      }
+      assert.match(
+        lines[line],
+        />&2/u,
+        `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so this annotation must be redirected to stderr`,
+      );
+    }
+  }
+}
+
 function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
@@ -196,6 +244,8 @@ function assertWorkflowSource() {
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
   const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
+  assertCapturedStdoutStaysClean(source, "resolve-pr-conflicts.yml");
+  assertCapturedStdoutStaysClean(rebaseSource, "rebase-pr-stacks.yml");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
