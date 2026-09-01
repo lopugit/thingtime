@@ -270,7 +270,8 @@ is fixed, and cite the checklist you ran in the PR description.
       `index.html` as `text/html`.
 - [ ] Confirm a disposable feature-branch push creates no automatic Vercel
       deployment, while exact `main` and `develop` pushes still do. The product
-      config must map `*` to `false` and explicitly map both retained branches
+      config must map minimatch `**` to `false` (including branch names with
+      `/`) and explicitly map both retained branches
       to `true`; the thin control-plane config must set
       `git.deploymentEnabled` to `false` and retain `ignoreCommand` as a second
       fail-safe.
