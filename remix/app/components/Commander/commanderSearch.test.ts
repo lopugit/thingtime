@@ -79,6 +79,14 @@ test('Commander search combines broad Thing, post, and person results with conte
 			}
 		]
 	);
+	assert.deepEqual(
+		rows.map(({ icon, avatarUrl }) => ({ icon, avatarUrl })),
+		[
+			{ icon: '📝', avatarUrl: null },
+			{ icon: '📦', avatarUrl: null },
+			{ icon: '👤', avatarUrl: null }
+		]
+	);
 });
 
 test('Thing detail paths are canonical and URL-safe', () => {
