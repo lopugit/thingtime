@@ -16,6 +16,31 @@ export const sortFeatureStackTimeline = <T extends FeatureStackTimelineLine>(lin
 		.sort((left, right) => timeValue(left.line.at) - timeValue(right.line.at) || left.index - right.index)
 		.map(({ line }) => line);
 
+export type FeatureStackHeartbeat = {
+	at: string;
+	message: string;
+	progressPercent: number;
+	expectedFinishAt: string | null;
+	workflowRunUrl: string | null;
+};
+
+export const latestFeatureStackHeartbeat = (
+	events: Array<{ eventType?: unknown; occurredAt?: unknown; data?: unknown }>
+): FeatureStackHeartbeat | null => {
+	const candidates = events.flatMap((event) => {
+		if (event.eventType !== 'feature_stack_progress' || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return [];
+		const data = event.data as Record<string, unknown>;
+		const at = typeof event.occurredAt === 'string' ? event.occurredAt : '';
+		const message = typeof data.message === 'string' ? data.message.trim() : '';
+		const progressPercent = Number(data.progressPercent);
+		const expectedFinishAt = typeof data.expectedFinishAt === 'string' ? data.expectedFinishAt : null;
+		const workflowRunUrl = typeof data.workflowRunUrl === 'string' && data.workflowRunUrl.startsWith('https://github.com/') ? data.workflowRunUrl : null;
+		if (!message || timeValue(at) === Number.MAX_SAFE_INTEGER || !Number.isFinite(progressPercent) || progressPercent < 0 || progressPercent > 100) return [];
+		return [{ at, message, progressPercent: Math.round(progressPercent), expectedFinishAt, workflowRunUrl }];
+	});
+	return candidates.sort((left, right) => timeValue(right.at) - timeValue(left.at))[0] ?? null;
+};
+
 const TERMINAL = new Set(['cancelled', 'completed', 'failure', 'failed', 'success', 'succeeded']);
 
 export const featureStackRunOutcome = (input: {

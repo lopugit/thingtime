@@ -73,6 +73,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Running Feature Stacks now report durable Lopu progress into their own CI
+  console.** The protected controller sends an immediate signed snapshot,
+  phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
+  binds each event to the exact stored stack/run, renders it chronologically,
+  links back to the precise Actions run, and refreshes progress plus the
+  viewer-local finish estimate without exposing workflow credentials.
+  — Codex (AI), 2026-09-01
+
 - **Feature Stack runs now expose their exact GitHub Actions history and stop
   reporting a finished controller as live.** Every new dispatch carries a
   durable run identity, signed workflow events attach the exact run URL, the

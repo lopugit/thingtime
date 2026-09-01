@@ -475,6 +475,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'integration-ci-progress',
+    group: 'integrations',
+    title: 'Record a Feature Stack progress heartbeat',
+    endpoint: '/api/v1/integrations/ci/progress',
+    featureVersion: '1.0.0',
+    summary: 'Attach a fresh, signed Lopu progress update to the exact Feature Stack dispatch.',
+    detail:
+      'The protected github-actions controller reports immediately, on phase changes, every ten minutes, and at completion. Thingtime validates the exact HMAC-signed body, repository, run identifiers, freshness window, bounded target phases, and the stored run-to-stack relationship before appending a relational ci-event. The admin CI console formats the stored estimate in the viewer local timezone.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Poll the current protected workflow run with actions:read.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'POST the first snapshot, each phase change, every ten minutes, and the terminal snapshot.'
+    ],
+    requestExamples: [{ name: 'Report Feature Stack progress', description: 'One immutable update for the exact stack run.', method: 'POST', headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' }, body: { deliveryId: 'feature-stack-run-<uuid>:123:1:4', repository: 'lopugit/thingtime', stackId: 'ci-feature-stack-<uuid>', featureStackRunId: 'feature-stack-run-<uuid>', workflowRunId: 123, workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123', runAttempt: 1, startedAt: '2026-09-01T00:00:00.000Z', reportedAt: '2026-09-01T00:10:00.000Z', expectedFinishAt: '2026-09-01T00:30:00.000Z', status: 'in_progress', message: 'Lopu is resolving 1 of 2 target branches.', progressPercent: 48, targets: [{ target: 'main', status: 'in_progress', phase: 'Resolving conflicts with Lopu', progressPercent: 55, jobUrl: 'https://github.com/lopugit/thingtime/actions/runs/123/job/456' }] } }],
+    responseExamples: [
+      { status: 202, description: 'Progress event recorded or idempotently replayed.', body: { ok: true, dispatchId: 'ci-example', eventId: 'ci-event-example', inserted: true } },
+      { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid progress signature.' } },
+      { status: 404, description: 'The signed run does not belong to a stored Feature Stack dispatch.', body: { ok: false, error: 'Feature Stack run not found.' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-ci-reconcile',
     group: 'admin',
     title: 'Reconcile CI state from GitHub',
