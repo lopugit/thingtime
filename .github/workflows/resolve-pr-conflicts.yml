@@ -4103,20 +4103,38 @@ jobs:
           set -euo pipefail
           safe_target="$(printf '%s' "$TARGET_BRANCH" | tr '/_' '--' | tr -cd 'A-Za-z0-9.-')"
           publish_branch="lopu/feature-stack-$STACK_ID-to-$safe_target"
-          head_sha="$(gh api "repos/$REPO/git/ref/heads/$publish_branch" --jq '.object.sha' 2>/dev/null || true)"
-          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+          initial_head_sha="$(gh api "repos/$REPO/git/ref/heads/$publish_branch" --jq '.object.sha' 2>/dev/null || true)"
+          [[ "$initial_head_sha" =~ ^[0-9a-f]{40}$ ]] || {
             echo "::error::The Feature Stack worker did not publish $publish_branch."
             exit 1
           }
+          pr_number=""
 
           for attempt in $(seq 1 300); do
             response="$RUNNER_TEMP/feature-stack-target-pr.json"
-            if gh api \
-              "repos/$REPO/pulls?state=all&head=${GITHUB_REPOSITORY_OWNER}%3A${publish_branch}&base=${TARGET_BRANCH}&sort=updated&direction=desc&per_page=20" \
-              >"$response" 2>"$RUNNER_TEMP/feature-stack-target-pr.err"; then
-              pr="$(jq -c --arg head_sha "$head_sha" '[.[] | select(.head.sha == $head_sha)][0] // empty' "$response")"
-              if [ -n "$pr" ]; then
-                pr_number="$(jq -r '.number' <<<"$pr")"
+            error_log="$RUNNER_TEMP/feature-stack-target-pr.err"
+            if [ -z "$pr_number" ]; then
+              if gh api \
+                "repos/$REPO/pulls?state=all&head=${GITHUB_REPOSITORY_OWNER}%3A${publish_branch}&base=${TARGET_BRANCH}&sort=updated&direction=desc&per_page=20" \
+                >"$response" 2>"$error_log"; then
+                pr_number="$(jq -r --arg publish_branch "$publish_branch" --arg target "$TARGET_BRANCH" \
+                  '[.[] | select(.head.ref == $publish_branch and .base.ref == $target)][0].number // empty' \
+                  "$response")"
+              else
+                sed -n '1,8p' "$error_log" >&2
+                echo "::warning::Could not locate the target PR on attempt $attempt; retrying."
+              fi
+            fi
+
+            if [ -n "$pr_number" ]; then
+              if gh api "repos/$REPO/pulls/$pr_number" >"$response" 2>"$error_log"; then
+                pr="$(jq -c '.' "$response")"
+                head_ref="$(jq -r '.head.ref' <<<"$pr")"
+                base_ref="$(jq -r '.base.ref' <<<"$pr")"
+                if [ "$head_ref" != "$publish_branch" ] || [ "$base_ref" != "$TARGET_BRANCH" ]; then
+                  echo "::error::Feature Stack target PR #$pr_number changed identity ($head_ref -> $base_ref)."
+                  exit 1
+                fi
                 pr_url="$(jq -r '.html_url' <<<"$pr")"
                 state="$(jq -r '.state' <<<"$pr")"
                 merged_at="$(jq -r '.merged_at // empty' <<<"$pr")"
@@ -4129,13 +4147,17 @@ jobs:
                   exit 1
                 fi
                 merge_state="$(jq -r '.mergeable_state // "unknown"' <<<"$pr")"
+                current_head_sha="$(jq -r '.head.sha' <<<"$pr")"
+                if [ "$current_head_sha" != "$initial_head_sha" ]; then
+                  echo "Feature Stack target PR #$pr_number advanced from $initial_head_sha to $current_head_sha; following the same protected PR."
+                fi
                 echo "Feature Stack target PR #$pr_number is open ($merge_state); waiting for branch protection: $pr_url"
               else
-                echo "Waiting for the exact $publish_branch head $head_sha to appear as a target PR."
+                sed -n '1,8p' "$error_log" >&2
+                echo "::warning::Could not inspect target PR #$pr_number on attempt $attempt; retrying."
               fi
             else
-              sed -n '1,8p' "$RUNNER_TEMP/feature-stack-target-pr.err" >&2
-              echo "::warning::Could not inspect the target PR on attempt $attempt; retrying."
+              echo "Waiting for $publish_branch to appear as a target PR."
             fi
             sleep 60
           done

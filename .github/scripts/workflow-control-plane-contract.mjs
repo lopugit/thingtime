@@ -1492,6 +1492,16 @@ export function assertControlPlaneContract() {
   assert.match(featureStackProgress, /actions: read[\s\S]*contents: read/u);
   assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/feature-stack-progress\.mjs/u);
   assert.match(featureStackProgress, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
+  assert.match(
+    featureStackProgress,
+    /pr_number=""[\s\S]*pulls\?state=all&head=[\s\S]*pulls\/\$pr_number[\s\S]*\.head\.ref[\s\S]*\.base\.ref/u,
+    "Feature Stack completion pins the published PR identity and revalidates its branches after repair pushes",
+  );
+  assert.doesNotMatch(
+    featureStackProgress,
+    /select\(\.head\.sha == \$head_sha\)/u,
+    "Feature Stack completion does not become permanently stale when the protected PR head advances",
+  );
   const allBranchHandoff = resolver.slice(
     resolver.indexOf("\n  handoff_all_branch_event:"),
     resolver.indexOf("\n  maintain_all_branch:"),
