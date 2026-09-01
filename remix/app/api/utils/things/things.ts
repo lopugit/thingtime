@@ -2056,7 +2056,11 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
-// never be cut off, only cycles and broken/missing targets fail closed).
+// never be cut off, only cycles and broken/missing targets fail closed). The
+// sole exception is an unrestricted owner opening their own orphaned media:
+// the object remains private to its owner, but must stay recoverable from its
+// direct permalink when a historic parent has disappeared. No audience or PAT
+// session can use that recovery path.
 // `findByShareId` is injectable so page-sized callers can share a batched
 // lookup; the default stays the plain per-hop findOne.
 export const canViewInherited = async (
@@ -2076,7 +2080,19 @@ export const canViewInherited = async (
 		return false;
 	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  return !!terminal && canView(terminal, viewer);
+  if (terminal) return canView(terminal, viewer);
+
+  // Attachments are independently stored media objects. If a parent was
+  // deleted or a legacy migration left the relation dangling, preserve an
+  // owner-only recovery route rather than turning the original bytes into an
+  // inaccessible orphan. Keep all other inherited children fail-closed and
+  // never bypass a visibility-scoped personal access token.
+  return (
+    thingtimeOf(doc).includes('attachment') &&
+    !!viewer?.id &&
+    doc.ownerId === viewer.id &&
+    !patVisibilityOf(viewer)
+  );
 };
 
 // Mutation-site visibility-fence check with the inherit chain resolved —
