@@ -3822,9 +3822,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'admin',
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
-		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
+		featureVersion: '1.1.0',
+		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
 		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
+			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
 			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
@@ -3833,7 +3834,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Configure CRON_SECRET only in the deployment environment.',
 			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed counts; later invocations safely retry anything still unstamped.'
+			'Monitor failed counts; a full failure-free batch immediately starts a durable continuation, while later hourly invocations safely retry anything still unstamped.'
 		],
 		requestExamples: [
 			{
@@ -3845,11 +3846,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [
 			{
 				status: 200,
-				description: 'One bounded sweep pass over both surfaces.',
+				description: 'One bounded sweep pass; continuationRunId is set when a durable self-draining workflow was started.',
 				body: {
 					ok: true,
 					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
-					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
+					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 },
+					continuationRunId: 'wrun_01moderationsweepexample'
 				}
 			},
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
