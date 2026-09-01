@@ -20,6 +20,7 @@ import ThingtimeUrl from './routes/$';
 import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
+import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 
 // Everything else is code-split. Statically importing every route put the
@@ -36,21 +37,6 @@ import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 // One hard reload fetches the fresh HTML + chunk graph; a session guard
 // (cleared after 10 healthy seconds in entry.client) prevents reload loops
 // when the network itself is down.
-const recoverStaleChunk = (error: unknown): never => {
-  try {
-    const RELOAD_FLAG = 'tt-chunk-reload';
-    const message = String((error as Error)?.message || error || '');
-    const chunkFailure = /dynamically imported module|Importing a module script failed|error loading dynamically imported/i.test(message);
-    if (chunkFailure && !sessionStorage.getItem(RELOAD_FLAG)) {
-      sessionStorage.setItem(RELOAD_FLAG, String(Date.now()));
-      window.location.reload();
-    }
-  } catch {
-    // sessionStorage unavailable — fall through to the router error surface
-  }
-  throw error;
-};
-
 const lazyRoute = (load: () => Promise<{ default: ComponentType<any> }>) => async () => ({
   Component: (await load().catch(recoverStaleChunk)).default
 });
@@ -145,6 +131,7 @@ export const router = createBrowserRouter([
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
       { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },
+      { path: 'admin/:section', lazy: lazyRoute(() => import('./routes/admin')) },
       // browse everything each connected app stores for you — no guard: it
       // renders its own signed-out quiet state, like /settings
       { path: 'apps', lazy: lazyRoute(() => import('./routes/apps')) },

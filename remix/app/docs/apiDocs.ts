@@ -9,6 +9,7 @@ export type ApiRequestExample = {
   description: string;
   method: ApiHttpMethod;
   query?: Record<string, string | number | boolean | null>;
+  headers?: Record<string, string>;
   body?: unknown;
 };
 
@@ -80,13 +81,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'CI control dashboard snapshot',
     endpoint: '/api/v1/admin/ci',
+    featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
       'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
-    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    requestExamples: [{ name: 'Load CI control', description: 'Use limit=0 to load every selectable feature, branch, and pull request. Recent run, deployment, preview, and dispatch activity stays bounded; summary counts remain exact.', method: 'GET', query: { limit: 0 } }],
     responseExamples: [
       {
         status: 200,
@@ -109,7 +111,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } },
+      {
+        status: 503,
+        description: 'A MongoDB blocking sort exceeded its memory ceiling. Retry-After is present and the client keeps its last-known cached snapshot.',
+        headers: { 'Retry-After': '30' },
+        body: {
+          ok: false,
+          error: 'CI dashboard data is temporarily unavailable. Last-known cached data remains safe to use.',
+          code: 'ci_dashboard_query_capacity',
+          retryable: true
+        }
+      }
     ]
   }),
   endpoint({
@@ -117,10 +130,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '1.1.0',
+    featureVersion: '2.1.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
-      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts an ordered list of 2-20 open same-repository PR numbers and 1-2 target branches; the server snapshots every live source ref and SHA into a canonical immutable plan before dispatch. The protected Lopu controller combines every source in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per target. Repository-maintenance keys are translated into typed Lopu PR manager inputs, so batching, rebase, promotion, and synchronization no longer depend on separate workflow files. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+      'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, safely omits selected sources and targets with no compatible partner, snapshots every remaining source ref and SHA into a canonical immutable plan, and rejects a plan with no compatible pair instead of crossing branch families. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
 		steps: [
@@ -161,6 +174,90 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'GitHub could not accept the request.',
 				body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
 			}
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-feature-stacks',
+    group: 'admin',
+    title: 'Manage saved Feature Stacks',
+    endpoint: '/api/v1/admin/ci/stacks',
+    featureVersion: '1.3.0',
+    summary: 'Save, edit, list, run, pause, stop, restart, and archive reusable multi-target Feature Stacks.',
+    detail:
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. GET includes a bounded stack-specific event stream so progress heartbeats remain visible even when unrelated repository activity exceeds the general dashboard event window. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time. Pause and stop cancel only the exact active linked workflow while preserving the saved definition and history; restart cancels active compute before dispatching a fresh immutable run.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run or restart to dispatch a current live plan.', 'POST pause or stop to cancel exact active compute while preserving history, or delete to archive it.'],
+    requestExamples: [
+      { name: 'Save a stack', description: 'Sources and targets have no product-imposed count cap.', method: 'POST', body: { action: 'save', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true } },
+      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } },
+      { name: 'Pause a stack', description: 'Cancel active compute and preserve the saved definition for restart.', method: 'POST', body: { action: 'pause', id: 'ci-feature-stack-example' } },
+      { name: 'Restart a stack', description: 'Cancel an active run if necessary and dispatch a fresh immutable plan.', method: 'POST', body: { action: 'restart', id: 'ci-feature-stack-example' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration with bounded workflow and progress-event history.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved', runs: [{ id: 'ci-dispatch-example', runId: 'feature-stack-run-example', status: 'success', workflowRunId: 123, url: 'https://github.com/lopugit/thingtime/actions/runs/123' }] }], events: [{ id: 'ci-event-example', parentId: 'ci-dispatch-example', eventType: 'feature_stack_progress', statusTo: 'in_progress', occurredAt: '2026-09-01T00:10:00.000Z', data: { message: 'Lopu progress: 1 active, 0 queued, 0/1 finished.', progressPercent: 45 } }] } }]
+  }),
+  endpoint({
+    id: 'admin-ci-previews',
+    group: 'admin',
+    title: 'Manage opt-in PR preview environments',
+    endpoint: '/api/v1/admin/ci/previews',
+    featureVersion: '1.0.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    detail:
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'Select a same-repository open pull request.',
+      'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
+      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable a develop preview',
+        description: 'Build the exact current PR head with the develop Custom Environment.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'develop', enabled: true }
+      },
+      {
+        name: 'Enable a production-environment preview',
+        description: 'Explicitly allow this trusted PR to run with production environment values without assigning production domains.',
+        method: 'POST',
+        body: { prNumber: 496, environment: 'production', enabled: true, acknowledgeProductionData: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Policy stored and the exact-SHA deployment created or reused.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+      },
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-credentials',
+    group: 'admin',
+    title: 'Manage the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/admin/ci/credentials',
+    featureVersion: '2.0.0',
+    summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
+    detail:
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the redacted ordered list.',
+      'POST create, rotate, set-enabled, reorder, or delete.',
+      'Use the CI Control page to manage the order without copying values back into the browser.'
+    ],
+    requestExamples: [
+      { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
+      { name: 'Reorder the waterfall', description: 'Every stored id must appear exactly once.', method: 'POST', body: { action: 'reorder', order: ['lopu_credential_first', 'lopu_credential_second'] } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true }] } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   }),
   endpoint({
@@ -354,6 +451,52 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
       { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-credentials',
+    group: 'integrations',
+    title: 'Deliver the ordered Lopu credential waterfall',
+    endpoint: '/api/v1/integrations/ci/credentials',
+    featureVersion: '1.1.0',
+    summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
+    detail:
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Create a fresh nonce and request timestamp in a workflow running from github-actions.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'On the first migration request only, the controller may include its existing OAuth slots; an empty vault imports them once.',
+      'Mask every returned value immediately and keep it only for the current job.'
+    ],
+    requestExamples: [{ name: 'Fetch for one controller run', description: 'A nonce cannot be replayed. bootstrapCredentials is accepted only while the vault is empty.', method: 'POST', body: { platform: 'Anthropic', repository: 'lopugit/thingtime', workflowRef: 'lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@refs/heads/github-actions', runId: '123456', runAttempt: '1', nonce: 'abcdefghijklmnopqrstuvwxyz012345', requestedAt: '2026-08-31T05:00:00.000Z', bootstrapCredentials: [{ name: 'Thingtime Claude', value: '<legacy-oauth-token>' }] } }],
+    responseExamples: [
+      { status: 200, description: 'Ordered enabled credentials for the requested platform. Values must be masked immediately.', body: { ok: true, credentials: [{ id: 'lopu_credential_first', name: 'Thingtime Claude', platform: 'Anthropic', credentialType: 'claude-code-oauth-token', value: '<oauth-token>' }] } },
+      { status: 409, description: 'Replay blocked.', body: { ok: false, error: 'Credential request was already used.' } }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-progress',
+    group: 'integrations',
+    title: 'Record a Feature Stack progress heartbeat',
+    endpoint: '/api/v1/integrations/ci/progress',
+    featureVersion: '1.0.0',
+    summary: 'Attach a fresh, signed Lopu progress update to the exact Feature Stack dispatch.',
+    detail:
+      'The protected github-actions controller reports immediately, on phase changes, every ten minutes, and at completion. Thingtime validates the exact HMAC-signed body, repository, run identifiers, freshness window, bounded target phases, and the stored run-to-stack relationship before appending a relational ci-event. The admin CI console formats the stored estimate in the viewer local timezone.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: [
+      'Poll the current protected workflow run with actions:read.',
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET.',
+      'POST the first snapshot, each phase change, every ten minutes, and the terminal snapshot.'
+    ],
+    requestExamples: [{ name: 'Report Feature Stack progress', description: 'One immutable update for the exact stack run.', method: 'POST', headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' }, body: { deliveryId: 'feature-stack-run-<uuid>:123:1:4', repository: 'lopugit/thingtime', stackId: 'ci-feature-stack-<uuid>', featureStackRunId: 'feature-stack-run-<uuid>', workflowRunId: 123, workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123', runAttempt: 1, startedAt: '2026-09-01T00:00:00.000Z', reportedAt: '2026-09-01T00:10:00.000Z', expectedFinishAt: '2026-09-01T00:30:00.000Z', status: 'in_progress', message: 'Lopu is resolving 1 of 2 target branches.', progressPercent: 48, targets: [{ target: 'main', status: 'in_progress', phase: 'Resolving conflicts with Lopu', progressPercent: 55, jobUrl: 'https://github.com/lopugit/thingtime/actions/runs/123/job/456' }] } }],
+    responseExamples: [
+      { status: 202, description: 'Progress event recorded or idempotently replayed.', body: { ok: true, dispatchId: 'ci-example', eventId: 'ci-event-example', inserted: true } },
+      { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid progress signature.' } },
+      { status: 404, description: 'The signed run does not belong to a stored Feature Stack dispatch.', body: { ok: false, error: 'Feature Stack run not found.' } }
     ]
   }),
   endpoint({
@@ -1305,11 +1448,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey registration',
     endpoint: '/api/v1/auth/passkeys/register-options',
+    featureVersion: '1.0.1',
     summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
     detail:
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
       'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
-      'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
+      'Options request a DISCOVERABLE credential (residentKey required) with user verification required, matching ' +
+      'the verification policy used when the response returns. Discoverability is what makes usernameless ' +
       'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
       'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
       'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
@@ -1327,7 +1472,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Creation options (challenge cookie set).',
-        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'required' } } }
       },
       { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
     ]
@@ -1371,11 +1516,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Start passkey login',
     endpoint: '/api/v1/auth/passkeys/login-options',
+    featureVersion: '1.0.1',
     summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
     detail:
       'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
       'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
-      'whatever Thingtime passkeys it holds (no username, no enumeration surface) — this is also the ' +
+      'whatever Thingtime passkeys it holds (no username, no enumeration surface). User verification is required ' +
+      'in the browser because the assertion verifier requires it too. This is also the ' +
       'options payload for conditional-UI autofill: request it on login-form mount with ' +
       'mediation:"conditional" and Safari/Chrome surface the iCloud Keychain / 1Password passkey popup ' +
       'directly on the username field.',
@@ -1388,7 +1535,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
     responseExamples: [
-      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'required' } } }
     ]
   }),
   endpoint({
@@ -3309,7 +3456,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
 			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } later re-sorts a post’s bound set and binds newly uploaded ready drafts appended to it.'
 		],
 		requestExamples: [
 			{
@@ -3383,19 +3530,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
-		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		summary: 'Sets or clears an owned ready attachment’s display filename, title, and description.',
 		detail:
-			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+			'Every attachment is a searchable Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation metadata that page, post cards, and lightbox render: filenamePreview up to 255 single-line characters, title up to 200, and description up to 2000 characters (newlines allowed). The original filename remains immutable and is still used for downloads. Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id with title and/or description.',
+			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
 			'Store the returned attachment metadata (it includes the updated title/description).',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
@@ -3407,6 +3555,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				method: 'POST',
 				body: {
 					id: '3bda8208-625c-4f5d-941f-348020021848',
+					filenamePreview: 'Bay sunset.jpg',
 					title: 'Sunset over the bay',
 					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
 				}
@@ -3432,20 +3581,77 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
-		id: 'attachment-delete',
+		id: 'attachment-link',
 		group: 'attachments',
-		title: 'Delete attachment',
-		endpoint: '/api/v1/attachments/delete',
-		summary: 'Deletes an owned attachment object before refunding its storage.',
+		title: 'Link external media',
+		endpoint: '/api/v1/attachments/link',
+		summary: 'Mints a ready linked-attachment draft from an external media URL.',
 		detail:
-			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+			'A linked attachment is a first-class attachment Thing whose bytes stay on the original site: the crystal carries the external http(s) URL and clients render it directly (image tile, video player, or file row with an outbound download link). It binds into posts and rich comments through the same attachmentIds flows as uploads, reorders and annotates identically, and never touches Thingtime object storage or the upload-approval gate — only the metadata document counts toward the owner’s quota. The server derives contentType and a render hint from the URL’s file extension; a client may demote the hint to a plain file after a failed load probe, but can never promote a file extension to a visual kind. Duplicate URLs are allowed — each mint is its own attachment. Unbound mints expire on the standard 24-hour draft TTL. The server never fetches the URL.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
-			'POST the canonical attachment id.',
+			'POST the external http(s) media URL (up to 2048 characters).',
+			'Optionally send purpose ("post" default, or "comment") so the draft binds to the right surface, and mediaKind to demote an extensionless URL to "file".',
+			'Store the returned attachment id and url — the id goes into attachmentIds on post create or edit exactly like an uploaded attachment.',
+			'Remove an unwanted mint with /api/v1/attachments/delete; unbound mints expire on their own after 24 hours.'
+		],
+		requestExamples: [
+			{
+				name: 'Link a photo by URL',
+				description: 'Mint a ready linked attachment for an external image.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/photos/sunset.jpg'
+				}
+			},
+			{
+				name: 'Link a document for a comment',
+				description: 'A file-extension URL lands in the file row UI with an outbound download link.',
+				method: 'POST',
+				body: {
+					url: 'https://example.com/papers/spec.pdf',
+					purpose: 'comment'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'The minted linked attachment’s public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '9c1f5f68-3f0a-45f2-8f60-6f4a70b1a001',
+						name: 'sunset.jpg',
+						size: 0,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						url: 'https://example.com/photos/sunset.jpg'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-delete',
+		featureVersion: '1.1.0',
+		group: 'attachments',
+		title: 'Delete attachment',
+		endpoint: '/api/v1/attachments/delete',
+		summary: 'Deletes an owned attachment object before refunding its storage.',
+		detail:
+			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
 			'On success, remove it from local draft state.',
 			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
 		],
@@ -3454,7 +3660,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				name: 'Delete file',
 				description: 'Delete one owned attachment.',
 				method: 'POST',
-				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
@@ -3616,9 +3822,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'admin',
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
-		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
+		featureVersion: '1.1.0',
+		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
 		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
+			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
 			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
@@ -3627,7 +3834,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Configure CRON_SECRET only in the deployment environment.',
 			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed counts; later invocations safely retry anything still unstamped.'
+			'Monitor failed counts; a full failure-free batch immediately starts a durable continuation, while later hourly invocations safely retry anything still unstamped.'
 		],
 		requestExamples: [
 			{
@@ -3639,11 +3846,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [
 			{
 				status: 200,
-				description: 'One bounded sweep pass over both surfaces.',
+				description: 'One bounded sweep pass; continuationRunId is set when a durable self-draining workflow was started.',
 				body: {
 					ok: true,
 					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
-					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
+					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 },
+					continuationRunId: 'wrun_01moderationsweepexample'
 				}
 			},
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
@@ -6261,6 +6469,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -6275,14 +6484,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST { thingtime: ["post"], crystal: { type, text, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'POST { thingtime: ["post"], crystal: { type, text, richText?, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'Post captions may include richText: a bounded native Editor.js document ({ kind: "rich-text", blocks: [...] }). The server derives crystal.text from those blocks as the canonical plain-text search, moderation, notification, and older-client fallback.',
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
-      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
+      'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
       'DELETE ?id= (or body { id, expectedUpdatedAt? }) removes an owned thing; the optional precondition is checked atomically before cascade cleanup, attached comments/reactions go with it, and shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
@@ -6297,6 +6507,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           crystal: { type: 'text', text: 'Everything is a thing ✨' },
           acl: ['tt:all'],
           tags: ['thingtime']
+        }
+      },
+      {
+        name: 'Create rich-text post',
+        description: 'Native blocks retain inline marks, block styles, whitespace, and line breaks; text is derived server-side.',
+        method: 'POST',
+        body: {
+          type: 'text',
+          richText: {
+            kind: 'rich-text',
+            blocks: [{ type: 'paragraph', data: { text: '<mark>Home network public ip:</mark><br>113.29.241.145' } }]
+          },
+          visibility: 'private'
         }
       },
       {
@@ -6616,6 +6839,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
+    featureVersion: '1.1.1',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
@@ -6754,12 +6978,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
+			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -6942,6 +7167,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -7089,6 +7315,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
@@ -7129,6 +7356,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
@@ -7143,7 +7371,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST the thing id plus any of crystal, extended, visibility, and tags.',
-      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas. For posts, a text patch from an older/plain client that omits richText intentionally clears the previous rich-text document.',
       'For a previewed update, send expectedUpdatedAt; a stale value returns 409 without writing. Set replaceCrystal only when whole-crystal replacement is intended.',
       'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
@@ -7183,6 +7411,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
@@ -8144,6 +8373,63 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
       }
     ]
+  }),
+  endpoint({
+    id: 'network-probe-ping',
+    group: 'system',
+    title: 'Network probe ping',
+    endpoint: '/api/v1/network-probe/ping',
+    summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
+    detail:
+      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
+    requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'A 256-byte binary response.', headers: { 'Content-Type': 'application/octet-stream' } }]
+  }),
+  endpoint({
+    id: 'network-probe-download',
+    group: 'system',
+    title: 'Network probe download',
+    endpoint: '/api/v1/network-probe/download',
+    summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
+    detail:
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['GET'],
+    steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
+    requestExamples: [
+      { name: 'Download a 2 MiB packet', description: 'One member of the fixed speed-test ladder.', method: 'GET', query: { bytes: 2097152 } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'The requested fixed-size binary packet.', headers: { 'Content-Type': 'application/octet-stream' } }
+    ]
+  }),
+  endpoint({
+    id: 'network-probe-upload',
+    group: 'system',
+    title: 'Network probe upload',
+    endpoint: '/api/v1/network-probe/upload',
+    summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
+    detail:
+      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+    methods: ['POST'],
+    steps: [
+      'Pass one documented bytes value.',
+      'Send binary data with exactly that Content-Length.',
+      'Use the small JSON acknowledgement only after a 200.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upload a 500 KiB packet',
+        description: 'One member of the fixed speed-test ladder; set Content-Length to 512000.',
+        method: 'POST',
+        query: { bytes: 512000 }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Exact body accepted.', body: { ok: true, bytes: 512000 } }]
   }),
   endpoint({
     id: 'schemas-browse',

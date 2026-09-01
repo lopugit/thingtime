@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import {
   Box,
   Button,
@@ -34,6 +35,7 @@ import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorMo
 import { TierManager } from '~/components/Admin/TierManager';
 import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
 import type { AdminRowField } from '~/components/Admin/adminRowQuery';
+import { ADMIN_TABS, adminTabIndex, adminTabPath } from '~/components/Admin/adminRoutesCore';
 import {
 	exactByteLabel,
 	storageProjectionTitle,
@@ -942,6 +944,13 @@ const AppsTab = () => {
 
 export const AdminDashboard = () => {
   const user = useCurrentUser();
+  const navigate = useNavigate();
+  const { section } = useParams();
+  const selectedTabIndex = adminTabIndex(section);
+
+  React.useEffect(() => {
+    if (selectedTabIndex === null) navigate('/admin', { replace: true });
+  }, [navigate, selectedTabIndex]);
 
   // Same whole-page gate idiom as the MongoDB workbench (Raw.tsx): a card,
   // never a redirect, so the URL is shareable between admins.
@@ -968,7 +977,14 @@ export const AdminDashboard = () => {
         variant="ink"
         subtitle="Manage users, apps, subscription tiers, CI automation, external integrations, quotas, and ownership."
       />
-      <Tabs variant="unstyled" size="sm" isLazy lazyBehavior="keepMounted">
+      <Tabs
+        variant="unstyled"
+        size="sm"
+        isLazy
+        lazyBehavior="keepMounted"
+        index={selectedTabIndex ?? 0}
+        onChange={(index) => navigate(adminTabPath(index))}
+      >
         <TabList
           bg="var(--tt-surface-alt, #f5f5f7)"
           borderRadius="var(--tt-radius-pill, 999px)"
@@ -978,13 +994,11 @@ export const AdminDashboard = () => {
           width="fit-content"
           maxWidth="100%"
         >
-          <Tab {...ADMIN_TAB_STYLES}>Users</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>Apps</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>Moderation</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>Tiers</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>CI Control</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>External integrations</Tab>
-          <Tab {...ADMIN_TAB_STYLES}>System</Tab>
+          {ADMIN_TABS.map((tab) => (
+            <Tab key={tab.slug} as={RouterLink} to={`/admin/${tab.slug}`} {...ADMIN_TAB_STYLES}>
+              {tab.label}
+            </Tab>
+          ))}
         </TabList>
         <TabPanels>
           <TabPanel px={0}>

@@ -217,6 +217,10 @@ const main = async () => {
 		'options request a discoverable credential',
 		regOptions.json?.options?.authenticatorSelection?.residentKey === 'required'
 	);
+	check(
+		'registration requires device user verification',
+		regOptions.json?.options?.authenticatorSelection?.userVerification === 'required'
+	);
 
 	const authenticator = makeAuthenticator();
 	const userHandle = regOptions.json.options.user.id;
@@ -254,6 +258,7 @@ const main = async () => {
 	const visitor = newJar(); // a fresh browser: no session, no roster
 	const loginOptions = await api(visitor, 'POST', '/api/v1/auth/passkeys/login-options');
 	check('login-options 200, empty allowCredentials', loginOptions.json?.ok === true && loginOptions.json.options?.allowCredentials?.length === 0);
+	check('login requires device user verification', loginOptions.json?.options?.userVerification === 'required');
 	check('login challenge cookie set', visitor.cookies.has('tt_webauthn_auth'));
 
 	const assertion = assertionResponseFor(authenticator, loginOptions.json.options, userHandle);

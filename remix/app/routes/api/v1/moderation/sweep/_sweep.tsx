@@ -12,18 +12,25 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { json } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
-import { sweepUnanalyzedAttachments, sweepUnmoderatedTextThings } from '~/api/utils/moderation/moderationAdmin';
+import {
+	shouldContinueModerationSweep,
+	sweepUnanalyzedAttachments,
+	sweepUnmoderatedTextThings
+} from '~/api/utils/moderation/moderationAdmin';
+import { startModerationSweepDrain } from '../../../../../../workflows/moderationSweep';
 
 type SweepDependencies = {
 	getSecret: () => string | undefined;
 	sweepText: typeof sweepUnmoderatedTextThings;
 	sweepAttachments: typeof sweepUnanalyzedAttachments;
+	startContinuation: () => Promise<string>;
 };
 
 const defaultDependencies: SweepDependencies = {
 	getSecret: () => process.env.CRON_SECRET,
 	sweepText: sweepUnmoderatedTextThings,
-	sweepAttachments: sweepUnanalyzedAttachments
+	sweepAttachments: sweepUnanalyzedAttachments,
+	startContinuation: startModerationSweepDrain
 };
 
 const exactSecretHeader = (authorization: string | null, secret: string): boolean => {
@@ -46,9 +53,11 @@ export const createModerationSweepLoader = (overrides: Partial<SweepDependencies
 			if (!exactSecretHeader(request.headers.get('Authorization'), secret)) {
 				return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 			}
-			const text = await dependencies.sweepText();
-			const attachments = await dependencies.sweepAttachments();
-			return json({ ok: true, text, attachments });
+			const [text, attachments] = await Promise.all([dependencies.sweepText(), dependencies.sweepAttachments()]);
+			const continuationRunId = shouldContinueModerationSweep(text, attachments)
+				? await dependencies.startContinuation()
+				: null;
+			return json({ ok: true, text, attachments, continuationRunId });
 		});
 };
 

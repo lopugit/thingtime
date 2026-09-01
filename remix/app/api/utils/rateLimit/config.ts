@@ -20,6 +20,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // owner title/description edits (POST /api/v1/attachments/annotate) — small
   // crystal-only writes, same shape as delete
   'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
+  // linked-URL media mints (POST /api/v1/attachments/link) — metadata-only
+  // thing inserts, no object storage; same shape as annotate/delete
+  'attachments.link': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
@@ -200,7 +203,14 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,
   // ever). Enforced fail-closed at the route like mongodb.populate.
-  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // Public diagnostic packets used by Commander Activity. A speed run makes
+  // exactly five requests in each direction (one for each fixed packet size),
+  // so this admits one complete measurement every 15 minutes per client IP and
+  // rejects traffic if the shared limiter is unavailable.
+  'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
+  'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
@@ -212,51 +222,47 @@ const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
 let cache: { at: number; config: RateLimitConfig } | null = null;
 
 const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
-  limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
-  windowMs: Number.isFinite(rule?.windowMs)
-    ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs)))
-    : fallback.windowMs,
-  enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
+	limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
+	windowMs: Number.isFinite(rule?.windowMs) ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs))) : fallback.windowMs,
+	enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
 });
 
 // Only known endpoints survive, each clamped — a stored/patched config can never
 // widen the endpoint set or set nonsensical values.
 const normalize = (endpoints: any): RateLimitConfig => {
-  const out: RateLimitConfig = {};
-  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-    out[name] = clampRule(endpoints?.[name], def);
-  }
-  return out;
+	const out: RateLimitConfig = {};
+	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+		out[name] = clampRule(endpoints?.[name], def);
+	}
+	return out;
 };
 
 export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig> => {
-  if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
-  try {
-    const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
-    const config = normalize(doc?.endpoints);
-    cache = { at: Date.now(), config };
-    return config;
-  } catch {
-    // fall back to the last cache or the defaults if the settings read fails
-    return cache?.config || normalize(null);
-  }
+	if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
+	try {
+		const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
+		const config = normalize(doc?.endpoints);
+		cache = { at: Date.now(), config };
+		return config;
+	} catch {
+		// fall back to the last cache or the defaults if the settings read fails
+		return cache?.config || normalize(null);
+	}
 };
 
 export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: string): Promise<RateLimitConfig> => {
-  const current = await getRateLimitConfig(true);
-  const endpoints: RateLimitConfig = {};
-  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-    // Merge the patch OVER the current stored rule, so a partial patch (e.g.
-    // only { limit }) keeps the endpoint's other fields instead of resetting
-    // them to defaults; then clamp. Non-object patch entries are ignored.
-    const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
-    endpoints[name] = clampRule({ ...current[name], ...p }, def);
-  }
-  await (await getSettingsCollection()).updateOne(
-    { key: SETTINGS_KEY },
-    { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } },
-    { upsert: true }
-  );
-  cache = { at: Date.now(), config: endpoints };
-  return endpoints;
+	const current = await getRateLimitConfig(true);
+	const endpoints: RateLimitConfig = {};
+	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+		// Merge the patch OVER the current stored rule, so a partial patch (e.g.
+		// only { limit }) keeps the endpoint's other fields instead of resetting
+		// them to defaults; then clamp. Non-object patch entries are ignored.
+		const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
+		endpoints[name] = clampRule({ ...current[name], ...p }, def);
+	}
+	await (
+		await getSettingsCollection()
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } }, { upsert: true });
+	cache = { at: Date.now(), config: endpoints };
+	return endpoints;
 };

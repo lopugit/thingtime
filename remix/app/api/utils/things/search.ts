@@ -1,6 +1,7 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
 import {
+  ACL_INHERIT,
   KEY_SEGMENT_PATTERN,
   MAX_TEXT_CHARS,
   PROTECTED_THINGTIME,
@@ -38,6 +39,7 @@ import {
   type Viewer
 } from './things';
 import { attachRankScores, type RankedSearchSource } from './searchRanking';
+import { emojiTokensForSearchTerm } from './emojiSearch';
 
 // Structured search over the things collection — the API behind /search.
 //
@@ -98,6 +100,9 @@ const COUNT_MAX_TIME_MS = 2000;
 // Same determinism trade-off as the ranked feed's RANKED_CANDIDATE_WINDOW.
 const ENGAGEMENT_CANDIDATE_WINDOW = 400;
 const MAX_AUTHOR_CHARS = 64;
+// Attachments are level-one things and intentionally participate in generic
+// search. Other protected system kinds retain their existing exclusion.
+const GENERIC_SEARCH_EXCLUDED_THINGTIME = PROTECTED_THINGTIME.filter((kind) => kind !== 'attachment');
 
 // Root fields searchable by name; anything else lives under crystal (bare
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
@@ -300,6 +305,17 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
       }
       const literal = escapeRegex(value);
       const pattern = op === 'startsWith' ? `^${literal}` : op === 'endsWith' ? `${literal}$` : literal;
+      if (field === 'crystal.emoji' && op === 'contains') {
+        const namedTokens = emojiTokensForSearchTerm(value);
+        if (namedTokens.length) {
+          return {
+            $or: [
+              { [field]: { $regex: pattern, $options: 'i' } },
+              { [field]: { $in: namedTokens } }
+            ]
+          };
+        }
+      }
       return { [field]: { $regex: pattern, $options: 'i' } };
     }
   }
@@ -393,9 +409,22 @@ const projectVisiblePage = async (
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));
-  const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
+  const reactionTargets = await Promise.all(
+    visible.map(async (doc) =>
+      Array.isArray(doc.thingtime) && doc.thingtime.includes('reaction') && typeof doc.targetId === 'string'
+        ? lookup(doc.targetId)
+        : null
+    )
+  );
+  const targetPosts = reactionTargets.filter((doc): doc is ThingDoc => !!doc && isPostThing(doc));
+  const uniquePostDocs = [...new Map([...postDocs, ...targetPosts].map((doc) => [doc.shareId, doc])).values()];
+  const postProjections = uniquePostDocs.length ? await toPublicPosts(uniquePostDocs, viewer) : [];
   const posts: Record<string, PublicPost> = {};
   for (const post of postProjections) posts[post.id] = post;
+  visible.forEach((doc, index) => {
+    const target = reactionTargets[index];
+    if (target && posts[target.shareId]) posts[doc.shareId] = posts[target.shareId];
+  });
   return { things: attachRankScores(things, visible as RankedSearchSource[]), posts };
 };
 
@@ -442,7 +471,7 @@ export const searchThings = async (
   // scrape / account-existence + user-count oracle); theme/feed-algorithm/
   // waitlist things are owner-private and never meant to be searched. schema
   // things stay searchable — the schema browser relies on it.
-  clauses.push({ thingtime: { $nin: [...PROTECTED_THINGTIME] } });
+  clauses.push({ thingtime: { $nin: GENERIC_SEARCH_EXCLUDED_THINGTIME } });
 
   const tags = csvList(query.tags).map((tag) => tag.toLowerCase());
   if (tags.length) clauses.push({ tags: { $in: tags } });
@@ -519,7 +548,13 @@ export const searchThings = async (
   // Under the app lens the audience superset IS the namespace conjunction —
   // server-injected, never expressible from the client grammar (appId/acl stay
   // out of SEARCHABLE_ROOT_FIELDS).
-  const visibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
+  const directVisibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
+  // Inherited children (notably reactions) need their parent ACL evaluated by
+  // canViewInherited below; include them in this coarse DB-level superset.
+  const visibility =
+    !app && directVisibility && circles.length === 0
+      ? { $or: [directVisibility, { acl: ACL_INHERIT }] }
+      : directVisibility;
   if (!visibility) return emptyResult;
 
   const baseMatch = withMatch(visibility, ...clauses);

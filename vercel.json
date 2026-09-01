@@ -7,7 +7,9 @@
 	"ignoreCommand": "node scripts/vercel-ignore-build.mjs",
 	"git": {
 		"deploymentEnabled": {
-			"github-actions": false
+			"**": false,
+			"main": true,
+			"develop": true
 		}
 	},
 	"regions": ["syd1"],

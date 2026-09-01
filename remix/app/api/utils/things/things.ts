@@ -240,6 +240,7 @@ export type PublicComment = {
   author: FeedAuthor | null;
   type: PostType;
   text: string;
+  richText: Record<string, any> | null;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
@@ -268,6 +269,7 @@ export type PublicPost = {
   visibility: PostVisibility;
   acl: string[];
   text: string;
+  richText: Record<string, any> | null;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
@@ -1353,6 +1355,7 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
 export type CreatePostInput = {
   type?: unknown;
   text?: unknown;
+  richText?: unknown;
   images?: unknown;
   listing?: unknown;
   thing?: unknown;
@@ -1379,7 +1382,15 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing, mediaLayout: input.mediaLayout },
+      crystal: {
+			type: input.type,
+			text: input.text,
+			richText: input.richText,
+			images: input.images,
+			listing: input.listing,
+			thing: input.thing,
+			mediaLayout: input.mediaLayout
+		},
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -1489,6 +1500,7 @@ export const RELATED_CHILD_PROJECTION = {
   thingtime: 1,
   tags: 1,
   'crystal.text': 1,
+  'crystal.richText': 1,
   'crystal.type': 1,
   'crystal.images': 1,
   // Rich comments use the same post crystal as top-level posts. Keeping this
@@ -1695,7 +1707,8 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
 // metadata; private object keys/upload ids never leave this module boundary.
 const resolvePostAttachments = async (
 	postIds: string[],
-	expectedTargets?: ReadonlyMap<string, { ownerId: string; purpose: 'post' | 'comment' }>
+	expectedTargets?: ReadonlyMap<string, { ownerId: string; purpose: 'post' | 'comment' }>,
+	viewerId?: string | null
 ): Promise<Map<string, AttachmentPublicMetadata[]>> => {
 	const ids = [...new Set(postIds)].filter(Boolean);
 	const byTarget = new Map<string, AttachmentPublicMetadata[]>();
@@ -1710,7 +1723,14 @@ const resolvePostAttachments = async (
 	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+		// The owner keeps seeing their own moderation-PENDING media (flagged
+		// `pending: true`, mirroring visibleRelatedModerationClause) so an
+		// in-analysis image never silently vanishes from their post or its edit
+		// composer. Everyone else keeps the fail-closed hide; blocked stays
+		// hidden for all.
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, {
+			ownerView: !!viewerId && String(doc.ownerId) === viewerId
+		});
 		if (
 			!targetId ||
 			!attachment ||
@@ -1879,7 +1899,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // Attachments and profiles both derive from `related`, but NOT from each
   // other — running them together keeps the second off the critical path.
   const [attachmentsByTarget, profiles] = await Promise.all([
-    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets),
+    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
     resolveProfiles(userIds)
   ]);
 
@@ -1897,6 +1917,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       author: profiles.get(comment.userId) || null,
       type: (commentCrystal.type as PostType) || 'text',
       text: comment.text,
+      richText:
+        commentCrystal.richText && typeof commentCrystal.richText === 'object' && !Array.isArray(commentCrystal.richText)
+          ? (commentCrystal.richText as Record<string, any>)
+          : null,
       images: (commentCrystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(comment.id) || [],
 			mediaLayout: mediaLayoutOf(commentCrystal),
@@ -1937,6 +1961,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       text: String(crystal.text || ''),
+      richText:
+        crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
+          ? (crystal.richText as Record<string, any>)
+          : null,
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
 			mediaLayout: mediaLayoutOf(crystal),
@@ -2033,7 +2061,11 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
-// never be cut off, only cycles and broken/missing targets fail closed).
+// never be cut off, only cycles and broken/missing targets fail closed). The
+// sole exception is an unrestricted owner opening their own orphaned media:
+// the object remains private to its owner, but must stay recoverable from its
+// direct permalink when a historic parent has disappeared. No audience or PAT
+// session can use that recovery path.
 // `findByShareId` is injectable so page-sized callers can share a batched
 // lookup; the default stays the plain per-hop findOne.
 export const canViewInherited = async (
@@ -2053,7 +2085,19 @@ export const canViewInherited = async (
 		return false;
 	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  return !!terminal && canView(terminal, viewer);
+  if (terminal) return canView(terminal, viewer);
+
+  // Attachments are independently stored media objects. If a parent was
+  // deleted or a legacy migration left the relation dangling, preserve an
+  // owner-only recovery route rather than turning the original bytes into an
+  // inaccessible orphan. Keep all other inherited children fail-closed and
+  // never bypass a visibility-scoped personal access token.
+  return (
+    thingtimeOf(doc).includes('attachment') &&
+    !!viewer?.id &&
+    doc.ownerId === viewer.id &&
+    !patVisibilityOf(viewer)
+  );
 };
 
 // Mutation-site visibility-fence check with the inherit chain resolved —
@@ -3112,6 +3156,7 @@ export type AddCommentInput =
   | string
   | {
       text?: unknown;
+      richText?: unknown;
       // any of these makes it a RICH comment — a full ["post","comment"] thing
       // with the whole post vocabulary (photos, listing, thingtime thing)
       type?: unknown;
@@ -3168,6 +3213,7 @@ export const addComment = async (
   // ["post","comment"] thing (validated by the post crystal sanitizer)
 	const rich =
 		body.type !== undefined ||
+		body.richText !== undefined ||
 		body.images !== undefined ||
 		body.listing !== undefined ||
 		body.thing !== undefined ||
@@ -3177,7 +3223,15 @@ export const addComment = async (
 	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
-          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing, mediaLayout: body.mediaLayout },
+          crystal: {
+				type: body.type ?? 'text',
+				text: body.text,
+				richText: body.richText,
+				images: body.images,
+				listing: body.listing,
+				thing: body.thing,
+				mediaLayout: body.mediaLayout
+			},
           tags: body.tags,
 				shareId: body.shareId,
           targetId: target.shareId
@@ -3256,6 +3310,10 @@ export const addComment = async (
     author: profiles.get(viewerId) || null,
     type: (crystal.type as PostType) || 'text',
     text: String(crystal.text || ''),
+    richText:
+      crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
+        ? (crystal.richText as Record<string, any>)
+        : null,
     images: (crystal.images as string[]) || [],
 		attachments: options.attachments || [],
 		mediaLayout: mediaLayoutOf(crystal),
@@ -3889,6 +3947,15 @@ export const updateThing = async (
   }
   const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
+  // A plain-text client editing a rich-text post intentionally replaces the
+  // body. Clear the old document so it cannot override the newly supplied text.
+  if (
+    thingtime.includes('post') &&
+    Object.prototype.hasOwnProperty.call(patch, 'text') &&
+    !Object.prototype.hasOwnProperty.call(patch, 'richText')
+  ) {
+    nextCrystal.richText = null;
+  }
 	// Post edits validate with the same trusted attachment context creates get:
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".

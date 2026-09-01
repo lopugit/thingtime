@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { authorizeCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 
@@ -9,6 +10,33 @@ const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
 const bootScript = readFileSync('.vercel/output/static/tt-boot.js', 'utf8');
 const previewFreshnessScript = readFileSync('.vercel/output/static/tt-preview-freshness.js', 'utf8');
 const config = readJson('.vercel/output/config.json');
+const serverFunctionDir = '.vercel/output/functions/__server.func';
+
+const filesBelow = (dir) =>
+	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+		const path = join(dir, entry.name);
+		return entry.isDirectory() ? filesBelow(path) : [path];
+	});
+
+// Nitro may leave createRequire(import.meta.url)("package/file.json") in a
+// server chunk. Vercel's dependency tracer does not follow that indirection,
+// so the build looks healthy but the deployed route throws MODULE_NOT_FOUND.
+// A static import is bundled and has no runtime package lookup. If a future
+// build deliberately externalizes the package instead, accepting it remains
+// safe only when the traced function contains the requested JSON asset.
+const emojiRuntimeSpecifier = 'unicode-emoji-json/data-by-emoji.json';
+const emojiCreateRequirePattern = new RegExp(
+	`createRequire\\([^)]*\\)\\s*\\(\\s*["']${emojiRuntimeSpecifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']\\s*\\)`
+);
+const unresolvedEmojiLookup = filesBelow(serverFunctionDir).find(
+	(path) => path.endsWith('.mjs') && emojiCreateRequirePattern.test(readFileSync(path, 'utf8'))
+);
+const tracedEmojiAsset = join(serverFunctionDir, 'node_modules', ...emojiRuntimeSpecifier.split('/'));
+if (unresolvedEmojiLookup && !existsSync(tracedEmojiAsset)) {
+	throw new Error(
+		`Vercel server output leaves ${emojiRuntimeSpecifier} as a runtime lookup without tracing the JSON asset (${unresolvedEmojiLookup}).`
+	);
+}
 
 const getDirectiveSources = (policy, name) => {
 	const directive = policy
@@ -75,12 +103,12 @@ const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
-const chatGptDiscoveryIndex = routes.findIndex(
+const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
-		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json)$' &&
+		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
-const serverFallbackIndex = routes.findIndex((route, index) => route.dest === '/__server' && index !== chatGptDiscoveryIndex);
+const serverFallbackIndex = routes.findIndex((route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex);
 
 if (spaIndex === -1) {
 	throw new Error('Vercel output config does not route non-API app paths to /index.html.');
@@ -114,12 +142,12 @@ if (filesystemIndex > spaIndex) {
 	throw new Error('Vercel output checks the SPA fallback before static filesystem assets.');
 }
 
-if (chatGptDiscoveryIndex === -1) {
-	throw new Error('Vercel output does not route ChatGPT OAuth and capability discovery to Nitro.');
+if (wellKnownDiscoveryIndex === -1) {
+	throw new Error('Vercel output does not route OAuth and Thingtime capability discovery to Nitro.');
 }
 
-if (chatGptDiscoveryIndex > filesystemIndex || chatGptDiscoveryIndex > spaIndex) {
-	throw new Error('Vercel output checks static or SPA fallbacks before ChatGPT discovery.');
+if (wellKnownDiscoveryIndex > filesystemIndex || wellKnownDiscoveryIndex > spaIndex) {
+	throw new Error('Vercel output checks static or SPA fallbacks before well-known discovery.');
 }
 
 if (apiIndex > spaIndex) {
@@ -224,5 +252,5 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, ChatGPT discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );

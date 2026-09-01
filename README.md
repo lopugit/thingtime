@@ -22,13 +22,19 @@ files. `scripts/graphify` stores portable output under the immutable,
 content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
 snapshot through ignored compatibility aliases at the conventional root
 paths. Independent branches therefore add different files instead of
-line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`. After a
+successful activation, the wrapper keeps one current portable snapshot by
+default and removes superseded snapshots from the checked-out tree, so merged
+branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
 writers, validates each atomic output set, deduplicates identical artifacts,
 regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. See
+coexisting immutable variants. `scripts/graphify prune` applies the bounded
+retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer only when a local workflow deliberately needs more than one
+portable snapshot. See
 [`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
 for the rationale, layout, migration path, and retention model.
 
@@ -130,7 +136,7 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
-CI Control also supports **Feature Stacks**. An admin checks 2–20 open feature
+CI Control also supports **Feature Stacks**. An admin checks one or more open feature
 PRs in the exact order they should be combined, chooses one or two live target
 branches (for example `develop` and `main`), confirms the batch, and dispatches
 it once. The server snapshots every selected same-repository PR head SHA. The
@@ -139,6 +145,19 @@ lets Lopu resolve only Git-reported conflict paths, mechanically verifies every
 merge parent and clean-merge byte, then opens a target-specific PR with
 auto-merge enabled. Required checks and branch protection remain the final gate;
 the batch never pushes directly to a target branch.
+
+The same page owns Lopu’s **Claude credential waterfall**. Admins add a named
+Claude Code OAuth token once, enable or disable it, rotate it, and reorder up to
+eight accounts. Only redacted labels and timestamps return to the browser. The
+values are AES-256-GCM encrypted in Thingtime with
+`THINGTIME_ADMIN_VAULT_KEY`. A protected workflow fetches the ordered enabled
+bundle just in time through `/api/v1/integrations/ci/credentials`, using the
+same stable `THINGTIME_CI_ROUTER_SECRET` HMAC boundary and a fresh single-use
+nonce. It masks the values immediately, keeps the bundle at mode `0600` for the
+current run only, and advances accounts only for classified capacity or
+credential failures. The first controller run can import the old OAuth slots
+into an empty vault; after that proof, delete the account-specific GitHub
+secrets and retain only `THINGTIME_CI_ROUTER_SECRET`.
 
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
@@ -191,6 +210,24 @@ The signed compute-provider route is:
 https://<your-thingtime-origin>/api/v1/integrations/ci/route
 ```
 
+The signed Lopu credential delivery route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/credentials
+```
+
+The signed Feature Stack progress route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/progress
+```
+
+The protected controller posts an initial snapshot, phase changes, a heartbeat
+every ten minutes, and one terminal snapshot. The route uses the same
+`THINGTIME_CI_ROUTER_SECRET`, attaches each immutable event only to its exact
+stored stack/run identity, and never accepts browser sessions or arbitrary
+workflow log text.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
@@ -205,6 +242,29 @@ GitHub App credentials, provider-router secret, and Vercel runtime identity are
 all available; its API refuses to select Vercel before that complete capability
 is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
+
+The selected-PR detail panel also has independent, durable **Develop** and
+**Production / main** preview switches. Enabling either switch deploys the
+exact current same-repository PR SHA through Vercel; later `synchronize`,
+reopen, and ready-for-review deliveries rebuild every enabled environment.
+Production access requires an explicit admin acknowledgement and uses the
+project's Production environment values, but `autoAssignCustomDomains` remains
+false: the generated immutable `*.vercel.app` URL never replaces or aliases
+`thingtime.com`. Closing the PR removes only deployments carrying Thingtime's
+PR/environment ownership markers. Configure these server-only deployment
+values in every origin that hosts CI Control (placeholders only):
+
+```sh
+VERCEL_API_TOKEN="<Vercel-API-token>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+```
+
+Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
+only for the Develop switch; the other five values are required for both.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
@@ -619,6 +679,7 @@ host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
 ## Components library (`/components` + the external catalog)
+## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
 (thingtime `["component"]`) carry an arg-templated render tree (drawn only
@@ -813,6 +874,12 @@ THINGTIME_ADMIN_VAULT_KEY="<base64url-32-byte-aes-256-gcm-key>"
 # Vercel is built in as https://api.vercel.com; localhost/private/IP hosts are always refused.
 THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS="api.example.com"
 ```
+
+This key also encrypts the dedicated Lopu credential collection. Keep the key
+stable across deploys: rotating the environment value without re-encrypting
+stored entries intentionally makes them undecryptable. For a fork, create a
+new random 32-byte base64url key and add Claude accounts through Admin → CI
+Control; never copy Thingtime’s encrypted rows or production tokens.
 
 Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
 accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
@@ -1416,8 +1483,8 @@ change, and the hourly backstop. There is no second product-branch workflow:
   `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
   powers). If a rebuild still trips GitHub's workflow-file push restriction,
   the builder re-pins `.github` to the previous `all` state and retries.
-- Vercel builds `all` like any other product branch, so it doubles as a living
-  everything-preview.
+- Vercel no longer auto-builds `all`; use an explicitly requested
+  GitHub-built preview when the aggregate needs browser validation.
 
 ## Vercel deployment status
 
@@ -1472,19 +1539,27 @@ the controller. The controller remains responsible for the stable
 `pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
 comment, and marker-scoped cleanup.
 
-The workflow deliberately uses two stages. The product branches retain only a
+The workflow deliberately separates authorization, compilation, and
+publication. Product branches retain only a
 thin event listener pinned to the reusable implementation on the protected
 `github-actions` branch. Its `pull_request_target` job has no environment or
 Vercel secret, checks out no code, and emits only a bounded
-`repository_dispatch` payload. The privileged dispatch job runs in the trusted
-default-branch event context behind the `vercel-develop-pr-control` environment
-while checking out the controller from `github-actions`. It proves the
-source workflow path/run, repository, same-repository PR, head SHA, action, and
-triggering actor through GitHub's API, then re-reads the live PR. Both the PR
-author and triggering actor must be explicitly allowlisted, currently hold
-write/admin permission, and the non-draft PR must still target `develop`.
-Neither GitHub job checks out or executes PR-head code; Vercel performs the
-remote build only after those gates pass.
+`repository_dispatch` payload. The protected authorizer checks out only
+`github-actions`, proves the source workflow path/run, repository,
+same-repository PR, head SHA, action, and triggering actor through GitHub's API,
+then re-reads the live PR. Both the PR author and triggering actor must be
+explicitly allowlisted, currently hold write/admin permission, and the
+non-draft PR must still target `develop`.
+
+A separate environment-free GitHub job checks out exactly that authorized SHA,
+installs locked dependencies, and generates `.vercel/output` without any
+repository or Environment secrets. The protected publisher never executes the
+product checkout: it validates the short-lived archive's paths, links, size,
+routes, and Vite shell, then uses a pinned Vercel CLI with `--prebuilt` and
+`--target=develop`. Only that controller process receives the Vercel token and S3
+CORS probe URL. Root `vercel.json` disables automatic Git deployments for
+every branch except exact `main` and `develop`, so feature pushes cannot create
+a second native Vercel build for the same SHA.
 
 The reusable implementation and controller script must first merge to the
 protected `github-actions` branch. The thin listener must then reach the
@@ -1541,13 +1616,10 @@ only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
 `https://pr-<number>.previews.dev.thingtime.com`.
 
-Generic Preview intentionally receives every runtime variable currently
-assigned to the `develop` Custom Environment, while retaining its existing
-Preview-only filesystem, CI, repository, webhook, and workflow variables. This
-includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
-the AI, SES/email, and Vercel API values that `develop` intentionally shares
-with Production. Production MongoDB, JWT, and S3 settings remain separate and
-are not assigned to Preview.
+Generic Preview retains the development runtime variables required by manual
+or prebuilt preview publication, but ordinary feature pushes no longer trigger
+automatic Vercel builds. Production MongoDB, JWT, and S3 settings remain
+separate and are not assigned to Preview.
 
 For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
@@ -1638,13 +1710,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` is reserved for a separate future production-preview
-controller. Do not point the develop controller at that suffix, copy the
-production S3 role into generic Preview, or let ordinary Vercel feature/fork
-previews assume the production AWS role. A production-preview controller must have its
-own trusted actors, protected control environment, exact production OIDC trust,
-deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
-activated.
+`*.previews.thingtime.com` remains unassigned. Admin CI Control can now create
+an opt-in production-environment preview for a trusted same-repository PR, but
+it deliberately keeps `autoAssignCustomDomains: false` and exposes only the
+generated immutable `*.vercel.app` deployment URL. Do not point the develop
+controller at that suffix, copy the production S3 role into generic Preview,
+or let ordinary Vercel feature/fork previews assume the production AWS role.
+Any future custom production-preview namespace still needs its own protected
+identity, exact production OIDC trust, cleanup, CORS probe, and bucket CORS
+rule before activation.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as

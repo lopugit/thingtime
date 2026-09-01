@@ -95,7 +95,8 @@ const KIND_OPTION_LABELS: Record<string, string> = {
   data: 'data',
   schema: 'schemas',
   comment: 'comments',
-  reaction: 'reactions'
+  reaction: 'reactions',
+  attachment: 'attachments'
 };
 
 // builtin crystal schemas the query builder can scope to → SchemaSource, via
@@ -719,6 +720,11 @@ export const SearchPage = () => {
   );
 
   const applySchema = React.useCallback((source: SchemaSource) => {
+    // A selected schema is the new primary query. Clear any Commander text
+    // and relevance-only sort left over from the previous search so the
+    // generated field filters cannot be silently narrowed to zero results.
+    setQ('');
+    setSort('auto');
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that

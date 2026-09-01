@@ -49,6 +49,114 @@ export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: un
 	return 'file';
 };
 
+// Linked (external URL) attachments: the derive-from-contentType rule above
+// protects bytes OUR server serves inline; linked media renders straight from
+// the original site in safe sinks, so the server's declared render hint is
+// trusted as-is (clamped to the kinds the renderers know).
+const safeLinkedMediaKind = (requestedKind: unknown): AttachmentMediaKind =>
+	requestedKind === 'image' || requestedKind === 'video' ? requestedKind : 'file';
+
+// Mirrors the server's canonicalLinkedAttachmentUrl (attachmentCore) — plain
+// absolute http(s), no credentials, no control/format/space characters,
+// bounded length.
+export const MAX_LINKED_ATTACHMENT_URL_CHARS = 2048;
+export const canonicalLinkedMediaUrl = (value: unknown): string | null => {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (
+		!trimmed ||
+		trimmed.length > MAX_LINKED_ATTACHMENT_URL_CHARS ||
+		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
+		trimmed.includes('\\') ||
+		!/^https?:\/\//i.test(trimmed)
+	) {
+		return null;
+	}
+	try {
+		const parsed = new URL(trimmed);
+		if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname || parsed.username || parsed.password) {
+			return null;
+		}
+		return trimmed;
+	} catch {
+		return null;
+	}
+};
+
+// Client mirror of the server's linkedMediaTypeForUrl extension table
+// (attachmentCore LINKED_MEDIA_EXTENSION_TYPES) — a pin test keeps the two
+// tables equal. Unknown/missing extensions default to an image hint, matching
+// the legacy crystal.images behavior; the composer demotes to 'file' after a
+// failed load probe.
+export const LINKED_MEDIA_EXTENSION_KINDS: Record<string, AttachmentMediaKind> = {
+	apng: 'image',
+	avif: 'image',
+	gif: 'image',
+	jfif: 'image',
+	jpeg: 'image',
+	jpg: 'image',
+	png: 'image',
+	webp: 'image',
+	m4v: 'video',
+	mkv: 'video',
+	mov: 'video',
+	mp4: 'video',
+	ogv: 'video',
+	webm: 'video',
+	'7z': 'file',
+	csv: 'file',
+	doc: 'file',
+	docx: 'file',
+	gz: 'file',
+	json: 'file',
+	md: 'file',
+	mp3: 'file',
+	pdf: 'file',
+	ppt: 'file',
+	pptx: 'file',
+	rar: 'file',
+	svg: 'file',
+	txt: 'file',
+	wav: 'file',
+	xls: 'file',
+	xlsx: 'file',
+	zip: 'file'
+};
+
+// The client-side detection the composer uses BEFORE minting: a known
+// extension decides immediately; anything else is 'probe' — try loading the
+// URL as an image and demote to 'file' if it never loads.
+export const linkedMediaKindForUrl = (url: string): AttachmentMediaKind | 'probe' => {
+	try {
+		const basename = new URL(url).pathname.split('/').pop() || '';
+		const dot = basename.lastIndexOf('.');
+		if (dot <= 0 || dot === basename.length - 1) return 'probe';
+		const extension = basename.slice(dot + 1).toLowerCase();
+		return LINKED_MEDIA_EXTENSION_KINDS[extension] ?? 'probe';
+	} catch {
+		return 'probe';
+	}
+};
+
+// The display name the composer shows while a linked mint is in flight —
+// mirrors the server's linkedAttachmentNameForUrl.
+export const linkedMediaNameForUrl = (url: string): string => {
+	try {
+		const parsed = new URL(url);
+		const rawBasename = parsed.pathname.split('/').filter(Boolean).pop() || '';
+		let basename = rawBasename;
+		try {
+			basename = decodeURIComponent(rawBasename);
+		} catch {
+			// keep the raw basename when percent-decoding fails
+		}
+		basename = basename.trim();
+		return basename || parsed.hostname;
+	} catch {
+		return 'linked-media';
+	}
+};
+
 export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKind => {
 	const type = file.type.trim().toLowerCase();
 	if (INLINE_IMAGE_TYPES.has(type)) return 'image';
@@ -58,6 +166,7 @@ export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKin
 
 const MAX_ATTACHMENT_TITLE_CHARS = 200;
 const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
+const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
 
 const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
 	if (typeof value !== 'string') return undefined;
@@ -75,9 +184,11 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
 	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
 	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
+	const filenamePreview = normalizedOwnerText(record.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS);
 	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
+	const linkedUrl = canonicalLinkedMediaUrl(record.url);
 	return {
 		id,
 		name,
@@ -86,16 +197,29 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		...(detectedContentType ? { detectedContentType } : {}),
 		// Audio is valid canonical server metadata, but is intentionally treated as
 		// a generic download until Thingtime ships a vetted inline audio player.
-		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		// Linked attachments keep the server's declared render hint instead — their
+		// bytes render straight from the external URL in safe sinks.
+		mediaKind: linkedUrl ? safeLinkedMediaKind(record.mediaKind) : safeAttachmentMediaKind(contentType, record.mediaKind),
+		...(filenamePreview ? { filenamePreview } : {}),
 		...(title ? { title } : {}),
 		...(description ? { description } : {}),
 		// only an explicit server true survives — nothing client-side can set it
-		...(record.nsfw === true ? { nsfw: true } : {})
+		...(record.nsfw === true ? { nsfw: true } : {}),
+		...(linkedUrl ? { url: linkedUrl } : {}),
+		...(record.pending === true ? { pending: true as const } : {})
 	};
 };
 
+export const attachmentDisplayName = (attachment: Pick<PublicAttachment, 'name' | 'filenamePreview'>): string =>
+	attachment.filenamePreview || attachment.name;
+
 // The stable deeplink to a media attachment's own Thing page.
 export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
+
+// Attachments are persisted Things too. Keep the generic Thing permalink
+// separate from the richer media page so callers can explicitly choose which
+// detail view they need.
+export const attachmentThingUrl = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
 // Display names for containers the server can sniff but never renders inline,
 // plus common claimed types; anything unmapped shows its raw MIME string.
@@ -131,9 +255,7 @@ const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
 
 export const attachmentTypeLabel = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string => {
 	const shown =
-		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType
-			? attachment.detectedContentType
-			: attachment.contentType;
+		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType ? attachment.detectedContentType : attachment.contentType;
 	if (!shown || shown === 'application/octet-stream') return 'File';
 	return FRIENDLY_CONTENT_TYPE_LABELS[shown] || shown;
 };
@@ -143,6 +265,11 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 	if (download) params.set('download', '1');
 	return `/api/v1/attachments/content?${params.toString()}`;
 };
+
+// The src every renderer should use: linked attachments render straight from
+// their external URL; everything else goes through the authenticated content
+// endpoint.
+export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string => attachment.url || attachmentContentUrl(attachment.id);
 
 export const formatAttachmentBytes = (bytes: number): string => {
 	if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown size';
@@ -254,7 +381,9 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.contentType !== rightAttachment.contentType ||
 			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
 			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
-			leftAttachment.nsfw !== rightAttachment.nsfw
+			leftAttachment.nsfw !== rightAttachment.nsfw ||
+			leftAttachment.url !== rightAttachment.url ||
+			leftAttachment.pending !== rightAttachment.pending
 		) {
 			return false;
 		}

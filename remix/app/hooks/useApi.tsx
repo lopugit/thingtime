@@ -5,6 +5,7 @@ import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmen
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -216,6 +217,18 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
+      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      mutateCiFeatureStack: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
+        [asyncFetcher]
+      ),
+      mutateCiCredential: useCallback(
+        async (args: Record<string, unknown>) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/credentials', errorContext: 'manage Lopu credential waterfall' }),
+        [asyncFetcher]
+      ),
       reconcileCiControl: useCallback(
         async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
         [asyncFetcher]
@@ -228,6 +241,11 @@ export function useApi() {
       setCiAutomationPolicy: useCallback(
         async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
+        [asyncFetcher]
+      ),
+      setCiPreviewPolicy: useCallback(
+        async (args: { prNumber: number; environment: 'develop' | 'production'; enabled: boolean; acknowledgeProductionData?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/previews', errorContext: `update ${args.environment} PR preview` }),
         [asyncFetcher]
       ),
       setPrConflictResolverModelWaterfall: useCallback(
@@ -450,20 +468,42 @@ export function useApi() {
 				)
 			},
 			remove: useCallback(
-				async (args: { id: string }) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/attachments/delete', errorContext: 'remove a draft file' });
+				async (args: { id: string; targetId?: string }) => {
+					const ret = asyncFetcher.submit(
+						{ id: args?.id, ...(args.targetId ? { targetId: args.targetId } : {}) },
+						{ action: '/api/v1/attachments/delete', errorContext: args.targetId ? 'delete an attached file' : 'remove a draft file' }
+					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},
 				[asyncFetcher]
 			),
-			// owner title/description on a ready attachment (media page + lightbox
+			// mint a READY linked-attachment draft from an external media URL — it
+			// binds/orders/deletes like an upload but its bytes stay on the original
+			// site (duplicates allowed; unbound mints expire in 24h)
+			link: useCallback(
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+					const ret = asyncFetcher.submit(
+						{
+							url: args?.url,
+							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
+							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
+						},
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+					);
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			),
+			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; title?: string | null; description?: string | null }) =>
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
 					asyncFetcher.submit(
 						{
 							id: args?.id,
+							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
@@ -528,8 +568,9 @@ export function useApi() {
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
               ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
-              // attachment reorder — only send when the caller provides it
-              // (the ids must be a permutation of the post's bound set)
+              // attachment sync — only send when the caller provides it (the
+              // full desired order: every bound id plus any newly uploaded
+              // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
@@ -572,11 +613,8 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					const { type, text, images, listing, thing, mediaLayout, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
-          // unified shape when thingtime is given, legacy post shape otherwise
-          const payload = Array.isArray(thingtime)
-						? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
-						: { type, text, images, listing, thing, mediaLayout, acl, visibility, tags, attachmentIds, shareId };
+					const payload = buildThingCreateRequestPayload(args);
+					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
@@ -596,9 +634,9 @@ export function useApi() {
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-					const { id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds } = args || {};
+					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
-						{ id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds },
+						buildThingCommentRequestPayload(args),
 						{ action: '/api/v1/things/comment' }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {

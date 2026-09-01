@@ -19,7 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-  attachment: ['name', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
+	attachment: ['name', 'filenamePreview', 'title', 'description', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
   post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
   comment: ['text'],
   reaction: ['emoji'],
@@ -40,6 +40,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
     'clientId',
     'name',
     'origins',
+    'nativeRedirectUris',
     'subscriptionTier',
     'subscriptionTierVersionId',
     'subscriptionTierVersion',
@@ -89,11 +90,14 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-feature': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-feature-stack': ['title', 'repository', 'autoDecideBranches', 'revision', 'status', 'archived', 'createdBy', 'updatedBy', 'lastDispatchId', 'lastRunAt'],
+  'ci-feature-stack-entry': ['repository', 'revision', 'entryType', 'position', 'prNumber', 'branch'],
   'ci-branch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-pull-request': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-workflow-run': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-preview-policy': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
@@ -126,6 +130,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
 	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
+	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);

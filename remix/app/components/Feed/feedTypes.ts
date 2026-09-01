@@ -3,6 +3,7 @@
 // the API utils are the source of truth; keep this file in sync with them.
 
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import type { EditorJsDoc } from '~/components/Editor/editorJsValue';
 import type { PostMediaLayout } from '~/schemas/registry';
 
 export type { PostMediaLayout };
@@ -52,6 +53,7 @@ export type PostComment = {
   author: FeedAuthor | null;
   type: PostType;
   text: string;
+  richText?: EditorJsDoc | null;
   images: string[];
 	attachments: PublicAttachment[];
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
@@ -80,6 +82,7 @@ export type PublicPost = {
   author: FeedAuthor | null;
   visibility: PostVisibility;
   text: string;
+  richText?: EditorJsDoc | null;
   images: string[];
   // Stable metadata only. Content always resolves through the authenticated
   // attachment endpoint; feed payloads never carry S3 keys or signed URLs.
@@ -159,7 +162,8 @@ export const POST_TYPE_META: Record<PostType, { label: string; emoji: string }> 
   text: { label: 'Text', emoji: '📝' },
   image: { label: 'Photos', emoji: '🖼️' },
   marketplace: { label: 'Marketplace', emoji: '🏪' },
-  thingtime: { label: 'Thingtime', emoji: '🌀' }
+  // the stored type key stays 'thingtime'; the badge reads "Things"
+  thingtime: { label: 'Things', emoji: '📦' }
 };
 
 export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string; hint: string }> = {

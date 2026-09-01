@@ -135,6 +135,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Local runbook: seed site pages with an admin session via
   `POST /api/v1/admin/webpages/seed`; smoke with
   `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+### 2026-09-01 — Self-draining moderation safety sweep
+
+- A successful full moderation sweep batch now immediately starts a durable
+  continuation run. Each run remains bounded to 25 text posts and 10
+  attachments; only failures stop that surface's chain, leaving the hourly
+  Vercel Cron as the safe retry path. — Codex (AI), 2026-09-01
+
+### 2026-09-01 — Production search server-bundle repair
+
+- `/api/v1/things/search` now statically bundles its emoji-name metadata
+  instead of leaving an untraced runtime JSON lookup in the Vercel function.
+  The Vercel output verifier now fails the build if this missing-dependency
+  class returns, and the `api.things-search` capability advances to `1.1.1`.
+  — Codex (AI), 2026-09-01
+
+### 2026-08-31 — Bounded Graphify snapshot retention
+
+- Graphify now retains one active portable snapshot by default after successful
+  update, extract, cluster, and ensure runs, with fail-closed retention
+  overrides and an explicit prune command. The semantic content-addressed cache
+  remains reusable, while older snapshots stay recoverable from Git history.
+  — Codex (AI), 2026-08-31
 
 ### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
 
@@ -184,6 +206,134 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
+  and Stop cancel only the exact linked GitHub Actions run while retaining the
+  stack definition and historical run links; Restart safely cancels active
+  compute before creating a fresh immutable run. Late webhook and progress
+  receipts cannot overwrite a deliberate paused or stopped state.
+- **Feature Stack progress no longer disappears under a busy CI event feed.**
+  The saved-stack endpoint returns a bounded per-dispatch event stream, so
+  immediate, phase-change, and 10-minute Lopu heartbeats remain chronological
+  and visible while unrelated repository automation is active.
+  Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
+  — Codex (AI), 2026-09-01
+
+- **Reusable Feature Stacks no longer fail because an older selected PR has
+  already completed.** Each run now omits merged, closed, and draft entries at
+  admission time, keeps every remaining live source in the saved order, and
+  rejects only when no compatible live source remains. The protected target
+  worker now stays active through branch protection until its generated stack
+  PR has actually merged. — Codex (AI), 2026-09-01
+
+- **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
+  now disables automatic deployments with the recursive `**` branch glob for
+  every branch except exact `main` and `develop`; eligible PR previews are
+  compiled on GitHub and uploaded as validated prebuilt bundles targeting the
+  `develop` Custom Environment without the production-only `--skip-domain`
+  flag, while native production and stable-development builds remain intact.
+  — Codex (AI), 2026-09-01
+
+- **Editor.js block controls now stay at the active line's right edge on
+  mobile.** The + and settings buttons no longer drop underneath post text,
+  and the editor reserves enough inline space to prevent overlap with long or
+  right-aligned blocks. — Codex (AI), 2026-09-01
+
+- **Running Feature Stacks now report durable Lopu progress into their own CI
+  console.** The protected controller sends an immediate signed snapshot,
+  phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
+  binds each event to the exact stored stack/run, renders it chronologically,
+  links back to the precise Actions run, and refreshes progress plus the
+  viewer-local finish estimate without exposing workflow credentials.
+  — Codex (AI), 2026-09-01
+
+- **Feature Stack runs now expose their exact GitHub Actions history and stop
+  reporting a finished controller as live.** Every new dispatch carries a
+  durable run identity, signed workflow events attach the exact run URL, the
+  activity stream is sorted chronologically, and a controller that exits before
+  publishing a target PR is labelled Needs attention instead of receiving an
+  ever-moving ETA. The protected Lopu worker also tolerates its expected skipped
+  sibling dependencies, so admitted target merges actually start.
+  — Codex (AI), 2026-09-01
+
+- **Published posts and rich comments now retain their native Editor.js
+  document across the browser API boundary.** The request allowlist includes
+  `richText` alongside the canonical plain-text fallback, so headings no
+  longer reappear as literal Markdown such as `## Posts` after posting or
+  reloading. — Codex (AI), 2026-09-01
+
+- **Posting now flushes the live Editor.js document before freezing a post
+  payload.** Tapping Post immediately after changing a heading, colour,
+  alignment, size, whitespace, or line break can no longer publish the older
+  plain-text snapshot while the composer still shows the newer rich styling.
+  — Codex (AI), 2026-08-31
+
+- **Post media editing now has one visual source of truth.** Auto and Rows show
+  final-view previews, Rows uses add/remove and per-row image-count controls,
+  Grid previews expose the clickable 1×1 span badge, and the single Media &
+  files panel owns reorder, metadata, and delete actions in create and edit.
+  Attachments are now default searchable level-one Things (including display
+  filename/title/description), while Reaction schema searches resolve human
+  emoji names such as “heart” to stored emoji and render the matching parent
+  posts. — Codex (AI), 2026-08-31
+
+- **[Admin CI refreshes now fail softly and recover without a request
+  storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
+  The protected snapshot route turns MongoDB blocking-sort memory failures into
+  a retryable, private 503 with stable route/error-code telemetry, while the UI
+  keeps its cached state, deduplicates overlapping pollers, and exponentially
+  backs off automatic retries up to five minutes. — Codex (AI), 2026-08-31
+
+- **Passkeys and the Admin CI snapshot now recover from the two mobile failure
+  modes seen in production.** Registration and login options require the same
+  on-device user verification enforced by the WebAuthn verifier, so a valid
+  iCloud Keychain or 1Password ceremony is no longer rejected after the
+  authenticator returns. CI entities are read per repository through a stable
+  compound sort index instead of a growing in-memory sort, and a saved Feature
+  Stack keeps its PR-number placeholders visible until a temporarily missing
+  live snapshot can rehydrate them. Unlimited Feature Stack selection no longer
+  makes the same request fetch unlimited run, deployment, preview, and dispatch
+  history; activity stays bounded while the dashboard totals remain exact.
+  Running Feature Stacks now also respect an
+  admin's collapsed-card choice instead of immediately forcing themselves open.
+  — Codex (AI), 2026-08-31
+
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
+- **Vercel now serves Thingtime's origin-scoped API capability manifest from
+  Nitro instead of the SPA shell.** The generic
+  `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
+  discovery ahead of the filesystem and `index.html` fallbacks, and the built
+  output verifier locks in that ordering. — Codex (AI), 2026-08-31
 - **The new Limitless MCP Lab turns the live connector contract into an
   interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
   in parallel, keeps the current release contract on first paint, demonstrates
@@ -220,6 +370,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Feature Stacks are now reusable, unlimited control-plane workflows.** Admin
+  CI Control can save and edit multiple stacks, run a one-feature stack, select
+  any number of live features and targets, see per-target PR progress, and use
+  a default-on branch router that keeps `github-actions`, `main`, and `develop`
+  sources in compatible lanes. The protected controller receives a v2 immutable
+  plan and filters it to one target-specific source manifest before Lopu merges.
+  PR statuses now use a Vercel-style multi-select; System model-order entries
+  edit in place; and the encrypted credential waterfall accepts built-in or
+  custom AI platform labels while GitHub keeps using the single stable router
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
+
+- **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
+  add, name, rotate, enable, remove, and reorder up to eight write-only Claude
+  Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only
+  redacted metadata to browsers, and delivers the ordered enabled bundle to a
+  fresh replay-protected HMAC-authenticated controller run. Lopu masks the
+  bundle, keeps it only for that run, and walks the array on classified account
+  capacity/credential failures, removing the need for one GitHub secret name
+  per Claude account. — Codex (AI), 2026-08-31
+
 - **Admin CI Control now batches features as a verified multi-target Feature
   Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
   live target branches, and dispatch once. The server snapshots exact live
@@ -227,8 +398,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   them per target, restricts AI edits to Git-reported conflicts, verifies merge
   topology and bytes, and opens branch-protected auto-merge PRs. The new
   origin-scoped API capability manifest advertises the additive dispatch
-  contract as `api.admin-ci-dispatch` 1.1.0. [Detailed PR #487 validation
-  note](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md).
+  contract as `api.admin-ci-dispatch` 1.1.0. Detailed validation notes:
+  [PR #487 (`develop`)](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md)
+  and [PR #489 (`main` promotion)](../PRs/489-codex-feature-stack-main-add-verified-multi-target-feature-stacks.md).
   — Codex (AI), 2026-08-30
 
 - **Thingtime’s MCP initialization now supplies connector-wide interaction
@@ -377,6 +549,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -452,6 +629,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
@@ -1155,6 +1336,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
 
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
+
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
   the branch alias's current HTML on load, foreground, and focus, then reloads
@@ -1553,6 +1763,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Claude (AI), 2026-07-21.
 
 ### Added
+
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
 
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a

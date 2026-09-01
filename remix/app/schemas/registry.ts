@@ -13,6 +13,8 @@
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -90,11 +92,14 @@ export const CI_CONTROL_THINGTIME = [
   'ci-repository',
   'ci-automation',
   'ci-feature',
+  'ci-feature-stack',
+  'ci-feature-stack-entry',
   'ci-branch',
   'ci-pull-request',
   'ci-workflow-run',
   'ci-deployment',
   'ci-preview',
+  'ci-preview-policy',
   'ci-dispatch',
   'ci-event'
 ] as const;
@@ -350,6 +355,7 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   adminIntegrationEndpoints: 1,
   adminIntegrationClaims: 1,
   adminIntegrationAudit: 1,
+  lopuCredentials: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
   email_events: 1,
@@ -622,7 +628,13 @@ const postSchema: ThingtimeSchema = {
       type: 'string',
       required: false,
       max: MAX_TEXT_CHARS,
-      description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+      description: `Canonical plain-text post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+    },
+    {
+      name: 'richText',
+      type: 'record',
+      required: false,
+      description: 'Bounded native Editor.js document preserving inline marks, block styles, whitespace, and line breaks.'
     },
     {
       name: 'images',
@@ -662,12 +674,19 @@ const postSchema: ThingtimeSchema = {
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
     }
   ],
-  example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
+  example: {
+    type: 'text',
+    text: 'Everything is a thing ✨',
+    richText: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: '<mark>Everything</mark> is a thing ✨' } }] },
+    images: [],
+    listing: null,
+    thing: null
+  }
 };
 
 const attachmentSchema: ThingtimeSchema = {
 	id: ATTACHMENT_THINGTIME,
-	version: 1,
+	version: 2,
 	kind: 'crystal',
 	collection: null,
 	title: 'Attachment',
@@ -686,8 +705,17 @@ const attachmentSchema: ThingtimeSchema = {
 			type: 'string',
 			required: true,
 			max: MAX_ATTACHMENT_NAME_CHARS,
-			description: 'Display filename only; never used as an S3 key.'
+			description: 'Immutable original filename; never used as an S3 key.'
 		},
+		{
+			name: 'filenamePreview',
+			type: 'string',
+			required: false,
+			max: MAX_ATTACHMENT_NAME_CHARS,
+			description: 'Owner-selected filename shown in the UI; the original download filename is preserved.'
+		},
+		{ name: 'title', type: 'string', required: false, max: 200, description: 'Owner-authored media title.' },
+		{ name: 'description', type: 'string', required: false, max: 2000, description: 'Owner-authored media description.' },
 		{
 			name: 'size',
 			type: 'number',
@@ -1689,11 +1717,48 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-repository', 'CI repository', 'Current integration and default-branch state for one repository.'),
   ciEntitySchema('ci-automation', 'CI automation policy', 'Current execution-provider policy for one allowlisted automation.'),
   ciEntitySchema('ci-feature', 'CI feature', 'A feature/stack grouping that relates source and promotion pull requests.'),
+  {
+    id: 'ci-feature-stack', version: 1, kind: 'crystal', collection: null,
+    title: 'Saved CI Feature Stack',
+    summary: 'An editable named Feature Stack configuration owned by the protected CI control plane.',
+    detail: 'The root stores fixed configuration and latest-run metadata. Ordered sources and targets are relational ci-feature-stack-entry Things published by revision, so edits never expose a partially replaced list.',
+    createdVia: '/api/v1/admin/ci/stacks',
+    fields: [
+      { name: 'title', type: 'string', required: true, max: 80 },
+      { name: 'repository', type: 'string', required: true, max: 300 },
+      { name: 'autoDecideBranches', type: 'boolean', required: true },
+      { name: 'revision', type: 'string', required: true, max: 80 },
+      { name: 'status', type: 'string', required: true, max: 120 },
+      { name: 'archived', type: 'boolean', required: true },
+      { name: 'createdBy', type: 'string', required: true, max: 180 },
+      { name: 'updatedBy', type: 'string', required: true, max: 180 },
+      { name: 'lastDispatchId', type: 'string', required: false, max: 180 },
+      { name: 'lastRunAt', type: 'date', required: false }
+    ],
+    example: { title: 'Search + Actions', repository: 'lopugit/thingtime', autoDecideBranches: true, revision: 'revision-id', status: 'saved', archived: false, createdBy: 'admin', updatedBy: 'admin' }
+  },
+  {
+    id: 'ci-feature-stack-entry', version: 1, kind: 'crystal', collection: null,
+    title: 'CI Feature Stack entry',
+    summary: 'One ordered source pull request or target branch related to a saved Feature Stack.',
+    detail: 'Each child belongs to one root and revision. entryType chooses either prNumber or branch; position preserves administrator order without embedding an unbounded list on the root.',
+    createdVia: '/api/v1/admin/ci/stacks',
+    fields: [
+      { name: 'repository', type: 'string', required: true, max: 300 },
+      { name: 'revision', type: 'string', required: true, max: 80 },
+      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'] },
+      { name: 'position', type: 'number', required: true, min: 0 },
+      { name: 'prNumber', type: 'number', required: false, min: 1 },
+      { name: 'branch', type: 'string', required: false, max: 180 }
+    ],
+    example: { repository: 'lopugit/thingtime', revision: 'revision-id', entryType: 'source', position: 0, prNumber: 427 }
+  },
   ciEntitySchema('ci-branch', 'CI branch', 'Current ref and head state for one repository branch.'),
   ciEntitySchema('ci-pull-request', 'CI pull request', 'Current topology, mergeability, and review state for one pull request.'),
   ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),
   ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
   ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
+  ciEntitySchema('ci-preview-policy', 'CI preview policy', 'Admin-only develop and production-data preview choices for one pull request.'),
   ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
   {
     id: 'ci-event',
@@ -2136,6 +2201,31 @@ const adminIntegrationSecretSchema: ThingtimeSchema = {
   example: { id: 'secret_example', label: 'Vercel write-only token', cipherText: '<encrypted>', schemaVersion: 1 }
 };
 
+const lopuCredentialSchema: ThingtimeSchema = {
+  id: 'lopu-credential',
+  version: COLLECTION_SCHEMA_VERSIONS.lopuCredentials,
+  kind: 'collection',
+  collection: 'lopuCredentials',
+  title: 'Lopu ordered credential vault entry',
+  summary: 'Named Claude credential encrypted with AES-256-GCM and ordered for Lopu usage failover.',
+  detail:
+    'The browser receives metadata only. Credential values are decrypted solely for a fresh, replay-protected HMAC request from the protected GitHub Actions control plane.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque credential id.' },
+    { name: 'name', type: 'string', required: true, description: 'Non-sensitive admin label.' },
+    { name: 'credentialType', type: 'string', required: true, description: 'Closed credential type.' },
+    { name: 'cipherText', type: 'string', required: true, description: 'AES-GCM ciphertext. Never projected to a browser.' },
+    { name: 'iv', type: 'string', required: true, description: 'AES-GCM nonce. Never projected.' },
+    { name: 'tag', type: 'string', required: true, description: 'AES-GCM authentication tag. Never projected.' },
+    { name: 'priority', type: 'number', required: true, description: 'Zero-based waterfall position.' },
+    { name: 'enabled', type: 'boolean', required: true, description: 'Whether Lopu may use the credential.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Last metadata or value change.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { id: 'lopu_credential_example', name: 'Thingtime Claude', credentialType: 'claude-code-oauth-token', priority: 0, enabled: true, cipherText: '<encrypted>', schemaVersion: 1 }
+};
+
 const adminIntegrationEndpointSchema: ThingtimeSchema = {
   id: 'admin-integration-endpoint',
   version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationEndpoints,
@@ -2247,6 +2337,7 @@ const appSchema: ThingtimeSchema = {
       max: MAX_APP_ORIGINS,
       description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
     },
+    { name: 'nativeRedirectUris', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
     { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
     { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
     { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
@@ -2280,6 +2371,7 @@ const appSchema: ThingtimeSchema = {
     clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
     name: 'Rainbow Notes',
     origins: ['https://rainbownotes.example'],
+    nativeRedirectUris: ['com.rainbownotes.app://oauth/callback'],
     subscriptionTier: 'free',
     subscriptionTierVersionId: 'subscription-tier-free-v1',
     subscriptionTierVersion: 1,
@@ -2865,7 +2957,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   adminIntegrationSecretSchema,
   adminIntegrationEndpointSchema,
   adminIntegrationClaimSchema,
-  adminIntegrationAuditSchema
+  adminIntegrationAuditSchema,
+  lopuCredentialSchema
 ];
 
 export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;
@@ -2989,7 +3082,21 @@ const sanitizePostCrystal = (
 	const hasAnyAttachment = options.postAttachments?.hasAny === true;
 	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
-  const text = typeof input.text === 'string' ? input.text.trim() : '';
+  const richTextProvided = input.richText !== undefined;
+  let richText: Record<string, unknown> | null = null;
+  let text = typeof input.text === 'string' ? input.text.trim() : '';
+  if (richTextProvided && input.richText !== null) {
+    if (!input.richText || typeof input.richText !== 'object' || Array.isArray(input.richText)) {
+      return fail(400, 'richText must be a native rich-text document');
+    }
+    const sanitized = sanitizeDataValue(input.richText, { path: 'richText', depth: 2 });
+    if (sanitized.ok === false) return sanitized;
+    if (!isEditorJsDoc(sanitized.value) || !isEditorJsDocSafeToEdit(sanitized.value)) {
+      return fail(400, 'richText must be a safe native rich-text document');
+    }
+    richText = sanitized.value as Record<string, unknown>;
+    text = blocksToText(richText.blocks as any[]).trim();
+  }
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
 
   const rawImages = input.images;
@@ -3062,7 +3169,15 @@ const sanitizePostCrystal = (
 
 	return {
 		ok: true,
-		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+		crystal: {
+			type,
+			text,
+			...(richTextProvided ? { richText } : {}),
+			images,
+			listing,
+			thing,
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+		}
 	};
 };
 

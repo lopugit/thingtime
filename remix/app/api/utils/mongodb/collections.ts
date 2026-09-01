@@ -3,6 +3,7 @@ import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } 
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
 import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -274,6 +275,10 @@ export const getAdminIntegrationSecretsCollection = async () => getHomeCollectio
 export const getAdminIntegrationEndpointsCollection = async () => getHomeCollection('adminIntegrationEndpoints');
 export const getAdminIntegrationClaimsCollection = async () => getHomeCollection('adminIntegrationClaims');
 export const getAdminIntegrationAuditCollection = async () => getHomeCollection('adminIntegrationAudit');
+// Ordered, named Lopu credentials are encrypted at rest and only decrypted for
+// a short-lived HMAC-authenticated controller fetch. Browser APIs project
+// metadata only.
+export const getLopuCredentialsCollection = async () => getHomeCollection('lopuCredentials');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
 export const getEmailMessagesCollection = async () => getHomeCollection('email_messages');
@@ -497,6 +502,11 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
+    // Admin CI snapshots are repository-scoped and ordered by the latest
+    // provider update. Without this exact sort index, MongoDB must materialize
+    // every growing ci-event/run/deployment row before applying the dashboard
+    // limit and eventually trips its 32 MiB blocking-sort ceiling.
+    col.createIndex(CI_DASHBOARD_UPDATED_INDEX, { name: 'things_ci_repository_updated' }),
     // The unread-notification badge counts (thingtime, ownerId, readAt: null).
     // The general (thingtime, ownerId, createdAt, shareId) index above narrows
     // to the user's notifications, but readAt is not a key in it, so the count
@@ -944,6 +954,10 @@ export const ensureIndexes = async () => {
         col('adminIntegrationAudit').createIndex({ createdAt: -1 }),
         col('adminIntegrationAudit').createIndex({ endpointId: 1, createdAt: -1 }),
         col('adminIntegrationAudit').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('lopuCredentials').createIndex({ id: 1 }, { unique: true }),
+        col('lopuCredentials').createIndex({ name: 1 }, { unique: true }),
+        col('lopuCredentials').createIndex({ priority: 1 }),
+        col('lopuCredentials').createIndex({ enabled: 1, priority: 1 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats
