@@ -34,7 +34,7 @@ test('MCP tools/list publishes OAuth requirements before a user links Thingtime'
   });
   const payload: any = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(payload.result.tools.length, 31);
+  assert.equal(payload.result.tools.length, 32);
   assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
   assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
   const annotations = Object.fromEntries(payload.result.tools.map((tool: any) => [tool.name, tool.annotations]));
@@ -63,6 +63,7 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
   assert.deepEqual(
     tools.map((tool: any) => tool.name),
     [
+      'login_thingtime',
       'list_thingtime_accounts',
       'select_thingtime_account',
       'remove_thingtime_account',
@@ -241,7 +242,7 @@ test('an unauthenticated protected tool call returns the OAuth challenge ChatGPT
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_thingtime_accounts', arguments: {} } })
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'login_thingtime', arguments: {} } })
     })
   });
   const payload: any = await response.json();
@@ -251,6 +252,17 @@ test('an unauthenticated protected tool call returns the OAuth challenge ChatGPT
   assert.equal(response.headers.get('www-authenticate'), challenge);
   assert.equal(payload.result.isError, true);
   assert.deepEqual(payload.result._meta['mcp/www_authenticate'], [challenge]);
+});
+
+test('login status and account listing expose only authenticated account metadata', async () => {
+  const login: any = await callThingtimeTool('login_thingtime', {}, connectedContext);
+  const listed: any = await callThingtimeTool('list_thingtime_accounts', {}, connectedContext);
+
+  assert.equal(login.authenticated, true);
+  assert.equal(login.defaultAccountId, 'personal');
+  assert.deepEqual(login.accounts, listed.accounts);
+  assert.match(login.message, /reconnect/i);
+  assert.equal(JSON.stringify(login).includes('test-token-not-returned-to-the-client'), false);
 });
 
 test('MCP initialize is available before OAuth so clients can negotiate the protocol', async () => {
@@ -264,7 +276,7 @@ test('MCP initialize is available before OAuth so clients can negotiate the prot
   const payload: any = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(payload.result.serverInfo.name, 'thingtime-chatgpt');
+  assert.equal(payload.result.serverInfo.name, 'thingtime');
   assert.equal(payload.result.instructions, CHATGPT_MCP_INSTRUCTIONS);
   assert.match(payload.result.instructions, /select one explicitly/);
   assert.match(payload.result.instructions, /exact Thing ID.*get_thingtime_thing/i);

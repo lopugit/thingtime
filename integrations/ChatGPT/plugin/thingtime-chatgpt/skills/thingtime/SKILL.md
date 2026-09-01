@@ -9,11 +9,17 @@ Use the Thingtime MCP tools only for accounts the user has connected. Start a
 new task by listing accounts when the requested account is ambiguous, then
 select the requested account explicitly.
 
+Treat `@Thingtime login` as an explicit request to call `login_thingtime`.
+When no connection is active, its OAuth requirement opens the host browser and
+uses the registered callback; never ask the user to paste a token into chat.
+Treat `@Thingtime list accounts` as an explicit request to call
+`list_thingtime_accounts` and return only its safe account metadata.
+
 Never ask the user to paste a Thingtime personal access token into chat. A
-connected client can renew its 30-day bridge credential with a rotating
-refresh credential; tell the user to reconnect only if that renewal fails or
-an account is missing. Never expose token values, authorization codes, bridge
-credentials, or refresh credentials in a response.
+connected client’s revocable bridge credentials do not expire by default; tell
+the user to reconnect only if a connection is revoked or an account is missing.
+Never expose token values, authorization codes, bridge credentials, or refresh
+credentials in a response.
 
 Read/search actions may proceed when the user asks. Before any create, update,
 delete, comment, reaction, save, or share action, show the intended account,
