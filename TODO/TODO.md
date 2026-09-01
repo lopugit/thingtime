@@ -343,3 +343,14 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     imported data grant authority; keep baseline exit available to every tier.
     Start with the evidence note and phased roadmap, then execute
     `claude-todo/23-data-portability-and-exit.md`.
+
+23. **🌿 Make attention agency and calm use a product contract.**
+
+    Preserve Thingtime's chronological no-training feed and granular
+    notification controls while making automatic continuation, ranked-feed
+    training, corrective feedback, per-post explanations, stopping points, and
+    delivery defaults explicit choices. Useful return may improve, but not by
+    rewarding more minutes, scroll depth, training events, streaks, or
+    notification opens. Start with the evidence note and phased roadmap, then
+    execute `claude-todo/24-attention-agency-and-calm-use.md` only after the
+    owner approves defaults, migration behavior, and guardrail owners.

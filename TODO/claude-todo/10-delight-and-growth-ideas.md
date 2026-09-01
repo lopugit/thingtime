@@ -118,6 +118,10 @@ systems. Reusable whimsy exports (from the review):
   people a reason to come back and raise their feed. *(`AlgorithmMenu.tsx` dot
   title ~L341, `AlgorithmManager.tsx` label ~L248, `useFeedEngagement.ts`
   thresholds.)* **See the mockup in `docs/design/thingtime-algorithm-growth/`.**
+  Treat the growth stage as an explanation of learning, not a retention target:
+  before expanding it, meet [TODO 24's attention-agency gates](./24-attention-agency-and-calm-use.md)
+  for training pause, correction, stopping points, and metrics that do not
+  reward more scrolling.
 
 ## ⌨️ Power user / dev
 

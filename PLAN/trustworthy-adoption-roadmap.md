@@ -122,6 +122,9 @@ privacy, reliability, or data-loss regression.
 - Make stale, offline, moved, deleted, and permission-changed states explicit.
 - Test across account switching and custom data endpoints without leaking one
   account or endpoint into another.
+- Treat the [attention agency and calm-use roadmap](./attention-agency-roadmap.md)
+  as the feed and notification guardrail: useful return must not depend on
+  automatic continuation, silent training, or unwanted delivery.
 
 **Gate:** useful return improves while restore correctness, delete behavior,
 and error budgets stay within approved bounds.

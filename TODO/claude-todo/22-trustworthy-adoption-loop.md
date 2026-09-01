@@ -48,6 +48,10 @@ experiment by itself.
 - [TODO 23](./23-data-portability-and-exit.md) owns the independently verifiable
   export, restore, selective deletion, and account-closure contract required
   before “no lock-in” becomes a proven adoption claim.
+- [TODO 24](./24-attention-agency-and-calm-use.md) owns feed continuation,
+  ranking-versus-training control, corrective feedback, explanations, calm
+  stopping points, and notification defaults. Useful return cannot treat more
+  scrolling, training events, or notification opens as success.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.
