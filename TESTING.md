@@ -251,11 +251,11 @@ is fixed, and cite the checklist you ran in the PR description.
       With the chunk request kept broken, the tab must not reload-loop; after
       ten healthy seconds, a later alias flip can claim one new recovery.
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
-      build, the nested config is absent, ordinary product commits build,
-      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
-      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
-      artifact is staged at root, and invalid source output preserves the prior
-      artifact.
+      build, the nested config is absent, automatic Git deployments are limited
+      to exact `main` and `develop`, `github-actions` and generic Preview
+      duplicate SHAs skip, the `develop` Custom Environment still rebuilds an
+      already-previewed SHA, a valid Nitro artifact is staged at root, and
+      invalid source output preserves the prior artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -268,11 +268,12 @@ is fixed, and cite the checklist you ran in the PR description.
       output, its preview URL, and the production alias. It must reach Nitro and
       return JSON with the exact request origin; it must never fall through to
       `index.html` as `text/html`.
-- [ ] Confirm the literal `github-actions` branch and a disposable branch made
-      from the thin control plane create no Vercel deployment. The product
-      config must map `github-actions` to `false`, while the thin branch config
-      must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
-      a second fail-safe.
+- [ ] Confirm a disposable feature-branch push creates no automatic Vercel
+      deployment, while exact `main` and `develop` pushes still do. The product
+      config must map `*` to `false` and explicitly map both retained branches
+      to `true`; the thin control-plane config must set
+      `git.deploymentEnabled` to `false` and retain `ignoreCommand` as a second
+      fail-safe.
 
 ## Lopu CodeQL all-branch listener
 
