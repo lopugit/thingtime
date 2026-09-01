@@ -2414,6 +2414,14 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       recomputed conflict paths, source/target movement aborts publication, and
       a target-specific PR is opened with auto-merge while branch protection
       remains the final gate. Pause/opt-out labels must stop the batch.
+- [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
+      snapshot immediately, whenever its target phase changes, every ten
+      minutes while unchanged, and once when all target workers are terminal.
+      Reload CI Control between updates: the stream must retain chronological
+      messages, exact per-job GitHub links, progress percentage, and a refreshed
+      finish estimate in the browser's local timezone. A changed body, stale
+      timestamp, mismatched repository/stack/run, or replayed delivery ID must
+      not create a second event, and reporter failure must not cancel the merge.
 - [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
       from the dropdown's Add value field. Add two named OAuth tokens and confirm
       neither value appears in GET/mutation responses, browser storage, page
@@ -2440,7 +2448,7 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, saved stacks are `1.1.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.1.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Select one trusted open PR and independently enable Develop and
