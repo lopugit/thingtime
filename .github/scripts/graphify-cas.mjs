@@ -179,12 +179,20 @@ function sha256Parts(parts) {
 /**
  * Drop nested-repository gitlinks from the scratch fingerprint index.
  *
- * Controller jobs check a second copy of this repository out at ./trusted,
- * inside the product worktree and matched by no ignore rule. `git add -A`
- * records that directory as a mode-160000 gitlink whose SHA is the control
- * plane's own HEAD, so the source key moved with every unrelated control-plane
- * commit and no ordinary checkout could reproduce it. This repository has no
- * submodules: a gitlink here is always a co-located checkout, never source.
+ * Controller jobs check a second copy of this repository out inside the product
+ * worktree, matched by no ignore rule. `git add -A` records that directory as a
+ * mode-160000 gitlink whose SHA is the control plane's own HEAD, so the source
+ * key moved with every unrelated control-plane commit and no ordinary checkout
+ * could reproduce it. This repository has no submodules: a gitlink here is
+ * always a co-located checkout, never source.
+ *
+ * Matching on the mode rather than on a name is deliberate. The nested checkout
+ * is not always called `trusted/`: `all-branch.yml` uses `control-plane/`, and
+ * `promote-develop-to-main.yml` / `promote-features-to-main.yml` both use
+ * `workflow-control/`. One mode test covers every such path and any future one,
+ * where a name list would silently regrow this bug. (`build-all-branch.mjs`
+ * solves the same problem for itself with a name-based `:(exclude)control-plane`
+ * pathspec; do not narrow this to match it.)
  */
 function dropNestedRepositories(root, env) {
   // This is the only git call here that captures a whole index rather than a
