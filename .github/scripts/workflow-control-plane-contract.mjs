@@ -1493,6 +1493,21 @@ export function assertControlPlaneContract() {
   assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/feature-stack-progress\.mjs/u);
   assert.match(featureStackProgress, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
   assert.match(
+    resolver,
+    /feature_stack_plan:[\s\S]*recovery: \$\{\{ steps\.validate\.outputs\.recovery \}\}[\s\S]*pulls\?state=all&head=[\s\S]*\.merged_at != null[\s\S]*expected_source_count[\s\S]*Feature Stack id:[\s\S]*expected_source[\s\S]*git\/commits\/\$merge_commit_sha[\s\S]*compare\/\$merge_commit_sha\.\.\.\$target[\s\S]*recovery=true/u,
+    "completed Feature Stacks are recovered only from exact merged target PRs bound to the immutable source manifest whose published heads and merge commits remain on the target",
+  );
+  assert.match(
+    featureStackMerge,
+    /feature_stack_reconcile_receipt:[\s\S]*feature_stack_plan\.outputs\.recovery == 'true'[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*feature-stack-progress\.mjs --reconcile/u,
+    "already-merged Feature Stacks publish one trusted terminal receipt without rerunning the model",
+  );
+  assert.match(
+    featureStackMerge,
+    /feature_stack_merge:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'[\s\S]*feature_stack_progress:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'[\s\S]*feature_stack_merge_gate:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'/u,
+    "the recovery lane is mutually exclusive with merge, streaming, and gate workers",
+  );
+  assert.match(
     featureStackProgress,
     /pr_number=""[\s\S]*pulls\?state=all&head=[\s\S]*pulls\/\$pr_number[\s\S]*\.head\.ref[\s\S]*\.base\.ref/u,
     "Feature Stack completion pins the published PR identity and revalidates its branches after repair pushes",

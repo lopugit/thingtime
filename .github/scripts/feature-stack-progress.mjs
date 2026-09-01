@@ -134,6 +134,74 @@ const postProgress = async ({ endpoint, secret, payload }) => {
   throw lastError;
 };
 
+export const recoveryPayload = ({
+  repository,
+  runId,
+  runAttempt,
+  stackId,
+  featureStackRunId,
+  matrix,
+  now = Date.now(),
+  serverUrl = 'https://github.com'
+}) => {
+  const targets = Array.isArray(matrix?.include) ? matrix.include : [];
+  if (!targets.length) throw new Error('Feature Stack receipt recovery has no verified targets.');
+  const rows = targets.map((item) => {
+    const target = String(item?.target ?? '');
+    const pr = Number(item?.pr);
+    const prUrl = String(item?.pr_url ?? '');
+    const mergedAt = String(item?.merged_at ?? '');
+    const mergeCommitSha = String(item?.merge_commit_sha ?? '');
+    if (!target || !Number.isSafeInteger(pr) || pr <= 0 || !/^https:\/\/github\.com\//u.test(prUrl)
+      || !Number.isFinite(Date.parse(mergedAt)) || !/^[0-9a-f]{40}$/u.test(mergeCommitSha)) {
+      throw new Error('Feature Stack receipt recovery target is invalid.');
+    }
+    return {
+      target,
+      status: 'success',
+      phase: `Verified stack PR #${pr} already merged`,
+      progressPercent: 100,
+      jobUrl: null
+    };
+  });
+  const workflowRunUrl = `${serverUrl}/${repository}/actions/runs/${runId}`;
+  const timestamp = new Date(now).toISOString();
+  const details = targets.map((item) => `${item.target} via PR #${item.pr} (${String(item.merge_commit_sha).slice(0, 12)})`).join('; ');
+  return {
+    deliveryId: `${featureStackRunId}:${runId}:${runAttempt}:reconcile`,
+    repository,
+    stackId,
+    featureStackRunId,
+    workflowRunId: runId,
+    workflowRunUrl,
+    runAttempt,
+    startedAt: timestamp,
+    reportedAt: timestamp,
+    expectedFinishAt: timestamp,
+    status: 'success',
+    message: `Lopu reconciled an already-merged Feature Stack without rerunning AI: ${details}`.slice(0, 500),
+    progressPercent: 100,
+    targets: rows
+  };
+};
+
+const reconcile = async () => {
+  const repository = process.env.GITHUB_REPOSITORY ?? '';
+  const runId = Number(process.env.GITHUB_RUN_ID);
+  const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? '1');
+  const stackId = process.env.STACK_ID ?? '';
+  const featureStackRunId = process.env.FEATURE_STACK_RUN_ID ?? '';
+  const secret = process.env.THINGTIME_CI_ROUTER_SECRET ?? '';
+  const matrix = JSON.parse(process.env.FEATURE_STACK_MATRIX ?? '{"include":[]}');
+  const origin = new URL(process.env.THINGTIME_PROGRESS_ORIGIN || process.env.THINGTIME_CREDENTIAL_VAULT_ORIGIN || 'https://thingtime.com').origin;
+  if (!repository || !Number.isSafeInteger(runId) || !Number.isSafeInteger(runAttempt) || !stackId || !featureStackRunId || !secret) {
+    throw new Error('Feature Stack receipt recovery is missing its trusted run configuration.');
+  }
+  const payload = recoveryPayload({ repository, runId, runAttempt, stackId, featureStackRunId, matrix });
+  await postProgress({ endpoint: `${origin}/api/v1/integrations/ci/progress`, secret, payload });
+  console.log(`Reconciled Feature Stack ${stackId} at 100% success.`);
+};
+
 const run = async () => {
   const repository = process.env.GITHUB_REPOSITORY ?? '';
   const runId = Number(process.env.GITHUB_RUN_ID);
@@ -223,8 +291,22 @@ const selfTest = () => {
   assert.equal(awaitingMerge.status, 'in_progress');
   assert.equal(awaitingMerge.progressPercent, 98);
   assert.match(awaitingMerge.targets[0].phase, /branch protection/);
+  const recovered = recoveryPayload({
+    repository: 'lopugit/thingtime',
+    runId: 3,
+    runAttempt: 1,
+    stackId: 'ci-feature-stack-98c30439-8739-4acb-8dfa-2dc4e0f780aa',
+    featureStackRunId: 'feature-stack-run-f2023eb8-a7a5-4903-ba83-65a73c02dc4f',
+    matrix: { include: [{ target: 'main', pr: 566, pr_url: 'https://github.com/lopugit/thingtime/pull/566', merged_at: '2026-09-01T12:24:36Z', merge_commit_sha: '4adda985252632f2c1d0738b3e6bf84faf874af8' }] },
+    now: Date.parse('2026-09-01T12:40:00Z')
+  });
+  assert.equal(recovered.status, 'success');
+  assert.equal(recovered.progressPercent, 100);
+  assert.match(recovered.message, /main via PR #566/);
+  assert.equal(recovered.targets[0].jobUrl, null);
   console.log('Feature Stack progress self-test passed.');
 };
 
 if (process.argv.includes('--self-test')) selfTest();
+else if (process.argv.includes('--reconcile')) await reconcile();
 else if (import.meta.url === `file://${process.argv[1]}`) await run();

@@ -19,6 +19,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Reconciled cancelled or stale Feature Stack wrappers after their exact
+  protected target PRs have already merged. Lopu now verifies every published
+  branch/base identity and target-contained merge commit, skips duplicate AI
+  work, and signs the terminal success back to the production CI console. —
+  Codex (AI), 2026-09-01
+
 - Kept Feature Stack completion tracking attached to the stable published PR
   instead of its first head SHA. An authorized repair push may now advance the
   protected PR while the original wrapper is waiting; the gate revalidates the

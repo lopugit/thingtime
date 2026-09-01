@@ -3343,6 +3343,7 @@ jobs:
       matrix: ${{ steps.validate.outputs.matrix }}
       plan_b64: ${{ steps.validate.outputs.plan_b64 }}
       stack_id: ${{ steps.validate.outputs.stack_id }}
+      recovery: ${{ steps.validate.outputs.recovery }}
     steps:
       - name: Check out the trusted controller
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -3370,6 +3371,97 @@ jobs:
             echo '::error::Feature Stack run identity does not match its immutable plan.'
             exit 1
           }
+
+          stack_id="$(jq -r '.stackId' "$decoded")"
+          [[ "$stack_id" =~ ^ci-feature-stack-[0-9a-f-]{36}$ ]] || {
+            echo '::error::Feature Stack id is invalid.'
+            exit 1
+          }
+
+          # A wrapper can be cancelled after its protected target PR has
+          # already merged (for example while an older merge gate is still
+          # following a repaired head SHA). In that state the immutable source
+          # PRs are legitimately closed, so rerunning AI is both impossible
+          # and incorrect. Reconcile only when every exact stack branch/base
+          # pair has a merged PR whose merge commit is still contained by the
+          # requested target branch.
+          recovery_matrix='{"include":[]}'
+          recovery_complete=true
+          while IFS= read -r target; do
+            safe_target="$(printf '%s' "$target" | tr '/_' '--' | tr -cd 'A-Za-z0-9.-')"
+            publish_branch="lopu/feature-stack-$stack_id-to-$safe_target"
+            response="$RUNNER_TEMP/feature-stack-recovery-$safe_target.json"
+            gh api \
+              "repos/$REPO/pulls?state=all&head=${GITHUB_REPOSITORY_OWNER}%3A${publish_branch}&base=${target}&sort=updated&direction=desc&per_page=20" \
+              >"$response"
+            merged_pr="$(jq -c --arg repo "$REPO" --arg head "$publish_branch" --arg base "$target" '
+              [.[] | select(
+                .merged_at != null
+                and .head.repo.full_name == $repo
+                and .head.ref == $head
+                and .base.ref == $base
+              )][0] // empty
+            ' "$response")"
+            if [ -z "$merged_pr" ]; then
+              recovery_complete=false
+              break
+            fi
+            pr_body="$(jq -r '.body // ""' <<<"$merged_pr")"
+            expected_source_count="$(jq --arg target "$target" '[.sources[] | select(.targets | index($target))] | length' "$plan")"
+            actual_source_count="$(grep -Ec '^- #[0-9]+ `[^`]+` at `[0-9a-f]{40}`$' <<<"$pr_body" || true)"
+            if [ "$actual_source_count" != "$expected_source_count" ] \
+              || ! grep -Fxq "Feature Stack id: \`$stack_id\`" <<<"$pr_body"; then
+              recovery_complete=false
+              break
+            fi
+            while IFS= read -r source; do
+              expected_source="$(jq -r '"- #\(.pr) `\(.head)` at `\(.sha)`"' <<<"$source")"
+              if ! grep -Fxq "$expected_source" <<<"$pr_body"; then
+                recovery_complete=false
+                break 2
+              fi
+            done < <(jq -c --arg target "$target" '.sources[] | select(.targets | index($target))' "$plan")
+            merge_commit_sha="$(jq -r '.merge_commit_sha // empty' <<<"$merged_pr")"
+            published_head_sha="$(jq -r '.head.sha // empty' <<<"$merged_pr")"
+            [[ "$merge_commit_sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::Merged Feature Stack PR for '$target' has no valid merge commit."
+              exit 1
+            }
+            [[ "$published_head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::Merged Feature Stack PR for '$target' has no valid published head."
+              exit 1
+            }
+            gh api "repos/$REPO/git/commits/$merge_commit_sha" \
+              | jq -e --arg head "$published_head_sha" '[.parents[].sha] | index($head) != null' >/dev/null || {
+                echo "::error::Merged Feature Stack commit for '$target' does not contain the exact published PR head."
+                exit 1
+              }
+            compare_status="$(gh api "repos/$REPO/compare/$merge_commit_sha...$target" --jq '.status')"
+            case "$compare_status" in
+              ahead|identical) ;;
+              *)
+                echo "::error::Merged Feature Stack commit $merge_commit_sha is not contained by '$target'."
+                exit 1
+                ;;
+            esac
+            recovery_matrix="$(jq -c \
+              --arg target "$target" \
+              --argjson pr "$(jq '.number' <<<"$merged_pr")" \
+              --arg pr_url "$(jq -r '.html_url' <<<"$merged_pr")" \
+              --arg merged_at "$(jq -r '.merged_at' <<<"$merged_pr")" \
+              --arg merge_commit_sha "$merge_commit_sha" \
+              '.include += [{target:$target, pr:$pr, pr_url:$pr_url, merged_at:$merged_at, merge_commit_sha:$merge_commit_sha}]' \
+              <<<"$recovery_matrix")"
+          done < <(jq -r '.targets[]' "$plan")
+
+          if [ "$recovery_complete" = true ]; then
+            echo 'recovery=true' >>"$GITHUB_OUTPUT"
+            echo "matrix=$recovery_matrix" >>"$GITHUB_OUTPUT"
+            echo "plan_b64=$PLAN_B64" >>"$GITHUB_OUTPUT"
+            printf 'stack_id=%s\n' "$stack_id" >>"$GITHUB_OUTPUT"
+            echo 'Every exact Feature Stack target PR is already merged; routing to signed receipt reconciliation without model work.'
+            exit 0
+          fi
 
           while IFS= read -r source; do
             pr="$(jq -r '.pr' <<<"$source")"
@@ -3411,7 +3503,8 @@ jobs:
 
           echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
           echo "plan_b64=$PLAN_B64" >>"$GITHUB_OUTPUT"
-          printf 'stack_id=%s\n' "$(jq -r '.stackId' "$decoded")" >>"$GITHUB_OUTPUT"
+          printf 'stack_id=%s\n' "$stack_id" >>"$GITHUB_OUTPUT"
+          echo 'recovery=false' >>"$GITHUB_OUTPUT"
 
   model_config:
     name: Load the conflict-resolver model waterfall
@@ -3452,6 +3545,7 @@ jobs:
               && inputs.promotion_source_pr != ''
               && inputs.promotion_plan_b64 != '')
           || (needs.feature_stack_plan.result == 'success'
+              && needs.feature_stack_plan.outputs.recovery != 'true'
               && github.actor != 'dependabot[bot]'
               && inputs.maintenance_operation == 'merge-feature-stack'
               && inputs.feature_stack_plan_b64 != ''))
@@ -3722,6 +3816,7 @@ jobs:
     if: >-
       !cancelled()
       && needs.feature_stack_plan.result == 'success'
+      && needs.feature_stack_plan.outputs.recovery != 'true'
       && needs.model_config.result == 'success'
     strategy:
       fail-fast: false
@@ -4046,6 +4141,7 @@ jobs:
     if: >-
       !cancelled()
       && needs.feature_stack_plan.result == 'success'
+      && needs.feature_stack_plan.outputs.recovery != 'true'
       && needs.model_config.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 360
@@ -4075,6 +4171,37 @@ jobs:
       - name: Stream immediate, phase-change, ten-minute, and terminal updates
         run: node .github/scripts/feature-stack-progress.mjs
 
+  feature_stack_reconcile_receipt:
+    name: Reconcile an already-merged Feature Stack receipt
+    needs: [feature_stack_plan]
+    if: >-
+      always()
+      && !cancelled()
+      && needs.feature_stack_plan.result == 'success'
+      && needs.feature_stack_plan.outputs.recovery == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      STACK_ID: ${{ needs.feature_stack_plan.outputs.stack_id }}
+      FEATURE_STACK_RUN_ID: ${{ inputs.feature_stack_run_id }}
+      FEATURE_STACK_MATRIX: ${{ needs.feature_stack_plan.outputs.matrix }}
+      THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+      THINGTIME_PROGRESS_ORIGIN: ${{ vars.THINGTIME_CREDENTIAL_VAULT_ORIGIN || 'https://thingtime.com' }}
+    steps:
+      - name: Check out the trusted Feature Stack progress reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/feature-stack-progress.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Publish the signed terminal success receipt
+        run: node .github/scripts/feature-stack-progress.mjs --reconcile
+
   feature_stack_merge_gate:
     name: Confirm Feature Stack merged into ${{ matrix.target }}
     needs: [feature_stack_plan, model_config, feature_stack_merge]
@@ -4082,6 +4209,7 @@ jobs:
       always()
       && !cancelled()
       && needs.feature_stack_plan.result == 'success'
+      && needs.feature_stack_plan.outputs.recovery != 'true'
       && needs.model_config.result == 'success'
     strategy:
       fail-fast: false
