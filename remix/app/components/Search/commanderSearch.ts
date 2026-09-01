@@ -1,8 +1,15 @@
 import type { SearchPerson, SearchPost, SearchThing } from './searchTypes';
+import { thingIcon } from '~/components/Things/thingIcon';
 
 export type CommanderSearchResult = {
 	id: string;
 	resultType: 'thing' | 'person';
+	// The shared /things icon resolver keeps Commander in lockstep with every
+	// other Thing surface, including filename-aware attachment icons.
+	icon: string;
+	// People use their profile image as the primary visual, with the user icon
+	// overlaid by Commander as a small type badge.
+	avatarUrl: string | null;
 	title: string;
 	context: string;
 	href: string;
@@ -61,6 +68,8 @@ export const commanderSearchResults = (input: {
 		rows.push({
 			id: thing.id,
 			resultType: 'thing',
+			icon: thingIcon(thing),
+			avatarUrl: null,
 			title: title.slice(0, 120),
 			context: [kind, author, tags].filter(Boolean).join(' · '),
 			href: post ? `/post/${encodeURIComponent(thing.id)}` : thingDetailPath(thing.id)
@@ -72,6 +81,8 @@ export const commanderSearchResults = (input: {
 		rows.push({
 			id: person.id,
 			resultType: 'person',
+			icon: thingIcon({ thingtime: ['user'] }),
+			avatarUrl: person.avatarUrl,
 			title: displayName,
 			context: [`@${person.username}`, person.bio ? person.bio.replace(/\s+/g, ' ').trim().slice(0, 90) : 'person'].filter(Boolean).join(' · '),
 			href: `/profile/${encodeURIComponent(person.username)}`

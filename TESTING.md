@@ -1686,6 +1686,11 @@ is fixed, and cite the checklist you ran in the PR description.
       result still wins, and `path = value` setters still execute instead of
       becoming searches. A failed typeahead leaves full search + local commands
       usable.
+- [ ] Commander result visuals use the shared `thingIcon` mapping (including
+      filename-aware Thing icons). A person with `avatarUrl` shows that profile
+      image with a small `👤` user-type badge; a person without one gets an
+      initial fallback plus the same badge. Verify the compact rows remain
+      readable and unclipped at desktop and 390px mobile widths.
 - [ ] Search results default to `Standard`: posts use the real interactive
       post card and other Things use their native rendered `ThingView` (with
       its rendered/tree toggle where supported). Switching to `Data` restores
@@ -1701,6 +1706,11 @@ is fixed, and cite the checklist you ran in the PR description.
       Non-post Things and private admin diagnostics do not show an empty post
       section. Verify the inline card and JSON remain unclipped at desktop and
       mobile widths and survive a full top-to-bottom scroll.
+- [ ] Open a non-post `/thing/:id` permalink. Its `Views` controls independently
+      toggle the rendered preview and raw `Thing data`, with both enabled by
+      default. A component Thing resolves its sanitised live preview; turning
+      either switch off hides only that section, and either/both sections may
+      be disabled without overflow at desktop and 390px mobile widths.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
