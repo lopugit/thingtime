@@ -125,6 +125,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/crypto': () => import('../../../app/routes/api/v1/crypto/_crypto'),
   'v1/email/config': () => import('../../../app/routes/api/v1/email/config/_config'),
   'v1/email/test-otp': () => import('../../../app/routes/api/v1/email/test-otp/_test-otp'),
+  'v1/embed/things': () => import('../../../app/routes/api/v1/embed/things/_things'),
   'v1/emojis': () => import('../../../app/routes/api/v1/emojis/_emojis'),
   'v1/emojis/delete': () => import('../../../app/routes/api/v1/emojis/delete/_delete'),
   'v1/health/frontend': () => import('../../../app/routes/api/v1/health/frontend/_frontend'),

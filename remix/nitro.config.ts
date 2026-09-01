@@ -9,6 +9,7 @@ import {
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
+const embedDir = new URL('./dist/embed', import.meta.url).pathname;
 const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
 const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
@@ -27,6 +28,13 @@ export default defineNitroConfig({
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
   },
   publicAssets: [
+    {
+      baseURL: '/embed',
+      dir: embedDir,
+      // The SDK uses a stable copy-paste URL; revalidate it frequently so an
+      // old browser cache cannot pin an incompatible protocol for a year.
+      maxAge: 60 * 5
+    },
     {
       baseURL: '/',
       dir: publicDir,

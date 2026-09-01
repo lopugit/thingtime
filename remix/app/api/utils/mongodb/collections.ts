@@ -457,6 +457,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // embed SDK: listEmbeddedThings pages a single owner's `kind: 'embed'`
+    // things by most-recently-updated, so that sort needs its own index
+    col.createIndex({ kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
     // The feed and profile matches are $or over BOTH eras
     // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
     // thingtime side had its (createdAt desc, shareId asc) index above; the

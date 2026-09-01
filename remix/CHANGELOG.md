@@ -1746,7 +1746,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
   same development data plane rather than receiving isolated sandboxes. — Codex
   (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
-
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
   now creates the standing develop → main PR with — and re-applies on every
   develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
@@ -2228,6 +2227,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Details in
   [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
   — _Claude (AI), 2026-07-10_
+- Added the Thingtime Embed SDK: a verified single-file minified IIFE with
+  JSON-only Shadow DOM mounts, shared get/set/subscription and undo/redo state,
+  a responsive injected popup, a first-party full-editor/save bridge, public
+  cross-origin reads, version-safe `kind: 'embed'` persistence, and an
+  interactive safety-canary demo. See the
+  [embed guide](../docs/THINGTIME_EMBED.md) and
+  [PR 57 notes](../PRs/57-codex-thingtime-embed-sdk--share-thingtime-through-a-single-file-embed-sdk.md).
+  — _Codex (AI), 2026-07-10_
 
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,

@@ -5472,6 +5472,91 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'embed-things',
+    group: 'embed',
+    title: 'Embedded things',
+    endpoint: '/api/v1/embed/things',
+    summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
+    detail:
+      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as kind: embed documents in the things collection.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Public GET by id is anonymous. Private reads, owner lists, creates, and updates require an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with id to load a public embedded thing, or authenticate to load a caller-owned private thing.',
+      'GET without id while authenticated to list the caller embedded things.',
+      'POST name, value, and visibility without id to create a thing.',
+      'POST id, the last-seen version, value, and optional metadata to update; reload after a 409 conflict.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load a public thing',
+        description: 'Fetch a thing for a script-tag embed.',
+        method: 'GET',
+        query: { id: '0df8c965-48a5-4a39-bc47-43c04d404615' }
+      },
+      {
+        name: 'Create an embedded thing',
+        description: 'Create an owner-controlled public thing.',
+        method: 'POST',
+        body: {
+          name: 'Website capability card',
+          visibility: 'public',
+          value: { title: 'Hello from Thingtime', enabled: true }
+        }
+      },
+      {
+        name: 'Update an embedded thing',
+        description: 'Save edits against the version that was loaded.',
+        method: 'POST',
+        body: {
+          id: '0df8c965-48a5-4a39-bc47-43c04d404615',
+          version: 1,
+          value: { title: 'Hello, world', enabled: true }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Thing loaded or saved.',
+        body: {
+          ok: true,
+          thing: {
+            id: '0df8c965-48a5-4a39-bc47-43c04d404615',
+            name: 'Website capability card',
+            value: { title: 'Hello from Thingtime', enabled: true },
+            visibility: 'public',
+            version: 1
+          }
+        }
+      },
+      {
+        status: 409,
+        description: 'Another client saved a newer version.',
+        body: { ok: false, error: 'Thing changed somewhere else. Load it before saving again.' }
+      },
+      {
+        status: 429,
+        description: 'Read budget exhausted (anonymous cross-origin callers are counted per IP).',
+        body: { ok: false, error: 'Too many embed reads — take a breather 🌸' }
+      },
+      {
+        status: 429,
+        description: 'Save budget exhausted for this account.',
+        body: { ok: false, error: 'Saving embeds very enthusiastically — take a breather 🌸' }
+      }
+    ],
+    notes: [
+      'Cross-origin public reads use CORS. Do not put a full-account bearer token in publicly served browser source.',
+      'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.',
+      'Both verbs are rate limited (embed.read / embed.write). A 429 sends Retry-After, and the read 429 keeps its CORS headers so a host page can read the status instead of seeing an opaque network error.'
+    ]
+  }),
+  endpoint({
     id: 'apps',
     group: 'embed',
     title: 'Embed apps',

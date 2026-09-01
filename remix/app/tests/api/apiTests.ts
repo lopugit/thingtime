@@ -820,6 +820,49 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Theme delete was rejected with an error shape.')
   },
   {
+    id: 'embed-things-public-missing',
+    name: 'Embedded thing public reads are bounded',
+    description: 'An unknown embedded thing returns the public CORS error shape without exposing private data.',
+    group: 'embed',
+    method: 'GET',
+    path: '/api/v1/embed/things?id=definitely-not-a-real-embedded-thing',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown embedded thing returned a 404 error shape.'
+    )
+  },
+  {
+    id: 'embed-things-create-guarded',
+    name: 'Embedded thing writes require auth',
+    description: 'Creating embedded data without a session is rejected before anything is written.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    mutates: true,
+    body: { name: 'API test embed', value: { hello: 'world' }, visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.thing?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Embedded thing creation either persisted for a session or returned an auth error.'
+    )
+  },
+  {
+    id: 'embed-things-json-only',
+    name: 'Embedded thing writes require JSON',
+    description: 'Safelisted text/plain requests are rejected before cookie authentication, closing the simple-request CSRF path.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    body: { name: 'Must not save', value: { hello: 'world' } },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson(
+      [415],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Embedded thing writes rejected a non-JSON content type.'
+    )
+  },
+  {
     id: 'things-feed-public',
     name: 'Feed lists public posts',
     description: 'The feed route responds anonymously with a posts page shape.',

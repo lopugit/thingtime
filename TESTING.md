@@ -1863,6 +1863,33 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## Single-file embed bundle (`remix/vite.embed.config.ts`, `remix/scripts/verify-embed-bundle.mjs`)
+
+- [ ] `pnpm --dir remix run build:embed` writes exactly one generated asset
+      (`dist/embed/thingtime.min.js`) and `[verify] Single-file embed ready`
+      prints — no `.map` file and no second chunk.
+- [ ] The source-map guard matches an *annotation*, not a substring: appending
+      `//# sourceMappingURL=thingtime.min.js.map` to the built bundle fails
+      `verify:embed`, while the vendored css-loader/style-loader runtimes that
+      Editor.js ships pre-webpacked (they contain the literal
+      `/*# sourceMappingURL=data:…` inside code that builds an inline map at
+      runtime) must NOT fail it. `pnpm --dir remix run test:embed-bundle`
+      covers both directions.
+- [ ] `verify:embed` counts only what the embed build *generated*. Adding a file
+      to `remix/public/embed/` (the client build copies it into `dist/embed/`
+      before the embed build runs) must not fail it; a real second chunk or a
+      `.map` still must.
+- [ ] `/embed/demo.html` reaches `✓ Host globals untouched` (`data-passed="true"`
+      on `#host-integrity`) when served under the **production** CSP, not just on
+      the dev server. Deployed paths get `script-src 'self'` with no
+      `'unsafe-inline'` and no hash/nonce, so any inline `<script>` on that page
+      is silently refused and the verdict hangs on "Checking host isolation…"
+      forever — while `devCsp` allows inline scripts and hides it locally. The
+      demo's code must stay in `/embed/demo-host.js` and
+      `/embed/demo-integrity.js`; `verify:vercel-output` fails the build if an
+      inline executable script reappears in `embed/demo.html` or
+      `embed/bridge.html`.
+
 ## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
 - [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)

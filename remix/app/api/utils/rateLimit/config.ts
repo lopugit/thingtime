@@ -32,6 +32,15 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // embed SDK reads (GET /api/v1/embed/things) — the only anonymous
+  // cross-origin read in the API (Access-Control-Allow-Origin: *), so an
+  // unbounded one would be a free amplification/scraping surface off any host
+  // page. Bounded like the other public reads; anonymous callers key by IP.
+  'embed.read': { limit: 120, windowMs: 60_000, enabled: true },
+  // embed SDK writes (POST /api/v1/embed/things) — MAX_THINGS_PER_OWNER bounds
+  // how many embeds exist, not how fast they churn; each save costs a count +
+  // find + CAS update, so throttle the rate too. Write-shaped like things.write.
+  'embed.write': { limit: 60, windowMs: 60_000, enabled: true },
   // component browsing (/api/v1/components/browse) — same read-only shape
   'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // admin component-library seeding (/api/v1/admin/components/seed) — batch

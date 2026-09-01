@@ -8,6 +8,21 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Embed Thingtime on any website
+
+Thingtime now builds as a single minified browser file with shared state,
+Shadow DOM mounts, an injected popup, and a first-party secure editor/save
+window:
+
+```html
+<div data-thingtime-mount></div>
+<script src="https://thingtime.com/embed/thingtime.min.js"></script>
+```
+
+See [the Thingtime Embed SDK guide](docs/THINGTIME_EMBED.md) for declarative and
+JavaScript APIs, public persistence, conflict handling, security boundaries,
+local development, and build verification.
+
 ## AI agent instructions
 
 Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.

@@ -42,17 +42,11 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 // re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
 // second boundary, not the mechanism that makes storage-controlled code inert.
 
-try {
-	window.smarts = smarts;
-	window.flatted = {
-		parse: parseThingtime,
-		stringify: stringifyThingtime
-	};
-} catch (err) {
-	// nothing
-}
-
 export const ThingtimeProvider = (props: any): React.JSX.Element => {
+	const storageKey = props?.storageKey || 'thingtime';
+	const persistLocal = props?.persistLocal !== false;
+	const exposeGlobals = props?.exposeGlobals !== false;
+
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
 		set: null,
@@ -79,6 +73,10 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const hydrationResolvedRef = React.useRef(false);
 	const persistenceReadyRef = React.useRef(false);
 	const persistenceRevisionRef = React.useRef(0);
+	// The autosave coordinator is created once, so it reads the storage key
+	// through a ref instead of closing over the first render's prop value.
+	const storageKeyRef = React.useRef(storageKey);
+	storageKeyRef.current = storageKey;
 	const persistenceRef = React.useRef<LatestRevisionAutosaveCoordinator<any> | null>(null);
 	if (!persistenceRef.current) {
 		persistenceRef.current = createLatestRevisionAutosave<any, string>({
@@ -90,7 +88,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				return serialized;
 			},
 			write: async (serialized) => {
-				await localforage.setItem('thingtime', serialized);
+				await localforage.setItem(storageKeyRef.current, serialized);
 			},
 			onError: (error, context) => {
 				console.error(`[tt] Thingtime autosave ${context.phase} failed at revision ${context.revision}`, error);
@@ -116,6 +114,17 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const setThingtimeSyncRef = React.useRef<((path: ThingtimeSyncPath, value: any) => void) | null>(null);
 
 	const undoRedo = useThingtimeLine(Everything);
+
+	React.useEffect(() => {
+		if (!exposeGlobals) return;
+
+		try {
+			window.smarts = smarts;
+			window.flatted = { parse: parseThingtime, stringify: stringifyThingtime };
+		} catch {
+			// Global tools are best-effort outside a browser.
+		}
+	}, [exposeGlobals]);
 
 	const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
 		const newThingtime = {
@@ -383,7 +392,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				const localStorageThingtime = await localforage.getItem('thingtime');
+				const localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
@@ -421,7 +430,10 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
 							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
 							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
-							await localforage.setItem('thingtime', repairedSerialized);
+							// Repair the blob this provider actually read. Writing the literal
+							// default key here would overwrite another provider's tree and
+							// leave this one unrepaired, so it would repair again every load.
+							await localforage.setItem(storageKey, repairedSerialized);
 							if (cancelled) return;
 						}
 					} else {
@@ -458,24 +470,27 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [flushSetThingtimeQueue, restoreThingtime]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey]);
 
 	// thingtime change listener
 	React.useEffect(() => {
-		try {
-			window.setThingtime = setThingtime;
-			window.getThingtime = getThingtime;
-			window.thingtime = thingtimeState;
-			window.tt = thingtimeState;
-			window.events = events;
-		} catch {
-			// nothing
+		if (exposeGlobals) {
+			try {
+				window.setThingtime = setThingtime;
+				window.getThingtime = getThingtime;
+				window.thingtime = thingtimeState;
+				window.tt = thingtimeState;
+				window.events = events;
+			} catch {
+				// Global state is best-effort outside a browser.
+			}
 		}
 
 		// Never persist the temporary pre-hydration value. In development React
 		// replays effects, so a one-shot "skip the first effect" flag can otherwise
 		// schedule that placeholder state before LocalForage finishes loading.
-		if (!loading && persistenceReadyRef.current) {
+		// Embedded mounts opt out of local persistence entirely (persistLocal).
+		if (persistLocal && !loading && persistenceReadyRef.current) {
 			persistenceRevisionRef.current += 1;
 			persistenceRef.current?.schedule(thingtimeState, persistenceRevisionRef.current);
 		}
@@ -483,7 +498,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		thingtimeRef.current = thingtimeState;
 
 		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
-	}, [setThingtime, events, getThingtime, loading, thingtimeState, setThingtimeObjectWrapper]);
+	}, [setThingtime, events, exposeGlobals, getThingtime, loading, persistLocal, thingtimeState, setThingtimeObjectWrapper]);
 
 	// Keep the sync channel pointed at the current setThingtime without ever
 	// recreating the channel itself.
