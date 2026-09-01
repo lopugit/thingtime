@@ -4,6 +4,7 @@ import test from 'node:test';
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
 	attachmentContentUrl,
+	attachmentDisplayName,
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
@@ -99,6 +100,20 @@ test('normalises only canonical stable attachment metadata', () => {
 		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
 	);
 	assert.equal(MAX_POST_ATTACHMENTS, 25);
+});
+
+test('filename preview overrides display text without replacing the immutable filename', () => {
+	const attachment = normalizePublicAttachment({
+		id: 'att-display',
+		name: '7627.jpg',
+		filenamePreview: 'Replacement blades.jpg',
+		size: 42,
+		contentType: 'image/jpeg',
+		mediaKind: 'image'
+	});
+	assert.ok(attachment);
+	assert.equal(attachmentDisplayName(attachment), 'Replacement blades.jpg');
+	assert.equal(attachment.name, '7627.jpg');
 });
 
 test('download rows label the sniffed container instead of application/octet-stream', () => {
