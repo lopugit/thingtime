@@ -2143,7 +2143,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   convert each legacy collection idempotently. Legacy ids are preserved as
   thing shareIds so sessions, rosters, ownerId joins, share links, and active
   theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
-  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  Details in TODO/claude-todo/22-everything-is-a-thing-collections.md.
   — Claude (AI), 2026-07-12
 
 ### Added

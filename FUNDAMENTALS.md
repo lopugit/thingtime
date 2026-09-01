@@ -1,7 +1,8 @@
 # 🏛️ Thingtime Fundamentals
 
 Core engineering principles for this codebase. These are deliberately short and
-non-negotiable — read before adding features. (Roadmap lives in `claude-todo/`.)
+non-negotiable — read before adding features. (Roadmap lives in
+`TODO/claude-todo/`.)
 
 ## 1. The API is the only gateway to data
 
@@ -33,7 +34,7 @@ Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
-`app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
+`app/schemas/registry.ts` and `TODO/claude-todo/22-everything-is-a-thing-collections.md`).
 
 **Physical collections are versioned.** The names below are _logical_ — the
 vocabulary of code, docs, and the admin query API. On the MongoDB server each
@@ -266,7 +267,7 @@ ephemeral namespace plus the global windowed brake. The end user owns
 every namespace doc and can browse (`GET /api/v1/things?appId=`,
 `/api/v1/apps/data-summary`) and delete
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
-`claude-todo/16-full-power-app-namespaces.md`.
+`TODO/claude-todo/16-full-power-app-namespaces.md`.
 
 ## 4. One MongoDB connection source
 
@@ -317,7 +318,7 @@ JWTs stored anywhere). `tt_auth` stays the single ACTIVE credential; switching
 mints a fresh JWT from the chosen live session. Every roster account is
 independently revocable and validated by the same session→user path as
 `tt_auth`, and raw tokens never reach the client (the switcher API returns
-public users only). See `claude-todo/11-account-switcher.md`.
+public users only). See `TODO/claude-todo/11-account-switcher.md`.
 
 ## 6. Never leak secrets
 

@@ -10,7 +10,8 @@ import { clearUserActiveTheme } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
 
-// Themes are THINGS now (thingtime ["theme"], see claude-todo/12): the resolved,
+// Themes are THINGS now (thingtime ["theme"], see
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): the resolved,
 // sanitized token document (see app/theme/tokens.ts) lives in crystal as
 // { name, theme }, and the legacy visibility enum maps onto the acl
 // (public → ['tt:all'], private → ['tt:user']). This module keeps the LEGACY

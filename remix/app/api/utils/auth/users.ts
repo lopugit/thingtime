@@ -28,7 +28,8 @@ import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
-// Users are THINGS now (thingtime ["user"], see claude-todo/12): public
+// Users are THINGS now (thingtime ["user"], see
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): public
 // profile in crystal, credentials/private state under the root `secure` field
 // (sensitive strings as BinData so the $** text index can't tokenize them),
 // uniqueness via uniqueKeys (username plain, email hashed). This module keeps
@@ -39,7 +40,8 @@ import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 // to things for new accounts, and updates target whichever store holds the doc.
 
 // Canonical legacy user document (thingtime.users) — now also the adapter
-// output shape for user things. See FUNDAMENTALS.md §3 + claude-todo/12.
+// output shape for user things. See FUNDAMENTALS.md §3 +
+// TODO/claude-todo/22-everything-is-a-thing-collections.md.
 export type UserDoc = {
 	_id?: any;
 	ttid: string;

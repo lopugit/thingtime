@@ -51,7 +51,7 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw
   Chakra `useToast` or `alert()`.
 
-The active build roadmap lives in `claude-todo/`. The owner's engineering
+The active build roadmap lives in `TODO/claude-todo/`. The owner's engineering
 decisions and thinking method are logged in `DECISIONS.md`; read it when
 product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge

@@ -16,8 +16,9 @@ import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageM
 // (users.meta.activeFeedAlgorithmId).
 //
 // Feed algorithms are THINGS now (thingtime ['feed-algorithm'], see
-// claude-todo/12): the trained profile lives in crystal, ALWAYS private
-// (acl ['tt:user']) because the weight maps encode the owner's reading habits.
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): the trained
+// profile lives in crystal, ALWAYS private (acl ['tt:user']) because the
+// weight maps encode the owner's reading habits.
 // This module keeps the legacy FeedAlgorithmDoc shape as its interchange
 // format — every things-era read adapts back to it, so projectAlgorithm and
 // the /api/v1/algorithms* routes are untouched. Reads are dual-era (things
