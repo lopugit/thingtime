@@ -13,11 +13,23 @@
   Full spec and Bambu Studio reference screenshot:
   `claude-todo/20-versioned-experience-history.md`.
 
-1. **URGENT HIGH PRIORITY: Make true `hydrateRoot(document, ...)` merge-ready.**
+1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
+   (closed 2026-07-21).**
 
-   Rollback checkpoint before deeper hydrate experiments: `61c234a` (`Fix Remix Emotion hydration styling`).
-
-   The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
+   This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
+   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+   React document tree, and the remaining work was to eliminate dev-mode
+   `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
+   to the Vite + React Router non-framework shell: `remix/index.html` is a
+   static shell and `remix/app/entry.client.tsx` renders client-only via
+   `createRoot(document.getElementById('root'))` — there is no server-rendered
+   document and no hydration pass anywhere, so document-hydration mismatch
+   warnings can no longer occur. The original symptom (unstyled-content jump)
+   is handled by the static shell plus the pre-paint theme snapshot in
+   `remix/public/tt-boot.js` (a render-blocking external script loaded from
+   `index.html`'s `<head>` — external so the CSP can stay `script-src 'self'`).
+   If SSR is ever reintroduced, write a fresh spec against that architecture
+   instead of resurrecting this item.
 
 2. **✅ FIXED — Tighten verification-link origin trust.**
 
