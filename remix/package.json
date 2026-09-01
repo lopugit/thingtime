@@ -68,7 +68,7 @@
     "test:vercel-config": "node --test scripts/vercel-config.test.mjs",
     "test:vercel-root": "node --test ../scripts/vercel-root-flow.test.mjs",
     "test:web-ci-context": "node scripts/web-ci-required-context-contract.mjs",
-    "test:webpages": "node --import tsx --test app/components/Builder/*.test.ts",
+    "test:webpages": "node --import tsx --test app/components/Builder/*.test.ts app/api/utils/webpages/*.test.ts",
     "test:workflow-callers": "node scripts/workflow-caller-contract.mjs",
     "test:subscriptions": "node --import tsx --test app/api/utils/subscriptions/tierCatalog.test.ts",
     "test:persist": "node --import tsx --test app/Providers/thingtimeSerialization.test.ts",
