@@ -15,6 +15,7 @@ import type { OrderedEditorJsChangeQueue } from './editorJsChangeQueue';
 import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './editorJsChangeReconciliation';
 import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
+import { watchEditorJsBlockReorder } from './editorJsBlockDragDrop';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
@@ -326,6 +327,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 		destroyedRef.current = false;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
+		let blockReorderCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
 		let saveEditorValue: (() => void) | undefined;
@@ -495,6 +497,13 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			// the browser keeps native deletion and cursor movement in the field.
 			textFieldKeyboardCleanup = watchEditorJsTextFieldKeydowns(holderRef.current);
 
+			// Block reordering: drag / long-press the six-dot grip, or Alt+↑/↓.
+			// Explicitly settle one save after each completed move — Editor.js does
+			// not reliably emit onChange for programmatic blocks.move().
+			blockReorderCleanup = watchEditorJsBlockReorder(holderRef.current, () => editorRef.current, {
+				onMoved: () => saveEditorValue?.()
+			});
+
 			// register in the window.meta debug db (same convention as
 			// Thingtime.tsx) so devtools/tests can drive editor.js's own API
 			try {
@@ -532,6 +541,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			const drained = editorChangeQueue?.close() ?? Promise.resolve();
 			destroyedRef.current = true;
 			textFieldKeyboardCleanup?.();
+			blockReorderCleanup?.();
 			rawInputCleanupRef.current?.();
 			rawInputCleanupRef.current = null;
 			const editor = editorRef.current;
@@ -557,6 +567,8 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 		<Box
 			className="long-text-editor"
 			ref={holderRef}
+			// anchor for the block-reorder drop indicator (absolute child)
+			position="relative"
 			onPointerUp={(event) => {
 				if (readonlyRef.current) return;
 				const holder = event.currentTarget;
@@ -591,6 +603,9 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 				'.codex-editor__redactor': { paddingBottom: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
+				// the grip doubles as the block-drag handle: keep the browser from
+				// hijacking a touch long-press into page scroll, and hint the affordance
+				'.ce-toolbar__settings-btn': { touchAction: 'none', cursor: 'grab' },
 				'@media screen and (max-width: 650px)': {
 					// Editor.js normally puts its mobile + / settings action row after the
 					// active block. Keep the row on the same line at the inline end instead,

@@ -9,6 +9,55 @@ export type ChatRole = 'owner' | 'admin' | 'member';
 export type MemberState = 'active' | 'pending' | 'left' | 'declined';
 export type MessengerMode = 'slack' | 'messenger';
 
+export type ImportedAiSource = {
+	access?: 'imported';
+  provider: 'chatgpt' | 'claude';
+  sourceId: string;
+  label: string;
+  connector: string;
+  readOnly: true;
+  role?: 'user' | 'assistant' | 'system' | 'unknown';
+  authorName?: string | null;
+  segmentIndex?: number;
+  segmentCount?: number;
+};
+
+export type AgentCapability =
+	| 'read-history'
+	| 'create-session'
+	| 'send-message'
+	| 'steer-turn'
+	| 'interrupt-turn'
+	| 'review-approval'
+	| 'accessibility'
+	| 'explicit-approval'
+	| 'attachments';
+
+export type LiveAiSource = {
+	access: 'live';
+	provider: 'chatgpt' | 'claude';
+	sourceId: string;
+	label: string;
+	connector: string;
+	readOnly: false;
+	deviceId: string;
+	connectorId: string;
+	sessionId: string;
+	projectId?: string | null;
+	projectLabel?: string | null;
+	historyCursor?: string | null;
+	historyHasMore?: boolean;
+	historySyncedAt?: string;
+	capabilities: AgentCapability[];
+	role?: 'user' | 'assistant' | 'system' | 'unknown';
+	authorName?: string | null;
+};
+
+export type ExternalAiSource = ImportedAiSource | LiveAiSource;
+
+export const isLiveAiSource = (source: ExternalAiSource | null | undefined): source is LiveAiSource =>
+	source?.access === 'live' && source.readOnly === false;
+
 export type MessengerProfile = {
   id: string;
   username: string;
@@ -39,6 +88,7 @@ export type MessagePreview = {
   systemType: string | null;
 	attachmentCount: number;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatSummary = {
@@ -57,6 +107,7 @@ export type ChatSummary = {
   memberCount: number;
   unreadCount: number;
   lastMessage: MessagePreview | null;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatMessage = {
@@ -78,6 +129,7 @@ export type ChatMessage = {
   threadCount: number;
   threadLastAt: string | null;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CustomEmojiMap = Record<string, { name: string; image: string; animated: boolean }>;
@@ -102,6 +154,7 @@ export type Community = {
   memberCount: number;
   createdAt: string;
   sections: { id: string; name: string; order: number }[];
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CommunityChannel = {

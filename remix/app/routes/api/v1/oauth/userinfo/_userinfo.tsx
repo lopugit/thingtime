@@ -13,6 +13,8 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // mirrors exactly what the user chose on the consent screen:
 //   id, username, profileUrl        — always (profile.username baseline)
 //   displayName / avatarUrl / bio / bannerUrl — profile.<field> (or profile)
+//   birthday                         — profile.birthday only (exact: a plain
+//                                      `profile` grant never covers it)
 //   email                            — email scope
 // Well-built platforms read `scopes` and light up features for whatever the
 // user shared ("auto" sharing) instead of assuming a fixed shape. Same CORS +
@@ -52,6 +54,7 @@ export const loader = async ({ request }: { request: Request }) => {
 				...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(ctx.user.avatarUrl) } : {}),
         ...(has('profile.bio') ? { bio: ctx.user.bio } : {}),
 				...(has('profile.banner') ? { bannerUrl: thirdPartyProfileMediaUrl(ctx.user.bannerUrl) } : {}),
+        ...(has('profile.birthday') ? { birthday: ctx.user.birthday } : {}),
         ...(has('email') ? { email: ctx.user.email } : {})
       }
     },

@@ -279,6 +279,20 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		[subSections, selectedTopItem, setOrderingFor]
 	);
 
+	// whole-section reorder: section order IS the flat item order (sections are
+	// grouped by first appearance), so persisting the sections' items
+	// concatenated in the new order reuses the existing per-top-item ordering
+	const sectionKeyOf = (group: string | null) => group ?? '__ungrouped__';
+	const onGroupSectionReorder = React.useCallback(
+		(newSectionKeys: string[]) => {
+			const byKey = new Map(subSections.map((section) => [sectionKeyOf(section.group), section]));
+			const flat = newSectionKeys.flatMap((key) => byKey.get(key)?.items.map((item) => item.id) || []);
+
+			setOrderingFor(selectedTopItem?.id, flat);
+		},
+		[subSections, selectedTopItem, setOrderingFor]
+	);
+
 	const onSearchClick = React.useCallback(
 		(event?: React.MouseEvent) => {
 			// this same native click bubbles to document where the Commander's
@@ -491,69 +505,86 @@ export const DrawerContent = (props: DrawerContentProps) => {
 							{selectedTopItem?.label}
 						</Text>
 						<Flex flexDirection="column" rowGap="1px">
-							{subSections.map((section) => {
-								if (!section.group) {
-									return (
-										<ReorderableList
-											key={`${selectedTopItem?.id}-ungrouped`}
-											items={section.items.map((item) => ({
-												id: item.id,
-												node: subRow(item)
-											}))}
-											onReorder={(idsInSection) => onSubSectionReorder(null, idsInSection)}
-										/>
-									);
+							{/* sections are themselves reorderable — but only when the drag
+							starts from a group header (the handle), so the nested per-item
+							lists keep sole ownership of drags that start on their rows */}
+							<ReorderableList
+								key={`${selectedTopItem?.id}-sections`}
+								shouldStartDrag={(event) =>
+									Boolean((event.target as Element | null)?.closest?.('[data-drawer-group-handle]'))
 								}
+								onReorder={onGroupSectionReorder}
+								items={subSections.map((section) => {
+									if (!section.group) {
+										return {
+											id: '__ungrouped__',
+											node: (
+												<ReorderableList
+													items={section.items.map((item) => ({
+														id: item.id,
+														node: subRow(item)
+													}))}
+													onReorder={(idsInSection) => onSubSectionReorder(null, idsInSection)}
+												/>
+											)
+										};
+									}
 
-								const groupKey = `${selectedTopItem?.id}:${section.group}`;
-								const collapsed = !!collapsedGroups?.[groupKey];
+									const groupKey = `${selectedTopItem?.id}:${section.group}`;
+									const collapsed = !!collapsedGroups?.[groupKey];
 
-								return (
-									<React.Fragment key={groupKey}>
-										<Flex
-											alignItems="center"
-											columnGap={1}
-											marginX={2}
-											paddingX={3}
-											paddingY="5px"
-											borderRadius="var(--tt-radius-sm, 9px)"
-											opacity={0.7}
-											_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
-											transition="background 0.15s ease, opacity 0.15s ease"
-											cursor="pointer"
-											onClick={() => toggleGroupCollapsed(groupKey)}
-										>
-											<Box
-												as="span"
-												display="inline-flex"
-												transform={collapsed ? 'rotate(-90deg)' : 'none'}
-												transition="transform 0.2s ease-out"
-											>
-												<ChevronDown size={12} strokeWidth={2} />
-											</Box>
-											<Text
-												fontFamily="mono"
-												fontSize="10px"
-												fontWeight={600}
-												letterSpacing="0.08em"
-												textTransform="uppercase"
-												color="var(--tt-muted, #9a9aa6)"
-											>
-												{section.group}
-											</Text>
-										</Flex>
-										{!collapsed && (
-											<ReorderableList
-												items={section.items.map((item) => ({
-													id: item.id,
-													node: subRow(item)
-												}))}
-												onReorder={(idsInSection) => onSubSectionReorder(section.group, idsInSection)}
-											/>
-										)}
-									</React.Fragment>
-								);
-							})}
+									return {
+										id: section.group,
+										node: (
+											<>
+												<Flex
+													data-drawer-group-handle
+													title="Click to collapse · hold to drag"
+													alignItems="center"
+													columnGap={1}
+													marginX={2}
+													paddingX={3}
+													paddingY="5px"
+													borderRadius="var(--tt-radius-sm, 9px)"
+													opacity={0.7}
+													_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+													transition="background 0.15s ease, opacity 0.15s ease"
+													cursor="pointer"
+													onClick={() => toggleGroupCollapsed(groupKey)}
+												>
+													<Box
+														as="span"
+														display="inline-flex"
+														transform={collapsed ? 'rotate(-90deg)' : 'none'}
+														transition="transform 0.2s ease-out"
+													>
+														<ChevronDown size={12} strokeWidth={2} />
+													</Box>
+													<Text
+														fontFamily="mono"
+														fontSize="10px"
+														fontWeight={600}
+														letterSpacing="0.08em"
+														textTransform="uppercase"
+														color="var(--tt-muted, #9a9aa6)"
+													>
+														{section.group}
+													</Text>
+												</Flex>
+												{!collapsed && (
+													<ReorderableList
+														items={section.items.map((item) => ({
+															id: item.id,
+															node: subRow(item)
+														}))}
+														onReorder={(idsInSection) => onSubSectionReorder(section.group, idsInSection)}
+													/>
+												)}
+											</>
+										)
+									};
+								})}
+							/>
 						</Flex>
 					</>
 				)}
