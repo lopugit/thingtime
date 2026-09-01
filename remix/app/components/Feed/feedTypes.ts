@@ -111,8 +111,19 @@ export type PublicPost = {
   // impressions/avgDwellMs secondary — see api/utils/things/views.ts
   viewCount?: number;
   viewStats?: { impressions: number; avgDwellMs: number };
+  // poll posts only: live per-option vote counts + the viewer's own vote
+  pollVotes?: PublicPollVotes;
+  // logged-in viewers only: has the viewer saved this post to their library?
+  // (absent for anonymous projections — the bookmark button hides with it)
+  viewerSaved?: boolean;
   createdAt: string;
 };
+
+// Live poll tally on poll posts (posts whose thing carries question/options):
+// per-option counts (index-aligned with the options), the total, and the
+// viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
+// api/utils/things/pollCore.ts.
+export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
 
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form
@@ -135,6 +146,10 @@ export type PublicAlgorithm = {
   parentId: string | null;
   eventCount: number;
   lastTrainedAt: string | null;
+  // "try my feed brain 🧠": the owner-granted branch invitation. The algorithm
+  // itself stays private either way — mirrors PublicAlgorithm in
+  // api/utils/algorithms/algorithms.ts, which is what this projects.
+  shared: boolean;
   createdAt: string;
   updatedAt: string;
   topInterests: AlgorithmInterest[];
@@ -192,4 +207,26 @@ export const timeAgo = (iso: string): string => {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
   if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)}d`;
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+// Append a fetched page onto an existing post list, dropping any post whose id
+// is already rendered. Ranked feed pagination re-scores a moving candidate
+// window (and training shifts weights between pages), so later pages can
+// re-serve ids from earlier pages; cursor pagers can also re-serve a post when
+// the window shifts under a fresh insert. Duplicate ids would collide as React
+// keys in PostList (and as `[data-thing-id]` view-tracking targets).
+//
+// `seen` grows as the page is scanned, so a page that carries the same id twice
+// is also collapsed — the window that re-serves across pages can just as easily
+// repeat within one. Pass an empty `prev` to dedupe a first/reset page, so every
+// path into `setPosts` upholds the same "rendered ids are unique" contract.
+export const appendPostsDeduped = (prev: PublicPost[], page: PublicPost[]): PublicPost[] => {
+  if (!page.length) return prev;
+  const seen = new Set(prev.map((post) => post.id));
+  const fresh = page.filter((post) => {
+    if (seen.has(post.id)) return false;
+    seen.add(post.id);
+    return true;
+  });
+  return fresh.length ? [...prev, ...fresh] : prev;
 };

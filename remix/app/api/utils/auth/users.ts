@@ -27,8 +27,10 @@ import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFro
 import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
+import { sanitizeBirthday } from './birthday';
 
-// Users are THINGS now (thingtime ["user"], see claude-todo/12): public
+// Users are THINGS now (thingtime ["user"], see
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): public
 // profile in crystal, credentials/private state under the root `secure` field
 // (sensitive strings as BinData so the $** text index can't tokenize them),
 // uniqueness via uniqueKeys (username plain, email hashed). This module keeps
@@ -39,7 +41,8 @@ import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 // to things for new accounts, and updates target whichever store holds the doc.
 
 // Canonical legacy user document (thingtime.users) — now also the adapter
-// output shape for user things. See FUNDAMENTALS.md §3 + claude-todo/12.
+// output shape for user things. See FUNDAMENTALS.md §3 +
+// TODO/claude-todo/22-everything-is-a-thing-collections.md.
 export type UserDoc = {
 	_id?: any;
 	ttid: string;
@@ -81,6 +84,9 @@ export type PublicUser = {
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
 	bannerLinkedUrl: string | null;
+	// PRIVATE (secure-blob meta.birthday, YYYY-MM-DD): owner-facing responses and
+	// the scope-gated userinfo only — never part of PublicProfile.
+	birthday: string | null;
 	emailVerified: boolean;
 	createdAt: string;
 	accountKind: 'user' | 'service';
@@ -168,6 +174,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		bannerAttachmentId: profileAttachmentIdFromRecord(user, 'banner'),
 		avatarLinkedUrl: linkedProfileMediaUrl(user, 'avatar'),
 		bannerLinkedUrl: linkedProfileMediaUrl(user, 'banner'),
+		birthday: typeof user.meta?.birthday === 'string' ? user.meta.birthday : null,
 		emailVerified: !!user.emailVerified,
 		createdAt: new Date(user.createdAt).toISOString(),
 		accountKind: user.accountKind === 'service' ? 'service' : 'user',
@@ -364,6 +371,24 @@ export const findUserByUsername = async (username: string) => {
 	]);
 	if (thing) return userThingToDoc(thing);
 	return legacy;
+};
+
+// Batch form for @mention resolution (bounded at MENTION_CAP per text): same
+// two-store probe and Things-first precedence as findUserByUsername, but one
+// $in query per physical store instead of up to 2×N point reads on the
+// synchronous create path. Preserves caller order; unknown names simply drop
+// out. Mirrors findUsersByIds (same loose UserDoc-shaped `any` rows as every
+// resolver here — userThingToDoc is untyped by design until the migration).
+export const findUsersByUsernames = async (usernames: readonly string[]): Promise<any[]> => {
+	const unique = [...new Set(usernames.map((username) => username.trim().toLowerCase()).filter(Boolean))];
+	if (!unique.length) return [];
+	const [thingRows, legacyRows] = await Promise.all([
+		getThingsCollection().then((collection) => collection.find({ thingtime: 'user', 'crystal.username': { $in: unique } } as any).toArray()),
+		getUsersCollection().then((collection) => collection.find({ username: { $in: unique } } as any).toArray())
+	]);
+	const legacyByName = new Map(legacyRows.map((row: any) => [String(row.username), row]));
+	const thingsByName = new Map(thingRows.map((row: any) => [String(row?.crystal?.username), userThingToDoc(row)] as const));
+	return unique.map((name) => thingsByName.get(name) ?? legacyByName.get(name)).filter((row): row is NonNullable<typeof row> => !!row);
 };
 
 export const findUserByEmail = async (email: string) => {
@@ -933,6 +958,219 @@ export const removeUserMongoEndpoint = async (userId: string, endpointId: string
 	if (next.length === list.length) return false;
 	await users.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.mongoEndpoints': next, updatedAt: new Date() } });
 	return true;
+};
+
+// ── Saved deployment links (cross-deployment account sync) ──────────────────
+// A user's links to their accounts on OTHER Thingtime deployments live INSIDE
+// the secure blob (meta.deploymentLinks): each link carries a bearer token for
+// the remote deployment, and the blob is the one place a user thing keeps
+// unsearchable private state (same reasoning as meta.mongoEndpoints above).
+// Tokens never leave the API utils — routes project links through
+// toPublicDeploymentLink before responding.
+export type DeploymentSyncMode = 'push' | 'pull' | 'two-way' | 'off';
+export type DeploymentLinkPathRule = { path: string; mode: DeploymentSyncMode };
+export type SavedDeploymentLink = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  token: string; // remote-deployment JWT — NEVER projected out of api/utils
+  tokenExpiresAt: string | null; // ISO; null = non-expiring link token
+  remoteUserId: string;
+  remoteUsername: string;
+  syncMode: DeploymentSyncMode;
+  pathRules: DeploymentLinkPathRule[];
+  createdAt: string;
+  lastSyncAt: string | null;
+  lastSyncSummary: Record<string, any> | null;
+};
+
+export const MAX_DEPLOYMENT_LINKS = 10;
+export const MAX_DEPLOYMENT_PATH_RULES = 50;
+
+const DEPLOYMENT_SYNC_MODES: DeploymentSyncMode[] = ['push', 'pull', 'two-way', 'off'];
+
+const normalizeDeploymentPathRules = (value: any): DeploymentLinkPathRule[] =>
+  Array.isArray(value)
+    ? value
+        .filter(
+          (rule) =>
+            rule &&
+            typeof rule.path === 'string' &&
+            DEPLOYMENT_SYNC_MODES.includes(rule.mode)
+        )
+        .slice(0, MAX_DEPLOYMENT_PATH_RULES)
+        .map((rule) => ({ path: rule.path, mode: rule.mode }))
+    : [];
+
+const normalizeSavedDeploymentLinks = (value: any): SavedDeploymentLink[] =>
+  Array.isArray(value)
+    ? value
+        .filter(
+          (entry) =>
+            entry &&
+            typeof entry.id === 'string' &&
+            typeof entry.baseUrl === 'string' &&
+            typeof entry.token === 'string'
+        )
+        .map((entry) => ({
+          id: entry.id,
+          name: typeof entry.name === 'string' ? entry.name : '',
+          baseUrl: entry.baseUrl,
+          token: entry.token,
+          tokenExpiresAt: typeof entry.tokenExpiresAt === 'string' ? entry.tokenExpiresAt : null,
+          remoteUserId: typeof entry.remoteUserId === 'string' ? entry.remoteUserId : '',
+          remoteUsername: typeof entry.remoteUsername === 'string' ? entry.remoteUsername : '',
+          syncMode: DEPLOYMENT_SYNC_MODES.includes(entry.syncMode) ? entry.syncMode : 'off',
+          pathRules: normalizeDeploymentPathRules(entry.pathRules),
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
+          lastSyncAt: typeof entry.lastSyncAt === 'string' ? entry.lastSyncAt : null,
+          lastSyncSummary:
+            entry.lastSyncSummary && typeof entry.lastSyncSummary === 'object' ? entry.lastSyncSummary : null
+        }))
+    : [];
+
+export const getUserDeploymentLinks = async (userId: string): Promise<SavedDeploymentLink[]> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) return normalizeSavedDeploymentLinks(unpackSecure((thing as any).secure).meta?.deploymentLinks);
+  if (!ObjectId.isValid(userId)) return [];
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.deploymentLinks': 1 } }
+  );
+  return normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
+};
+
+// Append a deployment link. Cap + duplicate checks run INSIDE the CAS round so
+// a racing add can't slip past either (same contract as addUserMongoEndpoint).
+// A duplicate is the same (baseUrl, remoteUserId) pair — you can link two
+// DIFFERENT remote accounts on one deployment, but not the same account twice.
+export const addUserDeploymentLink = async (
+  userId: string,
+  input: Omit<SavedDeploymentLink, 'id' | 'createdAt' | 'lastSyncAt' | 'lastSyncSummary'>
+): Promise<{ ok: true; link: SavedDeploymentLink } | { ok: false; error: string }> => {
+  const link: SavedDeploymentLink = {
+    ...input,
+    id: new ObjectId().toHexString(),
+    pathRules: normalizeDeploymentPathRules(input.pathRules),
+    createdAt: new Date().toISOString(),
+    lastSyncAt: null,
+    lastSyncSummary: null
+  };
+
+  let failure: string | null = null;
+  const apply = (list: SavedDeploymentLink[]): SavedDeploymentLink[] | null => {
+    failure = null;
+    if (list.length >= MAX_DEPLOYMENT_LINKS) {
+      failure = `You can link at most ${MAX_DEPLOYMENT_LINKS} deployments`;
+      return null;
+    }
+    if (list.some((entry) => entry.baseUrl === link.baseUrl && entry.remoteUserId === link.remoteUserId)) {
+      failure = 'That deployment account is already linked';
+      return null;
+    }
+    return [...list, link];
+  };
+
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const next = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
+    if (next) secure.meta!.deploymentLinks = next;
+  });
+  if (result === 'mutated') return failure ? { ok: false, error: failure } : { ok: true, link };
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return { ok: false, error: 'User not found' };
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  if (!doc) return { ok: false, error: 'User not found' };
+  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
+  if (!next) return { ok: false, error: failure || 'Could not link that deployment' };
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
+  );
+  return { ok: true, link };
+};
+
+// Patch a link in place (settings edits + post-sync bookkeeping). Only the
+// mutable fields are accepted; identity fields (baseUrl/remote identity/token)
+// are fixed at link time except `token`/`tokenExpiresAt`, which re-auth updates.
+export const updateUserDeploymentLink = async (
+  userId: string,
+  linkId: string,
+  patch: Partial<
+    Pick<
+      SavedDeploymentLink,
+      'name' | 'syncMode' | 'pathRules' | 'token' | 'tokenExpiresAt' | 'lastSyncAt' | 'lastSyncSummary'
+    >
+  >
+): Promise<SavedDeploymentLink | null> => {
+  let updated: SavedDeploymentLink | null = null;
+  const apply = (list: SavedDeploymentLink[]): SavedDeploymentLink[] => {
+    updated = null;
+    return list.map((entry) => {
+      if (entry.id !== linkId) return entry;
+      updated = {
+        ...entry,
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.syncMode !== undefined && DEPLOYMENT_SYNC_MODES.includes(patch.syncMode)
+          ? { syncMode: patch.syncMode }
+          : {}),
+        ...(patch.pathRules !== undefined ? { pathRules: normalizeDeploymentPathRules(patch.pathRules) } : {}),
+        ...(patch.token !== undefined ? { token: patch.token } : {}),
+        ...(patch.tokenExpiresAt !== undefined ? { tokenExpiresAt: patch.tokenExpiresAt } : {}),
+        ...(patch.lastSyncAt !== undefined ? { lastSyncAt: patch.lastSyncAt } : {}),
+        ...(patch.lastSyncSummary !== undefined ? { lastSyncSummary: patch.lastSyncSummary } : {})
+      };
+      return updated;
+    });
+  };
+
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    secure.meta!.deploymentLinks = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
+  });
+  if (result === 'mutated') return updated;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  if (!doc) return null;
+  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
+  if (!updated) return null;
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
+  );
+  return updated;
+};
+
+// Remove a link by id. Returns the removed link (the route best-effort revokes
+// its remote session) or null when no entry matched.
+export const removeUserDeploymentLink = async (
+  userId: string,
+  linkId: string
+): Promise<SavedDeploymentLink | null> => {
+  let removed: SavedDeploymentLink | null = null;
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const list = normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks);
+    removed = list.find((entry) => entry.id === linkId) || null;
+    secure.meta!.deploymentLinks = list.filter((entry) => entry.id !== linkId);
+  });
+  if (result === 'mutated') return removed;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  const list = normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
+  removed = list.find((entry) => entry.id === linkId) || null;
+  if (!removed) return null;
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': list.filter((entry) => entry.id !== linkId), updatedAt: new Date() } }
+  );
+  return removed;
 };
 
 // Set (or clear, with null) the user's active theme shareId in meta.
@@ -1538,6 +1776,7 @@ export type UpdateProfileInput = {
 	bannerUrl?: unknown;
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
+	birthday?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1638,106 +1877,141 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched) {
+		// Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
+		// never in the public crystal, so it takes the secure write path below
+		// rather than the crystal/attachment transaction.
+		let birthday: string | null | undefined;
+		if (input.birthday !== undefined) {
+			birthday = sanitizeBirthday(input.birthday);
+			if (birthday === undefined) {
+				return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
+			}
+		}
+
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
-		try {
-			const mutated = await dependencies.withTransaction(async (session) => {
-				const things = await dependencies.getThings();
-				const thing = (await things.findOne({ shareId: String(userId) } as any, { session })) as any;
-				let kind: 'thing' | 'legacy';
-				let user: any;
-				let collection: any;
-				if (thing) {
-					if (
-						!Array.isArray(thing.thingtime) ||
-						thing.thingtime.length !== 1 ||
-						thing.thingtime[0] !== 'user' ||
-						thing.ownerId !== String(userId) ||
-						thing.targetId !== null
-					) {
-						return false;
-					}
-					kind = 'thing';
-					user = thing;
-					collection = things;
-				} else {
-					if (!ObjectId.isValid(userId)) return false;
-					collection = await dependencies.getUsers();
-					user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
-					if (!user) return false;
-					kind = 'legacy';
-				}
-
-				const current: ProfileAttachmentRefs = {
-					avatar: typeof user.avatarAttachmentId === 'string' && user.avatarAttachmentId ? user.avatarAttachmentId : null,
-					banner: typeof user.bannerAttachmentId === 'string' && user.bannerAttachmentId ? user.bannerAttachmentId : null
-				};
-				const desired: ProfileAttachmentRefs = { ...current };
-				const externalUrlUpdates: Partial<Record<'avatar' | 'banner', string | null>> = {};
-				for (const slot of ['avatar', 'banner'] as const) {
-					const request = media[slot];
-					if (!request.touched) continue;
-					if (request.attachmentIdPresent && request.attachmentId) {
-						desired[slot] = request.attachmentId;
-					} else {
-						desired[slot] = null;
-						// Explicit attachmentId:null removes managed media while preserving
-						// the existing external fallback. A URL field switches to (or clears)
-						// that fallback and also removes the managed reference.
-						if (request.urlPresent) externalUrlUpdates[slot] = request.url;
-					}
-				}
-				if (desired.avatar && desired.avatar === desired.banner) {
-					throw new AttachmentBindingError(400, 'Avatar and banner must use different attachments');
-				}
-
-				const now = dependencies.now();
-				if (media.avatar.touched || media.banner.touched) {
-					await dependencies.reconcileAttachments({ ownerId: userId, targetId: userId, current, desired, now, session });
-				}
-
-				const rootSet: Record<string, unknown> = {};
-				const rootUnset: Record<string, ''> = {};
-				const profileSet: Record<string, unknown> = { ...set };
-				for (const slot of ['avatar', 'banner'] as const) {
-					if (!media[slot].touched) continue;
-					if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
-						profileSet[`${slot}Url`] = externalUrlUpdates[slot] ?? null;
-					}
-					if (desired[slot]) rootSet[`${slot}AttachmentId`] = desired[slot];
-					else rootUnset[`${slot}AttachmentId`] = '';
-				}
-
-				if (kind === 'thing') {
-					const thingSet: Record<string, unknown> = { updatedAt: now, ...rootSet };
-					for (const [key, value] of Object.entries(profileSet)) thingSet[`crystal.${key}`] = value;
-					const write = await collection.updateOne(
-						{ _id: user._id, shareId: String(userId), thingtime: 'user', updatedAt: user.updatedAt } as any,
-						{ $set: thingSet, ...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {}) },
-						{ session }
-					);
-					if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
-				} else {
-					const write = await collection.updateOne(
-						{ _id: user._id, updatedAt: user.updatedAt },
-						{
-							$set: { ...profileSet, ...rootSet, updatedAt: now },
-							...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {})
-						},
-						{ session }
-					);
-					if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
-				}
-				return true;
+		// Secure-blob write first: it is a separate store from the crystal, so it
+		// runs outside the profile/attachment transaction below.
+		if (birthday !== undefined) {
+			const cleared = birthday === null;
+			const result = await mutateUserThingSecure(userId, (s) => {
+				if (cleared) delete s.meta!.birthday;
+				else s.meta!.birthday = birthday;
 			});
-			if (!mutated) return { ok: false, status: 400, error: 'Invalid user id' };
-		} catch (error) {
-			if (error instanceof AttachmentBindingError) {
-				return { ok: false, status: error.status, error: error.message };
+			if (result === 'contended') throw new SecureWriteContendedError(userId);
+			if (result === 'missing') {
+				if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+				await (await dependencies.getUsers()).updateOne(
+					{ _id: new ObjectId(userId) },
+					cleared
+						? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: dependencies.now() } }
+						: { $set: { 'meta.birthday': birthday, updatedAt: dependencies.now() } }
+				);
 			}
-			throw error;
+		}
+
+		// A birthday-only update never touches the crystal or attachments, so the
+		// transactional write below is skipped entirely for it.
+		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
+			try {
+				const mutated = await dependencies.withTransaction(async (session) => {
+					const things = await dependencies.getThings();
+					const thing = (await things.findOne({ shareId: String(userId) } as any, { session })) as any;
+					let kind: 'thing' | 'legacy';
+					let user: any;
+					let collection: any;
+					if (thing) {
+						if (
+							!Array.isArray(thing.thingtime) ||
+							thing.thingtime.length !== 1 ||
+							thing.thingtime[0] !== 'user' ||
+							thing.ownerId !== String(userId) ||
+							thing.targetId !== null
+						) {
+							return false;
+						}
+						kind = 'thing';
+						user = thing;
+						collection = things;
+					} else {
+						if (!ObjectId.isValid(userId)) return false;
+						collection = await dependencies.getUsers();
+						user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
+						if (!user) return false;
+						kind = 'legacy';
+					}
+
+					const current: ProfileAttachmentRefs = {
+						avatar: typeof user.avatarAttachmentId === 'string' && user.avatarAttachmentId ? user.avatarAttachmentId : null,
+						banner: typeof user.bannerAttachmentId === 'string' && user.bannerAttachmentId ? user.bannerAttachmentId : null
+					};
+					const desired: ProfileAttachmentRefs = { ...current };
+					const externalUrlUpdates: Partial<Record<'avatar' | 'banner', string | null>> = {};
+					for (const slot of ['avatar', 'banner'] as const) {
+						const request = media[slot];
+						if (!request.touched) continue;
+						if (request.attachmentIdPresent && request.attachmentId) {
+							desired[slot] = request.attachmentId;
+						} else {
+							desired[slot] = null;
+							// Explicit attachmentId:null removes managed media while preserving
+							// the existing external fallback. A URL field switches to (or clears)
+							// that fallback and also removes the managed reference.
+							if (request.urlPresent) externalUrlUpdates[slot] = request.url;
+						}
+					}
+					if (desired.avatar && desired.avatar === desired.banner) {
+						throw new AttachmentBindingError(400, 'Avatar and banner must use different attachments');
+					}
+
+					const now = dependencies.now();
+					if (media.avatar.touched || media.banner.touched) {
+						await dependencies.reconcileAttachments({ ownerId: userId, targetId: userId, current, desired, now, session });
+					}
+
+					const rootSet: Record<string, unknown> = {};
+					const rootUnset: Record<string, ''> = {};
+					const profileSet: Record<string, unknown> = { ...set };
+					for (const slot of ['avatar', 'banner'] as const) {
+						if (!media[slot].touched) continue;
+						if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {
+							profileSet[`${slot}Url`] = externalUrlUpdates[slot] ?? null;
+						}
+						if (desired[slot]) rootSet[`${slot}AttachmentId`] = desired[slot];
+						else rootUnset[`${slot}AttachmentId`] = '';
+					}
+
+					if (kind === 'thing') {
+						const thingSet: Record<string, unknown> = { updatedAt: now, ...rootSet };
+						for (const [key, value] of Object.entries(profileSet)) thingSet[`crystal.${key}`] = value;
+						const write = await collection.updateOne(
+							{ _id: user._id, shareId: String(userId), thingtime: 'user', updatedAt: user.updatedAt } as any,
+							{ $set: thingSet, ...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {}) },
+							{ session }
+						);
+						if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
+					} else {
+						const write = await collection.updateOne(
+							{ _id: user._id, updatedAt: user.updatedAt },
+							{
+								$set: { ...profileSet, ...rootSet, updatedAt: now },
+								...(Object.keys(rootUnset).length ? { $unset: rootUnset } : {})
+							},
+							{ session }
+						);
+						if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Profile changed while it was being updated');
+					}
+					return true;
+				});
+				if (!mutated) return { ok: false, status: 400, error: 'Invalid user id' };
+			} catch (error) {
+				if (error instanceof AttachmentBindingError) {
+					return { ok: false, status: error.status, error: error.message };
+				}
+				throw error;
+			}
 		}
 
 		const updated = await dependencies.findUser(userId);

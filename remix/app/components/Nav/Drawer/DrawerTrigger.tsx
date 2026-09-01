@@ -111,7 +111,7 @@ export const DrawerTrigger = () => {
 					className="drawerHoverPopup"
 					position="fixed"
 					zIndex={DRAWER_POPUP_Z}
-					top="calc(var(--thingtime-safe-area-top) + var(--thingtime-electron-titlebar-height, 0px) + 48px)"
+					top="calc(var(--thingtime-safe-area-top) + var(--thingtime-electron-titlebar-height, 0px) + 10px)"
 					left="10px"
 					width="300px"
 					maxWidth="86vw"

@@ -1,6 +1,6 @@
 {
-  "name": "thingtime-chatgpt",
-  "version": "2.0.0+codex.20260830",
+  "name": "thingtime",
+  "version": "2.1.0+codex.20260901",
   "description": "Composable, preview-first Thingtime tools for ChatGPT and Codex.",
   "author": {
     "name": "Thingtime",

@@ -13,6 +13,8 @@ export type CurrentUser = {
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
 	bannerLinkedUrl: string | null;
+  // private: own-account responses only, never the public profile
+  birthday: string | null;
   emailVerified: boolean;
   isAdmin: boolean;
 	// Canonical beta upload scopes: public covers posts/comments/custom emoji;
