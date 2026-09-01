@@ -4,7 +4,11 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError } from '../storage/storageCore';
 import {
 	attachmentMediaKindForContentType,
+	canonicalLinkedAttachmentUrl,
 	isAttachmentObjectVersionId,
+	isLinkedAttachmentMediaKind,
+	linkedAttachmentNameForUrl,
+	linkedMediaTypeForUrl,
 	sanitizeAttachmentPublicMetadata,
 	toAttachmentPublicMetadata,
 	type AttachmentCrystal,
@@ -27,7 +31,7 @@ import {
 	bindReadyMessageAttachmentsToTarget,
 	annotateOwnedAttachment,
 	bindReadyAttachmentsToTarget,
-	reorderBoundTargetAttachments,
+	syncBoundTargetAttachments,
 	type AttachmentDoc,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -346,10 +350,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const cleanupClaimedDoc = async (
-		s3: AttachmentS3,
+		getS3: () => AttachmentS3,
 		doc: AttachmentDoc,
 		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
 	): Promise<AttachmentCleanupOutcome> => {
+		// Linked docs never touch S3. For everything else, resolve the client
+		// BEFORE the destructive deleting claim so an unconfigured/broken S3
+		// fails atomically — no half-deleted cascade, no doc stranded in
+		// 'deleting' retry loops. attachmentLinked is immutable, so the pre-claim
+		// doc is authoritative for this branch.
+		const s3 = doc.attachmentLinked === true ? null : getS3();
 		const allowedStates = doc.attachmentState === 'deleting' ? (['deleting'] as const) : ([doc.attachmentState, 'deleting'] as const);
 		let claimed: AttachmentDoc | null = null;
 		if (scope.kind === 'draft' && doc.attachmentState === 'pending' && !doc.uploadId && !doc.objectVersionId) {
@@ -363,6 +373,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			claimed = await dependencies.store.claimDeleting(doc.ownerId, doc.shareId, [...allowedStates], scope);
 		}
 		if (!claimed) return { status: 'skipped' };
+		// Linked attachments never had an S3 object: no MPU to abort, no HEAD to
+		// verify, no version to delete. Straight to the transactional row removal
+		// and exact quota refund — S3 stays untouched (and unrequired, so linked
+		// cleanup works even where private storage is unconfigured).
+		if (s3 === null || claimed.attachmentLinked === true) {
+			return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
+		}
 		// A just-cancelled MPU remains billed until its retry-not-before. Part PUTs
 		// already in flight may finish after Abort; the later sweep repeats
 		// Abort/ListParts/HEAD before any refund.
@@ -385,14 +402,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
 	};
 
-	const cleanupExpiredOwned = async (s3: AttachmentS3, ownerId: string) => {
+	const cleanupExpiredOwned = async (getS3: () => AttachmentS3, ownerId: string) => {
 		const cleanupTime = dependencies.now();
 		const finalizingBefore = new Date(cleanupTime.getTime() - ATTACHMENT_FINALIZING_DELETE_GRACE_MS);
 		const expired = await dependencies.store.listExpiredOwned(ownerId, 5);
 		for (const doc of expired) {
 			try {
 				await cleanupClaimedDoc(
-					s3,
+					getS3,
 					doc,
 					doc.targetId
 						? { kind: 'target', targetId: doc.targetId }
@@ -425,14 +442,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!queue.length) {
 				return { ok: true, scanned: 0, deleted: 0, deferred: 0, skipped: 0, failed: 0, hasMore: false };
 			}
-			const s3 = dependencies.getS3();
+			// resolved lazily so a queue of linked-only drafts never needs S3
+			let s3: AttachmentS3 | null = null;
+			const getS3 = () => (s3 ??= dependencies.getS3());
 			let deleted = 0;
 			let deferred = 0;
 			let skipped = 0;
 			let failed = 0;
 			for (const doc of queue) {
 				try {
-					const outcome = await cleanupClaimedDoc(s3, doc, { kind: 'draft' });
+					const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'draft' });
 					if (outcome.status === 'deleted') deleted += 1;
 					else if (outcome.status === 'deferred') deferred += 1;
 					else skipped += 1;
@@ -483,7 +502,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				};
 			}
 
-			const s3 = dependencies.getS3();
+			// resolved lazily so a reap pass of linked-only drafts never needs S3
+			let s3Client: AttachmentS3 | null = null;
+			const getS3 = () => (s3Client ??= dependencies.getS3());
 			const queue = docs.slice(0, MAX_EXPIRED_ATTACHMENTS_PER_REAP);
 			const hasMoreFromLimit = docs.length > queue.length;
 			const startedAt = dependencies.clock();
@@ -504,7 +525,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					scanned += 1;
 					try {
 						const outcome = await cleanupClaimedDoc(
-							s3,
+							getS3,
 							doc,
 							doc.targetId
 								? { kind: 'target', targetId: doc.targetId }
@@ -648,11 +669,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						// existing annotation exactly, and fail closed rather than erase a
 						// malformed value written by some other path.
 						const existingPresentation = doc.crystal as AttachmentCrystal & {
+							filenamePreview?: unknown;
 							title?: unknown;
 							description?: unknown;
 						};
 						const presentation: Record<string, string> = {};
-						for (const key of ['title', 'description'] as const) {
+						for (const key of ['filenamePreview', 'title', 'description'] as const) {
 							if (!Object.prototype.hasOwnProperty.call(existingPresentation, key)) continue;
 							const value = existingPresentation[key];
 							if (typeof value !== 'string') throw new AttachmentStoreConflictError(`Attachment ${key} is malformed`);
@@ -750,7 +772,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 			const plan = attachmentPartPlan(sizeBytes);
 			const s3 = dependencies.getS3();
-			await cleanupExpiredOwned(s3, ownerId);
+			await cleanupExpiredOwned(() => s3, ownerId);
 
 			const id = requestedId ? attachmentIdForRequest(ownerId, requestedId) : dependencies.uuid();
 			const objectKey = `objects/${id}`;
@@ -833,7 +855,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				// safely age out under the bucket's seven-day lifecycle rule. Keep a
 				// durable objectless deletion intent, verify HEAD, and only then refund.
 				try {
-					await cleanupClaimedDoc(s3, reserved, { kind: 'draft' });
+					await cleanupClaimedDoc(() => s3, reserved, { kind: 'draft' });
 				} catch (cleanupError) {
 					unavailable('failed upload reservation cleanup', cleanupError);
 				}
@@ -1139,8 +1161,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const s3 = dependencies.getS3();
-			const outcome = await cleanupClaimedDoc(s3, existing, { kind: 'draft' });
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
@@ -1159,22 +1180,28 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => key !== 'id')) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
 			const id = normalizeId(raw.id);
+			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
+			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
 			// A client may miss a successful post-create response and then try to
 			// clean up its former draft ids. Once bound, only post cascade deletion
 			// may remove the object; this check makes that ambiguous success safe.
-			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
+			if (existing.targetId && existing.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
+			if (existing.targetId && existing.attachmentPurpose && !['post', 'comment'].includes(existing.attachmentPurpose)) {
+				return fail(409, 'This attached file must be removed from its owning surface');
+			}
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const outcome = await cleanupClaimedDoc(dependencies.getS3(), existing, { kind: 'draft' });
+			const reason = existing.targetId ? { kind: 'target' as const, targetId: existing.targetId } : { kind: 'draft' as const };
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
-				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
+				if (raced?.targetId && raced.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
 				if (raced?.attachmentState === 'finalizing') {
 					return fail(409, 'Attachment finalization is in progress — try again');
 				}
@@ -1220,6 +1247,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					? await dependencies.canViewTarget(viewer, doc)
 					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');
+
+			// Linked attachments have no stored object and are NEVER served or
+			// redirected through this endpoint: a 302 to crystal.url would turn the
+			// first-party content URL into an open redirect to an attacker-chosen
+			// origin (CWE-601). Renderers always use crystal.url directly.
+			if (doc.attachmentLinked === true) return fail(404, 'Attachment not found');
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1347,10 +1380,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// a home-object query or deletion.
 			if (dependencies.customMongoActive()) return { ok: true };
 			const docs = await dependencies.store.listForTarget(root.ownerId, root.shareId);
-			const s3 = docs.length ? dependencies.getS3() : null;
+			// resolved lazily so deleting a linked-only post never requires S3
+			let s3: AttachmentS3 | null = null;
+			const getS3 = () => (s3 ??= dependencies.getS3());
 			for (const doc of docs) {
-				if (!s3) break;
-				const outcome = await cleanupClaimedDoc(s3, doc, { kind: 'target', targetId: root.shareId });
+				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId });
 				if (outcome.status === 'deferred') {
 					throw new AttachmentServiceError(503, 'Attachment deletion is still settling — try again');
 				}
@@ -1408,19 +1442,16 @@ export const createReadyAttachmentPostInsertHook =
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
 
-// POST /api/v1/attachments/annotate — owner-authored title/description on a
+// POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (
-	ownerId: string,
-	input: unknown
-): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['id', 'title', 'description'].includes(key))) {
+		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description'].includes(key))) {
 			return fail(400, 'Invalid attachment annotation request');
 		}
 		const id = normalizeId(record.id);
@@ -1433,10 +1464,11 @@ export const annotateAttachment = async (
 		};
 		const title = patchField(record.title, 'title');
 		const description = patchField(record.description, 'description');
-		if (title === undefined && description === undefined) {
-			return fail(400, 'Provide a title or description to update');
+		const filenamePreview = patchField(record.filenamePreview, 'filename preview');
+		if (title === undefined && description === undefined && filenamePreview === undefined) {
+			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { title, description });
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description });
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
 		return { ok: true, attachment };
@@ -1445,10 +1477,69 @@ export const annotateAttachment = async (
 	}
 };
 
-// PATCH-time reorder: re-stamp the display order of a target's already-bound
-// attachments. Pure permutations only — the store helper rejects any set
-// change, so this can never bind, unbind, or leak an attachment.
-export const reorderReadyAttachmentsForTarget = async (
+// POST /api/v1/attachments/link — mint a READY linked-attachment draft from an
+// external media URL. It binds, orders, annotates, projects, and deletes like
+// any uploaded attachment, but no bytes ever touch Thingtime storage: the
+// crystal's url renders straight from the original site (img/video/anchor safe
+// sinks; the server never fetches it, so there is no SSRF surface). Duplicate
+// URLs are deliberately allowed — each mint is its own attachment thing.
+// Unbound mints expire on the same 24h draft TTL as uploads.
+export const linkAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind'].includes(key))) {
+			return fail(400, 'Invalid linked media request');
+		}
+		const url = canonicalLinkedAttachmentUrl(record.url);
+		if (!url) return fail(400, 'Linked media must be a plain http(s) URL of at most 2048 characters');
+		const purpose = record.purpose === undefined ? 'post' : record.purpose;
+		if (purpose !== 'post' && purpose !== 'comment') {
+			return fail(400, 'Linked media is available on posts and comments');
+		}
+		const derived = linkedMediaTypeForUrl(url);
+		// The declared kind is a render hint the client may DEMOTE (an
+		// extensionless URL that failed an image probe becomes a plain file) but
+		// never promote: a known file extension cannot claim a visual kind.
+		let mediaKind = derived.mediaKind;
+		if (record.mediaKind !== undefined) {
+			if (!isLinkedAttachmentMediaKind(record.mediaKind)) return fail(400, 'Invalid linked media kind');
+			if (record.mediaKind !== 'file' && record.mediaKind !== derived.mediaKind) {
+				return fail(400, 'Linked media kind does not match the URL');
+			}
+			mediaKind = record.mediaKind;
+		}
+		const crystal: AttachmentCrystal = {
+			name: linkedAttachmentNameForUrl(url),
+			size: 0,
+			contentType: derived.contentType,
+			mediaKind,
+			url
+		};
+		const doc = await attachmentStore.insertLinkedReady({
+			id: randomUUID(),
+			ownerId,
+			crystal,
+			purpose,
+			expiresAt: new Date(Date.now() + ATTACHMENT_READY_DRAFT_TTL_MS)
+		});
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+		if (!attachment) return fail(409, 'Linked media failed validation after creation');
+		return { ok: true, attachment };
+	} catch (error) {
+		return knownFailure(error) || unavailable('link', error);
+	}
+};
+
+// PATCH-time sync: re-stamp the display order of a target's bound attachments
+// AND bind any newly uploaded ready drafts an edit appends. The store helper
+// verifies target ownership, rejects removals (deletes stay their own
+// operation), and claims additions with the same fences create-time binding
+// uses — so this can never move an attachment onto a thing the editor does
+// not own.
+export const syncReadyAttachmentsForTarget = async (
 	ownerId: string,
 	targetId: unknown,
 	attachmentIds: readonly unknown[]
@@ -1459,10 +1550,10 @@ export const reorderReadyAttachmentsForTarget = async (
 		}
 		const normalizedTargetId = typeof targetId === 'string' ? targetId.trim() : '';
 		if (!normalizedTargetId) return fail(400, 'Thing id is required');
-		await reorderBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
+		await syncBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
 		return { ok: true };
 	} catch (error) {
-		return knownFailure(error) || unavailable('reorder', error);
+		return knownFailure(error) || unavailable('attachment update', error);
 	}
 };
 

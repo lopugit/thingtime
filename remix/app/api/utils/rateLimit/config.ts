@@ -20,6 +20,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // owner title/description edits (POST /api/v1/attachments/annotate) — small
   // crystal-only writes, same shape as delete
   'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
+  // linked-URL media mints (POST /api/v1/attachments/link) — metadata-only
+  // thing inserts, no object storage; same shape as annotate/delete
+  'attachments.link': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },

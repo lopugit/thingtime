@@ -147,6 +147,19 @@ export const createAnalyzeReadyAttachment =
 			return { ok: true, status: currentStatus };
 		}
 
+		// Linked attachments carry no stored bytes — there is no object for the
+		// analyzer to fetch. They are stamped 'skipped' at mint; this guard keeps
+		// a mint whose stamp was lost from wedging the sweep on a missing object.
+		if (doc.attachmentLinked === true) {
+			await stampModeration(
+				things,
+				shareId,
+				{ status: 'skipped', categories: ['external-url'], provider: 'linked', analyzedAt: now },
+				{ allowOverwriteOf: [null, 'pending'], now }
+			);
+			return { ok: true, status: 'skipped' };
+		}
+
 		const choice = await deps.resolveProvider();
 		if (choice.kind === 'off') {
 			await stampModeration(things, shareId, { status: 'skipped', provider: 'off', analyzedAt: now }, { allowOverwriteOf: [null, 'pending'], now });
