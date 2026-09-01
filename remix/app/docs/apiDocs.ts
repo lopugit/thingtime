@@ -181,18 +181,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage saved Feature Stacks',
     endpoint: '/api/v1/admin/ci/stacks',
-    featureVersion: '1.2.0',
-    summary: 'Save, edit, list, run, and archive reusable multi-target Feature Stacks.',
+    featureVersion: '1.3.0',
+    summary: 'Save, edit, list, run, pause, stop, restart, and archive reusable multi-target Feature Stacks.',
     detail:
-      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time.',
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. GET includes a bounded stack-specific event stream so progress heartbeats remain visible even when unrelated repository activity exceeds the general dashboard event window. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time. Pause and stop cancel only the exact active linked workflow while preserving the saved definition and history; restart cancels active compute before dispatching a fresh immutable run.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
-    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run to dispatch its current live plan, or delete to archive it.'],
+    steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run or restart to dispatch a current live plan.', 'POST pause or stop to cancel exact active compute while preserving history, or delete to archive it.'],
     requestExamples: [
       { name: 'Save a stack', description: 'Sources and targets have no product-imposed count cap.', method: 'POST', body: { action: 'save', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true } },
-      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } }
+      { name: 'Run a stack', description: 'Run the latest saved revision.', method: 'POST', body: { action: 'run', id: 'ci-feature-stack-example' } },
+      { name: 'Pause a stack', description: 'Cancel active compute and preserve the saved definition for restart.', method: 'POST', body: { action: 'pause', id: 'ci-feature-stack-example' } },
+      { name: 'Restart a stack', description: 'Cancel an active run if necessary and dispatch a fresh immutable plan.', method: 'POST', body: { action: 'restart', id: 'ci-feature-stack-example' } }
     ],
-    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration with bounded workflow history.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved', runs: [{ id: 'ci-dispatch-example', runId: 'feature-stack-run-example', status: 'success', workflowRunId: 123, url: 'https://github.com/lopugit/thingtime/actions/runs/123' }] }] } }]
+    responseExamples: [{ status: 200, description: 'Redacted saved stack configuration with bounded workflow and progress-event history.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved', runs: [{ id: 'ci-dispatch-example', runId: 'feature-stack-run-example', status: 'success', workflowRunId: 123, url: 'https://github.com/lopugit/thingtime/actions/runs/123' }] }], events: [{ id: 'ci-event-example', parentId: 'ci-dispatch-example', eventType: 'feature_stack_progress', statusTo: 'in_progress', occurredAt: '2026-09-01T00:10:00.000Z', data: { message: 'Lopu progress: 1 active, 0 queued, 0/1 finished.', progressPercent: 45 } }] } }]
   }),
   endpoint({
     id: 'admin-ci-previews',

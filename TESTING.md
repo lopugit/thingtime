@@ -2489,7 +2489,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       minutes while unchanged, and once when all target workers are terminal.
       Reload CI Control between updates: the stream must retain chronological
       messages, exact per-job GitHub links, progress percentage, and a refreshed
-      finish estimate in the browser's local timezone. A changed body, stale
+      finish estimate in the browser's local timezone, even after more than 500
+      unrelated CI events arrive between heartbeats. A changed body, stale
       timestamp, mismatched repository/stack/run, or replayed delivery ID must
       not create a second event, and reporter failure must not cancel the merge.
 - [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
@@ -2518,9 +2519,18 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.2.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
+- [ ] Start a saved Feature Stack, then use its Pause control while the linked
+      GitHub Actions run is queued or active. Confirm only that exact run is
+      cancelled, the saved definition and historical GitHub link remain, the
+      stack reads paused after late webhook/progress receipts, and ordinary
+      Save & merge refuses until Restart is used. Repeat with Stop, then use
+      Restart and confirm a new immutable run id and GitHub run are appended
+      without replacing prior history. At desktop and 375px mobile widths,
+      all three controls remain visible, labelled, non-overlapping, and show a
+      clear confirmation before Stop or active-run Restart.
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
