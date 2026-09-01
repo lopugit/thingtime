@@ -514,6 +514,12 @@ const BlockFrame = ({
 					draggable={!locked}
 					sx={CHROME_TOUCH_SX}
 					onDragStart={(event) => {
+						// a press on the ⊞ chip action that wanders a few pixels is a
+						// CLICK, not a block move
+						if ((event.target as HTMLElement).closest?.('.ttChipAction')) {
+							event.preventDefault();
+							return;
+						}
 						event.stopPropagation();
 						event.dataTransfer.setData(DRAG_MIME, block.id);
 						event.dataTransfer.effectAllowed = 'move';

@@ -61,6 +61,38 @@ export const InlineRichTextEditor = ({
 		}
 	}, [html, text, seedDoc]);
 
+	// click-to-type: focus the editor as soon as Editor.js has mounted its
+	// contenteditable (retry briefly — the tools load async)
+	const rootRef = React.useRef<HTMLDivElement | null>(null);
+	React.useEffect(() => {
+		let cancelled = false;
+		let attempts = 0;
+		const tryFocus = () => {
+			if (cancelled) return;
+			const editable = rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]');
+			if (editable) {
+				editable.focus();
+				try {
+					const selection = window.getSelection();
+					const range = document.createRange();
+					range.selectNodeContents(editable);
+					range.collapse(false);
+					selection?.removeAllRanges();
+					selection?.addRange(range);
+				} catch {
+					// caret placement is best-effort
+				}
+				return;
+			}
+			if ((attempts += 1) < 20) setTimeout(tryFocus, 100);
+		};
+		tryFocus();
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only focus
+	}, []);
+
 	const handleChange = React.useCallback(
 		(next: LongTextValue) => {
 			setValue(next);
@@ -77,6 +109,7 @@ export const InlineRichTextEditor = ({
 
 	return (
 		<Box
+			ref={rootRef}
 			className="ttInlineRichTextEditor"
 			data-testid="inline-rich-text-editor"
 			{...(typography as any)}
