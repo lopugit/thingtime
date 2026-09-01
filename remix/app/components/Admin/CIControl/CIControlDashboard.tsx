@@ -1637,6 +1637,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     setFeatureStackDispatching(true);
     try {
 			await requireThingtimeCapability('api.admin-ci-dispatch', '2.1.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.2.0');
 			const saved = await saveCurrentFeatureStack();
 			if (!saved) throw new Error('Feature Stack save failed');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action: 'run', id: saved.id });

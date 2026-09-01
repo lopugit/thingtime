@@ -133,6 +133,20 @@ export const recordFeatureStackProgress = async (input: FeatureStackProgressRequ
 		startedAt: input.startedAt,
 		completedAt: TERMINAL.has(input.status) ? input.reportedAt : null
 	});
+	// A generic workflow-success webhook can only prove that the controller
+	// finished, so featureStackStore deliberately labels it controller-completed.
+	// The signed progress reporter is stricter: its success is emitted only
+	// after every target merge gate confirms the generated PR actually merged.
+	if (TERMINAL.has(input.status)) {
+		await things.updateOne(
+			{
+				shareId: input.stackId,
+				thingtime: 'ci-feature-stack',
+				'crystal.lastFeatureStackRunId': input.featureStackRunId
+			},
+			{ $set: { 'crystal.status': input.status, updatedAt: input.reportedAt } }
+		);
+	}
 	const event = await recordCiEvent({
 		provider: 'thingtime',
 		repository: input.repository,

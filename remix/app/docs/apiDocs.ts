@@ -181,10 +181,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage saved Feature Stacks',
     endpoint: '/api/v1/admin/ci/stacks',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
     summary: 'Save, edit, list, run, and archive reusable multi-target Feature Stacks.',
     detail:
-      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. POST run reloads live PR metadata and creates the immutable target-aware controller plan and durable run identity at execution time.',
+      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run to dispatch its current live plan, or delete to archive it.'],
