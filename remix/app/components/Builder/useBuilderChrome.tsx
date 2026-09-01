@@ -288,13 +288,13 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 					onClose={() => setContextMenu(null)}
 					onWrap={(direction) => {
 						const next = wrapBlock(draftRef.current.blocks, contextBlock.id, direction);
-						if (next === draftRef.current.blocks) lopu({ title: 'Too deep to wrap here — pages nest 8 levels max 🪆', status: 'warning' });
+						if (next === draftRef.current.blocks) lopu({ title: 'Too deep to wrap here — pages nest 8 levels max 🪆', status: 'error' });
 						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}
 					onDuplicate={() => {
 						const next = duplicateBlock(draftRef.current.blocks, contextBlock.id);
-						if (next === draftRef.current.blocks) lopu({ title: 'Duplicating would pass the 120-block page cap 📦', status: 'warning' });
+						if (next === draftRef.current.blocks) lopu({ title: 'Duplicating would pass the 120-block page cap 📦', status: 'error' });
 						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}

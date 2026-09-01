@@ -753,7 +753,11 @@ export const BuilderDrawer = (props: {
 		if (result.ok) {
 			setMetaDirty(false);
 			lopu({ title: mode === 'site' ? 'Your page is saved — this is your Thingtime now 🧱✨' : 'Page saved ✨', status: 'success' });
-			if (result.id && onSaved) onSaved(result.id);
+			// Only the single-page draft.save() reports an id; onSaveAll settles
+			// several drafts at once and has no single page to hand back, so the
+			// id is read off the narrowed result instead of the union.
+			const savedId = 'id' in result && typeof result.id === 'string' ? result.id : undefined;
+			if (savedId && onSaved) onSaved(savedId);
 		} else {
 			lopu({ title: result.error || 'Save didn’t stick — try again 🌈', status: 'error' });
 		}
