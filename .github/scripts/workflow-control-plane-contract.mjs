@@ -1442,6 +1442,16 @@ export function assertControlPlaneContract() {
     4,
     "the model, continuations, verifier, and publisher remain inside the isolated integration repository",
   );
+  const featureStackProgress = resolver.slice(
+    resolver.indexOf("\n  feature_stack_progress:"),
+    resolver.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.match(featureStackProgress, /needs: \[feature_stack_plan, model_config\]/u);
+  assert.match(featureStackProgress, /!cancelled\(\)[\s\S]*feature_stack_plan\.result == 'success'[\s\S]*model_config\.result == 'success'/u);
+  assert.match(featureStackProgress, /continue-on-error: true/u);
+  assert.match(featureStackProgress, /actions: read[\s\S]*contents: read/u);
+  assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/feature-stack-progress\.mjs/u);
+  assert.match(featureStackProgress, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
   const allBranchHandoff = resolver.slice(
     resolver.indexOf("\n  handoff_all_branch_event:"),
     resolver.indexOf("\n  maintain_all_branch:"),
