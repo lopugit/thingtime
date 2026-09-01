@@ -1182,6 +1182,17 @@ jobs:
           # base.ref from the PR record rather than event ref context, which
           # stays correct regardless of which ref the event ran from.
           ONLY_PR: ${{ github.event.pull_request.number }}
+          # The standing synchronizer already carries an exact trusted PR
+          # number. Keep its priority path independent of the repository-wide
+          # GraphQL inventory, which is both unnecessary for this non-stacked
+          # automation branch and can fail under a large open-PR corpus.
+          PRIORITY_SYNC_EVENT: >-
+            ${{ github.event_name == 'pull_request_target'
+                && github.event.action != 'closed'
+                && github.event.pull_request.head.ref == 'sync/main-into-develop'
+                && github.event.pull_request.base.ref == 'develop'
+                && 'true'
+                || 'false' }}
           # Pushes and explicit human branch selectors match either PR base or
           # PR head. A head push can CREATE a conflict (`synchronize` is
           # deliberately not a trigger, and the next base push may be days
@@ -1749,8 +1760,52 @@ jobs:
             gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
           }
 
+          exact_sync_open_pr() {
+            local response inventory
+            response="$RUNNER_TEMP/exact-sync-pr.json"
+            if ! gh_read_retry "repos/$REPO/pulls/$ONLY_PR" >"$response"; then
+              echo "::error::Could not read exact standing sync PR #$ONLY_PR from GitHub." >&2
+              rm -f "$response"
+              return 1
+            fi
+            if ! jq -e --argjson number "$ONLY_PR" '
+              type == "object"
+              and .number == $number
+              and .state == "open"
+              and .head.ref == "sync/main-into-develop"
+              and .base.ref == "develop"
+              and (.head.sha | type) == "string"
+              and (.base.sha | type) == "string"
+              and (.labels | type) == "array"
+            ' "$response" >/dev/null; then
+              echo "::error::GitHub returned a stale or malformed exact standing sync PR response." >&2
+              rm -f "$response"
+              return 1
+            fi
+            inventory="$(jq -c '[{
+              number,
+              headRefName:.head.ref,
+              baseRefName:.base.ref,
+              isCrossRepository:(.head.repo.full_name != .base.repo.full_name),
+              isDraft:(.draft == true),
+              mergeable:(if .mergeable == null then "UNKNOWN"
+                         elif .mergeable then "MERGEABLE"
+                         else "CONFLICTING" end),
+              mergeStateStatus:((.mergeable_state // "unknown") | ascii_upcase),
+              labels:[(.labels // [])[] | {name}],
+              files:[],
+              filesTotal:(.changed_files // 0)
+            }]' "$response")"
+            rm -f "$response"
+            printf '%s\n' "$inventory"
+          }
+
           all_open_prs() {
             local owner name response inventory
+            if [ "$PRIORITY_SYNC_EVENT" = true ]; then
+              exact_sync_open_pr
+              return
+            fi
             owner="${REPO%%/*}"
             name="${REPO#*/}"
             response="$RUNNER_TEMP/open-pr-inventory.json"

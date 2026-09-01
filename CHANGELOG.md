@@ -24,6 +24,12 @@ every entry is attributed the same way the app changelog attributes them.
   dependency guard as the other Lopu workers and validates the durable
   Thingtime run identity against the immutable merge plan. — Codex (AI),
   2026-09-01
+- Kept the priority `sync/main-into-develop` detector independent of the
+  repository-wide open-PR GraphQL inventory. Its trusted pull-request event now
+  hydrates and validates only the exact automation-owned PR through the REST
+  API, so a large inventory-side GitHub 502 cannot stall a new `main` commit;
+  scheduled and ordinary PR sweeps retain the complete topology scan. — Codex
+  (AI), 2026-09-01
 - Bounded the control-plane Graphify store to one active portable snapshot by
   default, added an explicit safe prune command, and made every successful
   update activate its replacement before deleting superseded snapshots. The
