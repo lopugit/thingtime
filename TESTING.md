@@ -20,6 +20,11 @@ is fixed, and cite the checklist you ran in the PR description.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
+- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
+      returns only through its registered callback; add two named accounts on
+      that page, then confirm `@Thingtime list accounts` exposes safe metadata
+      for both. Bridge credentials have no default expiry but become unusable
+      immediately after their account or connection is revoked.
 - [ ] Confirm a read/search tool succeeds with `things.read`, while each write
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
@@ -30,7 +35,7 @@ is fixed, and cite the checklist you ran in the PR description.
       known parent ID, `list_thingtime_comments` returns only directly attached
       comments and preserves `limit`/`cursor` pagination without fetching global
       comment rows.
-- [ ] `tools/list` exposes all 31 tools with the Thingtime MCP App output
+- [ ] `tools/list` exposes all 32 tools with the Thingtime MCP App output
       template; prompts and static UI/contract resources work before OAuth,
       while account-scoped resources return the OAuth challenge. In the app,
       inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
@@ -613,6 +618,11 @@ is fixed, and cite the checklist you ran in the PR description.
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
       admin Run analysis sweep button) — the post gets stamped/flagged and the
       "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
+      Seed more than 25 text posts or 10 attachments and verify a full,
+      failure-free cron pass returns a `continuationRunId`; the durable runs
+      keep draining immediately until a short batch remains. Introduce one
+      provider failure and verify that surface stops its chain and waits for
+      the next hourly cron instead of retrying in a tight loop.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -832,6 +842,10 @@ is fixed, and cite the checklist you ran in the PR description.
       Esc, and backdrop close. Those toolbar controls sit below the persistent
       navigation at desktop and 375px mobile widths. Error-state tiles never
       open a broken lightbox.
+- [ ] Opening an image attachment's generic `/thing/:id` permalink shows the
+      raw, safe image in an attachment card — never a blank post-shaped card.
+      Its expandable "Referenced by" section stays compact and links to the
+      direct post or comment without rendering that reference inline.
 - [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
       max-width): large media, title/description, author, a link back to the
       parent post, plus working reactions and comments on the media thing
@@ -1023,6 +1037,11 @@ is fixed, and cite the checklist you ran in the PR description.
       while the feed still rendered them.
 - [ ] A comment whose parent chain is broken (target deleted) fails closed:
       not viewable, not reactable, permalink 404s.
+- [ ] An owner can still open their own image attachment at `/thing/:id` when
+      its historic inherited parent is missing: it renders as raw media with
+      zero available references. Anonymous, other-user, and visibility-scoped
+      token reads still return 404 (the owner recovery exception applies only
+      to persisted `attachment` Things).
 
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
@@ -1686,6 +1705,11 @@ is fixed, and cite the checklist you ran in the PR description.
       result still wins, and `path = value` setters still execute instead of
       becoming searches. A failed typeahead leaves full search + local commands
       usable.
+- [ ] Commander result visuals use the shared `thingIcon` mapping (including
+      filename-aware Thing icons). A person with `avatarUrl` shows that profile
+      image with a small `👤` user-type badge; a person without one gets an
+      initial fallback plus the same badge. Verify the compact rows remain
+      readable and unclipped at desktop and 390px mobile widths.
 - [ ] Search results default to `Standard`: posts use the real interactive
       post card and other Things use their native rendered `ThingView` (with
       its rendered/tree toggle where supported). Switching to `Data` restores
@@ -1701,6 +1725,11 @@ is fixed, and cite the checklist you ran in the PR description.
       Non-post Things and private admin diagnostics do not show an empty post
       section. Verify the inline card and JSON remain unclipped at desktop and
       mobile widths and survive a full top-to-bottom scroll.
+- [ ] Open a non-post `/thing/:id` permalink. Its `Views` controls independently
+      toggle the rendered preview and raw `Thing data`, with both enabled by
+      default. A component Thing resolves its sanitised live preview; turning
+      either switch off hides only that section, and either/both sections may
+      be disabled without overflow at desktop and 390px mobile widths.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims

@@ -17,6 +17,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — Self-draining moderation safety sweep
+
+- A successful full moderation sweep batch now immediately starts a durable
+  continuation run. Each run remains bounded to 25 text posts and 10
+  attachments; only failures stop that surface's chain, leaving the hourly
+  Vercel Cron as the safe retry path. — Codex (AI), 2026-09-01
+
 ### 2026-09-01 — Production search server-bundle repair
 
 - `/api/v1/things/search` now statically bundles its emoji-name metadata
