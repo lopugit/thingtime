@@ -75,14 +75,99 @@ jobs:
           }
           NODE
 
+  prepare:
+    name: Authorize exact preview source
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      should_build: ${{ steps.plan.outputs.should_build }}
+      pr_number: ${{ steps.plan.outputs.pr_number }}
+      head_sha: ${{ steps.plan.outputs.head_sha }}
+      head_ref: ${{ steps.plan.outputs.head_ref }}
+    env:
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+      VERCEL_GITHUB_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+      VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
+      DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
+      PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
+    steps:
+      - name: Check out protected authorization controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Authorize current same-repository PR SHA
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare
+
+  build:
+    name: Build exact PR bundle without secrets
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the authorized exact PR SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: product
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install pinned package manager
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+
+      - name: Install exact locked dependencies
+        run: corepack pnpm --dir product/remix install --frozen-lockfile
+
+      - name: Build Vercel output on GitHub
+        working-directory: product
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: preview
+          VERCEL_TARGET_ENV: develop
+          VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.head_ref }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.head_sha }}
+          VERCEL_GIT_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+          VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
+          VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
+          VERCEL_GIT_PULL_REQUEST_ID: ${{ needs.prepare.outputs.pr_number }}
+        run: node scripts/vercel-build.mjs
+
+      - name: Package symlink-preserving prebuilt output
+        run: tar -C product -czf "$RUNNER_TEMP/vercel-prebuilt.tgz" .vercel/output
+
+      - name: Upload prebuilt output for the protected publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
+          path: ${{ runner.temp }}/vercel-prebuilt.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   controller:
     name: Publish or reconcile develop S3 preview
-    # Do not filter manual recovery at the reusable-workflow job boundary:
-    # GitHub can lose the forwarded typed input there and silently create a
-    # failed run with no jobs. The checked-out controller validates the original
-    # workflow_dispatch event input before any mutation. The environment's
-    # deployment branch policy remains the authoritative main-only secrets gate.
-    if: github.event_name != 'pull_request_target'
+    needs: [prepare, build]
+    if: always() && github.event_name != 'pull_request_target' && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: vercel-develop-pr-control
@@ -102,7 +187,6 @@ jobs:
       DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
       PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
-      DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
     steps:
       - name: Check out protected deployment controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -111,8 +195,46 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Deploy, report, and clean up
+      - name: Download GitHub-built preview bundle
+        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: develop-preview-${{ github.run_id }}-${{ needs.prepare.outputs.pr_number }}
+          path: ${{ runner.temp }}/prebuilt-artifact
+
+      - name: Validate and extract untrusted preview bundle
+        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        run: >-
+          python3 .github/scripts/extract-vercel-prebuilt.py
+          "$RUNNER_TEMP/prebuilt-artifact/vercel-prebuilt.tgz"
+          "$RUNNER_TEMP/validated-prebuilt"
+
+      - name: Install pinned Vercel publisher without deployment credentials
+        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
+        run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+
+      - name: Upload and publish GitHub-built preview
+        if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
+          DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          VERCEL_PREBUILT_DIR: ${{ runner.temp }}/validated-prebuilt
+        run: node .github/scripts/deploy-develop-pr-preview.mjs
+
+      - name: Reconcile or clean up without a new build
+        if: needs.prepare.outputs.should_build != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
+          DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+        run: node .github/scripts/deploy-develop-pr-preview.mjs
+
+      - name: Report failed GitHub prebuild
+        if: needs.prepare.outputs.should_build == 'true' && needs.build.result != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
+          DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs

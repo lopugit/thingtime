@@ -268,6 +268,15 @@ interrupting an active deployment. Every queued worker revalidates the live PR
 head and lifecycle before changing Vercel state, so superseded requests exit
 without publishing stale code.
 
+The worker builds the exact authorized PR SHA on GitHub without repository or
+environment secrets, packages `.vercel/output`, and passes that artifact to a
+separate protected publisher. The publisher validates archive paths, links,
+size, Vite shell, and Build Output routes before a pinned Vercel CLI uploads it
+with `--prebuilt`; feature-branch build scripts never receive the Vercel token
+or the develop S3 probe URL. Keep build-time public values derivable from the
+GitHub event. Secrets used by server functions remain runtime values in the
+selected Vercel Custom Environment and must not be copied into the build job.
+
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"
 VERCEL_PROJECT_ID="prj_<project-id>"
@@ -280,6 +289,7 @@ STABLE_DEVELOP_DOMAIN="dev.example.com"
 PREVIEW_ALIAS_SUFFIX="preview.example.com"
 PRODUCTION_PREVIEW_ALIAS_SUFFIX="production-preview.example.com"
 DEVELOP_PREVIEW_TRUSTED_ACTORS="<comma-separated-github-logins>"
+THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<bucket>.s3.<region>.amazonaws.com/<unsigned-probe-path>"
 ```
 
 ### Stable develop domain
@@ -290,10 +300,10 @@ domain itself to the `develop` Git branch. This gives Vercel a deterministic
 fallback for the hostname, while the controller separately promotes only an
 exact, verified native `develop` deployment.
 
-If trusted PR automation creates deployments in that same Custom Environment,
-its deployment payload must set `autoAssignCustomDomains: false` and assign
-only a separate PR alias after validating the exact repository, branch, commit,
-and READY state. Bind the development PR wildcard to the `develop` Git branch.
+If trusted PR automation creates prebuilt deployments in that same Custom
+Environment, it must use `--skip-domain` and assign only a separate PR alias
+after validating the exact repository, branch, commit metadata, and READY
+state. Bind the development PR wildcard to the `develop` Git branch.
 Vercel does not permit binding a project domain to the production branch as a
 Preview domain, so the production preview wildcard must remain detached (the
 documented Vercel production fallback) and may not attach to a Custom
