@@ -17,6 +17,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — Builder round 6: true-WYSIWYG canvas, inline Editor.js, wrap-with-block — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 6).
+- **Rendered rich-text typography**: Chakra's reset made sanitised
+  h1-h6/lists/quotes/tables render as plain body text — `RichHtmlView` +
+  `richHtmlStyles.ts` restore a real document scale (heading sizes match the
+  Editor.js editing scale) and memoise the parse.
+- **Inline Editor.js**: selected text blocks edit in place with the FULL
+  Editor.js block editor; the modal stays as the "advanced" surface (drawer
+  button + new right-click menu, shared `RichTextModal`). The old
+  contentEditable inline editor was retired.
+- **Block context menu + wrap-with-block**: right-click any frame (or the
+  chip's ⊞) for Advanced editor / Wrap with block (searchable drill-down;
+  containers are the only block kind with a children slot) / Duplicate /
+  move / delete. New pure ops `wrapBlock` + `duplicateBlock` (tested).
+- **True-WYSIWYG edit canvas**: insert affordances became absolute overlay
+  edge strips — edit-mode geometry is pixel-identical to view mode
+  (measured across the mode toggle). The 🌐 Global label floats in the nav
+  breathing band; the region separator is a zero-height overlay; the
+  trailing add affordance is a spacious dashed well.
+- **Input UX**: numeric clamps commit on blur/Enter (typing "300" no longer
+  snaps to the minimum at "3"); sides/corners inputs stop trimming per
+  keystroke.
+
 ### 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 5).

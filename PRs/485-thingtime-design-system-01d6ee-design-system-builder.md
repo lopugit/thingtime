@@ -331,3 +331,36 @@ resize handle stays reachable (content scrolls, not the shell). QA on
 pr-485 via emulated input: drop-replace/paste-replace/window-append upload
 E2E (real attachments, image decodes), align-center + padding persisted
 through a save (source:user fork), component dblclick arg edit persisted.
+
+## Round 6 — true-WYSIWYG canvas, inline Editor.js, wrap-with-block (2026-09-01)
+
+Owner asks, all landed:
+1. **Editor.js formatting now RENDERS** — the bug was not the pipeline but
+   Chakra's global reset flattening native h1-h6/ul/blockquote/table to body
+   text. RichHtmlView + richHtmlStyles.ts give rendered rich markup a real
+   document scale (heading sizes identical to the Editor.js editing scale)
+   and memoise htmlToNode per html string.
+2. **Inline Editor.js everywhere text is edited** — selecting a text block
+   mounts the full Editor.js editor in place (headings, lists, checklists,
+   quotes, tables, code, inline formatting). Doc→html conversion runs per
+   edit behind a lastEmitted echo guard; external html changes re-seed.
+   The popup stays as the ADVANCED surface: drawer 📝 button + the new block
+   right-click menu (shared RichTextModal). Component text args keep the
+   simple double-click inline input.
+3. **Wrap with block** — chip ⊞ shortcut and right-click → "Wrap with block"
+   open a searchable drill-down (Column/Row/Grid). wrapBlock swaps the block
+   for a container holding it, in place; duplicateBlock deep-clones with
+   fresh ids. Containers are the only block kind with a children slot — the
+   menu says so; a component "slot" arg is the future path for
+   wrap-with-component.
+4. **TRUE WYSIWYG** — every insert affordance became an absolutely
+   positioned overlay strip on block seams (hover/drag to reveal, click to
+   insert, drop to move/upload). Nothing edit-only participates in layout:
+   measured block top/left/size are IDENTICAL across the edit/view toggle.
+   The 🌐 Global label floats in the nav breathing band, the region
+   separator is a zero-height line, the grid add-tile is gone (a cell's
+   right seam appends), and the root's trailing affordance is a spacious
+   dashed well (28px clear).
+5. **Typing no longer fights the inspector** — ClampedNumberInput commits
+   clamps on blur/Enter (max width/gap/columns), and uniform sides/corners
+   inputs stopped trimming per keystroke.

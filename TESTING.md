@@ -2904,7 +2904,33 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Text block 📝 Rich editor (Editor.js) applies headers/lists/tables/code
       as sanitised html and reopens editable; double-click on text inside a
       component block opens the inline arg editor and patches the arg.
-- [ ] Drawer resizes by dragging its left edge; width persists across
-      reloads and the canvas padding follows live; selected inline text
-      editor shows ONE outline (no double border once padding is set).
+- [ ] Drawer resizes by dragging its left edge (handle reachable even with
+      the inspector scrolled — content scrolls, not the shell); width
+      persists across reloads and the canvas padding follows live; selected
+      inline text editor shows ONE outline (no double border once padding is
+      set).
+- [ ] TRUE WYSIWYG: a saved block's top/left/size are IDENTICAL in edit mode
+      and view mode (toggle ✏️/Done and measure) — insert affordances are
+      overlay strips on block seams and never occupy layout; the 🌐 Global
+      label floats in the nav breathing band; grids have no add-tile cell.
+- [ ] Selecting a text block mounts the FULL Editor.js editor inline
+      (headings/lists/tables/quotes); a heading typed there renders at real
+      heading scale after deselect (regression: Chakra reset flattened
+      rendered rich markup to body size); right-click a text block →
+      "Advanced rich editor…" opens the modal.
+- [ ] Right-click any block (or the chip ⊞): Wrap with block drill-down wraps
+      IN PLACE (block becomes the container's only child), Duplicate
+      deep-clones with fresh ids, move/delete work
+      (`pnpm --dir remix run test:webpages` → wrapBlock/duplicateBlock).
+- [ ] Numeric inspector fields never rewrite mid-typing: type "300" into Max
+      width — it must NOT snap to 120 at the "3" (clamps commit on
+      blur/Enter); spaces can be typed in the uniform padding input.
+- [ ] Dropping the SAME OS file twice starts two uploads (regression: the
+      uploader's session dedupe silently swallowed re-drops); Rich-editor
+      Apply shows immediately in the still-mounted inline editor and is not
+      overwritten by its blur commit (external-change sync); pasting into
+      drawer inputs or the Editor.js modal is never hijacked by the
+      paste-to-upload listener; a padding of calc(100% - 20px) survives the
+      Sides control (paren-aware tokenizer) and a multi-token shorthand is
+      shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
