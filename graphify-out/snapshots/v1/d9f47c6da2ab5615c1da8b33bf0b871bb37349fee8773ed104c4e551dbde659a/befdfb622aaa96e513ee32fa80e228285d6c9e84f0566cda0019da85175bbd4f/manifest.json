@@ -1,307 +1,307 @@
 {
   ".github/scripts/build-all-branch.mjs": {
-    "mtime": 1788235684.8201127,
+    "mtime": 1788238950.485298,
     "ast_hash": "bcd5fec9d71a4e542da98f89e4d70235",
     "semantic_hash": "bcd5fec9d71a4e542da98f89e4d70235"
   },
   ".github/scripts/deploy-develop-pr-preview.mjs": {
-    "mtime": 1788237168.7262092,
-    "ast_hash": "8bdbc76a12c1f5ecb9b627b712f9b73b",
+    "mtime": 1788238950.485793,
+    "ast_hash": "54d13244b528dc57a0b6d2df1c9c67f5",
     "semantic_hash": ""
   },
   ".github/scripts/promote-features-to-main.mjs": {
-    "mtime": 1788235684.8226552,
+    "mtime": 1788238950.4880009,
     "ast_hash": "1fbc844ec7a3a2e2f50078de42b3fea5",
     "semantic_hash": "1fbc844ec7a3a2e2f50078de42b3fea5"
   },
   ".github/scripts/promotion-pr-changelog.mjs": {
-    "mtime": 1788235684.8229597,
+    "mtime": 1788238950.4881043,
     "ast_hash": "761b35e477a27c12e56f84c507adbac6",
     "semantic_hash": "761b35e477a27c12e56f84c507adbac6"
   },
   ".github/scripts/promotion-worker-contract.sh": {
-    "mtime": 1788235684.8231041,
+    "mtime": 1788238950.4882042,
     "ast_hash": "6f9df6f37df416e2e5de1e3df57a424b",
     "semantic_hash": "6f9df6f37df416e2e5de1e3df57a424b"
   },
   ".github/scripts/promotion-worker-routing-contract.mjs": {
-    "mtime": 1788235684.823394,
+    "mtime": 1788238950.488517,
     "ast_hash": "0e09992b0286cf765109e51256f1ed49",
     "semantic_hash": "0e09992b0286cf765109e51256f1ed49"
   },
   ".github/scripts/rebase-ownership-routing-contract.sh": {
-    "mtime": 1788235684.8235474,
+    "mtime": 1788238950.4886684,
     "ast_hash": "0421aaf1d9422bee571cd2df152e7b6c",
     "semantic_hash": "0421aaf1d9422bee571cd2df152e7b6c"
   },
   ".github/scripts/rebase-stack/prepare-round.sh": {
-    "mtime": 1788235684.823802,
+    "mtime": 1788238950.4888854,
     "ast_hash": "60da8c9b345911aa924d90d61e751df8",
     "semantic_hash": "60da8c9b345911aa924d90d61e751df8"
   },
   ".github/scripts/rebase-stack/promotion-worker.sh": {
-    "mtime": 1788235684.823942,
+    "mtime": 1788238950.4889932,
     "ast_hash": "558328a5541d8422954e34d2cd8acf76",
     "semantic_hash": "558328a5541d8422954e34d2cd8acf76"
   },
   ".github/scripts/rebase-stack/refresh-promotion-graphify.sh": {
-    "mtime": 1788235684.824148,
+    "mtime": 1788238950.4891863,
     "ast_hash": "317e9a3a466a525e36f9275be22943f7",
     "semantic_hash": "317e9a3a466a525e36f9275be22943f7"
   },
   ".github/scripts/rebase-stack/start.sh": {
-    "mtime": 1788235684.8242366,
+    "mtime": 1788238950.489245,
     "ast_hash": "5b89811647b98ecb526948859518d445",
     "semantic_hash": "5b89811647b98ecb526948859518d445"
   },
   ".github/scripts/rebase-stack/verify-promotion-source-authority.sh": {
-    "mtime": 1788235684.8243067,
+    "mtime": 1788238950.4893062,
     "ast_hash": "14b9f6d094629a529f4abde76080542e",
     "semantic_hash": "14b9f6d094629a529f4abde76080542e"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1788237163.8535755,
+    "mtime": 1788238950.4898598,
     "ast_hash": "4eeea35f3403bcc1c8b2be0ea70fd811",
     "semantic_hash": ""
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1788237163.8539798,
+    "mtime": 1788238950.4903452,
     "ast_hash": "a6d2d6f3a21943dab90cd1794af2f6d7",
     "semantic_hash": ""
   },
   "vercel.json": {
-    "mtime": 1788235684.8441317,
+    "mtime": 1788238950.5073543,
     "ast_hash": "33d015ab2b66b6708204132736e87457",
     "semantic_hash": "33d015ab2b66b6708204132736e87457"
   },
   ".github/actions/rebase-conflict-round/action.yml": {
-    "mtime": 1788235684.8197272,
+    "mtime": 1788238950.485145,
     "ast_hash": "35772670268b9a16242535396b05a9e2",
     "semantic_hash": "35772670268b9a16242535396b05a9e2"
   },
   ".github/workflows/all-branch.yml": {
-    "mtime": 1788235684.8250287,
+    "mtime": 1788238950.4904637,
     "ast_hash": "20bdfad3437bee0aef0cabcf9490ec71",
     "semantic_hash": "20bdfad3437bee0aef0cabcf9490ec71"
   },
   ".github/workflows/ci-provider-router.yml": {
-    "mtime": 1788235684.8251724,
+    "mtime": 1788238950.4905372,
     "ast_hash": "97d3a1b83b64c2a664e81f29a629fa57",
     "semantic_hash": "97d3a1b83b64c2a664e81f29a629fa57"
   },
   ".github/workflows/control-plane-ci.yml": {
-    "mtime": 1788236103.8399217,
+    "mtime": 1788238950.4909856,
     "ast_hash": "9b3800eb787e376662576c1b33592cf2",
     "semantic_hash": ""
   },
   ".github/workflows/develop-pr-preview.yml": {
-    "mtime": 1788236814.422374,
+    "mtime": 1788238950.491183,
     "ast_hash": "53a7b74622478004b0ee0fb1a6d681fc",
     "semantic_hash": ""
   },
   ".github/workflows/electron-release.yml": {
-    "mtime": 1788235684.8262997,
+    "mtime": 1788238950.4913535,
     "ast_hash": "45accab0eccdbdba5150d49a90956fe2",
     "semantic_hash": "45accab0eccdbdba5150d49a90956fe2"
   },
   ".github/workflows/promote-develop-to-main.yml": {
-    "mtime": 1788235684.8263748,
+    "mtime": 1788238950.4914153,
     "ast_hash": "16556d35d3fba43861601f7737540986",
     "semantic_hash": "16556d35d3fba43861601f7737540986"
   },
   ".github/workflows/promote-features-to-main.yml": {
-    "mtime": 1788235684.8264923,
+    "mtime": 1788238950.49152,
     "ast_hash": "dcbfdcbc6317a352ec1ef6b8ad90d009",
     "semantic_hash": "dcbfdcbc6317a352ec1ef6b8ad90d009"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1788235684.8267667,
+    "mtime": 1788238950.4917386,
     "ast_hash": "27276e11cd97fb7e30d1fa045cc938cc",
     "semantic_hash": "27276e11cd97fb7e30d1fa045cc938cc"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1788237163.8557103,
-    "ast_hash": "ff08adaa0ea98a316515e9356ce490b2",
+    "mtime": 1788239161.2894995,
+    "ast_hash": "b0babfa2ce4cda663ccb05666b79d67a",
     "semantic_hash": ""
   },
   ".github/workflows/sync-main-into-develop.yml": {
-    "mtime": 1788235684.8277745,
+    "mtime": 1788238950.4927268,
     "ast_hash": "4400400d2e28c81c65305d533ee58c13",
     "semantic_hash": "4400400d2e28c81c65305d533ee58c13"
   },
   ".github/workflows/web-ci.yml": {
-    "mtime": 1788235684.8280768,
+    "mtime": 1788238950.4928002,
     "ast_hash": "1e796da6f998667d80ddefedc419ee00",
     "semantic_hash": "1e796da6f998667d80ddefedc419ee00"
   },
   "AGENTS.md": {
-    "mtime": 1788235684.8286803,
+    "mtime": 1788238950.4931614,
     "ast_hash": "012107e7ca5e0a7d0b6d35017f9800c5",
     "semantic_hash": ""
   },
   "AI_ALL.md": {
-    "mtime": 1788235684.8286803,
+    "mtime": 1788238950.4931614,
     "ast_hash": "012107e7ca5e0a7d0b6d35017f9800c5",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1788236124.1349816,
+    "mtime": 1788238950.4935913,
     "ast_hash": "d8c87c7b7bc21831d25290df26d22065",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1788235684.8286803,
+    "mtime": 1788238950.4931614,
     "ast_hash": "012107e7ca5e0a7d0b6d35017f9800c5",
     "semantic_hash": "012107e7ca5e0a7d0b6d35017f9800c5"
   },
   "README.md": {
-    "mtime": 1788236124.1346655,
+    "mtime": 1788238950.4941852,
     "ast_hash": "98e75c7c96eeee1f9eaa2101c6abafc5",
     "semantic_hash": ""
   },
   ".github/workflows/commander-release.yml": {
-    "mtime": 1788235684.825675,
+    "mtime": 1788238950.490794,
     "ast_hash": "6dfb9061bf883718b3aa5fc8d44283c7",
     "semantic_hash": "6dfb9061bf883718b3aa5fc8d44283c7"
   },
   ".github/scripts/electron-pr-release-contract.mjs": {
-    "mtime": 1788235684.8208282,
+    "mtime": 1788238950.4858692,
     "ast_hash": "8eb2ca68a8825921ca1e0a4b0ec21814",
     "semantic_hash": "8eb2ca68a8825921ca1e0a4b0ec21814"
   },
   ".github/workflows/electron-pr-release.yml": {
-    "mtime": 1788235684.826174,
+    "mtime": 1788238950.4912684,
     "ast_hash": "5ba88d4b18105dbbc3e70ccc9544fff5",
     "semantic_hash": "5ba88d4b18105dbbc3e70ccc9544fff5"
   },
   ".github/workflows/codeql-analysis.yml": {
-    "mtime": 1788235684.8253047,
+    "mtime": 1788238950.4906223,
     "ast_hash": "3a6dd63c972385d74c3147c17b4efc35",
     "semantic_hash": "3a6dd63c972385d74c3147c17b4efc35"
   },
   ".github/actions/lopu-agent/action.yml": {
-    "mtime": 1788235684.8195353,
+    "mtime": 1788238950.4849582,
     "ast_hash": "f47499fe69d9dd1387c5f4a9b9c9f4e7",
     "semantic_hash": "f47499fe69d9dd1387c5f4a9b9c9f4e7"
   },
   ".github/workflows/codeql-pr-handoff.yml": {
-    "mtime": 1788235684.8253832,
+    "mtime": 1788238950.4906814,
     "ast_hash": "5c9eacd506c3f179eef7dc9d6ec6cf00",
     "semantic_hash": "5c9eacd506c3f179eef7dc9d6ec6cf00"
   },
   ".github/scripts/classify-claude-credential-failure.mjs": {
-    "mtime": 1788235684.8204691,
+    "mtime": 1788238950.485376,
     "ast_hash": "6bb1b64399a77490bc774db4eb716a27",
     "semantic_hash": "6bb1b64399a77490bc774db4eb716a27"
   },
   ".github/scripts/codeql-open-pr-backfill.mjs": {
-    "mtime": 1788235684.8205652,
+    "mtime": 1788238950.485454,
     "ast_hash": "e1ebf5ba838318df24ae79a91945a191",
     "semantic_hash": "e1ebf5ba838318df24ae79a91945a191"
   },
   ".github/scripts/graphify": {
-    "mtime": 1788235684.8211708,
+    "mtime": 1788238950.4866672,
     "ast_hash": "de42366b5a480cbde5c6bc6e864b0bea",
     "semantic_hash": "de42366b5a480cbde5c6bc6e864b0bea"
   },
   ".github/scripts/graphify-cas.mjs": {
-    "mtime": 1788235684.821496,
+    "mtime": 1788238950.487102,
     "ast_hash": "6965f1fd5cbc4191be21716ba4115d30",
     "semantic_hash": "6965f1fd5cbc4191be21716ba4115d30"
   },
   ".github/scripts/graphify-cas.test.mjs": {
-    "mtime": 1788235684.8217423,
+    "mtime": 1788238950.4873352,
     "ast_hash": "82de9938cdffa33f7f5d34a90ba8f8f2",
     "semantic_hash": "82de9938cdffa33f7f5d34a90ba8f8f2"
   },
   ".github/scripts/stage-graphify-snapshots.mjs": {
-    "mtime": 1788235684.8247683,
+    "mtime": 1788238950.4899344,
     "ast_hash": "1ed4bb45269c822b3d85574877b520af",
     "semantic_hash": "1ed4bb45269c822b3d85574877b520af"
   },
   ".github/scripts/rebase-index-fingerprint.test.mjs": {
-    "mtime": 1788235684.8234673,
+    "mtime": 1788238950.4886003,
     "ast_hash": "610d9cc36e24c79795ef307c1fb7d511",
     "semantic_hash": "610d9cc36e24c79795ef307c1fb7d511"
   },
   ".github/scripts/rebase-related-edits.test.mjs": {
-    "mtime": 1788235684.8236585,
+    "mtime": 1788238950.4887674,
     "ast_hash": "9cd52d03db89fc9d93e0b571429dfcf5",
     "semantic_hash": "9cd52d03db89fc9d93e0b571429dfcf5"
   },
   ".github/scripts/resolve-canonical-instruction-type-conflicts.sh": {
-    "mtime": 1788235684.824383,
+    "mtime": 1788238950.4893646,
     "ast_hash": "f8567b42ad50c24f18d0aa7b18267399",
     "semantic_hash": "f8567b42ad50c24f18d0aa7b18267399"
   },
   ".github/scripts/resolve-canonical-instruction-type-conflicts.test.mjs": {
-    "mtime": 1788235684.82445,
+    "mtime": 1788238950.4894147,
     "ast_hash": "d2acb860dfeb457d79f0d6194003542f",
     "semantic_hash": "d2acb860dfeb457d79f0d6194003542f"
   },
   ".github/scripts/lopu-pr-status.mjs": {
-    "mtime": 1788235684.8220973,
+    "mtime": 1788238950.4875286,
     "ast_hash": "b57ed9d4744731766481c318ae1f3ad5",
     "semantic_hash": "b57ed9d4744731766481c318ae1f3ad5"
   },
   ".github/scripts/lopu-pr-status.test.mjs": {
-    "mtime": 1788235684.8221688,
+    "mtime": 1788238950.4875922,
     "ast_hash": "91f62b6621044378a44e21a322a62186",
     "semantic_hash": "91f62b6621044378a44e21a322a62186"
   },
   ".github/scripts/feature-stack-plan.mjs": {
-    "mtime": 1788235684.8211057,
+    "mtime": 1788238950.4864032,
     "ast_hash": "34638fffbf5a475ba9d778f0adf1a619",
     "semantic_hash": "34638fffbf5a475ba9d778f0adf1a619"
   },
   ".github/scripts/lopu-credential-vault.mjs": {
-    "mtime": 1788235684.821834,
+    "mtime": 1788238950.4874074,
     "ast_hash": "a82deaa1a50ca4f750bf318eb1527f60",
     "semantic_hash": "a82deaa1a50ca4f750bf318eb1527f60"
   },
   ".github/scripts/lopu-credential-vault.test.mjs": {
-    "mtime": 1788235684.8220172,
+    "mtime": 1788238950.4874575,
     "ast_hash": "7a56f9b70dbbbb96a3202249b541be52",
     "semantic_hash": "7a56f9b70dbbbb96a3202249b541be52"
   },
   "PRs/492-codex-lopu-credential-vault-controller-load-lopu-credentials-from-thingtime-vault.md": {
-    "mtime": 1788235684.8292758,
+    "mtime": 1788238950.493716,
     "ast_hash": "68fd4e92195026b0e4b1fe6009567300",
     "semantic_hash": "68fd4e92195026b0e4b1fe6009567300"
   },
   ".github/scripts/merge-main-develop-sync-pr.mjs": {
-    "mtime": 1788235684.822244,
+    "mtime": 1788238950.4876554,
     "ast_hash": "968c52ffc79596bcb9100c690d4b8c46",
     "semantic_hash": "968c52ffc79596bcb9100c690d4b8c46"
   },
   "PRs/506-codex-auto-merge-main-develop-sync-pr.md": {
-    "mtime": 1788235684.8293345,
+    "mtime": 1788238950.4937644,
     "ast_hash": "466f703c6e89a3573e871476f77a7572",
     "semantic_hash": "466f703c6e89a3573e871476f77a7572"
   },
-  ".githooks/post-checkout": {
-    "mtime": 1788235908.9542315,
-    "ast_hash": "18ce593685d2799611e4db5604ba2025",
-    "semantic_hash": "18ce593685d2799611e4db5604ba2025"
-  },
-  ".githooks/post-commit": {
-    "mtime": 1788235908.9540095,
-    "ast_hash": "8ef614b7e7176761e299808e2c48b988",
-    "semantic_hash": "8ef614b7e7176761e299808e2c48b988"
-  },
   ".github/scripts/extract-vercel-prebuilt.py": {
-    "mtime": 1788236038.9253354,
+    "mtime": 1788238950.486188,
     "ast_hash": "7580b7f9d73b616e2b582f600af5fd99",
     "semantic_hash": "7580b7f9d73b616e2b582f600af5fd99"
   },
   ".github/scripts/feature-stack-progress.mjs": {
-    "mtime": 1788237163.8528085,
-    "ast_hash": "a9b10bf0052ef17359056061ff783f0e",
+    "mtime": 1788239170.8922281,
+    "ast_hash": "41bd791662ec72e7c400a2a574f699d5",
     "semantic_hash": ""
   },
   "PRs/534-codex-feature-stack-progress-heartbeats-controller.md": {
-    "mtime": 1788237163.8561223,
+    "mtime": 1788238950.4939487,
     "ast_hash": "f484eb79dc7e697af579ac513b26d025",
+    "semantic_hash": ""
+  },
+  ".githooks/post-checkout": {
+    "mtime": 1788239276.5711195,
+    "ast_hash": "18ce593685d2799611e4db5604ba2025",
+    "semantic_hash": ""
+  },
+  ".githooks/post-commit": {
+    "mtime": 1788239276.570959,
+    "ast_hash": "8ef614b7e7176761e299808e2c48b988",
     "semantic_hash": ""
   }
 }
