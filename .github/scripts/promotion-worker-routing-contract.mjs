@@ -93,6 +93,11 @@ assert.match(
 assert.match(workflow, /feature_stack_plan:\s+name: Validate the immutable Feature Stack/);
 assert.match(workflow, /feature_stack_run_id:/);
 assert.match(workflow, /Feature Stack run identity does not match its immutable plan/);
+assert.match(
+	workflow,
+	/jq -r '\.plan\.runId' \"\$decoded\"/,
+	"Feature Stack admission validates the run id inside the decoded immutable plan",
+);
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
 assert.match(
 	workflow,

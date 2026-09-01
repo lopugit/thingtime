@@ -3366,7 +3366,7 @@ jobs:
           plan="$RUNNER_TEMP/feature-stack-plan.json"
           node trusted/.github/scripts/feature-stack-plan.mjs decode "$PLAN_B64" >"$decoded"
           jq -c '.plan' "$decoded" >"$plan"
-          [[ "$(jq -r '.runId' "$decoded")" == "$FEATURE_STACK_RUN_ID" ]] || {
+          [[ "$(jq -r '.plan.runId' "$decoded")" == "$FEATURE_STACK_RUN_ID" ]] || {
             echo '::error::Feature Stack run identity does not match its immutable plan.'
             exit 1
           }
