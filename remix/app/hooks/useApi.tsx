@@ -923,6 +923,14 @@ export function useApi() {
     themes: {
       list: useCallback(async () => getJson('/api/v1/themes'), []),
       getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), []),
+      // public gallery list (no id → every public theme, newest first). The
+      // arg is optional: callers that want the server default call this with
+      // no arguments at all.
+      listShared: useCallback(
+        async (args?: { limit?: number }) =>
+          getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
+        []
+      ),
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;

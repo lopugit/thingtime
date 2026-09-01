@@ -229,6 +229,7 @@ export const router = createBrowserRouter([
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
+      { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },

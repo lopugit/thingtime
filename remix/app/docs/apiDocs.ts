@@ -4813,16 +4813,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'themes',
     title: 'Shared theme',
     endpoint: '/api/v1/themes/shared',
-    summary: 'Reads a shared theme by id/share id.',
-    detail: 'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id.',
+    summary: 'Reads a shared theme by id, or lists the public theme gallery without one.',
+    detail:
+      'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
     auth: {
       mode: 'optional',
       description: 'Anonymous public reads are allowed; auth cookie or bearer token can reveal caller-owned private themes.'
     },
     methods: ['GET'],
     steps: [
-      'Send id as a query parameter.',
-      'Use the returned theme to preview or apply a shared visual configuration.',
+      'Send id as a query parameter for a single theme, or omit it to list the public gallery.',
+      'Use the returned theme(s) to preview or apply a shared visual configuration.',
       'Treat 404 as not found without assuming whether a private theme exists.',
       'Authenticate only when reading one of your own private themes by id.'
     ],
@@ -4832,6 +4833,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Fetch a public shared theme.',
         method: 'GET',
         query: { id: 'theme_123' }
+      },
+      {
+        name: 'List the public gallery',
+        description: 'Fetch every public theme, newest first.',
+        method: 'GET',
+        query: { limit: '24' }
       }
     ],
     responseExamples: [

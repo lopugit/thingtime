@@ -828,6 +828,39 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared theme id returned a 404 error shape.')
   },
   {
+    id: 'themes-shared-gallery-list',
+    name: 'Public theme gallery list',
+    description: 'Omitting id lists the public gallery: an array of public themes (possibly empty), anonymously readable.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.themes) &&
+        body.themes.length <= 60 &&
+        body.themes.every(
+          (theme: any) =>
+            typeof theme?.id === 'string' && typeof theme?.name === 'string' && theme?.theme && typeof theme?.theme === 'object'
+        ),
+      'Gallery list returned ok with a bounded array of public theme shapes.'
+    )
+  },
+  {
+    id: 'themes-shared-gallery-limit',
+    name: 'Public theme gallery limit',
+    description: 'The gallery list honours a lower ?limit bound.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared?limit=1',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.themes) && body.themes.length <= 1,
+      'Gallery list with limit=1 returned at most one theme.'
+    )
+  },
+  {
     id: 'themes-active-guarded',
     name: 'Active theme requires auth',
     description: 'Setting the active theme without a session is rejected with a 401 error shape.',

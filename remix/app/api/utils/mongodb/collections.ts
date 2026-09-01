@@ -672,6 +672,41 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
+    // Public theme gallery (`GET /api/v1/themes/shared` with no id): public
+    // themes, newest-UPDATED first. Every other index here sorts by createdAt,
+    // so the gallery's `updatedAt` sort had nothing to ride: the planner
+    // narrowed on thingtime, then blocking-sorted EVERY theme thing in memory
+    // just to take 60 — a sort that grows with the theme corpus and eventually
+    // trips Mongo's 32 MB in-memory sort limit outright.
+    //
+    // `acl` deliberately stays OUT of the key and remains a residual: it is an
+    // array, `thingtime` is an array, and a compound over both is a parallel
+    // -array index that Mongo refuses to write to at all. The residual is cheap
+    // because the walk is already scoped to themes and stops at the page.
+    //
+    // Verified on a local 40k-theme / 40k-post dataset: 40,000 keys and 40,000
+    // docs examined with a blocking SORT, down to 600 and 600 with none.
+    //
+    // PARTIAL on thingtime:'theme' — `things` is the whole platform (posts,
+    // comments, reactions, chat messages, attachments, every ci-* record), and
+    // an unfiltered key would add an entry per thingtime element to EVERY one
+    // of those writes, forever, to serve one gallery read. The partial filter
+    // is the same tool `notification_unread` below uses for the same reason.
+    // Both theme queries name thingtime:'theme' explicitly, so the planner can
+    // still prove the predicate implies the filter and use the index for the
+    // gallery AND listThemesForUser; no other query in the codebase sorts
+    // `things` by a bare updatedAt under a thingtime equality.
+    //
+    // createIndexReplacing (not a bare createIndex) because a same-key index
+    // with different options is IndexOptionsConflict(85): any environment that
+    // already built the unfiltered `thingtime_1_updatedAt_-1` gets it swapped
+    // for the scoped one instead of failing the whole ensure batch.
+    createIndexReplacing(
+      col,
+      { thingtime: 1, updatedAt: -1 },
+      { name: 'theme_gallery_updated', partialFilterExpression: { thingtime: 'theme' } },
+      ['thingtime_1_updatedAt_-1']
+    ),
     // Public tag feeds (`GET /api/v1/things/feed?tag=…`): one tag's posts,
     // newest first. Without `tags` as a key the tag is a post-scan residual —
     // the pager walks every post in createdAt order until it fills a page, so a

@@ -306,6 +306,27 @@ export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]>
   return mergeThemeDocs(thingDocs, legacyDocs).map(toPublicTheme);
 };
 
+// Public gallery list — every PUBLIC theme, newest-updated first, across both
+// eras (claude-todo/10 ✨ theme gallery). The acl/visibility filters mirror
+// getSharedTheme's public gate exactly, so a theme is listed iff its share
+// link would resolve.
+export const MAX_GALLERY_THEMES = 60;
+
+export const listPublicThemes = async (limit: number = MAX_GALLERY_THEMES): Promise<PublicTheme[]> => {
+  const cap = Math.max(1, Math.min(Math.floor(limit) || MAX_GALLERY_THEMES, MAX_GALLERY_THEMES));
+  const things = await getThingsCollection();
+  const thingDocs = (
+    await things
+      .find({ thingtime: 'theme', acl: ACL_ALL } as any)
+      .sort({ updatedAt: -1 })
+      .limit(cap)
+      .toArray()
+  ).map(themeThingToDoc);
+  const themes = await getThemesCollection();
+  const legacyDocs = await themes.find({ visibility: 'public' }).sort({ updatedAt: -1 }).limit(cap).toArray();
+  return mergeThemeDocs(thingDocs, legacyDocs).slice(0, cap).map(toPublicTheme);
+};
+
 // Public shared read — only returns public themes; 'not found' for private
 // ones so their existence isn't revealed.
 export const getSharedTheme = async (shareId: string): Promise<PublicTheme | null> => {
