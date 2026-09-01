@@ -54,11 +54,14 @@ import {
 	FiGitBranch,
 	FiGithub,
 	FiLayers,
+	FiPauseCircle,
 	FiPlay,
 	FiPlus,
 	FiRefreshCw,
+	FiRotateCcw,
 	FiSave,
 	FiSearch,
+	FiStopCircle,
 	FiTrash2,
 	FiX
 } from 'react-icons/fi';
@@ -75,6 +78,12 @@ import {
 	shouldPollCiDashboard
 } from './dashboardPollingCore';
 import { featureStackTargetsForSource } from '~/api/utils/ciControl/featureStackRoutingCore';
+import {
+	featureStackCanPause,
+	featureStackCanRestart,
+	featureStackCanStop,
+	type FeatureStackLifecycleAction
+} from '~/api/utils/ciControl/featureStackLifecycleCore';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
@@ -590,6 +599,7 @@ type FeatureStackComposerProps = {
   onToggleCollapsed: () => void;
   isSubmitting: boolean;
 	isSaving: boolean;
+	lifecycleBusy: { id: string; action: FeatureStackLifecycleAction } | null;
   canDispatch: boolean;
   onNameChange: (value: string) => void;
   onRemove: (featureId: string) => void;
@@ -600,6 +610,7 @@ type FeatureStackComposerProps = {
 	onLoad: (stack: SavedFeatureStack) => void;
 	onSave: () => void;
 	onDelete: (id: string) => void;
+	onLifecycle: (stack: SavedFeatureStack, action: FeatureStackLifecycleAction) => void;
   onSubmit: () => void;
 };
 
@@ -618,6 +629,7 @@ const FeatureStackComposer = ({
   onToggleCollapsed,
   isSubmitting,
 	isSaving,
+	lifecycleBusy,
   canDispatch,
   onNameChange,
   onRemove,
@@ -628,11 +640,14 @@ const FeatureStackComposer = ({
 	onLoad,
 	onSave,
 	onDelete,
+	onLifecycle,
   onSubmit
 }: FeatureStackComposerProps) => {
   const availableTargets = branchOptions.filter((branch) => !targets.includes(branch));
 	const selectedCount = selected.length + pendingSourcePrNumbers.length;
 	const ready = selected.length >= 1 && targets.length >= 1 && name.trim().length > 0;
+	const activeSavedStack = savedStacks.find((stack) => stack.id === activeStackId) ?? null;
+	const requiresRestart = activeSavedStack ? ['paused', 'stopped'].includes(activeSavedStack.status.toLowerCase()) : false;
   return (
 		<Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" mb={4} overflow="hidden">
       <Flex px={4} py={3} align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={3} direction={{ base: 'column', md: 'row' }}>
@@ -688,7 +703,8 @@ const FeatureStackComposer = ({
           leftIcon={<FiPlay />}
           onClick={onSubmit}
           isLoading={isSubmitting}
-						isDisabled={!canDispatch || !ready || isSaving}
+						isDisabled={!canDispatch || !ready || isSaving || requiresRestart}
+						title={requiresRestart ? 'Use Restart to begin a fresh run for this paused or stopped stack' : undefined}
           flex="0 0 auto"
         >
 						Save &amp; merge
@@ -702,36 +718,84 @@ const FeatureStackComposer = ({
 					<Text fontSize="10px" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" opacity={0.5} mb={2}>
 						Saved stacks
 					</Text>
-					<Flex gap={2} wrap="wrap">
+					<Flex gap={2} wrap="wrap" align="stretch">
 						{savedStacks.map((stack) => {
 							const progress = progressByStack.get(stack.id) ?? [];
+							const busy = lifecycleBusy?.id === stack.id;
+							const lifecycleOverridesTarget = ['paused', 'stopped'].includes(stack.status.toLowerCase());
 							return (
-								<Button
+								<Box
 									key={stack.id}
-									size="sm"
-									height="auto"
-									py={2}
-									variant={activeStackId === stack.id ? 'solid' : 'outline'}
-									colorScheme={activeStackId === stack.id ? 'purple' : 'gray'}
-									leftIcon={<FiEdit3 />}
-									onClick={() => onLoad(stack)}
+									border="1px solid"
+									borderColor={activeStackId === stack.id ? 'purple.400' : 'var(--tt-border, #e7e7eb)'}
+									borderRadius="md"
+									bg={activeStackId === stack.id ? 'purple.50' : 'var(--tt-card, #fff)'}
+									minW={{ base: '100%', md: '260px' }}
 								>
-									<Box textAlign="left">
-										<Text fontSize="xs" fontWeight="700">
-											{stack.name}
-										</Text>
+									<Button
+										variant="unstyled"
+										height="auto"
+										width="100%"
+										px={3}
+										pt={2.5}
+										pb={2}
+										textAlign="left"
+										onClick={() => onLoad(stack)}
+										leftIcon={<FiEdit3 />}
+									>
+										<Box minW={0}>
+											<Text fontSize="xs" fontWeight="700" noOfLines={1}>{stack.name}</Text>
 										<Flex gap={1} mt={1} wrap="wrap">
 											{stack.targets.map((target) => {
 												const targetProgress = progress.find((item) => item.target === target);
 												return (
-													<Badge key={target} colorScheme={statusColor(targetProgress?.status ?? stack.status)} textTransform="none">
-														{target}: {targetProgress?.status ?? stack.status}
+												<Badge
+													key={target}
+													colorScheme={statusColor(lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status)}
+													textTransform="none"
+												>
+													{target}: {lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status}
 													</Badge>
 												);
 											})}
 										</Flex>
-									</Box>
-        </Button>
+										</Box>
+									</Button>
+									<Flex borderTop="1px solid var(--tt-border, #e7e7eb)" px={2} py={1.5} gap={1} justify="flex-end">
+										<IconButton
+											aria-label={`Pause ${stack.name}`}
+											title="Pause: cancel current compute and preserve this stack for Restart"
+											icon={<FiPauseCircle />}
+											size="xs"
+											variant="ghost"
+											isLoading={busy && lifecycleBusy?.action === 'pause'}
+											isDisabled={busy || !featureStackCanPause(stack.status)}
+											onClick={() => onLifecycle(stack, 'pause')}
+										/>
+										<IconButton
+											aria-label={`Stop ${stack.name}`}
+											title="Stop: cancel current compute and keep the saved definition and history"
+											icon={<FiStopCircle />}
+											size="xs"
+											variant="ghost"
+											colorScheme="red"
+											isLoading={busy && lifecycleBusy?.action === 'stop'}
+											isDisabled={busy || !featureStackCanStop(stack.status)}
+											onClick={() => onLifecycle(stack, 'stop')}
+										/>
+										<IconButton
+											aria-label={`Restart ${stack.name}`}
+											title="Restart: cancel any active compute and begin a fresh immutable run"
+											icon={<FiRotateCcw />}
+											size="xs"
+											variant="ghost"
+											colorScheme="purple"
+											isLoading={busy && lifecycleBusy?.action === 'restart'}
+											isDisabled={busy || !featureStackCanRestart(stack.status)}
+											onClick={() => onLifecycle(stack, 'restart')}
+										/>
+									</Flex>
+								</Box>
 							);
 						})}
       </Flex>
@@ -1139,9 +1203,14 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [dispatching, setDispatching] = React.useState(false);
   const [featureStackDispatching, setFeatureStackDispatching] = React.useState(false);
 	const [featureStackSaving, setFeatureStackSaving] = React.useState(false);
+	const [featureStackLifecycleBusy, setFeatureStackLifecycleBusy] = React.useState<{
+		id: string;
+		action: FeatureStackLifecycleAction;
+	} | null>(null);
   const [savingWorkflow, setSavingWorkflow] = React.useState<CiWorkflowKey | null>(null);
   const [savingPreviewEnvironment, setSavingPreviewEnvironment] = React.useState<'develop' | 'production' | null>(null);
 	const [savedFeatureStacks, setSavedFeatureStacks] = React.useState<SavedFeatureStack[]>([]);
+	const [featureStackEvents, setFeatureStackEvents] = React.useState<CiEvent[]>([]);
 	const [activeFeatureStackId, setActiveFeatureStackId] = React.useState<string | null>(initialStackDraft.id ?? null);
   const [featureStackName, setFeatureStackName] = React.useState(initialStackDraft.name);
   const [featureStackIds, setFeatureStackIds] = React.useState(initialStackDraft.selectedFeatureIds);
@@ -1188,7 +1257,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
 	const loadSavedFeatureStacks = React.useCallback(async (options?: { signal?: AbortSignal }) => {
 		const next = await apiRef.current.v1.admin.ciFeatureStacks(options);
-		if (next?.ok && Array.isArray(next.stacks)) setSavedFeatureStacks(next.stacks);
+		if (next?.ok && Array.isArray(next.stacks)) {
+			setSavedFeatureStacks(next.stacks);
+			setFeatureStackEvents(Array.isArray(next.events) ? next.events : []);
+		}
 	}, []);
 
 	const load = React.useCallback(
@@ -1334,7 +1406,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const terminalStatuses = new Set(['merged', 'closed', 'completed', 'success', 'succeeded', 'failure', 'failed', 'cancelled']);
 		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
-		const dispatchEvents = dashboard.events.filter((event) => event.parentId === stack.lastDispatchId);
+		const dispatchEvents = [
+			...new Map(
+				[...featureStackEvents, ...dashboard.events]
+					.filter((event) => event.parentId === stack.lastDispatchId)
+					.map((event) => [event.id, event])
+			).values()
+		];
 		const heartbeat = latestFeatureStackHeartbeat(dispatchEvents);
 		const topLevelRuns = dashboard.workflowRuns.filter(
 			(candidate) => String(candidate.entityType ?? '') !== 'job' && normalizedStatus(candidate.event) === 'workflow_dispatch'
@@ -1474,7 +1552,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			lines,
 			runs: historicalRuns
 		};
-	}, [activeSavedFeatureStack, dashboard, featureStackProgress]);
+	}, [activeSavedFeatureStack, dashboard, featureStackEvents, featureStackProgress]);
 
 	React.useEffect(() => {
 		if (!featureStackLiveSnapshot?.live) return;
@@ -1593,6 +1671,50 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		}
   };
 
+	const changeFeatureStackLifecycle = async (stack: SavedFeatureStack, action: FeatureStackLifecycleAction) => {
+		if (featureStackLifecycleBusy) return;
+		if (
+			action === 'stop' &&
+			!window.confirm(`Stop “${stack.name}”?\n\nCurrent compute will be cancelled. The saved stack and its run history will remain available.`)
+		) {
+			return;
+		}
+		if (
+			action === 'restart' &&
+			featureStackCanPause(stack.status) &&
+			!window.confirm(`Restart “${stack.name}”?\n\nIts current compute will be cancelled before a fresh immutable run starts.`)
+		) {
+			return;
+		}
+		setFeatureStackLifecycleBusy({ id: stack.id, action });
+		try {
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.3.0');
+			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action, id: stack.id });
+			if (!result?.ok) throw new Error(result?.error || `Feature Stack ${action} failed.`);
+			setSavedFeatureStacks(result.stacks ?? []);
+			lopu({
+				title: action === 'restart' ? 'Feature Stack restarted 🙌' : action === 'pause' ? 'Feature Stack paused' : 'Feature Stack stopped',
+				description:
+					action === 'restart'
+						? 'Lopu accepted a fresh immutable run. Live progress and the new GitHub run link will appear here.'
+						: 'Current compute was cancelled when still active. The saved definition and complete run history were preserved.',
+				status: 'success',
+				duration: 7000
+			});
+			window.setTimeout(() => {
+				void Promise.allSettled([load(), loadSavedFeatureStacks()]);
+			}, 1500);
+		} catch (error: any) {
+			lopu({
+				title: `The Feature Stack was not ${action === 'restart' ? 'restarted' : action === 'pause' ? 'paused' : 'stopped'}`,
+				description: error?.message || 'Nothing was changed.',
+				status: 'error'
+			});
+		} finally {
+			setFeatureStackLifecycleBusy(null);
+		}
+	};
+
   const selectFeature = (feature: CiEntity) => {
     setSelectedFeatureId(feature.id);
     if (isMobile) setMobileDetailOpen(true);
@@ -1637,7 +1759,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     setFeatureStackDispatching(true);
     try {
 			await requireThingtimeCapability('api.admin-ci-dispatch', '2.1.0');
-			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.2.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.3.0');
 			const saved = await saveCurrentFeatureStack();
 			if (!saved) throw new Error('Feature Stack save failed');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action: 'run', id: saved.id });
@@ -1898,6 +2020,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('feature-stack')}
         isSubmitting={featureStackDispatching}
 				isSaving={featureStackSaving}
+				lifecycleBusy={featureStackLifecycleBusy}
         canDispatch={Boolean(integration?.githubAppConfigured && policies.find((policy) => policy.key === 'feature-stack')?.enabled)}
         onNameChange={(value) => {
           setFeatureStackName(value);
@@ -1931,6 +2054,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 						);
 				}}
 				onDelete={deleteFeatureStack}
+				onLifecycle={changeFeatureStackLifecycle}
         onSubmit={submitFeatureStack}
       />
 

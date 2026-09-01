@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — Production search server-bundle repair
+
+- `/api/v1/things/search` now statically bundles its emoji-name metadata
+  instead of leaving an untraced runtime JSON lookup in the Vercel function.
+  The Vercel output verifier now fails the build if this missing-dependency
+  class returns, and the `api.things-search` capability advances to `1.1.1`.
+  — Codex (AI), 2026-09-01
+
 ### 2026-08-31 — Bounded Graphify snapshot retention
 
 - Graphify now retains one active portable snapshot by default after successful
@@ -72,6 +80,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
+  and Stop cancel only the exact linked GitHub Actions run while retaining the
+  stack definition and historical run links; Restart safely cancels active
+  compute before creating a fresh immutable run. Late webhook and progress
+  receipts cannot overwrite a deliberate paused or stopped state.
+- **Feature Stack progress no longer disappears under a busy CI event feed.**
+  The saved-stack endpoint returns a bounded per-dispatch event stream, so
+  immediate, phase-change, and 10-minute Lopu heartbeats remain chronological
+  and visible while unrelated repository automation is active.
+  Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
+  — Codex (AI), 2026-09-01
 
 - **Reusable Feature Stacks no longer fail because an older selected PR has
   already completed.** Each run now omits merged, closed, and draft entries at

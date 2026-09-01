@@ -260,6 +260,11 @@ is fixed, and cite the checklist you ran in the PR description.
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
       than an `outputDirectory` selected by the dashboard.
+- [ ] Confirm the Vercel output verifier rejects any server chunk that leaves
+      `unicode-emoji-json/data-by-emoji.json` as a runtime package lookup
+      without tracing the JSON asset. In an isolated copy of the generated
+      function (with no parent checkout `node_modules`), importing the search
+      chunk must not throw `MODULE_NOT_FOUND`.
 - [ ] In Vercel, clear the old `remix` Root Directory and all Build, Install,
       Output Directory, and Ignored Build Step overrides; select Other as the
       framework. Confirm a product-branch commit builds from root and serves
@@ -822,8 +827,11 @@ is fixed, and cite the checklist you ran in the PR description.
       overflow, and video/file sections keep their existing layouts.
 - [ ] Clicking (and keyboard-activating) a masonry image opens the lightbox:
       full image, title/description when present, prev/next across only that
-      post's images, an Open-page link to `/media/:id`, a download link, and
-      Esc/backdrop close. Error-state tiles never open a broken lightbox.
+      post's images, a filename link to its canonical `/thing/:id` permalink,
+      an Open-page link to `/media/:id`, a download button, and a visible X,
+      Esc, and backdrop close. Those toolbar controls sit below the persistent
+      navigation at desktop and 375px mobile widths. Error-state tiles never
+      open a broken lightbox.
 - [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
       max-width): large media, title/description, author, a link back to the
       parent post, plus working reactions and comments on the media thing
@@ -1664,6 +1672,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
+- [ ] Build the Vercel output and exercise `/api/v1/things/search` from the
+      deployed function with both a plain ranked query and a reaction
+      `crystal.emoji contains <name>` condition. Neither path may depend on an
+      untraced `unicode-emoji-json` runtime file or return `MODULE_NOT_FOUND`.
 - [ ] Commander typeahead searches the live Things + people APIs after the
       debounce: it shows contextual platform posts/data/schemas/people before
       the bounded `Local paths` tier, arrow/Enter and click open the selected
@@ -2499,7 +2511,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       minutes while unchanged, and once when all target workers are terminal.
       Reload CI Control between updates: the stream must retain chronological
       messages, exact per-job GitHub links, progress percentage, and a refreshed
-      finish estimate in the browser's local timezone. A changed body, stale
+      finish estimate in the browser's local timezone, even after more than 500
+      unrelated CI events arrive between heartbeats. A changed body, stale
       timestamp, mismatched repository/stack/run, or replayed delivery ID must
       not create a second event, and reporter failure must not cancel the merge.
 - [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
@@ -2528,9 +2541,18 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.2.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
+- [ ] Start a saved Feature Stack, then use its Pause control while the linked
+      GitHub Actions run is queued or active. Confirm only that exact run is
+      cancelled, the saved definition and historical GitHub link remain, the
+      stack reads paused after late webhook/progress receipts, and ordinary
+      Save & merge refuses until Restart is used. Repeat with Stop, then use
+      Restart and confirm a new immutable run id and GitHub run are appended
+      without replacing prior history. At desktop and 375px mobile widths,
+      all three controls remain visible, labelled, non-overlapping, and show a
+      clear confirmation before Stop or active-run Restart.
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit

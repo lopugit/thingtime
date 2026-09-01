@@ -538,6 +538,30 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
   };
 };
 
+export const listCiEventsForParents = async (
+  parentIds: string[],
+  options?: { perParentLimit?: number; repository?: string }
+) => {
+  const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
+  const perParentLimit = Math.min(50, Math.max(1, Math.floor(options?.perParentLimit ?? 20)));
+  const ids = [...new Set(parentIds.map((value) => boundedText(value, 180)).filter(Boolean))].slice(0, 50);
+  if (!ids.length) return [];
+  const things = await getHomeThingsCollection();
+  const groups = await Promise.all(
+    ids.map((parentId) =>
+      things
+        .find({ thingtime: 'ci-event', parentId, 'crystal.repository': repository })
+        .sort({ createdAt: -1, shareId: 1 })
+        .limit(perParentLimit)
+        .toArray()
+    )
+  );
+  return groups
+    .flat()
+    .map(publicCrystal)
+    .sort((left, right) => new Date(right.occurredAt ?? right.createdAt ?? 0).getTime() - new Date(left.occurredAt ?? left.createdAt ?? 0).getTime());
+};
+
 export const clearCiControlForTests = async () => {
   if (process.env.NODE_ENV !== 'test') throw new Error('CI control data can only be cleared in tests');
   const things = await getHomeThingsCollection();
