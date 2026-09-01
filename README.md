@@ -216,6 +216,18 @@ The signed Lopu credential delivery route is:
 https://<your-thingtime-origin>/api/v1/integrations/ci/credentials
 ```
 
+The signed Feature Stack progress route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/progress
+```
+
+The protected controller posts an initial snapshot, phase changes, a heartbeat
+every ten minutes, and one terminal snapshot. The route uses the same
+`THINGTIME_CI_ROUTER_SECRET`, attaches each immutable event only to its exact
+stored stack/run identity, and never accepts browser sessions or arbitrary
+workflow log text.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The

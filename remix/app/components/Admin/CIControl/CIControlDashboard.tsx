@@ -66,7 +66,7 @@ import {
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { resolveFeatureStackSources, sameNumberOrder } from './featureStackDraftCore';
-import { featureStackRunOutcome, legacyFeatureStackWorkflowRunId, sortFeatureStackTimeline } from './featureStackRunCore';
+import { featureStackRunOutcome, latestFeatureStackHeartbeat, legacyFeatureStackWorkflowRunId, sortFeatureStackTimeline } from './featureStackRunCore';
 import {
 	CI_DASHBOARD_LIVE_POLL_INTERVAL_MS,
 	CI_DASHBOARD_POLL_INTERVAL_MS,
@@ -1335,6 +1335,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
 		const dispatchEvents = dashboard.events.filter((event) => event.parentId === stack.lastDispatchId);
+		const heartbeat = latestFeatureStackHeartbeat(dispatchEvents);
 		const topLevelRuns = dashboard.workflowRuns.filter(
 			(candidate) => String(candidate.entityType ?? '') !== 'job' && normalizedStatus(candidate.event) === 'workflow_dispatch'
 		);
@@ -1370,12 +1371,18 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		if (run) percent = Math.max(percent, terminalStatuses.has(normalizedStatus(run.status)) ? 65 : 30);
 		if (jobs.length) percent = Math.max(percent, 30 + Math.round((completedJobs / jobs.length) * 35));
 		if (activeTargets.length) percent = Math.max(percent, 30 + Math.round((completedTargets / activeTargets.length) * 70));
+		if (heartbeat) percent = Math.max(percent, heartbeat.progressPercent);
 		if (allTargetsFinished) percent = 100;
 		percent = Math.min(100, Math.max(5, percent));
 		const startedMs = startedAt.getTime();
 		const estimatedMinutes = Math.max(8, stack.sourcePrNumbers.length * 2 + Math.max(1, activeTargets.length) * 4);
 		const baselineFinish = new Date(startedMs + estimatedMinutes * 60_000);
-		const expectedFinish = baselineFinish.getTime() > Date.now() ? baselineFinish : new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
+		const heartbeatFinish = heartbeat?.expectedFinishAt ? parseTime(heartbeat.expectedFinishAt) : null;
+		const expectedFinish = heartbeatFinish && heartbeatFinish.getTime() > Date.now()
+			? heartbeatFinish
+			: baselineFinish.getTime() > Date.now()
+				? baselineFinish
+				: new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
 		const latestFinishedAt = [run?.completedAt, ...targetRows.map((entry) => entry.updatedAt)]
 			.map(parseTime)
 			.filter((date): date is Date => Boolean(date))
@@ -1390,11 +1397,18 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 					activeTargets.length || stack.targets.length
 				} compatible target${(activeTargets.length || stack.targets.length) === 1 ? '' : 's'}.`
 			},
-			...dispatchEvents.map((event) => ({
-				key: `event:${event.id}`,
-				at: String(event.occurredAt ?? entityTime(event) ?? stack.lastRunAt),
-				message: `Dispatch ${String(event.statusTo ?? event.action ?? event.status ?? 'updated').replace(/_/g, ' ')}.`
-			})),
+			...dispatchEvents.map((event) => {
+				const data = event.data && typeof event.data === 'object' && !Array.isArray(event.data) ? event.data as Record<string, unknown> : null;
+				const isProgress = event.eventType === 'feature_stack_progress';
+				return {
+					key: `event:${event.id}`,
+					at: String(event.occurredAt ?? entityTime(event) ?? stack.lastRunAt),
+					message: isProgress && typeof data?.message === 'string'
+						? data.message
+						: `Dispatch ${String(event.statusTo ?? event.action ?? event.status ?? 'updated').replace(/_/g, ' ')}.`,
+					url: isProgress && typeof data?.workflowRunUrl === 'string' ? data.workflowRunUrl : null
+				};
+			}),
 			...(run
 				? [
 						{
@@ -1447,6 +1461,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			percent,
 			summary: outcome.needsAttention
 				? `${percent}% · controller completed but 0/${activeTargets.length || stack.targets.length} target branch PRs were published`
+				: outcome.live && heartbeat
+					? `${percent}% · ${heartbeat.message}`
 				: `${percent}% · ${completedTargets}/${activeTargets.length || stack.targets.length} target branches finished · ${completedJobs}/${jobs.length} visible workflow jobs finished`,
 			finishLabel:
 				allTargetsFinished && latestFinishedAt
