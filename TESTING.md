@@ -917,6 +917,11 @@ is fixed, and cite the checklist you ran in the PR description.
       then tap Post immediately after the final style change. The new feed
       card and `/post/:id` preserve the exact latest block document after a
       reload; no heading appears as literal Markdown such as `## Posts`.
+- [ ] At desktop and 390px mobile widths, focus the first, middle, and final
+      Editor.js blocks in the Text post composer: the + and settings buttons
+      stay on the active block's right/inline-end edge, never below its text or
+      outside the editor card. Long and right-aligned text keeps a readable gap;
+      both button menus open without clipping or horizontal page overflow.
 - [ ] Repeat the same create-and-reload check with a rich comment. Inspect the
       create request and exact-id readback: both must contain the complete
       native `richText` document as well as the canonical `text` fallback.

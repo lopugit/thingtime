@@ -73,6 +73,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Editor.js block controls now stay at the active line's right edge on
+  mobile.** The + and settings buttons no longer drop underneath post text,
+  and the editor reserves enough inline space to prevent overlap with long or
+  right-aligned blocks. — Codex (AI), 2026-09-01
+
 - **Feature Stack runs now expose their exact GitHub Actions history and stop
   reporting a finished controller as live.** Every new dispatch carries a
   durable run identity, signed workflow events attach the exact run URL, the
