@@ -20,6 +20,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // owner title/description edits (POST /api/v1/attachments/annotate) — small
   // crystal-only writes, same shape as delete
   'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
+  // linked-URL media mints (POST /api/v1/attachments/link) — metadata-only
+  // thing inserts, no object storage; same shape as annotate/delete
+  'attachments.link': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
@@ -27,8 +30,19 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
+  // poll vote toggles (POST /api/v1/things/vote) — same shape as reactions
+  'things.vote': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // embed SDK reads (GET /api/v1/embed/things) — the only anonymous
+  // cross-origin read in the API (Access-Control-Allow-Origin: *), so an
+  // unbounded one would be a free amplification/scraping surface off any host
+  // page. Bounded like the other public reads; anonymous callers key by IP.
+  'embed.read': { limit: 120, windowMs: 60_000, enabled: true },
+  // embed SDK writes (POST /api/v1/embed/things) — MAX_THINGS_PER_OWNER bounds
+  // how many embeds exist, not how fast they churn; each save costs a count +
+  // find + CAS update, so throttle the rate too. Write-shaped like things.write.
+  'embed.write': { limit: 60, windowMs: 60_000, enabled: true },
   // component browsing (/api/v1/components/browse) — same read-only shape
   'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // admin component-library seeding (/api/v1/admin/components/seed) — batch
@@ -39,6 +53,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'actions.run': { limit: 60, windowMs: 60_000, enabled: true },
   // run-history reads (GET /api/v1/actions/runs) — read-only, browse-shaped
   'actions.runs': { limit: 120, windowMs: 60_000, enabled: true },
+  // public theme gallery list (GET /api/v1/themes/shared with no id) — the same
+  // anonymous browse shape as schemas.browse; it only ever returns public theme
+  // projections, but each call is two indexed reads and up to 60 token docs
+  'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
@@ -56,6 +74,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // like the other public reads (anonymous callers key by IP)
   'users.relationships': { limit: 120, windowMs: 60_000, enabled: true },
   'users.connections': { limit: 120, windowMs: 60_000, enabled: true },
+  // profile activity heatmap (/api/v1/users/activity) — one aggregation of
+  // day-counts per profile view, bounded like the other public reads
+  'users.activity': { limit: 120, windowMs: 60_000, enabled: true },
   // notifications: list backs the bell (poll + focus refetch), read flips
   // readAt, settings is a rare interactive toggle
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
@@ -171,6 +192,23 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
   // PAT revocation — cheap owner-bound update, still bounded
   'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true },
+  // Cross-deployment account links. Linking/unlinking makes the SERVER dial
+  // whatever base URL the caller supplied (login probe + identity check) — the
+  // same outbound-fetch abuse surface as mongodb.endpoint, so the window stays
+  // tight and the routes enforce fail-closed. Token minting shares the key
+  // (each mint writes a never-expiring session doc).
+  'deployments.link': { limit: 10, windowMs: 300_000, enabled: true },
+  // Editing a link you already hold (name, sync mode, path rules) dials
+  // NOTHING — it rewrites one row in the caller's own secure blob. It gets its
+  // own budget because the settings pane sends one PATCH per sync-mode tap and
+  // per path-rule save: on the dial budget above, configuring a couple of links
+  // exhausts the window and locks the same user out of linking and unlinking.
+  'deployments.update': { limit: 60, windowMs: 60_000, enabled: true },
+  // One sync pass fans out up to ~40 writes against the linked deployment plus
+  // paginated reads on both sides — heavier than any single API call, so the
+  // per-user budget is small (fail-closed at the route). Passes are resumable,
+  // so a tight cap costs only patience, never data.
+  'deployments.sync': { limit: 6, windowMs: 300_000, enabled: true },
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns
@@ -179,6 +217,25 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // than things.write; membership/chat mutations share one bounded bucket.
   'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
   'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // A desktop sync is chunked into bounded JSON batches. The wider hourly
+  // window accommodates a first full-history import while still fencing a
+  // runaway renderer or replay loop.
+  'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
+	// Paired device mesh. Pairing creates credentials and therefore fails
+	// closed at the routes; state/command/event budgets are deliberately roomy
+	// enough for a live desktop while still bounding stuck pollers and replays.
+	'devices.read': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
+	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
+	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
+	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.permissions': { limit: 60, windowMs: 60_000, enabled: true },
+	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
+	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
   // message reactions mirror things.react but chats toggle faster in practice
   'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
   // read receipts fire on every focused chat scroll — cheap single-doc updates,
@@ -194,7 +251,24 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,
   // ever). Enforced fail-closed at the route like mongodb.populate.
-  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // Public diagnostic packets used by Commander Activity. A speed run makes
+  // exactly five requests in each direction (one for each fixed packet size),
+  // so this admits one complete measurement every 15 minutes per client IP and
+  // rejects traffic if the shared limiter is unavailable.
+  'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
+  'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  // token introspection (POST /api/v1/auth/introspect) — read-only status
+  // checks by external platforms; two cheap DB reads per call, keyed by IP for
+  // anonymous callers, bounded like the other public reads
+  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true },
+  // the "try my feed brain 🧠" share-link preview (GET /api/v1/algorithms/shared)
+  // — public and anonymous, two DB reads per call (the algorithm lookup plus an
+  // owner-username resolve). The shareId is an unguessable uuid, so this is not
+  // an enumeration brake; it is the same "bound the anonymous public read"
+  // budget the other unauthenticated endpoints carry, keyed by hashed IP.
+  'algorithms.shared': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
@@ -206,51 +280,47 @@ const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
 let cache: { at: number; config: RateLimitConfig } | null = null;
 
 const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
-  limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
-  windowMs: Number.isFinite(rule?.windowMs)
-    ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs)))
-    : fallback.windowMs,
-  enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
+	limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
+	windowMs: Number.isFinite(rule?.windowMs) ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs))) : fallback.windowMs,
+	enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
 });
 
 // Only known endpoints survive, each clamped — a stored/patched config can never
 // widen the endpoint set or set nonsensical values.
 const normalize = (endpoints: any): RateLimitConfig => {
-  const out: RateLimitConfig = {};
-  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-    out[name] = clampRule(endpoints?.[name], def);
-  }
-  return out;
+	const out: RateLimitConfig = {};
+	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+		out[name] = clampRule(endpoints?.[name], def);
+	}
+	return out;
 };
 
 export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig> => {
-  if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
-  try {
-    const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
-    const config = normalize(doc?.endpoints);
-    cache = { at: Date.now(), config };
-    return config;
-  } catch {
-    // fall back to the last cache or the defaults if the settings read fails
-    return cache?.config || normalize(null);
-  }
+	if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
+	try {
+		const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
+		const config = normalize(doc?.endpoints);
+		cache = { at: Date.now(), config };
+		return config;
+	} catch {
+		// fall back to the last cache or the defaults if the settings read fails
+		return cache?.config || normalize(null);
+	}
 };
 
 export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: string): Promise<RateLimitConfig> => {
-  const current = await getRateLimitConfig(true);
-  const endpoints: RateLimitConfig = {};
-  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-    // Merge the patch OVER the current stored rule, so a partial patch (e.g.
-    // only { limit }) keeps the endpoint's other fields instead of resetting
-    // them to defaults; then clamp. Non-object patch entries are ignored.
-    const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
-    endpoints[name] = clampRule({ ...current[name], ...p }, def);
-  }
-  await (await getSettingsCollection()).updateOne(
-    { key: SETTINGS_KEY },
-    { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } },
-    { upsert: true }
-  );
-  cache = { at: Date.now(), config: endpoints };
-  return endpoints;
+	const current = await getRateLimitConfig(true);
+	const endpoints: RateLimitConfig = {};
+	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+		// Merge the patch OVER the current stored rule, so a partial patch (e.g.
+		// only { limit }) keeps the endpoint's other fields instead of resetting
+		// them to defaults; then clamp. Non-object patch entries are ignored.
+		const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
+		endpoints[name] = clampRule({ ...current[name], ...p }, def);
+	}
+	await (
+		await getSettingsCollection()
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } }, { upsert: true });
+	cache = { at: Date.now(), config: endpoints };
+	return endpoints;
 };

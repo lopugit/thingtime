@@ -10,6 +10,13 @@ import {
   type CiExecutionProvider,
   type CiWorkflowKey
 } from './automationPolicy';
+import type { CiPreviewEnvironment, CiPreviewPolicy } from './previewPolicyCore';
+import {
+  CI_DASHBOARD_UPDATED_SORT,
+  ciDashboardFieldFilter,
+  ciDashboardKindFilter,
+  ciDashboardReadLimit
+} from './dashboardQueryCore';
 import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export const CI_THINGTIME = CI_CONTROL_THINGTIME;
@@ -225,14 +232,117 @@ export const upsertCiEntity = async (
   };
 };
 
-const readKind = async (kind: CiThingtime, limit: number) => {
+export const listCiPreviewPolicies = async (repository: string): Promise<CiPreviewPolicy[]> => {
+  const rows = await readKind('ci-preview-policy', 500, repository);
+  return rows
+    .filter((row: any) => row.repository === repository)
+    .map((row: any) => ({
+      id: String(row.id),
+      prNumber: Number(row.prNumber),
+      repository: String(row.repository),
+      develop: row.develop === true,
+      production: row.production === true,
+      headSha: typeof row.headSha === 'string' ? row.headSha : null,
+      headRef: typeof row.headRef === 'string' ? row.headRef : null,
+      updatedAt: typeof row.sourceUpdatedAt === 'string' ? row.sourceUpdatedAt : null,
+      updatedBy: typeof row.updatedBy === 'string' ? row.updatedBy : null
+    }))
+    .filter((row) => Number.isSafeInteger(row.prNumber) && row.prNumber > 0);
+};
+
+export const setCiPreviewPolicy = async (input: {
+  repository: string;
+  prNumber: number;
+  environment: CiPreviewEnvironment;
+  enabled: boolean;
+  headSha: string;
+  headRef: string;
+  actorId: string;
+}): Promise<CiPreviewPolicy> => {
+  const current = (await listCiPreviewPolicies(input.repository)).find((policy) => policy.prNumber === input.prNumber);
+  const develop = input.environment === 'develop' ? input.enabled : current?.develop === true;
+  const production = input.environment === 'production' ? input.enabled : current?.production === true;
+  const occurredAt = new Date();
+  const entity = await upsertCiEntity({
+    kind: 'ci-preview-policy',
+    provider: 'thingtime',
+    repository: input.repository,
+    externalId: String(input.prNumber),
+    title: `PR #${input.prNumber} preview environments`,
+    status: develop || production ? 'enabled' : 'disabled',
+    occurredAt,
+    data: {
+      prNumber: input.prNumber,
+      develop,
+      production,
+      headSha: input.headSha,
+      headRef: input.headRef,
+      updatedBy: boundedText(input.actorId, 180)
+    }
+  });
+  return {
+    id: entity.id,
+    prNumber: input.prNumber,
+    repository: input.repository,
+    develop,
+    production,
+    headSha: input.headSha,
+    headRef: input.headRef,
+    updatedAt: occurredAt.toISOString(),
+    updatedBy: boundedText(input.actorId, 180)
+  };
+};
+
+const readKind = async (kind: CiThingtime, limit: number, repository: string) => {
   const things = await getHomeThingsCollection();
   const docs = await things
-    .find({ thingtime: kind })
-    .sort({ updatedAt: -1, shareId: 1 })
+    .find(ciDashboardKindFilter(kind, repository))
+    .sort(CI_DASHBOARD_UPDATED_SORT)
     .limit(limit)
     .toArray();
   return docs.map(publicCrystal);
+};
+
+const countCiDashboardStats = async (repository: string) => {
+  const things = await getHomeThingsCollection();
+  const [openPullRequests, conflicting, activeRuns, readyPreviews] = await Promise.all([
+    things.countDocuments(ciDashboardFieldFilter('ci-pull-request', repository, 'state', ['OPEN', 'open'])),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-pull-request', repository, 'status', [
+        'conflicting',
+        'CONFLICTING',
+        'dirty',
+        'DIRTY',
+        'blocked',
+        'BLOCKED'
+      ])
+    ),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-workflow-run', repository, 'status', [
+        'queued',
+        'QUEUED',
+        'requested',
+        'REQUESTED',
+        'waiting',
+        'WAITING',
+        'in_progress',
+        'IN_PROGRESS',
+        'pending',
+        'PENDING'
+      ])
+    ),
+    things.countDocuments(
+      ciDashboardFieldFilter('ci-preview', repository, 'status', [
+        'ready',
+        'READY',
+        'success',
+        'SUCCESS',
+        'succeeded',
+        'SUCCEEDED'
+      ])
+    )
+  ]);
+  return { openPullRequests, conflicting, activeRuns, readyPreviews };
 };
 
 const policyFromEntity = (workflow: CiWorkflowKey, entity: any | null): CiAutomationPolicy => {
@@ -389,25 +499,24 @@ export const claimCiDispatchRoute = async (input: {
 };
 
 export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number; repository?: string }) => {
-  const limit = Math.min(250, Math.max(1, Math.floor(options?.limit ?? 100)));
+  const requestedLimit = Math.floor(options?.limit ?? 100);
   const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
   const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
-  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =
+  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, previewPolicies, dispatches, events, stats] =
     await Promise.all([
-      readKind('ci-repository', 20),
+      readKind('ci-repository', 20, repository),
       listCiAutomationPolicies(repository),
-      readKind('ci-feature', limit),
-      readKind('ci-branch', limit),
-      readKind('ci-pull-request', limit),
-      readKind('ci-workflow-run', limit),
-      readKind('ci-deployment', limit),
-      readKind('ci-preview', limit),
-      readKind('ci-dispatch', limit),
-      readKind('ci-event', eventLimit)
+      readKind('ci-feature', ciDashboardReadLimit('ci-feature', requestedLimit), repository),
+      readKind('ci-branch', ciDashboardReadLimit('ci-branch', requestedLimit), repository),
+      readKind('ci-pull-request', ciDashboardReadLimit('ci-pull-request', requestedLimit), repository),
+      readKind('ci-workflow-run', ciDashboardReadLimit('ci-workflow-run', requestedLimit), repository),
+      readKind('ci-deployment', ciDashboardReadLimit('ci-deployment', requestedLimit), repository),
+      readKind('ci-preview', ciDashboardReadLimit('ci-preview', requestedLimit), repository),
+      listCiPreviewPolicies(repository),
+      readKind('ci-dispatch', ciDashboardReadLimit('ci-dispatch', requestedLimit), repository),
+      readKind('ci-event', eventLimit, repository),
+      countCiDashboardStats(repository)
     ]);
-
-  const statusCount = (values: any[], accepted: string[]) =>
-    values.filter((value) => accepted.includes(String(value.status ?? '').toLowerCase())).length;
   const latest = events[0]?.occurredAt ?? events[0]?.updatedAt ?? null;
   return {
     repositories,
@@ -418,19 +527,39 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
     workflowRuns,
     deployments,
     previews,
+    previewPolicies,
     dispatches,
     events,
-    stats: {
-      openPullRequests: pullRequests.filter((pr: any) => pr.state === 'OPEN' || pr.state === 'open').length,
-      conflicting: statusCount(pullRequests, ['conflicting', 'dirty', 'blocked']),
-      activeRuns: statusCount(workflowRuns, ['queued', 'requested', 'waiting', 'in_progress', 'pending']),
-      readyPreviews: statusCount(previews, ['ready', 'success', 'succeeded'])
-    },
+    stats,
     freshness: {
       latestEventAt: latest,
       stale: !latest || Date.now() - new Date(latest).getTime() > 15 * 60 * 1000
     }
   };
+};
+
+export const listCiEventsForParents = async (
+  parentIds: string[],
+  options?: { perParentLimit?: number; repository?: string }
+) => {
+  const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
+  const perParentLimit = Math.min(50, Math.max(1, Math.floor(options?.perParentLimit ?? 20)));
+  const ids = [...new Set(parentIds.map((value) => boundedText(value, 180)).filter(Boolean))].slice(0, 50);
+  if (!ids.length) return [];
+  const things = await getHomeThingsCollection();
+  const groups = await Promise.all(
+    ids.map((parentId) =>
+      things
+        .find({ thingtime: 'ci-event', parentId, 'crystal.repository': repository })
+        .sort({ createdAt: -1, shareId: 1 })
+        .limit(perParentLimit)
+        .toArray()
+    )
+  );
+  return groups
+    .flat()
+    .map(publicCrystal)
+    .sort((left, right) => new Date(right.occurredAt ?? right.createdAt ?? 0).getTime() - new Date(left.occurredAt ?? left.createdAt ?? 0).getTime());
 };
 
 export const clearCiControlForTests = async () => {

@@ -1,7 +1,7 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
 	COLLECTION_SCHEMA_VERSIONS,
-	MESSENGER_THINGTIME,
+	DEVICE_CONTROL_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
@@ -109,10 +109,15 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// minted by dedicated home-plane state machines, never generic user CRUD.
 	'friend',
 	'notification',
-	// Messenger rows are bounded server-managed relationship/index plumbing.
-	// User file bytes live in separately metered attachment Things, so message,
-	// comment and custom-emoji media cannot bypass account storage quotas.
-	...MESSENGER_THINGTIME,
+	// Poll votes are bounded engagement plumbing: one tiny fixed-shape doc per
+	// (user, poll), minted only by POST /api/v1/things/vote (no generic
+	// sanitizer). Direct-inserted without a storage stamp, so they must stay
+	// out of billable arithmetic like the other dedicated-endpoint kinds.
+	'vote',
+	// Messenger communities, conversations, messages, comments, and custom
+	// emoji are user-owned content and intentionally remain billable. Their
+	// attachment object bytes are metered separately by attachment Things.
+	...DEVICE_CONTROL_THINGTIME,
   'service-quota',
   'subscription',
   'subscription-tier',

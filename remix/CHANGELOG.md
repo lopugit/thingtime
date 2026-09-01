@@ -17,6 +17,55 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — ChatGPT OAuth production credential vault
+
+- Production ChatGPT connector credentials now use a dedicated sensitive Vercel
+  encryption key, allowing the OAuth connection screen to create and retain
+  independently encrypted multi-account credentials. — Codex (AI), 2026-09-01
+
+### 2026-09-01 — Self-draining moderation safety sweep
+
+- A successful full moderation sweep batch now immediately starts a durable
+  continuation run. Each run remains bounded to 25 text posts and 10
+  attachments; only failures stop that surface's chain, leaving the hourly
+  Vercel Cron as the safe retry path. — Codex (AI), 2026-09-01
+
+### 2026-09-01 — Production search server-bundle repair
+
+- `/api/v1/things/search` now statically bundles its emoji-name metadata
+  instead of leaving an untraced runtime JSON lookup in the Vercel function.
+  The Vercel output verifier now fails the build if this missing-dependency
+  class returns, and the `api.things-search` capability advances to `1.1.1`.
+  — Codex (AI), 2026-09-01
+
+### 2026-08-31 — Bounded Graphify snapshot retention
+
+- Graphify now retains one active portable snapshot by default after successful
+  update, extract, cluster, and ensure runs, with fail-closed retention
+  overrides and an explicit prune command. The semantic content-addressed cache
+  remains reusable, while older snapshots stay recoverable from Git history.
+  — Codex (AI), 2026-08-31
+
+### Fixed
+
+- **Consolidated uniqueness lookups no longer collection-scan `things`.** The
+  post-consolidation helpers queried `$or: [{uniqueKeys}, {crystal.<field>}]`,
+  but the five `crystal.*Key` indexes had just been dropped and MongoDB only
+  unions an `$or` when *every* branch is indexed — so each lookup degraded to a
+  full scan (measured on a live MongoDB 8 replica set: 50,001 docs examined vs
+  1), once per synced live event, message segment, command and approval. The
+  fallback arm could never match anyway: all five key families are introduced
+  by this branch, so no row predates the root stamp. Lookups are now a single
+  indexed `uniqueKeys` predicate, and the key rides `$setOnInsert` rather than
+  `$addToSet`, which an equality filter makes illegal on upsert.
+  — Lopu, 2026-08-28
+- **The device bootstrap stopped resurrecting `crystal.deviceUniqueKeys`.**
+  `newDeviceThing` deliberately no longer writes that mirror, so every device
+  row created since the last cold start re-matched the legacy backfill and had
+  it written back — an unaccounted `raw` write that bypasses the storage ledger,
+  on a filter that never converged. The backfill is now scoped to rows that
+  predate the root `uniqueKeys` stamp. — Lopu, 2026-08-28
+
 ### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
 
 - Multi-agent defensive security review of the Action Thing surface (report:
@@ -65,6 +114,134 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
+  and Stop cancel only the exact linked GitHub Actions run while retaining the
+  stack definition and historical run links; Restart safely cancels active
+  compute before creating a fresh immutable run. Late webhook and progress
+  receipts cannot overwrite a deliberate paused or stopped state.
+- **Feature Stack progress no longer disappears under a busy CI event feed.**
+  The saved-stack endpoint returns a bounded per-dispatch event stream, so
+  immediate, phase-change, and 10-minute Lopu heartbeats remain chronological
+  and visible while unrelated repository automation is active.
+  Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
+  — Codex (AI), 2026-09-01
+
+- **Reusable Feature Stacks no longer fail because an older selected PR has
+  already completed.** Each run now omits merged, closed, and draft entries at
+  admission time, keeps every remaining live source in the saved order, and
+  rejects only when no compatible live source remains. The protected target
+  worker now stays active through branch protection until its generated stack
+  PR has actually merged. — Codex (AI), 2026-09-01
+
+- **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
+  now disables automatic deployments with the recursive `**` branch glob for
+  every branch except exact `main` and `develop`; eligible PR previews are
+  compiled on GitHub and uploaded as validated prebuilt bundles targeting the
+  `develop` Custom Environment without the production-only `--skip-domain`
+  flag, while native production and stable-development builds remain intact.
+  — Codex (AI), 2026-09-01
+
+- **Editor.js block controls now stay at the active line's right edge on
+  mobile.** The + and settings buttons no longer drop underneath post text,
+  and the editor reserves enough inline space to prevent overlap with long or
+  right-aligned blocks. — Codex (AI), 2026-09-01
+
+- **Running Feature Stacks now report durable Lopu progress into their own CI
+  console.** The protected controller sends an immediate signed snapshot,
+  phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
+  binds each event to the exact stored stack/run, renders it chronologically,
+  links back to the precise Actions run, and refreshes progress plus the
+  viewer-local finish estimate without exposing workflow credentials.
+  — Codex (AI), 2026-09-01
+
+- **Feature Stack runs now expose their exact GitHub Actions history and stop
+  reporting a finished controller as live.** Every new dispatch carries a
+  durable run identity, signed workflow events attach the exact run URL, the
+  activity stream is sorted chronologically, and a controller that exits before
+  publishing a target PR is labelled Needs attention instead of receiving an
+  ever-moving ETA. The protected Lopu worker also tolerates its expected skipped
+  sibling dependencies, so admitted target merges actually start.
+  — Codex (AI), 2026-09-01
+
+- **Published posts and rich comments now retain their native Editor.js
+  document across the browser API boundary.** The request allowlist includes
+  `richText` alongside the canonical plain-text fallback, so headings no
+  longer reappear as literal Markdown such as `## Posts` after posting or
+  reloading. — Codex (AI), 2026-09-01
+
+- **Posting now flushes the live Editor.js document before freezing a post
+  payload.** Tapping Post immediately after changing a heading, colour,
+  alignment, size, whitespace, or line break can no longer publish the older
+  plain-text snapshot while the composer still shows the newer rich styling.
+  — Codex (AI), 2026-08-31
+
+- **Post media editing now has one visual source of truth.** Auto and Rows show
+  final-view previews, Rows uses add/remove and per-row image-count controls,
+  Grid previews expose the clickable 1×1 span badge, and the single Media &
+  files panel owns reorder, metadata, and delete actions in create and edit.
+  Attachments are now default searchable level-one Things (including display
+  filename/title/description), while Reaction schema searches resolve human
+  emoji names such as “heart” to stored emoji and render the matching parent
+  posts. — Codex (AI), 2026-08-31
+
+- **[Admin CI refreshes now fail softly and recover without a request
+  storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
+  The protected snapshot route turns MongoDB blocking-sort memory failures into
+  a retryable, private 503 with stable route/error-code telemetry, while the UI
+  keeps its cached state, deduplicates overlapping pollers, and exponentially
+  backs off automatic retries up to five minutes. — Codex (AI), 2026-08-31
+
+- **Passkeys and the Admin CI snapshot now recover from the two mobile failure
+  modes seen in production.** Registration and login options require the same
+  on-device user verification enforced by the WebAuthn verifier, so a valid
+  iCloud Keychain or 1Password ceremony is no longer rejected after the
+  authenticator returns. CI entities are read per repository through a stable
+  compound sort index instead of a growing in-memory sort, and a saved Feature
+  Stack keeps its PR-number placeholders visible until a temporarily missing
+  live snapshot can rehydrate them. Unlimited Feature Stack selection no longer
+  makes the same request fetch unlimited run, deployment, preview, and dispatch
+  history; activity stays bounded while the dashboard totals remain exact.
+  Running Feature Stacks now also respect an
+  admin's collapsed-card choice instead of immediately forcing themselves open.
+  — Codex (AI), 2026-08-31
+
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
+- **Vercel now serves Thingtime's origin-scoped API capability manifest from
+  Nitro instead of the SPA shell.** The generic
+  `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
+  discovery ahead of the filesystem and `index.html` fallbacks, and the built
+  output verifier locks in that ordering. — Codex (AI), 2026-08-31
 - **The new Limitless MCP Lab turns the live connector contract into an
   interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
   in parallel, keeps the current release contract on first paint, demonstrates
@@ -80,6 +257,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   runs, MCP prompts/resources, and an interactive result/diff review UI while
   continuing to reject arbitrary routes, queries, and code. — Codex (AI),
   2026-08-30
+- **Desktop AI and device idempotency now share Thingtime's protected
+  uniqueness namespace.** Five one-off crystal-path unique indexes were
+  consolidated into the existing Binary root `uniqueKeys` index, restoring
+  five MongoDB slots (57/64 in the complete home plan), keeping domain hashes
+  out of the wildcard text index's uniqueness mechanism, and preserving
+  compatibility through a home-only backfill. The migration no longer rewrites
+  or drops indexes in user-owned custom data endpoints. — Codex (AI), 2026-08-28
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
   A dedicated provider-double suite proves that a reasoning-starved decorated
   Claude or OpenAI stream retries bare on the same model, never retries after
@@ -99,7 +283,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   recreate-and-republish release requirements, role/action controls, and the
   current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
 
+- **Explicit data-authority identity for clients and peer federation**:
+  deployments now publish a safe `production`, `development`, or named
+  `custom` database/authentication environment through root data and
+  `api.capabilities` `1.1.0`. Electron rejects selected endpoints that cannot
+  prove this identity, account recovery uses its configured authority rather
+  than Vercel tier/branch inference, and signed peer gossip is scoped to the
+  matching federation id. No MongoDB host, database name, connection string,
+  account, or secret is exposed. — Codex (AI), 2026-08-24
+
 ### Added
+
+- **Feature Stacks are now reusable, unlimited control-plane workflows.** Admin
+  CI Control can save and edit multiple stacks, run a one-feature stack, select
+  any number of live features and targets, see per-target PR progress, and use
+  a default-on branch router that keeps `github-actions`, `main`, and `develop`
+  sources in compatible lanes. The protected controller receives a v2 immutable
+  plan and filters it to one target-specific source manifest before Lopu merges.
+  PR statuses now use a Vercel-style multi-select; System model-order entries
+  edit in place; and the encrypted credential waterfall accepts built-in or
+  custom AI platform labels while GitHub keeps using the single stable router
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
+
+- **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
+  add, name, rotate, enable, remove, and reorder up to eight write-only Claude
+  Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only
+  redacted metadata to browsers, and delivers the ordered enabled bundle to a
+  fresh replay-protected HMAC-authenticated controller run. Lopu masks the
+  bundle, keeps it only for that run, and walks the array on classified account
+  capacity/credential failures, removing the need for one GitHub secret name
+  per Claude account. — Codex (AI), 2026-08-31
 
 - **Admin CI Control now batches features as a verified multi-target Feature
   Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
@@ -243,9 +457,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
   signing, notarization, and prerelease publishing remain in the reusable
   implementation. — Codex (AI), 2026-08-24
+- **Paired-Mac display mode selections now persist**: resolution and refresh
+  changes use Core Graphics' permanent display-configuration transaction rather
+  than an app-lifetime mode setter, matching the existing layout and mirroring
+  persistence. The desktop endpoint probe now requires the matching `api.devices`
+  `^1.6.0` contract before activating controls. The closed command shape, fresh
+  approval boundary, and advertised-mode validation are unchanged. — Codex (AI),
+  2026-08-24
 
 ### Added
 
+- **Account birthday as private state with an exact `profile.birthday` scope**:
+  the birthday is a plain `YYYY-MM-DD` calendar date stored in the user thing's
+  secure blob (`meta.birthday`), editable from Settings, and excluded from
+  `PublicProfile` — other users and the public profile projection never see it.
+  Apps receive it from `/api/v1/oauth/userinfo` only under the literal
+  `profile.birthday` scope: it is marked `exact`, so a plain `profile` grant —
+  including every legacy token — never silently covers it.
+  `/api/v1/oauth/scopes` is now CORS-open so platforms can feature-detect the
+  scope before opening the popup. Details in
+  [`PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md`](../PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md).
+  — Claude (AI), 2026-08-24
 - **Unlimited AI workflow model waterfall**: Admin → System's model order now
   accepts any number of unique entries from a 33-model Claude + OpenAI
   catalog, each with a per-entry reasoning-effort tier and normal/fast mode
@@ -259,6 +491,137 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
+
+- **Explicit UNSIGNED desktop-release fallback**: the owner-approved PR release
+  worker now publishes an ad-hoc-only Electron and Recovery pair when all six
+  Developer ID/notarization secrets are absent. Their SemVer, asset names,
+  GitHub title, and notes all say UNSIGNED; a partial secret configuration
+  stops the build. Recovery visibly separates them from verified releases and,
+  after acknowledgement, can cache, launch, or atomically install one while
+  warning that macOS may require Privacy & Security → Open Anyway. — Codex
+  (AI), 2026-08-24
+
+- **Admin deployment peer explorer**: **Dev → Deployment peers** now presents
+  locally known signed mesh leases in grid, card, and list views, with a
+  property-aware search selector and deliberate cursor paging. The browser
+  uses a separate private admin projection; HMAC material, private keys,
+  request signatures, and gossip cursors remain inaccessible to clients. —
+  Codex (AI), 2026-08-24
+
+- **Independent native rollback launcher for Thingtime Desktop**: the signed
+  `Thingtime Recovery.app` now has its own SwiftUI version browser, a separately
+  signed installer helper, its own companion release ZIP, and a self-update
+  path. It shares the durable desktop cache at
+  `~/Library/Application Support/com.thingtime.desktop/release-cache` while
+  keeping recovery-launcher copies separate. It caches only verified bundle
+  identifiers and same-team signatures, closes a running desktop before an
+  atomic install, preserves the replaced bundle, and rejects a stale or
+  malformed GitHub asset without changing the installed app. Its companion
+  asset is supplied by the dedicated protected-release control plane. — Codex
+  (AI), 2026-08-24
+
+- **Signed Desktop PR releases and recovery-first version switching**: an
+  owner-approved, same-repository PR carrying the `desktop-release` label can
+  now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer
+  identifies its PR, normalized branch, and exact commit. Desktop Settings now
+  fetches/searches the GitHub release catalog, caches only verified signed
+  macOS ZIP bundles, lets a person launch or atomically install a cached
+  version, and preserves the current production app as a fallback before every
+  switch. The cache is bounded to twelve explicit recovery bundles, never
+  silently installs, and remains revealable in Finder if a later UI is broken.
+  — Codex (AI), 2026-08-24
+- **Desktop recovery updater hardening**: GitHub release discovery now follows
+  every API Link page instead of stopping at a fixed history cap, rejects
+  redirect hops outside GitHub release storage, repairs stale cache metadata
+  before applying its twelve-bundle limit, and removes a partial cache copy on
+  failed verification. Recovery launches now hand off after the current app
+  exits, preventing two cached/installed versions from sharing one local
+  profile at once; cached recovery choices remain visible and usable if GitHub
+  is offline. — Codex (AI), 2026-08-24
+
+- **Approval-gated remote pointer and keyboard controls for paired Macs**:
+  the desktop node now accepts a closed, capability-gated set of screen-relative
+  pointer moves/clicks/scrolls, bounded text entry, and allowlisted keyboard
+  shortcuts. Every command needs a fresh approval and macOS Accessibility
+  permission; the node does not request Input Monitoring, Full Disk Access,
+  root, clipboard, keylogging, event taps, shell execution, or arbitrary
+  scripting. Quartz enqueueing stays journalled as `needs-review` rather than
+  pretending that a target app accepted the input. The paired-device contract
+  is now `1.8.0`; live screen pixels remain intentionally unimplemented until a
+  privacy-preserving peer-to-peer transport is selected. — Codex (AI),
+  2026-08-24
+
+- **Consented media app and Chrome YouTube volume controls for paired Macs**:
+  Apple Music and Spotify now expose their own bounded 0–100% volume settings
+  alongside fixed playback controls. Chrome can set the active direct
+  YouTube/YouTube Music audio/video element volume through one fixed Apple
+  Event after the Mac user grants Automation and enables Chrome’s **Allow
+  JavaScript from Apple Events** setting. These commands always require fresh
+  approval, reject scripts, URLs, selectors, browser/profile data and unknown
+  input, and do not collect media metadata or page data. Cross-origin embeds
+  and generic browser media remain intentionally unavailable. Paired-device
+  API contracts are now `1.7.0`. — Codex (AI), 2026-08-24
+
+- **User-reviewed global availability policy proposals for paired Macs**:
+  AirDrop and camera availability now have separate capability-gated commands
+  that accept only a boolean and always require a fresh approval. Each command
+  writes one fixed local configuration profile and opens macOS’s profile-review
+  flow; macOS installation remains a separate local choice. The profiles never
+  create MDM enrollment, carry arbitrary payload content, or alter per-app
+  camera TCC grants. Paired-device API contracts are now `1.5.0`. — Codex (AI), 2026-08-24
+
+- **Approval-gated persistent idle timers for paired Macs**: the node now
+  reads and can set the documented IOKit display-idle, system-sleep, and
+  disk-spindown timers from Never (0) through 180 minutes. Every change
+  requires a fresh approval and verifies the observed value after macOS
+  applies it; no power profile, arbitrary `pmset` key, or shell input is
+  accepted. Paired-device API contracts are now `1.4.0`. — Codex (AI), 2026-08-24
+
+- **Scoped Spotify playback controls for paired Macs**: the node now reports
+  only whether Spotify is installed/running and accepts only fixed play,
+  pause, previous, and next actions. Each command requires a fresh approval
+  and macOS Automation consent, accepts no script, app, queue, track, library,
+  or history input, and remains `needs-review` until the next observation.
+  Paired-device API contracts are now `1.3.0`. — Codex (AI), 2026-08-24
+
+- **Advanced paired-computer display, hardware, and lifecycle controls**:
+  paired Macs now advertise capability-gated per-display
+  mode/resolution/refresh, brightness, layout, mirroring and read-only HDR;
+  default printer, preferred camera, paired Bluetooth device, existing VPN,
+  and keep-awake controls; plus always-fresh-approved restart, shutdown, and
+  logout. The device drawer groups the new controls in **Displays & system
+  hardware**. Terminal lifecycle effects reconcile as `needs-review` after
+  reconnect; no arbitrary scripts or shell input is accepted. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
+- **Scoped Apple Music and power-status controls for paired Macs**: the node
+  now reports Low Power Mode and whether Apple Music is installed/running.
+  Apple Music exposes only fixed play, pause, previous, and next actions;
+  each needs a fresh approval plus macOS Automation consent, accepts no script,
+  app, queue, track, library, or history input, and remains `needs-review`
+  until the next observation. HDR and Low Power Mode remain read-only; Focus,
+  AirDrop, Bluetooth radio power, camera privacy, and global media playback
+  remain absent because macOS provides no supported scoped setter. Paired-device
+  API contracts are now `1.2.0`. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
+- **Categorized safe machine controls in the paired-computer drawer**: everyday
+  volume, mute, brightness, and application focus controls remain immediately
+  available; advanced Audio & routing, Network & connectivity, Power,
+  permissions, and diagnostics begin collapsed per computer. Audio routes use
+  menus, each running app has a contextual More menu, and the Applications
+  heading provides a separate global-actions menu. Wi-Fi permits only a
+  saved/open SSID (never a password); Force quit always creates an explicit
+  approval because it can discard unsaved work; and Sleep uses the existing
+  approval policy. — Codex (AI), 2026-08-23
+
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
@@ -289,6 +652,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
   recording every merge and skip. See README “Branch automation: the `all`
   wildcard branch”. — Claude (AI), 2026-08-18
+
+### Performance
+
+- **Collection→things migration batches each phase per page (PR #69 review, c16)**:
+  `collectionToThingsMigration.run` processed legacy docs one-by-one with 3-4
+  sequential Mongo round trips each (upsert claim, twin re-read, fresh legacy
+  read, optional replace, delete) plus a growing `$nin` page filter — migrating
+  ~50k accounts cost ~150-200k serial round trips inside a single admin request
+  (timeout territory). The CLAIM phase of each ~200-doc page is now batched: one
+  unordered `bulkWrite` of `$setOnInsert` upserts (deterministic-shareId specs)
+  classified via `upsertedIds`, one `shareId` `$in` re-read for the genuine
+  check, a batched `findExistingMany` lookup for the uuid-shareId waitlist path,
+  and one legacy `_id` `$in` fresh read — those steps drop from O(docs) to
+  O(pages). The CONSUME phase's *mutations* deliberately stay per-doc: a
+  conversion receipt may only certify a delete that verifiably landed, so each
+  survivor still costs its own lease re-assert, exact-snapshot `deleteOne`, and
+  receipt write (plus a CAS `replaceOne` on the repair path). Net effect is
+  roughly halved round trips — about 3 per migrated doc instead of 6-7 — not a
+  per-page constant; batching the guarded delete would require a different
+  receipt protocol and is left as follow-up. Every guard is preserved verbatim: the updatedAt data-loss guard
+  still leaves a raced legacy doc for the next run, and collisions /
+  foreign-held ids / malformed docs still fall back to per-doc skip.
+  Validated with a dry-run + real run against seeded legacy users (3 pages), the
+  race-guard rebuild path, foreign-collision skip, waitlist dedup, and idempotent
+  re-runs — Claude (AI), 2026-07-18.
+  Follow-up: the batched BUILD phase now runs each `spec.toThing` through
+  `conversionBuildOutcomes`, restoring the per-doc `try/catch` the per-doc loop
+  had. A legacy `users` row whose `emailVerificationRequiredBy` is truthy but
+  unparseable makes `buildUserSecure` raise `RangeError: Invalid time value`
+  rather than returning `{ ok: false }`; in a bare page loop that escapes `run()`
+  before the row reaches `skippedIds`, so every re-run re-reads the same page and
+  aborts identically — one corrupt document wedges the whole migration instead of
+  costing it a single skip. Pinned by a regression test — Lopu (AI), 2026-08-29.
+  Follow-up: the consume phase's conversion-receipt LOOKUP is now batched too. It
+  had been grouped with the mutations that must stay per-doc, but it is a pure
+  read keyed only on `(collection, source._id)` — the same key for a page-query
+  snapshot and its re-read — so one `key: { $in: [...] }` query against the
+  unique `settings.key` index resolves a whole page. The freshness comparison
+  (`conversionReceiptCovers`) stays per-document, run against the exact snapshot
+  being judged, and receipts are only ever upserted, so a page-old snapshot can
+  miss a receipt a concurrent runner just wrote but can never invent one — a miss
+  falls through to the stricter semantic-equality path. Measured against a
+  throwaway mongod with server-side profiling: receipt reads drop 250 → 2 over a
+  250-doc/2-page `users-to-things` run, with every other operation count and the
+  full report identical — Lopu (AI), 2026-08-30.
+  [PR #74 details](../PRs/74-claude-batch-collection-things-migration--batch-collection-to-things-migration-per-page.md).
 
 ### Fixed
 
@@ -334,6 +743,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
@@ -343,11 +756,163 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   no accompanying write-concern failure. The check covers the current driver's
   concern-only and result-level error shapes and fails closed when the result
   cannot be inspected. — Codex (AI), 2026-08-24
+
+- **Signed-release MCP gate handles closed local connector pipes**: the JSONL
+  transport now treats a child-process `EPIPE` as an unavailable connector and
+  fails pending work closed, rather than allowing Node to throw an unhandled
+  stream error during teardown. — Codex (AI), 2026-08-24
+
+- **Signed-release native gate no longer relies on wall-clock scheduling**:
+  the long-running lease-heartbeat test now waits for its three intended
+  renewals before completing dispatch, then verifies renewal stops. This keeps
+  the behavior under test intact while eliminating macOS runner timing flakes.
+  — Codex (AI), 2026-08-24
+
+- **Signed-release native checks now build across macOS SDK overlays**: printer
+  identifiers and names are converted through the Core Foundation Get-rule
+  bridge, rather than force-cast from one SDK-specific declaration. The
+  release gate now works whether Core Printing imports these values as Swift,
+  Core Foundation, or unmanaged Core Foundation strings. — Codex (AI),
+  2026-08-24
+
+- **Deployment peer discovery is bounded and gossip-based**: authenticated
+  first-party deployments now maintain one relational, TTL-reaped peer lease
+  per origin. `/api/v1/peers` streams cursor-paginated NDJSON instead of an
+  all-peers array; a self-signed sync announces to production then probes a
+  capped breadth-first peer set. HMAC binds method, path, timestamp, and raw
+  body; each peer identity and streamed result has an Ed25519 public signature
+  which is pinned to its origin. Anonymous, expired, tampered,
+  non-first-party, key-rotated, and unbounded requests fail closed. — Codex
+  (AI), 2026-08-24
+  The production bootstrap advances its bounded traversal with a five-minute
+  `CRON_SECRET`-protected Vercel schedule; other deployments can use the
+  documented scheduler endpoint. — Codex (AI), 2026-08-24
+
+- **Every API operation now advertises a compatibility contract**:
+  `/api/v1/capabilities` is generated from the canonical API-doc registry and
+  active runtime route map. It publishes a semantic `api.<endpoint-id>`
+  contract for each documented operation plus discoverable `route.*` entries
+  for every executable route. Desktop clients negotiate their required range
+  before using a selected deployment,
+  while older deployments retain the narrow devices-route fallback during the
+  rollout. — Codex (AI), 2026-08-23
+
+- **Desktop API endpoint compatibility is now explicit and fail-safe**: the
+  packaged app validates both the selected deployment's computers route and
+  its own bundled loopback proxy target on startup, endpoint changes, and a
+  non-blocking Settings retry. A preview that is still deploying now stays
+  visibly selected but is marked incompatible rather than looking like a
+  production fallback; Thingtime desktop will not reconfigure or restart its
+  managed node against that endpoint until both checks pass. — Codex (AI),
+  2026-08-23
+
+- **Per-computer device-drawer layout and browser navigation alignment**: each
+  paired machine now remembers its own collapsed/expanded details sections and
+  last chosen panel width locally, without storing device state or content. The
+  browser nav now shares the drawer trigger's 52px/36px control grid, and the
+  Commander search button remains available in ordinary web browsers as well
+  as Electron. — Codex (AI), 2026-08-23
+
+- **Paired-computer actions now default to Always allow**: the paired-account
+  badge uses a soft green success treatment, and each account/computer drawer
+  now offers a durable **Always allow / Ask every time / Deny** preference.
+  Existing pairs read as Always allow without a migration. The server enforces
+  the selected mode before creating a command, while pairing, capability,
+  freshness, locked-session, and macOS privacy checks remain fail-closed in
+  every mode. — Codex (AI), 2026-08-23
+
+- **Device drawer drag now changes its visible width**: resize handling now uses
+  one window-level pointer stream, preventing Chromium's compatibility
+  `mousedown` from replacing the active pointer id. The desktop drawer width
+  also explicitly outranks Chakra's inline `width: 100%`, so the rendered panel
+  edge moves with the accessible splitter value. The same slim edge is now
+  draggable on mobile instead of forcing a fixed full-width panel, with a
+  mobile-safe 280px minimum; the oversized dotted grip has been removed while
+  its generous invisible hit target remains. — Codex (AI), 2026-08-23
 - **Storage-accounting migrations retain protected attachment fields**: the
-  pending census and real whole-account backfill now project the complete
+  pending census and real whole-account backfill now read the complete stored
   attachment object envelope before calculating canonical bytes, preventing
   legitimate preview uploads from stopping migration with
   `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
+
+- **Interactive, resizable device details drawer**: the close control and panel
+  surface are now explicit Electron `no-drag` regions, so the 44px X remains
+  clickable even where the native title-bar drag band crosses the drawer.
+  Desktop users now get an always-visible grip and a generous 24px hit area
+  wholly inside the drawer's left edge, which can be dragged between bounded
+  viewport-safe widths (or adjusted with arrow keys). Node, observed state,
+  applications, connectors, screen, approvals, and command activity can each
+  be collapsed independently. Mobile keeps the existing full-width drawer. —
+  Codex (AI), 2026-08-22
+
+- **Paired-node optimistic status, clickable device drawers, offline deep-link
+  reloads, and launch restart**: background node checks now preserve the last
+  paired badge and all known-good controls, adding only a tiny green activity
+  indicator while each real action owns its own pending state. Chakra drawer
+  portal stacking now keeps device and chat panels above their dimming overlay.
+  Nitro bundles the React index shell as a server asset so Cmd+R on `/things`
+  remains local and returns the app instead of a build-placeholder 503.
+  Electron desktop settings default **Auto-start node on Thingtime launch** on;
+  app launch revives only a previously approved managed LaunchAgent and never
+  silently installs a never-enabled node. — Codex (AI), 2026-08-22
+
+- **Desktop pairing response reconciliation and Thingtime Node identity**: the
+  manually signed helper now stores its encrypted pairing vault in the
+  traditional macOS login Keychain instead of requesting the provisioning-only
+  Data Protection Keychain access group that failed with
+  `errSecMissingEntitlement`. Local Keychain failures are definitive and
+  actionable rather than being mislabeled as an unconfirmed server response.
+  The signed node now retries an ambiguous prepare/complete response up to three
+  times inside the original locally approved operation, replaying only the
+  exact key-bound signed claim so a committed response loss does not surface as
+  a false failure or require another confirmation. If every bounded attempt is
+  still uncertain, `/things` immediately refreshes into the durable **Resume
+  pairing** state with actionable copy. The embedded node helper now declares a
+  distinct RGBA macOS app icon that makes the four Thingtime canopy/trunk
+  squares smaller and more widely spaced, joined through pixel relays to a
+  central pink/red mesh square. — Codex
+  (AI), 2026-08-22
+
+- **Electron now always renders its packaged Thingtime build**: API/deployment
+  selection no longer replaces the desktop window with `thingtime.com` or a
+  preview website. The bundled loopback UI remains authoritative and proxies
+  only account/API traffic to the selected origin; that normalized API URL and
+  label now survive relaunches, reinstalls, and build-profile ID changes. Local
+  Vite and packaged Nitro use the same validated HTTPS/loopback fallback target,
+  while an unavailable API can no longer prevent the offline interface from
+  starting. — Codex (AI), 2026-08-22
+
+- **Multi-account desktop pairing and native menu polish**: one Mac now retains
+  up to 32 independently scoped Thingtime account credentials and runs an
+  isolated command/live-sync loop for each, while an account can continue to
+  pair any number of computers. Pair links remain single-use; endpoint drift is
+  rejected with an actionable origin-specific error instead of a generic toast.
+  Fresh installs default to the pink four-square menu-bar artwork, the full
+  wordmark is a tightly cropped 86x16 raster (eliminating SVG join seams), and
+  the native menu consistently says Thingtime with separate Restart and real
+  Quit commands. The Electron titlebar now restores drawer/history controls on
+  first paint and places notifications immediately after the account control.
+  — Codex (AI), 2026-08-22
+
+- **Electron titlebar, notification, and drawer interaction boundaries**: the
+  draggable region now stops at the 52px desktop titlebar instead of extending
+  through the inactive Commander over Lopu notifications. Notification text is
+  selectable and its close control has a 28px target; Electron places Back and
+  Forward between the drawer and home controls and moves the account to the end
+  of the left icon row, followed by notifications. Hovered/pinned drawers remain below those controls, use
+  an even 10px hover-surface gutter, and no longer add excess top menu padding.
+  — Codex (AI), 2026-08-22
+
+- **Desktop node endpoint, permissions, relaunch, and identity follow-up**:
+  Electron now stores a local list of named API origins, seeds the build's PR
+  preview, probes `/api/v1/devices` before switching, and moves the renderer,
+  LaunchAgent, Keychain, and journals to the same deployment scope. Explicit
+  native permission requests refresh TCC preflight, the KeepAlive helper
+  suppresses duplicate LaunchServices relaunches, and pairing confirmations
+  allow normal human response time. The menu bar is an image-only selectable
+  Thingtime tree/wordmark (including pink and private custom artwork), while
+  the Electron bundle uses adaptive light/dark Icon Composer artwork. — Codex
+  (AI), 2026-08-21
 
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
@@ -387,6 +952,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   workflow's push-only handoff to dispatch its supported-event worker instead
   of being rejected by GitHub before any job starts. The caller contract pins
   the required grant. — Codex (AI), 2026-08-21
+- **Desktop mesh node and connector stay alive independently of Electron**:
+  LaunchAgent generation now emits valid property-list `<key>` fields and
+  registration no longer performs an unconditional immediate kickstart. The
+  connector reads its long-lived pipe incrementally through `AsyncBytes`, with
+  a generation guard preventing stale canceled readers from tearing down a
+  replacement process; pending approvals also survive reload through only
+  their privacy-safe opaque/redacted projection. The final installed-app proof
+  replaced the old managed node once, kept the launchd node and connector alive
+  for more than two minutes and after Electron Cmd+Q, and reported one launchd
+  run with no exit. — Codex (AI), 2026-08-19
 - **CSP blocked attachment uploads on header-serving deployments**: the
   application Content-Security-Policy's `connect-src` never allowed the
   private S3 bucket origin, so on any surface that serves the CSP header
@@ -400,6 +975,74 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **Cross-tab persisted Thingtime state (PR #92)**: same-origin tabs now share
+  each successfully applied path-level write through one
+  `BroadcastChannel('thingtime')`, reusing the active safe Thingtime codec and
+  existing mutation queue. Remote writes skip the local undo timeline and
+  cannot echo; root `timemachine` metadata stays tab-local while ordinary paths
+  restored by undo/redo still converge. The debounced latest-revision
+  LocalForage autosave remains the only persistence path. This prevents a stale
+  open tab's next full-tree save from silently reverting newer drawer,
+  Commander, Content, or preference changes made elsewhere. See the
+  [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
+  — Claude (AI), 2026-08-20
+- **Cross-tab sync excludes view chrome (PR #92 review)**: writes that describe
+  what is open and focused in the current viewport — `settings.drawer.open` and
+  `settings.commander.<id>.commanderActive` — now pass `{ tabLocal: true }` to
+  `setThingtime`, which suppresses only the broadcast. Because `commanderId` is
+  a literal shared by every tab, broadcasting them let one tab toggle another's
+  palette and drawer; closing the palette in one tab ran the peer's toggle
+  effect, which clears its input under the default `clearCommanderOnToggle`,
+  destroying a query being typed there. All of it is still persisted, so a
+  reload restores it as before, and drawer width/direction/ordering and the
+  Commander's own preferences keep syncing. — Lopu (AI), 2026-08-30
+- **Cross-tab sync also excludes the drawer's selected section (PR #92 review)**:
+  `settings.drawer.selectedItem` now passes `{ tabLocal: true }` too. It is not a
+  preference — `DrawerContent` writes it from the current tab's `pathname`, so
+  two tabs on two routes hold two legitimately correct selections. Broadcasting
+  it swapped a peer's drawer to a section that peer was not on, and nothing there
+  restored it: the pathname-sync effect re-runs only on
+  `pathname`/`open`/`variant`/`loading` — none of which a remote write touches —
+  and returns early while that peer's drawer is closed. Still persisted, so each
+  tab's reload restores the section it last chose. The call-site guard test now
+  covers `open` and `selectedItem` together. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the editor's open-config handoff (PR #92 review)**:
+  both `settings.editor.openConfig` writes — the drawer's set and `EditorSplit`'s
+  consuming clear — now pass `{ tabLocal: true }`. An earlier note called this key
+  harmless because it is only read on mount; that was wrong. `openedConfigRef` is
+  a per-mount latch and the effect re-runs on the value, so a tab already on
+  `/editor` that had not yet consumed an intent would apply a *remote* config over
+  its own open windows. The key is a handoff to the writing tab's next navigation
+  (when the editor is already mounted the drawer uses the tab-local events bus
+  instead). Clearing had to be suppressed too, or consuming one tab's intent would
+  erase an intent another tab had not navigated to yet. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the DevKit form prefills (PR #92 review)**: both
+  `devKit.registerPrefill` and `devKit.loginPrefill` now pass `{ tabLocal: true }`.
+  A prefill fills the form in front of *that* DevKit, and `root.tsx` renders
+  DevKit for every session (not dev-only). `Login`/`Register` consume it from an
+  effect keyed on `_ts` — a fresh `Date.now()` per click, so it always re-fires —
+  meaning one click replaced the username/email/password a peer tab had typed
+  into its own form and called `setPasswordVisible(true)` there. Still persisted,
+  so the same DevKit still prefills after a reload. — Lopu (AI), 2026-08-30
+- **A broadcast failure can no longer discard a local write (PR #92 review)**:
+  `flushSetThingtimeQueue` published inside the callback whose return value *is*
+  the new state, and `drainThingtimeMutationQueue` drops any update whose apply
+  throws — so a throw on the publish path would have silently rolled back a write
+  that had already applied. The channel catches internally today, so this was not
+  a live defect; the publish is now contained in its own `try` so that stays true
+  independently of the transport. Sync is best-effort, the local write is not.
+  — Lopu (AI), 2026-08-30
+- **The composer's spent-draft clear is tab-local too (PR #92 review)**: the
+  post-submit `setThingtime('tmp.<draftSessionId>', {})` was the one half of the
+  `tmp` branch still on the wire — its sibling seed had already been made
+  `tabLocal`. `draftSessionId` is minted per mount, so the key names the writing
+  tab's own composer session and no peer owns one: it could not destroy a peer
+  draft, but it did land a foreign `s<hex>` branch in every other tab, which that
+  tab then persisted in its next full-tree autosave and displayed under `tt.tmp`
+  in the tree editor until its own next composer mount pruned it. Local clear and
+  persistence are unchanged; only the broadcast is suppressed. The composer guard
+  test now asserts the seed and the clear together so the pair cannot drift again.
+  — Lopu (AI), 2026-08-30
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
@@ -459,21 +1102,39 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Open Graph / Twitter cards for shared links**: the Nitro page catch-all
+  (`server/routes/[...].ts`) now injects per-request social meta into the SPA
+  shell's new `tt-social-meta` head block (`remix/index.html`), built by
+  `app/api/utils/meta/socialMeta.ts` — `/post/:id` gets author + text/poll
+  tags with the first image attachment (public `tt:all` posts only; private or
+  missing posts fail closed to the generic site block), `/profile/:username`
+  gets displayName/bio/avatar tags, and every other page gets site defaults
+  with request-derived absolute URLs. Deployment wiring:
+  `scripts/patch-vercel-output.mjs` routes the two permalink patterns to the
+  Nitro `__server` function (everything else stays on the static shell),
+  `scripts/verify-vercel-output.mjs` asserts that routing, and
+  `nitro.config.ts` gained an explicit `assets:shell` server-assets mount
+  because nitro 3's default `assets:server` mount no longer resolves to
+  `server/assets`. Note: the shell handler always answers 200 — h3 2.x treats
+  a 404 middleware Response as "unhandled" and would fall through to the raw
+  source template. Verification recipe lives in `TESTING.md` ("Social meta /
+  link unfurls"). — Claude (AI), 2026-08-19
+
 - **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
   Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
   now reports foreign-database origins as `unresolved`, and the client fans
   out to each origin's new `/account-hints/resolve` (CORS restricted to the
   Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
   surface mints a 2-minute, aud-bound, single-use code
   (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
   cookie family (immutable `*.vercel.app` previews) redeems at its own
   `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
   the session (theft signal), different-environment redemption fails closed;
   the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
-  identity provider*: `/.well-known/web-identity` + config/accounts/
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
+  identity provider_: `/.well-known/web-identity` + config/accounts/
   client-metadata/assertion endpoints let Chromium render its native
   "Continue as…" sheet on any domain from the switcher roster
   (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
@@ -515,8 +1176,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `canView` + thread loading), other flags queue an advisory `moderationFlag`
   with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
   and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
-  29) retries text moderation lost to mid-flight process deaths or provider
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
   outages and drains off-era backlog for free, plus the standard attachment
   sweep; the admin sweep button runs both batches and the tab shows the text
   backlog count. Post creation adds a hybrid sync gate: the free omni screen
@@ -532,7 +1192,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
   combined free request: prose + listing text + tags + legacy external image
   URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
-
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs
@@ -626,19 +1285,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
   Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
   now reports foreign-database origins as `unresolved`, and the client fans
   out to each origin's new `/account-hints/resolve` (CORS restricted to the
   Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
   surface mints a 2-minute, aud-bound, single-use code
   (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
   cookie family (immutable `*.vercel.app` previews) redeems at its own
   `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
   the session (theft signal), different-environment redemption fails closed;
   the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
-  identity provider*: `/.well-known/web-identity` + config/accounts/
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
+  identity provider_: `/.well-known/web-identity` + config/accounts/
   client-metadata/assertion endpoints let Chromium render its native
   "Continue as…" sheet on any domain from the switcher roster
   (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
@@ -680,8 +1339,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `canView` + thread loading), other flags queue an advisory `moderationFlag`
   with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
   and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
-  29) retries text moderation lost to mid-flight process deaths or provider
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
   outages and drains off-era backlog for free, plus the standard attachment
   sweep; the admin sweep button runs both batches and the tab shows the text
   backlog count. Post creation adds a hybrid sync gate: the free omni screen
@@ -835,6 +1493,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
+- **Posts, Messenger, and persistent device mirrors share the exact account
+  quota**: every user-owned Messenger row—including chats, messages,
+  communities, memberships, follows, and imported AI history—now carries the
+  canonical content-byte stamp and changes the subscription ledger in the same
+  Mongo transaction as its write. Persistent protected device mirror rows use
+  the same accounted-Thing admission path. Attachments remain separately
+  metered by their protected object-backed Things, while transient command and
+  event delivery is count/byte bounded and TTL-expiring. Storage accounting v2
+  forces the idempotent whole-account backfill to recount legacy posts and
+  Messenger content; identical AI re-imports add zero bytes, and quota failures
+  roll back related container/membership, send, delete, invite, and section
+  mutations rather than leaving partial or unmetered rows. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-19
 - **Native iOS drawer and media capture**: the iOS WebView now uses the same
   fixed drawer trigger as mobile web, so opening the drawer keeps its close
   control inside the panel instead of translating it with the top nav. The
@@ -871,6 +1543,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Thingtime desktop mesh nodes and live AI sessions**: a signed, persistent
+  macOS node now pairs to a user account, mirrors bounded device/app/permission
+  state into protected `/things` device views, leases an exact allowlist of
+  idempotent commands, and keeps remote mutations behind lock, capability, and
+  approval gates. Messenger distinguishes imported history from live sessions:
+  the native Codex app-server connector lists/reads/creates chats, queues or
+  steers messages, interrupts turns, forwards safe visible deltas, and brokers
+  approvals; semantic Accessibility connectors for ChatGPT and Claude expose
+  only already-visible user/assistant chat content and require one-time approval
+  for mutation. Completed visible messages become quota-accounted relational
+  Messenger rows while transient stream/control events expire separately.
+  Electron embeds the same-team signed node and bounded runtime; local paths,
+  credentials, cookies, hidden reasoning, and tool arguments/results never
+  enter Thingtime. A gated view-only ScreenCaptureKit primitive is included,
+  but the UI remains explicitly unavailable until a real peer media transport
+  is installed. The current delivery checkpoint proves the byte-identical local
+  Apple Development package/install and that its launchd node plus connector
+  survive Electron Cmd+Q; authenticated pairing and TCC-protected real-operation
+  acceptance remain open. The stale protected workflow still requires its
+  Developer ID/notarization patch before production. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-19
 - **Native iOS per-branch deployment history**: the Vercel deployments API now
   preserves its existing latest-per-branch response while optionally returning
   a bounded newest-first history for each branch. The native Web destination
@@ -879,6 +1573,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and keeps every specific deployment URL directly selectable. Signed iOS
   build 15 targets the matching branch preview and is available to internal
   TestFlight testers. — Codex (AI), 2026-08-18
+- **ChatGPT and Claude desktop history in Messenger**: the Electron app now
+  discovers local ChatGPT Work/Codex sessions plus the main and Thingtime
+  Claude desktop profiles, accepts official ChatGPT/Claude JSON or ZIP exports,
+  and streams bounded normalized batches through a narrow preload bridge into
+  the authenticated Messenger API. Projects map to Spaces, conversations to
+  chats/channels, and provider messages to read-only relational rows with
+  owner-scoped idempotency keys, native source badges, progress UI, and no
+  credential, cookie, hidden-reasoning, tool-traffic, or raw-path exposure.
+  Users can react, thread, and reply inside Thingtime without posting back to
+  the provider. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-17
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
@@ -981,21 +1687,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `remix/.vercel/output`. The deployment contract covers both invariants. —
   Codex (AI), 2026-08-17
 - **Vercel builds now start at the repository root without deploying the thin
-	CI branch**: root `vercel.json` installs only the Remix workspace, a tested
-	wrapper preserves the existing Vite/Nitro verification before staging the
-	Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
-	and weekly-summary crons now live in that same root config. Both config and the
-	ignored-build decision exclude `github-actions`. The matching control-plane
-	config disables Git deployments for that branch and its descendants. Setup
-	and live verification steps are recorded in README, TESTING, and
-	VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
+  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+  wrapper preserves the existing Vite/Nitro verification before staging the
+  Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
+  and weekly-summary crons now live in that same root config. Both config and the
+  ignored-build decision exclude `github-actions`. The matching control-plane
+  config disables Git deployments for that branch and its descendants. Setup
+  and live verification steps are recorded in README, TESTING, and
+  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
 - **Root bootstrap no longer exposes server secrets**: browser-visible loader
   configuration is now built from an explicit status-origin allowlist instead
   of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
   and cookie-varying. Regression coverage seeds representative CI, webhook, and
   email HMAC values and proves none cross the server/client boundary. — Codex
   (AI), 2026-08-17
-
 
 - **Thin Web CI promotion no longer blocks on topology contracts**: the stale
   product-branch copy of the develop-preview controller was removed, the two
@@ -1036,6 +1741,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   asset runtime error. Generated Vercel routes now return the SPA HTML shell
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
+
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
 
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
@@ -1220,6 +1954,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   rejecting new unbound runtimes or obsolete hard-coded models. The deleted
   legacy GitHub workflow registration was also disabled.
   — Codex (AI), 2026-08-10
+- **PR conflict resolver model selection follows Thingtime Admin**: the
+  protected `github-actions` resolver controller loads the public, allowlisted
+  model waterfall instead of hardcoding Opus 4.8, safely falling back to the
+  Claude default if the setting is unavailable or malformed. The change was
+  authored on PR #54, but that branch's `.github/workflows/` snapshot has since
+  been collapsed back to the trigger-only listener, so the live implementation
+  is on `github-actions` only. — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default
@@ -1436,6 +2177,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
+
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a
   secret-free `pull_request_target` dispatcher and provenance-checked
@@ -1456,7 +2209,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
   same development data plane rather than receiving isolated sandboxes. — Codex
   (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
-
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
   now creates the standing develop → main PR with — and re-applies on every
   develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
@@ -1668,6 +2420,89 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
+### Performance
+
+- **PostCard's `React.memo` actually bails now** (TODO #12): `PostList` passed
+  a fresh per-card arrow for `onChanged`, so every engagement event / scroll
+  re-render repainted every card in the column. `PostCard`'s contract is now
+  `onChanged(id, next)` and `PostList` passes the consumers'
+  `useCallback`-stable `handlePostChanged` straight through (Feed and
+  ProfilePage reach PostCard through `PostList`, so they were already stable).
+  Live-verified: reactions, comments, and both consumers behave identically
+  — Claude (AI), 2026-07-21.
+
+  Every other `PostCard` consumer was migrated to the two-argument contract in
+  the same change: `routes/thing.tsx`, `routes/post.tsx`, `routes/media.tsx`
+  and `components/Search/SearchPage.tsx` each took `(change)` only, so after
+  the signature change they bound `change` to the post **id string** and wrote
+  it into state in place of the post — `/thing/:id`, `/post/:id`, `/media/:id`
+  and search results would have blanked out on any react/comment/share/delete.
+  The three route handlers now take `(id, change)` and ignore changes addressed
+  to a different post; SearchPage drops its per-card wrapper and passes the
+  already-stable `updateResultPost` straight through, which extends the memo
+  win to search — Lopu, 2026-08-28.
+
+  Six `onChanged` call sites *inside* `PostCardImpl` were still on the old
+  one-argument contract and were fixed in the same pass: `handleEditSave`'s
+  optimistic text write and its failure revert (L1180/L1185),
+  `handleVisibilityChange`'s optimistic flip, server reconcile and revert
+  (L1199/L1203/L1208), and the full-composer edit's `onPosted` (L1566). Each
+  passed the change into the `id` slot, so every consumer compared an id string
+  against a function/post object, matched nothing and dropped the update: on
+  feed, profile, search and the three routes, **editing a post's text or
+  changing its privacy showed a success toast while the card kept rendering
+  stale content** until the next refetch. Now all 17 card-level calls address
+  `post.id` — Lopu, 2026-08-28.
+
+  Correction to an earlier note in this entry: the stale handlers were *not*
+  invisible to the type checker. Parameter bivariance does not apply here —
+  neither `string` nor `PostChange` is assignable to the other, so `tsc` rejects
+  the swap even with `"strict": false` (verified against the repo's exact
+  compiler flags). CI genuinely saw all six: the run for the superseded head
+  `4f44384` logged
+  `PostCard.tsx(1180|1185|1199|1203|1208|1566): error TS2554: Expected 2
+  arguments, but got 1` and summarised `Typecheck ratchet WARNING: 144 tsc
+  errors vs baseline 143 (+1). This check is non-blocking.` The gap is that the
+  ratchet is deliberately advisory (`ci: make typecheck ratchet warning-only`),
+  so a real regression annotates and still goes green — worth revisiting as its
+  own change, not silently here — Lopu, 2026-08-28.
+
+  Those six are fixed as of `c8cbab7`, whose CI run reports `Typecheck ratchet:
+  138 errors, DOWN from baseline 143 🎉`; base `261072a` measures the same 138
+  with a byte-identical error set, so this change is exactly type-neutral. That
+  comparison also sharpens the point above: the superseded head's true
+  regression was **+6**, not the +1 the ratchet printed — develop had
+  independently dropped 5 errors and the stale 143 baseline netted the two off.
+  The confirmed number is now locked in
+  (`node scripts/typecheck-ratchet.mjs --update-baseline`, 143 → 138), so that
+  masking headroom is gone; a ratchet that diffed error *identities* instead of
+  totals would close the remaining gap and stays worth doing as its own change,
+  not here — Lopu, 2026-08-28.
+
+  Both halves of the fix are now pinned by `test:feed-contract`
+  (`app/components/Feed/postCardChangeContract.test.ts`): every post-level
+  `onChanged?.()` call must address `post.id` (and every comment-level
+  `onChanged()` call `comment.id`), and no PostCard consumer may bind
+  `onChanged` to an inline closure. tsc covers the arity but not which id a call
+  addresses — a wrong id compiles, matches no post in any consumer and silently
+  drops the update — and nothing at all caught a consumer re-introducing the
+  per-card arrow, which is the original TODO #12 regression. Verified by
+  mutation: reverting the prop to one argument, mis-addressing a call site, and
+  restoring PostList's closure each fail the suite — Lopu, 2026-08-28.
+
+  That guard had a gap in the one place this change actually regressed. Both
+  call-site checks read the id out of `onChanged(<id>, …)`, so they only ever
+  saw calls that *have* a second argument: a site reverting to the old
+  one-argument shape stopped being counted rather than failing, and the
+  remaining sites still all said `post.id`. That is precisely the shape of the
+  six regressions above, and the only thing that catches it — tsc's TS2554 — is
+  reported by the deliberately non-blocking ratchet, so it ships green. Each
+  test now also counts raw `onChanged` call sites and asserts every one is
+  addressed. Verified by mutation on top of the existing cases: dropping the id
+  from a post-level call (17 sites, 16 addressed) and from a comment-level one
+  (5 sites, 3 addressed) each failed, where both passed before
+  — Lopu, 2026-08-28.
+
 ### Fixed
 
 - **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
@@ -1853,7 +2688,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   convert each legacy collection idempotently. Legacy ids are preserved as
   thing shareIds so sessions, rosters, ownerId joins, share links, and active
   theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
-  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  Details in TODO/claude-todo/22-everything-is-a-thing-collections.md.
   — Claude (AI), 2026-07-12
 
 ### Added
@@ -1874,6 +2709,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   uses server time, scopes every mutation by owner, and fails closed when
   storage is unavailable. Official API docs, auth smoke coverage, and focused
   policy/rollover/idempotency tests ship with it. — Codex (AI), 2026-07-19
+
+- Added the standalone consent-first Thingtime MCP foundation under `MCP/`:
+  MCP desktop hosts can explicitly stage their current chat, user-approved
+  ChatGPT/Claude exports and a portable app manifest normalize into one schema,
+  allowlisted local attachments are copied into private staging, credential-like
+  metadata is redacted, and relational `ai-chat`/`ai-chat-message` ThingtimeDB
+  records can be previewed without writing to the platform. Details in
+  [`PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — _Codex (AI), 2026-07-13_
 
 - Extensible data: every `things` doc now carries a schema-free top-level
   `extended` property — any JSON up to 512KB, stored and returned exactly as
@@ -1938,7 +2782,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Details in
   [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
   — _Claude (AI), 2026-07-10_
+- Added the Thingtime Embed SDK: a verified single-file minified IIFE with
+  JSON-only Shadow DOM mounts, shared get/set/subscription and undo/redo state,
+  a responsive injected popup, a first-party full-editor/save bridge, public
+  cross-origin reads, version-safe `kind: 'embed'` persistence, and an
+  interactive safety-canary demo. See the
+  [embed guide](../docs/THINGTIME_EMBED.md) and
+  [PR 57 notes](../PRs/57-codex-thingtime-embed-sdk--share-thingtime-through-a-single-file-embed-sdk.md).
+  — _Codex (AI), 2026-07-10_
 
+- Added `docs/email-owned-architecture.md`, a phased plan for owning
+  Thingtime email end-to-end with a self-hosted SMTP path, Mongo-backed queues
+  and events, stream separation, sender-reputation warm-up, bounce/complaint
+  handling, one-click unsubscribe, abuse contacts, security controls, and
+  compliance requirements. — _Codex (AI), 2026-07-10_
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
