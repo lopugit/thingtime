@@ -73,6 +73,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
+  and Stop cancel only the exact linked GitHub Actions run while retaining the
+  stack definition and historical run links; Restart safely cancels active
+  compute before creating a fresh immutable run. Late webhook and progress
+  receipts cannot overwrite a deliberate paused or stopped state.
+  — Codex (AI), 2026-09-01
+
 - **Reusable Feature Stacks no longer fail because an older selected PR has
   already completed.** Each run now omits merged, closed, and draft entries at
   admission time, keeps every remaining live source in the saved order, and
