@@ -78,6 +78,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   stack definition and historical run links; Restart safely cancels active
   compute before creating a fresh immutable run. Late webhook and progress
   receipts cannot overwrite a deliberate paused or stopped state.
+  Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
   — Codex (AI), 2026-09-01
 
 - **Reusable Feature Stacks no longer fail because an older selected PR has
