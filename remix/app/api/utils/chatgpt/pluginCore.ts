@@ -16,7 +16,7 @@ export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.3.0',
-  'chatgpt.oauth': '1.4.0',
+  'chatgpt.oauth': '1.5.0',
   'chatgpt.connections': '1.2.0',
   'chatgpt.things.read': '1.3.0',
   'chatgpt.things.write': '1.1.0',
@@ -234,8 +234,9 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
 };
 
 // Dynamic Client Registration is a compatibility path for Codex clients that
-// cannot use CIMD yet. A registration may contain only a loopback callback;
-// no arbitrary web, custom-scheme, or localhost redirect can become trusted.
+// cannot use CIMD yet, and for ChatGPT developer apps. A registration may use
+// only a native loopback callback or ChatGPT's exact connector callback; no
+// arbitrary web, custom-scheme, or localhost redirect can become trusted.
 export const normalizeDynamicClientRedirectUri = (value: unknown): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   try {
@@ -261,6 +262,15 @@ export const normalizeDynamicClientRedirectUri = (value: unknown): string | null
   }
 };
 
+// ChatGPT's current developer-app flow uses an opaque dynamically registered
+// public client and returns to its exact connector callback. Treat that callback
+// with the same registration binding as a native loopback client: it must be
+// included in the signed registration and in the later authorization request.
+// Nothing broad is accepted here; both supported ChatGPT callbacks are exact
+// constants above.
+export const normalizeRegisteredClientRedirectUri = (value: unknown): string | null =>
+  normalizeDynamicClientRedirectUri(value) || normalizeChatGptRedirectUri(value);
+
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
   return isMcpResourceForOrigin(value, origin) ? value : null;
@@ -279,7 +289,7 @@ export const parseChatGptAuthorizationRequest = (
   if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
 
   const redirectUri = registeredDynamicClient
-    ? normalizeDynamicClientRedirectUri(params.get('redirect_uri'))
+    ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'))
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
       : normalizeChatGptRedirectUri(params.get('redirect_uri'));

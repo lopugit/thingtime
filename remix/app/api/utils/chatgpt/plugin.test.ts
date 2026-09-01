@@ -321,7 +321,7 @@ test('MCP publishes prompts and static resources before account authorization', 
   assert.equal(ui.contents[0].text.includes('test-token-not-returned-to-the-client'), false);
 });
 
-test('OAuth dynamic client registration signs only exact local loopback callbacks', async () => {
+test('OAuth dynamic client registration signs only exact local loopback or ChatGPT callbacks', async () => {
   const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
   const registration = await registerChatGptOAuthClient({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {
@@ -348,6 +348,32 @@ test('OAuth dynamic client registration signs only exact local loopback callback
     })}`)
   });
   assert.notEqual(authorization.status, 400);
+
+  const chatGptRedirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  const chatGptRegistration = await registerChatGptOAuthClient({
+    request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: [chatGptRedirectUri], token_endpoint_auth_method: 'none' })
+    })
+  });
+  const chatGptPayload: any = await chatGptRegistration.json();
+  assert.equal(chatGptRegistration.status, 201);
+  assert.equal(chatGptPayload.redirect_uris[0], chatGptRedirectUri);
+
+  const chatGptAuthorization = await beginChatGptAuthorization({
+    request: new Request(`https://thingtime.example/api/v1/integrations/chatgpt/oauth/authorize?${new URLSearchParams({
+      response_type: 'code',
+      client_id: chatGptPayload.client_id,
+      redirect_uri: chatGptRedirectUri,
+      resource: 'https://thingtime.example/api/v1/integrations/chatgpt/mcp',
+      code_challenge: 'A'.repeat(43),
+      code_challenge_method: 'S256',
+      state: 'state-which-is-long-enough-to-be-safe',
+      scope: 'thingtime offline_access'
+    })}`)
+  });
+  assert.notEqual(chatGptAuthorization.status, 400);
 
   const invalid = await registerChatGptOAuthClient({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {
