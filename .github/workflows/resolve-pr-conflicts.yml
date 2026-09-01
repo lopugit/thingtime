@@ -4070,6 +4070,73 @@ jobs:
       - name: Stream immediate, phase-change, ten-minute, and terminal updates
         run: node .github/scripts/feature-stack-progress.mjs
 
+  feature_stack_merge_gate:
+    name: Confirm Feature Stack merged into ${{ matrix.target }}
+    needs: [feature_stack_plan, model_config, feature_stack_merge]
+    if: >-
+      always()
+      && !cancelled()
+      && needs.feature_stack_plan.result == 'success'
+      && needs.model_config.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.feature_stack_plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      STACK_ID: ${{ needs.feature_stack_plan.outputs.stack_id }}
+      TARGET_BRANCH: ${{ matrix.target }}
+    steps:
+      - name: Wait for the exact verified stack PR to merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          safe_target="$(printf '%s' "$TARGET_BRANCH" | tr '/_' '--' | tr -cd 'A-Za-z0-9.-')"
+          publish_branch="lopu/feature-stack-$STACK_ID-to-$safe_target"
+          head_sha="$(gh api "repos/$REPO/git/ref/heads/$publish_branch" --jq '.object.sha' 2>/dev/null || true)"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::The Feature Stack worker did not publish $publish_branch."
+            exit 1
+          }
+
+          for attempt in $(seq 1 300); do
+            response="$RUNNER_TEMP/feature-stack-target-pr.json"
+            if gh api \
+              "repos/$REPO/pulls?state=all&head=${GITHUB_REPOSITORY_OWNER}%3A${publish_branch}&base=${TARGET_BRANCH}&sort=updated&direction=desc&per_page=20" \
+              >"$response" 2>"$RUNNER_TEMP/feature-stack-target-pr.err"; then
+              pr="$(jq -c --arg head_sha "$head_sha" '[.[] | select(.head.sha == $head_sha)][0] // empty' "$response")"
+              if [ -n "$pr" ]; then
+                pr_number="$(jq -r '.number' <<<"$pr")"
+                pr_url="$(jq -r '.html_url' <<<"$pr")"
+                state="$(jq -r '.state' <<<"$pr")"
+                merged_at="$(jq -r '.merged_at // empty' <<<"$pr")"
+                if [ -n "$merged_at" ]; then
+                  echo "Feature Stack target merged: $pr_url at $merged_at"
+                  exit 0
+                fi
+                if [ "$state" = closed ]; then
+                  echo "::error::Feature Stack target PR #$pr_number closed without merging: $pr_url"
+                  exit 1
+                fi
+                merge_state="$(jq -r '.mergeable_state // "unknown"' <<<"$pr")"
+                echo "Feature Stack target PR #$pr_number is open ($merge_state); waiting for branch protection: $pr_url"
+              else
+                echo "Waiting for the exact $publish_branch head $head_sha to appear as a target PR."
+              fi
+            else
+              sed -n '1,8p' "$RUNNER_TEMP/feature-stack-target-pr.err" >&2
+              echo "::warning::Could not inspect the target PR on attempt $attempt; retrying."
+            fi
+            sleep 60
+          done
+          echo "::error::Feature Stack target did not merge within five hours."
+          exit 1
+
   # Clean PRs still need a principal-engineering review. This batch worker is
   # intentionally reached through the same fixed control plane as conflict
   # resolution: one Lopu session receives every PR selected by one source
