@@ -15,20 +15,44 @@ const STEP_PHASES = [
   ['Publish an auto-merge PR to the target', 95, 'Publishing the verified auto-merge PR']
 ];
 
-export const targetProgress = (target, job) => {
+export const targetProgress = (target, job, mergeGateJob = null) => {
+  if (mergeGateJob) {
+    if (mergeGateJob.status === 'completed') {
+      const rawConclusion = TERMINAL_CONCLUSIONS.has(mergeGateJob.conclusion) ? mergeGateJob.conclusion : 'failure';
+      const conclusion = ['success', 'cancelled', 'skipped'].includes(rawConclusion) ? rawConclusion : 'failure';
+      return {
+        target,
+        status: conclusion,
+        phase: rawConclusion === 'success' ? 'Verified stack PR merged' : `Target merge gate ${String(rawConclusion).replaceAll('_', ' ')}`,
+        progressPercent: 100,
+        jobUrl: mergeGateJob.html_url ?? null
+      };
+    }
+    return {
+      target,
+      status: mergeGateJob.status === 'queued' || mergeGateJob.status === 'waiting' || mergeGateJob.status === 'pending' ? 'queued' : 'in_progress',
+      phase: 'Waiting for branch protection to merge the verified stack PR',
+      progressPercent: 98,
+      jobUrl: mergeGateJob.html_url ?? null
+    };
+  }
   if (!job) return { target, status: 'waiting', phase: 'Waiting for the GitHub worker to appear', progressPercent: 0, jobUrl: null };
   if (job.status === 'queued' || job.status === 'waiting' || job.status === 'pending') {
     return { target, status: 'queued', phase: 'Waiting for the shared Lopu worker', progressPercent: 0, jobUrl: job.html_url ?? null };
   }
   if (job.status === 'completed') {
     const rawConclusion = TERMINAL_CONCLUSIONS.has(job.conclusion) ? job.conclusion : 'failure';
-    const conclusion = ['success', 'cancelled', 'skipped'].includes(rawConclusion) ? rawConclusion : 'failure';
+    const conclusion = rawConclusion === 'success'
+      ? 'in_progress'
+      : ['cancelled', 'skipped'].includes(rawConclusion)
+        ? rawConclusion
+        : 'failure';
     const phase = rawConclusion === 'success'
-      ? 'Verified stack PR published'
+      ? 'Verified stack PR published; waiting for its merge gate'
       : rawConclusion === 'skipped'
         ? 'Worker skipped before publication'
         : `Worker ${String(rawConclusion).replaceAll('_', ' ')}`;
-    return { target, status: conclusion, phase, progressPercent: 100, jobUrl: job.html_url ?? null };
+    return { target, status: conclusion, phase, progressPercent: rawConclusion === 'success' ? 95 : 100, jobUrl: job.html_url ?? null };
   }
   const steps = Array.isArray(job.steps) ? job.steps : [];
   let selected = STEP_PHASES[0];
@@ -44,7 +68,11 @@ export const targetProgress = (target, job) => {
 };
 
 export const progressSnapshot = ({ targets, jobs, startedAt, now = Date.now() }) => {
-  const rows = targets.map((target) => targetProgress(target, jobs.find((job) => job?.name === `Merge Feature Stack into ${target}`)));
+  const rows = targets.map((target) => targetProgress(
+    target,
+    jobs.find((job) => job?.name === `Merge Feature Stack into ${target}`),
+    jobs.find((job) => job?.name === `Confirm Feature Stack merged into ${target}`)
+  ));
   const progressPercent = Math.round(rows.reduce((total, row) => total + row.progressPercent, 0) / Math.max(1, rows.length));
   const terminal = rows.every((row) => TERMINAL_TARGET_STATUSES.has(row.status));
   const failed = rows.some((row) => row.status !== 'success' && TERMINAL_TARGET_STATUSES.has(row.status));
@@ -178,8 +206,19 @@ const selfTest = () => {
   assert.equal(snapshot.targets[0].phase, 'Resolving conflicts and combining sources with Lopu');
   assert.match(snapshot.message, /1 active, 1 queued/);
   const done = progressSnapshot({ targets: ['main'], jobs: [{ name: 'Merge Feature Stack into main', status: 'completed', conclusion: 'success' }], startedAt: Date.now() - 600_000 });
-  assert.equal(done.status, 'success');
-  assert.equal(done.progressPercent, 100);
+  assert.equal(done.status, 'in_progress');
+  assert.equal(done.progressPercent, 95);
+  const awaitingMerge = progressSnapshot({
+    targets: ['main'],
+    jobs: [
+      { name: 'Merge Feature Stack into main', status: 'completed', conclusion: 'success' },
+      { name: 'Confirm Feature Stack merged into main', status: 'in_progress' }
+    ],
+    startedAt: Date.now() - 600_000
+  });
+  assert.equal(awaitingMerge.status, 'in_progress');
+  assert.equal(awaitingMerge.progressPercent, 98);
+  assert.match(awaitingMerge.targets[0].phase, /branch protection/);
   console.log('Feature Stack progress self-test passed.');
 };
 
