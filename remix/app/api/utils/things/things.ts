@@ -1702,7 +1702,8 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
 // metadata; private object keys/upload ids never leave this module boundary.
 const resolvePostAttachments = async (
 	postIds: string[],
-	expectedTargets?: ReadonlyMap<string, { ownerId: string; purpose: 'post' | 'comment' }>
+	expectedTargets?: ReadonlyMap<string, { ownerId: string; purpose: 'post' | 'comment' }>,
+	viewerId?: string | null
 ): Promise<Map<string, AttachmentPublicMetadata[]>> => {
 	const ids = [...new Set(postIds)].filter(Boolean);
 	const byTarget = new Map<string, AttachmentPublicMetadata[]>();
@@ -1717,7 +1718,14 @@ const resolvePostAttachments = async (
 	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+		// The owner keeps seeing their own moderation-PENDING media (flagged
+		// `pending: true`, mirroring visibleRelatedModerationClause) so an
+		// in-analysis image never silently vanishes from their post or its edit
+		// composer. Everyone else keeps the fail-closed hide; blocked stays
+		// hidden for all.
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, {
+			ownerView: !!viewerId && String(doc.ownerId) === viewerId
+		});
 		if (
 			!targetId ||
 			!attachment ||
@@ -1886,7 +1894,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // Attachments and profiles both derive from `related`, but NOT from each
   // other — running them together keeps the second off the critical path.
   const [attachmentsByTarget, profiles] = await Promise.all([
-    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets),
+    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
     resolveProfiles(userIds)
   ]);
 

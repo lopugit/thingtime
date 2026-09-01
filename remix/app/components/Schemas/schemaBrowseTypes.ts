@@ -80,7 +80,7 @@ export const entryToCardSource = (entry: BrowseSchemaEntry): SchemaCardSource | 
 // The crystal kinds /search's kind <Select> can scope to. Protected
 // thingtimes (user/theme/…) are $nin-excluded by searchThings and share/save
 // aren't searchable, so "Search things" for those builtins would dead-end.
-export const SEARCHABLE_CRYSTAL_KINDS = new Set(['post', 'data', 'schema', 'comment', 'reaction']);
+export const SEARCHABLE_CRYSTAL_KINDS = new Set(['post', 'data', 'schema', 'comment', 'reaction', 'attachment']);
 
 // Fieldless shapes are excluded: toSearchSource returns null for them (nothing
 // to search by), so a "Search things" button / post-create deep link would

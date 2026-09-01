@@ -686,7 +686,7 @@ const postSchema: ThingtimeSchema = {
 
 const attachmentSchema: ThingtimeSchema = {
 	id: ATTACHMENT_THINGTIME,
-	version: 1,
+	version: 2,
 	kind: 'crystal',
 	collection: null,
 	title: 'Attachment',
@@ -705,8 +705,17 @@ const attachmentSchema: ThingtimeSchema = {
 			type: 'string',
 			required: true,
 			max: MAX_ATTACHMENT_NAME_CHARS,
-			description: 'Display filename only; never used as an S3 key.'
+			description: 'Immutable original filename; never used as an S3 key.'
 		},
+		{
+			name: 'filenamePreview',
+			type: 'string',
+			required: false,
+			max: MAX_ATTACHMENT_NAME_CHARS,
+			description: 'Owner-selected filename shown in the UI; the original download filename is preserved.'
+		},
+		{ name: 'title', type: 'string', required: false, max: 200, description: 'Owner-authored media title.' },
+		{ name: 'description', type: 'string', required: false, max: 2000, description: 'Owner-authored media description.' },
 		{
 			name: 'size',
 			type: 'number',
