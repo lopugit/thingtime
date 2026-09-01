@@ -1380,6 +1380,24 @@ session document.
 
 See `docs/api/service-accounts.md` for the complete request and response shape.
 
+## Email Delivery And Owned SMTP
+
+Thingtime's long-term email plan lives in
+`docs/email-owned-architecture.md`. It covers the migration from provider-backed
+sending toward an owned SMTP stack, including Mongo-backed queues/events,
+transactional versus newsletter stream separation, inbound/reply handling,
+DNS/authentication records, sender reputation warm-up, bounce/complaint
+processing, one-click unsubscribe, abuse contacts, and compliance requirements.
+
+Do not send production email directly from feature code. App routes and auth
+flows should enqueue mail through the Thingtime email service boundary —
+`sendEmail()` in `remix/app/api/utils/email/service.ts`, backed by the
+`email_messages` outbox and its deliverability satellites in `FUNDAMENTALS.md`
+§3 — so SES, other bridge providers, and the future owned MTA can share the same
+templates, events, suppression list, and audit trail. That boundary and its
+collections already exist; the plan extends them rather than introducing a
+second email path.
+
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.
 

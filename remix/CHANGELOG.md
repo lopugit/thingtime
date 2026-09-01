@@ -1498,6 +1498,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   rejecting new unbound runtimes or obsolete hard-coded models. The deleted
   legacy GitHub workflow registration was also disabled.
   — Codex (AI), 2026-08-10
+- **PR conflict resolver model selection follows Thingtime Admin**: the
+  protected `github-actions` resolver controller loads the public, allowlisted
+  model waterfall instead of hardcoding Opus 4.8, safely falling back to the
+  Claude default if the setting is unavailable or malformed. The change was
+  authored on PR #54, but that branch's `.github/workflows/` snapshot has since
+  been collapsed back to the trigger-only listener, so the live implementation
+  is on `github-actions` only. — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default
@@ -2236,6 +2243,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR 57 notes](../PRs/57-codex-thingtime-embed-sdk--share-thingtime-through-a-single-file-embed-sdk.md).
   — _Codex (AI), 2026-07-10_
 
+- Added `docs/email-owned-architecture.md`, a phased plan for owning
+  Thingtime email end-to-end with a self-hosted SMTP path, Mongo-backed queues
+  and events, stream separation, sender-reputation warm-up, bounce/complaint
+  handling, one-click unsubscribe, abuse contacts, security controls, and
+  compliance requirements. — _Codex (AI), 2026-07-10_
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
