@@ -641,18 +641,59 @@ export const CommanderV2 = (props) => {
 										background={hoveredSuggestion === suggestionIndex ? 'var(--tt-surface-hover, #ececee)' : null}
 										_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 										cursor="pointer"
-										flexDirection="column"
+										align="center"
 										onClick={() => selectSuggestion(suggestionIndex)}
 										onMouseEnter={() => setHoveredSuggestion(suggestionIndex)}
+										gap={2.5}
 										paddingX={4}
 										paddingY={1.5}
 									>
-										<Text color="var(--tt-text, #5a5a66)" fontSize="13px" fontWeight="600" noOfLines={1}>
-											{result.resultType === 'person' ? '👤' : '🌀'} {result.title}
-										</Text>
-										<Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px" noOfLines={1}>
-											{result.context}
-										</Text>
+										<Center
+											background="var(--tt-card, #ffffff)"
+											border="1px solid var(--tt-border, #ececef)"
+											borderRadius="full"
+											flexShrink={0}
+											height="32px"
+											overflow="visible"
+											position="relative"
+											width="32px"
+										>
+											{result.resultType === 'person' && result.avatarUrl ? (
+												<img
+													alt=""
+													src={result.avatarUrl}
+													style={{ borderRadius: '999px', height: '100%', objectFit: 'cover', width: '100%' }}
+												/>
+											) : (
+												<Text aria-hidden="true" fontSize="16px">
+													{result.resultType === 'person' ? result.title.slice(0, 1).toUpperCase() : result.icon}
+												</Text>
+											)}
+											{result.resultType === 'person' ? (
+												<Center
+													aria-label="User result"
+													background="var(--tt-card, #ffffff)"
+													border="1px solid var(--tt-border, #ececef)"
+													borderRadius="full"
+													bottom="-3px"
+													fontSize="10px"
+													height="16px"
+													position="absolute"
+													right="-4px"
+													width="16px"
+												>
+													{result.icon}
+												</Center>
+											) : null}
+										</Center>
+										<Flex direction="column" minWidth={0} flex="1">
+											<Text color="var(--tt-text, #5a5a66)" fontSize="13px" fontWeight="600" noOfLines={1}>
+												{result.title}
+											</Text>
+											<Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px" noOfLines={1}>
+												{result.context}
+											</Text>
+										</Flex>
 									</Flex>
 								);
 							})}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -8,6 +8,8 @@ import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { RenderThing } from '~/components/Kinds';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import {
 	SensitiveThingReveal,
 	type SensitiveThingRevealDescriptor
@@ -120,6 +122,12 @@ export default function ThingPage() {
 		data: null,
 		error: null
 	});
+	// Both representations are useful on a permalink: the preview is the
+	// human-facing surface, while the full JSON remains available for people
+	// inspecting a Thing's exact shape. They are independent so either one (or
+	// both) can stay visible without another route or mode switch.
+	const [showPreview, setShowPreview] = React.useState(true);
+	const [showData, setShowData] = React.useState(true);
 
 	// Hide prior-account data synchronously during the render that observes an
 	// identity change; the effect below then aborts the old request and refetches.
@@ -204,6 +212,18 @@ export default function ThingPage() {
 		  )
 		: '';
 	const detail = diagnostic?.detail || genericDetail;
+	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
+	const thingPreview = thing ? (
+		thing.thingtime?.includes('component') ? (
+			<RenderThing
+				context={{ size: 'full', untrusted: !isThingOwner }}
+				fallback={<ThingView thing={thing.crystal} />}
+				thing={thing}
+			/>
+		) : (
+			<ThingView thing={thing.crystal} />
+		)
+	) : null;
 
 	const copyDetail = async () => {
 		try {
@@ -311,13 +331,43 @@ export default function ThingPage() {
 							</Flex>
 						</Box>
 
-						{attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+						{thing ? (
+							<Flex
+								{...CARD_STYLES}
+								align={{ base: 'flex-start', sm: 'center' }}
+								gap={4}
+								justify="space-between"
+								p={{ base: 4, md: 5 }}
+								wrap="wrap"
+							>
+								<Box>
+									<Heading as="h2" fontSize="md">
+										Views
+									</Heading>
+									<Text color={MUTED} fontSize="sm" mt={1}>
+										Choose the human-friendly preview, the raw Thing data, or both.
+									</Text>
+								</Box>
+								<Flex align="center" gap={4} role="group" aria-label="Thing page views" wrap="wrap">
+									<Flex align="center" gap={2}>
+										<Switch aria-label="Show rendered preview" isChecked={showPreview} onChange={(event) => setShowPreview(event.target.checked)} />
+										<Text fontSize="sm">Rendered preview</Text>
+									</Flex>
+									<Flex align="center" gap={2}>
+										<Switch aria-label="Show Thing data" isChecked={showData} onChange={(event) => setShowData(event.target.checked)} />
+										<Text fontSize="sm">Thing data</Text>
+									</Flex>
+								</Flex>
+							</Flex>
+						) : null}
 
-						{post ? (
+						{showPreview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+
+						{showPreview && post ? (
 							<Stack spacing={3} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
 									<Heading as="h2" fontSize="md">
-										Post view
+										Rendered preview
 									</Heading>
 									<Button
 										as={Link}
@@ -335,29 +385,40 @@ export default function ThingPage() {
 							</Stack>
 						) : null}
 
-						<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
-							<Flex align="center" justify="space-between" gap={3} mb={3}>
-								<Heading as="h2" fontSize="md">
-									{diagnostic ? 'Full redacted error' : 'Thing data'}
+						{showPreview && thing && !post ? (
+							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
+								<Heading as="h2" fontSize="md" mb={3}>
+									Rendered preview
 								</Heading>
-							</Flex>
-							<Box
-								as="pre"
-								m={0}
-								p={{ base: 3, md: 4 }}
-								borderRadius="var(--tt-radius-lg, 14px)"
-								bg="var(--tt-surface-alt, #f5f5f7)"
-								color="var(--tt-ink, #16161a)"
-								fontFamily="mono"
-								fontSize={{ base: '11px', md: '12px' }}
-								lineHeight="1.65"
-								overflowX="auto"
-								overflowWrap="anywhere"
-								whiteSpace="pre-wrap"
-							>
-								{detail}
+								<Box minW={0}>{thingPreview}</Box>
 							</Box>
-						</Box>
+						) : null}
+
+						{showData ? (
+							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
+								<Flex align="center" justify="space-between" gap={3} mb={3}>
+									<Heading as="h2" fontSize="md">
+										{diagnostic ? 'Full redacted error' : 'Thing data'}
+									</Heading>
+								</Flex>
+								<Box
+									as="pre"
+									m={0}
+									p={{ base: 3, md: 4 }}
+									borderRadius="var(--tt-radius-lg, 14px)"
+									bg="var(--tt-surface-alt, #f5f5f7)"
+									color="var(--tt-ink, #16161a)"
+									fontFamily="mono"
+									fontSize={{ base: '11px', md: '12px' }}
+									lineHeight="1.65"
+									overflowX="auto"
+									overflowWrap="anywhere"
+									whiteSpace="pre-wrap"
+								>
+									{detail}
+								</Box>
+							</Box>
+						) : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal
