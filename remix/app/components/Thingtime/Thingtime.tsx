@@ -1399,11 +1399,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			const { type } = args;
 			const newChild = typeof type?.value === 'function' ? type?.value() : type?.value || null;
 
-			console.log('[tt] newChild', newChild);
+			if (TT_DEBUG) console.log('[tt] newChild', newChild);
 
 			const thingIsArray = thing instanceof Array;
 
-			console.log('[tt] thingIsArray', thingIsArray);
+			if (TT_DEBUG) console.log('[tt] thingIsArray', thingIsArray);
 
 			if (thingIsArray) {
 				// add new child to array
@@ -1428,7 +1428,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			const newChildPath = newPath;
 			const newChildFullPath = [...safeSplit(fullPath), newChildPath];
 
-			console.log('[tt] newChildFullPath', newChildFullPath);
+			if (TT_DEBUG) console.log('[tt] newChildFullPath', newChildFullPath);
 
 			// create new child on thing using setThingtime
 			setThingtime(newChildFullPath, newChild, {

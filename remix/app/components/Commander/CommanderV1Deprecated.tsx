@@ -113,8 +113,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 	}, []);
 
 	const command = React.useMemo(() => {
-		const debug: any = {};
-		console.log('[tt][CommanderV1Deprecated.tsx][command useMemo][debug]', debug);
 		// const sanitizedCommand = sanitise(value)
 		// const sanitizedCommand = inputValue
 		const sanitizedInput = virtualValue;
@@ -127,7 +125,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		});
 
 		if (typeof validSetter === 'string') {
-			debug.validSetter = validSetter;
 			const indexOfSplitter = sanitizedInput?.indexOf(validSetter);
 			const [pathRaw, valRaw] = [sanitizedInput?.slice(0, indexOfSplitter), sanitizedInput?.slice(indexOfSplitter + validSetter?.length)];
 
@@ -150,8 +147,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		}
 
 		if (props?.pathPrefix) {
-			debug.pathPrefix = props?.pathPrefix;
-			debug.safeSplitPathPrefix = safeSplit(props?.pathPrefix);
 			return [safeSplit(props?.pathPrefix), sanitizedInput];
 		}
 
@@ -288,7 +283,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
-			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();
