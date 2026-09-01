@@ -613,6 +613,11 @@ is fixed, and cite the checklist you ran in the PR description.
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
       admin Run analysis sweep button) — the post gets stamped/flagged and the
       "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
+      Seed more than 25 text posts or 10 attachments and verify a full,
+      failure-free cron pass returns a `continuationRunId`; the durable runs
+      keep draining immediately until a short batch remains. Introduce one
+      provider failure and verify that surface stops its chain and waits for
+      the next hourly cron instead of retrying in a tight loop.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
