@@ -592,6 +592,21 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
 				'@media screen and (max-width: 650px)': {
+					// Editor.js normally puts its mobile + / settings action row after the
+					// active block. Keep the row on the same line at the inline end instead,
+					// and reserve its width so long or right-aligned text cannot overlap it.
+					'.codex-editor__redactor': {
+						boxSizing: 'border-box',
+						paddingInlineEnd: '80px'
+					},
+					'.codex-editor .ce-toolbar__actions': {
+						insetInlineStart: 'auto !important',
+						insetInlineEnd: '0 !important',
+						top: 'auto',
+						bottom: 0,
+						paddingInlineEnd: 0,
+						paddingRight: 0
+					},
 					// Editor.js fixes its mobile sheets to the layout viewport. Keep the
 					// opened top-level sheet inside iOS's keyboard/zoom visual viewport.
 					'.ce-popover.ce-popover--opened:not(.ce-popover--inline):not(.ce-popover--nested) > .ce-popover__container': {
