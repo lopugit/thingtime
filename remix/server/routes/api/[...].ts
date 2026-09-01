@@ -82,6 +82,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/auth/accounts/switch': () => import('../../../app/routes/api/v1/auth/accounts/switch/_switch'),
   'v1/auth/account-hints': () => import('../../../app/routes/api/v1/auth/account-hints/_account-hints'),
   'v1/auth/account-hints/resolve': () => import('../../../app/routes/api/v1/auth/account-hints/resolve/_resolve'),
+  'v1/auth/introspect': () => import('../../../app/routes/api/v1/auth/introspect/_introspect'),
   'v1/auth/sso-handoff': () => import('../../../app/routes/api/v1/auth/sso-handoff/_sso-handoff'),
   'v1/auth/sso-session': () => import('../../../app/routes/api/v1/auth/sso-session/_sso-session'),
   'v1/fedcm/config': () => import('../../../app/routes/api/v1/fedcm/config/_config'),

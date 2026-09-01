@@ -2716,6 +2716,62 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-introspect',
+    group: 'auth',
+    title: 'Token introspection',
+    endpoint: '/api/v1/auth/introspect',
+    summary: 'Reports whether a Thingtime token is still active (signed, unexpired, and not revoked server-side).',
+    detail:
+      'JWKS lets services verify a token signature, issuer, and expiry offline, but cannot see server-side revocation. POST the token here to check the live session record in Thingtime: active is true only while the session exists, is unexpired, and has not been revoked (for example by logout). Possession of the token is the authorization — you can only ask about tokens you already hold — and inactive tokens return a bare { "active": false } with no reason.',
+    auth: {
+      mode: 'none',
+      description: 'No cookie or separate credential — the introspected token itself is the input, sent in the body or as a Bearer header.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { "token": "<jwt>" } (or send the token as an Authorization: Bearer header with an empty JSON body).',
+      'Call it from your server: introspection is a back-channel check, and unlike /api/v1/oauth/userinfo this route sends no CORS headers, so browser JavaScript on another origin cannot read the response.',
+      'Thingtime verifies the signature, then checks the session record for revocation and expiry.',
+      'active: true includes sub (user id), jti (session id), purpose, iat/exp (epoch seconds; exp null means non-expiring), and iss.',
+      'active only means the session is live — it does not mean the credential is a full account session. Branch on purpose: browser and service are full account credentials; app, app-sandbox, pat, oauth-code, chatgpt-oauth-code, chatgpt-mcp, chatgpt-mcp-refresh, and chatgpt-mcp-connection are scoped credentials that other endpoints will still reject. Treat any purpose you do not recognise as scoped.',
+      'Treat { "active": false } as terminal — re-authenticate to obtain a new token; the response never says why a token is inactive.',
+      'Poll only when you need live revocation status; keep offline JWKS verification for routine signature checks.'
+    ],
+    requestExamples: [
+      {
+        name: 'Introspect a bearer token',
+        description: 'Check whether a stored token is still usable.',
+        method: 'POST',
+        body: { token: '<jwt>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The token is signed, unexpired, and its session is still live.',
+        body: {
+          active: true,
+          sub: '64f000000000000000000001',
+          jti: '3f1c2a34-5678-4abc-9def-0123456789ab',
+          purpose: 'browser',
+          iat: 1767225600,
+          exp: 1769817600,
+          iss: 'https://thingtime.com'
+        }
+      },
+      {
+        status: 200,
+        description: 'The token is invalid, expired, or its session was revoked.',
+        body: { active: false }
+      },
+      {
+        status: 400,
+        description: 'No token was provided in the body or Bearer header.',
+        body: { ok: false, error: 'Provide the token to introspect as { "token": "…" } or a Bearer header' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-logout',
     group: 'auth',
     title: 'Logout',

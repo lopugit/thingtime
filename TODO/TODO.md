@@ -44,10 +44,13 @@
    fallback verifier and the legacy secret from deployment environments.
 
 4. **Add revocation-aware token introspection for external platforms.**
-
-   `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
-   expiry offline. If an external integration needs live session revocation
-   status, add a server-side introspection endpoint that checks Mongo sessions.
+   ✅ Built 2026-07-21: `POST /api/v1/auth/introspect` (RFC 7662 shape) —
+   `introspectToken` in `getCurrentUser.ts` verifies the signature then checks
+   the live Mongo session (revocation + expiry + user status). Possession of
+   the token is the authorization; inactive tokens return a bare
+   `{ active: false }` (no oracle). Rate-limited (`auth.introspect`),
+   documented on `/docs/api`, covered in `apiTests.ts`, and live-verified
+   (register → active:true; logout → active:false).
 
 5. **Replace Vercel status polling with Vercel webhooks.**
 

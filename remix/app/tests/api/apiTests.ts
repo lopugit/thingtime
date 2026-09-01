@@ -175,6 +175,30 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200, 503], (body) => Array.isArray(body?.keys), 'JWKS body contains a keys array.')
   },
   {
+    id: 'auth-introspect-missing-token',
+    name: 'Introspect without token',
+    description: 'Token introspection requires a token in the body or Bearer header.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Introspection rejected a missing token.')
+  },
+  {
+    id: 'auth-introspect-invalid-token',
+    name: 'Introspect invalid token',
+    description: 'An unverifiable token introspects as inactive with no failure reason (no oracle).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not-a-real-jwt' },
+    expect: expectJson(
+      [200],
+      (body) => body?.active === false && Object.keys(body || {}).length === 1,
+      'Invalid token reported as bare { active: false }.'
+    )
+  },
+  {
     id: 'auth-me-anonymous',
     name: 'Current user anonymous',
     description: 'Anonymous requests resolve to a null current user.',

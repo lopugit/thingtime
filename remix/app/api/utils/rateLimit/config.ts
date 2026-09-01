@@ -254,7 +254,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // rejects traffic if the shared limiter is unavailable.
   'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
   'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
-  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true }
+  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  // token introspection (POST /api/v1/auth/introspect) — read-only status
+  // checks by external platforms; two cheap DB reads per call, keyed by IP for
+  // anonymous callers, bounded like the other public reads
+  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
