@@ -516,6 +516,32 @@ function assertWorkflowSource() {
     /if grep -Eq 'HTTP \(408\|429\|500\|502\|503\|504\)\(\[\^0-9\]\|\$\)' "\$errors"; then/u,
     "no gh_read_retry copy classifies transience by HTTP status alone",
   );
+  // GitHub answers a diff it could not finish generating with HTTP 422 and
+  // "Sorry, this diff is taking too long to generate." That is a server-side
+  // generation timeout on an idempotent read, not a client error: the
+  // paginated `pulls/291/files` read that took the repository-wide scan down
+  // in run 33565995120 replayed cleanly minutes later, all 29 pages. Pin the
+  // declaration and the branch separately, exactly like the transport
+  // predicate, because a copy that keeps one without the other is silently
+  // back to the outage shape.
+  assert.equal(
+    source.match(/^\s*slow_diff='diff is taking too long to generate'$/gmu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy declares GitHub's diff-generation timeout",
+  );
+  assert.equal(
+    source.match(/&& grep -Fq "\$slow_diff" "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy branches on the diff-generation timeout, not just declares it",
+  );
+  // The status alone must never become retryable: an invalid ref, "No commits
+  // between", and a failed validation are all 422 and all have to stay fatal
+  // on the first attempt. The message is only honoured paired with its status.
+  assert.equal(
+    source.match(/grep -Eq 'HTTP 422\(\[\^0-9\]\|\$\)' "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy scopes that retry to a 422 carrying that exact message",
+  );
   assert.match(
     source,
     /if ! gh_read_retry graphql --paginate --slurp[\s\S]*Could not read the open PR inventory from GitHub[\s\S]*successful but malformed PR inventory response/u,

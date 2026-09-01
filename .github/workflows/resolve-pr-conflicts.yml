@@ -1407,15 +1407,27 @@ jobs:
           # Match that decode message too: only a body that stopped early
           # produces it, while a genuinely malformed payload (an HTML error
           # page, an auth/permission JSON error) fails with a different message
-          # and still surfaces immediately. Keep every notice on stderr so
+          # and still surfaces immediately. A diff GitHub could not finish
+          # generating is the same class one layer further up: run 33565995120
+          # lost `pulls/291/files` (2896 files) to HTTP 422 "Sorry, this diff
+          # is taking too long to generate", which is a server-side generation
+          # timeout on an idempotent read, not a client validation error — the
+          # identical paginated read replayed cleanly minutes later, all 29
+          # pages. 422 as a status is NOT retryable (an invalid ref, "No
+          # commits between", a failed validation all use it and must still
+          # fail on the first attempt), so the status and that exact message
+          # are matched together. gh prints both on one line but in the
+          # opposite order, which is why this stays two tests, not one regex.
+          # Keep every notice on stderr so
           # command-substitution JSON stays clean, and surface
           # auth/schema/permission failures
           # immediately. Mutating API calls deliberately do not use this helper
           # because a blind retry could duplicate a side effect; every read
           # routed here is idempotent, so replaying a torn-down request is safe.
           gh_read_retry() {
-            local attempt output errors delay transport
+            local attempt output errors delay transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -1427,7 +1439,9 @@ jobs:
                 return 0
               fi
               if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                 || grep -Eq "$transport" "$errors"; then
+                 || grep -Eq "$transport" "$errors" \
+                 || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                      && grep -Fq "$slow_diff" "$errors"; }; then
                 if [ "$attempt" -lt 4 ]; then
                   delay="$((1 << attempt))"
                   echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -3089,8 +3103,9 @@ jobs:
           # Retry only read-only metadata commands and keep diagnostics off
           # stdout so command-substitution JSON remains parseable.
           gh_read_retry() {
-            local attempt delay output errors transport
+            local attempt delay output errors transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -3103,8 +3118,12 @@ jobs:
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
+              # GitHub's diff-generation timeout does carry one, but 422 as a
+              # status is not retryable, so it is paired with its exact message.
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                   || grep -Eq "$transport" "$errors"; } \
+                   || grep -Eq "$transport" "$errors" \
+                   || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                        && grep -Fq "$slow_diff" "$errors"; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -4380,8 +4399,9 @@ jobs:
           set -euo pipefail
 
           gh_read_retry() {
-            local attempt delay output errors transport
+            local attempt delay output errors transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -4394,8 +4414,12 @@ jobs:
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
+              # GitHub's diff-generation timeout does carry one, but 422 as a
+              # status is not retryable, so it is paired with its exact message.
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                   || grep -Eq "$transport" "$errors"; } \
+                   || grep -Eq "$transport" "$errors" \
+                   || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                        && grep -Fq "$slow_diff" "$errors"; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
