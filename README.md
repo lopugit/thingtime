@@ -1550,7 +1550,7 @@ installs locked dependencies, and generates `.vercel/output` without any
 repository or Environment secrets. The protected publisher never executes the
 product checkout: it validates the short-lived archive's paths, links, size,
 routes, and Vite shell, then uses a pinned Vercel CLI with `--prebuilt` and
-`--skip-domain`. Only that controller process receives the Vercel token and S3
+`--target=develop`. Only that controller process receives the Vercel token and S3
 CORS probe URL. Root `vercel.json` disables automatic Git deployments for
 every branch except exact `main` and `develop`, so feature pushes cannot create
 a second native Vercel build for the same SHA.
