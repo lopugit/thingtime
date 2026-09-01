@@ -33,6 +33,21 @@ import type { WebpageBlock } from './webpageBlocks';
 // state and reconciles in the background (optimistic-render house rule).
 const routeCache = new Map<string, ResolvedWebpage | null>();
 
+// Personalised docs belong to ONE account — logout or account switch must
+// drop them or the previous user's blocks keep rendering from cache.
+let cacheOwnerId: string | null = null;
+const ensureCacheOwner = (userId: string | null) => {
+	if (cacheOwnerId === userId) return;
+	cacheOwnerId = userId;
+	routeCache.clear();
+	globalCache = null;
+	globalFetched = false;
+};
+
+// Exit-with-unsaved-changes guard: the editor (mounted per-path) reports its
+// dirty state here so the host's Done pill can ask before discarding.
+const siteEditorDirty = { current: false };
+
 const normalizePath = (pathname: string): string => {
 	const trimmed = pathname.replace(/\/+$/, '');
 	return trimmed || '/';
@@ -87,7 +102,15 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 		if (!enabled || globalFetched) return;
 		globalFetched = true;
 		(async () => {
-			globalCache = await resolveWebpageClient({ kind: 'global' });
+			const resolved = await resolveWebpageClient({ kind: 'global' });
+			// null is a FAILED resolve (a doc-less success still returns a
+			// result) — leave the flag unset so the next page view retries
+			// instead of hiding global blocks for the whole session
+			if (resolved === null) {
+				globalFetched = false;
+				return;
+			}
+			globalCache = resolved;
 			setState(globalCache);
 		})();
 	}, [enabled]);
@@ -354,6 +377,15 @@ const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: 
 		};
 	}, [path]);
 
+	// report unsaved changes to the host so ✕ Done can confirm before
+	// discarding them
+	React.useEffect(() => {
+		siteEditorDirty.current = pageDraft.dirty || globalDraft.dirty;
+		return () => {
+			siteEditorDirty.current = false;
+		};
+	}, [pageDraft.dirty, globalDraft.dirty]);
+
 	const saveAll = React.useCallback(async () => {
 		if (globalDraft.dirty) {
 			const result = await globalDraft.save({ name: 'Global blocks' });
@@ -550,8 +582,15 @@ export const SiteBlocksHost = ({ children }: { children: React.ReactNode }) => {
 
 	const editMode = !!thingtime?.settings?.builder?.editMode;
 	const toggleEditMode = React.useCallback(() => {
+		// leaving edit mode discards the draft — unsaved work asks first
+		if (editMode && siteEditorDirty.current && !window.confirm('Discard unsaved changes to this page?')) return;
 		setThingtime?.('settings.builder.editMode', !editMode, { ignoreUndoRedo: true, namespace: 'builder' });
 	}, [editMode, setThingtime]);
+
+	// personalised caches are per-account
+	React.useEffect(() => {
+		ensureCacheOwner(user?.id || null);
+	}, [user?.id]);
 
 	// Always-mounted invalidation (the /builder canvas saves while no page
 	// view is mounted): any webpage save clears the module caches so the next

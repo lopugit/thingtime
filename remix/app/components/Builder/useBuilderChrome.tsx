@@ -169,8 +169,15 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 					...(attachment.name ? { alt: attachment.name } : {})
 				};
 				const insertAtTarget = target && target.kind === 'insert' ? target : null;
+				// the recorded container may have been deleted while the upload was
+				// in flight — insertBlock would then silently drop the block, so a
+				// vanished target falls back to appending at the page root
+				const containerAlive =
+					!insertAtTarget?.containerId || !!findBlock(current.blocks, insertAtTarget.containerId);
 				current.setBlocks(
-					insertBlock(current.blocks, insertAtTarget?.containerId ?? null, insertAtTarget?.index ?? current.blocks.length, block)
+					containerAlive
+						? insertBlock(current.blocks, insertAtTarget?.containerId ?? null, insertAtTarget?.index ?? current.blocks.length, block)
+						: insertBlock(current.blocks, null, current.blocks.length, block)
 				);
 				setSelectedId(block.id);
 			}

@@ -169,6 +169,9 @@ export const resolveWebpage = async (
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
 	const doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
 	if (!doc) return fail(404, 'Webpage not found');
-	const source: 'user' | 'system' = doc.ownerId === 'system' ? 'system' : 'user';
+	// source 'user' means "the VIEWER owns this and saves update it in place".
+	// Someone else's shared page must report as 'system' so a viewer who edits
+	// it takes the fork path (their own twin) instead of a doomed update.
+	const source: 'user' | 'system' = viewer?.id && doc.ownerId === viewer.id ? 'user' : 'system';
 	return resultFor(viewer, doc, source);
 };

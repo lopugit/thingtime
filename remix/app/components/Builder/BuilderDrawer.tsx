@@ -323,11 +323,14 @@ const CssField = ({
 const CustomCssEditor = ({ block, onCommit }: { block: WebpageBlock; onCommit: (css: Record<string, string>) => void }) => {
 	const [text, setText] = React.useState(() => cssRecordToLines(block.css));
 	const editedRef = React.useRef(false);
+	const serialized = cssRecordToLines(block.css);
 	React.useEffect(() => {
-		// a different block selected → show its css (never clobber mid-edit text)
-		if (!editedRef.current) setText(cssRecordToLines(block.css));
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- block identity change resets the buffer
-	}, [block.id]);
+		// track the block's css from OUTSIDE this textarea too (the dedicated
+		// padding/typography fields write the same record) — a stale buffer
+		// here would commit old css on blur, reverting those edits. Only text
+		// actively being typed is protected from the resync.
+		if (!editedRef.current) setText(serialized);
+	}, [block.id, serialized]);
 	return (
 		<FieldRow label="Custom CSS (property: value per line)">
 			<Textarea

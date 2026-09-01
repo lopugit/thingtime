@@ -229,14 +229,20 @@ const EdgeInsertStrip = ({
 	const [active, setActive] = React.useState(false);
 	const coarse = useCoarsePointer();
 	const vertical = side === 'left' || side === 'right';
+	// fingers need bigger seams than mouse pointers (WCAG 2.5.8 / HIG):
+	// coarse pointers get a 28px hit band centred on the same seam line
+	const thickness = coarse ? '28px' : '16px';
+	const offset = coarse ? '-14px' : '-8px';
+	const vThickness = coarse ? '28px' : '18px';
+	const vOffset = coarse ? '-14px' : '-9px';
 	const rect =
 		side === 'top'
-			? { top: '-8px', left: 0, right: 0, height: '16px' }
+			? { top: offset, left: 0, right: 0, height: thickness }
 			: side === 'bottom'
-				? { bottom: '-8px', left: 0, right: 0, height: '16px' }
+				? { bottom: offset, left: 0, right: 0, height: thickness }
 				: side === 'left'
-					? { left: '-9px', top: 0, bottom: 0, width: '18px' }
-					: { right: '-9px', top: 0, bottom: 0, width: '18px' };
+					? { left: vOffset, top: 0, bottom: 0, width: vThickness }
+					: { right: vOffset, top: 0, bottom: 0, width: vThickness };
 	return (
 		<Flex
 			as="button"
@@ -446,17 +452,24 @@ const BlockFrame = ({
 					  }
 					: undefined
 			}
-			outline={
-				dropTarget
+			// selection chrome draws on an overlay pseudo-element so the content
+			// box itself carries NO edit-only border-radius — a block background
+			// must have identical (square) corners in edit and view mode
+			_after={{
+				content: '""',
+				position: 'absolute',
+				inset: '-4px',
+				borderRadius: 'var(--tt-radius-xs, 7px)',
+				border: dropTarget
 					? `2px dashed ${tone}`
 					: selected
 						? `2px solid ${tone}`
 						: hovered
 							? `1px dashed ${tone}`
-							: '1px dashed transparent'
-			}
-			outlineOffset="2px"
-			borderRadius="var(--tt-radius-xs, 7px)"
+							: '1px dashed transparent',
+				pointerEvents: 'none',
+				zIndex: 5
+			}}
 			cursor="pointer"
 			onMouseEnter={(event) => {
 				event.stopPropagation();
@@ -495,7 +508,10 @@ const BlockFrame = ({
 					position="absolute"
 					top="-14px"
 					left="6px"
-					zIndex={6}
+					// above the insert strips (also z 6): the strip renders later in
+					// the DOM and would otherwise hit-test OVER the chip's whole
+					// central band, eating its clicks and drags
+					zIndex={7}
 					alignItems="center"
 					columnGap="6px"
 					fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
@@ -553,6 +569,35 @@ const BlockFrame = ({
 							⊞
 						</Box>
 					) : null}
+					{!locked && chrome.onContextMenu ? (
+						// the FULL menu (duplicate / move / delete / advanced editor) —
+						// the only path to it on touch devices, where long-press never
+						// fires contextmenu
+						<Box
+							as="button"
+							type="button"
+							className="ttChipAction"
+							aria-label="Block menu"
+							title="Block menu — duplicate, move, delete, wrap, advanced editor"
+							data-testid={`menu-block-${block.id}`}
+							marginLeft="2px"
+							paddingX="3px"
+							fontSize="12px"
+							lineHeight="1"
+							opacity={0.85}
+							_hover={{ opacity: 1, transform: 'scale(1.15)' }}
+							cursor="pointer"
+							onClick={(event: React.MouseEvent) => {
+								event.preventDefault();
+								event.stopPropagation();
+								const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
+								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6);
+							}}
+						>
+							⋯
+						</Box>
+					) : null}
 				</Flex>
 			)}
 			{children}
@@ -583,22 +628,53 @@ const RichHtmlView = React.memo(function RichHtmlView({
 	html,
 	as,
 	typo,
-	fallback
+	fallback,
+	sx
 }: {
 	html: string;
 	as?: string;
 	typo?: Record<string, unknown>;
 	fallback?: React.ReactNode;
+	sx?: Record<string, unknown>;
 }) {
 	const node = React.useMemo(() => htmlToNode(html), [html]);
 	if (!node) return <>{fallback ?? null}</>;
 	return (
-		<Box as={(as || 'div') as any} {...(typo as any)} sx={RICH_HTML_SX}>
+		<Box as={(as || 'div') as any} {...(typo as any)} sx={sx || RICH_HTML_SX}>
 			<HtmlThingRenderer node={node} />
 		</Box>
 	);
 });
 
+// Inspector typography must actually WIN inside rich markup: the document
+// scale (RICH_HTML_SX) sets explicit sizes on p/h1-h6, so a block-level
+// font-size on the wrapper would otherwise never reach them.
+const TYPO_CSS_KEYS: Record<string, string> = {
+	'font-size': 'fontSize',
+	'line-height': 'lineHeight',
+	'letter-spacing': 'letterSpacing',
+	'font-weight': 'fontWeight',
+	'font-family': 'fontFamily',
+	color: 'color',
+	'text-align': 'textAlign',
+	'text-transform': 'textTransform',
+	'font-style': 'fontStyle',
+	'text-decoration': 'textDecoration'
+};
+
+const typographyFromCss = (css?: Record<string, string>): Record<string, unknown> | null => {
+	if (!css) return null;
+	const out: Record<string, unknown> = {};
+	for (const [cssKey, prop] of Object.entries(TYPO_CSS_KEYS)) {
+		const value = css[cssKey];
+		if (value) out[prop] = value;
+	}
+	return Object.keys(out).length ? out : null;
+};
+
+// Split once at module scope so BlockView hands the SAME typo object to the
+// memoised RichHtmlView on every render (a fresh rest-spread per render was
+// silently defeating that memo for every text block).
 const TEXT_STYLES: Record<string, Record<string, unknown>> = {
 	heading: {
 		as: 'h2',
@@ -623,6 +699,14 @@ const TEXT_STYLES: Record<string, Record<string, unknown>> = {
 		color: 'var(--tt-text, #5a5a66)'
 	}
 };
+
+const TEXT_STYLE_AS: Record<string, string | undefined> = {};
+const TEXT_STYLE_TYPO: Record<string, Record<string, unknown>> = {};
+for (const [key, style] of Object.entries(TEXT_STYLES)) {
+	const { as, ...typo } = style as Record<string, unknown> & { as?: string };
+	TEXT_STYLE_AS[key] = as;
+	TEXT_STYLE_TYPO[key] = typo;
+}
 
 const ComponentBlockView = ({
 	block,
@@ -693,6 +777,8 @@ const ComponentBlockView = ({
 		: undefined;
 
 	if (!component || !crystal?.render) {
+		// live viewers see nothing — the "not found" card is edit chrome
+		if (!chrome) return null;
 		return (
 			<Flex
 				alignItems="center"
@@ -807,10 +893,30 @@ const BlockView = (
 		indexInParent = 0
 	} = props;
 
+	// Inspector typography (font-size, color, …) must reach the text itself,
+	// not just the wrapper — explicit sizes in the typo presets and the rich
+	// document scale would otherwise always win over block.css.
+	const cssTypo = React.useMemo(() => typographyFromCss(block.css), [block.css]);
+	const styleTypo = TEXT_STYLE_TYPO[block.style || 'body'] || TEXT_STYLE_TYPO.body;
+	const mergedTypo = React.useMemo(
+		() => (cssTypo ? { ...styleTypo, ...cssTypo } : styleTypo),
+		[cssTypo, styleTypo]
+	);
+	const richSx = React.useMemo(
+		() =>
+			cssTypo
+				? {
+						...RICH_HTML_SX,
+						'& :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th)': cssTypo
+				  }
+				: undefined,
+		[cssTypo]
+	);
+
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
-		const { as: defaultAs, ...typo } = TEXT_STYLES[block.style || 'body'] as Record<string, unknown> & { as?: string };
-		const asTag = block.tag || defaultAs || 'p';
+		const typo = mergedTypo;
+		const asTag = block.tag || TEXT_STYLE_AS[block.style || 'body'] || 'p';
 		if (chrome && chrome.selectedId === block.id && chrome.onUpdate) {
 			// selected text edits IN PLACE with the FULL Editor.js editor —
 			// headings, lists, quotes, tables, inline formatting, right there on
@@ -826,7 +932,7 @@ const BlockView = (
 		} else if (block.html) {
 			// rich text renders as a styled flow container (never inside a <p> —
 			// pasted markup may hold block elements)
-			body = <RichHtmlView html={block.html} as={block.tag || 'div'} typo={typo} fallback={block.text} />;
+			body = <RichHtmlView html={block.html} as={block.tag || 'div'} typo={styleTypo} sx={richSx} fallback={block.text} />;
 		} else {
 			body = (
 				<Text as={asTag as any} {...(typo as any)}>
@@ -837,7 +943,8 @@ const BlockView = (
 	} else if (block.type === 'media') {
 		const src = block.src || '';
 		if (!src) {
-			body = (
+			// the placeholder is edit chrome — a live viewer sees nothing
+			body = !chrome ? null : (
 				<Flex
 					alignItems="center"
 					justifyContent="center"
@@ -861,8 +968,8 @@ const BlockView = (
 		}
 	} else if (block.type === 'html') {
 		body = block.html ? (
-			<RichHtmlView html={block.html} />
-		) : (
+			<RichHtmlView html={block.html} sx={richSx} />
+		) : !chrome ? null : (
 			<Flex
 				alignItems="center"
 				columnGap={2}
@@ -1026,7 +1133,9 @@ const BlockList = (
 };
 
 export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => {
-	if (props.bare && !props.chrome) return <BlockList {...props} containerId={null} />;
+	// bare is bare in BOTH modes — the edit canvas must not add root gaps the
+	// live page doesn't have (true WYSIWYG includes the spacing between blocks)
+	if (props.bare) return <BlockList {...props} containerId={null} />;
 	// identical root spacing in both modes — WYSIWYG includes the gaps
 	return (
 		<Flex flexDirection="column" width="100%" rowGap={4}>

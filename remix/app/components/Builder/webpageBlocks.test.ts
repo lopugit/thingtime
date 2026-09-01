@@ -87,6 +87,23 @@ test('move reorders at root, moves across containers, refuses cycles', () => {
 	assert.deepEqual(moveBlock(blocks, 'a', 'native-home', 0), blocks);
 });
 
+test('move indices are rendered-seam indices — downward same-container drags land ON the seam', () => {
+	// root renders [a, row, native-home]: drop a on the seam between row and
+	// native-home (rendered index 2, computed while a is still in the list)
+	const blocks = tree();
+	const down = moveBlock(blocks, 'a', null, 2);
+	assert.deepEqual(down.map((block) => block.id), ['row', 'a', 'native-home']);
+	// a's own bottom seam (index 1) is a visual no-op and stays one
+	const noop = moveBlock(blocks, 'a', null, 1);
+	assert.deepEqual(noop.map((block) => block.id), ['a', 'row', 'native-home']);
+	// end of list
+	const last = moveBlock(blocks, 'a', null, 3);
+	assert.deepEqual(last.map((block) => block.id), ['row', 'native-home', 'a']);
+	// same convention inside a container: row renders [b, c] — drop b below c
+	const inRow = moveBlock(blocks, 'b', 'row', 2);
+	assert.deepEqual(findBlock(inRow, 'row')?.children?.map((block) => block.id), ['c', 'b']);
+});
+
 test('newBlockId never collides and labels stay short', () => {
 	const existing = new Set(['text-1', 'text-2']);
 	const id = newBlockId('text', existing);

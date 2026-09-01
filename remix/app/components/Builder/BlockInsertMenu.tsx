@@ -85,13 +85,19 @@ export const BlockInsertMenu = (props: {
 			if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
 		};
 		const onKey = (event: KeyboardEvent) => {
-			if (event.code === 'Escape') onClose();
+			// CAPTURE + preventDefault: this Escape closes the MENU only — the
+			// canvas's bubble-phase deselect listener must not also fire (same
+			// listener-order trap the context menu hit)
+			if (event.code === 'Escape') {
+				event.preventDefault();
+				onClose();
+			}
 		};
 		window.addEventListener('mousedown', onDown);
-		window.addEventListener('keydown', onKey);
+		window.addEventListener('keydown', onKey, true);
 		return () => {
 			window.removeEventListener('mousedown', onDown);
-			window.removeEventListener('keydown', onKey);
+			window.removeEventListener('keydown', onKey, true);
 		};
 	}, [onClose]);
 

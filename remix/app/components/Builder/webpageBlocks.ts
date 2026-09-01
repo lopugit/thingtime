@@ -135,8 +135,10 @@ export const updateBlock = (blocks: WebpageBlock[], id: string, patch: Partial<W
 	mapTree(blocks, (list) => list.map((block) => (block.id === id ? { ...block, ...patch, id: block.id, type: block.type } : block)));
 
 // Move a block to (containerId, index). Refuses moves into the block's own
-// subtree (would orphan it). Index is interpreted against the list WITHOUT
-// the moving block (the usual drag-drop convention).
+// subtree (would orphan it). Index is interpreted against the RENDERED list
+// (the one still containing the moving block) — that is what every drop
+// caller computes from seam positions — so a same-container downward move
+// compensates for the removal happening first.
 export const moveBlock = (
 	blocks: WebpageBlock[],
 	id: string,
@@ -151,8 +153,15 @@ export const moveBlock = (
 		const target = findBlock(blocks, containerId);
 		if (!target || target.type !== 'container') return blocks;
 	}
+	const sourceParent = findParentId(blocks, id, null);
+	let insertIndex = index;
+	if (sourceParent !== undefined && sourceParent === containerId) {
+		const siblings = sourceParent === null ? blocks : findBlock(blocks, sourceParent)?.children || [];
+		const sourceIndex = siblings.findIndex((block) => block.id === id);
+		if (sourceIndex !== -1 && sourceIndex < index) insertIndex = index - 1;
+	}
 	const without = removeBlock(blocks, id);
-	return insertBlock(without, containerId, index, moving);
+	return insertBlock(without, containerId, insertIndex, moving);
 };
 
 // Wrap a block IN PLACE inside a new container (Figma's "wrap in frame"):
@@ -232,7 +241,9 @@ export const moveBlockRelative = (blocks: WebpageBlock[], id: string, delta: -1 
 	const index = siblings.findIndex((block) => block.id === id);
 	const nextIndex = index + delta;
 	if (index === -1 || nextIndex < 0 || nextIndex >= siblings.length) return blocks;
-	return moveBlock(blocks, id, parentId, nextIndex);
+	// moveBlock speaks rendered-seam indices: to END UP at nextIndex when
+	// stepping down, aim at the seam BELOW the sibling being passed
+	return moveBlock(blocks, id, parentId, delta > 0 ? nextIndex + 1 : nextIndex);
 };
 
 export const defaultTextBlock = (existing: Set<string>): WebpageBlock => ({

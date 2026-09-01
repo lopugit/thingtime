@@ -28,8 +28,14 @@ const elementToNode = (el: Element): HtmlThingNode | null => {
 	if (DROP_TAGS.has(tag)) return null;
 	const props: Record<string, unknown> = {};
 	for (const attr of Array.from(el.attributes)) {
-		if (attr.name === 'style') continue;
-		props[attr.name] = attr.value;
+		const name = attr.name.toLowerCase();
+		if (name === 'style') continue;
+		// authored markup must not mint tt-action bindings — those attributes
+		// are allowlisted downstream ONLY for trusted component templates, and
+		// a page's html block runs with the VIEWER's click, not the author's
+		if (name.startsWith('data-tt-')) continue;
+		if (name.startsWith('on')) continue;
+		props[name] = attr.value;
 	}
 	const style = styleTextToObject(el as HTMLElement);
 	if (style) props.style = style;

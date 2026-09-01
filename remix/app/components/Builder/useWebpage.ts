@@ -19,9 +19,19 @@ export type WebpageTarget =
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null } | null;
+	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[] } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
+};
+
+// The public toggle must never bulldoze the rest of the acl — hidden links
+// (tt:hidden + link keys), custom audiences (tt:user/…, tt:group/…), and app
+// grants (tt:app/…) all live in the same list. Only the tt:all entry is the
+// toggle's to add or remove.
+export const webpageAclForToggle = (current: unknown, isPublic: boolean): string[] => {
+	const list = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === 'string') : [];
+	const others = list.filter((entry) => entry !== 'tt:all' && entry !== ACL_OWNER);
+	return isPublic ? [ACL_OWNER, ...others, 'tt:all'] : [ACL_OWNER, ...others];
 };
 
 const targetQuery = (target: WebpageTarget): string => {
@@ -77,6 +87,13 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 
 	const targetKey = target ? JSON.stringify(target) : null;
 
+	// dirtyRef mirrors dirty for async landings: a background re-resolve (the
+	// post-save refresh) must never clobber keystrokes typed while it was in
+	// flight — only a target change or an explicitly-clean draft applies
+	// server blocks wholesale.
+	const dirtyRef = React.useRef(false);
+	const appliedTargetRef = React.useRef<string | null>(null);
+
 	React.useEffect(() => {
 		if (!targetKey) return;
 		let cancelled = false;
@@ -85,8 +102,13 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 			const data = await resolveWebpageClient(JSON.parse(targetKey) as WebpageTarget);
 			if (cancelled) return;
 			setResolved(data);
-			setBlocksState((data?.page?.crystal?.blocks as WebpageBlock[]) || []);
-			setDirty(false);
+			const targetChanged = appliedTargetRef.current !== targetKey;
+			appliedTargetRef.current = targetKey;
+			if (targetChanged || !dirtyRef.current) {
+				setBlocksState((data?.page?.crystal?.blocks as WebpageBlock[]) || []);
+				setDirty(false);
+				dirtyRef.current = false;
+			}
 			setExtraComponents({});
 			setLoading(false);
 		})();
@@ -98,6 +120,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	const setBlocks = React.useCallback((next: WebpageBlock[]) => {
 		setBlocksState(next);
 		setDirty(true);
+		dirtyRef.current = true;
 	}, []);
 
 	const componentsByRef = React.useMemo(
@@ -172,16 +195,37 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 			};
 			try {
 				if (resolved?.source === 'user' && page) {
+					// the public toggle merges with the page's existing acl (hidden
+					// links, custom audiences, app grants survive the toggle)
+					let aclPatch: { acl: string[] } | Record<string, never> = {};
+					if (options?.isPublic !== undefined) {
+						let currentAcl: unknown = page.acl;
+						if (!Array.isArray(currentAcl)) {
+							try {
+								const current: any = await apiRef.current.v1.things.get({ id: page.id });
+								currentAcl = current?.thing?.acl ?? current?.things?.[0]?.acl;
+							} catch {
+								// fall through — the merge treats unknown as owner-only base
+							}
+						}
+						aclPatch = { acl: webpageAclForToggle(currentAcl, options.isPublic) };
+					}
 					const resp: any = await apiRef.current.v1.things.update({
 						id: page.id,
 						crystal,
-						// standalone pages honour the public toggle on every save; site
-						// personalisations never send acl (they stay private)
-						...(options?.isPublic === undefined ? {} : { acl: [options.isPublic ? 'tt:all' : ACL_OWNER] })
+						// refuse to silently overwrite a save made from another tab or
+						// device since this draft loaded (server answers 409)
+						...(page.updatedAt ? { expectedUpdatedAt: page.updatedAt } : {}),
+						...aclPatch
 					});
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 					setDirty(false);
-					setResolved((prev) => (prev ? { ...prev, page: { ...prev.page!, crystal } } : prev));
+					dirtyRef.current = false;
+					const nextUpdatedAt = typeof resp?.thing?.updatedAt === 'string' ? resp.thing.updatedAt : page.updatedAt;
+					const nextAcl = Array.isArray(resp?.thing?.acl) ? (resp.thing.acl as string[]) : page.acl;
+					setResolved((prev) =>
+						prev ? { ...prev, page: { ...prev.page!, crystal, updatedAt: nextUpdatedAt, acl: nextAcl } } : prev
+					);
 					announceSave(crystal);
 					return { ok: true, id: page.id };
 				}
@@ -195,6 +239,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 				if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 				const id = resp?.thing?.id || resp?.id;
 				setDirty(false);
+				dirtyRef.current = false;
 				// re-resolve so source flips to 'user' and future saves update in place
 				setRefreshTick((tick) => tick + 1);
 				announceSave(crystal);
@@ -212,6 +257,9 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		try {
 			const resp: any = await apiRef.current.v1.things.remove({ id: page.id });
 			if (!resp?.ok) return { ok: false, error: resp?.error || 'Reset failed' };
+			// an explicit reset means the refresh SHOULD replace any local edits
+			setDirty(false);
+			dirtyRef.current = false;
 			setRefreshTick((tick) => tick + 1);
 			announceSave((page.crystal || {}) as WebpageCrystal);
 			return { ok: true };
@@ -223,6 +271,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	const discardDraft = React.useCallback(() => {
 		setBlocksState((resolved?.page?.crystal?.blocks as WebpageBlock[]) || []);
 		setDirty(false);
+		dirtyRef.current = false;
 	}, [resolved]);
 
 	const refresh = React.useCallback(() => setRefreshTick((tick) => tick + 1), []);
