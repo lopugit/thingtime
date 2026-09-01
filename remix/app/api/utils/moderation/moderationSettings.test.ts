@@ -375,16 +375,32 @@ test('text sweep: off releases pending only; batches analyze and count', async (
 	assert.deepEqual(result, { scanned: 4, analyzed: 2, flagged: 1, failed: 1, skippedOff: false });
 });
 
-test('moderation sweep cron route requires the exact bearer secret and fails closed unconfigured', async () => {
+test('moderation sweep continues full successful batches, but not failures or short batches', async () => {
+	const { ATTACHMENT_SWEEP_BATCH, TEXT_SWEEP_BATCH, shouldContinueModerationSweep } = await import('./moderationAdmin');
+	const text = (scanned: number, failed = 0) => ({ scanned, analyzed: scanned - failed, flagged: 0, failed, skippedOff: false });
+	const attachments = (scanned: number, failed = 0) => ({ scanned, analyzed: scanned - failed, flagged: 0, skipped: 0, failed });
+	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH), attachments(0)), true);
+	assert.equal(shouldContinueModerationSweep(text(0), attachments(ATTACHMENT_SWEEP_BATCH)), true);
+	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH, 1), attachments(0)), false);
+	assert.equal(shouldContinueModerationSweep(text(0), attachments(ATTACHMENT_SWEEP_BATCH, 1)), false);
+	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH - 1), attachments(ATTACHMENT_SWEEP_BATCH - 1)), false);
+});
+
+test('moderation sweep cron route requires the exact bearer secret, starts a continuation, and fails closed unconfigured', async () => {
 	const { createModerationSweepLoader } = await import('../../../routes/api/v1/moderation/sweep/_sweep');
 	let sweeps = 0;
+	let continuations = 0;
 	const loader = createModerationSweepLoader({
 		getSecret: () => 'cron-test-secret',
 		sweepText: (async () => {
 			sweeps += 1;
-			return { scanned: 1, analyzed: 1, flagged: 0, failed: 0, skippedOff: false };
+			return { scanned: 25, analyzed: 25, flagged: 0, failed: 0, skippedOff: false };
 		}) as any,
-		sweepAttachments: (async () => ({ scanned: 0, analyzed: 0, flagged: 0, skipped: 0, failed: 0 })) as any
+		sweepAttachments: (async () => ({ scanned: 0, analyzed: 0, flagged: 0, skipped: 0, failed: 0 })) as any,
+		startContinuation: async () => {
+			continuations += 1;
+			return 'wrun_test_continuation';
+		}
 	});
 	for (const authorization of [undefined, 'cron-test-secret', 'bearer cron-test-secret', 'Bearer wrong']) {
 		const response = await loader({
@@ -402,8 +418,10 @@ test('moderation sweep cron route requires the exact bearer secret and fails clo
 	assert.equal(authorized.status, 200);
 	const body = await authorized.json();
 	assert.equal(body.ok, true);
-	assert.equal(body.text.analyzed, 1);
+	assert.equal(body.text.analyzed, 25);
+	assert.equal(body.continuationRunId, 'wrun_test_continuation');
 	assert.equal(sweeps, 1);
+	assert.equal(continuations, 1);
 
 	const unconfigured = createModerationSweepLoader({ getSecret: () => undefined });
 	const response = await unconfigured({ request: new Request('https://thingtime.example/api/v1/moderation/sweep') });
