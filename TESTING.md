@@ -314,6 +314,10 @@ is fixed, and cite the checklist you ran in the PR description.
       number: the caller converts the dispatch string to the reusable
       workflow's numeric `pr_number`, creates the controller job instead of a
       zero-job failure, and performs the requested publish or cleanup.
+- [ ] Run the protected controller self-test and inspect its prebuilt deploy
+      arguments: `--prebuilt` and `--target=develop` are present, while
+      `--skip-domain` is absent because Vercel accepts that option only for
+      production-target deployments.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run
