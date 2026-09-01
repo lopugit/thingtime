@@ -344,7 +344,6 @@ const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubComm
 const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
-		githubDeployment: '1',
 		githubCommitOrg,
 		githubCommitRepo,
 		githubCommitRef: pullRequest.head.ref,
@@ -531,9 +530,10 @@ const runSelfTest = async () => {
 	const metadata = deploymentMetadata({ pullRequest: base, config });
 	equal(metadata.githubCommitSha, base.head.sha);
 	equal(metadata.githubCommitRef, base.head.ref);
+	equal(metadata.githubDeployment, undefined);
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
-	equal(Object.keys(metadata).length, 10);
+	equal(Object.keys(metadata).length, 9);
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
