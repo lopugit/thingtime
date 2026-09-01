@@ -1032,6 +1032,11 @@ is fixed, and cite the checklist you ran in the PR description.
       while the feed still rendered them.
 - [ ] A comment whose parent chain is broken (target deleted) fails closed:
       not viewable, not reactable, permalink 404s.
+- [ ] An owner can still open their own image attachment at `/thing/:id` when
+      its historic inherited parent is missing: it renders as raw media with
+      zero available references. Anonymous, other-user, and visibility-scoped
+      token reads still return 404 (the owner recovery exception applies only
+      to persisted `attachment` Things).
 
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
