@@ -3416,7 +3416,7 @@ jobs:
             fi
             while IFS= read -r source; do
               expected_source="$(jq -r '"- #\(.pr) `\(.head)` at `\(.sha)`"' <<<"$source")"
-              if ! grep -Fxq "$expected_source" <<<"$pr_body"; then
+              if ! grep -Fxq -- "$expected_source" <<<"$pr_body"; then
                 recovery_complete=false
                 break 2
               fi
