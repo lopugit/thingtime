@@ -362,6 +362,11 @@ Lifecycle and recovery:
 
 ## Verified PR Previews
 
+- PR #554, branch `codex/rich-commander-previews`, feature commit
+  `04e286b8cdcdf56266e10b6a39483f01f18b908d`:
+  https://thingtime-gt3r0i36w-lopugits-projects.vercel.app
+  - Deployment state: `READY`; verified HTTP 200 at `/` on 2026-09-01.
+
 - PR #24, branch `codex/migrate-remix-to-nitro`, commit
   `b8e14222184706bfef101e3dedace793ffa2d198`:
   https://thingtime-qsxzsqb4h-lopugits-projects.vercel.app
