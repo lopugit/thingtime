@@ -2458,6 +2458,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       same-repo PR base/head refs and SHAs, rejects drafts/forks/moved refs and
       duplicate targets, and forwards only canonical base64 through the thin
       `develop` listener.
+- [ ] Rerun a saved Feature Stack after one selected PR has merged, another has
+      closed, and another has become a draft. The new run safely omits those
+      inactive entries, preserves the relative order of every remaining live
+      source, and rejects only when no compatible live source remains.
 - [ ] Mix PRs targeting `github-actions`, `main`, and `develop`, keep Auto
       decide branches selected, and prove the immutable plan routes controller
       sources only to `github-actions`, main sources only to `main`, and develop
@@ -2472,7 +2476,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       list order, clean merges are byte-identical to Git, AI edits touch only
       recomputed conflict paths, source/target movement aborts publication, and
       a target-specific PR is opened with auto-merge while branch protection
-      remains the final gate. Pause/opt-out labels must stop the batch.
+      remains the final gate. The target worker must remain active until that
+      PR is actually merged, and must fail if the PR closes unmerged. Pause or
+      opt-out labels must stop the batch.
 - [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
       snapshot immediately, whenever its target phase changes, every ten
       minutes while unchanged, and once when all target workers are terminal.
@@ -2507,7 +2513,7 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.1.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.2.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Select one trusted open PR and independently enable Develop and

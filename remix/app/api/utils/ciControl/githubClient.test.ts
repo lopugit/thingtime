@@ -209,6 +209,60 @@ test('Feature Stack auto-routing skips incompatible sources and empty targets wi
 	);
 });
 
+test('saved Feature Stack runs omit completed and draft sources while preserving live order', () => {
+	const repository = 'lopugit/thingtime';
+	const plan = canonicalFeatureStackPlanFromPullRequests({
+		name: 'Reusable stack',
+		sourcePrNumbers: [40, 41, 42, 43],
+		targets: ['main'],
+		repository,
+		stackId: 'ci-feature-stack-55555555-5555-4555-8555-555555555555',
+		runId: 'feature-stack-run-55555555-5555-4555-8555-555555555555',
+		autoDecideBranches: true,
+		pullRequests: [
+			{ number: 40, state: 'closed' },
+			{
+				number: 41,
+				title: 'First live source',
+				state: 'open',
+				draft: false,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/first', sha: '1'.repeat(40), repo: { full_name: repository } }
+			},
+			{
+				number: 42,
+				title: 'Draft source',
+				state: 'open',
+				draft: true,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/draft', sha: '2'.repeat(40), repo: { full_name: repository } }
+			},
+			{
+				number: 43,
+				title: 'Second live source',
+				state: 'open',
+				draft: false,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/second', sha: '3'.repeat(40), repo: { full_name: repository } }
+			}
+		]
+	});
+	assert.deepEqual(plan.sources.map((source) => source.pr), [41, 43]);
+	assert.throws(
+		() => canonicalFeatureStackPlanFromPullRequests({
+			name: 'Completed stack',
+			sourcePrNumbers: [40],
+			targets: ['main'],
+			repository,
+			stackId: 'ci-feature-stack-55555555-5555-4555-8555-555555555555',
+			runId: 'feature-stack-run-55555555-5555-4555-8555-555555555555',
+			autoDecideBranches: true,
+			pullRequests: [{ number: 40, state: 'closed' }]
+		}),
+		/No selected pull request is compatible/
+	);
+});
+
 test('workflow dispatches enter only through reviewed product branches', () => {
   assert.equal(resolveCiWorkflowEntryRef('feature-stack'), 'develop');
   assert.equal(resolveCiWorkflowEntryRef('resolve-conflicts'), 'develop');
