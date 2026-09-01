@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-09-01)
 
 ## Corpus Check
-- 41 files · ~182,381 words
+- 40 files · ~182,052 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 803 nodes · 1641 edges · 94 communities (43 shown, 51 thin omitted)
+- 813 nodes · 1654 edges · 95 communities (44 shown, 51 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 14 edges (avg confidence: 0.54)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `651af6cb`
+- Built from commit: `c03914b8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -108,6 +108,7 @@
 - [[_COMMUNITY_Lopu Principal Repository Manager|Lopu Principal Repository Manager]]
 - [[_COMMUNITY_OpenAI Backend Configuration|OpenAI Backend Configuration]]
 - [[_COMMUNITY_Vercel Deployment Kill Switch|Vercel Deployment Kill Switch]]
+- [[_COMMUNITY_feature-stack-progress.mjs|feature-stack-progress.mjs]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 49 edges
@@ -149,7 +150,7 @@
 - **develop→main promotion and back-sync automation** — github_workflows_promote_develop_to_main_workflow, github_workflows_promote_features_to_main_workflow, github_workflows_sync_main_into_develop_workflow, github_workflows_resolve_pr_conflicts_workflow, github_scripts_promote_features_to_main, github_scripts_promotion_pr_changelog [EXTRACTED 0.85]
 - **Develop PR Preview Controller Flow** — github_workflows_develop_pr_preview_workflow, github_workflows_develop_pr_preview_dispatch_job, github_workflows_develop_pr_preview_repository_dispatch, github_workflows_develop_pr_preview_controller_event, github_workflows_develop_pr_preview_controller_job, github_workflows_develop_pr_preview_deploy_script [EXTRACTED 0.95]
 
-## Communities (94 total, 51 thin omitted)
+## Communities (95 total, 51 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -319,8 +320,12 @@ Nodes (5): Operational proof gate, PR #506 — Auto-merge resolved main to devel
 Cohesion: 0.40
 Nodes (4): PR #492 — Load Lopu credentials from the Thingtime vault, Safety and regression focus, Scope, Validation log
 
+### Community 94 - "feature-stack-progress.mjs"
+Cohesion: 0.29
+Nodes (8): githubJobs(), postProgress(), progressSnapshot(), run(), selfTest(), STEP_PHASES, TERMINAL_CONCLUSIONS, TERMINAL_TARGET_STATUSES
+
 ## Knowledge Gaps
-- **213 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+208 more)
+- **216 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+211 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **51 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -330,7 +335,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `promote: replay merged develop PRs` connect `promotion-pr-changelog.mjs` to `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.017) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
-  _213 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _216 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
