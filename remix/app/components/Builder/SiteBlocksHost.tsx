@@ -103,7 +103,13 @@ let globalCache: ResolvedWebpage | null = null;
 // global blocks on every page for the rest of the tab session.
 type GlobalEntry = { owner: string | null; data: ResolvedWebpage | null };
 
-const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
+// `retryKey` is the current path: only the EDITOR is keyed by path, so this
+// hook never remounts on navigation. Keyed on `enabled` alone the effect would
+// fire only on sign-in/out, and every later clearing of `globalFetched` — the
+// failed resolve below, or an account switch through ensureCacheOwner — would
+// have nothing left to act on, hiding global blocks for the rest of the tab
+// session. Re-running per navigation is free: a settled fetch short-circuits.
+const useGlobalBlocks = (enabled: boolean, retryKey: string): ResolvedWebpage | null => {
 	const [entry, setEntry] = React.useState<GlobalEntry>(() => ({ owner: cacheOwnerId, data: globalCache }));
 	React.useEffect(() => {
 		if (!enabled || globalFetched) return;
@@ -111,8 +117,8 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 		(async () => {
 			const resolved = await resolveWebpageClient({ kind: 'global' });
 			// null is a FAILED resolve (a doc-less success still returns a
-			// result) — leave the flag unset so the next page view retries
-			// instead of hiding global blocks for the whole session
+			// result) — clear the flag so the next navigation retries instead
+			// of hiding global blocks for the whole session
 			if (resolved === null) {
 				globalFetched = false;
 				return;
@@ -120,7 +126,7 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 			globalCache = resolved;
 			setEntry({ owner: cacheOwnerId, data: resolved });
 		})();
-	}, [enabled]);
+	}, [enabled, retryKey]);
 	// in-place refresh when a site-global save happens while a page view is
 	// mounted (saves from the in-page edit mode)
 	React.useEffect(() => {
@@ -175,10 +181,20 @@ const EditPill = ({ active, onToggle }: { active: boolean; onToggle: () => void 
 
 const SiteBlocksView = ({ path, children }: { path: string; children: React.ReactNode }) => {
 	const user = useCurrentUser();
-	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(() => routeCache.get(path) ?? null);
+	// The resolve is stamped with the path it belongs to and reconciled in the
+	// RENDER phase. `path` changes a whole render before any effect can reset
+	// state, and a fully sectioned doc REPLACES the route element rather than
+	// wrapping it — so reading last-render state directly would draw the
+	// PREVIOUS route's composition, with the newly navigated-to page missing
+	// entirely, for a frame on every navigation away from a sectioned page
+	// (/, /status, /welcome, /ode, /mongodb-status once seeded).
+	const [entry, setEntry] = React.useState<{ path: string; data: ResolvedWebpage | null }>(() => ({
+		path,
+		data: routeCache.get(path) ?? null
+	}));
+	const resolved = entry.path === path ? entry.data : (routeCache.get(path) ?? null);
 
 	React.useEffect(() => {
-		setResolved(routeCache.get(path) ?? null);
 		// only signed-in viewers can have personalised docs; the system defaults
 		// are single-native (nothing extra to draw), so anonymous view skips the
 		// fetch entirely
@@ -188,7 +204,7 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 			const data = await resolveWebpageClient({ kind: 'path', path });
 			if (!cancelled) {
 				routeCache.set(path, data);
-				setResolved(data);
+				setEntry({ path, data });
 			}
 		})();
 		return () => {
@@ -196,7 +212,7 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 		};
 	}, [path, user?.id]);
 
-	const globalResolved = useGlobalBlocks(!!user?.id);
+	const globalResolved = useGlobalBlocks(!!user?.id, path);
 	const globalBlocks = (globalResolved?.page?.crystal?.blocks as WebpageBlock[]) || [];
 	const globalComponents = globalResolved?.componentsByRef || {};
 
@@ -286,7 +302,9 @@ const SiteBlocksView = ({ path, children }: { path: string; children: React.Reac
 //   🌐 global — the site-global doc, blocks on every page
 //   this page — the route's doc, with the live screen as its native block
 // Saving persists whichever drafts are dirty (each as the viewer's own fork).
-const SiteBlocksEditor = ({ path, children, onDone }: { path: string; children: React.ReactNode; onDone: () => void }) => {
+// Leaving edit mode is the HOST's Done pill (it owns the dirty-state confirm),
+// so the editor takes no onDone of its own.
+const SiteBlocksEditor = ({ path, children }: { path: string; children: React.ReactNode }) => {
 	const pageDraft = useWebpageDraft(React.useMemo(() => ({ kind: 'path' as const, path }), [path]));
 	const globalDraft = useWebpageDraft(React.useMemo(() => ({ kind: 'global' as const }), []));
 	const pageChrome = useBuilderChrome(pageDraft);
@@ -626,7 +644,7 @@ export const SiteBlocksHost = ({ children }: { children: React.ReactNode }) => {
 	return (
 		<>
 			{editMode && user?.id ? (
-				<SiteBlocksEditor key={path} path={path} onDone={toggleEditMode}>
+				<SiteBlocksEditor key={path} path={path}>
 					{children}
 				</SiteBlocksEditor>
 			) : (

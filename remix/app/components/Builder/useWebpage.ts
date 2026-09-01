@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
-import { ACL_OWNER } from '~/schemas/registry';
+import { ACL_OWNER, MAX_WEBPAGE_ROUTE_CHARS, WEBPAGE_ROUTE_PATTERN } from '~/schemas/registry';
 import { buildComponentsByRef, type ComponentsByRef, type ComponentThingLike } from './WebpageBlocksRenderer';
 import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 
@@ -41,6 +41,13 @@ const targetQuery = (target: WebpageTarget): string => {
 };
 
 export const resolveWebpageClient = async (target: WebpageTarget): Promise<ResolvedWebpage | null> => {
+	// SiteBlocksHost resolves EVERY route a signed-in viewer lands on, and many
+	// of them can never be a siteRoute: /post/<id>, /docs/api/<group>/<docId>
+	// and the `*` thing-tree catch-all routinely carry characters the server
+	// gate refuses. Screening with the SAME bounds turns a guaranteed 400 round
+	// trip into the null a refused resolve already returns — identical
+	// behaviour, one less request per navigation.
+	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return null;
 	try {
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if (!response.ok) return null;
