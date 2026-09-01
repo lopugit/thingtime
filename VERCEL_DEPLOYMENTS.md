@@ -364,8 +364,10 @@ Lifecycle and recovery:
 
 - PR #554, branch `codex/rich-commander-previews`:
   https://pr-554.previews.dev.thingtime.com
-  - GitHub Actions builds and uploads the trusted prebuilt artifact; this is
-    the canonical preview alias, not a Git-tracked Vercel branch URL.
+  - Generated Vercel deployment from the GitHub Actions prebuilt upload:
+    https://thingtime-gt3r0i36w-lopugits-projects.vercel.app
+  - The stable custom domain is the canonical preview alias. The generated
+    Vercel URL is an artifact-hosting deployment, not a Git-tracked branch URL.
   - Verified HTTP 200 at `/` on 2026-09-01.
 
 - PR #24, branch `codex/migrate-remix-to-nitro`, commit
