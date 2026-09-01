@@ -11,7 +11,10 @@ export type SessionDoc = {
   expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  // 'deployment-link' — minted by /api/v1/deployment-links/token for another
+  // Thingtime deployment to sync with; full-credential like 'service', and
+  // revocable the same way
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
   meta?: Record<string, any>;
 };
 

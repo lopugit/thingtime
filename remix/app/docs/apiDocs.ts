@@ -2969,6 +2969,141 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'deployment-links',
+    group: 'deployments',
+    title: 'Linked deployments',
+    endpoint: '/api/v1/deployment-links',
+    summary: 'Lists, creates, updates, and removes links to the caller’s accounts on other Thingtime deployments.',
+    detail:
+      'A deployment link stores a bearer token for the caller’s account on another Thingtime deployment so the two can sync. The remote token lives only in the user thing’s encrypted secure blob (meta.deploymentLinks) and is never projected onto the wire — every response returns the sanitized link shape. POST accepts either a token pasted from the other deployment’s /api/v1/deployment-links/token, or a remote username + password (which may answer { requiresOtp, challenge } for an email-2FA account, completed by re-POSTing { challenge, code }). A password link is upgraded to a non-expiring deployment-link token when the remote supports it, and the login-derived session is then revoked. Base URLs are fenced against SSRF: https only (http for localhost), origin only — no path, query, or credentials — and IP literals plus internal-only names are refused. Link/unlink/mint ride the fail-closed deployments.link limit, because they dial a caller-supplied host; PATCH dials nothing and rides the roomier deployments.update limit so retuning a link never spends the linking budget.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Links are always scoped to the calling user.'
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    steps: [
+      'GET to list the caller’s links (never includes a token).',
+      'POST { baseUrl, token } to link with a token minted on the other deployment, or POST { baseUrl, username, password } to log in over there.',
+      'When the remote account has email 2FA, the login answers { requiresOtp: true, challenge } — re-POST { baseUrl, challenge, code } to finish.',
+      'PATCH { id, name?, syncMode?, pathRules? } to retune a link; path rules are profile, things, or things/<kind>, each with mode push/pull/two-way/off.',
+      'DELETE { id } to unlink — the remote session is revoked best-effort so the stored token dies with the link.'
+    ],
+    requestExamples: [
+      {
+        name: 'Link with a pasted token',
+        description: 'Link an account using a token minted by the other deployment.',
+        method: 'POST',
+        body: { baseUrl: 'https://other.thingtime.com', name: 'Other deployment', token: '<remote token>' }
+      },
+      {
+        name: 'Retune a link',
+        description: 'Switch a link to pull-only and suppress one kind.',
+        method: 'PATCH',
+        body: { id: 'link_123', syncMode: 'pull', pathRules: [{ path: 'things/chat-message', mode: 'off' }] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The caller’s links, sanitized — no token field is ever present.',
+        body: {
+          ok: true,
+          links: [
+            {
+              id: 'link_123',
+              name: 'other.thingtime.com',
+              baseUrl: 'https://other.thingtime.com',
+              remoteUserId: '64f000000000000000000001',
+              remoteUsername: 'rick.deckard',
+              syncMode: 'two-way',
+              pathRules: [],
+              tokenExpiresAt: null,
+              lastSyncAt: null,
+              lastSyncSummary: null
+            }
+          ]
+        }
+      },
+      {
+        status: 400,
+        description: 'The base URL failed the SSRF fence, or the body named neither a token nor a username + password.',
+        body: { ok: false, error: 'Provide a token, or a username + password for that deployment' }
+      },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ],
+    notes: [
+      'Remote tokens never leave api/utils — routes project links through toPublicLink before responding.',
+      'At most 10 links per account, and at most 50 path rules per link.'
+    ]
+  }),
+  endpoint({
+    id: 'deployment-links-sync',
+    group: 'deployments',
+    title: 'Sync a linked deployment',
+    endpoint: '/api/v1/deployment-links/sync',
+    summary: 'Runs one bounded sync pass for a link, or previews it with dryRun.',
+    detail:
+      'Moves things and profile fields between this deployment and the linked one, keyed by shareId, honouring the link’s syncMode and path rules (first matching rule wins, then things, then the link mode). Dependencies are ordered so a comment never lands before its post and schemas land before the data things citing them. Content equality beats updatedAt, so re-running an unchanged sync plans zero operations instead of ping-ponging copies. A pass is bounded by both an operation count and a wall-clock budget, so a slow linked deployment ends the pass with a report instead of running until the function is killed — the report’s remaining count says whether another pass is needed — and per-thing errors (a shareId owned by a different account, a kind unknown to the destination registry) are reported rather than aborting the run. Rides the fail-closed deployments.sync limit.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Only the caller’s own links can be synced.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { id, dryRun: true } to preview the planned operations without writing anything.',
+      'POST { id } to run the pass; the link’s lastSyncAt and lastSyncSummary are updated on a real run.',
+      'Re-run while report.remaining is greater than zero to continue a bounded pass.'
+    ],
+    requestExamples: [
+      { name: 'Preview a sync', description: 'Plan the pass without writing.', method: 'POST', body: { id: 'link_123', dryRun: true } },
+      { name: 'Run a sync', description: 'Execute one bounded pass.', method: 'POST', body: { id: 'link_123' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The pass report plus the refreshed link projection.',
+        body: {
+          ok: true,
+          report: { dryRun: false, planned: 12, applied: 12, conflictsResolved: 1, remaining: 0, errors: [], finishedAt: '2026-08-30T00:00:00.000Z' },
+          link: { id: 'link_123', syncMode: 'two-way', lastSyncAt: '2026-08-30T00:00:00.000Z' }
+        }
+      },
+      { status: 404, description: 'No link with that id belongs to the caller.', body: { ok: false, error: 'Link not found' } },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'deployment-links-token',
+    group: 'deployments',
+    title: 'Mint a deployment link token',
+    endpoint: '/api/v1/deployment-links/token',
+    summary: 'Mints a non-expiring, revocable token for THIS deployment so another deployment can link to this account.',
+    detail:
+      'Returns a bearer token purpose-tagged deployment-link, backed by a null-expiry session document exactly like a service-account token — so it is revocable server-side at any time. Two callers use it: another deployment upgrading a login-derived link token, and a person copying a token to paste into another deployment’s link form. The token is returned exactly once and is never stored in readable form or shown again. Rides the fail-closed deployments.link limit.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. The token is minted for the calling user only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST with no body while signed in on the deployment you want to be linked TO.',
+      'Copy the returned token once — it is never shown again.',
+      'Paste it into the other deployment’s POST /api/v1/deployment-links as { baseUrl, token }.',
+      'Revoke it later like any other session; unlinking also revokes it best-effort.'
+    ],
+    requestExamples: [
+      { name: 'Mint a link token', description: 'Create a token to paste into another deployment.', method: 'POST', body: {} }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The token, shown exactly once.',
+        body: { ok: true, token: '<jwt>', tokenType: 'Bearer', expiresAt: null }
+      },
+      { status: 401, description: 'No signed-in user.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
     id: 'mongodb-endpoint',
     group: 'mongodb',
     title: 'MongoDB data endpoint',

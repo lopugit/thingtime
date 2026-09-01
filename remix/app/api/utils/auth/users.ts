@@ -937,6 +937,219 @@ export const removeUserMongoEndpoint = async (userId: string, endpointId: string
 	return true;
 };
 
+// ── Saved deployment links (cross-deployment account sync) ──────────────────
+// A user's links to their accounts on OTHER Thingtime deployments live INSIDE
+// the secure blob (meta.deploymentLinks): each link carries a bearer token for
+// the remote deployment, and the blob is the one place a user thing keeps
+// unsearchable private state (same reasoning as meta.mongoEndpoints above).
+// Tokens never leave the API utils — routes project links through
+// toPublicDeploymentLink before responding.
+export type DeploymentSyncMode = 'push' | 'pull' | 'two-way' | 'off';
+export type DeploymentLinkPathRule = { path: string; mode: DeploymentSyncMode };
+export type SavedDeploymentLink = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  token: string; // remote-deployment JWT — NEVER projected out of api/utils
+  tokenExpiresAt: string | null; // ISO; null = non-expiring link token
+  remoteUserId: string;
+  remoteUsername: string;
+  syncMode: DeploymentSyncMode;
+  pathRules: DeploymentLinkPathRule[];
+  createdAt: string;
+  lastSyncAt: string | null;
+  lastSyncSummary: Record<string, any> | null;
+};
+
+export const MAX_DEPLOYMENT_LINKS = 10;
+export const MAX_DEPLOYMENT_PATH_RULES = 50;
+
+const DEPLOYMENT_SYNC_MODES: DeploymentSyncMode[] = ['push', 'pull', 'two-way', 'off'];
+
+const normalizeDeploymentPathRules = (value: any): DeploymentLinkPathRule[] =>
+  Array.isArray(value)
+    ? value
+        .filter(
+          (rule) =>
+            rule &&
+            typeof rule.path === 'string' &&
+            DEPLOYMENT_SYNC_MODES.includes(rule.mode)
+        )
+        .slice(0, MAX_DEPLOYMENT_PATH_RULES)
+        .map((rule) => ({ path: rule.path, mode: rule.mode }))
+    : [];
+
+const normalizeSavedDeploymentLinks = (value: any): SavedDeploymentLink[] =>
+  Array.isArray(value)
+    ? value
+        .filter(
+          (entry) =>
+            entry &&
+            typeof entry.id === 'string' &&
+            typeof entry.baseUrl === 'string' &&
+            typeof entry.token === 'string'
+        )
+        .map((entry) => ({
+          id: entry.id,
+          name: typeof entry.name === 'string' ? entry.name : '',
+          baseUrl: entry.baseUrl,
+          token: entry.token,
+          tokenExpiresAt: typeof entry.tokenExpiresAt === 'string' ? entry.tokenExpiresAt : null,
+          remoteUserId: typeof entry.remoteUserId === 'string' ? entry.remoteUserId : '',
+          remoteUsername: typeof entry.remoteUsername === 'string' ? entry.remoteUsername : '',
+          syncMode: DEPLOYMENT_SYNC_MODES.includes(entry.syncMode) ? entry.syncMode : 'off',
+          pathRules: normalizeDeploymentPathRules(entry.pathRules),
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
+          lastSyncAt: typeof entry.lastSyncAt === 'string' ? entry.lastSyncAt : null,
+          lastSyncSummary:
+            entry.lastSyncSummary && typeof entry.lastSyncSummary === 'object' ? entry.lastSyncSummary : null
+        }))
+    : [];
+
+export const getUserDeploymentLinks = async (userId: string): Promise<SavedDeploymentLink[]> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) return normalizeSavedDeploymentLinks(unpackSecure((thing as any).secure).meta?.deploymentLinks);
+  if (!ObjectId.isValid(userId)) return [];
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.deploymentLinks': 1 } }
+  );
+  return normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
+};
+
+// Append a deployment link. Cap + duplicate checks run INSIDE the CAS round so
+// a racing add can't slip past either (same contract as addUserMongoEndpoint).
+// A duplicate is the same (baseUrl, remoteUserId) pair — you can link two
+// DIFFERENT remote accounts on one deployment, but not the same account twice.
+export const addUserDeploymentLink = async (
+  userId: string,
+  input: Omit<SavedDeploymentLink, 'id' | 'createdAt' | 'lastSyncAt' | 'lastSyncSummary'>
+): Promise<{ ok: true; link: SavedDeploymentLink } | { ok: false; error: string }> => {
+  const link: SavedDeploymentLink = {
+    ...input,
+    id: new ObjectId().toHexString(),
+    pathRules: normalizeDeploymentPathRules(input.pathRules),
+    createdAt: new Date().toISOString(),
+    lastSyncAt: null,
+    lastSyncSummary: null
+  };
+
+  let failure: string | null = null;
+  const apply = (list: SavedDeploymentLink[]): SavedDeploymentLink[] | null => {
+    failure = null;
+    if (list.length >= MAX_DEPLOYMENT_LINKS) {
+      failure = `You can link at most ${MAX_DEPLOYMENT_LINKS} deployments`;
+      return null;
+    }
+    if (list.some((entry) => entry.baseUrl === link.baseUrl && entry.remoteUserId === link.remoteUserId)) {
+      failure = 'That deployment account is already linked';
+      return null;
+    }
+    return [...list, link];
+  };
+
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const next = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
+    if (next) secure.meta!.deploymentLinks = next;
+  });
+  if (result === 'mutated') return failure ? { ok: false, error: failure } : { ok: true, link };
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return { ok: false, error: 'User not found' };
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  if (!doc) return { ok: false, error: 'User not found' };
+  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
+  if (!next) return { ok: false, error: failure || 'Could not link that deployment' };
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
+  );
+  return { ok: true, link };
+};
+
+// Patch a link in place (settings edits + post-sync bookkeeping). Only the
+// mutable fields are accepted; identity fields (baseUrl/remote identity/token)
+// are fixed at link time except `token`/`tokenExpiresAt`, which re-auth updates.
+export const updateUserDeploymentLink = async (
+  userId: string,
+  linkId: string,
+  patch: Partial<
+    Pick<
+      SavedDeploymentLink,
+      'name' | 'syncMode' | 'pathRules' | 'token' | 'tokenExpiresAt' | 'lastSyncAt' | 'lastSyncSummary'
+    >
+  >
+): Promise<SavedDeploymentLink | null> => {
+  let updated: SavedDeploymentLink | null = null;
+  const apply = (list: SavedDeploymentLink[]): SavedDeploymentLink[] => {
+    updated = null;
+    return list.map((entry) => {
+      if (entry.id !== linkId) return entry;
+      updated = {
+        ...entry,
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.syncMode !== undefined && DEPLOYMENT_SYNC_MODES.includes(patch.syncMode)
+          ? { syncMode: patch.syncMode }
+          : {}),
+        ...(patch.pathRules !== undefined ? { pathRules: normalizeDeploymentPathRules(patch.pathRules) } : {}),
+        ...(patch.token !== undefined ? { token: patch.token } : {}),
+        ...(patch.tokenExpiresAt !== undefined ? { tokenExpiresAt: patch.tokenExpiresAt } : {}),
+        ...(patch.lastSyncAt !== undefined ? { lastSyncAt: patch.lastSyncAt } : {}),
+        ...(patch.lastSyncSummary !== undefined ? { lastSyncSummary: patch.lastSyncSummary } : {})
+      };
+      return updated;
+    });
+  };
+
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    secure.meta!.deploymentLinks = apply(normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks));
+  });
+  if (result === 'mutated') return updated;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  if (!doc) return null;
+  const next = apply(normalizeSavedDeploymentLinks(doc.meta?.deploymentLinks));
+  if (!updated) return null;
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': next, updatedAt: new Date() } }
+  );
+  return updated;
+};
+
+// Remove a link by id. Returns the removed link (the route best-effort revokes
+// its remote session) or null when no entry matched.
+export const removeUserDeploymentLink = async (
+  userId: string,
+  linkId: string
+): Promise<SavedDeploymentLink | null> => {
+  let removed: SavedDeploymentLink | null = null;
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const list = normalizeSavedDeploymentLinks(secure.meta?.deploymentLinks);
+    removed = list.find((entry) => entry.id === linkId) || null;
+    secure.meta!.deploymentLinks = list.filter((entry) => entry.id !== linkId);
+  });
+  if (result === 'mutated') return removed;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.deploymentLinks': 1 } });
+  const list = normalizeSavedDeploymentLinks(doc?.meta?.deploymentLinks);
+  removed = list.find((entry) => entry.id === linkId) || null;
+  if (!removed) return null;
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.deploymentLinks': list.filter((entry) => entry.id !== linkId), updatedAt: new Date() } }
+  );
+  return removed;
+};
+
 // Set (or clear, with null) the user's active theme shareId in meta.
 export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
 	const result = await mutateUserThingSecure(userId, (s) => {

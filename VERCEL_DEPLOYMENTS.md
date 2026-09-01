@@ -109,6 +109,28 @@ Last updated: 2026-09-01
   `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto. Vercel domain
   ownership and TLS are verified.
 
+## Develop environment
+
+- Branch: `develop` — the integration branch. Feature PRs merge into
+  `develop`, everything is tested on the develop deployment, and `develop` is
+  merged into `main` when it's ready to ship.
+- Branch alias: https://thingtime-git-develop-lopugits-projects.vercel.app
+- Database: `develop` has its OWN MongoDB (a dedicated free-tier Atlas
+  cluster), never the production cluster. Two branch-scoped env vars exist in
+  Vercel (target Preview, git branch `develop`) and currently hold
+  self-describing placeholders so develop can never accidentally reach the
+  production database:
+  - `MONGODB_CONNECTION_STRING` — replace with the develop Atlas URI (it may
+    contain the literal `<db_password>` placeholder).
+  - `MONGO_PASS` — replace with the develop DB password (only needed when the
+    URI contains `<db_password>`).
+  Update them at
+  https://vercel.com/lopugits-projects/thingtime/settings/environment-variables
+  (search "MONGO", the develop-scoped rows show the `develop` branch chip),
+  then redeploy the `develop` branch. Until real values are set, develop
+  deployments boot but `GET /api/v1/health/mongodb` reports a connection error
+  by design.
+
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.

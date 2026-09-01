@@ -183,6 +183,23 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
   // PAT revocation — cheap owner-bound update, still bounded
   'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true },
+  // Cross-deployment account links. Linking/unlinking makes the SERVER dial
+  // whatever base URL the caller supplied (login probe + identity check) — the
+  // same outbound-fetch abuse surface as mongodb.endpoint, so the window stays
+  // tight and the routes enforce fail-closed. Token minting shares the key
+  // (each mint writes a never-expiring session doc).
+  'deployments.link': { limit: 10, windowMs: 300_000, enabled: true },
+  // Editing a link you already hold (name, sync mode, path rules) dials
+  // NOTHING — it rewrites one row in the caller's own secure blob. It gets its
+  // own budget because the settings pane sends one PATCH per sync-mode tap and
+  // per path-rule save: on the dial budget above, configuring a couple of links
+  // exhausts the window and locks the same user out of linking and unlinking.
+  'deployments.update': { limit: 60, windowMs: 60_000, enabled: true },
+  // One sync pass fans out up to ~40 writes against the linked deployment plus
+  // paginated reads on both sides — heavier than any single API call, so the
+  // per-user budget is small (fail-closed at the route). Passes are resumable,
+  // so a tight cap costs only patience, never data.
+  'deployments.sync': { limit: 6, windowMs: 300_000, enabled: true },
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns

@@ -392,6 +392,47 @@ export function useApi() {
         )
       }
     },
+    // cross-deployment account links (Settings → Linked deployments)
+    deploymentLinks: {
+      list: useCallback(async () => getJson('/api/v1/deployment-links'), []),
+      link: useCallback(
+        async (args?: {
+          baseUrl?: string;
+          name?: string;
+          token?: string;
+          username?: string;
+          password?: string;
+          challenge?: string;
+          code?: string;
+        }) => asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links' }),
+        [asyncFetcher]
+      ),
+      update: useCallback(
+        async (args?: { id?: string; name?: string; syncMode?: string; pathRules?: unknown }) =>
+          asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links', method: 'PATCH' }),
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args?: { id?: string }) =>
+          asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/deployment-links', method: 'DELETE' }),
+        [asyncFetcher]
+      ),
+      sync: useCallback(
+        async (args?: { id?: string; dryRun?: boolean }) => {
+          const ret = asyncFetcher.submit(args || {}, { action: '/api/v1/deployment-links/sync' });
+          // a pull may have rewritten local things — refresh like login does
+          ret.then((result: any) => {
+            if (result?.report && !result.report.dryRun && result.report.pulled > 0) refreshRootData();
+          }).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      mintToken: useCallback(
+        async () => asyncFetcher.submit({}, { action: '/api/v1/deployment-links/token' }),
+        [asyncFetcher]
+      )
+    },
 		attachments: {
 			uploads: {
 				create: useCallback(

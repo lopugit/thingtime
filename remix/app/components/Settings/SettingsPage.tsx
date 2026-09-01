@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } fro
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
@@ -526,6 +527,16 @@ export const SettingsPage = () => {
             description="Algorithms learn from what you linger on in the feed — the active one trains as you scroll. Keep a few for different moods, branch the ones you like, and switch anytime."
           >
             <AlgorithmManager key={user.id} />
+          </SettingsSection>
+        )}
+
+        {/* 3b · linked deployments (auth only) */}
+        {user && (
+          <SettingsSection
+            eyebrow="Linked deployments"
+            description="Link your account on another Thingtime deployment (production, develop, a fork…) and keep your data in sync — push, pull, two-way, or per-path rules."
+          >
+            <LinkedDeployments key={user.id} userId={user.id} />
           </SettingsSection>
         )}
 
