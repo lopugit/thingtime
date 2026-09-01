@@ -19,12 +19,21 @@
 
    The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
 
-2. **Tighten verification-link origin trust.**
+2. **🟡 MOSTLY FIXED — Tighten verification-link origin trust.**
 
-   Email verification links are still built from the request origin. Move them
-   to a canonical `APP_URL` or explicit host allowlist before relying on real
-   email delivery, so unexpected or spoofed hosts cannot generate verification
-   URLs on the wrong origin.
+   Shipped (verified on main 2026-07-21, re-verified 2026-08-29):
+   `remix/app/api/utils/auth/appOrigin.ts` `resolveTrustedOrigin` prefers the
+   server-configured `APP_URL`.
+
+   **Still open — this is not just an ops checkbox.** When `APP_URL` is unset
+   the helper falls back to `new URL(request.url).origin`, i.e. the
+   caller-controlled `Host`, so the spoofing vector this item describes is still
+   live in exactly the deployments that lack `APP_URL`. Closing it takes both
+   the ops step (set `APP_URL` in production/preview) **and** the code-level
+   fallback hardening owned by PR #105
+   (`claude/todo2-verification-link-origin-s3`), which resolves the origin from
+   platform-injected values and a narrow Host allowlist instead of the caller.
+   Do not mark this item done on the `APP_URL` preference alone.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 
@@ -78,35 +87,38 @@ _Added 2026-07-08 after a full multi-agent codebase review (27 agents: 6 subsyst
 readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
 below was confirmed by reading the cited code — file/line refs are load-bearing._
 
-7. **🔒 URGENT SECURITY: lock down the unauthenticated admin/data endpoints.**
-   _✅ Done 2026-07-21: raw-results and populate became admin-only + rate-limited
-   fail-closed in earlier PRs; service-account provisioning (public by design)
-   is now rate-limited fail-closed per IP, body-capped, and field-whitelisted —
-   see `claude-todo/09-security-hardening.md` §A._
+7. **🟡 PARTIALLY FIXED — 🔒 SECURITY: lock down the unauthenticated admin/data endpoints.**
 
-   Three live, prod-registered endpoints have **no auth, no rate limit, no env
-   gate**:
-   - `POST /api/v1/mongodb/raw-results`
-     (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx` L21–44) runs
-     `things.find().toArray()` and returns **every** `things` doc — including
-     `friends`/`family`/`private` posts — bypassing the `canView` /
-     `visibilityQueryFor` gating in `things.ts`. Full data exfiltration by anyone.
-   - `POST /api/v1/mongodb/populate` (`.../mongodb/populate/_populate.tsx` L24 →
-     `scripts/mongodb/setup.ts`) lets any anonymous caller seed the DB with
-     repo-known demo passwords and burn bcrypt/Mongo work per request (DoS
-     amplification).
-   - `POST /api/v1/auth/service-account`
-     (`.../auth/service-account/_service-account.tsx` L8 →
-     `serviceAccounts.ts` L48–109) mints a **non-expiring** bearer token
-     (`signJwt expiresIn:null`, `createSession expiresAt:null`) with a **5 GB**
-     storage allowance, with no caller check. Anyone can mass-mint permanent
-     tokens. (Partial mitigation only: `getCurrentUser` L35–41 disables an
-     *unverified* service token after a 7-day grace.)
+   > **Status — verified on main 2026-07-21, re-verified 2026-08-29.** A1 and A2
+   > are closed. A3 is throttled but not yet bounded. Do not re-claim A1/A2 or
+   > A3's throttle. Full spec and original finding:
+   > `claude-todo/09-security-hardening.md` §A.
 
-   Gate all three behind an admin/service-account/session check (or dev-only env
-   gate + remove from the prod dispatcher `remix/server/routes/api/[...].ts`
-   L32–33), and add visibility filtering to any that stay.
-   Full spec: `claude-todo/09-security-hardening.md`.
+   - ✅ **A1 — `POST /api/v1/mongodb/raw-results`**
+     (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`): loader and
+     action both gate on `requireAdmin`, then a fail-closed `mongodb.query`
+     `enforceRateLimit`, and only run bounded read-only queries through
+     `runMongoQuery`. The `things.find().toArray()` full-collection dump that
+     bypassed the `canView` / `visibilityQueryFor` gating in `things.ts` is gone.
+   - ✅ **A2 — `POST /api/v1/mongodb/populate`**
+     (`.../mongodb/populate/_populate.tsx`): `requireAdmin` plus a fail-closed
+     `mongodb.populate` limiter, so an anonymous caller can no longer seed
+     repo-known demo passwords or burn bcrypt/Mongo work per request.
+   - 🟡 **A3 — `POST /api/v1/auth/service-account`**
+     (`.../auth/service-account/_service-account.tsx` → `serviceAccounts.ts`):
+     public by design. PR #100 (merged 2026-08-12) added the fail-closed per-IP
+     `auth.serviceAccount` limiter, a 16 KiB body cap, and an explicit field
+     whitelist, so unauthenticated mass-minting is throttled. **Still open:** the
+     minted token is non-expiring (`signJwt expiresIn:null`,
+     `createSession expiresAt:null`) and carries the 5 GiB
+     `storageAllowanceBytes` default. Bound the token lifetime before closing
+     this item. (`getCurrentUser` only disables an *unverified* service token
+     after a 7-day grace, so it does not bound a verified one.) PR #103 was
+     closed unmerged and covered signup/item 8, not A3.
+
+   All three are still registered in the prod dispatcher
+   (`remix/server/routes/api/[...].ts`) — the gating above is what makes them
+   safe, so keep it in place if these routes ever move.
 
 8. **✅ FIXED — 🔒 SECURITY: brute-force + abuse rate limiting on auth endpoints.**
 
