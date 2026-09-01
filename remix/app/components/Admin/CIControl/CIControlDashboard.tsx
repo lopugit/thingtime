@@ -1263,7 +1263,8 @@ const AutomationProviders = ({
     </Box>
     </Collapse>
   </Box>
-);
+  );
+};
 
 export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string }) => {
   const api = useApi();
