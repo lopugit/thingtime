@@ -82,8 +82,13 @@ const durableFleetQueue =
   /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
 assert.equal(
   [...workflow.matchAll(durableFleetQueue)].length,
-  3,
-  "Feature Stack, review, and promotion workers use the durable ordinary Lopu queue",
+  2,
+  "review and promotion workers use the durable ordinary Lopu queue",
+);
+assert.match(
+  workflow,
+  /feature_stack_merge:[\s\S]*group: lopu-feature-stack-\$\{\{ github\.repository \}\}-\$\{\{ matrix\.target \}\}[\s\S]*queue: max[\s\S]*cancel-in-progress: false/u,
+  "admin Feature Stacks use a durable per-target priority lane",
 );
 assert.match(
   workflow,

@@ -1472,6 +1472,11 @@ export function assertControlPlaneContract() {
     /allowed-bots: "github-actions,thingtime-ci-control"/u,
     "Feature Stack dispatches trust only GitHub Actions and Thingtime's authenticated CI control bot",
   );
+  assert.match(
+    featureStackMerge,
+    /group: lopu-feature-stack-\$\{\{ github\.repository \}\}-\$\{\{ matrix\.target \}\}[\s\S]*queue: max[\s\S]*cancel-in-progress: false/u,
+    "admin Feature Stacks serialize per target without waiting behind unrelated Lopu fleet work",
+  );
   assert.equal(
     featureStackMerge.match(/working-directory: integration/gu)?.length,
     4,

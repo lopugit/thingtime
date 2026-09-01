@@ -3727,7 +3727,10 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.feature_stack_plan.outputs.matrix) }}
     concurrency:
-      group: lopu-agent-fleet-${{ github.repository }}
+      # Admin-triggered stacks use their own vault-backed lane. Serialize the
+      # same target, but do not make a main/develop stack wait behind unrelated
+      # PR reviews, promotions, rebases, or all-branch maintenance.
+      group: lopu-feature-stack-${{ github.repository }}-${{ matrix.target }}
       queue: max
       cancel-in-progress: false
     runs-on: ubuntu-latest
