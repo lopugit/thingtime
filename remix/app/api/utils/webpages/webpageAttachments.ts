@@ -14,7 +14,10 @@ import { bindReadyAttachmentsToTarget, MAX_ATTACHMENTS_PER_TARGET } from '../att
 // simply not ours to bind. Only the owner's own ready, unbound (or already
 // bound-to-this-page) post-purpose drafts are claimed.
 
-const CONTENT_URL_PATTERN = /\/api\/v1\/attachments\/content\?id=([A-Za-z0-9_-]{8,64})/g;
+// Real attachment ids are 68 chars ("att_" + sha256 hex) — the upper bound
+// must clear that or the capture silently truncates the id and every lookup
+// misses (the round-8 preview E2E caught exactly that with a {8,64} cap).
+const CONTENT_URL_PATTERN = /\/api\/v1\/attachments\/content\?id=([A-Za-z0-9_-]{8,128})/g;
 
 const collectFromString = (value: unknown, into: Set<string>) => {
 	if (typeof value !== 'string' || !value) return;

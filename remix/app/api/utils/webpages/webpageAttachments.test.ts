@@ -6,6 +6,15 @@ import { extractWebpageAttachmentIds } from './webpageAttachments';
 // Webpage saves bind referenced builder uploads (media srcs + content URLs
 // inside rich/raw html) so the draft reaper can't break a saved page's media.
 
+test('extracts full-length production ids (att_ + sha256 hex = 68 chars) without truncation', () => {
+	const realId = `att_${'a1b2c3d4'.repeat(8)}`;
+	assert.equal(realId.length, 68);
+	const ids = extractWebpageAttachmentIds({
+		blocks: [{ id: 'm', type: 'media', src: `/api/v1/attachments/content?id=${realId}` }]
+	});
+	assert.deepEqual(ids, [realId]);
+});
+
 test('extracts attachment ids from media srcs, html, and nested children', () => {
 	const ids = extractWebpageAttachmentIds({
 		blocks: [
