@@ -19,7 +19,11 @@ import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { isWearingTryOn, nextTryOnRun, restoredThemeSettings } from './themeTryOnCore';
+import type { WornTheme } from './themeTryOnCore';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
@@ -36,7 +40,7 @@ export type ProfilePageProps = {
 type RemoteProfileState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'loaded'; profile: PublicProfile; postCount: number }
+  | { status: 'loaded'; profile: PublicProfile; postCount: number; wornTheme: WornTheme | null }
   | { status: 'missing' };
 
 const POSTS_PAGE_SIZE = 20;
@@ -137,7 +141,11 @@ export const ProfilePage = (props: ProfilePageProps) => {
           setRemote({
             status: 'loaded',
             profile: resp.profile,
-            postCount: typeof resp?.postCount === 'number' ? resp.postCount : 0
+            postCount: typeof resp?.postCount === 'number' ? resp.postCount : 0,
+            wornTheme:
+              resp?.wornTheme && typeof resp.wornTheme.id === 'string' && typeof resp.wornTheme.name === 'string'
+                ? { id: resp.wornTheme.id, name: resp.wornTheme.name }
+                : null
           });
         } else {
           setRemote({ status: 'missing' });
@@ -151,6 +159,100 @@ export const ProfilePage = (props: ProfilePageProps) => {
       cancelled = true;
     };
   }, [username, isSelf, getProfile]);
+
+  // "Wear my theme" (claude-todo/10 ✨): the profile owner's active PUBLIC
+  // theme, worn as a chip. Public profiles get it from the profile payload
+  // (server resolves it through the share-link gate); self profiles resolve
+  // their own activeThemeId — getShared with the session cookie also resolves
+  // the owner's private theme, which is correct for their own eyes.
+  const getSharedTheme = api.v1.themes.getShared;
+  const [selfWorn, setSelfWorn] = React.useState<WornTheme | null>(null);
+
+  React.useEffect(() => {
+    const activeId = isSelf && user?.activeThemeId ? user.activeThemeId : null;
+    if (!activeId) {
+      setSelfWorn(null);
+      return;
+    }
+    let cancelled = false;
+    getSharedTheme({ id: activeId })
+      .then((resp: any) => {
+        if (!cancelled) setSelfWorn(resp?.ok && resp?.theme ? { id: resp.theme.id, name: resp.theme.name } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSelfWorn(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSelf, user?.activeThemeId, getSharedTheme]);
+
+  const wornTheme: WornTheme | null = isSelf ? selfWorn : remote.status === 'loaded' ? remote.wornTheme : null;
+
+  // Try-on with an always-available revert: clicking the chip applies the
+  // owner's theme (snapshotting the visitor's settings.theme first); clicking
+  // it again restores the snapshot. A toast-button flow would expire in
+  // seconds — the chip itself is the keep/revert control.
+  const { applyThemeDoc } = useTtTheme();
+  const { thingtime, setThingtime, getThingtime } = useThingtime();
+
+  // Both halves of the try-on live in persisted `settings.*`, not component
+  // state: `settings.theme` is written through to localforage, so a try-on
+  // survives navigating away, but a React ref does not. With the snapshot in a
+  // ref, leaving the profile and coming back showed the chip in its "try on"
+  // state again, and a second click snapshotted the ALREADY-WORN foreign theme
+  // as the revert target — the visitor's own look became unrecoverable from the
+  // one control that advertises it. Deriving both from persisted state keeps
+  // "click again to take it off" true across navigation and reloads.
+  //
+  // An open RUN (the held look plus the share id it borrowed), not the applied
+  // share id alone, is what the chip reads — see themeTryOnCore for why the
+  // share id alone mislabels a visitor who simply wears the same theme as the
+  // owner, and why a run has to end once they adopt a look of their own.
+  const currentThemeSettings = thingtime?.settings?.theme;
+  const tryOnRun = thingtime?.settings?.themeBeforeTryOn;
+  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, run: tryOnRun });
+
+  const handleWornChipClick = React.useCallback(async () => {
+    if (!wornTheme) return;
+    if (isSelf) {
+      navigate('/themes');
+      return;
+    }
+    if (tryingOn) {
+      const openRun = getThingtime('settings.themeBeforeTryOn');
+      setThingtime('settings.theme', restoredThemeSettings(openRun, getThingtime('settings.theme')), {
+        ignoreUndoRedo: true,
+        namespace: 'theme'
+      });
+      setThingtime('settings.themeBeforeTryOn', null, { ignoreUndoRedo: true, namespace: 'theme' });
+      lopuRef.current({ title: 'Back to your own look ✨', status: 'success' });
+      return;
+    }
+    try {
+      const resp: any = await getSharedTheme({ id: wornTheme.id });
+      if (!resp?.ok || !resp?.theme?.theme) {
+        lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
+        return;
+      }
+      // Open or continue the run, then borrow. Hopping to a second profile
+      // while a run is open advances only the borrowed id, so the original
+      // look stays the revert target — while a visitor who arrived already
+      // wearing a shared theme (share link, gallery, cross-device pickup), or
+      // who has since adopted a look of their own, gets THAT captured, so
+      // take-off returns them to what they were actually wearing.
+      const run = nextTryOnRun(getThingtime('settings.themeBeforeTryOn'), getThingtime('settings.theme'), resp.theme.id);
+      setThingtime('settings.themeBeforeTryOn', run, { ignoreUndoRedo: true, namespace: 'theme' });
+      applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
+      lopuRef.current({
+        title: `Trying on "${resp.theme.name}" 🌈`,
+        description: 'Click the chip again to take it off, or keep it and tweak in /themes.',
+        status: 'success'
+      });
+    } catch {
+      lopuRef.current({ title: 'That theme could not be loaded 🌧️', status: 'error' });
+    }
+  }, [wornTheme, isSelf, tryingOn, navigate, getSharedTheme, getThingtime, setThingtime, applyThemeDoc]);
 
   // posts pager — self posts load immediately; public posts wait for the
   // profile to resolve so a missing user never fires a second failing fetch
@@ -496,6 +598,49 @@ export const ProfilePage = (props: ProfilePageProps) => {
         {/* follower/following/friend counts + follow/friend actions (and the
         pending friend-request inbox on your own profile) */}
         {!temporaryProfile && <RelationshipControls username={profile.username} isSelf={isSelf} />}
+
+        {wornTheme && (
+          <Box
+            as="button"
+            type="button"
+            onClick={handleWornChipClick}
+            mt={3}
+            p="1.5px"
+            borderRadius="999px"
+            background={RAINBOW}
+            backgroundSize="calc(100px + 200%)"
+            sx={{ animation: RAINBOW_ANIM }}
+            cursor="pointer"
+            display="inline-flex"
+            title={
+              isSelf
+                ? 'Your active theme — open the Theme Studio'
+                : tryingOn
+                  ? 'Take their theme off'
+                  : 'Preview Thingtime through their eyes'
+            }
+          >
+            <Flex
+              alignItems="center"
+              columnGap="6px"
+              px={3}
+              py="5px"
+              borderRadius="999px"
+              background="var(--tt-card, #fff)"
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-text, #5a5a66)"
+              transition="background 140ms ease"
+              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            >
+              {isSelf
+                ? `Wearing "${wornTheme.name}" 🌈`
+                : tryingOn
+                  ? `Wearing "${wornTheme.name}" ✓ — take it off`
+                  : `Wearing "${wornTheme.name}" 🌈 — try it on`}
+            </Flex>
+          </Box>
+        )}
 
         {isSelf && user?.temporary ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">

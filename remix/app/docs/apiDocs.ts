@@ -7982,11 +7982,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
       'GET returns a stripped public projection that never includes email, verification fields, or the ' +
-      'birthday. POST updates the caller display name, bio, avatar, banner, or birthday. Avatar/banner ' +
-      'may use either one external http(s) URL or a ready private attachment created for the exact ' +
-      'profile slot; managed media remains in the private bucket and is served through a stable ' +
-      'same-origin content route. Birthday is YYYY-MM-DD, private — stored in the secure blob and ' +
-      'shared with apps only via the exact profile.birthday scope.',
+      'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
+      'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
+      'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
+      'private attachment created for the exact profile slot; managed media remains in the private ' +
+      'bucket and is served through a stable same-origin content route. Birthday is YYYY-MM-DD, ' +
+      'private — stored in the secure blob and shared with apps only via the exact profile.birthday scope.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -8025,7 +8026,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public profile returned.',
-        body: { ok: true, profile: { username: 'rick.deckard', displayName: 'Rick Deckard' }, postCount: 0 }
+        body: {
+          ok: true,
+          profile: { username: 'rick.deckard', displayName: 'Rick Deckard' },
+          postCount: 0,
+          wornTheme: { id: 'theme_123', name: 'Neon Noir' }
+        }
       },
       {
         status: 401,
