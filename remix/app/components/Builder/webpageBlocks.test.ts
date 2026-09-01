@@ -107,3 +107,35 @@ test('moveBlockRelative steps within the parent list and clamps at edges', async
 	assert.deepEqual(findBlock(nestedUp, 'row')?.children?.map((block) => block.id), ['c', 'b']);
 	assert.deepEqual(moveBlockRelative(blocks, 'missing', 1), blocks);
 });
+
+test('wrapBlock replaces the block with a container holding it, in place', async () => {
+	const { wrapBlock } = await import('./webpageBlocks');
+	const blocks = tree();
+	const next = wrapBlock(blocks, 'c', 'grid');
+	const row = next.find((block) => block.id === 'row')!;
+	const wrapper = row.children![1];
+	assert.equal(wrapper.type, 'container');
+	assert.equal(wrapper.direction, 'grid');
+	assert.equal(wrapper.columns, 2);
+	assert.deepEqual(wrapper.children!.map((child) => child.id), ['c']);
+	// the original list shape is otherwise untouched
+	assert.deepEqual(next.map((block) => block.id), ['a', 'row', 'native-home']);
+	assert.equal(row.children![0].id, 'b');
+	// unknown id is a no-op
+	assert.equal(wrapBlock(blocks, 'nope', 'row'), blocks);
+});
+
+test('duplicateBlock deep-clones with fresh ids right after the original', async () => {
+	const { duplicateBlock } = await import('./webpageBlocks');
+	const blocks = tree();
+	const next = duplicateBlock(blocks, 'row');
+	assert.equal(next.length, 4);
+	const copy = next[2];
+	assert.equal(copy.type, 'container');
+	assert.notEqual(copy.id, 'row');
+	assert.equal(copy.children!.length, 2);
+	assert.ok(copy.children!.every((child, index) => child.id !== ['b', 'c'][index]));
+	// no id collisions across the whole tree
+	const { collectBlockIds: collect } = await import('./webpageBlocks');
+	assert.equal([...collect(next)].length, new Set([...collect(next)]).size);
+});

@@ -1,25 +1,7 @@
 import React from 'react';
-import {
-	Box,
-	Button,
-	Flex,
-	Input,
-	Modal,
-	ModalBody,
-	ModalCloseButton,
-	ModalContent,
-	ModalFooter,
-	ModalHeader,
-	ModalOverlay,
-	Select,
-	Switch,
-	Text,
-	Textarea
-} from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 
-import { LongTextEditor, type LongTextValue } from '../Editor/LongTextEditor';
-import { isEditorJsDoc } from '../Editor/editorJsValue';
-import { editorJsToHtml, htmlToEditorJs, htmlToPlainText } from './editorJsHtml';
+import { RichTextModal } from './RichTextModal';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
@@ -323,11 +305,8 @@ const CustomCssEditor = ({ block, onCommit }: { block: WebpageBlock; onCommit: (
 	);
 };
 
-// The Editor.js long-form editor for a text block: opens the full block
-// editor (headers, lists, tables, quotes, code, images, inline formatting) in
-// a modal; Apply converts the document to the block's sanitised-at-render
-// `html` (+ plain-text fallback), and reopening converts the html back into
-// editable Editor.js blocks.
+// The advanced Editor.js surface for a text block — the shared RichTextModal
+// (the block right-click menu opens the same one from the canvas).
 const RichTextEditorButton = ({
 	block,
 	patch
@@ -336,49 +315,12 @@ const RichTextEditorButton = ({
 	patch: (fields: Partial<WebpageBlock>) => void;
 }) => {
 	const [open, setOpen] = React.useState(false);
-	const [value, setValue] = React.useState<LongTextValue>('');
-	const openEditor = () => {
-		setValue(block.html ? htmlToEditorJs(block.html) : block.text || '');
-		setOpen(true);
-	};
-	const apply = () => {
-		if (isEditorJsDoc(value)) {
-			const html = editorJsToHtml(value);
-			patch({ html, text: htmlToPlainText(html).slice(0, 2000) });
-		} else {
-			patch({ text: String(value || ''), html: undefined });
-		}
-		setOpen(false);
-	};
 	return (
 		<>
-			<Button size="sm" variant="outline" onClick={openEditor} data-testid="rich-text-editor-open" alignSelf="flex-start">
+			<Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid="rich-text-editor-open" alignSelf="flex-start">
 				📝 Rich editor (Editor.js)
 			</Button>
-			<Modal isOpen={open} onClose={() => setOpen(false)} size="3xl" scrollBehavior="inside">
-				<ModalOverlay zIndex={DRAWER_Z + 20} />
-				<ModalContent containerProps={{ zIndex: DRAWER_Z + 21 }} data-testid="rich-text-editor-modal">
-					<ModalHeader fontSize="sm">Rich text ✍️</ModalHeader>
-					<ModalCloseButton />
-					<ModalBody>
-						<LongTextEditor
-							value={value}
-							onValueChange={setValue}
-							placeholder="Write something lovely ✨"
-							minHeight="280px"
-							blockTypes={{ style: false, embed: false, warning: false }}
-						/>
-					</ModalBody>
-					<ModalFooter columnGap={2}>
-						<Button size="sm" variant="outline" onClick={() => setOpen(false)}>
-							Cancel
-						</Button>
-						<Button size="sm" onClick={apply} data-testid="rich-text-editor-apply">
-							Apply
-						</Button>
-					</ModalFooter>
-				</ModalContent>
-			</Modal>
+			<RichTextModal block={block} isOpen={open} onClose={() => setOpen(false)} onApply={patch} />
 		</>
 	);
 };

@@ -155,6 +155,54 @@ export const moveBlock = (
 	return insertBlock(without, containerId, index, moving);
 };
 
+// Wrap a block IN PLACE inside a new container (Figma's "wrap in frame"):
+// the wrapper takes the block's slot, the block becomes its only child.
+// Only containers can hold children in the block model, so the wrapper is
+// always a container of the given direction. Depth beyond the server cap is
+// rejected at save — the gate stays the authority.
+export const wrapBlock = (
+	blocks: WebpageBlock[],
+	id: string,
+	direction: WebpageContainerDirection
+): WebpageBlock[] => {
+	const target = findBlock(blocks, id);
+	if (!target) return blocks;
+	const wrapper: WebpageBlock = {
+		id: newBlockId('box', collectBlockIds(blocks)),
+		type: 'container',
+		direction,
+		gap: 4,
+		...(direction === 'grid' ? { columns: 2 } : {}),
+		children: [target]
+	};
+	const walk = (list: WebpageBlock[]): WebpageBlock[] =>
+		list.map((block) => {
+			if (block.id === id) return wrapper;
+			return block.children ? { ...block, children: walk(block.children) } : block;
+		});
+	return walk(blocks);
+};
+
+// Deep-clone a block with fresh ids and insert the copy right after the
+// original.
+export const duplicateBlock = (blocks: WebpageBlock[], id: string): WebpageBlock[] => {
+	const target = findBlock(blocks, id);
+	if (!target) return blocks;
+	const existing = collectBlockIds(blocks);
+	const clone = (block: WebpageBlock): WebpageBlock => {
+		const prefix = block.id.replace(/-[a-z0-9]+$/, '') || block.type;
+		const next: WebpageBlock = { ...block, id: newBlockId(prefix, existing) };
+		existing.add(next.id);
+		if (block.children) next.children = block.children.map(clone);
+		return next;
+	};
+	const copy = clone(target);
+	const parentId = findParentId(blocks, id);
+	const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
+	const index = siblings.findIndex((sibling) => sibling.id === id);
+	return insertBlock(blocks, (parentId as string | null) ?? null, index + 1, copy);
+};
+
 // Move a block one step up/down within its parent list — the deterministic
 // (keyboard/inspector) twin of drag/drop.
 export const moveBlockRelative = (blocks: WebpageBlock[], id: string, delta: -1 | 1): WebpageBlock[] => {

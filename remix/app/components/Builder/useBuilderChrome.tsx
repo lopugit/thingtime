@@ -4,14 +4,20 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
 import { BlockInsertMenu, type InsertPick } from './BlockInsertMenu';
+import { BlockContextMenu } from './BlockContextMenu';
+import { RichTextModal } from './RichTextModal';
 import {
 	collectBlockIds,
+	duplicateBlock,
 	findBlock,
 	findParentId,
 	insertBlock,
 	moveBlock,
+	moveBlockRelative,
 	newBlockId,
+	removeBlock,
 	updateBlock,
+	wrapBlock,
 	type WebpageBlock
 } from './webpageBlocks';
 import type { BuilderChrome } from './WebpageBlocksRenderer';
@@ -44,6 +50,8 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
 	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement } | null>(null);
+	const [contextMenu, setContextMenu] = React.useState<{ blockId: string; x: number; y: number; wrapOnly?: boolean } | null>(null);
+	const [richEditorBlockId, setRichEditorBlockId] = React.useState<string | null>(null);
 
 	const draftRef = React.useRef(draft);
 	draftRef.current = draft;
@@ -191,10 +199,13 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			const files = Array.from(event.clipboardData?.files || []);
 			if (!files.length) return;
 			const target = event.target as HTMLElement | null;
-			if (target?.closest?.('input, textarea, select, .codex-editor, [data-testid="rich-text-editor-modal"]')) return;
+			if (target?.closest?.('input, textarea, select, [data-testid="rich-text-editor-modal"]')) return;
 			const types = Array.from(event.clipboardData?.types || []);
 			const carriesText = types.includes('text/html') || types.includes('text/plain');
-			if (carriesText && target?.closest?.('.ttInlineTextEditor')) return;
+			// the inline canvas editor keeps text-carrying pastes (rich copy);
+			// PURE file pastes upload — an Editor.js-pasted image would land as a
+			// data-uri that the render allowlist rejects
+			if (carriesText && target?.closest?.('.ttInlineRichTextEditor, .codex-editor')) return;
 			event.preventDefault();
 			uploadToBlock(selectedId, files);
 		};
@@ -219,7 +230,8 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 				draftRef.current.setBlocks(updateBlock(draftRef.current.blocks, id, patch));
 			},
 			onDropFiles: uploadToPosition ? (files, containerId, index) => uploadToPosition(files, containerId, index) : undefined,
-			onMediaToBlock: (blockId, files) => uploadToBlock(blockId, files)
+			onMediaToBlock: (blockId, files) => uploadToBlock(blockId, files),
+			onContextMenu: (blockId, x, y, wrapOnly) => setContextMenu({ blockId, x, y, wrapOnly })
 		}),
 		[hoverId, selectedId, uploadToPosition, uploadToBlock]
 	);
@@ -249,14 +261,67 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- insertAt is read via closure at call time
 	}, [insertAt]);
 
-	const insertMenu = insertAt ? (
-		<BlockInsertMenu
-			anchor={insertAt.anchor}
-			existingIds={collectBlockIds(draft.blocks)}
-			onPick={handlePick}
-			onClose={() => setInsertAt(null)}
-		/>
-	) : null;
+	const contextBlock = contextMenu ? findBlock(draft.blocks, contextMenu.blockId) : null;
+	const richEditorBlock = richEditorBlockId ? findBlock(draft.blocks, richEditorBlockId) : null;
+
+	// one overlay node bundles every floating chrome surface (insert menu,
+	// context menu, advanced rich editor) — hosts render it once after the
+	// canvas
+	const insertMenu = (
+		<>
+			{insertAt ? (
+				<BlockInsertMenu
+					anchor={insertAt.anchor}
+					existingIds={collectBlockIds(draft.blocks)}
+					onPick={handlePick}
+					onClose={() => setInsertAt(null)}
+				/>
+			) : null}
+			{contextMenu && contextBlock ? (
+				<BlockContextMenu
+					block={contextBlock}
+					x={contextMenu.x}
+					y={contextMenu.y}
+					wrapOnly={contextMenu.wrapOnly}
+					onClose={() => setContextMenu(null)}
+					onWrap={(direction) => {
+						draftRef.current.setBlocks(wrapBlock(draftRef.current.blocks, contextBlock.id, direction));
+						setContextMenu(null);
+					}}
+					onDuplicate={() => {
+						draftRef.current.setBlocks(duplicateBlock(draftRef.current.blocks, contextBlock.id));
+						setContextMenu(null);
+					}}
+					onDelete={() => {
+						draftRef.current.setBlocks(removeBlock(draftRef.current.blocks, contextBlock.id));
+						setContextMenu(null);
+						setSelectedId(null);
+					}}
+					onMove={(delta) => {
+						draftRef.current.setBlocks(moveBlockRelative(draftRef.current.blocks, contextBlock.id, delta));
+					}}
+					onOpenRichEditor={
+						contextBlock.type === 'text'
+							? () => {
+									setContextMenu(null);
+									setRichEditorBlockId(contextBlock.id);
+							  }
+							: undefined
+					}
+				/>
+			) : null}
+			{richEditorBlock ? (
+				<RichTextModal
+					block={richEditorBlock}
+					isOpen
+					onClose={() => setRichEditorBlockId(null)}
+					onApply={(patch) => {
+						draftRef.current.setBlocks(updateBlock(draftRef.current.blocks, richEditorBlock.id, patch));
+					}}
+				/>
+			) : null}
+		</>
+	);
 
 	const deselect = React.useCallback(() => setSelectedId(null), []);
 

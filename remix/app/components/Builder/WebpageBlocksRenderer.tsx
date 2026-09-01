@@ -8,7 +8,8 @@ import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { useTtActionClicks } from '../Actions/useTtActionClicks';
 import { htmlToNode } from './htmlToNode';
-import { InlineTextEditor } from './InlineTextEditor';
+import { InlineRichTextEditor } from './InlineRichTextEditor';
+import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
 
 // Draws a webpage block tree. Component blocks resolve their referenced
@@ -53,6 +54,9 @@ export type BuilderChrome = {
 	onMove: (id: string, containerId: string | null, index: number) => void;
 	// inline edits (WYSIWYG text, media src) patch the block draft in place
 	onUpdate?: (id: string, patch: Partial<WebpageBlock>) => void;
+	// right-click (or the chip's ⊞) opens the block context menu at (x, y);
+	// wrapOnly jumps straight to the wrap-with drill-down
+	onContextMenu?: (id: string, x: number, y: number, wrapOnly?: boolean) => void;
 	// OS file drops upload through the attachments API, then land as media
 	// blocks at (containerId, index)
 	onDropFiles?: (files: File[], containerId: string | null, index: number) => void;
@@ -416,6 +420,20 @@ const BlockFrame = ({
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
 			style={cssRecordToStyle(block.css)}
+			onContextMenu={
+				chrome.onContextMenu && !locked
+					? (event: React.MouseEvent) => {
+							const target = event.target as HTMLElement;
+							// native context menus stay native inside editors/inputs
+							if (target.closest?.('.codex-editor, input, textarea, [contenteditable="true"]')) return;
+							if (target.closest?.('[data-block-id]') !== event.currentTarget) return;
+							event.preventDefault();
+							event.stopPropagation();
+							chrome.onSelect(block.id, event.currentTarget as HTMLElement);
+							chrome.onContextMenu?.(block.id, event.clientX, event.clientY);
+					  }
+					: undefined
+			}
 			outline={
 				dropTarget
 					? `2px dashed ${tone}`
@@ -443,7 +461,12 @@ const BlockFrame = ({
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
 				const target = event.target as HTMLElement;
-				if (target.closest?.('.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttWysiwygToolbar, .ttArgEditPopover')) return;
+				if (
+					target.closest?.(
+						'.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttInlineRichTextEditor, .codex-editor, .ce-toolbar, .ce-popover, .ttWysiwygToolbar, .ttArgEditPopover, .ttBlockContextMenu'
+					)
+				)
+					return;
 				// nested frames: capture runs OUTERMOST-first, so an ancestor frame
 				// sees the click before the frame that was actually clicked. Only
 				// the innermost frame containing the click may handle it — anyone
@@ -487,12 +510,59 @@ const BlockFrame = ({
 					title={locked ? 'Native app screen — this block is locked' : 'Drag to move this block'}
 				>
 					{locked ? '🔒' : '⠿'} {blockLabel(block)}
+					{!locked && chrome.onContextMenu ? (
+						<Box
+							as="button"
+							type="button"
+							aria-label="Wrap this block"
+							title="Wrap with a block (row / column / grid)"
+							data-testid={`wrap-block-${block.id}`}
+							marginLeft="2px"
+							fontSize="12px"
+							lineHeight="1"
+							opacity={0.85}
+							_hover={{ opacity: 1, transform: 'scale(1.15)' }}
+							cursor="pointer"
+							onClick={(event: React.MouseEvent) => {
+								event.preventDefault();
+								event.stopPropagation();
+								const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
+								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6, true);
+							}}
+						>
+							⊞
+						</Box>
+					) : null}
 				</Flex>
 			)}
 			{children}
 		</Box>
 	);
 };
+
+// Sanitised rich markup, parsed once per html string and drawn with a real
+// document typography scale (Chakra's reset would otherwise render headings
+// at body size — the "Editor.js heading doesn't render" bug).
+const RichHtmlView = React.memo(function RichHtmlView({
+	html,
+	as,
+	typo,
+	fallback
+}: {
+	html: string;
+	as?: string;
+	typo?: Record<string, unknown>;
+	fallback?: React.ReactNode;
+}) {
+	const node = React.useMemo(() => htmlToNode(html), [html]);
+	if (!node) return <>{fallback ?? null}</>;
+	return (
+		<Box as={(as || 'div') as any} {...(typo as any)} sx={RICH_HTML_SX}>
+			<HtmlThingRenderer node={node} />
+		</Box>
+	);
+});
 
 const TEXT_STYLES: Record<string, Record<string, unknown>> = {
 	heading: {
@@ -707,26 +777,14 @@ const BlockView = (
 		const { as: defaultAs, ...typo } = TEXT_STYLES[block.style || 'body'] as Record<string, unknown> & { as?: string };
 		const asTag = block.tag || defaultAs || 'p';
 		if (chrome && chrome.selectedId === block.id && chrome.onUpdate) {
-			// selected text edits IN PLACE — WYSIWYG, caret and all. The editor
-			// element is ALWAYS a div: flipping the rendered tag mid-edit would
-			// swap the DOM node under the mount-only init effect and eat the text.
-			body = (
-				<InlineTextEditor
-					html={block.html}
-					text={block.text}
-					typography={typo}
-					onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
-				/>
-			);
+			// selected text edits IN PLACE with the FULL Editor.js editor —
+			// headings, lists, quotes, tables, inline formatting, right there on
+			// the canvas (the drawer's modal remains the "advanced" surface)
+			body = <InlineRichTextEditor html={block.html} text={block.text} onChange={(patch) => chrome.onUpdate?.(block.id, patch)} />;
 		} else if (block.html) {
-			const node = htmlToNode(block.html);
 			// rich text renders as a styled flow container (never inside a <p> —
 			// pasted markup may hold block elements)
-			body = (
-				<Box as={block.tag || 'div'} {...(typo as any)}>
-					{node ? <HtmlThingRenderer node={node} /> : block.text}
-				</Box>
-			);
+			body = <RichHtmlView html={block.html} as={block.tag || 'div'} typo={typo} fallback={block.text} />;
 		} else {
 			body = (
 				<Text as={asTag as any} {...(typo as any)}>
@@ -760,9 +818,8 @@ const BlockView = (
 			body = <Box as="img" src={src} alt={block.alt || ''} maxWidth="100%" borderRadius="var(--tt-radius-md, 12px)" />;
 		}
 	} else if (block.type === 'html') {
-		const node = htmlToNode(block.html || '');
-		body = node ? (
-			<HtmlThingRenderer node={node} />
+		body = block.html ? (
+			<RichHtmlView html={block.html} />
 		) : (
 			<Flex
 				alignItems="center"
