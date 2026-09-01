@@ -510,7 +510,7 @@ export const trackEngagement = async (
   ownerId: string,
   activeAlgorithmId: string | null,
   input: { algorithmId?: unknown; events?: unknown }
-): Promise<Fail | { ok: true; trained: boolean; applied: number }> => {
+): Promise<Fail | { ok: true; trained: boolean; applied: number; eventCount?: number }> => {
   const events = sanitizeEvents(input.events);
   if (!events.length) {
     return fail(400, 'events are required');
@@ -529,6 +529,11 @@ export const trackEngagement = async (
 	);
   const now = new Date();
 	let applied = 0;
+	// Captured from the in-transaction before-image, not the pre-transaction
+	// read above: a concurrent flush (second tab/device) commits between them,
+	// and a stale total makes the client's before/after crossing check both
+	// miss milestones and re-fire ones already celebrated.
+	let eventCount = 0;
 	try {
 		// Weights replace as one object (never dotted per-tag keys), but the
 		// before-image is read inside the transaction so concurrent training is
@@ -544,6 +549,7 @@ export const trackEngagement = async (
 				const trained = applyEventsToWeights(before.crystal?.weights || emptyWeights(), events, features);
 				if (!trained.applied) {
 					applied = 0;
+					eventCount = Math.max(0, Number(before.crystal?.eventCount || 0));
 					return;
 				}
 				const crystal = {
@@ -582,6 +588,7 @@ export const trackEngagement = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
 				}
 				applied = trained.applied;
+				eventCount = crystal.eventCount;
 			});
   } else {
 			const things = await getThingsCollection();
@@ -595,6 +602,7 @@ export const trackEngagement = async (
 				const trained = applyEventsToWeights(before.weights || emptyWeights(), events, features);
 				if (!trained.applied) {
 					applied = 0;
+					eventCount = Math.max(0, Number(before.eventCount || 0));
 					return;
 				}
 				const write = await algorithms.updateOne(
@@ -609,6 +617,7 @@ export const trackEngagement = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
 				}
 				applied = trained.applied;
+				eventCount = Math.max(0, Number(before.eventCount || 0)) + trained.applied;
 			});
 		}
 	} catch (error) {
@@ -616,5 +625,7 @@ export const trackEngagement = async (
 		if (projected) return projected;
 		throw error;
   }
-	return { ok: true, trained: applied > 0, applied };
+	// authoritative post-flush total so clients can detect growth-stage
+	// crossings (🥚→🐣→🐥→🧠) without double-counting session events
+	return { ok: true, trained: applied > 0, applied, eventCount };
 };

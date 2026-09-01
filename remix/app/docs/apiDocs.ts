@@ -5427,8 +5427,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Events were applied.',
-        body: { ok: true, trained: true, applied: 1 }
+        description:
+          'Events were applied. eventCount is the authoritative post-flush signal total for the trained algorithm, so a client can detect growth-stage crossings from (eventCount - applied) to eventCount.',
+        body: { ok: true, trained: true, applied: 1, eventCount: 101 }
       },
       {
         status: 400,
