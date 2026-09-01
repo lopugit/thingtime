@@ -7,6 +7,14 @@ import { Icon } from '../Icon/Icon';
 import { useLopu, useLopuStream } from '../Lopu/useLopu';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
+import {
+  buildCurlForEntry,
+  describeApiStatus,
+  getApiCalls,
+  subscribeApiCalls,
+  type ApiLogEntry,
+  type ApiStatusTone
+} from '~/hooks/apiRequestLog';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW, RAINBOW_CONIC } from '~/theme/rainbow';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
@@ -39,6 +47,17 @@ const getViewportSize = () => ({
 });
 
 const isNativeWebView = () => document.documentElement.classList.contains('thingtime-native-webview');
+
+// stable server-snapshot for useSyncExternalStore (a fresh [] every call would loop)
+const EMPTY_API_CALLS: ApiLogEntry[] = [];
+const getEmptyApiCalls = () => EMPTY_API_CALLS;
+
+const API_TONE_COLOR: Record<ApiStatusTone, string> = {
+  ok: 'var(--tt-rainbow-3, #58ca70)',
+  warn: '#b8860b',
+  danger: 'var(--tt-danger, #d6455a)',
+  muted: 'var(--tt-muted, #9a9aa6)'
+};
 
 const getDevKitBottomGuard = () => {
   const safeAreaBottom = readRootPixelValue('--thingtime-safe-area-bottom');
@@ -126,6 +145,27 @@ export const DevKit = (_props) => {
   const revalidator = useRevalidator();
   const lopu = useLopu();
   const pushLopuMusing = useLopuStream();
+
+  // request log (claude-todo/10 ⌨️): live view of the useApi ring buffer
+  const apiCalls = React.useSyncExternalStore(subscribeApiCalls, getApiCalls, getEmptyApiCalls);
+
+  const copyRequestAsCurl = React.useCallback(
+    async (entry: ApiLogEntry) => {
+      const curl = buildCurlForEntry(entry, window.location.origin);
+      try {
+        await navigator.clipboard.writeText(curl);
+        lopu({
+          title: 'curl copied 📋',
+          description: 'The session cookie ships as a placeholder — it is httpOnly, grab it from devtools if needed.',
+          status: 'success',
+          duration: 6000
+        });
+      } catch {
+        lopu({ title: 'Copy blocked — here it is', description: curl, status: 'info' });
+      }
+    },
+    [lopu]
+  );
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
@@ -475,6 +515,64 @@ export const DevKit = (_props) => {
               Lopu
             </Text>
             <DevAction onClick={pushMusing}>🔮 Push a Lopu musing</DevAction>
+
+            <Text
+              px={3}
+              pt={2}
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight="700"
+              letterSpacing="0.12em"
+              color="var(--tt-muted, #9a9aa6)"
+              textTransform="uppercase"
+            >
+              Requests · tap to copy curl
+            </Text>
+            {apiCalls.length === 0 ? (
+              <Text px={3} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+                No API calls yet — browse around 🌐
+              </Text>
+            ) : (
+              apiCalls.slice(0, 8).map((entry) => {
+                const status = describeApiStatus(entry);
+                return (
+                  <Flex
+                    key={entry.id}
+                    as="button"
+                    type="button"
+                    onClick={() => copyRequestAsCurl(entry)}
+                    align="center"
+                    gap={2}
+                    px={3}
+                    py="3px"
+                    borderRadius="var(--tt-radius-sm, 9px)"
+                    textAlign="left"
+                    title={`${entry.method} ${entry.url} — copy as curl`}
+                    _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+                  >
+                    <Text as="span" fontFamily="mono" fontSize="10px" fontWeight="800" flexShrink={0}>
+                      {entry.method}
+                    </Text>
+                    <Text
+                      as="span"
+                      fontFamily="mono"
+                      fontSize="10px"
+                      color="var(--tt-text, #5a5a66)"
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      whiteSpace="nowrap"
+                      flex={1}
+                      minW={0}
+                    >
+                      {entry.url.replace('/api/v1', '')}
+                    </Text>
+                    <Text as="span" fontFamily="mono" fontSize="10px" fontWeight="700" flexShrink={0} color={API_TONE_COLOR[status.tone]}>
+                      {status.label} · {entry.durationMs}ms
+                    </Text>
+                  </Flex>
+                );
+              })
+            )}
 
             <Text
               px={3}

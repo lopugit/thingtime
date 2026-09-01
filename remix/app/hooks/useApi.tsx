@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
@@ -14,14 +15,34 @@ const refreshRootData = () => {
 
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
+// Every call is recorded in the DevKit request log (method/path/status/ms).
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+  const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    recordApiCall({
+      at: Date.now(),
+      method: 'GET',
+      url,
+      status: 0,
+      ok: false,
+      aborted,
+      durationMs: Math.round(performance.now() - started)
+    });
+    if (aborted) throw error;
     throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
   }
+  recordApiCall({
+    at: Date.now(),
+    method: 'GET',
+    url,
+    status: response.status,
+    ok: response.ok,
+    durationMs: Math.round(performance.now() - started)
+  });
   const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
   if (!response.ok) {
     throw createApiFailure({
