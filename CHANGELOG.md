@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Feature Stack target workers now start after their expected sibling jobs are
+  skipped. The protected controller uses the same explicit `!cancelled()`
+  dependency guard as the other Lopu workers and validates the durable
+  Thingtime run identity against the immutable merge plan. — Codex (AI),
+  2026-09-01
 - Kept the priority `sync/main-into-develop` detector independent of the
   repository-wide open-PR GraphQL inventory. Its trusted pull-request event now
   hydrates and validates only the exact automation-owned PR through the REST

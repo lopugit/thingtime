@@ -91,7 +91,14 @@ assert.match(
   "the conflict worker selects a dedicated serialized lane only for the standing synchronizer",
 );
 assert.match(workflow, /feature_stack_plan:\s+name: Validate the immutable Feature Stack/);
+assert.match(workflow, /feature_stack_run_id:/);
+assert.match(workflow, /Feature Stack run identity does not match its immutable plan/);
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
+assert.match(
+	workflow,
+	/feature_stack_merge:[\s\S]*?if: >-\s*!cancelled\(\)\s*&& needs\.feature_stack_plan\.result == 'success'\s*&& needs\.model_config\.result == 'success'/,
+	"Feature Stack workers still run when skipped indirect dependencies are expected",
+);
 assert.match(workflow, /feature-stack-plan\.mjs verify/);
 assert.match(workflow, /gh pr merge "\$pr_url" --auto --merge/);
 assert.match(workflow, /CLAUDE_CODE_OAUTH_TOKEN_THINGTIME/);
