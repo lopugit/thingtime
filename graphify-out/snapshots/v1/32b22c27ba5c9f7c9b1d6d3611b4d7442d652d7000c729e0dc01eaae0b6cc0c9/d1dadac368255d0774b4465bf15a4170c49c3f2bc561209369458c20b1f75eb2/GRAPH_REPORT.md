@@ -1,15 +1,16 @@
-# Graph Report - /private/tmp/thingtime-stack-gate.BS2Bpw/worktree  (2026-09-01)
+# Graph Report - worktree  (2026-09-01)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 44 files · ~187,595 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 807 nodes · 1698 edges · 82 communities (42 shown, 40 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 14 edges (avg confidence: 0.54)
+- 829 nodes · 1710 edges · 94 communities (45 shown, 49 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1be2da36`
+- Built from commit: `62eb33a7`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -18,14 +19,14 @@
 - [[_COMMUNITY_graphify-cas.mjs|graphify-cas.mjs]]
 - [[_COMMUNITY_promotion-pr-changelog.mjs|promotion-pr-changelog.mjs]]
 - [[_COMMUNITY_build-all-branch.mjs|build-all-branch.mjs]]
+- [[_COMMUNITY_refresh-promotion-graphify.sh|refresh-promotion-graphify.sh]]
 - [[_COMMUNITY_selfTest|selfTest]]
 - [[_COMMUNITY_workflow-control-plane-contract.mjs|workflow-control-plane-contract.mjs]]
-- [[_COMMUNITY_verify job|verify job]]
 - [[_COMMUNITY_lopu-pr-status.mjs|lopu-pr-status.mjs]]
 - [[_COMMUNITY_failureDetail|failureDetail]]
 - [[_COMMUNITY_runPromotion|runPromotion]]
-- [[_COMMUNITY_refresh-promotion-graphify.sh|refresh-promotion-graphify.sh]]
 - [[_COMMUNITY_codeql-open-pr-backfill.mjs|codeql-open-pr-backfill.mjs]]
+- [[_COMMUNITY_verify job|verify job]]
 - [[_COMMUNITY_promote-features-to-main.mjs|promote-features-to-main.mjs]]
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
 - [[_COMMUNITY_merge-main-develop-sync-pr.mjs|merge-main-develop-sync-pr.mjs]]
@@ -34,16 +35,16 @@
 - [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
 - [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
 - [[_COMMUNITY_Lopu agent composite action|Lopu agent composite action]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_promotion-worker-routing-contract.mjs|promotion-worker-routing-contract.mjs]]
 - [[_COMMUNITY_recoverPromotionReviewCheckpoint|recoverPromotionReviewCheckpoint]]
+- [[_COMMUNITY_Authorize Exact Preview Source|Authorize Exact Preview Source]]
+- [[_COMMUNITY_feature-stack-progress.mjs|feature-stack-progress.mjs]]
 - [[_COMMUNITY_queueTrustedPromotionWorker|queueTrustedPromotionWorker]]
 - [[_COMMUNITY_stage-graphify-snapshots.mjs|stage-graphify-snapshots.mjs]]
-- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
-- [[_COMMUNITY_API Suite Job|API Suite Job]]
 - [[_COMMUNITY_feature-stack-plan.mjs|feature-stack-plan.mjs]]
 - [[_COMMUNITY_lopu-credential-vault.mjs|lopu-credential-vault.mjs]]
 - [[_COMMUNITY_start.sh|start.sh]]
-- [[_COMMUNITY_controller job|controller job]]
 - [[_COMMUNITY_Lopu internal maindevelop synchronization|Lopu internal main/develop synchronization]]
 - [[_COMMUNITY_classify-claude-credential-failure.mjs|classify-claude-credential-failure.mjs]]
 - [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
@@ -57,7 +58,6 @@
 - [[_COMMUNITY_resolve-canonical-instruction-type-conflicts.sh|resolve-canonical-instruction-type-conflicts.sh]]
 - [[_COMMUNITY_resolve-canonical-instruction-type-conflicts.test.mjs|resolve-canonical-instruction-type-conflicts.test.mjs]]
 - [[_COMMUNITY_Commander App Release workflow|Commander App Release workflow]]
-- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
 - [[_COMMUNITY_Graphify CLI|Graphify CLI]]
 - [[_COMMUNITY_Lopu Agent Action|Lopu Agent Action]]
@@ -75,7 +75,7 @@
 - [[_COMMUNITY_Root AGENTS.md and CLAUDE.md Symlinks|Root AGENTS.md and CLAUDE.md Symlinks]]
 - [[_COMMUNITY_Worktree Port Resolver|Worktree Port Resolver]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
-- [[_COMMUNITY_lopu-credential-vault.test.mjs|lopu-credential-vault.test.mjs]]
+- [[_COMMUNITY_Fundamentals|Fundamentals]]
 - [[_COMMUNITY_CodeQL PR handoff workflow|CodeQL PR handoff workflow]]
 - [[_COMMUNITY_Legacy PR conflict resolver (superseded)|Legacy PR conflict resolver (superseded)]]
 - [[_COMMUNITY_Clean Synchronization Lane|Clean Synchronization Lane]]
@@ -94,7 +94,20 @@
 - [[_COMMUNITY_syncmain-into-develop PR|sync/main-into-develop PR]]
 - [[_COMMUNITY_Thingtime Repository|Thingtime Repository]]
 - [[_COMMUNITY_Trusted Terminal Merger|Trusted Terminal Merger]]
+- [[_COMMUNITY_Electron PR Release Workflow|Electron PR Release Workflow]]
 - [[_COMMUNITY_Testing Checklist|Testing Checklist]]
+- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
+- [[_COMMUNITY_API Suite Job|API Suite Job]]
+- [[_COMMUNITY_PR 534 — Feature Stack progress heartbeat controller|PR #534 — Feature Stack progress heartbeat controller]]
+- [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
+- [[_COMMUNITY_Lopu PR Manager|Lopu PR Manager]]
+- [[_COMMUNITY_PR 492 Load Lopu credentials from Thingtime vault|PR #492 Load Lopu credentials from Thingtime vault]]
+- [[_COMMUNITY_Feature Stack Progress Reporter|Feature Stack Progress Reporter]]
+- [[_COMMUNITY_Feature Stack Target Workers|Feature Stack Target Workers]]
+- [[_COMMUNITY_github-actions CI control plane|github-actions CI control plane]]
+- [[_COMMUNITY_.githubscriptsgraphify|.github/scripts/graphify]]
+- [[_COMMUNITY_.githubactionslopu-agent|.github/actions/lopu-agent]]
+- [[_COMMUNITY_Lopu PR manager|Lopu PR manager]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 49 edges
@@ -105,20 +118,20 @@
 6. `main()` - 20 edges
 7. `orphanedMergeHydrationIntegrationTest()` - 19 edges
 8. `main()` - 16 edges
-9. `repoFlag()` - 15 edges
-10. `boundedInteger()` - 15 edges
+9. `boundedInteger()` - 15 edges
+10. `repoFlag()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Thingtime AI Instructions` --semantically_similar_to--> `Thingtime AI Instructions`  [EXTRACTED] [semantically similar]
-  CLAUDE.md → AGENTS.md
 - `Product Contract Advisories` --conceptually_related_to--> `Thin product branch listeners`  [INFERRED]
   .github/workflows/web-ci.yml → README.md
-- `Control-plane changelog` --conceptually_related_to--> `Feature Stack Progress Heartbeat Controller`  [INFERRED]
-  CHANGELOG.md → PRs/534-codex-feature-stack-progress-heartbeats-controller.md
 - `API Suite Job` --references--> `Thingtime API`  [EXTRACTED]
   .github/workflows/web-ci.yml → AGENTS.md
 - `API Suite Job` --references--> `Versioned MongoDB Collections`  [EXTRACTED]
   .github/workflows/web-ci.yml → AGENTS.md
+- `contract-advisories job` --calls--> `deploy-develop-pr-preview.mjs`  [EXTRACTED]
+  .github/workflows/control-plane-ci.yml → README.md
+- `contract-advisories job` --calls--> `workflow-control-plane-contract.mjs`  [EXTRACTED]
+  .github/workflows/control-plane-ci.yml → README.md
 
 ## Import Cycles
 - None detected.
@@ -137,7 +150,7 @@
 - **Shared CI provider routing contract** — github_workflows_ci_provider_router_workflow, github_workflows_promote_develop_to_main_route, github_workflows_promote_features_to_main_route, github_workflows_resolve_pr_conflicts_workflow [EXTRACTED 0.80]
 - **develop→main promotion and back-sync automation** — github_workflows_promote_develop_to_main_workflow, github_workflows_promote_features_to_main_workflow, github_workflows_sync_main_into_develop_workflow, github_workflows_resolve_pr_conflicts_workflow, github_scripts_promote_features_to_main, github_scripts_promotion_pr_changelog [EXTRACTED 0.85]
 
-## Communities (82 total, 40 thin omitted)
+## Communities (94 total, 49 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -155,15 +168,15 @@ Nodes (42): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, com
 Cohesion: 0.16
 Nodes (36): assertAllBranchWorkflowContract(), BASE_BRANCHES, buildMode(), checkMode(), completeRefspecs, countLeadingFailureMarkers(), doctorCommitMode(), doctorRecordMode() (+28 more)
 
-### Community 4 - "selfTest"
+### Community 4 - "refresh-promotion-graphify.sh"
 Cohesion: 0.10
 Nodes (28): extract_archive(), main(), _member_path(), self_test(), _validate_link(), assert_control_metadata_unchanged(), assert_tool_boundary(), current_refs_hash() (+20 more)
 
-### Community 5 - "workflow-control-plane-contract.mjs"
+### Community 5 - "selfTest"
 Cohesion: 0.09
 Nodes (33): botCommentsByLatestEvent(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), externalStackPromotionState(), findBotPromotionRetirement(), groupFailureMessages(), groupKeyFor() (+25 more)
 
-### Community 6 - "verify job"
+### Community 6 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.13
 Nodes (27): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertAdminTransportCap(), assertAdminWaterfallGrammar() (+19 more)
 
@@ -179,13 +192,13 @@ Nodes (27): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), c
 Cohesion: 0.18
 Nodes (26): cancelPromotionRetirement(), closeRedundantPass(), createPromotionPr(), ensurePromotionLabel(), ensureSourceLineageReviewLabel(), exactBranchDeleteWithActionsToken(), finalizeAiPromotionMetadata(), finalizeSourceLineageMetadata() (+18 more)
 
-### Community 10 - "refresh-promotion-graphify.sh"
+### Community 10 - "codeql-open-pr-backfill.mjs"
 Cohesion: 0.21
 Nodes (22): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), analysisSnapshotForPullRequest(), commandFailureText(), completeAnalysisKeys(), dispatchAnalysisWithInput(), flattenSlurp() (+14 more)
 
-### Community 11 - "codeql-open-pr-backfill.mjs"
-Cohesion: 0.10
-Nodes (22): actions/checkout, actions/github-script, comment-contract-advisories job, contract-advisories job, graphify-cas.test.mjs, merge-main-develop-sync-pr.mjs, verify job, Workflow control-plane CI workflow (+14 more)
+### Community 11 - "verify job"
+Cohesion: 0.20
+Nodes (10): actions/checkout, actions/github-script, comment-contract-advisories job, contract-advisories job, graphify-cas.test.mjs, merge-main-develop-sync-pr.mjs, verify job, Workflow control-plane CI workflow (+2 more)
 
 ### Community 12 - "promote-features-to-main.mjs"
 Cohesion: 0.13
@@ -219,43 +232,43 @@ Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), 
 Cohesion: 0.14
 Nodes (14): classify-claude-credential-failure.mjs, anthropics/claude-code-action, openai/codex-action, Lopu agent composite action, lopu-credential-vault.mjs, graphify-cas.mjs, prepare-round.sh, Lopu rebase conflict round composite action (+6 more)
 
-### Community 20 - "promotion-worker-routing-contract.mjs"
-Cohesion: 0.15
-Nodes (12): Thingtime AI Instructions, Thingtime AI Instructions, Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing (+4 more)
+### Community 20 - "Thingtime AI instructions"
+Cohesion: 0.17
+Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-### Community 21 - "recoverPromotionReviewCheckpoint"
+### Community 21 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.17
 Nodes (11): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, graphify, lopuAgent, mainDevelopSyncWorkflow, promoter (+3 more)
 
-### Community 22 - "queueTrustedPromotionWorker"
+### Community 22 - "recoverPromotionReviewCheckpoint"
 Cohesion: 0.27
 Nodes (11): attestationMatches(), exactCheckpointPush(), inspectPromotionReviewCheckpoint(), isObjectId(), latestBotPromotionAttestationEvents(), liveRefShaWithActionsToken(), parsePromotionResolutionAttestations(), recoverPromotionReviewCheckpoint() (+3 more)
 
-### Community 23 - "stage-graphify-snapshots.mjs"
-Cohesion: 0.22
-Nodes (10): Control-plane changelog, Build Exact PR Bundle Without Secrets, Publish or Reconcile Develop S3 Preview, Dispatch Trusted Default-branch Controller, Authorize Exact Preview Source, Develop S3 PR Preview Implementation, Lopu PR Manager, Feature Stack Progress Heartbeat Controller (+2 more)
+### Community 23 - "Authorize Exact Preview Source"
+Cohesion: 0.50
+Nodes (5): Build Exact PR Bundle Without Secrets, Publish or Reconcile Develop S3 Preview, Dispatch Trusted Default-branch Controller, Authorize Exact Preview Source, Develop S3 PR Preview Implementation
 
-### Community 24 - "`github-actions` — the CI control plane"
-Cohesion: 0.29
-Nodes (8): githubJobs(), postProgress(), progressSnapshot(), run(), selfTest(), STEP_PHASES, TERMINAL_CONCLUSIONS, TERMINAL_TARGET_STATUSES
+### Community 24 - "feature-stack-progress.mjs"
+Cohesion: 0.27
+Nodes (10): githubJobs(), postProgress(), progressSnapshot(), reconcile(), recoveryPayload(), run(), selfTest(), STEP_PHASES (+2 more)
 
-### Community 25 - "API Suite Job"
+### Community 25 - "queueTrustedPromotionWorker"
 Cohesion: 0.24
 Nodes (10): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionBody(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation() (+2 more)
 
-### Community 26 - "feature-stack-plan.mjs"
+### Community 26 - "stage-graphify-snapshots.mjs"
 Cohesion: 0.40
 Nodes (9): addExisting(), filesUnder(), git(), LEGACY_ROOT, PORTABLE, restoreTrackedFromHead(), selfTest(), stageGraphifySnapshots() (+1 more)
 
-### Community 27 - "lopu-credential-vault.mjs"
+### Community 27 - "feature-stack-plan.mjs"
 Cohesion: 0.64
 Nodes (7): canonicalFeatureStackPlan(), decodeFeatureStackPlan(), exactKeys(), featureStackId(), git(), selfTest(), verifyFeatureStackHistory()
 
-### Community 28 - "start.sh"
+### Community 28 - "lopu-credential-vault.mjs"
 Cohesion: 0.61
 Nodes (7): exportBundle(), fetchBundle(), legacyCredentials(), main(), required(), safeCache(), validate()
 
-### Community 29 - "controller job"
+### Community 29 - "start.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
@@ -293,7 +306,7 @@ Nodes (4): rawIndexHash(), runGit(), semanticIndexHash(), sha256()
 
 ### Community 38 - "PR #492 — Load Lopu credentials from the Thingtime vault"
 Cohesion: 0.40
-Nodes (4): PR #492 Load Lopu credentials from Thingtime vault, Safety and regression focus, Scope, Validation log
+Nodes (4): PR #492 — Load Lopu credentials from the Thingtime vault, Safety and regression focus, Scope, Validation log
 
 ### Community 39 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
@@ -303,25 +316,37 @@ Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh 
 Cohesion: 0.67
 Nodes (3): build_and_run.sh, Commander App Release workflow, release-version.mjs
 
+### Community 82 - "`github-actions` — the CI control plane"
+Cohesion: 0.12
+Nodes (14): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off (+6 more)
+
+### Community 83 - "API Suite Job"
+Cohesion: 0.25
+Nodes (8): API Suite Job, Build Typecheck Ratchet Unit Tests Job, Product Contract Advisories, Classify Web CI Scope Job, Web CI Workflow, Versioned MongoDB Collections, Thingtime API, Thin product branch listeners
+
+### Community 84 - "PR #534 — Feature Stack progress heartbeat controller"
+Cohesion: 0.40
+Nodes (4): Outcome, PR #534 — Feature Stack progress heartbeat controller, Safety and cost, Validation
+
 ## Knowledge Gaps
-- **191 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `REQUIRED_CATEGORIES`, `ACTIVE_RUN_STATUSES` (+186 more)
+- **212 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+207 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **40 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `promote: replay merged develop PRs` connect `promotion-pr-changelog.mjs` to `promote-features-to-main.mjs`?**
-  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+  _High betweenness centrality (0.016) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
-  _191 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _212 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06019766397124888 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.09175920514319112 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.10631229235880399 - nodes in this community are weakly interconnected._
-- **Should `selfTest` be split into smaller, more focused modules?**
+- **Should `refresh-promotion-graphify.sh` be split into smaller, more focused modules?**
   _Cohesion score 0.10227272727272728 - nodes in this community are weakly interconnected._
-- **Should `workflow-control-plane-contract.mjs` be split into smaller, more focused modules?**
+- **Should `selfTest` be split into smaller, more focused modules?**
   _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
