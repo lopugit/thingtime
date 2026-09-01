@@ -28,6 +28,12 @@ import {
   withRepositoryLock,
 } from "./graphify-cas.mjs"
 
+// GRAPHIFY_SNAPSHOT_RETENTION is a documented operator override, so an ambient
+// value would silently redefine what the retention assertions below mean. The
+// suite pins the unset default once, for this process and every child it
+// spawns, instead of asserting against whichever policy the caller exported.
+delete process.env.GRAPHIFY_SNAPSHOT_RETENTION
+
 function git(root, args) {
   return execFileSync("git", ["-C", root, ...args], {
     encoding: "utf8",
