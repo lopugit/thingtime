@@ -285,8 +285,8 @@
     "semantic_hash": "7580b7f9d73b616e2b582f600af5fd99"
   },
   ".github/scripts/feature-stack-progress.mjs": {
-    "mtime": 1788243406.0748277,
-    "ast_hash": "41bd791662ec72e7c400a2a574f699d5",
+    "mtime": 1788243883.8521163,
+    "ast_hash": "54e248a96f4280ea1aa70a35eaf6cb34",
     "semantic_hash": ""
   },
   "PRs/534-codex-feature-stack-progress-heartbeats-controller.md": {
