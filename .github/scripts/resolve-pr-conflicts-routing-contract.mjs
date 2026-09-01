@@ -523,6 +523,21 @@ function assertWorkflowSource() {
   );
   assert.match(
     source,
+    /PRIORITY_SYNC_EVENT:[\s\S]*pull_request_target[\s\S]*sync\/main-into-develop[\s\S]*develop[\s\S]*'true'[\s\S]*'false'/u,
+    "the exact standing synchronizer event is identified from trusted pull-request context",
+  );
+  assert.match(
+    source,
+    /exact_sync_open_pr\(\) \{[\s\S]*gh_read_retry "repos\/\$REPO\/pulls\/\$ONLY_PR"[\s\S]*stale or malformed exact standing sync PR response[\s\S]*mergeStateStatus:\(\(\.mergeable_state \/\/ "unknown"\) \| ascii_upcase\)/u,
+    "the priority synchronizer hydrates and validates one exact REST PR snapshot",
+  );
+  assert.match(
+    source,
+    /all_open_prs\(\) \{[\s\S]*if \[ "\$PRIORITY_SYNC_EVENT" = true \]; then\s+exact_sync_open_pr\s+return\s+fi[\s\S]*gh_read_retry graphql --paginate --slurp/u,
+    "the priority synchronizer bypasses the repository-wide GraphQL inventory without changing ordinary sweeps",
+  );
+  assert.match(
+    source,
     /all_open="\$\(all_open_prs\)"\n\s+prs="\$\(query\)"/u,
     "the detector filters and classifies one complete PR inventory snapshot",
   );
