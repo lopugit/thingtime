@@ -17,6 +17,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — ChatGPT OAuth production credential vault
+
+- Production ChatGPT connector credentials now use a dedicated sensitive Vercel
+  encryption key, allowing the OAuth connection screen to create and retain
+  independently encrypted multi-account credentials. — Codex (AI), 2026-09-01
+
 ### 2026-09-01 — Self-draining moderation safety sweep
 
 - A successful full moderation sweep batch now immediately starts a durable
