@@ -475,7 +475,7 @@ const BlockFrame = ({
 				const target = event.target as HTMLElement;
 				if (
 					target.closest?.(
-						'.ttInsertZone, .ttDropWell, .ttInlineTextEditor, .ttInlineRichTextEditor, .codex-editor, .ce-toolbar, .ce-popover, .ttWysiwygToolbar, .ttArgEditPopover, .ttBlockContextMenu'
+						'.ttInsertZone, .ttDropWell, .ttChipAction, .ttInlineRichTextEditor, .codex-editor, .ce-toolbar, .ce-popover, .ce-inline-toolbar, .ttArgEditPopover, .ttBlockContextMenu'
 					)
 				)
 					return;
@@ -526,6 +526,7 @@ const BlockFrame = ({
 						<Box
 							as="button"
 							type="button"
+							className="ttChipAction"
 							aria-label="Wrap this block"
 							title="Wrap with a block (row / column / grid)"
 							data-testid={`wrap-block-${block.id}`}
@@ -808,7 +809,14 @@ const BlockView = (
 			// selected text edits IN PLACE with the FULL Editor.js editor —
 			// headings, lists, quotes, tables, inline formatting, right there on
 			// the canvas (the drawer's modal remains the "advanced" surface)
-			body = <InlineRichTextEditor html={block.html} text={block.text} onChange={(patch) => chrome.onUpdate?.(block.id, patch)} />;
+			body = (
+				<InlineRichTextEditor
+					html={block.html}
+					text={block.text}
+					typography={typo}
+					onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
+				/>
+			);
 		} else if (block.html) {
 			// rich text renders as a styled flow container (never inside a <p> —
 			// pasted markup may hold block elements)

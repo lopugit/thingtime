@@ -241,7 +241,9 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	React.useEffect(() => {
 		if (!selectedId) return;
 		const onKey = (event: KeyboardEvent) => {
-			if (event.code === 'Escape') setSelectedId(null);
+			// an overlay (context menu, Editor.js popover) that consumed this
+			// Escape marked it defaultPrevented — the selection stays
+			if (event.code === 'Escape' && !event.defaultPrevented) setSelectedId(null);
 		};
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
@@ -285,11 +287,15 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 					wrapOnly={contextMenu.wrapOnly}
 					onClose={() => setContextMenu(null)}
 					onWrap={(direction) => {
-						draftRef.current.setBlocks(wrapBlock(draftRef.current.blocks, contextBlock.id, direction));
+						const next = wrapBlock(draftRef.current.blocks, contextBlock.id, direction);
+						if (next === draftRef.current.blocks) lopu({ title: 'Too deep to wrap here — pages nest 8 levels max 🪆', status: 'warning' });
+						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}
 					onDuplicate={() => {
-						draftRef.current.setBlocks(duplicateBlock(draftRef.current.blocks, contextBlock.id));
+						const next = duplicateBlock(draftRef.current.blocks, contextBlock.id);
+						if (next === draftRef.current.blocks) lopu({ title: 'Duplicating would pass the 120-block page cap 📦', status: 'warning' });
+						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}
 					onDelete={() => {

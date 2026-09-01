@@ -5,50 +5,72 @@ import { LongTextEditor, type LongTextValue } from '../Editor/LongTextEditor';
 import { isEditorJsDoc } from '../Editor/editorJsValue';
 import { editorJsToHtml, htmlToEditorJs, htmlToPlainText } from './editorJsHtml';
 
+const escapeHtml = (text: string): string =>
+	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
 // The FULL Editor.js editor, inline on the canvas: a selected text block
 // edits in place with the real block vocabulary (headings, lists, quotes,
-// tables, inline formatting) — what the modal offered, without leaving the
-// page. Changes convert doc → sanitised-at-render html on every edit; the
-// lastEmitted ref separates our own echoes from EXTERNAL html changes
-// (advanced modal Apply, discard), which re-seed the editor.
+// tables, inline formatting). Conversions are guarded three ways:
+// - NO-OP SUPPRESSION: emissions equal to the current normalised content are
+//   swallowed, so merely selecting a block (or the editor's own
+//   normalisation / unmount drain) never rewrites html or dirties the draft;
+// - ECHO/EXTERNAL split: a (html, text) prop change we did not emit re-seeds
+//   the editor (drawer textarea edits, advanced-modal Apply, discard);
+// - the image tool is DISABLED inline so pasted/dropped image FILES reach the
+//   attachments uploader instead of dying as data-uris the render allowlist
+//   rejects (the advanced modal keeps the tool for URL-based images).
 export const InlineRichTextEditor = ({
 	html,
 	text,
+	typography,
 	onChange
 }: {
 	html?: string;
 	text?: string;
+	// the block's resolved typography so editing reads like the render
+	typography?: Record<string, unknown>;
 	onChange: (patch: { html: string; text: string }) => void;
 }) => {
-	const seed = React.useCallback(
+	const seedDoc = React.useCallback(
 		(seedHtml: string | undefined, seedText: string | undefined): LongTextValue =>
-			htmlToEditorJs(seedHtml || (seedText ? `<p>${seedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>` : '<p></p>')),
+			htmlToEditorJs(seedHtml || (seedText ? `<p>${escapeHtml(seedText)}</p>` : '<p></p>')),
 		[]
 	);
-	const [value, setValue] = React.useState<LongTextValue>(() => seed(html, text));
-	const lastEmittedRef = React.useRef<string>(html || '');
+	const [value, setValue] = React.useState<LongTextValue>(() => seedDoc(html, text));
+	// the NORMALISED form of what the editor currently holds — emissions equal
+	// to it are no-ops, prop keys equal to it are our own echoes
+	const lastEmittedRef = React.useRef<{ html: string; key: string }>({ html: '', key: '' });
+	React.useState(() => {
+		const initial = value;
+		const normalised = isEditorJsDoc(initial) ? editorJsToHtml(initial) : String(initial || '');
+		lastEmittedRef.current = { html: normalised, key: `${html || ''}::${text || ''}` };
+		return null;
+	});
 
 	React.useEffect(() => {
-		if ((html || '') !== lastEmittedRef.current) {
-			// external content change — re-seed (LongTextEditor remounts itself on
-			// genuinely different incoming values)
-			lastEmittedRef.current = html || '';
-			setValue(seed(html, text));
+		const key = `${html || ''}::${text || ''}`;
+		if (key !== lastEmittedRef.current.key) {
+			// external content change (drawer field, modal Apply, discard) —
+			// re-seed; LongTextEditor remounts on genuinely different values
+			const next = seedDoc(html, text);
+			lastEmittedRef.current = {
+				html: isEditorJsDoc(next) ? editorJsToHtml(next) : String(next || ''),
+				key
+			};
+			setValue(next);
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- text only matters alongside an html change
-	}, [html, seed]);
+	}, [html, text, seedDoc]);
 
 	const handleChange = React.useCallback(
 		(next: LongTextValue) => {
 			setValue(next);
-			if (!isEditorJsDoc(next)) {
-				lastEmittedRef.current = '';
-				onChange({ html: '', text: String(next || '') });
-				return;
-			}
-			const nextHtml = editorJsToHtml(next);
-			lastEmittedRef.current = nextHtml;
-			onChange({ html: nextHtml, text: htmlToPlainText(nextHtml).slice(0, 2000) });
+			const nextHtml = isEditorJsDoc(next) ? editorJsToHtml(next) : `<p>${escapeHtml(String(next || ''))}</p>`;
+			// normalisation echoes and unmount drains produce the same html —
+			// swallowing them keeps untouched blocks byte-identical and clean
+			if (nextHtml === lastEmittedRef.current.html) return;
+			const nextText = htmlToPlainText(nextHtml).slice(0, 2000);
+			lastEmittedRef.current = { html: nextHtml, key: `${nextHtml}::${nextText}` };
+			onChange({ html: nextHtml, text: nextText });
 		},
 		[onChange]
 	);
@@ -57,10 +79,13 @@ export const InlineRichTextEditor = ({
 		<Box
 			className="ttInlineRichTextEditor"
 			data-testid="inline-rich-text-editor"
+			{...(typography as any)}
 			sx={{
-				// the editor owns its typography; keep the canvas frame calm
-				'& .codex-editor__redactor': { paddingBottom: '8px !important' },
-				whiteSpace: 'normal'
+				whiteSpace: 'normal',
+				// the canvas is the page — strip the editor's own gutters so the
+				// editing state sits where the render sits
+				'& .codex-editor__redactor': { padding: '0 !important' },
+				'& .ce-block__content, & .ce-toolbar__content': { maxWidth: 'none' }
 			}}
 			onClick={(event: React.MouseEvent) => event.stopPropagation()}
 		>
@@ -69,7 +94,7 @@ export const InlineRichTextEditor = ({
 				onValueChange={handleChange}
 				placeholder="Write something lovely ✨"
 				minHeight="1.6em"
-				blockTypes={{ style: false, embed: false, warning: false }}
+				blockTypes={{ style: false, embed: false, warning: false, image: false }}
 			/>
 		</Box>
 	);

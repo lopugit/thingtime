@@ -160,6 +160,20 @@ export const moveBlock = (
 // Only containers can hold children in the block model, so the wrapper is
 // always a container of the given direction. Depth beyond the server cap is
 // rejected at save — the gate stays the authority.
+const subtreeDepth = (block: WebpageBlock): number =>
+	1 + (block.children?.length ? Math.max(...block.children.map(subtreeDepth)) : 0);
+
+const depthOf = (blocks: WebpageBlock[], id: string, depth = 1): number | null => {
+	for (const block of blocks) {
+		if (block.id === id) return depth;
+		if (block.children) {
+			const hit = depthOf(block.children, id, depth + 1);
+			if (hit !== null) return hit;
+		}
+	}
+	return null;
+};
+
 export const wrapBlock = (
 	blocks: WebpageBlock[],
 	id: string,
@@ -167,6 +181,10 @@ export const wrapBlock = (
 ): WebpageBlock[] => {
 	const target = findBlock(blocks, id);
 	if (!target) return blocks;
+	// the wrapper adds one level — refuse when that would breach the server's
+	// depth cap (callers surface the refusal; the gate stays the authority)
+	const depth = depthOf(blocks, id) ?? 1;
+	if (depth + subtreeDepth(target) > MAX_BLOCK_DEPTH) return blocks;
 	const wrapper: WebpageBlock = {
 		id: newBlockId('box', collectBlockIds(blocks)),
 		type: 'container',
@@ -188,9 +206,11 @@ export const wrapBlock = (
 export const duplicateBlock = (blocks: WebpageBlock[], id: string): WebpageBlock[] => {
 	const target = findBlock(blocks, id);
 	if (!target) return blocks;
+	if (countBlocks(blocks) + countBlocks([target]) > MAX_BLOCKS) return blocks;
 	const existing = collectBlockIds(blocks);
 	const clone = (block: WebpageBlock): WebpageBlock => {
-		const prefix = block.id.replace(/-[a-z0-9]+$/, '') || block.type;
+		// keep clone ids well under the server's 40-char id cap
+		const prefix = (block.id.replace(/-[a-z0-9]+$/, '') || block.type).slice(0, 24);
 		const next: WebpageBlock = { ...block, id: newBlockId(prefix, existing) };
 		existing.add(next.id);
 		if (block.children) next.children = block.children.map(clone);

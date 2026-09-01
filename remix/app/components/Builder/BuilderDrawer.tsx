@@ -454,7 +454,7 @@ const BlockInspector = ({
 				<>
 					{block.html ? (
 						<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.6">
-							✍️ This block holds rich text — click it on the canvas to edit inline (select text for the formatting toolbar).
+							✍️ Click this block on the canvas to edit inline with the full Editor.js editor (headings, lists, tables…) — or open the advanced editor below.
 						</Text>
 					) : (
 						<FieldRow label="Text">

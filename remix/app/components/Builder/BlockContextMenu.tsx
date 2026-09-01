@@ -103,19 +103,26 @@ export const BlockContextMenu = ({
 			if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
 		};
 		const onKey = (event: KeyboardEvent) => {
-			if (event.code === 'Escape') onClose();
+			if (event.code === 'Escape') {
+				// closing the menu consumes the Escape — the canvas's deselect
+				// listener checks defaultPrevented and leaves the selection alone
+				event.preventDefault();
+				onClose();
+			}
 		};
 		window.addEventListener('mousedown', onDown);
-		window.addEventListener('keydown', onKey);
+		// CAPTURE phase: the canvas's own Escape-deselect listener (registered
+		// earlier, bubble phase) must see this Escape already consumed
+		window.addEventListener('keydown', onKey, true);
 		return () => {
 			window.removeEventListener('mousedown', onDown);
-			window.removeEventListener('keydown', onKey);
+			window.removeEventListener('keydown', onKey, true);
 		};
 	}, [onClose]);
 
 	const width = 280;
 	const left = Math.max(8, Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 1280) - width - 8));
-	const top = Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 320));
+	const top = Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 260));
 	const targets = WRAP_TARGETS.filter(
 		(target) => !filter.trim() || `${target.label} ${target.hint}`.toLowerCase().includes(filter.trim().toLowerCase())
 	);
@@ -152,8 +159,10 @@ export const BlockContextMenu = ({
 					{block.type === 'text' && onOpenRichEditor ? (
 						<MenuRow icon="📝" label="Advanced rich editor…" testId="ctx-rich-editor" onClick={onOpenRichEditor} />
 					) : null}
-					<MenuRow icon="⊞" label="Wrap with block" chevron testId="ctx-wrap" onClick={() => setWrapOpen(true)} />
-					<MenuRow icon="⧉" label="Duplicate" testId="ctx-duplicate" onClick={onDuplicate} />
+					{block.type !== 'native' ? (
+						<MenuRow icon="⊞" label="Wrap with block" chevron testId="ctx-wrap" onClick={() => setWrapOpen(true)} />
+					) : null}
+					{block.type !== 'native' ? <MenuRow icon="⧉" label="Duplicate" testId="ctx-duplicate" onClick={onDuplicate} /> : null}
 					<MenuRow icon="↑" label="Move up" testId="ctx-move-up" onClick={() => onMove(-1)} />
 					<MenuRow icon="↓" label="Move down" testId="ctx-move-down" onClick={() => onMove(1)} />
 					{block.type !== 'native' ? <MenuRow icon="🗑" label="Delete" danger testId="ctx-delete" onClick={onDelete} /> : null}
