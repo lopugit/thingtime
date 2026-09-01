@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
+import { beginChatGptAuthorization, callThingtimeTool, consumedSessionPatch, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
 import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES } from './pluginCore';
 import { REVOKED_SESSION_REAP_MS, revokedSessionPatch } from '~/api/utils/auth/sessions';
 
@@ -372,4 +372,19 @@ test('revoking a never-expiring bridge session leaves a reap date for the sessio
   });
   // A session that already carries a real expiry keeps it.
   assert.equal(patch.expiresAt.$ifNull[0], '$expiresAt');
+});
+
+test('consuming a rotated refresh grant also leaves a reap date, not just revokedAt', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+  const patch = consumedSessionPatch(now);
+
+  // Refresh rotation burns one never-expiring session per refresh. Stamping
+  // only revokedAt would strand every consumed row: the TTL index skips
+  // expiresAt: null, so the sessions collection would grow without bound.
+  assert.deepEqual(patch, [
+    { $set: revokedSessionPatch(now) },
+    { $set: { 'meta.consumedAt': now } }
+  ]);
+  // It must be an aggregation pipeline — $ifNull only resolves in one.
+  assert.ok(Array.isArray(patch));
 });

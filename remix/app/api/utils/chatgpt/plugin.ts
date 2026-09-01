@@ -78,6 +78,18 @@ const infiniteExpiryFilter = (now: Date) => ({
   $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
 });
 
+// Single-use grant consumption (refresh rotation) revokes the record it burns.
+// Rotation is the highest-frequency revoke on this bridge — every refresh burns
+// one never-expiring refresh session and mints another — so a plain
+// `$set: { revokedAt }` would leave each consumed row at expiresAt: null, which
+// the sessions TTL index skips, orphaning one document per rotation forever.
+// revokedSessionPatch fills a missing expiry and preserves a real one, so this
+// is also correct for grants that already carry a short TTL.
+export const consumedSessionPatch = (now: Date) => [
+  { $set: revokedSessionPatch(now) },
+  { $set: { 'meta.consumedAt': now } }
+];
+
 const requestOrigin = (request: Request) => new URL(request.url).origin;
 
 const configuredCipherKey = (): Buffer | null => {
@@ -604,7 +616,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (resource) refreshFilter['meta.resource'] = resource;
   const consumed = await (await getSessionsCollection()).findOneAndUpdate(
     refreshFilter,
-    { $set: { revokedAt: now, 'meta.consumedAt': now } },
+    consumedSessionPatch(now),
     { returnDocument: 'before' }
   );
   if (!consumed) return invalidGrant();
