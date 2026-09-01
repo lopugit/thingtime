@@ -93,6 +93,8 @@ export const sandboxPublicUser = (ownerId: string, mintedAt: Date, username = 's
   storageUsedBytes: null,
 	storageRemainingBytes: null,
 	storageAccountingReady: false,
+	publicUploadsEnabled: false,
+	privateUploadsEnabled: false,
 	storage: {
 		usedBytes: 0,
 		allowanceBytes: null,

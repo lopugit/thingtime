@@ -500,7 +500,10 @@ export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
 // collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
 	'sourceIds_1_createdAt_-1_shareId_1',
-	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1'
+	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
+	// Device event pagination now supplies the deterministic control-scope key,
+	// so the retention index serves the same cursor in either scan direction.
+	'things_device_event_cursor'
 ] as const;
 
 // Home-only: a custom data endpoint belongs to the user and may legitimately
@@ -1033,10 +1036,6 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
 		col.createIndex(
 			{ ownerId: 1, targetId: 1, 'crystal.status': 1, createdAt: 1, shareId: 1 },
 			{ name: 'things_device_command_queue', partialFilterExpression: { 'crystal.deviceCommandKey': { $type: 'string' } } }
-		),
-		col.createIndex(
-			{ ownerId: 1, targetId: 1, createdAt: 1, shareId: 1 },
-			{ name: 'things_device_event_cursor', partialFilterExpression: { 'crystal.deviceEventKey': { $type: 'string' } } }
 		),
 		col.createIndex(
 			{ ownerId: 1, targetId: 1, 'crystal.deviceControlEventScopeKey': 1, createdAt: -1, shareId: -1 },

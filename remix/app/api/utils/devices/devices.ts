@@ -889,7 +889,16 @@ export const listDeviceEvents = async (
 	if (cursorValue && !cursor) return deviceFail(400, 'cursor is invalid');
 	const requestedLimit = Number(limitValue);
 	const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(200, Math.floor(requestedLimit))) : 100;
-	const filter: any = { thingtime: 'device-command-event', ownerId, targetId: id };
+	// Every device-command-event is stamped with this deterministic scope key.
+	// Supplying it here lets pagination reuse the retention index (Mongo can
+	// reverse-scan its createdAt/shareId suffix), avoiding a second index over
+	// the same event partition and preserving MongoDB upgrade headroom.
+	const filter: any = {
+		thingtime: 'device-command-event',
+		ownerId,
+		targetId: id,
+		'crystal.deviceControlEventScopeKey': deviceControlEventScopeKey(ownerId, id)
+	};
 	if (cursor) {
 		filter.$or = [{ createdAt: { $gt: cursor.at } }, { createdAt: cursor.at, shareId: { $gt: cursor.id } }];
 	}

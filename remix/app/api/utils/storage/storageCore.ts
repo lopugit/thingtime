@@ -114,10 +114,9 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// sanitizer). Direct-inserted without a storage stamp, so they must stay
 	// out of billable arithmetic like the other dedicated-endpoint kinds.
 	'vote',
-	// Messenger rows are bounded server-managed relationship/index plumbing.
-	// User file bytes live in separately metered attachment Things, so message,
-	// comment and custom-emoji media cannot bypass account storage quotas.
-	...MESSENGER_THINGTIME,
+	// Messenger communities, conversations, messages, comments, and custom
+	// emoji are user-owned content and intentionally remain billable. Their
+	// attachment object bytes are metered separately by attachment Things.
 	...DEVICE_CONTROL_THINGTIME,
   'service-quota',
   'subscription',

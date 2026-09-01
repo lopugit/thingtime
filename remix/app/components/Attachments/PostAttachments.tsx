@@ -293,11 +293,18 @@ export const PostAttachments = ({
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
 		);
+		const interactiveProps = shielded
+			? {}
+			: {
+				as: 'button' as const,
+				type: 'button' as const,
+				'aria-label': `View ${attachment.title || attachmentDisplayName(attachment)}`,
+				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })
+			};
 		return (
 			<Box
 				key={attachment.id}
-				as={shielded ? 'div' : 'button'}
-				type={shielded ? undefined : 'button'}
+				{...interactiveProps}
 				display="block"
 				width="100%"
 				position="relative"
@@ -305,10 +312,6 @@ export const PostAttachments = ({
 				overflow="hidden"
 				cursor={shielded ? 'default' : 'zoom-in'}
 				sx={tileSx}
-				aria-label={shielded ? undefined : `View ${attachment.title || attachmentDisplayName(attachment)}`}
-				// the lightbox skips shielded media, so open it at this image's index
-				// within that list rather than its attachment-order index
-				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
 			>
 				{shielded ? (
 					<NsfwShield

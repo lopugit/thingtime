@@ -3,7 +3,7 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate, useRouteLoaderData } from 'react-router';
 
 import { AccountHintRow } from './AccountHints';
-import { resolveSsoHub, SSO_HUB_CACHE_KEY, ssoHubDisplayName } from './ssoHub';
+import { resolveSsoHub, SSO_HUB_CACHE_KEY, ssoHubDisplayName, type SsoHubEnvironment } from './ssoHub';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
@@ -80,10 +80,10 @@ export const AutoLoginPopup = () => {
 	const rootData = useRouteLoaderData('root') as
 		| {
 			envFromCookie?: { THINGTIME_BRANCH_NAME?: string; THINGTIME_VERCEL_ENV?: string };
-			dataEnvironment?: { kind?: 'production' | 'development' | 'custom'; authorityOrigin?: string | null } | null;
+			dataEnvironment?: SsoHubEnvironment['dataEnvironment'];
 		}
 		| undefined;
-	const hubEnv = React.useMemo(
+	const hubEnv = React.useMemo<SsoHubEnvironment>(
 		() => ({
 			dataEnvironment: rootData?.dataEnvironment,
 			branch: rootData?.envFromCookie?.THINGTIME_BRANCH_NAME,
@@ -110,7 +110,7 @@ export const AutoLoginPopup = () => {
 	// can't run (unsupported, no hub, no accounts, cooling down) the card with
 	// the manual button below is the fallback.
 	const autoFedcmTried = React.useRef(false);
-	const redeemRef = React.useRef<(code: string) => Promise<void>>();
+	const redeemRef = React.useRef<((code: string) => Promise<void>) | null>(null);
 	React.useEffect(() => {
 		if (!foreignOrigin || !ssoHubRef.current || user || !eligible || dismissed || autoFedcmTried.current) return;
 		if (typeof (window as any).IdentityCredential === 'undefined') return;

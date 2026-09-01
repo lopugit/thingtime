@@ -65,7 +65,7 @@ const CountdownRing = ({ ms }: { ms: number }) => (
   </Box>
 );
 
-type LopuStatus = 'success' | 'error' | 'info';
+type LopuStatus = 'success' | 'error' | 'info' | 'warning';
 
 type LopuLink = { label: string; href: string };
 

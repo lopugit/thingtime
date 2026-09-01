@@ -2956,6 +2956,12 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       remains the final gate. The target worker must remain active until that
       PR is actually merged, and must fail if the PR closes unmerged. Pause or
       opt-out labels must stop the batch.
+- [ ] After a large Feature Stack publishes its target PR, run the required
+      Web CI aggregate against the combined head. Cross-branch additions must
+      retain every shared runtime import and keep the typecheck ratchet at or
+      below its baseline; repairing the published head must rerun required
+      checks without replacing the immutable stack history or disabling
+      auto-merge.
 - [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
       snapshot immediately, whenever its target phase changes, every ten
       minutes while unchanged, and once when all target workers are terminal.

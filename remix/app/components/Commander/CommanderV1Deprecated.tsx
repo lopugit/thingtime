@@ -31,7 +31,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return props?.id || 'global';
 	}, [props?.id]);
 
-	const inputRef = React.useRef();
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const global = props?.global;
 
@@ -41,7 +41,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const [inputValue, setInputValue] = React.useState('');
 	const [virtualValue, setVirtualValue] = React.useState('');
-	const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
+	const [hoveredSuggestion, setHoveredSuggestion] = React.useState<number | null>(null);
 	const [active, setActive] = React.useState(false);
 	const [contextPath, setContextPath] = React.useState<PathArray>();
 
@@ -83,7 +83,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 			}
 		} else {
 			if (props?.global) {
-				document.activeElement.blur();
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 			}
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {

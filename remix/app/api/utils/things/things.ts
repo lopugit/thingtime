@@ -4552,12 +4552,12 @@ export const bulkThings = async (
   for (const id of ids) {
     if (op === 'delete') {
       const result = await deleteThing(viewer, id);
-      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
+      results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;
     }
     if (op === 'move') {
       const result = await updateThing(viewer, id, { folderId });
-      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
+      results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;
     }
 
@@ -4572,7 +4572,7 @@ export const bulkThings = async (
 
     if (op === 'share') {
       const result = await updateThing(viewer, id, sharePatch);
-      if (!result.ok) {
+      if ('error' in result) {
         results.push({ id, ok: false, error: result.error });
         continue;
       }
@@ -4594,10 +4594,11 @@ export const bulkThings = async (
       let firstError: string | undefined;
       for (const child of tree.docs) {
         const childResult = await updateThing(viewer, child.shareId, sharePatch);
-        if (childResult.ok) applied += 1;
-        else {
+        if ('error' in childResult) {
           skipped += 1;
           if (!firstError) firstError = childResult.error;
+        } else {
+          applied += 1;
         }
       }
       results.push({ id, ok: true, applied, skipped, ...(skipped && firstError ? { error: firstError } : {}) });
@@ -4613,7 +4614,7 @@ export const bulkThings = async (
     }
     if (!isFolderDoc) {
       const created = await copyOne(doc, folderId, true);
-      results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
+      results.push('error' in created ? { id, ok: false, error: created.error } : { id, ok: true, newId: created.doc.shareId });
       continue;
     }
     const tree = await collectFolderTree(viewer.id, doc.shareId);
@@ -4622,7 +4623,7 @@ export const bulkThings = async (
       continue;
     }
     const rootCopy = await copyOne(doc, folderId, true);
-    if (!rootCopy.ok) {
+    if ('error' in rootCopy) {
       results.push({ id, ok: false, error: rootCopy.error });
       continue;
     }
@@ -4639,11 +4640,11 @@ export const bulkThings = async (
         continue;
       }
       const childCopy = await copyOne(child, parentNewId, false);
-      if (childCopy.ok) {
+      if ('error' in childCopy) {
+        skipped += 1;
+      } else {
         copied += 1;
         if (childKinds.includes('folder')) idMap.set(child.shareId, childCopy.doc.shareId);
-      } else {
-        skipped += 1;
       }
     }
     results.push({ id, ok: true, newId: rootCopy.doc.shareId, copied, skipped });
