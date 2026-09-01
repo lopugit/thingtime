@@ -155,16 +155,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     than weakening the whole application policy.
     Full spec: `claude-todo/09-security-hardening.md`.
 
-11. **🐛 Feed shows duplicate posts in ranked mode.**
+11. **✅ FIXED: Feed shows duplicate posts in ranked mode.**
 
-    `Feed.tsx` `load()` (L79) appends pages with no id dedupe. Ranked pagination
-    re-scores a moving 400-candidate window by numeric offset
-    (`things.ts` L426–453), and the training flush every 8 s mutates weights
-    (`algorithms.ts` L283–291), so ordering shifts between pages and the same
-    `post.id` reappears on a later page. `PostList.tsx` L75 keys rows by
-    `post.id`, so duplicates produce duplicate React keys + glitched rows. Dedupe
-    appended pages against a `Set` of existing ids (and/or exclude served ids
-    server-side for ranked pagination).
+    Fixed on `claude/feed-ranked-dedupe-s7` (2026-07-21): every paginated
+    append now flows through one shared `appendPostsDeduped` helper
+    (`feedTypes.ts`) — the feed pager (both simple and advanced modes) and the
+    profile pager drop any page entry whose `post.id` is already rendered, so
+    ranked re-scoring of the moving candidate window can no longer produce
+    duplicate React keys. Server-side exclusion of served ids for ranked
+    pagination remains an optional follow-up optimisation (saves duplicate
+    delivery, not needed for correctness).
 
 12. **⚡ `React.memo` on `PostCard` is defeated → every card repaints on scroll.**
     _✅ Done 2026-07-21: `PostCard`'s `onChanged` contract is now `(id, next)` so

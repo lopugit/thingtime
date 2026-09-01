@@ -1836,6 +1836,16 @@ email whose link points at the attacker.
       an error), min reactions/comments (bounded-window mode), text length.
 - [ ] Profile panels are locked to the profile's user (no By-user field) and
       the header post count stays the profile total, not the filtered count.
+- [ ] Paginated appends never duplicate a post id (`appendPostsDeduped` in
+      `feedTypes.ts`): scroll the feed through several pages in BOTH latest and
+      ranked modes and on a profile with >20 posts, then confirm every rendered
+      `[data-thing-id]` is unique (ranked re-scores a moving window, so later
+      pages can re-serve earlier ids; duplicates collide as React keys).
+      Every `setPosts` path — including the reset/first page — runs through the
+      helper, so a single page that repeats an id is collapsed too. The helper
+      itself is covered by `npm run test:feed`
+      (`app/components/Feed/feedTypes.test.ts`); this manual pass is for the
+      wiring (which pager calls it, and with which `prev`).
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 

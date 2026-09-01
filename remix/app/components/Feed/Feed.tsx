@@ -16,6 +16,7 @@ import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
 import { mergeReactionOverlays } from './reactionOverlay';
+import { appendPostsDeduped } from './feedTypes';
 import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 
 // The /feed page: composer + algorithm picker + filters over an infinite
@@ -130,11 +131,7 @@ export const FeedPage = () => {
           if (seq !== requestSeqRef.current) return;
 
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => {
-            if (reset) return pagePosts;
-            const seen = new Set(prev.map((post) => post.id));
-            return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
-          });
+          setPosts((prev) => appendPostsDeduped(reset ? [] : prev, pagePosts));
           setNextCursor(resp.nextCursor ?? null);
           setRanked(!!resp.ranked);
           return;
@@ -154,8 +151,10 @@ export const FeedPage = () => {
         if (seq !== requestSeqRef.current) return;
 
         setPosts((prev) => {
-          const page = mergeReactionOverlays(startedAt, resp.posts || []);
-          return reset ? page : [...prev, ...page];
+          // `feed` responses are untyped JSON; name the projection the same way
+          // the advanced-search branch above does so the pager stays PublicPost[].
+          const page: PublicPost[] = mergeReactionOverlays<PublicPost>(startedAt, (resp.posts || []) as PublicPost[]);
+          return appendPostsDeduped(reset ? [] : prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
         setRanked(!!resp.ranked);

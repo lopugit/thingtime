@@ -53,7 +53,7 @@
     "test:editorjs": "node --import tsx --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:embed": "node --import tsx --test app/embed/*.test.ts",
     "test:embed-bundle": "node --test scripts/embed-bundle-source-map.test.mjs",
-    "test:feed": "node --import tsx --test app/components/Feed/*.test.ts",
+    "test:feed": "node --import tsx --test app/components/Feed/*.test.ts app/components/Feed/feedTypes.test.ts",
     "test:feed-contract": "node --import tsx --test app/components/Feed/postCardChangeContract.test.ts",
     "test:editable-target": "node --import tsx --test app/utils/editableTarget.test.ts",
     "test:lopu": "node --import tsx --test app/api/utils/lopu/*.test.ts",
