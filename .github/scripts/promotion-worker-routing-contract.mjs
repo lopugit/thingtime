@@ -118,9 +118,18 @@ assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$
 // so deleting the merge worker's guard entirely would leave this contract
 // green while the property it exists to pin was gone. Consuming only lines
 // that are not a sibling job header keeps a missing guard failing closed.
-const featureStackMergeCondition = (
-	/\n {2}feature_stack_merge:\n(?:(?! {2}[A-Za-z0-9_-]+:\n).*\n)*? {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow) ?? [, ""]
-)[1];
+const featureStackMergeBlock =
+	/\n {2}feature_stack_merge:\n(?:(?! {2}[A-Za-z0-9_-]+:\n).*\n)*? {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow);
+// Name the extraction failure separately. A missing block otherwise reaches the
+// three assertions below as `actual: ''`, which reads as "the guard was
+// deleted" even when the real change was to the job's shape — and an advisory
+// whose message misdirects its next reader is the same dead advisory this
+// contract exists to avoid.
+assert.ok(
+	featureStackMergeBlock,
+	"feature_stack_merge must keep a job-level `if: >-` block whose conjuncts this contract can read",
+);
+const featureStackMergeCondition = featureStackMergeBlock[1];
 assert.match(
 	featureStackMergeCondition,
 	/^ {6}!cancelled\(\)$/mu,

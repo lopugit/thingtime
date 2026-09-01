@@ -1587,6 +1587,18 @@ function assertAdminModelRouting(
     // own shape is pinned by the control-plane contract.
     const isJobHeader = (line) => /^ {2}[A-Za-z0-9_-]+:$/u.test(line);
     const vaultJobStart = lines.indexOf("  verify_credential_vault:");
+    // Renaming or dropping that job silently retires the exemption, and the
+    // probe then trips the generic rule below as "every Lopu call receives the
+    // secondary API-key slot". Acting on *that* message literally means handing
+    // the vault probe GitHub-secret fallbacks — precisely the regression the
+    // exemption exists to prevent — so name the real cause here instead.
+    if (path === ".github/workflows/resolve-pr-conflicts.yml") {
+      assert.notStrictEqual(
+        vaultJobStart,
+        -1,
+        `${path}: the credential-vault probe exemption keys on the verify_credential_vault job, which is missing`,
+      );
+    }
     const vaultJobEndOffset = vaultJobStart === -1
       ? -1
       : lines.slice(vaultJobStart + 1).findIndex(isJobHeader);
