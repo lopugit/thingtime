@@ -20,6 +20,11 @@ is fixed, and cite the checklist you ran in the PR description.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
+- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
+      returns only through its registered callback; add two named accounts on
+      that page, then confirm `@Thingtime list accounts` exposes safe metadata
+      for both. Bridge credentials have no default expiry but become unusable
+      immediately after their account or connection is revoked.
 - [ ] Confirm a read/search tool succeeds with `things.read`, while each write
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
@@ -30,7 +35,7 @@ is fixed, and cite the checklist you ran in the PR description.
       known parent ID, `list_thingtime_comments` returns only directly attached
       comments and preserves `limit`/`cursor` pagination without fetching global
       comment rows.
-- [ ] `tools/list` exposes all 31 tools with the Thingtime MCP App output
+- [ ] `tools/list` exposes all 32 tools with the Thingtime MCP App output
       template; prompts and static UI/contract resources work before OAuth,
       while account-scoped resources return the OAuth challenge. In the app,
       inspect Result, Diff, and Raw tabs at desktop and 390px mobile widths,
