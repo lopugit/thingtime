@@ -993,6 +993,17 @@ export function assertControlPlaneContract() {
     "develop preview delegates the manual branch gate to its protected environment",
   );
   const developPreviewBuildJob = developPreview.match(/\n  build:\n[\s\S]*?\n  controller:\n/u)?.[0] ?? "";
+  const developPreviewPrepareJob = developPreview.match(/\n  prepare:\n[\s\S]*?\n  build:\n/u)?.[0] ?? "";
+  assert.match(
+    developPreviewPrepareJob,
+    /environment: vercel-develop-pr-control/u,
+    "the protected authorizer can read its environment-scoped non-secret settings",
+  );
+  assert.doesNotMatch(
+    developPreviewBuildJob,
+    /environment: vercel-develop-pr-control/u,
+    "untrusted product build code does not attach to the protected publisher environment",
+  );
   assert.match(
     developPreviewBuildJob,
     /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,

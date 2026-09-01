@@ -80,6 +80,10 @@ jobs:
     if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The non-secret Vercel/project settings are scoped to this protected
+    # environment. Only protected controller code runs here; product code is
+    # checked out later in the separate environment-free build job.
+    environment: vercel-develop-pr-control
     permissions:
       actions: read
       contents: read
