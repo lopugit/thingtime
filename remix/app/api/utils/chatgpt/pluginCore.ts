@@ -16,8 +16,8 @@ export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.3.0',
-  'chatgpt.oauth': '1.3.0',
-  'chatgpt.connections': '1.1.0',
+  'chatgpt.oauth': '1.4.0',
+  'chatgpt.connections': '1.2.0',
   'chatgpt.things.read': '1.3.0',
   'chatgpt.things.write': '1.1.0',
   'chatgpt.schemas': '1.0.0',
@@ -32,6 +32,7 @@ export const CHATGPT_PLUGIN_FEATURES = {
 } as const;
 
 export const CHATGPT_MCP_TOOL_FEATURES = {
+  login_thingtime: 'chatgpt.connections',
   list_thingtime_accounts: 'chatgpt.connections',
   select_thingtime_account: 'chatgpt.connections',
   remove_thingtime_account: 'chatgpt.connections',
@@ -74,7 +75,7 @@ export const CHATGPT_MCP_METHOD_FEATURES = {
 } as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
 
 export const CHATGPT_MCP_INSTRUCTIONS =
-  'Thingtime operates only on named accounts connected through this app. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. Every composed workflow and multi-Thing mutation must be previewed first; apply or undo only after stating the selected account, targets, effects, and obtaining clear confirmation. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
+  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. Every composed workflow and multi-Thing mutation must be previewed first; apply or undo only after stating the selected account, targets, effects, and obtaining clear confirmation. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
