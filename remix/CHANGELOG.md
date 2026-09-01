@@ -17,6 +17,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 8).
+- **Saved pages own their media now**: webpage saves bind the owner's
+  referenced builder uploads to the page thing (`webpageAttachments.ts`,
+  wired into things create + PATCH), so the draft reaper stops eating media
+  off saved pages and a public `/p/` page serves its images anonymously via
+  acl inherit. A live-preview E2E caught the id capture truncating real
+  68-char attachment ids (`{8,64}` → `{8,128}`) — full-length-id test pins it.
+- **Adversarial review batch (49 agents, 16 confirmed findings fixed)**:
+  edit/view WYSIWYG parity (root gaps, placeholder leaks, edit-only border
+  radius), inspector typography actually reaching text, rendered-seam drag
+  convention (downward off-by-one), acl-preserving public toggle +
+  `expectedUpdatedAt` concurrency on saves, foreign-page fork fallback,
+  touch access to the full block menu (⋯ chip) + 28px coarse hit bands,
+  authored-html `data-tt-*`/`on*` scrubbing, per-account view caches, and
+  a confirm before discarding unsaved edits.
+- **Mobile edit mode**: the drawer starts closed under 768px (selecting a
+  block still opens it) and the 🌐 hint text hides on phones.
+
 ### 2026-09-01 — Builder round 6: true-WYSIWYG canvas, inline Editor.js, wrap-with-block — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 6).

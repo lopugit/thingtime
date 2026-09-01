@@ -364,3 +364,62 @@ Owner asks, all landed:
 5. **Typing no longer fights the inspector** — ClampedNumberInput commits
    clamps on blur/Enter (max width/gap/columns), and uniform sides/corners
    inputs stopped trimming per keystroke.
+
+## Round 8 (2026-09-01, overnight loop): saved-media lifecycle + full-surface adversarial review
+
+**Headline fix — saved pages own their media.** Nothing ever bound builder
+uploads to the pages that referenced them, so the draft reaper eventually
+deleted them and saved pages sprouted broken images (found live: a global
+fork's media 404ing). `app/api/utils/webpages/webpageAttachments.ts` now
+extracts every `/api/v1/attachments/content?id=…` reference from a webpage
+crystal (media srcs + rich/raw html, nested, deduped, capped at 25) and
+tolerantly binds the owner's own ready unbound post-purpose drafts to the
+page thing inside a home-Mongo transaction — same lifecycle as posts:
+expiry cleared, acl → inherit (a public page serves its media publicly),
+delete cascade reclaims them. Wired after things create and PATCH update.
+The preview E2E (drop-upload → public save → **anonymous** content fetch)
+caught the id capture truncating production ids: attachment ids are
+`att_` + sha256 hex = 68 chars and the regex capped the capture at 64, so
+every lookup missed while every short-id unit test passed. Cap now 128
+with a full-length-id regression test.
+
+**Review batch.** A 49-agent find→2-skeptic-verify workflow over five fresh
+dimensions (touch/a11y, WYSIWYG parity, state/perf, save/data-integrity,
+sanitizer surface) confirmed 20 findings; 16 shipped this round:
+
+- *WYSIWYG parity*: `bare` now renders bare in edit mode too (no phantom
+  16px root gaps on sectioned pages); selection chrome moved to an
+  `::after` overlay so content boxes keep square corners in both modes;
+  builder-only placeholders (empty media/html, missing component) no
+  longer render to live viewers.
+- *Inspector*: typography fields reach the text (merged over style presets;
+  injected past RICH_HTML_SX for rich markup with a zero-flash sx
+  override); the Custom CSS textarea resyncs after dedicated-field edits.
+- *Structure*: `moveBlock` speaks rendered-seam indices — downward
+  same-container drags landed one slot low; `moveBlockRelative`
+  translated; ready uploads whose target container was deleted mid-flight
+  append at the root instead of vanishing.
+- *Data safety*: the public toggle merges into the existing acl (hidden
+  links / custom audiences / app grants survive); saves send
+  `expectedUpdatedAt` (409 instead of silent last-writer-wins) and refresh
+  `updatedAt`/acl from the response; the post-save re-resolve no longer
+  clobbers in-flight typing; another user's public page resolves as
+  `source: system` so edits fork instead of update-404ing.
+- *Touch*: chip raised above the insert strips (its clicks/drags were
+  hitting the invisible strip); new ⋯ chip action opens the FULL context
+  menu — the only Duplicate/Delete/advanced-editor path on iOS; insert
+  strips grow to 28px hit bands on coarse pointers; Escape on the insert
+  menu no longer also deselects.
+- *Sanitizer*: authored html can't smuggle `data-tt-action` (htmlToNode
+  drops `data-tt-*`/`on*`); `applyNoOpener` is case-insensitive and covers
+  named targets.
+- *Session*: view caches drop on account switch; a failed global-blocks
+  fetch retries next view; ✕ Done confirms before discarding unsaved work.
+- *Mobile*: edit mode starts with the canvas visible under 768px.
+
+Verified: 20/20 webpage unit tests, targeted lint, client build, and live
+preview QA (mobile drawer behavior + the controlled PATCH/Mongo-probe E2E
+that exposed the id truncation). Remaining known items (logged, not
+shipped): keyboard-only block selection + focus-visible chrome, hover
+re-render memoization, SSR fallback for rich text, safe-area insets on the
+pills.
