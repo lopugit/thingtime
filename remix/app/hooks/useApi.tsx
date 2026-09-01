@@ -5,6 +5,7 @@ import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmen
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -612,11 +613,8 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					const { type, text, images, listing, thing, mediaLayout, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
-          // unified shape when thingtime is given, legacy post shape otherwise
-          const payload = Array.isArray(thingtime)
-						? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
-						: { type, text, images, listing, thing, mediaLayout, acl, visibility, tags, attachmentIds, shareId };
+					const payload = buildThingCreateRequestPayload(args);
+					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
@@ -636,9 +634,9 @@ export function useApi() {
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-					const { id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds } = args || {};
+					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
-						{ id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds },
+						buildThingCommentRequestPayload(args),
 						{ action: '/api/v1/things/comment' }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
