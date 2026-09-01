@@ -151,4 +151,7 @@ systems. Reusable whimsy exports (from the review):
 ## Done when
 
 Each idea graduates to its own `claude-todo/NN-*.md` when picked up. This file is
-the menu, not the commitment.
+the menu, not the commitment. Cross-feature sequencing, privacy-safe outcome
+measurement, accessibility/reliability gates, and sustainable adoption belong
+to [22 — Trustworthy adoption loop](./22-trustworthy-adoption-loop.md) and its
+[phased roadmap](../../PLAN/trustworthy-adoption-roadmap.md).

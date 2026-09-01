@@ -1,0 +1,23 @@
+# Thingtime notes
+
+`NOTES/` preserves evidence, observations, questions, and design thinking that
+should inform work without pretending the work has been committed to. Turn a
+note into a phased strategy in [`../PLAN/`](../PLAN/README.md), then create an
+actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
+
+## Index
+
+| Note | Purpose | Last grounded |
+| --- | --- | --- |
+| [Ethical adoption baseline](./ethical-adoption-baseline.md) | Current product and delivery evidence, adoption gaps, privacy boundaries, and open questions | 2026-09-01 |
+
+## Conventions
+
+- Separate confirmed repository or live-service evidence from hypotheses.
+- Date snapshots and name the command, file, issue, PR, or route that supports a
+  claim. Link to source material when it can be shared safely.
+- Never copy credentials, private user data, raw analytics payloads, or
+  security-sensitive exploit detail into a note.
+- Give every time-sensitive claim a refresh trigger. An open PR, CI run, or
+  production behavior can change after the note is written.
+- Prefer questions and competing explanations over invented certainty.

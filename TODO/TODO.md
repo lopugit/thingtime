@@ -263,3 +263,14 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     app-ness as a view over an existing folder rather than overloading the
     client-identity control plane.
     Full spec: `claude-todo/21-app-composition-surface.md`.
+
+21. **🌱 Define and prove a trustworthy adoption loop.**
+
+    Thingtime has many useful creation, search, history, sharing, component,
+    action, invite, and composed-app ideas, but no shared definition of healthy
+    adoption. Approve one first-value journey, useful-return metric, privacy-safe
+    learning contract, consentful sharing gate, accessibility/reliability
+    guardrails, and aligned sustainability path before optimizing acquisition.
+    Raw signups, page views, time-on-site, and content volume are not north-star
+    outcomes. Start with the evidence note and phased roadmap, then execute the
+    bounded epic in `claude-todo/22-trustworthy-adoption-loop.md`.
