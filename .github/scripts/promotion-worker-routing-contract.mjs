@@ -105,6 +105,9 @@ assert.match(
 	"Feature Stack workers still run when skipped indirect dependencies are expected",
 );
 assert.match(workflow, /feature-stack-plan\.mjs verify/);
+assert.match(workflow, /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"/);
+assert.match(workflow, /git -C "\$integration" update-ref "refs\/remotes\/origin\/\$head" "\$sha"/);
+assert.doesNotMatch(workflow, /git -C "\$integration" fetch --no-tags snapshot/);
 assert.match(workflow, /gh pr merge "\$pr_url" --auto --merge/);
 assert.match(workflow, /CLAUDE_CODE_OAUTH_TOKEN_THINGTIME/);
 assert.match(rebaseWorkflow, /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/);

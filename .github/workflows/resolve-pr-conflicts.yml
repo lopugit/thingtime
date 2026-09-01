@@ -3763,15 +3763,17 @@ jobs:
             '(.targets | index($target) != null) and (.sources | length > 0)' "$plan" >/dev/null
 
           integration="$GITHUB_WORKSPACE/integration"
-          git init "$integration"
-          git -C "$integration" remote add snapshot "$GITHUB_WORKSPACE/trusted"
           trusted_base="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$TARGET_BRANCH^{commit}")"
           [ "$trusted_base" = "$BASE_SHA" ] || {
             echo "::error::Feature Stack target '$TARGET_BRANCH' moved after admission."
             exit 1
           }
-          git -C "$integration" fetch --no-tags snapshot "$BASE_SHA"
-          git -C "$integration" switch --detach FETCH_HEAD
+          # The trusted full checkout already owns every admitted object. A
+          # shared local clone gives the integration worktree its own config
+          # and index without repacking the repository once per source ref.
+          git clone --shared --no-checkout "$GITHUB_WORKSPACE/trusted" "$integration"
+          git -C "$integration" remote rename origin snapshot
+          git -C "$integration" switch --detach "$BASE_SHA"
           git -C "$integration" config user.name 'Lopu'
           git -C "$integration" config user.email 'github-actions[bot]@users.noreply.github.com'
           while IFS= read -r source; do
@@ -3782,7 +3784,7 @@ jobs:
               echo "::error::Feature Stack source '$head' moved after admission."
               exit 1
             }
-            git -C "$integration" fetch --no-tags snapshot "+$sha:refs/remotes/origin/$head"
+            git -C "$integration" update-ref "refs/remotes/origin/$head" "$sha"
           done < <(jq -c '.sources[]' "$plan")
           git -C "$integration" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
 
