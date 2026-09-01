@@ -827,8 +827,11 @@ is fixed, and cite the checklist you ran in the PR description.
       overflow, and video/file sections keep their existing layouts.
 - [ ] Clicking (and keyboard-activating) a masonry image opens the lightbox:
       full image, title/description when present, prev/next across only that
-      post's images, an Open-page link to `/media/:id`, a download link, and
-      Esc/backdrop close. Error-state tiles never open a broken lightbox.
+      post's images, a filename link to its canonical `/thing/:id` permalink,
+      an Open-page link to `/media/:id`, a download button, and a visible X,
+      Esc, and backdrop close. Those toolbar controls sit below the persistent
+      navigation at desktop and 375px mobile widths. Error-state tiles never
+      open a broken lightbox.
 - [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
       max-width): large media, title/description, author, a link back to the
       parent post, plus working reactions and comments on the media thing
