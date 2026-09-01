@@ -260,6 +260,11 @@ is fixed, and cite the checklist you ran in the PR description.
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
       than an `outputDirectory` selected by the dashboard.
+- [ ] Confirm the Vercel output verifier rejects any server chunk that leaves
+      `unicode-emoji-json/data-by-emoji.json` as a runtime package lookup
+      without tracing the JSON asset. In an isolated copy of the generated
+      function (with no parent checkout `node_modules`), importing the search
+      chunk must not throw `MODULE_NOT_FOUND`.
 - [ ] In Vercel, clear the old `remix` Root Directory and all Build, Install,
       Output Directory, and Ignored Build Step overrides; select Other as the
       framework. Confirm a product-branch commit builds from root and serves
@@ -1664,6 +1669,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
+- [ ] Build the Vercel output and exercise `/api/v1/things/search` from the
+      deployed function with both a plain ranked query and a reaction
+      `crystal.emoji contains <name>` condition. Neither path may depend on an
+      untraced `unicode-emoji-json` runtime file or return `MODULE_NOT_FOUND`.
 - [ ] Commander typeahead searches the live Things + people APIs after the
       debounce: it shows contextual platform posts/data/schemas/people before
       the bounded `Local paths` tier, arrow/Enter and click open the selected

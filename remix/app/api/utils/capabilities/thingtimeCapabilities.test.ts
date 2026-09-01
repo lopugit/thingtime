@@ -18,9 +18,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.0.1');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
+  assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
   for (const feature of [
     'api.things',
-    'api.things-search',
     'api.things-comment',
     'api.things-feed',
     'api.things-share',

@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-01 — Production search server-bundle repair
+
+- `/api/v1/things/search` now statically bundles its emoji-name metadata
+  instead of leaving an untraced runtime JSON lookup in the Vercel function.
+  The Vercel output verifier now fails the build if this missing-dependency
+  class returns, and the `api.things-search` capability advances to `1.1.1`.
+  — Codex (AI), 2026-09-01
+
 ### 2026-08-31 — Bounded Graphify snapshot retention
 
 - Graphify now retains one active portable snapshot by default after successful
