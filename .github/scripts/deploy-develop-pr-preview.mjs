@@ -534,6 +534,9 @@ const runSelfTest = async () => {
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
 	equal(Object.keys(metadata).length, 9);
+	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata });
+	truthy(prebuiltArgs.includes('--target=develop'));
+	truthy(!prebuiltArgs.includes('--skip-domain'));
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
@@ -1579,6 +1582,24 @@ const assertPrebuiltOutput = async (directory) => {
 	return outputDirectory;
 };
 
+const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata }) => {
+	const args = [
+		'deploy',
+		'--prebuilt',
+		'--archive=tgz',
+		'--target=develop',
+		'--yes',
+		'--scope',
+		config.teamSlug,
+		'--cwd',
+		prebuiltDirectory
+	];
+	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--meta', `${key}=${value}`);
+	}
+	return args;
+};
+
 const deployPrebuiltOutput = async (config, pullRequest) => {
 	const prebuiltDirectory = resolve(requiredEnv('VERCEL_PREBUILT_DIR'));
 	await assertPrebuiltOutput(prebuiltDirectory);
@@ -1590,21 +1611,7 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 	);
 
 	const metadata = deploymentMetadata({ pullRequest, config });
-	const args = [
-		'deploy',
-		'--prebuilt',
-		'--archive=tgz',
-		'--target=develop',
-		'--skip-domain',
-		'--yes',
-		'--scope',
-		config.teamSlug,
-		'--cwd',
-		prebuiltDirectory
-	];
-	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
-		args.push('--meta', `${key}=${value}`);
-	}
+	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata });
 
 	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
 		env: {
