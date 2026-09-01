@@ -28,7 +28,7 @@ test('the repository-root Vercel config owns the product build', async () => {
 	assert.equal(config.outputDirectory, null);
 	assert.equal(config.ignoreCommand, 'node scripts/vercel-ignore-build.mjs');
 	assert.deepEqual(config.git?.deploymentEnabled, {
-		'*': false,
+		'**': false,
 		main: true,
 		develop: true
 	});
