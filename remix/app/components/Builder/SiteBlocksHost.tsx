@@ -96,8 +96,15 @@ const GlobalBlocks = React.memo(function GlobalBlocks({
 let globalFetched = false;
 let globalCache: ResolvedWebpage | null = null;
 
+// The resolved doc is stamped with the account it was fetched for. Clearing
+// the module cache is not enough on its own: this state survives a logout
+// (the host swaps no component), and a signed-out viewer never refetches to
+// correct it — so an unstamped value would render the previous account's
+// global blocks on every page for the rest of the tab session.
+type GlobalEntry = { owner: string | null; data: ResolvedWebpage | null };
+
 const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
-	const [state, setState] = React.useState<ResolvedWebpage | null>(globalCache);
+	const [entry, setEntry] = React.useState<GlobalEntry>(() => ({ owner: cacheOwnerId, data: globalCache }));
 	React.useEffect(() => {
 		if (!enabled || globalFetched) return;
 		globalFetched = true;
@@ -111,7 +118,7 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 				return;
 			}
 			globalCache = resolved;
-			setState(globalCache);
+			setEntry({ owner: cacheOwnerId, data: resolved });
 		})();
 	}, [enabled]);
 	// in-place refresh when a site-global save happens while a page view is
@@ -122,13 +129,15 @@ const useGlobalBlocks = (enabled: boolean): ResolvedWebpage | null => {
 			if (detail?.pageKey !== 'site-global') return;
 			(async () => {
 				globalCache = await resolveWebpageClient({ kind: 'global' });
-				setState(globalCache);
+				setEntry({ owner: cacheOwnerId, data: globalCache });
 			})();
 		};
 		window.addEventListener('thingtime:webpage-saved', onSaved);
 		return () => window.removeEventListener('thingtime:webpage-saved', onSaved);
 	}, []);
-	return state;
+	// ensureCacheOwner runs in the host's RENDER phase, so cacheOwnerId is
+	// already the current account here — a stale stamp means "not mine".
+	return entry.owner === cacheOwnerId ? entry.data : null;
 };
 
 const EditPill = ({ active, onToggle }: { active: boolean; onToggle: () => void }) => (
@@ -587,10 +596,14 @@ export const SiteBlocksHost = ({ children }: { children: React.ReactNode }) => {
 		setThingtime?.('settings.builder.editMode', !editMode, { ignoreUndoRedo: true, namespace: 'builder' });
 	}, [editMode, setThingtime]);
 
-	// personalised caches are per-account
-	React.useEffect(() => {
-		ensureCacheOwner(user?.id || null);
-	}, [user?.id]);
+	// Personalised caches are per-account, checked in the RENDER phase rather
+	// than an effect: React runs child effects BEFORE parent effects, so an
+	// effect here would drop the caches only after the view below had already
+	// read the previous account's entries — and a signed-out viewer never
+	// refetches, so those blocks would keep rendering for the whole session.
+	// ensureCacheOwner is idempotent module bookkeeping (no state, no render
+	// output), so calling it here is safe under StrictMode double-render.
+	ensureCacheOwner(user?.id || null);
 
 	// Always-mounted invalidation (the /builder canvas saves while no page
 	// view is mounted): any webpage save clears the module caches so the next

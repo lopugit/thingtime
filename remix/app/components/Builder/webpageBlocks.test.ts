@@ -156,3 +156,21 @@ test('duplicateBlock deep-clones with fresh ids right after the original', async
 	const { collectBlockIds: collect } = await import('./webpageBlocks');
 	assert.equal([...collect(next)].length, new Set([...collect(next)]).size);
 });
+
+test('duplicateBlock clone ids always satisfy the server gate id pattern', async () => {
+	const { duplicateBlock, collectBlockIds } = await import('./webpageBlocks');
+	// mirrors COMPONENT_KEY_PATTERN in schemas/registry.ts, which the write
+	// gate applies to EVERY block id — a clone that fails it is rejected at save
+	const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+	// the 24-char prefix slice lands exactly on a separator here, which used to
+	// mint `aaaaaaaaaaaaaaaaaaaaaaa--1` and make the save 400
+	const longId = 'aaaaaaaaaaaaaaaaaaaaaaa-bbb-c';
+	for (const id of [longId, 'a-b-c-d-e-f-g-h-i-j-k-l-m-n', 'hero-title', 'x']) {
+		const next = duplicateBlock([{ id, type: 'text', text: 'hi' }], id);
+		assert.equal(next.length, 2, `expected a copy for ${id}`);
+		for (const blockId of collectBlockIds(next)) {
+			assert.match(blockId, ID_PATTERN, `clone id "${blockId}" (from "${id}") must satisfy the gate`);
+			assert.ok(blockId.length <= 40, `clone id "${blockId}" must fit the 40-char cap`);
+		}
+	}
+});

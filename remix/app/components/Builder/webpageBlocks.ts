@@ -218,8 +218,11 @@ export const duplicateBlock = (blocks: WebpageBlock[], id: string): WebpageBlock
 	if (countBlocks(blocks) + countBlocks([target]) > MAX_BLOCKS) return blocks;
 	const existing = collectBlockIds(blocks);
 	const clone = (block: WebpageBlock): WebpageBlock => {
-		// keep clone ids well under the server's 40-char id cap
-		const prefix = (block.id.replace(/-[a-z0-9]+$/, '') || block.type).slice(0, 24);
+		// keep clone ids well under the server's 40-char id cap. The trailing
+		// `-` strip matters: slicing can land on a separator, and the resulting
+		// `prefix--1` fails the server gate's lowercase-dashed id pattern, so
+		// duplicating a long-id block would be rejected at save.
+		const prefix = (block.id.replace(/-[a-z0-9]+$/, '') || block.type).slice(0, 24).replace(/-+$/, '') || block.type;
 		const next: WebpageBlock = { ...block, id: newBlockId(prefix, existing) };
 		existing.add(next.id);
 		if (block.children) next.children = block.children.map(clone);
