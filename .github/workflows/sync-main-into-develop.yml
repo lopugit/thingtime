@@ -105,7 +105,37 @@ jobs:
             exit 1
           }
 
+          # Graphify snapshots are content-addressed per source fingerprint, so
+          # each side of a sync carries a differently named tree and the merge
+          # unions them instead of conflicting. Both sides were individually
+          # bounded when they were built, but nothing re-applies the bound to
+          # the merge result, so develop drifts one ~45MB snapshot past
+          # retention per distinct branch graph it absorbs. Re-apply it here,
+          # before the candidate SHA is published, using the protected
+          # control-plane router: product-branch code must never execute in
+          # this credentialed job.
+          bound_graphify_snapshots() {
+            local helper="$RUNNER_TEMP/graphify-cas.mjs"
+            # No --depth here: this checkout is unshallow, and a shallow fetch
+            # would set a shallow boundary that can break the develop push.
+            git fetch --no-tags origin \
+              +refs/heads/github-actions:refs/remotes/origin/github-actions || return 1
+            git show origin/github-actions:.github/scripts/graphify-cas.mjs \
+              >"$helper" || return 1
+            node "$helper" prune || return 1
+            # Scope staging to the immutable snapshot trees; the router's
+            # ignored root aliases and lock/work state stay out of the commit.
+            if git diff --quiet -- graphify-out/snapshots; then
+              return 0
+            fi
+            git add -A -- graphify-out/snapshots || return 1
+            git commit -qm "chore(graphify): bound snapshot retention after main sync" || return 1
+          }
+
           if git merge --no-edit origin/main; then
+            if ! bound_graphify_snapshots; then
+              echo "::warning::Could not re-apply the Graphify snapshot retention bound; syncing the merge unpruned."
+            fi
             echo "result=clean" >> "$GITHUB_OUTPUT"
             echo "candidate_sha=$(git rev-parse 'HEAD^{commit}')" >> "$GITHUB_OUTPUT"
           else
