@@ -560,8 +560,24 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
     8,
     "only the single Lopu action owns the bounded eight-position Claude credential waterfall",
   );
+  const credentialVaultProbe = resolver.slice(
+    resolver.indexOf("\n  verify_credential_vault:"),
+    resolver.indexOf("\n  route:"),
+  );
+  assert.match(
+    credentialVaultProbe,
+    /uses: \.\/\.github\/actions\/lopu-agent[\s\S]*--max-turns 1/u,
+    "credential-vault maintenance bounds its authentication probe to one turn",
+  );
+  const resumableRuntimeSource = (path, source) =>
+    path === ".github/workflows/resolve-pr-conflicts.yml"
+      ? source.replace(credentialVaultProbe, "")
+      : source;
   const turnBudgets = runtimeFiles.flatMap((path) => {
-    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    const source = resumableRuntimeSource(
+      path,
+      readFileSync(resolve(githubRoot, "..", path), "utf8"),
+    );
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
       path,
       value: Number(match[1]),
@@ -579,7 +595,10 @@ function assertAdminModelRouting(resolver, rebase, allBranch) {
     );
   }
   const runtimeSource = runtimeFiles
-    .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
+    .map((path) => resumableRuntimeSource(
+      path,
+      readFileSync(resolve(githubRoot, "..", path), "utf8"),
+    ))
     .join("\n");
   const lopuCallCount =
     runtimeSource.match(/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/gu)?.length ?? 0;
@@ -1426,8 +1445,8 @@ export function assertControlPlaneContract() {
 
   assert.match(
     resolver,
-    /verify_credential_vault:[\s\S]*inputs\.maintenance_operation == 'verify-credential-vault'[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*lopu-credential-vault\.mjs[\s\S]*stat -c '%a'[\s\S]*no model was invoked/u,
-    'credential-vault maintenance must fetch the ordered Thingtime bundle through the stable router secret without invoking a model',
+    /verify_credential_vault:[\s\S]*inputs\.maintenance_operation == 'verify-credential-vault'[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*lopu-credential-vault\.mjs[\s\S]*stat -c '%a'[\s\S]*uses: \.\/\.github\/actions\/lopu-agent[\s\S]*prompt: Return exactly credential-ok[\s\S]*--max-turns 1[\s\S]*Live Claude authentication succeeded/u,
+    'credential-vault maintenance must fetch the ordered Thingtime bundle through the stable router secret and prove the waterfall with one live Claude turn',
   );
   const featureStackMerge = resolver.slice(
     resolver.indexOf("\n  feature_stack_merge:"),
