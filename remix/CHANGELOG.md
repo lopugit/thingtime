@@ -94,6 +94,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   plain-text snapshot while the composer still shows the newer rich styling.
   — Codex (AI), 2026-08-31
 
+- **Post media editing now has one visual source of truth.** Auto and Rows show
+  final-view previews, Rows uses add/remove and per-row image-count controls,
+  Grid previews expose the clickable 1×1 span badge, and the single Media &
+  files panel owns reorder, metadata, and delete actions in create and edit.
+  Attachments are now default searchable level-one Things (including display
+  filename/title/description), while Reaction schema searches resolve human
+  emoji names such as “heart” to stored emoji and render the matching parent
+  posts. — Codex (AI), 2026-08-31
+
 - **[Admin CI refreshes now fail softly and recover without a request
   storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
   The protected snapshot route turns MongoDB blocking-sort memory failures into

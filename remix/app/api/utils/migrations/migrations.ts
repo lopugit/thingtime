@@ -104,7 +104,8 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	attachmentObjectlessDelete: 1,
 	attachmentMpuEmptyVerifiedAt: 1,
 	uploadId: 1,
-	attachmentExpiresAt: 1
+	attachmentExpiresAt: 1,
+	attachmentLinked: 1
 } as const;
 
 export type MigrationReport = {
