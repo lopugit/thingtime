@@ -14,11 +14,12 @@ const exactKeys = (value, keys) =>
   Object.keys(value).join(",") === keys.join(",");
 
 export function canonicalFeatureStackPlan(input) {
-  if (!exactKeys(input, ["autoDecideBranches", "autoMerge", "name", "sources", "stackId", "targets", "version"]) || input.version !== 2) {
+  if (!exactKeys(input, ["autoDecideBranches", "autoMerge", "name", "runId", "sources", "stackId", "targets", "version"]) || input.version !== 3) {
     throw new Error("invalid feature stack envelope");
   }
   if (typeof input.autoDecideBranches !== "boolean" || input.autoMerge !== true ||
       typeof input.stackId !== "string" || !/^ci-feature-stack-[0-9a-f-]{36}$/u.test(input.stackId) ||
+		typeof input.runId !== "string" || !/^feature-stack-run-[0-9a-f-]{36}$/u.test(input.runId) ||
       typeof input.name !== "string" || input.name.length < 1 || input.name.length > 80 ||
       input.name !== input.name.trim() || /[\u0000-\u001f\u007f]/u.test(input.name)) {
     throw new Error("invalid feature stack metadata");
@@ -66,7 +67,7 @@ export function canonicalFeatureStackPlan(input) {
   });
   if (targets.some((target) => sourceRefs.has(target))) throw new Error("invalid feature stack target");
   if (targets.some((target) => !sources.some((source) => source.targets.includes(target)))) throw new Error("feature stack target has no routed source");
-  return { autoDecideBranches: input.autoDecideBranches, autoMerge: true, name: input.name, sources, stackId: input.stackId, targets, version: 2 };
+  return { autoDecideBranches: input.autoDecideBranches, autoMerge: true, name: input.name, runId: input.runId, sources, stackId: input.stackId, targets, version: 3 };
 }
 
 export function decodeFeatureStackPlan(encoded) {
@@ -129,13 +130,14 @@ function selfTest() {
     autoDecideBranches: true,
     autoMerge: true,
     name: "Search + Messenger",
+    runId: "feature-stack-run-11111111-1111-4111-8111-111111111111",
     sources: [
       { base: "develop", head: "feature/search", pr: 12, sha: "a".repeat(40), targets: ["develop", "main"], title: "Search" },
       { base: "develop", head: "feature/messenger", pr: 14, sha: "b".repeat(40), targets: ["develop", "main"], title: "Messenger" }
     ],
     stackId: "ci-feature-stack-11111111-1111-4111-8111-111111111111",
     targets: ["develop", "main"],
-    version: 2
+		version: 3
   });
   const encoded = Buffer.from(JSON.stringify(plan)).toString("base64");
   assert.deepEqual(decodeFeatureStackPlan(encoded), plan);
@@ -174,13 +176,14 @@ function selfTest() {
       autoDecideBranches: true,
       autoMerge: true,
       name: "Verifier",
+      runId: "feature-stack-run-22222222-2222-4222-8222-222222222222",
       sources: [
         { base: "develop", head: "source-one", pr: 1, sha: sourceOne, targets: ["develop"], title: "One" },
         { base: "develop", head: "source-two", pr: 2, sha: sourceTwo, targets: ["develop"], title: "Two" }
       ],
       stackId: "ci-feature-stack-22222222-2222-4222-8222-222222222222",
       targets: ["develop"],
-      version: 2
+		version: 3
     });
     git("switch", "-q", "--detach", base);
     git("merge", "--no-ff", "-q", "-m", `Merge source one\n\nFeature-Stack-Source: pr=1 head=${sourceOne}`, sourceOne);

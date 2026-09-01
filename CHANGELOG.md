@@ -19,6 +19,11 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Feature Stack target workers now start after their expected sibling jobs are
+  skipped. The protected controller uses the same explicit `!cancelled()`
+  dependency guard as the other Lopu workers and validates the durable
+  Thingtime run identity against the immutable merge plan. — Codex (AI),
+  2026-09-01
 - Bounded the control-plane Graphify store to one active portable snapshot by
   default, added an explicit safe prune command, and made every successful
   update activate its replacement before deleting superseded snapshots. The

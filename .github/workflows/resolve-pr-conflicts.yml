@@ -348,6 +348,11 @@ on:
         required: false
         default: ""
         type: string
+      feature_stack_run_id:
+        description: "Internal: durable Thingtime Feature Stack run id"
+        required: false
+        default: ""
+        type: string
       execution_provider:
         description: "Internal: hosted compute selected by Thingtime CI Control"
         required: false
@@ -524,6 +529,11 @@ on:
         type: string
       feature_stack_plan_b64:
         description: "Internal: canonical-base64 immutable Feature Stack plan"
+        required: false
+        default: ""
+        type: string
+      feature_stack_run_id:
+        description: "Internal: durable Thingtime Feature Stack run id"
         required: false
         default: ""
         type: string
@@ -3238,6 +3248,7 @@ jobs:
     if: >-
       inputs.maintenance_operation == 'merge-feature-stack'
       && inputs.feature_stack_plan_b64 != ''
+      && inputs.feature_stack_run_id != ''
       && inputs.pr_number == ''
       && inputs.pr_batch_b64 == ''
       && inputs.branch == ''
@@ -3268,6 +3279,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_B64: ${{ inputs.feature_stack_plan_b64 }}
+          FEATURE_STACK_RUN_ID: ${{ inputs.feature_stack_run_id }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -3275,6 +3287,10 @@ jobs:
           plan="$RUNNER_TEMP/feature-stack-plan.json"
           node trusted/.github/scripts/feature-stack-plan.mjs decode "$PLAN_B64" >"$decoded"
           jq -c '.plan' "$decoded" >"$plan"
+          [[ "$(jq -r '.runId' "$decoded")" == "$FEATURE_STACK_RUN_ID" ]] || {
+            echo '::error::Feature Stack run identity does not match its immutable plan.'
+            exit 1
+          }
 
           while IFS= read -r source; do
             pr="$(jq -r '.pr' <<<"$source")"
@@ -3625,7 +3641,8 @@ jobs:
     name: Merge Feature Stack into ${{ matrix.target }}
     needs: [feature_stack_plan, model_config]
     if: >-
-      needs.feature_stack_plan.result == 'success'
+      !cancelled()
+      && needs.feature_stack_plan.result == 'success'
       && needs.model_config.result == 'success'
     strategy:
       fail-fast: false
