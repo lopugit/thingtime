@@ -183,6 +183,30 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200, 503], (body) => Array.isArray(body?.keys), 'JWKS body contains a keys array.')
   },
   {
+    id: 'auth-introspect-missing-token',
+    name: 'Introspect without token',
+    description: 'Token introspection requires a token in the body or Bearer header.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Introspection rejected a missing token.')
+  },
+  {
+    id: 'auth-introspect-invalid-token',
+    name: 'Introspect invalid token',
+    description: 'An unverifiable token introspects as inactive with no failure reason (no oracle).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not-a-real-jwt' },
+    expect: expectJson(
+      [200],
+      (body) => body?.active === false && Object.keys(body || {}).length === 1,
+      'Invalid token reported as bare { active: false }.'
+    )
+  },
+  {
     id: 'auth-me-anonymous',
     name: 'Current user anonymous',
     description: 'Anonymous requests resolve to a null current user.',
@@ -437,6 +461,16 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/service-account',
     mutates: true,
+    // This is the FIRST account-creating test in the suite, so it is the one
+    // that pays createUserAccount's awaited ensureIndexes() bootstrap against a
+    // cold database (index pruning, the device-index layout migration, then
+    // every things index). That one-time cost is measured in seconds and had
+    // been creeping past the 12s default, aborting a request the server had in
+    // fact completed. The other two account-creating tests already opt into
+    // 30s for the same reason — this one was simply left behind. It asserts a
+    // contract (non-expiring token, 5 GiB allowance, seven-day window), never a
+    // latency budget.
+    timeoutMs: 30000,
     body: uniqueServiceAccountBody,
     expect: expectJson(
       [200, 429, 503],
@@ -802,6 +836,39 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared theme id returned a 404 error shape.')
   },
   {
+    id: 'themes-shared-gallery-list',
+    name: 'Public theme gallery list',
+    description: 'Omitting id lists the public gallery: an array of public themes (possibly empty), anonymously readable.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.themes) &&
+        body.themes.length <= 60 &&
+        body.themes.every(
+          (theme: any) =>
+            typeof theme?.id === 'string' && typeof theme?.name === 'string' && theme?.theme && typeof theme?.theme === 'object'
+        ),
+      'Gallery list returned ok with a bounded array of public theme shapes.'
+    )
+  },
+  {
+    id: 'themes-shared-gallery-limit',
+    name: 'Public theme gallery limit',
+    description: 'The gallery list honours a lower ?limit bound.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared?limit=1',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.themes) && body.themes.length <= 1,
+      'Gallery list with limit=1 returned at most one theme.'
+    )
+  },
+  {
     id: 'themes-active-guarded',
     name: 'Active theme requires auth',
     description: 'Setting the active theme without a session is rejected with a 401 error shape.',
@@ -826,6 +893,49 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { id: 'not-a-real-theme-id' },
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Theme delete was rejected with an error shape.')
+  },
+  {
+    id: 'embed-things-public-missing',
+    name: 'Embedded thing public reads are bounded',
+    description: 'An unknown embedded thing returns the public CORS error shape without exposing private data.',
+    group: 'embed',
+    method: 'GET',
+    path: '/api/v1/embed/things?id=definitely-not-a-real-embedded-thing',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown embedded thing returned a 404 error shape.'
+    )
+  },
+  {
+    id: 'embed-things-create-guarded',
+    name: 'Embedded thing writes require auth',
+    description: 'Creating embedded data without a session is rejected before anything is written.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    mutates: true,
+    body: { name: 'API test embed', value: { hello: 'world' }, visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.thing?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Embedded thing creation either persisted for a session or returned an auth error.'
+    )
+  },
+  {
+    id: 'embed-things-json-only',
+    name: 'Embedded thing writes require JSON',
+    description: 'Safelisted text/plain requests are rejected before cookie authentication, closing the simple-request CSRF path.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    body: { name: 'Must not save', value: { hello: 'world' } },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson(
+      [415],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Embedded thing writes rejected a non-JSON content type.'
+    )
   },
   {
     id: 'things-feed-public',
@@ -1747,6 +1857,24 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'algorithms-shared-not-found',
+    name: 'Shared algorithm unknown id',
+    description: 'Unknown, unshared, and private algorithm ids all resolve to the same 404 error shape.',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared?id=not-a-real-algorithm-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared algorithm id returned a 404 error shape.')
+  },
+  {
+    id: 'algorithms-shared-empty-id',
+    name: 'Shared algorithm requires an id',
+    description: 'The shared preview without an id is a 404 error shape, never a listing (algorithms are private).',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Shared algorithm preview without an id returned a 404 error shape.')
+  },
+  {
     id: 'algorithms-delete-guarded',
     name: 'Algorithm delete is guarded',
     description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',
@@ -1794,6 +1922,35 @@ export const apiTests: ApiTestDefinition[] = [
           !Object.prototype.hasOwnProperty.call(body.profile, 'emailVerified')) ||
         (body?.ok === false && typeof body?.error === 'string'),
       'Seeded profile exposed only public fields (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-get-never-leaks-birthday',
+    name: 'Public profile never leaks birthday',
+    description: 'The birthday is private state — the public projection must not carry the field at all.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile?username=rick.deckard',
+    expect: expectJson(
+      [200, 404],
+      (body) =>
+        (body?.ok === true && !Object.prototype.hasOwnProperty.call(body.profile ?? {}, 'birthday')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Public profile carried no birthday field (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-update-birthday-validates',
+    name: 'Profile update rejects malformed birthdays',
+    description: 'A birthday that is not a real YYYY-MM-DD date is a 400 before anything is written.',
+    group: 'profile',
+    method: 'POST',
+    path: '/api/v1/users/profile',
+    body: { birthday: '2001-02-31' },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Impossible birthday rejected with an error shape (400 signed in, 401 anonymous).'
     )
   },
   {

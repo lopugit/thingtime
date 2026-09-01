@@ -7,6 +7,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { ChatDetailsDrawer } from './ChatDetailsDrawer';
+import { AiConnectionsModal } from './AiConnectionsModal';
 import { ChatView } from './ChatView';
 import { InboxSidebar } from './InboxSidebar';
 import {
@@ -21,15 +22,7 @@ import {
 } from './MessengerModals';
 import { RequestsView } from './RequestsView';
 import { SlackSidebar } from './SlackSidebar';
-import {
-  MESSENGER_REFRESH_EVENT,
-  modeKey,
-  readChatList,
-  readCommunities,
-  writeChatList,
-  writeCommunities,
-  writeUnread
-} from './messengerCache';
+import { MESSENGER_REFRESH_EVENT, modeKey, readChatList, readCommunities, writeChatList, writeCommunities, writeUnread } from './messengerCache';
 import type { ChatSummary, Community, MessengerMode } from './messengerTypes';
 import { useMessengerApi } from './useMessengerApi';
 
@@ -49,9 +42,7 @@ export const MessengerPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [mode, setMode] = React.useState<MessengerMode>(
-    () => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger')
-  );
+	const [mode, setMode] = React.useState<MessengerMode>(() => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger'));
   const [chats, setChats] = React.useState<ChatSummary[]>(() => readChatList(userId));
   const [communities, setCommunities] = React.useState<Community[]>(() => readCommunities(userId));
   const [requestsCount, setRequestsCount] = React.useState(0);
@@ -59,6 +50,7 @@ export const MessengerPage = () => {
   const [activeCommunityId, setActiveCommunityId] = React.useState<string | null>(null);
   const [showRequests, setShowRequests] = React.useState(searchParams.get('view') === 'requests');
   const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [aiConnectionsOpen, setAiConnectionsOpen] = React.useState(false);
   const [inputRequest, setInputRequest] = React.useState<InputModalRequest | null>(null);
   const [modal, setModal] = React.useState<
     | { kind: 'new-dm' }
@@ -150,13 +142,7 @@ export const MessengerPage = () => {
   };
 
   const modeToggle = (
-    <Flex
-      background="var(--tt-surface-alt, #f2f2f5)"
-      borderRadius="var(--tt-radius-pill, 999px)"
-      padding="3px"
-      gap={0}
-      flexShrink={0}
-    >
+		<Flex background="var(--tt-surface-alt, #f2f2f5)" borderRadius="var(--tt-radius-pill, 999px)" padding="3px" gap={0} flexShrink={0}>
       {(
         [
           ['slack', '🏛️ Spaces'],
@@ -181,7 +167,8 @@ export const MessengerPage = () => {
     </Flex>
   );
 
-  const sidebar = mode === 'slack' ? (
+	const sidebar =
+		mode === 'slack' ? (
     <SlackSidebar
       communities={communities}
       activeCommunityId={activeCommunity?.id || null}
@@ -323,8 +310,20 @@ export const MessengerPage = () => {
             borderRight={{ md: '1px solid var(--tt-border-light, #f3f3f5)' }}
             minHeight={0}
           >
-            <Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)">
+						<Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" position="relative">
               {modeToggle}
+              <Button
+                size="xs"
+                variant="ghost"
+                position="absolute"
+                right={2}
+                borderRadius="var(--tt-radius-pill, 999px)"
+                onClick={() => setAiConnectionsOpen(true)}
+                aria-label="Connect AI apps"
+                title="Connect ChatGPT and Claude"
+              >
+                ✦ AI
+              </Button>
             </Flex>
             <Box flex={1} minHeight={0}>
               {sidebar}
@@ -383,6 +382,13 @@ export const MessengerPage = () => {
       />
       <InvitePeopleModal isOpen={modal?.kind === 'invite'} onClose={() => setModal(null)} api={api} community={activeCommunity} />
       <InputModal request={inputRequest} onClose={() => setInputRequest(null)} />
+      <AiConnectionsModal
+        isOpen={aiConnectionsOpen}
+        onClose={() => setAiConnectionsOpen(false)}
+        api={api}
+				chats={chats}
+		onSynced={refresh}
+      />
       {selectedChat ? (
         <ChatDetailsDrawer
           isOpen={detailsOpen}

@@ -14,6 +14,18 @@ const getJson = async (url: string) => {
   return payload;
 };
 
+const postJson = async (url: string, body: unknown) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) throw payload;
+  return payload;
+};
+
 const toQuery = (args: Record<string, unknown>) => {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(args)) {
@@ -35,6 +47,8 @@ export const useMessengerApi = () => {
   return useMemo(
     () => ({
       listChats: () => getJson('/api/v1/chats'),
+      aiConnections: () => getJson('/api/v1/ai/connections'),
+      syncAiConnections: (batch: Record<string, unknown>) => postJson('/api/v1/ai/connections', batch),
       updates: () => getJson('/api/v1/chats/updates'),
       getChat: (id: string) => getJson(`/api/v1/chats/get${toQuery({ id })}`),
       createChat: post('/api/v1/chats'),

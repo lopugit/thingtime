@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { recordApiCall } from './apiRequestLog';
 
 export function useAsyncFetcher() {
   const [defaultOpts, setDefaultOpts] = useState({
@@ -30,7 +31,11 @@ export function useAsyncFetcher() {
         body = formData;
       }
 
+      // DevKit request log: every mutation is timed + recorded (body is
+      // redacted by the recorder before it is stored)
+      const loggedBody = nextOpts.encType === 'application/json' ? data || {} : undefined;
       const method = nextOpts.method || 'POST';
+      const started = performance.now();
       let response: Response;
       try {
         response = await fetch(nextOpts.action, {
@@ -41,9 +46,29 @@ export function useAsyncFetcher() {
           signal: nextOpts.signal
         });
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') throw error;
+        const aborted = error instanceof Error && error.name === 'AbortError';
+        recordApiCall({
+          at: Date.now(),
+          method,
+          url: nextOpts.action,
+          status: 0,
+          ok: false,
+          aborted,
+          durationMs: Math.round(performance.now() - started),
+          body: loggedBody
+        });
+        if (aborted) throw error;
         throw createApiFailure({ cause: error, action: nextOpts.errorContext, method });
       }
+      recordApiCall({
+        at: Date.now(),
+        method,
+        url: nextOpts.action,
+        status: response.status,
+        ok: response.ok,
+        durationMs: Math.round(performance.now() - started),
+        body: loggedBody
+      });
       const payload = await readApiResponsePayload(response, {
         action: nextOpts.errorContext,
         method

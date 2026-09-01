@@ -28,7 +28,6 @@ export const ThingtimeURL = (props) => {
   }, [location, pathname]);
 
   const thing = React.useMemo(() => {
-    // remove /things/ from path
     return getThingtime(path);
   }, [path, getThingtime]);
 

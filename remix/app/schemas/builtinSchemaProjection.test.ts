@@ -35,6 +35,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   // inputs + result + trace: records → dropped
   'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
   save: [], // marker schema
+  vote: ['optionIndex', 'voteKey'],
   folder: ['name', 'icon', 'description'],
   app: [
     'clientId',
@@ -105,6 +106,19 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+	'ai-connection': [
+		'sourceType',
+		'provider',
+		'sourceId',
+		'deviceId',
+		'connectorId',
+		'label',
+		'connectors',
+		'capabilities',
+		'status',
+		'readOnly',
+		'lastSyncAt'
+	],
   community: ['name', 'description'],
   'community-member': ['memberKey', 'role'],
   'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
@@ -112,11 +126,42 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   chat: ['name', 'topic', 'chatType', 'communityId', 'sectionId', 'channelVisibility', 'dmKey'],
   'chat-member': ['memberKey', 'role', 'nickname', 'state', 'requestOrigin', 'lastReadMessageId', 'lastReadAt', 'muted'],
   'chat-message': ['text', 'threadRootId', 'replyToId', 'editedAt', 'deletedAt', 'systemType'],
+	device: ['deviceKey', 'name', 'platform', 'model', 'osVersion', 'appVersion', 'capabilities', 'pairedAt'],
+	'device-state': ['deviceStateKey', 'revision', 'stateHash', 'snapshotHash', 'observedAt'], // state: record → dropped
+	'device-connector': ['deviceConnectorKey', 'revision', 'connectorHash'], // connector: record → dropped
+	'device-command': [
+		'deviceCommandKey',
+		'requestId',
+		'kind',
+		'requiresApproval',
+		'approvalState',
+		'status',
+		'controlBytes',
+		'inputTextHash',
+		'inputRedactedAt',
+		'expiresAt'
+	], // input: record → dropped
+	'device-command-event': [
+		'deviceEventKey',
+		'deviceControlEventScopeKey',
+		'liveControlEventScopeKey',
+		'retainedBytes',
+		'liveEventSequenceKey',
+		'liveEventHash',
+		'liveActivityHash',
+		'eventType',
+		'resourceId',
+		'revision',
+		'expiresAt'
+	], // payload: record → dropped
+	'device-ai-live-state': ['deviceAiLiveStateKey', 'connectorId', 'sessionId', 'lastSequence', 'lastObservedAt'],
+	'device-approval': ['deviceApprovalKey', 'commandId', 'requestId', 'kind', 'prompt', 'status'],
+	'device-screen-session': ['deviceScreenKey', 'requestId', 'status', 'viewOnly', 'startedAt', 'endedAt'],
   'custom-emoji': ['name', 'emojiKey', 'image', 'animated'],
   follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
-  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
+  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
   waitlist: [] // marker schema — email lives in the secure root field
 };
 
@@ -132,6 +177,9 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
+	assert.ok(PROTECTED_THINGTIME.includes('device'));
+	assert.ok(PROTECTED_THINGTIME.includes('device-command'));
+	assert.ok(PROTECTED_THINGTIME.includes('device-ai-live-state'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);

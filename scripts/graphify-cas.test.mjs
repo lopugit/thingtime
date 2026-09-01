@@ -28,6 +28,12 @@ import {
   withRepositoryLock,
 } from "./graphify-cas.mjs"
 
+// GRAPHIFY_SNAPSHOT_RETENTION is a documented operator override, so an ambient
+// value would silently redefine what the retention assertions below mean. The
+// suite pins the unset default once, for this process and every child it
+// spawns, instead of asserting against whichever policy the caller exported.
+delete process.env.GRAPHIFY_SNAPSHOT_RETENTION
+
 function git(root, args) {
   return execFileSync("git", ["-C", root, ...args], {
     encoding: "utf8",
@@ -471,6 +477,73 @@ test("independent branch snapshots merge without generated-file conflicts", () =
     )
     assert.equal(existsSync(cacheA), true)
     assert.equal(existsSync(cacheB), true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("a merge unions branch snapshots and pruning restores the retention bound", () => {
+  const root = fixture()
+  try {
+    const base = git(root, ["rev-parse", "HEAD"])
+    git(root, ["checkout", "-qb", "branch-a"])
+    // Each branch edits its own source file so the two histories merge cleanly
+    // while still producing distinct source fingerprints.
+    writeFileSync(path.join(root, "a.txt"), "branch-a\n")
+    const fingerprintA = computeSourceFingerprint(root)
+    const snapshotA = finalizeSnapshot(root, writeOutput(root, "branch-a", 1), {
+      ...fingerprintA,
+      version: "graphify test",
+    })
+    git(root, ["add", "-A"])
+    git(root, ["commit", "-qm", "snapshot a"])
+
+    git(root, ["checkout", "-q", base])
+    git(root, ["checkout", "-qb", "branch-b"])
+    writeFileSync(path.join(root, "b.txt"), "branch-b\n")
+    const fingerprintB = computeSourceFingerprint(root)
+    const snapshotB = finalizeSnapshot(root, writeOutput(root, "branch-b", 2), {
+      ...fingerprintB,
+      version: "graphify test",
+    })
+    git(root, ["add", "-A"])
+    git(root, ["commit", "-qm", "snapshot b"])
+
+    // Each branch pruned to its own single snapshot while it built, but the
+    // snapshots are content-addressed to different source fingerprints, so the
+    // merge unions two distinct paths instead of conflicting. Nothing in the
+    // merge itself re-applies the bound, which is how a promotion branch grows
+    // past retention one snapshot per merged branch.
+    git(root, ["merge", "--no-edit", "-m", "merge branch-a", "branch-a"])
+    assert.equal(existsSync(snapshotA.path), true)
+    assert.equal(existsSync(snapshotB.path), true)
+    assert.equal(
+      listSnapshots(root).length,
+      2,
+      "a merge unions both branch snapshots into one tree",
+    )
+    assert.ok(
+      listSnapshots(root).length > snapshotRetentionLimit(),
+      "the merged tree exceeds the retention bound until it is pruned again",
+    )
+
+    const active = selectSnapshot(root)
+    assert.equal(
+      active.path,
+      snapshotB.path,
+      "the richer branch snapshot stays active across the merge",
+    )
+
+    const result = pruneSnapshots(root, active)
+    assert.equal(result.retention, snapshotRetentionLimit())
+    assert.equal(result.removed.length, 1)
+    assert.equal(existsSync(snapshotB.path), true)
+    assert.equal(existsSync(snapshotA.path), false)
+    assert.equal(
+      listSnapshots(root).length,
+      snapshotRetentionLimit(),
+      "pruning after a merge restores the bounded snapshot tree",
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

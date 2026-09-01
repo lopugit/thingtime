@@ -24,6 +24,10 @@
 			"schedule": "29 * * * *"
 		},
 		{
+			"path": "/api/v1/peers/sync",
+			"schedule": "*/5 * * * *"
+		},
+		{
 			"path": "/api/v1/notifications/email/weekly-summary",
 			"schedule": "37 21 * * 0"
 		}

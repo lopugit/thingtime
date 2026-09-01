@@ -1,53 +1,93 @@
 {
-  "name": "thingtime-electron",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Thingtime desktop app shell for the Remix/Nitro web app.",
-  "main": "main.cjs",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/lopugit/thingtime.git",
-    "directory": "electron"
-  },
-  "packageManager": "pnpm@10.12.1",
-  "scripts": {
-    "build": "pnpm run build:web && pnpm run verify:web && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
-    "build:web": "node scripts/build-web.mjs",
-    "dev": "pnpm run build:web && pnpm run verify:web && electron .",
-    "dist": "pnpm run build:web && pnpm run verify:web && electron-builder",
-    "dist:unsigned": "pnpm run build:web && pnpm run verify:web && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never -c.mac.identity=null",
-    "install:local": "node scripts/install-local-app.mjs",
-    "start": "electron .",
-    "verify:web": "node scripts/verify-web-build.mjs"
-  },
-  "build": {
-    "appId": "com.thingtime.desktop",
-    "productName": "Thingtime",
-    "asar": true,
-    "directories": {
-      "buildResources": "build",
-      "output": "release"
-    },
-    "files": [
-      "main.cjs",
-      "preload.cjs",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "dist/web",
-        "to": "web",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.productivity"
-    }
-  },
-  "devDependencies": {
-    "electron": "^43.1.0",
-    "electron-builder": "^26.15.3"
-  }
+	"name": "thingtime-electron",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Thingtime desktop app shell for the Remix/Nitro web app.",
+	"main": "main.cjs",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/lopugit/thingtime.git",
+		"directory": "electron"
+	},
+	"packageManager": "pnpm@10.12.1",
+	"scripts": {
+		"build": "node scripts/build-local-app.mjs",
+		"build:native": "node scripts/build-native-node.mjs",
+		"build:resources": "node scripts/build-web.mjs && node scripts/verify-web-build.mjs && node scripts/build-native-node.mjs && node scripts/verify-native-node.mjs",
+		"build:web": "node scripts/build-web.mjs",
+		"dev": "node scripts/build-web.mjs && node scripts/verify-web-build.mjs && electron .",
+		"dist": "node scripts/build-production-app.mjs",
+		"dist:unsigned": "node scripts/build-unsigned-release.mjs",
+		"install:local": "node scripts/install-local-app.mjs",
+		"start": "electron .",
+		"test": "node --test test/**/*.test.cjs",
+		"verify:native": "node scripts/verify-native-node.mjs",
+		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
+		"verify:signed": "node scripts/verify-signed-app.mjs",
+		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
+		"verify:web": "node scripts/verify-web-build.mjs"
+	},
+	"build": {
+		"appId": "com.thingtime.desktop",
+		"productName": "Thingtime",
+		"asar": true,
+		"directories": {
+			"buildResources": "build",
+			"output": "release"
+		},
+		"files": [
+			"lib/**/*.cjs",
+			"main.cjs",
+			"preload.cjs",
+			"scripts/install-cached-release.mjs",
+			"scripts/install-local-app.mjs",
+			"scripts/verify-signed-app.mjs",
+			"package.json"
+		],
+		"extraResources": [
+			{
+				"from": "dist/web",
+				"to": "web",
+				"filter": [
+					"**/*"
+				]
+			},
+			{
+				"from": "dist/ai",
+				"to": "ai",
+				"filter": [
+					"**/*"
+				]
+			}
+		],
+		"extraFiles": [
+			{
+				"from": "dist/native/Thingtime Node.app",
+				"to": "Helpers/Thingtime Node.app",
+				"filter": [
+					"**/*"
+				]
+			}
+		],
+		"mac": {
+			"category": "public.app-category.productivity",
+			"icon": "build/Thingtime.icon",
+			"entitlements": "build/entitlements.mac.plist",
+			"entitlementsInherit": "build/entitlements.mac.inherit.plist",
+			"hardenedRuntime": true,
+			"minimumSystemVersion": "13.0",
+			"notarize": true,
+			"target": [
+				"dmg",
+				"zip"
+			],
+			"signIgnore": [
+				"Thingtime Node\\.app(?:/|$)"
+			]
+		}
+	},
+	"devDependencies": {
+		"electron": "^43.1.0",
+		"electron-builder": "^26.15.3"
+	}
 }

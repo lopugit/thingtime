@@ -1,5 +1,6 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
+import { fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
   ACL_INHERIT,
   KEY_SEGMENT_PATTERN,
@@ -91,9 +92,8 @@ const DEFAULT_SEARCH_LIMIT = 20;
 // ranked text results page by offset within a bounded window (mirrors the
 // ranked feed's determinism trade-off)
 const MAX_RANKED_OFFSET = 500;
-// match counts are a UX nicety, never worth a collection scan hanging a request
-const COUNT_LIMIT = 1000;
-const COUNT_MAX_TIME_MS = 2000;
+// match-count ceiling + timeout live in ../mongodb/cappedTotal (fetchCappedTotal),
+// shared with the schema browser so /search and /schemas can't drift.
 // Engagement filters (min reactions/comments) can't be expressed as an indexed
 // match — counts live in child things (FUNDAMENTALS §3), so we score a bounded
 // window of the newest/best-matching candidates and page within it by offset.
@@ -738,18 +738,12 @@ export const searchThings = async (
   // Capped count for the "N things match" readout — only on the FIRST page
   // (load-more keeps the total it already has), concurrent with the page find,
   // and approximate by design: it counts the DB visibility superset, so
-  // circle-restricted docs the exact acl pass rejects may be included.
-  const fetchTotal = async (): Promise<{ total: number | null; totalCapped: boolean }> => {
-    if (query.cursor) return { total: null, totalCapped: false };
-    try {
-      const count = await things.countDocuments(match as any, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-      return count > COUNT_LIMIT ? { total: COUNT_LIMIT, totalCapped: true } : { total: count, totalCapped: false };
-    } catch {
-      return { total: null, totalCapped: false };
-    }
-  };
-
-  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([fetchPage(), fetchTotal()]);
+  // circle-restricted docs the exact acl pass rejects may be included. Shared
+  // with the schema browser via fetchCappedTotal so both stay in lockstep.
+  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([
+    fetchPage(),
+    fetchCappedTotal(things, match, query.cursor)
+  ]);
   const page = docs.slice(0, limit);
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances

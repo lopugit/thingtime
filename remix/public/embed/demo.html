@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Thingtime embed demo</title>
+		<!--
+			Both demo scripts are external, not inline. Deployed Thingtime paths are
+			served under the strict application CSP (script-src 'self', no
+			'unsafe-inline' and no hash/nonce allowance), so an inline block is
+			parsed into the page and then silently refused by the browser. Only the
+			dev server's devCsp allows inline scripts, so an inline canary looks fine
+			locally and never runs in production.
+		-->
+		<script src="/embed/demo-host.js"></script>
+		<style>
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				background: #f5f5f5;
+				color: #18181b;
+				font-family: Inter, system-ui, sans-serif;
+				margin: 0;
+			}
+			main {
+				margin: 0 auto;
+				max-width: 960px;
+				padding: 48px 20px 120px;
+			}
+			h1 {
+				font-size: clamp(34px, 7vw, 72px);
+				letter-spacing: -0.055em;
+				line-height: 0.96;
+				margin: 0 0 18px;
+			}
+			p {
+				color: #71717a;
+				font-size: 18px;
+				max-width: 650px;
+			}
+			.grid {
+				display: grid;
+				gap: 18px;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				margin-top: 34px;
+			}
+			.card {
+				background: #fff;
+				border: 1px solid #e4e4e7;
+				border-radius: 18px;
+				box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+				min-width: 0;
+				padding: 20px;
+			}
+			.card h2 {
+				font-size: 13px;
+				letter-spacing: 0.08em;
+				margin: 0 0 12px;
+				text-transform: uppercase;
+			}
+			.integrity {
+				background: #ecfdf3;
+				border: 1px solid #abefc6;
+				border-radius: 999px;
+				color: #067647;
+				display: inline-block;
+				font-size: 12px;
+				font-weight: 750;
+				margin-top: 18px;
+				padding: 7px 10px;
+			}
+			@media (max-width: 700px) {
+				.grid {
+					grid-template-columns: 1fr;
+				}
+				main {
+					padding-top: 28px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>One thing.<br />Mounted twice.</h1>
+			<p>Edit either card or the Thingtime popup. Every view stays connected to the same state.</p>
+			<output id="host-integrity" class="integrity" aria-live="polite">Checking host isolation…</output>
+			<div class="grid">
+				<section class="card">
+					<h2>Whole thing</h2>
+					<div data-thingtime-mount data-thingtime-label="Website capabilities"></div>
+				</section>
+				<section class="card">
+					<h2>Nested mount</h2>
+					<div data-thingtime-mount="capabilities" data-thingtime-label="Capabilities"></div>
+				</section>
+			</div>
+		</main>
+		<script
+			src="/embed/thingtime.min.js"
+			data-thingtime-name="Website capabilities"
+			data-thingtime-initial='{"headline":"Hello from Thingtime","enabled":true,"capabilities":{"editing":true,"saving":"secure popup","mounts":2}}'
+			data-thingtime-open="true"
+		></script>
+		<script src="/embed/demo-integrity.js"></script>
+	</body>
+</html>

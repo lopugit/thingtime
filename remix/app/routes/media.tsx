@@ -101,9 +101,9 @@ export const MediaPage = () => {
 	// system with the feed (masonry/lightbox included via PostAttachments)
 	const displayPost = React.useMemo(() => (post && attachment ? { ...post, attachments: [attachment] } : null), [post, attachment]);
 
-	const handleChanged = (change: PostChange) => {
+	const handleChanged = (id: string, change: PostChange) => {
 		setData((prev) => {
-			if (!prev?.post) return prev;
+			if (!prev?.post || prev.post.id !== id) return prev;
 			const applied = typeof change === 'function' ? change({ ...prev.post, attachments: [prev.attachment] }) : change;
 			if (!applied) {
 				navigate(parentId ? `/post/${parentId}` : '/feed');
