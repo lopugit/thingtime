@@ -73,6 +73,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Feature Stack runs now expose their exact GitHub Actions history and stop
+  reporting a finished controller as live.** Every new dispatch carries a
+  durable run identity, signed workflow events attach the exact run URL, the
+  activity stream is sorted chronologically, and a controller that exits before
+  publishing a target PR is labelled Needs attention instead of receiving an
+  ever-moving ETA. The protected Lopu worker also tolerates its expected skipped
+  sibling dependencies, so admitted target merges actually start.
+  — Codex (AI), 2026-09-01
+
+- **Published posts and rich comments now retain their native Editor.js
+  document across the browser API boundary.** The request allowlist includes
+  `richText` alongside the canonical plain-text fallback, so headings no
+  longer reappear as literal Markdown such as `## Posts` after posting or
+  reloading. — Codex (AI), 2026-09-01
+
+- **Posting now flushes the live Editor.js document before freezing a post
+  payload.** Tapping Post immediately after changing a heading, colour,
+  alignment, size, whitespace, or line break can no longer publish the older
+  plain-text snapshot while the composer still shows the newer rich styling.
+  — Codex (AI), 2026-08-31
+
 - **Post media editing now has one visual source of truth.** Auto and Rows show
   final-view previews, Rows uses add/remove and per-row image-count controls,
   Grid previews expose the clickable 1×1 span badge, and the single Media &
