@@ -1,10 +1,8 @@
 import React from 'react';
 import {
-  Badge,
   Box,
   Button,
   Flex,
-  Heading,
   Icon,
   Input,
   Link,
@@ -22,7 +20,8 @@ import { Check, ChevronDown, ExternalLink, Filter, Globe2, RefreshCw, Rocket } f
 
 import type { VercelDeploymentsOverview, VercelDeploymentSummary } from '~/api/utils/vercel/status';
 
-const PAGE_MAX_WIDTH = '920px';
+import { PageHeader, PageShell } from '../components/Layout/PageShell';
+
 type DeploymentSort = 'created-desc' | 'created-asc' | 'ready-desc' | 'state' | 'branch';
 type DeploymentState = VercelDeploymentSummary['state'];
 
@@ -53,20 +52,13 @@ const BRANCH_LIMIT_OPTIONS = [
   { label: '5 branches', value: '5' }
 ];
 
-const statusScheme = (state: VercelDeploymentSummary['state']) => {
-  if (state === 'ready') return 'green';
-  if (state === 'building' || state === 'queued' || state === 'initializing') return 'yellow';
-  if (state === 'error' || state === 'blocked') return 'red';
-  return 'gray';
-};
-
 const statusDot = (state: VercelDeploymentSummary['state']) => {
-  if (state === 'ready') return 'var(--tt-positive, #50E3C2)';
-  if (state === 'building') return 'var(--tt-warning, #F5A623)';
-  if (state === 'queued' || state === 'initializing') return 'var(--tt-border, #E5E7EB)';
-  if (state === 'error' || state === 'blocked') return 'var(--tt-danger, #E00)';
-  if (state === 'canceled') return 'var(--tt-muted, #9CA3AF)';
-  return 'var(--tt-faint, #A0AEC0)';
+  if (state === 'ready') return 'var(--tt-positive, #2f8f4f)';
+  if (state === 'building') return 'var(--tt-warning, #ffbc48)';
+  if (state === 'queued' || state === 'initializing') return 'var(--tt-border, #ececef)';
+  if (state === 'error' || state === 'blocked') return 'var(--tt-danger, #d6455a)';
+  if (state === 'canceled') return 'var(--tt-muted, #9a9aa6)';
+  return 'var(--tt-faint, #b6b6c0)';
 };
 
 const shortCommit = (sha?: string) => (sha ? sha.slice(0, 7) : 'unknown');
@@ -165,7 +157,7 @@ const sortDeployments = (deployments: VercelDeploymentSummary[], sort: Deploymen
 const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) => (
   <Box
     borderWidth="1px"
-    borderColor="var(--tt-border, #E2E8F0)"
+    borderColor="var(--tt-border, #ececef)"
     borderRadius="var(--tt-radius-md, 12px)"
     bg="var(--tt-card, #ffffff)"
     boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
@@ -180,7 +172,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
           <Link
             href={deployment.url}
             isExternal
-            color="var(--tt-link, #2C7A7B)"
+            color="var(--tt-link, #2f8fd6)"
             fontFamily="mono"
             fontSize={{ base: 'xs', md: 'sm' }}
             overflowWrap="anywhere"
@@ -190,9 +182,26 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
           </Link>
         </Flex>
         <Flex alignItems="center" gap={2} flexShrink={0}>
-          <Badge colorScheme={statusScheme(deployment.state)} borderRadius="md" px={2} py={1}>
-            {deployment.state}
-          </Badge>
+          <Flex
+            alignItems="center"
+            gap={2}
+            bg="var(--tt-surface-alt, #f5f5f7)"
+            borderRadius="var(--tt-radius-pill, 999px)"
+            px={2.5}
+            py={1}
+          >
+            <Box width="7px" height="7px" borderRadius="full" bg={statusDot(deployment.state)} flexShrink={0} />
+            <Text
+              color="var(--tt-muted, #9a9aa6)"
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight={600}
+              letterSpacing="0.12em"
+              textTransform="uppercase"
+            >
+              {deployment.state}
+            </Text>
+          </Flex>
           <Button
             as="a"
             href={deployment.url}
@@ -223,7 +232,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
       <SimpleGrid columns={{ base: 1, sm: 2, lg: 5 }} spacing={3}>
         <Box>
           <Text
-            color="var(--tt-muted, #718096)"
+            color="var(--tt-muted, #9a9aa6)"
             fontFamily="mono"
             fontSize="10px"
             letterSpacing="0.12em"
@@ -237,7 +246,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
         </Box>
         <Box>
           <Text
-            color="var(--tt-muted, #718096)"
+            color="var(--tt-muted, #9a9aa6)"
             fontFamily="mono"
             fontSize="10px"
             letterSpacing="0.12em"
@@ -251,7 +260,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
         </Box>
         <Box>
           <Text
-            color="var(--tt-muted, #718096)"
+            color="var(--tt-muted, #9a9aa6)"
             fontFamily="mono"
             fontSize="10px"
             letterSpacing="0.12em"
@@ -263,7 +272,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
         </Box>
         <Box>
           <Text
-            color="var(--tt-muted, #718096)"
+            color="var(--tt-muted, #9a9aa6)"
             fontFamily="mono"
             fontSize="10px"
             letterSpacing="0.12em"
@@ -275,7 +284,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
         </Box>
         <Box>
           <Text
-            color="var(--tt-muted, #718096)"
+            color="var(--tt-muted, #9a9aa6)"
             fontFamily="mono"
             fontSize="10px"
             letterSpacing="0.12em"
@@ -370,18 +379,19 @@ export default function VercelPage() {
   }, []);
 
   return (
-    <Box minH="100vh" w="100%" minW={0} bg="var(--tt-surface, #fafafb)" pt={{ base: 28, md: 32 }} pb={{ base: 6, md: 10 }} px={{ base: 3, md: 12 }} display="flex" justifyContent="center">
-      <Box as="main" data-testid="vercel-shell" maxW={PAGE_MAX_WIDTH} w="100%">
+    <PageShell width={920}>
+      <Box as="main" data-testid="vercel-shell" w="100%" minW={0}>
         <Stack spacing={6} alignItems="stretch" w="100%">
-          <Flex alignItems="center" justifyContent="center" gap={3} textAlign="center">
-            <Icon as={Rocket} boxSize={6} color="var(--tt-link, #319795)" />
-            <Box>
-              <Heading size="lg">Vercel</Heading>
-              <Text color="var(--tt-muted, #718096)" fontSize="sm" mt={1} fontFamily="mono">
+          <PageHeader
+            eyebrow="Thingtime · deployments"
+            title="Vercel 🚀"
+            variant="ink"
+            subtitle={
+              <Box as="span" fontFamily="mono" fontSize="xs">
                 /api/v1/vercel/deployments
-              </Text>
-            </Box>
-          </Flex>
+              </Box>
+            }
+          />
 
           <Flex
             alignItems="center"
@@ -391,16 +401,40 @@ export default function VercelPage() {
             textAlign="center"
           >
             <Flex gap={2} wrap="wrap" justifyContent="center">
-              <Badge colorScheme={overview.configured ? 'green' : 'gray'} px={3} py={1} borderRadius="md">
+              <Box
+                bg={overview.configured ? 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))' : 'var(--tt-surface-alt, #f5f5f7)'}
+                color={overview.configured ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
+                borderRadius="var(--tt-radius-pill, 999px)"
+                px={3}
+                py={1}
+                fontSize="xs"
+                fontWeight={600}
+              >
                 {overview.configured ? 'API configured' : 'tokenless'}
-              </Badge>
-              <Badge colorScheme={overview.hasError ? 'red' : 'teal'} px={3} py={1} borderRadius="md">
+              </Box>
+              <Box
+                bg={overview.hasError ? 'rgba(214, 69, 90, 0.12)' : 'var(--tt-accent-tint, #fff5fa)'}
+                color={overview.hasError ? 'var(--tt-danger, #d6455a)' : 'var(--tt-accent, hotpink)'}
+                borderRadius="var(--tt-radius-pill, 999px)"
+                px={3}
+                py={1}
+                fontSize="xs"
+                fontWeight={600}
+              >
                 {overview.label}
-              </Badge>
+              </Box>
               {overview.projectName ? (
-                <Badge colorScheme="purple" px={3} py={1} borderRadius="md">
+                <Box
+                  bg="var(--tt-surface-alt, #f5f5f7)"
+                  color="var(--tt-muted, #9a9aa6)"
+                  borderRadius="var(--tt-radius-pill, 999px)"
+                  px={3}
+                  py={1}
+                  fontSize="xs"
+                  fontWeight={600}
+                >
                   {overview.projectName}
-                </Badge>
+                </Box>
               ) : null}
             </Flex>
             <Button
@@ -423,7 +457,6 @@ export default function VercelPage() {
                 <Button
                   size="sm"
                   variant={search ? 'solid' : 'outline'}
-                  colorScheme={search ? 'teal' : 'gray'}
                   leftIcon={<Icon as={Filter} boxSize={3.5} />}
                   data-testid="vercel-filter-trigger"
                 >
@@ -432,7 +465,7 @@ export default function VercelPage() {
               </PopoverTrigger>
               <PopoverContent
                 w={{ base: 'calc(100vw - 32px)', sm: '320px' }}
-                borderColor="var(--tt-border, #E2E8F0)"
+                borderColor="var(--tt-border, #ececef)"
                 boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
               >
                 <PopoverArrow />
@@ -440,7 +473,7 @@ export default function VercelPage() {
                   <Stack spacing={2}>
                     <Text
                       fontSize="10px"
-                      color="var(--tt-muted, #718096)"
+                      color="var(--tt-muted, #9a9aa6)"
                       fontFamily="mono"
                       letterSpacing="0.12em"
                       textTransform="uppercase"
@@ -485,15 +518,22 @@ export default function VercelPage() {
                       ))}
                     </Flex>
                     <Text>Status</Text>
-                    <Badge borderRadius="full" colorScheme="gray">
+                    <Box
+                      bg="var(--tt-surface-alt, #f5f5f7)"
+                      color="var(--tt-muted, #9a9aa6)"
+                      borderRadius="var(--tt-radius-pill, 999px)"
+                      px={2}
+                      fontSize="xs"
+                      fontWeight={600}
+                    >
                       {selectedStatusCount}/{statusOptions.length}
-                    </Badge>
+                    </Box>
                   </Flex>
                 </Button>
               </PopoverTrigger>
               <PopoverContent
                 w="260px"
-                borderColor="var(--tt-border, #E2E8F0)"
+                borderColor="var(--tt-border, #ececef)"
                 boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
               >
                 <PopoverArrow />
@@ -515,7 +555,7 @@ export default function VercelPage() {
                           py={2}
                           borderRadius="md"
                           textAlign="left"
-                          _hover={{ bg: 'var(--tt-surface-hover, #F7FAFC)' }}
+                          _hover={{ bg: 'var(--tt-surface-hover, #ececee)' }}
                         >
                           <Flex
                             alignItems="center"
@@ -523,12 +563,12 @@ export default function VercelPage() {
                             width="18px"
                             height="18px"
                             borderRadius="md"
-                            bg={selected ? 'var(--tt-ink, #111827)' : 'var(--tt-card, #FFFFFF)'}
+                            bg={selected ? 'var(--tt-ink, #16161a)' : 'var(--tt-card, #ffffff)'}
                             borderWidth="1px"
-                            borderColor={selected ? 'var(--tt-ink, #111827)' : 'var(--tt-faint, #A1A1AA)'}
+                            borderColor={selected ? 'var(--tt-ink, #16161a)' : 'var(--tt-faint, #b6b6c0)'}
                             flexShrink={0}
                           >
-                            {selected ? <Icon as={Check} boxSize={3} color="var(--tt-card, #FFFFFF)" strokeWidth={3} /> : null}
+                            {selected ? <Icon as={Check} boxSize={3} color="var(--tt-card, #ffffff)" strokeWidth={3} /> : null}
                           </Flex>
                           <Flex alignItems="center" gap={2}>
                             <Box width="10px" height="10px" borderRadius="full" bg={statusDot(option.state)} />
@@ -554,7 +594,7 @@ export default function VercelPage() {
               </PopoverTrigger>
               <PopoverContent
                 w="230px"
-                borderColor="var(--tt-border, #E2E8F0)"
+                borderColor="var(--tt-border, #ececef)"
                 boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
               >
                 <PopoverArrow />
@@ -581,8 +621,8 @@ export default function VercelPage() {
               </PopoverContent>
               </Popover>
             </Flex>
-            <Flex alignItems="center" justifyContent="center" gap={3} wrap="wrap" color="var(--tt-muted, #71717A)" fontSize="11px">
-              <Text color="var(--tt-text, #4A5568)" fontSize="xs">
+            <Flex alignItems="center" justifyContent="center" gap={3} wrap="wrap" color="var(--tt-muted, #9a9aa6)" fontSize="11px">
+              <Text color="var(--tt-text, #5a5a66)" fontSize="xs">
                 {visibleDeployments.length}/{overview.deployments.length}
               </Text>
               <Text>branches counted: {overview.totalBranchCount}</Text>
@@ -595,7 +635,7 @@ export default function VercelPage() {
                 <Button
                   size="xs"
                   variant="ghost"
-                  color="var(--tt-muted, #71717A)"
+                  color="var(--tt-muted, #9a9aa6)"
                   fontSize="11px"
                   fontWeight="normal"
                   height="auto"
@@ -610,7 +650,7 @@ export default function VercelPage() {
               </PopoverTrigger>
               <PopoverContent
                 w="190px"
-                borderColor="var(--tt-border, #E2E8F0)"
+                borderColor="var(--tt-border, #ececef)"
                 boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
               >
                 <PopoverArrow />
@@ -645,7 +685,7 @@ export default function VercelPage() {
               borderColor="color-mix(in srgb, var(--tt-danger, #d6455a) 30%, transparent)"
               borderRadius="var(--tt-radius-md, 12px)"
               bg="color-mix(in srgb, var(--tt-danger, #d6455a) 6%, transparent)"
-              color="var(--tt-danger, #C53030)"
+              color="var(--tt-danger, #d6455a)"
               p={4}
               fontSize="sm"
             >
@@ -662,21 +702,21 @@ export default function VercelPage() {
           ) : (
             <Box
               borderWidth="1px"
-              borderColor="var(--tt-border, #E2E8F0)"
+              borderColor="var(--tt-border, #ececef)"
               borderRadius="var(--tt-radius-md, 12px)"
               bg="var(--tt-card, #ffffff)"
               boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
               p={8}
               textAlign="center"
             >
-              <Icon as={Globe2} boxSize={8} color="var(--tt-faint, #A0AEC0)" />
-              <Text mt={3} color="var(--tt-text, #4A5568)">
+              <Icon as={Globe2} boxSize={8} color="var(--tt-faint, #b6b6c0)" />
+              <Text mt={3} color="var(--tt-text, #5a5a66)">
                 {overview.deployments.length ? 'No deployments match the current filters.' : 'No deployment URLs found.'}
               </Text>
             </Box>
           )}
         </Stack>
       </Box>
-    </Box>
+    </PageShell>
   );
 }

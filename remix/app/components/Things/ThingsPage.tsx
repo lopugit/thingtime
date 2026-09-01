@@ -1191,7 +1191,14 @@ export const ThingsPage = () => {
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="14px" maxWidth="360px">
             Log in to collect, organise, and share everything you make on Thingtime.
           </Text>
-          <Button as={RouterLink} colorScheme="pink" size="sm" to="/login">
+          <Button
+            as={RouterLink}
+            size="sm"
+            to="/login"
+            background="var(--tt-accent, hotpink)"
+            color="var(--tt-accent-contrast, #ffffff)"
+            _hover={{ opacity: 0.9 }}
+          >
             Log in 🗝️
           </Button>
         </Flex>
@@ -1281,7 +1288,7 @@ export const ThingsPage = () => {
           </Text>
           <Box flex={1} />
           <Menu placement="bottom-end">
-            <MenuButton as={Button} colorScheme="pink" leftIcon={<Plus size={14} />} size="sm">
+            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>
