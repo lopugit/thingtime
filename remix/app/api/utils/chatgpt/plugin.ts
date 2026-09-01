@@ -21,7 +21,7 @@ import {
   escapeHtml,
   isMcpResourceForOrigin,
   normalizeChatGptOAuthScopes,
-  normalizeDynamicClientRedirectUri,
+  normalizeRegisteredClientRedirectUri,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
@@ -200,7 +200,7 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
 const dynamicClientFromId = async (clientId: string): Promise<ChatGptDynamicOAuthClient | null> => {
   const claims = await verifyPurposeToken(clientId, OAUTH_DYNAMIC_CLIENT_PURPOSE);
   if (!claims || !Array.isArray(claims.redirectUris)) return null;
-  const redirectUris = [...new Set(claims.redirectUris.map(normalizeDynamicClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  const redirectUris = [...new Set(claims.redirectUris.map(normalizeRegisteredClientRedirectUri).filter((value): value is string => Boolean(value)))];
   if (!redirectUris.length || redirectUris.length > 8) return null;
   return { clientId, redirectUris };
 };
@@ -437,11 +437,11 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
   const candidate = body.value && typeof body.value === 'object' ? body.value as Record<string, unknown> : null;
   const rawRedirectUris = candidate?.redirect_uris;
   if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length < 1 || rawRedirectUris.length > 8) {
-    return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight loopback callbacks' }, { status: 400, headers: noStoreHeaders });
+    return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight supported ChatGPT or loopback callbacks' }, { status: 400, headers: noStoreHeaders });
   }
-  const redirectUris = [...new Set(rawRedirectUris.map(normalizeDynamicClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  const redirectUris = [...new Set(rawRedirectUris.map(normalizeRegisteredClientRedirectUri).filter((value): value is string => Boolean(value)))];
   if (redirectUris.length !== rawRedirectUris.length) {
-    return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact http://127.0.0.1:<port>/callback loopback URL' }, { status: 400, headers: noStoreHeaders });
+    return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact ChatGPT connector or http://127.0.0.1:<port>/callback URL' }, { status: 400, headers: noStoreHeaders });
   }
   const clientId = await signPurposeToken(OAUTH_DYNAMIC_CLIENT_PURPOSE, { redirectUris }, '1y');
   return json(
