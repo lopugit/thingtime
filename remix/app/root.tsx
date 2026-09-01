@@ -17,6 +17,7 @@ import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
@@ -94,9 +95,13 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
-                    : pathname === '/branding'
-                      ? `${baseTitle} - Brand resources`
-                      : baseTitle;
+                    : pathname.startsWith('/actions')
+                      ? `${baseTitle} - Actions`
+                      : pathname.startsWith('/components')
+                        ? `${baseTitle} - Components`
+                        : pathname === '/branding'
+                          ? `${baseTitle} - Brand resources`
+                          : baseTitle;
 
       document.title = routeTitle;
     }
@@ -133,6 +138,8 @@ export default function App() {
           </Main>
         )}
         {isAuthorizePopup ? null : <DrawerSystem />}
+        {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
+        {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
         {/* Signed out here but signed in on another Thingtime deployment →

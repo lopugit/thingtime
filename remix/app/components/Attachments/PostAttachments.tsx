@@ -4,7 +4,14 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
-import { attachmentContentUrl, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import {
+	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentMediaSrc,
+	attachmentTypeLabel,
+	formatAttachmentBytes,
+	normalizePublicAttachment
+} from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
@@ -120,7 +127,7 @@ export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
 };
 
 // hero rows get a cinematic ratio; pairs a gentle landscape; 3+ go square
-const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
+export const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
 
 const spanFor = (layout: PostMediaLayout, id: string): MediaLayoutSpan => layout.spans?.[id] || 'normal';
 export const spanColumns = (span: MediaLayoutSpan, columns: number): number => (span === 'wide' || span === 'big' ? Math.min(2, columns) : 1);
@@ -131,11 +138,33 @@ export const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
 	return `${cols} / ${rows}`;
 };
 
+// The owner's own moderation-pending media renders with this badge instead of
+// silently vanishing while analysis runs (other viewers don't receive it).
+const PendingBadge = () => (
+	<Text
+		fontFamily="mono"
+		fontSize="9px"
+		fontWeight={700}
+		letterSpacing="0.1em"
+		textTransform="uppercase"
+		color="var(--tt-ink, #16161a)"
+		background="rgba(255, 214, 102, 0.95)"
+		paddingX={1.5}
+		paddingY="1px"
+		borderRadius="999px"
+		flexShrink={0}
+	>
+		Checking…
+	</Text>
+);
+
+// Linked (external URL) rows open the original URL — the HTML download
+// attribute is ignored cross-origin, so they open in a new tab instead.
 const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => (
 	<Flex
 		as="a"
-		href={attachmentContentUrl(attachment.id, true)}
-		download={attachment.name}
+		href={attachment.url || attachmentContentUrl(attachment.id, true)}
+		{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 		alignItems="center"
 		columnGap={2.5}
 		minHeight="48px"
@@ -164,15 +193,16 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 				fontWeight={650}
 				color="var(--tt-ink, #16161a)"
 				noOfLines={1}
-				title={attachment.title || attachment.name}
+				title={attachment.title || attachmentDisplayName(attachment)}
 			>
-				{attachment.title || attachment.name}
+				{attachment.title || attachmentDisplayName(attachment)}
 			</Text>
 			<Text fontSize="10px" color={MUTED} noOfLines={1}>
-				{formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
+				{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
 			</Text>
 		</Box>
-		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
+		{attachment.pending ? <PendingBadge /> : null}
+		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachmentDisplayName(attachment)}`} />
 	</Flex>
 );
 
@@ -185,8 +215,8 @@ const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment
 	return (
 		<Box
 			as="video"
-			src={attachmentContentUrl(attachment.id)}
-			aria-label={attachment.title || attachment.name}
+			src={attachmentMediaSrc(attachment)}
+			aria-label={attachment.title || attachmentDisplayName(attachment)}
 			controls
 			playsInline
 			preload="metadata"
@@ -249,8 +279,8 @@ export const PostAttachments = ({
 		const image = (
 			<Box
 				as="img"
-				src={attachmentContentUrl(attachment.id)}
-				alt={attachment.title || attachment.name || `Post image ${index + 1}`}
+				src={attachmentMediaSrc(attachment)}
+				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
 				referrerPolicy="no-referrer"
 				width="100%"
@@ -263,11 +293,18 @@ export const PostAttachments = ({
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
 		);
+		const interactiveProps = shielded
+			? {}
+			: {
+				as: 'button' as const,
+				type: 'button' as const,
+				'aria-label': `View ${attachment.title || attachmentDisplayName(attachment)}`,
+				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })
+			};
 		return (
 			<Box
 				key={attachment.id}
-				as={shielded ? 'div' : 'button'}
-				type={shielded ? undefined : 'button'}
+				{...interactiveProps}
 				display="block"
 				width="100%"
 				position="relative"
@@ -275,14 +312,10 @@ export const PostAttachments = ({
 				overflow="hidden"
 				cursor={shielded ? 'default' : 'zoom-in'}
 				sx={tileSx}
-				aria-label={shielded ? undefined : `View ${attachment.title || attachment.name}`}
-				// the lightbox skips shielded media, so open it at this image's index
-				// within that list rather than its attachment-order index
-				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
 			>
 				{shielded ? (
 					<NsfwShield
-						name={attachment.title || attachment.name}
+						name={attachment.title || attachmentDisplayName(attachment)}
 						compact={compact}
 						fill={fill}
 						onReveal={() => reveal(attachment.id)}
@@ -292,6 +325,11 @@ export const PostAttachments = ({
 				) : (
 					image
 				)}
+				{attachment.pending ? (
+					<Box position="absolute" top={1.5} left={1.5}>
+						<PendingBadge />
+					</Box>
+				) : null}
 				{attachment.title && !shielded ? (
 					<Box
 						position="absolute"
@@ -350,12 +388,7 @@ export const PostAttachments = ({
 			)}
 
 			{images.length > 0 && layout.mode === 'grid' && (
-				<Box
-					display="grid"
-					gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`}
-					gap="6px"
-					sx={{ gridAutoFlow: 'dense' }}
-				>
+				<Box display="grid" gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`} gap="6px" sx={{ gridAutoFlow: 'dense' }}>
 					{images.map((attachment, index) => {
 						const span = spanFor(layout, attachment.id);
 						return tile(
@@ -376,7 +409,7 @@ export const PostAttachments = ({
 			{videos.map((attachment) => {
 				const video = <AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />;
 				return attachment.nsfw && !revealedIds.has(attachment.id) ? (
-					<NsfwShield key={attachment.id} name={attachment.name} compact={compact} onReveal={() => reveal(attachment.id)}>
+					<NsfwShield key={attachment.id} name={attachmentDisplayName(attachment)} compact={compact} onReveal={() => reveal(attachment.id)}>
 						{video}
 					</NsfwShield>
 				) : (

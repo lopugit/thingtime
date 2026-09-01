@@ -17,6 +17,7 @@ import { EMOJI_NAME_PATTERN, MAX_EMOJIS_PER_SCOPE } from '~/schemas/registry';
 import type { Fail} from './shared';
 import { communityRoleOf, emojiScopeKey, fail, findThingByKind, newThingDoc, ROLE_RANK } from './shared';
 import { customEmojiIdForAttachment, matchesCommittedEmojiRequest } from './messengerMediaCore';
+import { deleteMessengerThing, insertMessengerThing } from './storage';
 
 export type PublicCustomEmoji = {
   id: string;
@@ -112,7 +113,7 @@ export const uploadEmoji = async (
 			if (count >= MAX_EMOJIS_PER_SCOPE) {
 				throw Object.assign(new Error('emoji_scope_full'), { status: 400 });
 			}
-			await things.insertOne(emoji as any, { session });
+			await insertMessengerThing(things, emoji as any, { session });
 			await bindAttachment(emoji as any, session);
 		});
   } catch (err: any) {
@@ -190,7 +191,7 @@ export const deleteEmoji = async (viewerId: string, input: { id?: unknown }): Pr
 	});
 	if (attachmentCleanup.ok === false) return fail(attachmentCleanup.status, attachmentCleanup.error);
   const things = await getThingsCollection();
-  await things.deleteOne({ shareId: emoji.shareId } as any);
+  await deleteMessengerThing(things, { shareId: emoji.shareId } as any);
   // existing `custom:<id>` reactions keep their chips; readers render a
   // placeholder once the id stops resolving — deliberate, like deleted users
   return { ok: true };

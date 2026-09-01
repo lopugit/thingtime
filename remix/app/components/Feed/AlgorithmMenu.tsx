@@ -25,6 +25,7 @@ import {
   useIsMobileViewport
 } from '~/components/Nav/Drawer/useDrawer';
 import { RAINBOW } from '~/theme/rainbow';
+import { growthStageFor } from './algorithmGrowth';
 import type { EngagementEvent, PublicAlgorithm } from './feedTypes';
 
 // The feed's algorithm picker: "Latest" (pure chronological) plus every
@@ -193,6 +194,13 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   const navigate = useNavigate();
 
   const [algorithms, setAlgorithms] = React.useState<PublicAlgorithm[]>([]);
+  // `sessionEventCount` is the whole scroll session's log — it never resets,
+  // because "Save session as algorithm" trains on all of it. The growth stage
+  // therefore overlays only the events recorded SINCE the list was last
+  // loaded: anything older is already inside the refetched `eventCount`, and
+  // on an algorithm switch this session's training belongs to the previous
+  // algorithm, not the newly selected one.
+  const [sessionBaseline, setSessionBaseline] = React.useState(0);
   const [modalMode, setModalMode] = React.useState<ModalMode | null>(null);
   const [draftName, setDraftName] = React.useState('');
   const [draftEmoji, setDraftEmoji] = React.useState('🧠');
@@ -200,17 +208,28 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  const sessionEventCountRef = React.useRef(sessionEventCount);
+  sessionEventCountRef.current = sessionEventCount;
 
   const active = value ? algorithms.find((algorithm) => algorithm.id === value) || null : null;
 
   const reload = React.useCallback(async () => {
+    // Snapshot the session count BEFORE the request. Events recorded while it
+    // is in flight cannot be inside the total it returns, so rebasing on the
+    // post-await count would subtract them twice and the dot could regress
+    // (🐣 → 🥚 mid-scroll). Over-counting the overlap is the safe direction —
+    // that is what keeps the stage monotonic.
+    const baseline = sessionEventCountRef.current;
     if (!user) {
       setAlgorithms([]);
+      setSessionBaseline(baseline);
       return;
     }
     try {
       const resp = await apiRef.current.v1.algorithms.list();
       setAlgorithms(resp.algorithms || []);
+      // rebase the overlay only when fresh counts actually landed
+      setSessionBaseline(baseline);
     } catch {
       // background load — stay quiet, the menu just shows Latest
     }
@@ -301,6 +320,14 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
 
   const buttonLabel = value === null ? '⏱️ Latest' : active ? `${active.emoji} ${active.name}` : '🧠 Algorithm';
 
+  // growth stage (🥚→🐣→🐥→🧠): server-counted signals + this session's
+  // events that the server total cannot include yet (see `sessionBaseline`).
+  // The slight overlap after a flush lands before a list refetch can only ever
+  // nudge the total forward — stages are monotonic, so the dot never regresses
+  // mid-session.
+  const sessionSinceLoad = Math.max(0, sessionEventCount - sessionBaseline);
+  const activeStage = active ? growthStageFor((active.eventCount || 0) + sessionSinceLoad) : null;
+
   const modalTitle =
     modalMode === 'branch'
       ? 'Branch algorithm 🌿'
@@ -337,8 +364,8 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
                 width="6px"
                 height="6px"
                 borderRadius="999px"
-                background="var(--tt-rainbow-3, #58ca70)"
-                title="Learning as you scroll 🧠"
+                background={activeStage?.color || 'var(--tt-rainbow-3, #58ca70)'}
+                title={activeStage ? `${activeStage.name} ${activeStage.emoji} — ${activeStage.tip}` : 'Learning as you scroll 🧠'}
                 sx={{
                   animation: 'tt-training-pulse 1.6s ease-in-out infinite',
                   '@keyframes tt-training-pulse': {
@@ -368,8 +395,14 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
                 <Box as="span" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
                   {algorithm.emoji} {algorithm.name}
                 </Box>
-                <Text as="span" fontSize="10px" color={MUTED} flexShrink={0}>
-                  · {algorithm.eventCount} events
+                <Text
+                  as="span"
+                  fontSize="10px"
+                  color={MUTED}
+                  flexShrink={0}
+                  title={growthStageFor(algorithm.eventCount).tip}
+                >
+                  · {algorithm.eventCount} events {growthStageFor(algorithm.eventCount).emoji}
                 </Text>
                 {value === algorithm.id && <Check size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
               </Flex>

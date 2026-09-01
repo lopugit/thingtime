@@ -22,7 +22,9 @@ import {
   hydrateSemanticCache,
   ingestSemanticCache,
   listSnapshots,
+  pruneSnapshots,
   selectSnapshot,
+  snapshotRetentionLimit,
   withRepositoryLock,
 } from "./graphify-cas.mjs"
 
@@ -113,6 +115,55 @@ test("immutable output variants coexist and richer valid output wins", () => {
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test("bounded retention keeps the active snapshot and prunes superseded trees", () => {
+  const root = fixture()
+  try {
+    const firstFingerprint = computeSourceFingerprint(root)
+    const first = finalizeSnapshot(root, writeOutput(root, "first", 1), {
+      ...firstFingerprint,
+      version: "graphify test",
+    })
+
+    writeFileSync(path.join(root, "source.txt"), "two\n")
+    const secondFingerprint = computeSourceFingerprint(root)
+    const second = finalizeSnapshot(root, writeOutput(root, "second", 2), {
+      ...secondFingerprint,
+      version: "graphify test",
+    })
+
+    writeFileSync(path.join(root, "source.txt"), "three\n")
+    const thirdFingerprint = computeSourceFingerprint(root)
+    const third = finalizeSnapshot(root, writeOutput(root, "third", 3), {
+      ...thirdFingerprint,
+      version: "graphify test",
+    })
+
+    const result = pruneSnapshots(root, second, 2)
+    assert.equal(result.retention, 2)
+    assert.equal(result.retained.length, 2)
+    assert.equal(result.removed.length, 1)
+    assert.equal(existsSync(second.path), true)
+    assert.equal(existsSync(third.path), true)
+    assert.equal(existsSync(first.path), false)
+    assert.equal(listSnapshots(root).length, 2)
+    assert.equal(
+      existsSync(path.dirname(first.path)),
+      false,
+      "empty source-fingerprint directories are removed",
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("snapshot retention defaults to one and rejects unsafe values", () => {
+  assert.equal(snapshotRetentionLimit(undefined), 1)
+  assert.equal(snapshotRetentionLimit("3"), 3)
+  assert.throws(() => snapshotRetentionLimit("0"), /positive integer/)
+  assert.throws(() => snapshotRetentionLimit("1.5"), /positive integer/)
+  assert.throws(() => snapshotRetentionLimit("all"), /positive integer/)
 })
 
 test("a large graph collapse requires an explicit force decision", () => {
@@ -281,6 +332,37 @@ test("activation replaces a dangling compatibility alias", () => {
     assert.equal(
       path.resolve(path.dirname(alias), readlinkSync(alias)),
       path.join(second.path, "graph.json"),
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("activation replaces an ignored regular compatibility output", () => {
+  const root = fixture()
+  try {
+    git(root, ["rm", "-q", "graphify-out/graph.json"])
+    writeFileSync(path.join(root, ".gitignore"), "graphify-out/graph.json\n")
+    git(root, ["add", ".gitignore"])
+    git(root, ["commit", "-qm", "ignore generated graph alias"])
+    mkdirSync(path.join(root, "graphify-out"), { recursive: true })
+    writeFileSync(
+      path.join(root, "graphify-out/graph.json"),
+      '{"stale":true}\n',
+    )
+
+    const fingerprint = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(
+      root,
+      writeOutput(root, "ignored-regular-alias", 2),
+      { ...fingerprint, version: "graphify test" },
+    )
+    activateSnapshot(root, snapshot)
+
+    const alias = path.join(root, "graphify-out/graph.json")
+    assert.equal(
+      path.resolve(path.dirname(alias), readlinkSync(alias)),
+      path.join(snapshot.path, "graph.json"),
     )
   } finally {
     rmSync(root, { recursive: true, force: true })

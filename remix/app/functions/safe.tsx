@@ -1,4 +1,6 @@
 export const safe = (props) => {
+  if (props?.disabled) return props?.children
+
   // do not render more than the limit of things to prevent infinite loops
   const meta = getMeta()
 

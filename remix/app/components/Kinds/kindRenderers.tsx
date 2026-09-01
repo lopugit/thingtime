@@ -8,6 +8,8 @@ import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
+import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '~/components/ComponentsLibrary/componentTemplate';
+import { useTtActionClicks } from '~/components/Actions/useTtActionClicks';
 import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
@@ -751,6 +753,100 @@ const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRe
 	</Box>
 );
 
+// ————— 🧩 component (arg-templated element/chakra tree) —————
+
+type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
+
+const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; context: KindRenderContext }) => {
+	// Memoised like the /components preview: resolution walks the whole template
+	// under the MAX_RESOLVED_VALUES budget, so a feed or search page listing
+	// several component things would redo that work on every parent render.
+	// adapt() rebuilds `values` on every RenderThing pass, so the memo keys on
+	// its content — a bounded scalar map (≤ MAX_COMPONENT_SAVED_ARGS entries) —
+	// rather than its identity, which would never hit.
+	const valuesKey = JSON.stringify(value.values);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values
+	const resolved = React.useMemo(() => resolveTemplate(value.render, value.values), [value.render, valuesKey]);
+	// ttAction controls fire only on the trusted /things render surface — a
+	// component-kind thing rendered through the kind registry in your own app,
+	// where context.untrusted is false. Untrusted feed/search renders pass
+	// context.untrusted and get no handler. NOTE the /components catalog and
+	// its args tester draw the same template DIRECTLY through the sanitising
+	// renderers (ComponentPreview / ComponentDetailPage), bypassing this
+	// wrapper — so authoring and browsing a component never fire a
+	// side-effectful action run; explicit execution lives on the /actions run
+	// panel. Keep those preview paths off this wrapper deliberately.
+	const onTtAction = useTtActionClicks();
+	return (
+		<Box onClickCapture={context.untrusted ? undefined : onTtAction} width="100%">
+			{isChakraThingNode(resolved) ? (
+				<ChakraThingRenderer node={resolved as ChakraThingNode} />
+			) : (
+				<HtmlThingRenderer node={resolved as HtmlThingNode} />
+			)}
+		</Box>
+	);
+};
+
+// ————— ⚡ action (declarative capability-bounded program) —————
+
+type ActionKindValue = {
+	name: string;
+	actionKey: string | null;
+	description: string | null;
+	ops: string[];
+	stepCount: number;
+	capabilityCount: number;
+};
+
+// Minimalist, Apple-like: quiet tinted dots per op tone instead of loud
+// badges, hairline chip borders, tokens throughout. Sizes ride the existing
+// context scale (compact → sm row, card → md, full → lg with description).
+const ACTION_OP_DOTS: Record<string, string> = {
+	'things.create': 'var(--tt-warning, #e8a33d)',
+	'things.update': 'var(--tt-warning, #e8a33d)',
+	'things.get': 'var(--tt-link, #4c7dff)',
+	'things.search': 'var(--tt-link, #4c7dff)',
+	'actions.invoke': 'var(--tt-accent, #7c6cff)',
+	return: 'var(--tt-muted, #9a9aa6)'
+};
+
+const ActionKindRenderer = ({ value, context }: { value: ActionKindValue; context: KindRenderContext }) => {
+	const size = context.size === 'compact' ? 'sm' : context.size === 'full' ? 'lg' : 'md';
+	const nameSize = size === 'sm' ? '13px' : size === 'lg' ? '16px' : '14px';
+	return (
+		<Box width="100%">
+			<Flex align="center" gap={2} minW={0}>
+				<Text fontSize={nameSize} lineHeight="1.2">
+					⚡
+				</Text>
+				<Text color="var(--tt-ink, #16161a)" fontSize={nameSize} fontWeight="600" isTruncated>
+					{value.name}
+				</Text>
+				<Flex align="center" gap="5px" ml="auto">
+					{value.ops.map((op) => (
+						<Box background={ACTION_OP_DOTS[op] || 'var(--tt-muted, #9a9aa6)'} borderRadius="full" height="6px" key={op} title={op} width="6px" />
+					))}
+				</Flex>
+			</Flex>
+			{size !== 'sm' ? (
+				<Flex align="center" gap={2} mt={1.5} wrap="wrap">
+					{value.actionKey ? <MutedMono>{value.actionKey}</MutedMono> : null}
+					<MutedMono>
+						{value.stepCount} step{value.stepCount === 1 ? '' : 's'} · {value.capabilityCount}{' '}
+						{value.capabilityCount === 1 ? 'capability' : 'capabilities'}
+					</MutedMono>
+				</Flex>
+			) : null}
+			{size === 'lg' && value.description ? (
+				<Text color="var(--tt-text, #33333c)" fontSize="13px" mt={2}>
+					{value.description}
+				</Text>
+			) : null}
+		</Box>
+	);
+};
+
 // ————— registration —————
 // Wrapped in an exported function (called lazily by kindRegistry) instead of running
 // at module scope: remix/package.json sets "sideEffects": false, so a bare
@@ -1082,6 +1178,66 @@ registerKindRenderer({
 	match: (thing) => isChakraThingNode(thing),
 	adapt: (thing): ChakraThingNode | null => (isChakraThingNode(thing) ? (thing as ChakraThingNode) : null),
 	render: ChakraKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'component',
+	title: 'UI component',
+	emoji: '🧩',
+	category: 'Builder',
+	description:
+		'A component thing from /components — its render template resolved against savedArgs (or arg defaults), drawn through the sanitising gates.',
+	aliases: ['ui-component'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && 'render' in crystal && ('args' in crystal || 'componentKey' in crystal || 'library' in crystal);
+	},
+	adapt: (thing): ComponentKindValue | null => {
+		// accepts both a full component thing ({ crystal }) and a bare crystal
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!crystal.render || typeof crystal.render !== 'object') return null;
+		const args = sanitizeArgSpecs(crystal.args);
+		const savedArgs =
+			crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs)
+				? (crystal.savedArgs as Record<string, string | number | boolean>)
+				: {};
+		return { render: crystal.render, values: { ...defaultsFromArgs(args), ...savedArgs } };
+	},
+	render: ComponentKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'action',
+	title: 'Action',
+	emoji: '⚡',
+	category: 'Builder',
+	description:
+		'A declarative capability-bounded program — typed inputs, a closed step vocabulary, explicit capabilities, and a shared execution budget. Inspect and run it on /actions.',
+	aliases: ['action-thing'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && Array.isArray(crystal.steps) && ('capabilities' in crystal || 'actionKey' in crystal);
+	},
+	adapt: (thing): ActionKindValue | null => {
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!Array.isArray(crystal.steps)) return null;
+		const ops = [
+			...new Set(
+				crystal.steps
+					.map((step) => (step && typeof step === 'object' ? String((step as Record<string, unknown>).op || '') : ''))
+					.filter(Boolean)
+			)
+		];
+		return {
+			name: typeof crystal.name === 'string' ? crystal.name : 'Action',
+			actionKey: typeof crystal.actionKey === 'string' ? crystal.actionKey : null,
+			description: typeof crystal.description === 'string' ? crystal.description : null,
+			ops,
+			stepCount: crystal.steps.length,
+			capabilityCount: Array.isArray(crystal.capabilities) ? crystal.capabilities.length : 0
+		};
+	},
+	render: ActionKindRenderer
 });
 
 };

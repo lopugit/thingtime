@@ -5,6 +5,7 @@ import {
   Badge,
   Box,
   Button,
+  Collapse,
   Flex,
   FormControl,
   FormLabel,
@@ -39,7 +40,15 @@ type Credential = {
 
 type CredentialResponse = { ok: true; vaultConfigured: boolean; credentials: Credential[] };
 
-export const ClaudeCredentialWaterfall = ({ cacheIdentity }: { cacheIdentity: string }) => {
+export const ClaudeCredentialWaterfall = ({
+  cacheIdentity,
+  collapsed,
+  onToggleCollapsed
+}: {
+  cacheIdentity: string;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}) => {
   const api = useApi();
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -102,17 +111,35 @@ export const ClaudeCredentialWaterfall = ({ cacheIdentity }: { cacheIdentity: st
 
   return (
     <Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" p={4} mb={4}>
-      <Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
+      <Flex
+        as="button"
+        type="button"
+        width="100%"
+        textAlign="left"
+        align="flex-start"
+        justify="space-between"
+        gap={3}
+        wrap="wrap"
+        onClick={onToggleCollapsed}
+        aria-expanded={!collapsed}
+        aria-controls="ai-credential-waterfall-section"
+      >
         <Box>
 					<Heading size="sm">AI credential waterfall</Heading>
           <Text fontSize="sm" opacity={0.62} mt={1} maxW="760px">
             Lopu tries enabled accounts from top to bottom. Values are encrypted in Thingtime and are never shown again or stored in this browser.
           </Text>
         </Box>
-				<Badge colorScheme={response?.vaultConfigured ? 'green' : 'orange'}>
-					{response?.vaultConfigured ? 'Vault ready' : 'Vault not configured'}
-				</Badge>
+				<Flex align="center" gap={2}>
+					<Badge colorScheme={response?.vaultConfigured ? 'green' : 'orange'}>
+						{response?.vaultConfigured ? 'Vault ready' : 'Vault not configured'}
+					</Badge>
+					{collapsed ? <FiChevronDown /> : <FiChevronUp />}
+				</Flex>
       </Flex>
+
+      <Collapse in={!collapsed} animateOpacity>
+      <Box id="ai-credential-waterfall-section">
 
 			{error ? (
 				<Alert status="error" mt={3} borderRadius="md">
@@ -288,6 +315,8 @@ export const ClaudeCredentialWaterfall = ({ cacheIdentity }: { cacheIdentity: st
           Add token
         </Button>
       </Flex>
+      </Box>
+      </Collapse>
     </Box>
   );
 };

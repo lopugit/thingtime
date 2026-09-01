@@ -1,11 +1,14 @@
 import { json } from './api/http';
+import { getDeploymentDataEnvironment, type DeploymentDataEnvironment } from './api/utils/deployment/dataEnvironment';
 import { getCurrentUser } from './api/utils/auth/getCurrentUser';
 import { isVercelStatusEnabled } from './api/utils/vercel/environment';
 import { Session } from './cookies.server';
 
 export type RootLoaderData = {
-  envFromCookie: Record<string, string | undefined>;
-  devKitEnv: Record<string, string | undefined>;
+	envFromCookie: Record<string, string | undefined>;
+	/** Public, non-secret database/authentication authority for this deployment. */
+	dataEnvironment: DeploymentDataEnvironment | null;
+	devKitEnv: Record<string, string | undefined>;
   titlePrefix: string;
   user: Awaited<ReturnType<typeof getCurrentUser>>;
 };
@@ -64,9 +67,10 @@ export async function loadRootData(request: Request) {
   processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = isVercelStatusEnabled() ? 'true' : 'false';
 
   return {
-    data: {
-      envFromCookie: { ...processEnv },
-      devKitEnv,
+		data: {
+			envFromCookie: { ...processEnv },
+			dataEnvironment: getDeploymentDataEnvironment(),
+			devKitEnv,
       titlePrefix,
       user: await getCurrentUser(request)
     } satisfies RootLoaderData,

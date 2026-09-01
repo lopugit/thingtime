@@ -7,7 +7,9 @@
 	"ignoreCommand": "node scripts/vercel-ignore-build.mjs",
 	"git": {
 		"deploymentEnabled": {
-			"github-actions": false
+			"**": false,
+			"main": true,
+			"develop": true
 		}
 	},
 	"regions": ["syd1"],
@@ -20,6 +22,10 @@
 		{
 			"path": "/api/v1/moderation/sweep",
 			"schedule": "29 * * * *"
+		},
+		{
+			"path": "/api/v1/peers/sync",
+			"schedule": "*/5 * * * *"
 		},
 		{
 			"path": "/api/v1/notifications/email/weekly-summary",

@@ -21,6 +21,16 @@ const isoDate = (value: string | null): Date | null => {
 // traffic is absorbed by the nearest Vercel edge PoP instead of a function.
 const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
 
+// The `anon=1` guard below only fences a Bearer credential when the request
+// actually reaches this function. `public, s-maxage` is exactly the marker
+// that licenses a shared cache to reuse a stored response for an
+// Authorization-carrying request (RFC 9111 §3.5), so without varying on it
+// the warm anon entry — always warm, on a URL built to be cached — would be
+// replayed to a fenced token and hand back the public sphere the guard just
+// closed off. Anonymous callers all share the header-absent key, so the
+// cacheable path keeps one entry and loses no hit rate.
+const ANON_CACHE_VARY = 'Authorization';
+
 // GET /api/v1/things/feed?types=&circles=&from=&to=&algorithm=<id|latest>&cursor=&limit=&anon=1
 // The public feed. Works logged out (public posts only). With `algorithm`
 // omitted the viewer's active algorithm applies; 'latest' forces chronological.
@@ -40,7 +50,9 @@ export const loader = async ({ request }: { request: Request }) => {
   // entirely and hand the asker the logged-out view past every per-credential
   // rule — today a visibility-fenced token's audience fence, which is supposed
   // to cover reads. Answering the token as itself also keeps the shared anon
-  // URL's cache entry honest: a fenced body never carries ANON_CACHE_CONTROL.
+  // URL's cache entry honest: a fenced body never carries ANON_CACHE_CONTROL,
+  // and the cacheable one carries ANON_CACHE_VARY so no shared cache can
+  // replay it to a credential that would have been fenced here.
   const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
   // Otherwise resolve the things actor (cookie/Bearer session or a scoped PAT)
   // — unknown/stale credentials degrade to an anonymous null user, so
@@ -89,7 +101,7 @@ export const loader = async ({ request }: { request: Request }) => {
     { ok: true, posts: result.posts, nextCursor: result.nextCursor, ranked: result.ranked },
     {
       headers: anonCacheable
-        ? { 'Cache-Control': ANON_CACHE_CONTROL }
+        ? { 'Cache-Control': ANON_CACHE_CONTROL, Vary: ANON_CACHE_VARY }
         : user
           ? { 'Cache-Control': 'private, no-store' }
           : {}

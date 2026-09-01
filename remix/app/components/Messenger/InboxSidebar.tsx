@@ -7,6 +7,25 @@ import type { MessengerApi } from './useMessengerApi';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: string | null }) => {
+  if (chat.externalSource) {
+    return (
+      <Flex
+        width="42px"
+        height="42px"
+        borderRadius="full"
+        align="center"
+        justify="center"
+        background={chat.externalSource.provider === 'chatgpt' ? '#17171c' : '#d97757'}
+        color="white"
+        fontSize="20px"
+        fontWeight={700}
+        flexShrink={0}
+        title={chat.externalSource.label}
+      >
+        {chat.externalSource.provider === 'chatgpt' ? '◎' : '✦'}
+      </Flex>
+    );
+  }
   const others = (chat.members || []).filter((m) => m.userId !== viewerId);
   const shown = others.slice(0, 2);
   if (!shown.length) {
@@ -219,8 +238,12 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
           const unread = chat.unreadCount > 0;
           const last = chat.lastMessage;
           const lastAuthor =
-            last && last.authorId === props.viewerId
+            last?.externalSource?.role === 'user'
               ? 'You'
+              : last?.externalSource
+                ? last.externalSource.authorName || last.externalSource.label
+                : last && last.authorId === props.viewerId
+                  ? 'You'
               : last
                 ? memberDisplayName((chat.members || []).find((m) => m.userId === last.authorId)) || last.authorName || ''
                 : '';

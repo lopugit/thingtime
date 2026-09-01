@@ -483,6 +483,8 @@ export const sanitizeInlineHtml = (html: unknown, limits?: RichTextRenderLimits)
 
 // theme styling for the sanitised inline tags
 const inlineMarkupSx = {
+	whiteSpace: 'pre-wrap',
+	overflowWrap: 'anywhere',
 	'b, strong': { fontWeight: 800, color: 'inherit' },
 	'i, em': { fontStyle: 'italic' },
 	u: { textDecoration: 'underline' },
@@ -546,12 +548,14 @@ const ListLevel = ({
 	items,
 	ordered,
 	depth,
-	itemStyle
+	itemStyle,
+	bodyFontSize
 }: {
 	items: NormalizedListItem[];
 	ordered: boolean;
 	depth: number;
 	itemStyle?: React.CSSProperties;
+	bodyFontSize: 'sm' | 'md';
 }) => (
 	<Flex flexDirection="column" paddingLeft={depth ? 4 : 0} rowGap={1}>
 		{items.map((item, idx) => (
@@ -562,7 +566,7 @@ const ListLevel = ({
 					</Text>
 					<Text
 						color="var(--tt-text, #5a5a66)"
-						fontSize="sm"
+						fontSize={bodyFontSize}
 						lineHeight="1.55"
 						opacity={item.checked ? 0.6 : 1}
 						style={itemStyle}
@@ -571,13 +575,15 @@ const ListLevel = ({
 						dangerouslySetInnerHTML={{ __html: item.html }}
 					/>
 				</Flex>
-				{item.children.length ? <ListLevel items={item.children} ordered={ordered} depth={depth + 1} itemStyle={itemStyle} /> : null}
+				{item.children.length ? (
+					<ListLevel items={item.children} ordered={ordered} depth={depth + 1} itemStyle={itemStyle} bodyFontSize={bodyFontSize} />
+				) : null}
 			</React.Fragment>
 		))}
 	</Flex>
 );
 
-export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
+export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTextBlock[]; bodyFontSize?: 'sm' | 'md' }) => {
 	const limits: RichTextRenderLimits = {
 		remaining: MAX_RENDER_UNITS,
 		textRemaining: MAX_RENDER_TEXT_LENGTH,
@@ -619,14 +625,14 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
 				const style = toStringOr(block.data.style);
 				const checklist = block.type === 'checklist' || style === 'checklist';
 				const items = normalizeListItems(toArray(block.data.items), checklist, limits);
-				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} itemStyle={tuneStyle} />;
+				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} itemStyle={tuneStyle} bodyFontSize={bodyFontSize} />;
 			}
 			if (block.type === 'quote') {
 				return (
 					<Box key={idx} borderLeft="3px solid var(--tt-accent, hotpink)" paddingLeft={3} style={{ textAlign: tuneStyle.textAlign }}>
 						<Text
 							color="var(--tt-ink, #16161a)"
-							fontSize="sm"
+							fontSize={bodyFontSize}
 							fontStyle="italic"
 							lineHeight="1.6"
 							style={tuneStyle}
@@ -683,10 +689,10 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
 											>
 												<Text
 													color={withHeadings && rowIdx === 0 ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
-													fontSize="sm"
+													fontSize={bodyFontSize}
 													fontWeight={withHeadings && rowIdx === 0 ? 750 : 500}
 													sx={inlineMarkupSx}
-											dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell, limits) }}
+													dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell, limits) }}
 												/>
 											</Box>
 										))}
@@ -704,9 +710,9 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
 							⚠️
 						</Text>
 						<Box minWidth={0}>
-							<Text color="#78350f" fontSize="sm" fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title, limits) }} />
+							<Text color="#78350f" fontSize={bodyFontSize} fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title, limits) }} />
 							{block.data.message ? (
-								<Text color="#8a6d3b" fontSize="sm" lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message, limits) }} />
+								<Text color="#8a6d3b" fontSize={bodyFontSize} lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message, limits) }} />
 							) : null}
 						</Box>
 					</Flex>
@@ -754,7 +760,7 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
 				<Text
 					key={idx}
 					color="var(--tt-text, #5a5a66)"
-					fontSize="sm"
+					fontSize={bodyFontSize}
 					lineHeight="1.65"
 					whiteSpace="pre-wrap"
 					style={tuneStyle}

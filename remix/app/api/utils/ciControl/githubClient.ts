@@ -2,6 +2,8 @@ import { createSign } from 'node:crypto';
 
 import type { CiWorkflowKey } from './automationPolicy';
 import { ciProviderReadiness } from './providerReadiness';
+import { featureStackTargetsForSource } from './featureStackRoutingCore';
+import { linkFeatureStackWorkflowRun } from './featureStackStore';
 import { getCiAutomationPolicy, recordCiEvent, upsertCiEntity } from './store';
 import { ciFeatureIdentity } from './webhooks';
 
@@ -92,7 +94,69 @@ export const githubRequest = async <T = any>(path: string, init?: { method?: str
   return payload as T;
 };
 
+export type GitHubWorkflowRunLink = {
+	workflowRunId: number;
+	url: string | null;
+	title: string;
+	status: string;
+	startedAt: string;
+	completedAt: string | null;
+};
+
+export const findFeatureStackWorkflowRunNear = async (value: string | Date): Promise<GitHubWorkflowRunLink | null> => {
+	const wanted = value instanceof Date ? value : new Date(value);
+	if (!Number.isFinite(wanted.getTime())) return null;
+	const repository = repositoryName();
+	const response = await githubRequest<{ workflow_runs?: any[] }>(
+		`/repos/${repository}/actions/workflows/resolve-pr-conflicts.yml/runs?branch=develop&event=workflow_dispatch&per_page=100`
+	);
+	const candidates = (response.workflow_runs ?? [])
+		.map((run) => ({ run, delta: Math.abs(new Date(run.run_started_at ?? run.created_at).getTime() - wanted.getTime()) }))
+		.filter(({ run, delta }) => Number.isSafeInteger(Number(run.id)) && Number.isFinite(delta) && delta <= 120_000)
+		.sort((left, right) => left.delta - right.delta)
+		.slice(0, 5);
+	const inspected = await Promise.all(
+		candidates.map(async ({ run }) => ({
+			run,
+			jobs: (await githubRequest<{ jobs?: any[] }>(`/repos/${repository}/actions/runs/${Number(run.id)}/jobs?per_page=100`)).jobs ?? []
+		}))
+	);
+	const match = inspected.find(({ jobs }) => jobs.some((job) => String(job.name ?? '').includes('Validate the immutable Feature Stack')))?.run;
+	if (!match) return null;
+	return {
+		workflowRunId: Number(match.id),
+		url: typeof match.html_url === 'string' ? match.html_url : null,
+		title: String(match.display_title ?? match.name ?? `Run #${match.id}`),
+		status: String(match.conclusion ?? match.status ?? 'unknown'),
+		startedAt: String(match.run_started_at ?? match.created_at),
+		completedAt: match.status === 'completed' && match.updated_at ? String(match.updated_at) : null
+	};
+};
+
 export const repositoryName = () => (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
+
+export const cancelGitHubWorkflowRun = async (workflowRunId: number) => {
+	if (!Number.isSafeInteger(workflowRunId) || workflowRunId < 1) throw new Error('GitHub workflow run id is invalid');
+	const repository = repositoryName();
+	const path = `/repos/${repository}/actions/runs/${workflowRunId}`;
+	const current = await githubRequest<{ status?: string; conclusion?: string | null }>(path);
+	if (String(current.status ?? '').toLowerCase() === 'completed') {
+		return { cancelled: false as const, status: String(current.conclusion ?? current.status ?? 'completed') };
+	}
+	try {
+		await githubRequest<void>(`${path}/cancel`, { method: 'POST' });
+		return { cancelled: true as const, status: 'cancel_requested' };
+	} catch (error) {
+		// GitHub can finish a run between the status read and cancellation. That
+		// race is already the requested terminal outcome, so prove it before
+		// surfacing a false lifecycle failure.
+		const latest = await githubRequest<{ status?: string; conclusion?: string | null }>(path);
+		if (String(latest.status ?? '').toLowerCase() === 'completed') {
+			return { cancelled: false as const, status: String(latest.conclusion ?? latest.status ?? 'completed') };
+		}
+		throw error;
+	}
+};
 
 const workflowFileByKey = {
   'feature-stack': 'resolve-pr-conflicts.yml',
@@ -106,7 +170,7 @@ const workflowFileByKey = {
 } as const;
 
 const inputAllowlist: Record<CiWorkflowKey, readonly string[]> = {
-  'feature-stack': ['feature_stack_plan_b64'],
+  'feature-stack': ['feature_stack_plan_b64', 'feature_stack_run_id'],
   'resolve-conflicts': ['pr_number', 'branch'],
   'rebase-stack': ['pr_number', 'branch', 'cascade'],
   'promote-features': ['dry_run', 'lookback'],
@@ -163,7 +227,8 @@ export const resolveCiWorkflowDispatch = (
       workflowFile,
       inputs: {
         ...managerInputs('merge-feature-stack'),
-        feature_stack_plan_b64: encoded
+        feature_stack_plan_b64: encoded,
+				feature_stack_run_id: String(selected.feature_stack_run_id ?? '')
       }
     };
   }
@@ -198,26 +263,27 @@ type FeatureStackPullRequest = {
 	base?: { ref?: string };
 };
 
-const featureStackTargetsForSource = (base: string, selectedTargets: string[], autoDecideBranches: boolean) => {
-	if (!autoDecideBranches) return [...selectedTargets];
-	if (base === 'github-actions') return selectedTargets.filter((target) => target === 'github-actions');
-	if (base === 'main') return selectedTargets.filter((target) => target === 'main');
-	if (base === 'develop') return selectedTargets.filter((target) => target === 'develop' || target === 'main');
-	return selectedTargets.filter((target) => target === base);
-};
-
 export const canonicalFeatureStackPlanFromPullRequests = (input: {
   name: string;
   sourcePrNumbers: number[];
   targets: string[];
   pullRequests: FeatureStackPullRequest[];
-  repository: string;
+	repository: string;
 	stackId: string;
+	runId: string;
 	autoDecideBranches: boolean;
 }) => {
   const headRefs = new Set<string>();
-  const sources = input.pullRequests.map((pr, index) => {
+	const sources = input.pullRequests.flatMap((pr, index) => {
     const number = input.sourcePrNumbers[index];
+		if (pr.number !== number) {
+			throw new Error(`Feature Stack source PR #${number} did not match the requested pull request`);
+		}
+		// Saved stacks are intentionally reusable. A source can merge or close
+		// between runs, so omit completed entries while preserving the exact
+		// order of every still-live source. Drafts remain selected in the saved
+		// definition but are not eligible for an immutable merge run yet.
+		if (pr.state !== 'open' || pr.draft === true) return [];
     const head = String(pr.head?.ref ?? '');
     const sha = String(pr.head?.sha ?? '');
 		const base = String(pr.base?.ref ?? '');
@@ -225,9 +291,6 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
 			.trim()
 			.slice(0, 200);
     if (
-			pr.number !== number ||
-			pr.state !== 'open' ||
-			pr.draft === true ||
 			pr.head?.repo?.full_name !== input.repository ||
 			!GIT_REF.test(head) ||
 			!GIT_REF.test(base) ||
@@ -240,27 +303,24 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
     }
     headRefs.add(head);
 		const targets = featureStackTargetsForSource(base, input.targets, input.autoDecideBranches);
-		if (!targets.length) {
-			throw new Error(`Feature Stack source PR #${number} targets ${base}, which is not compatible with any selected target`);
-		}
-		return { base, head, pr: number, sha, targets, title };
+		return targets.length ? [{ base, head, pr: number, sha, targets, title }] : [];
   });
   if (input.targets.some((target) => headRefs.has(target))) {
     throw new Error('A Feature Stack source branch cannot also be a target');
   }
-	for (const target of input.targets) {
-		if (!sources.some((source) => source.targets.includes(target))) {
-			throw new Error(`No selected pull request is compatible with target ${target}`);
-		}
+	if (!sources.length) {
+		throw new Error('No selected pull request is compatible with the selected target branches');
 	}
+	const targets = input.targets.filter((target) => sources.some((source) => source.targets.includes(target)));
 	return {
 		autoDecideBranches: input.autoDecideBranches,
 		autoMerge: true as const,
 		name: input.name,
+		runId: input.runId,
 		sources,
 		stackId: input.stackId,
-		targets: input.targets,
-		version: 2 as const
+		targets,
+		version: 3 as const
 	};
 };
 
@@ -270,6 +330,7 @@ export const buildFeatureStackInputs = async (requestedInputs: Record<string, un
   const rawNumbers = requestedInputs.source_pr_numbers;
   const rawTargets = requestedInputs.targets;
 	const stackId = typeof requestedInputs.stack_id === 'string' ? requestedInputs.stack_id.trim() : '';
+	const runId = typeof requestedInputs.run_id === 'string' ? requestedInputs.run_id.trim() : '';
 	const autoDecideBranches = requestedInputs.auto_decide_branches !== false;
   if (!name || name.length > 80 || hasControlCharacter(name)) {
     throw new Error('Feature Stack name must be 1-80 printable characters');
@@ -277,6 +338,7 @@ export const buildFeatureStackInputs = async (requestedInputs: Record<string, un
 	if (!stackId || !/^ci-feature-stack-[0-9a-f-]{36}$/.test(stackId)) {
 		throw new Error('Feature Stack id is invalid');
   }
+	if (!/^feature-stack-run-[0-9a-f-]{36}$/.test(runId)) throw new Error('Feature Stack run id is invalid');
 	if (!Array.isArray(rawNumbers) || rawNumbers.length < 1) {
 		throw new Error('Feature Stack needs at least one pull request');
 	}
@@ -306,9 +368,10 @@ export const buildFeatureStackInputs = async (requestedInputs: Record<string, un
     pullRequests,
 		repository,
 		stackId,
+		runId,
 		autoDecideBranches
   });
-  return { feature_stack_plan_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64') };
+  return { feature_stack_plan_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64'), feature_stack_run_id: runId };
 };
 
 export const dispatchCiWorkflow = async (input: {
@@ -317,6 +380,7 @@ export const dispatchCiWorkflow = async (input: {
   inputs?: Record<string, unknown>;
   actorId: string;
   externalId?: string;
+	parentId?: string | null;
   requestedAt?: Date;
 }) => {
 	const requestedInputs = input.workflow === 'feature-stack' ? await buildFeatureStackInputs(input.inputs ?? {}) : input.inputs;
@@ -330,6 +394,7 @@ export const dispatchCiWorkflow = async (input: {
   if (!policy.enabled) throw new Error(`The ${input.workflow} automation is disabled`);
   const requestedAt = input.requestedAt ?? new Date();
   const externalId = input.externalId ?? `${input.workflow}:${requestedAt.toISOString()}:${input.actorId}`;
+	const featureStackRunId = input.workflow === 'feature-stack' ? String(inputs.feature_stack_run_id ?? '') : null;
   const dispatch = await upsertCiEntity({
     kind: 'ci-dispatch',
     provider: 'thingtime',
@@ -337,6 +402,7 @@ export const dispatchCiWorkflow = async (input: {
     externalId,
     title: `Dispatch ${input.workflow}`,
     status: 'requested',
+		parentId: input.parentId ?? null,
     occurredAt: requestedAt,
     data: {
       workflow: input.workflow,
@@ -344,6 +410,7 @@ export const dispatchCiWorkflow = async (input: {
       ref,
       controlPlaneRef: DEFAULT_CONTROL_REF,
       executionProvider: policy.executionProvider,
+			featureStackRunId,
       inputs,
       actorId: input.actorId
     }
@@ -372,6 +439,7 @@ export const dispatchCiWorkflow = async (input: {
         externalId,
         title: `Dispatch ${input.workflow}`,
         status: 'accepted',
+				parentId: input.parentId ?? null,
         occurredAt: new Date(),
         data: {
           workflow: input.workflow,
@@ -379,6 +447,7 @@ export const dispatchCiWorkflow = async (input: {
           ref: DEFAULT_CONTROL_REF,
           controlPlaneRef: DEFAULT_CONTROL_REF,
           executionProvider: policy.executionProvider,
+					featureStackRunId,
           workflowRunId: workflowRun.runId,
           inputs,
           actorId: input.actorId
@@ -424,6 +493,7 @@ export const dispatchCiWorkflow = async (input: {
       externalId,
       title: `Dispatch ${input.workflow}`,
       status: 'accepted',
+		parentId: input.parentId ?? null,
       occurredAt: new Date(),
       data: {
         workflow: input.workflow,
@@ -431,6 +501,7 @@ export const dispatchCiWorkflow = async (input: {
         ref,
         controlPlaneRef: DEFAULT_CONTROL_REF,
         executionProvider: policy.executionProvider,
+		featureStackRunId,
         inputs,
         actorId: input.actorId
       }
@@ -464,6 +535,7 @@ export const dispatchCiWorkflow = async (input: {
       externalId,
       title: `Dispatch ${input.workflow}`,
       status: 'failed',
+		parentId: input.parentId ?? null,
       occurredAt: new Date(),
       data: {
         workflow: input.workflow,
@@ -471,6 +543,7 @@ export const dispatchCiWorkflow = async (input: {
         ref,
         controlPlaneRef: DEFAULT_CONTROL_REF,
         executionProvider: policy.executionProvider,
+		featureStackRunId,
         inputs,
         actorId: input.actorId
       }
@@ -672,13 +745,14 @@ export const reconcileGitHubRepository = async (actorId: string) => {
     );
   }
   for (const run of runs.workflow_runs ?? []) {
-    remember(
-      await upsertCiEntity({
+		const title = String(run.display_title ?? run.name ?? `Run #${run.id}`);
+		remember(
+			await upsertCiEntity({
         kind: 'ci-workflow-run',
         provider: 'github',
         repository,
         externalId: String(run.id),
-        title: run.name ?? run.display_title ?? `Run #${run.id}`,
+				title,
         status: run.conclusion ?? run.status ?? 'unknown',
         url: run.html_url,
         occurredAt: run.updated_at ?? run.created_at,
@@ -694,10 +768,24 @@ export const reconcileGitHubRepository = async (actorId: string) => {
           actor: run.actor?.login ?? null,
           startedAt: run.run_started_at ?? run.created_at,
           completedAt: run.status === 'completed' ? run.updated_at : null,
-          reconciledBy: actorId
-        }
-      })
-    );
+					displayTitle: run.display_title ?? null,
+					workflowName: run.name ?? null,
+					reconciledBy: actorId
+				}
+			})
+		);
+		const featureStackRunId = title.match(/\b(feature-stack-run-[0-9a-f-]{36})\b/i)?.[1]?.toLowerCase();
+		if (featureStackRunId) {
+			await linkFeatureStackWorkflowRun({
+				runId: featureStackRunId,
+				workflowRunId: Number(run.id),
+				url: typeof run.html_url === 'string' ? run.html_url : null,
+				title,
+				status: String(run.conclusion ?? run.status ?? 'unknown'),
+				startedAt: run.run_started_at ?? run.created_at,
+				completedAt: run.status === 'completed' ? run.updated_at ?? null : null
+			});
+		}
   }
   for (const deployment of deployments ?? []) {
     remember(

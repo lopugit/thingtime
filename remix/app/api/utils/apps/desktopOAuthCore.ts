@@ -2,6 +2,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 export { appendDesktopAuthorizationResult, normalizeDesktopRedirectUri, normalizeDesktopState, normalizePkceChallenge } from './desktopOAuthRedirect';
 
+// RFC 8252 loopback redirects for installed apps. We deliberately accept IP
+// literals only: `localhost` can be resolved or intercepted differently across
+// machines, while 127.0.0.1 / ::1 are unambiguously local. Commander binds the
+// listener before opening the system browser and registers the exact origin
+// (including its stable, unprivileged port) on its Thingtime app.
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
 
 export const normalizePkceVerifier = (value: unknown): string | null => {

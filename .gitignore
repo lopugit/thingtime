@@ -42,6 +42,7 @@ remix/server/assets/*
 electron/dist/
 electron/release/
 electron/node_modules/
+macos/ThingtimeNode/.build/
 
 tmp/*
 
@@ -64,12 +65,13 @@ iOS/xcuserdata/
 iOS/**/xcuserdata/
 iOS/Thingtime/Resources/Info.plist
 
-# graphify - immutable portable snapshots + untracked compatibility aliases
+# graphify - one active immutable portable snapshot + untracked aliases
 graphify-out/.graphify_*
 graphify-out/.rebuild.lock
+graphify-out/.pending_changes
 graphify-out/.vocab.txt
 # Mutable root files are symlinks created by scripts/graphify for compatibility
-# with ordinary `graphify query`; only content-addressed snapshots are tracked.
+# with ordinary `graphify query`; the wrapper prunes superseded snapshots.
 graphify-out/graph.json
 graphify-out/manifest.json
 graphify-out/GRAPH_REPORT.md

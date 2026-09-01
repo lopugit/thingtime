@@ -4,6 +4,8 @@ import test from 'node:test';
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
 	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentThingUrl,
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
@@ -101,6 +103,20 @@ test('normalises only canonical stable attachment metadata', () => {
 	assert.equal(MAX_POST_ATTACHMENTS, 25);
 });
 
+test('filename preview overrides display text without replacing the immutable filename', () => {
+	const attachment = normalizePublicAttachment({
+		id: 'att-display',
+		name: '7627.jpg',
+		filenamePreview: 'Replacement blades.jpg',
+		size: 42,
+		contentType: 'image/jpeg',
+		mediaKind: 'image'
+	});
+	assert.ok(attachment);
+	assert.equal(attachmentDisplayName(attachment), 'Replacement blades.jpg');
+	assert.equal(attachment.name, '7627.jpg');
+});
+
 test('download rows label the sniffed container instead of application/octet-stream', () => {
 	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/x-msvideo' }), 'AVI video');
 	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/quicktime' }), 'QuickTime video');
@@ -116,6 +132,7 @@ test('download rows label the sniffed container instead of application/octet-str
 test('content links are stable same-origin routes derived only from attachment ids', () => {
 	assert.equal(attachmentContentUrl('a/b ?'), '/api/v1/attachments/content?id=a%2Fb+%3F');
 	assert.equal(attachmentContentUrl('a/b ?', true), '/api/v1/attachments/content?id=a%2Fb+%3F&download=1');
+	assert.equal(attachmentThingUrl('a/b ?'), '/thing/a%2Fb%20%3F');
 });
 
 test('upload errors are fixed client-authored messages', () => {
