@@ -1178,6 +1178,7 @@ jobs:
           # automation branch and can fail under a large open-PR corpus.
           PRIORITY_SYNC_EVENT: >-
             ${{ github.event_name == 'pull_request_target'
+                && github.event.action != 'closed'
                 && github.event.pull_request.head.ref == 'sync/main-into-develop'
                 && github.event.pull_request.base.ref == 'develop'
                 && 'true'

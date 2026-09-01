@@ -523,8 +523,8 @@ function assertWorkflowSource() {
   );
   assert.match(
     source,
-    /PRIORITY_SYNC_EVENT:[\s\S]*pull_request_target[\s\S]*sync\/main-into-develop[\s\S]*develop[\s\S]*'true'[\s\S]*'false'/u,
-    "the exact standing synchronizer event is identified from trusted pull-request context",
+    /PRIORITY_SYNC_EVENT:[\s\S]*pull_request_target[\s\S]*github\.event\.action != 'closed'[\s\S]*sync\/main-into-develop[\s\S]*develop[\s\S]*'true'[\s\S]*'false'/u,
+    "the exact standing synchronizer event is identified from trusted open pull-request context",
   );
   assert.match(
     source,
