@@ -5,9 +5,9 @@
     "semantic_hash": "bcd5fec9d71a4e542da98f89e4d70235"
   },
   ".github/scripts/deploy-develop-pr-preview.mjs": {
-    "mtime": 1788236178.4802728,
-    "ast_hash": "c208376a9817f933a713a69441783270",
-    "semantic_hash": "c208376a9817f933a713a69441783270"
+    "mtime": 1788237168.7262092,
+    "ast_hash": "8bdbc76a12c1f5ecb9b627b712f9b73b",
+    "semantic_hash": ""
   },
   ".github/scripts/promote-features-to-main.mjs": {
     "mtime": 1788235684.8226552,
@@ -60,13 +60,13 @@
     "semantic_hash": "14b9f6d094629a529f4abde76080542e"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1788235684.8246787,
-    "ast_hash": "846005c57137fed1e86cdf1a25cbd562",
-    "semantic_hash": "846005c57137fed1e86cdf1a25cbd562"
+    "mtime": 1788237163.8535755,
+    "ast_hash": "4eeea35f3403bcc1c8b2be0ea70fd811",
+    "semantic_hash": ""
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1788236814.4228125,
-    "ast_hash": "cea1a3d5f46f96cc00567354007310ae",
+    "mtime": 1788237163.8539798,
+    "ast_hash": "a6d2d6f3a21943dab90cd1794af2f6d7",
     "semantic_hash": ""
   },
   "vercel.json": {
@@ -120,8 +120,8 @@
     "semantic_hash": "27276e11cd97fb7e30d1fa045cc938cc"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1788235684.8276193,
-    "ast_hash": "b632d41ae727fa694534db7bfd13ccd8",
+    "mtime": 1788237163.8557103,
+    "ast_hash": "ff08adaa0ea98a316515e9356ce490b2",
     "semantic_hash": ""
   },
   ".github/workflows/sync-main-into-develop.yml": {
@@ -293,5 +293,15 @@
     "mtime": 1788236038.9253354,
     "ast_hash": "7580b7f9d73b616e2b582f600af5fd99",
     "semantic_hash": "7580b7f9d73b616e2b582f600af5fd99"
+  },
+  ".github/scripts/feature-stack-progress.mjs": {
+    "mtime": 1788237163.8528085,
+    "ast_hash": "a9b10bf0052ef17359056061ff783f0e",
+    "semantic_hash": ""
+  },
+  "PRs/534-codex-feature-stack-progress-heartbeats-controller.md": {
+    "mtime": 1788237163.8561223,
+    "ast_hash": "f484eb79dc7e697af579ac513b26d025",
+    "semantic_hash": ""
   }
 }

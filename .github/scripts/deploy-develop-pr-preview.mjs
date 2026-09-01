@@ -351,7 +351,6 @@ const deploymentMetadata = ({ pullRequest, config }) => {
 		githubCommitSha: pullRequest.head.sha,
 		githubPrId: String(pullRequest.number),
 		githubRepoId: String(config.gitRepoId),
-		githubRepositoryId: String(config.repositoryId),
 		thingtimeCustomEnvironmentId: config.customEnvironmentId,
 		[WORKFLOW_DEPLOYMENT_MARKER]: '1',
 		[PREBUILT_DEPLOYMENT_MARKER]: '1'
@@ -370,7 +369,7 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	if (String(deployment.meta?.githubRepoId ?? '') !== String(config.gitRepoId)) {
 		return 'metadata-git-repository-mismatch';
 	}
-	if (String(deployment.meta?.githubRepositoryId ?? '') !== String(config.repositoryId)) {
+	if (String(deployment.meta?.githubRepositoryId ?? deployment.meta?.githubRepoId ?? '') !== String(config.repositoryId)) {
 		return 'metadata-github-repository-mismatch';
 	}
 	if (deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) {
@@ -534,6 +533,7 @@ const runSelfTest = async () => {
 	equal(metadata.githubCommitRef, base.head.ref);
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
+	equal(Object.keys(metadata).length, 10);
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
