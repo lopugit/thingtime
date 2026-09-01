@@ -3815,7 +3815,7 @@ jobs:
           thingtime-ci-router-secret: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
-          allowed-bots: github-actions
+          allowed-bots: "github-actions,thingtime-ci-control"
           claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --max-turns 500

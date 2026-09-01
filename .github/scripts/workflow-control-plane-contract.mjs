@@ -1467,6 +1467,11 @@ export function assertControlPlaneContract() {
     /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"[\s\S]{0,180}remote rename origin snapshot[\s\S]{0,1200}trusted_source=.*refs\/remotes\/origin\/\$head[\s\S]{0,500}update-ref "refs\/remotes\/origin\/\$head" "\$sha"/u,
     "candidate Git objects are admitted as data into a separate shared-object integration repository",
   );
+  assert.match(
+    featureStackMerge,
+    /allowed-bots: "github-actions,thingtime-ci-control"/u,
+    "Feature Stack dispatches trust only GitHub Actions and Thingtime's authenticated CI control bot",
+  );
   assert.equal(
     featureStackMerge.match(/working-directory: integration/gu)?.length,
     4,
