@@ -81,10 +81,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   PR has actually merged. — Codex (AI), 2026-09-01
 
 - **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
-  now disables automatic deployments for every branch except exact `main` and
-  `develop`; eligible PR previews are compiled on GitHub and uploaded as
-  validated prebuilt bundles, while native production and stable-development
-  builds remain intact. — Codex (AI), 2026-09-01
+  now disables automatic deployments with the recursive `**` branch glob for
+  every branch except exact `main` and `develop`; eligible PR previews are
+  compiled on GitHub and uploaded as validated prebuilt bundles, while native
+  production and stable-development builds remain intact. — Codex (AI), 2026-09-01
 
 - **Editor.js block controls now stay at the active line's right edge on
   mobile.** The + and settings buttons no longer drop underneath post text,
