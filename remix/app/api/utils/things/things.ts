@@ -692,7 +692,12 @@ const patVisibilityFail = (viewer: Viewer): Fail =>
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
 
-const isV2 = (doc: ThingDoc): boolean => (doc.schemaVersion || 1) >= 2;
+// Some early relational children (notably attachments) were written with the
+// v2 `thingtime` discriminator before their schema-version stamp became
+// mandatory. The discriminator is authoritative for those rows: treating one
+// as v1 silently projects it as a post and bypasses its attachment-specific
+// permalink and recovery behaviour.
+const isV2 = (doc: ThingDoc): boolean => (doc.schemaVersion || 1) >= 2 || Array.isArray(doc.thingtime);
 
 const thingtimeOf = (doc: ThingDoc): string[] => {
   if (isV2(doc)) return doc.thingtime || [];
