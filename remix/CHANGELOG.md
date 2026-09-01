@@ -647,6 +647,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   recording every merge and skip. See README “Branch automation: the `all`
   wildcard branch”. — Claude (AI), 2026-08-18
 
+### Performance
+
+- **Collection→things migration batches each phase per page (PR #69 review, c16)**:
+  `collectionToThingsMigration.run` processed legacy docs one-by-one with 3-4
+  sequential Mongo round trips each (upsert claim, twin re-read, fresh legacy
+  read, optional replace, delete) plus a growing `$nin` page filter — migrating
+  ~50k accounts cost ~150-200k serial round trips inside a single admin request
+  (timeout territory). The CLAIM phase of each ~200-doc page is now batched: one
+  unordered `bulkWrite` of `$setOnInsert` upserts (deterministic-shareId specs)
+  classified via `upsertedIds`, one `shareId` `$in` re-read for the genuine
+  check, a batched `findExistingMany` lookup for the uuid-shareId waitlist path,
+  and one legacy `_id` `$in` fresh read — those steps drop from O(docs) to
+  O(pages). The CONSUME phase's *mutations* deliberately stay per-doc: a
+  conversion receipt may only certify a delete that verifiably landed, so each
+  survivor still costs its own lease re-assert, exact-snapshot `deleteOne`, and
+  receipt write (plus a CAS `replaceOne` on the repair path). Net effect is
+  roughly halved round trips — about 3 per migrated doc instead of 6-7 — not a
+  per-page constant; batching the guarded delete would require a different
+  receipt protocol and is left as follow-up. Every guard is preserved verbatim: the updatedAt data-loss guard
+  still leaves a raced legacy doc for the next run, and collisions /
+  foreign-held ids / malformed docs still fall back to per-doc skip.
+  Validated with a dry-run + real run against seeded legacy users (3 pages), the
+  race-guard rebuild path, foreign-collision skip, waitlist dedup, and idempotent
+  re-runs — Claude (AI), 2026-07-18.
+  Follow-up: the batched BUILD phase now runs each `spec.toThing` through
+  `conversionBuildOutcomes`, restoring the per-doc `try/catch` the per-doc loop
+  had. A legacy `users` row whose `emailVerificationRequiredBy` is truthy but
+  unparseable makes `buildUserSecure` raise `RangeError: Invalid time value`
+  rather than returning `{ ok: false }`; in a bare page loop that escapes `run()`
+  before the row reaches `skippedIds`, so every re-run re-reads the same page and
+  aborts identically — one corrupt document wedges the whole migration instead of
+  costing it a single skip. Pinned by a regression test — Lopu (AI), 2026-08-29.
+  Follow-up: the consume phase's conversion-receipt LOOKUP is now batched too. It
+  had been grouped with the mutations that must stay per-doc, but it is a pure
+  read keyed only on `(collection, source._id)` — the same key for a page-query
+  snapshot and its re-read — so one `key: { $in: [...] }` query against the
+  unique `settings.key` index resolves a whole page. The freshness comparison
+  (`conversionReceiptCovers`) stays per-document, run against the exact snapshot
+  being judged, and receipts are only ever upserted, so a page-old snapshot can
+  miss a receipt a concurrent runner just wrote but can never invent one — a miss
+  falls through to the stricter semantic-equality path. Measured against a
+  throwaway mongod with server-side profiling: receipt reads drop 250 → 2 over a
+  250-doc/2-page `users-to-things` run, with every other operation count and the
+  full report identical — Lopu (AI), 2026-08-30.
+  [PR #74 details](../PRs/74-claude-batch-collection-things-migration--batch-collection-to-things-migration-per-page.md).
+
 ### Fixed
 
 - **Lopu is the sole wildcard-union listener**: the legacy public **Build all
