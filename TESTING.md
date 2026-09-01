@@ -1700,6 +1700,11 @@ is fixed, and cite the checklist you ran in the PR description.
       result still wins, and `path = value` setters still execute instead of
       becoming searches. A failed typeahead leaves full search + local commands
       usable.
+- [ ] Commander intent ranking: with eight matching chat-message Things and a
+      person whose username is exactly `@lopu`, that person is the first remote
+      row. Exact usernames rank above username/display-name prefixes, which rank
+      above an exact Thing title; server relevance order remains stable within a
+      matching tier.
 - [ ] Commander result visuals use the shared `thingIcon` mapping (including
       filename-aware Thing icons). A person with `avatarUrl` shows that profile
       image with a small `👤` user-type badge; a person without one gets an

@@ -206,6 +206,7 @@ export const CommanderV2 = (props) => {
 				setRemoteSearch({
 					query,
 					results: commanderSearchResults({
+						query,
 						things: thingsResponse?.things,
 						posts: thingsResponse?.posts,
 						people: peopleResponse?.users
