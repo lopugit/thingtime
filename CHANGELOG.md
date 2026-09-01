@@ -19,6 +19,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Moved develop PR preview compilation from Vercel into a secret-free GitHub
+  job. The exact authorized SHA now produces a symlink-preserving
+  `.vercel/output` artifact; a separate protected publisher validates the
+  untrusted archive and uploads it with a pinned Vercel CLI in prebuilt-only
+  mode before applying the SHA-fenced alias and live CORS checks. — Codex (AI),
+  2026-09-01
 - Feature Stack target workers now start after their expected sibling jobs are
   skipped. The protected controller uses the same explicit `!cancelled()`
   dependency guard as the other Lopu workers and validates the durable

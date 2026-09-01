@@ -992,6 +992,38 @@ export function assertControlPlaneContract() {
     /github\.ref == 'refs\/heads\/main'/u,
     "develop preview delegates the manual branch gate to its protected environment",
   );
+  const developPreviewBuildJob = developPreview.match(/\n  build:\n[\s\S]*?\n  controller:\n/u)?.[0] ?? "";
+  assert.match(
+    developPreviewBuildJob,
+    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
+    "develop preview builds only the exact SHA authorized by the protected controller",
+  );
+  assert.match(
+    developPreviewBuildJob,
+    /node scripts\/vercel-build\.mjs[\s\S]*actions\/upload-artifact@[0-9a-f]{40}/u,
+    "develop preview builds Vercel output on GitHub and hands it off through a pinned artifact action",
+  );
+  assert.doesNotMatch(
+    developPreviewBuildJob,
+    /secrets\.|VERCEL_API_TOKEN|THINGTIME_DEVELOP_S3_CORS_PROBE_URL/u,
+    "untrusted product build code receives no preview deployment secret",
+  );
+  const developPreviewControllerJob = developPreview.match(/\n  controller:\n[\s\S]*$/u)?.[0] ?? "";
+  assert.match(
+    developPreviewControllerJob,
+    /environment: vercel-develop-pr-control[\s\S]*actions\/download-artifact@[0-9a-f]{40}/u,
+    "only the protected publisher downloads the GitHub-built artifact",
+  );
+  assert.match(
+    developPreviewControllerJob,
+    /extract-vercel-prebuilt\.py[\s\S]*vercel@59\.10\.0[\s\S]*VERCEL_PREBUILT_DIR/u,
+    "the publisher validates the untrusted archive and uses a pinned prebuilt-only Vercel CLI",
+  );
+  assert.doesNotMatch(
+    developPreviewControllerJob,
+    /checkout[\s\S]{0,240}ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
+    "the secret-bearing publisher never checks out the product branch",
+  );
   const developPreviewController = readFileSync(
     resolve(scripts, "deploy-develop-pr-preview.mjs"),
     "utf8",

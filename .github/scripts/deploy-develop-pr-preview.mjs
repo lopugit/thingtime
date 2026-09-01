@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
-import { readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 const COMMENT_MARKER = '<!-- thingtime-develop-pr-preview -->';
 const WORKFLOW_DEPLOYMENT_MARKER = 'thingtimeDevelopPrPreview';
+const PREBUILT_DEPLOYMENT_MARKER = 'thingtimeGithubPrebuiltPreview';
 const CONTROLLER_DISPATCH_TYPE = 'develop-pr-preview-controller';
 const CONTROLLER_WORKFLOW_PATH = '.github/workflows/develop-pr-preview.yml';
 const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -26,6 +30,7 @@ const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
 const STABLE_DEVELOP_POLL_MS = 5_000;
 const MAX_STABLE_DEPLOYMENTS = 50;
+const execFileAsync = promisify(execFile);
 
 class HttpError extends Error {
 	constructor(status, code) {
@@ -333,33 +338,23 @@ const dispatchPullRequestIssue = (pullRequest, dispatch) => {
 	return null;
 };
 
-const deploymentPayload = ({ pullRequest, config }) => {
+const workflowDeploymentCommitSha = (deployment) => deployment?.meta?.githubCommitSha ?? deployment?.gitSource?.sha ?? null;
+const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubCommitRef ?? deployment?.gitSource?.ref ?? null;
+
+const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
-		name: config.projectName,
-		project: config.projectId,
-		customEnvironmentSlugOrId: config.customEnvironmentId,
-		// PR deployments receive only their exact PR alias. The stable develop alias
-		// is promoted separately after an exact native develop deployment is READY.
-		autoAssignCustomDomains: false,
-		gitSource: {
-			type: 'github',
-			repoId: config.gitRepoId,
-			ref: pullRequest.head.ref,
-			sha: pullRequest.head.sha
-		},
-		meta: {
-			githubDeployment: '1',
-			githubCommitOrg,
-			githubCommitRepo,
-			githubCommitRef: pullRequest.head.ref,
-			githubCommitSha: pullRequest.head.sha,
-			githubPrId: String(pullRequest.number),
-			githubRepoId: String(config.gitRepoId),
-			githubRepositoryId: String(config.repositoryId),
-			thingtimeCustomEnvironmentId: config.customEnvironmentId,
-			[WORKFLOW_DEPLOYMENT_MARKER]: '1'
-		}
+		githubDeployment: '1',
+		githubCommitOrg,
+		githubCommitRepo,
+		githubCommitRef: pullRequest.head.ref,
+		githubCommitSha: pullRequest.head.sha,
+		githubPrId: String(pullRequest.number),
+		githubRepoId: String(config.gitRepoId),
+		githubRepositoryId: String(config.repositoryId),
+		thingtimeCustomEnvironmentId: config.customEnvironmentId,
+		[WORKFLOW_DEPLOYMENT_MARKER]: '1',
+		[PREBUILT_DEPLOYMENT_MARKER]: '1'
 	};
 };
 
@@ -372,8 +367,6 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	if (prNumber !== undefined && String(deployment.meta?.githubPrId ?? '') !== String(prNumber)) {
 		return 'wrong-pull-request';
 	}
-	if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
-	if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
 	if (String(deployment.meta?.githubRepoId ?? '') !== String(config.gitRepoId)) {
 		return 'metadata-git-repository-mismatch';
 	}
@@ -387,18 +380,32 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	if (deployment.meta?.githubCommitOrg !== repositoryOwner || deployment.meta?.githubCommitRepo !== repositoryName) {
 		return 'metadata-repository-name-mismatch';
 	}
-	if (!/^[0-9a-f]{40}$/.test(deployment.gitSource?.sha ?? '')) return 'invalid-git-sha';
-	if (deployment.meta?.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
-	if (deployment.meta?.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
-	if (expectedSha && deployment.gitSource.sha !== expectedSha) return 'wrong-git-sha';
-	if (expectedRef && deployment.gitSource.ref !== expectedRef) return 'wrong-git-ref';
+	if (!/^[0-9a-f]{40}$/.test(deployment.meta?.githubCommitSha ?? '')) return 'invalid-metadata-sha';
+	if (!isSafeHeadRef(deployment.meta?.githubCommitRef)) return 'invalid-metadata-ref';
+	if (deployment.meta?.[PREBUILT_DEPLOYMENT_MARKER] === '1') {
+		if (deployment.gitSource != null) {
+			if (deployment.gitSource.type !== 'github') return 'wrong-git-provider';
+			if (String(deployment.gitSource.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+			if (deployment.gitSource.sha !== deployment.meta.githubCommitSha) return 'metadata-sha-mismatch';
+			if (deployment.gitSource.ref !== deployment.meta.githubCommitRef) return 'metadata-ref-mismatch';
+		}
+	} else {
+		if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
+		if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+		if (deployment.meta.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
+		if (deployment.meta.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
+	}
+	if (expectedSha && workflowDeploymentCommitSha(deployment) !== expectedSha) return 'wrong-git-sha';
+	if (expectedRef && workflowDeploymentCommitRef(deployment) !== expectedRef) return 'wrong-git-ref';
 	return null;
 };
 
 const choosePreferredDeployment = (deployments, expectedSha) =>
 	deployments
 		.filter(
-			(deployment) => deployment.gitSource?.sha === expectedSha && (deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
+			(deployment) =>
+				workflowDeploymentCommitSha(deployment) === expectedSha &&
+				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
 		)
 		.sort((left, right) => {
 			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
@@ -427,7 +434,7 @@ const deploymentListParams = (config, { prNumber = null, sha = null, until = nul
 	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
 	if (sha) {
 		if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Vercel deployment SHA filter is invalid');
-		params.set('sha', sha);
+		params.set(workflowOwned ? 'meta-githubCommitSha' : 'sha', sha);
 	}
 	if (until !== null) params.set('until', String(boundedInteger(until, 'Vercel deployment cursor')));
 	return params;
@@ -522,12 +529,11 @@ const runSelfTest = async () => {
 	truthy(pullRequestMatchesSnapshot(base, snapshot));
 	truthy(!pullRequestMatchesSnapshot({ ...base, head: { ...base.head, sha: 'b'.repeat(40) } }, snapshot));
 
-	const payload = deploymentPayload({ pullRequest: base, config });
-	equal(payload.project, config.projectId);
-	equal(payload.customEnvironmentSlugOrId, config.customEnvironmentId);
-	equal(payload.autoAssignCustomDomains, false);
-	equal(payload.gitSource.sha, base.head.sha);
-	equal(payload.meta[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	const metadata = deploymentMetadata({ pullRequest: base, config });
+	equal(metadata.githubCommitSha, base.head.sha);
+	equal(metadata.githubCommitRef, base.head.ref);
+	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
@@ -625,6 +631,21 @@ const runSelfTest = async () => {
 		}),
 		null
 	);
+	const prebuiltDeployment = {
+		...deployment,
+		meta: { ...deployment.meta, [PREBUILT_DEPLOYMENT_MARKER]: '1' },
+		gitSource: null
+	};
+	equal(
+		deploymentIdentityIssue(prebuiltDeployment, config, {
+			prNumber: base.number,
+			expectedSha: base.head.sha,
+			expectedRef: base.head.ref
+		}),
+		null
+	);
+	equal(workflowDeploymentCommitSha(prebuiltDeployment), base.head.sha);
+	equal(workflowDeploymentCommitRef(prebuiltDeployment), base.head.ref);
 	equal(deploymentIdentityIssue({ ...deployment, projectId: 'prj_wrong' }, config, { prNumber: 201 }), 'wrong-project');
 	equal(
 		deploymentIdentityIssue({ ...deployment, customEnvironment: { id: 'env_wrong', slug: 'develop' } }, config, { prNumber: 201 }),
@@ -687,7 +708,7 @@ const runSelfTest = async () => {
 		limit: '100',
 		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1',
 		'meta-githubPrId': '201',
-		sha: base.head.sha,
+		'meta-githubCommitSha': base.head.sha,
 		until: '123'
 	});
 	equal(Object.fromEntries(deploymentListParams(config, { sha: developSha, workflowOwned: false })), {
@@ -1288,7 +1309,7 @@ const listWorkflowDeployments = async (config, { prNumber = null, sha = null } =
 		}
 		const issue = deploymentIdentityIssue(detail, config, { prNumber: prNumber ?? undefined });
 		if (issue) throw new Error(`Workflow deployment ownership check failed (${issue})`);
-		if (sha && detail.gitSource.sha !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
+		if (sha && workflowDeploymentCommitSha(detail) !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
 		details.push(detail);
 	}
 	return details;
@@ -1546,17 +1567,78 @@ const prepareDeployment = async (config, pullRequest) => {
 	return reusable;
 };
 
+const assertPrebuiltOutput = async (directory) => {
+	const outputDirectory = resolve(directory, '.vercel/output');
+	const [rawConfig, indexHtml] = await Promise.all([
+		readFile(resolve(outputDirectory, 'config.json'), 'utf8'),
+		readFile(resolve(outputDirectory, 'static/index.html'), 'utf8')
+	]);
+	const outputConfig = JSON.parse(rawConfig);
+	if (!Array.isArray(outputConfig.routes)) throw new Error('Prebuilt Vercel output config is missing routes');
+	if (!indexHtml.includes('<div id="root"></div>')) throw new Error('Prebuilt Vercel output is missing the Vite root shell');
+	return outputDirectory;
+};
+
+const deployPrebuiltOutput = async (config, pullRequest) => {
+	const prebuiltDirectory = resolve(requiredEnv('VERCEL_PREBUILT_DIR'));
+	await assertPrebuiltOutput(prebuiltDirectory);
+	await mkdir(resolve(prebuiltDirectory, '.vercel'), { recursive: true });
+	await writeFile(
+		resolve(prebuiltDirectory, '.vercel/project.json'),
+		`${JSON.stringify({ orgId: config.teamId, projectId: config.projectId })}\n`,
+		{ mode: 0o600 }
+	);
+
+	const metadata = deploymentMetadata({ pullRequest, config });
+	const args = [
+		'deploy',
+		'--prebuilt',
+		'--archive=tgz',
+		'--target=develop',
+		'--skip-domain',
+		'--yes',
+		'--scope',
+		config.teamSlug,
+		'--cwd',
+		prebuiltDirectory
+	];
+	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--meta', `${key}=${value}`);
+	}
+
+	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
+		env: {
+			...process.env,
+			VERCEL_ORG_ID: config.teamId,
+			VERCEL_PROJECT_ID: config.projectId,
+			VERCEL_TOKEN: requiredEnv('VERCEL_API_TOKEN')
+		},
+		maxBuffer: 4 * 1024 * 1024,
+		timeout: 10 * 60 * 1000
+	});
+	const candidateUrl = stdout
+		.trim()
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.at(-1);
+	let deploymentHostname;
+	try {
+		const parsed = new URL(candidateUrl);
+		if (parsed.protocol !== 'https:' || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('invalid URL');
+		deploymentHostname = safeHostname(parsed.hostname, 'Prebuilt Vercel deployment URL');
+	} catch {
+		throw new Error('Vercel CLI did not return an exact deployment URL');
+	}
+	if (!deploymentHostname.endsWith('.vercel.app')) throw new Error('Prebuilt deployment URL was outside vercel.app');
+	return deploymentDetail(deploymentHostname);
+};
+
 const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 	if (reusable) return reusable;
-	const payload = deploymentPayload({ pullRequest, config });
 	let created;
 	try {
-		created = await vercelRequest('/v13/deployments?forceNew=1', {
-			method: 'POST',
-			body: payload,
-			retries: 0,
-			accept: [200, 201]
-		});
+		created = await deployPrebuiltOutput(config, pullRequest);
 	} catch (error) {
 		await delay(1500);
 		const reconciled = choosePreferredDeployment(
@@ -1574,14 +1656,13 @@ const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 		if (reconciled) return reconciled;
 		throw new Error('Vercel create response did not identify a deployment');
 	}
-	const detail = await deploymentDetail(created.id);
-	const issue = deploymentIdentityIssue(detail, config, {
+	const issue = deploymentIdentityIssue(created, config, {
 		prNumber: pullRequest.number,
 		expectedSha: pullRequest.head.sha,
 		expectedRef: pullRequest.head.ref
 	});
 	if (issue) throw new Error(`Created Vercel deployment failed identity validation (${issue})`);
-	return detail;
+	return created;
 };
 
 const waitForDeployment = async (config, pullRequest, deployment) => {
@@ -1693,8 +1774,8 @@ const reconcile = async (config) => {
 		if (
 			binding &&
 			binding.deployment.readyState === 'READY' &&
-			binding.deployment.gitSource.sha === pullRequest.head.sha &&
-			binding.deployment.gitSource.ref === pullRequest.head.ref
+			workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
+			workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref
 		) {
 			keeper = binding.deployment;
 		} else if (binding) {
@@ -1828,9 +1909,70 @@ const deploy = async (config, pullRequest) => {
 	}
 };
 
+const writePrepareOutputs = async ({ shouldBuild, pullRequest = null }) => {
+	const outputPath = requiredEnv('GITHUB_OUTPUT');
+	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`];
+	if (pullRequest) {
+		lines.push(`pr_number=${boundedInteger(pullRequest.number, 'PR number')}`);
+		lines.push(`head_sha=${pullRequest.head.sha}`);
+		lines.push(`head_ref=${pullRequest.head.ref}`);
+	}
+	await appendFile(outputPath, `${lines.join('\n')}\n`, { mode: 0o600 });
+};
+
+const prepareBuildPlan = async () => {
+	let config = runtimeConfig();
+	const eventName = requiredEnv('GITHUB_EVENT_NAME');
+	if (eventName === 'schedule' || eventName === 'pull_request_target') {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild not required for ${eventName}`);
+		return;
+	}
+
+	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	let dispatch = null;
+	try {
+		dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild skipped: ${error.reason}`);
+		return;
+	}
+	config = {
+		...config,
+		actor: dispatch?.actor ?? normalizeLogin(process.env.GITHUB_TRIGGERING_ACTOR || requiredEnv('GITHUB_ACTOR'))
+	};
+	const prNumber =
+		eventName === 'workflow_dispatch'
+			? boundedInteger(event.inputs?.pr_number, 'PR number')
+			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
+	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
+	if (dispatchIssue) {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild skipped for stale PR #${prNumber}: ${dispatchIssue}`);
+		return;
+	}
+	try {
+		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
+		return;
+	}
+	await writePrepareOutputs({ shouldBuild: true, pullRequest });
+	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
+};
+
 const main = async () => {
 	if (process.argv.includes('--self-test')) {
 		await runSelfTest();
+		return;
+	}
+	if (process.argv.includes('--prepare')) {
+		await prepareBuildPlan();
 		return;
 	}
 
