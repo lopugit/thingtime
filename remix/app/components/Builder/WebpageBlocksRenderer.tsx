@@ -2,11 +2,12 @@ import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
+import { isSafeUrl } from '../Kinds/safeUrl';
 import type { ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks } from '../Actions/useTtActionClicks';
+import { useTtActionClicks, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
 import { RICH_HTML_SX } from './richHtmlStyles';
@@ -659,7 +660,11 @@ const TYPO_CSS_KEYS: Record<string, string> = {
 	'text-align': 'textAlign',
 	'text-transform': 'textTransform',
 	'font-style': 'fontStyle',
-	'text-decoration': 'textDecoration'
+	'text-decoration': 'textDecoration',
+	// Main's `*` pre-wrap rule lands on the text element itself, so a
+	// white-space set on the block frame never reached it — pill labels
+	// wrapped mid-word inside flex rows
+	'white-space': 'whiteSpace'
 };
 
 const typographyFromCss = (css?: Record<string, string>): Record<string, unknown> | null => {
@@ -667,7 +672,11 @@ const typographyFromCss = (css?: Record<string, string>): Record<string, unknown
 	const out: Record<string, unknown> = {};
 	for (const [cssKey, prop] of Object.entries(TYPO_CSS_KEYS)) {
 		const value = css[cssKey];
-		if (value) out[prop] = value;
+		if (!value) continue;
+		// Main's `.root *` pre-wrap rule ties a text element's own class on
+		// specificity and is injected later, so an author's white-space only
+		// holds when it is marked important
+		out[prop] = prop === 'whiteSpace' && !/!important/.test(value) ? `${value} !important` : value;
 	}
 	return Object.keys(out).length ? out : null;
 };
@@ -712,14 +721,16 @@ const ComponentBlockView = ({
 	block,
 	component,
 	interactive,
-	chrome
+	chrome,
+	onUnowned
 }: {
 	block: WebpageBlock;
 	component: ComponentThingLike | null;
 	interactive: boolean;
 	chrome?: BuilderChrome | null;
+	onUnowned?: TtActionUnownedHandler;
 }) => {
-	const onTtAction = useTtActionClicks();
+	const onTtAction = useTtActionClicks({ onUnowned });
 	const crystal = component?.crystal;
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
 	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
@@ -856,6 +867,9 @@ export type WebpageBlocksRendererProps = {
 	// wire ttAction clicks (owner-viewing surfaces only — the PreviewModal
 	// trust rule: interactive for the page owner, inert for everyone else)
 	interactive?: boolean;
+	// what to do when a delegated click names an action the viewer does not
+	// own (demo surfaces install the suite, then re-run); see useTtActionClicks
+	onTtActionUnowned?: TtActionUnownedHandler;
 	// how native blocks render (site pages pass the app screen; builders pass
 	// a placeholder; /p/ pages omit → native blocks render nothing)
 	renderNative?: (key: string, block: WebpageBlock) => React.ReactNode;
@@ -940,6 +954,29 @@ const BlockView = (
 				</Text>
 			);
 		}
+		// a linked text block is an anchor around the styled text: same
+		// protocol screen as every other untrusted URL, external targets drop
+		// the opener, and the edit canvas never navigates on click
+		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? block.href : null;
+		if (href && !(chrome && chrome.selectedId === block.id)) {
+			const external = /^https?:/i.test(href);
+			body = (
+				<Box
+					as="a"
+					href={href}
+					{...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+					display="block"
+					width="100%"
+					color="inherit"
+					textDecoration="none"
+					_hover={{ textDecoration: 'none', opacity: 0.92 }}
+					onClick={chrome ? (event: React.MouseEvent) => event.preventDefault() : undefined}
+					data-testid="text-block-link"
+				>
+					{body}
+				</Box>
+			);
+		}
 	} else if (block.type === 'media') {
 		const src = block.src || '';
 		if (!src) {
@@ -990,6 +1027,7 @@ const BlockView = (
 				component={componentsByRef[block.component || ''] ?? null}
 				interactive={!!interactive}
 				chrome={chrome}
+				onUnowned={props.onTtActionUnowned}
 			/>
 		);
 	} else if (block.type === 'native') {

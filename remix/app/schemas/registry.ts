@@ -1200,7 +1200,7 @@ const webpageSchema: ThingtimeSchema = {
 			description:
 				`Ordered block tree, max ${MAX_WEBPAGE_BLOCKS} blocks / ${MAX_WEBPAGE_BLOCK_DEPTH} deep: ` +
 				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
-				'text (text + style), or native (built-in screen key) — plus align/maxWidth per block }.'
+				'text (text + style, optional href link), or native (built-in screen key) — plus align/maxWidth per block }.'
 		}
 	],
 	example: {
@@ -4369,6 +4369,11 @@ const isSafeWebpageCssValue = (value: string): boolean => {
 const isSafeWebpageMediaSrc = (value: string): boolean =>
 	/^(https:\/\/|\/(?!\/))/.test(value) && !/\s/.test(value);
 
+// A text block's link target: the media-src screen plus mailto:/tel: (a page
+// button or nav link), never javascript:/data:/protocol-relative.
+const isSafeWebpageHref = (value: string): boolean =>
+	isSafeWebpageMediaSrc(value) || /^(mailto:|tel:)[^\s/][^\s]*$/i.test(value);
+
 const sanitizeWebpageBlock = (
 	input: unknown,
 	depth: number,
@@ -4556,6 +4561,15 @@ const sanitizeWebpageBlock = (
 				return fail(400, `Block ${id} tag must be ${WEBPAGE_TEXT_TAGS.join('/')}`);
 			}
 			block.tag = tag;
+		}
+		// optional link target — the text renders as an anchor (buttons, nav
+		// links); screened like a media src, with mailto:/tel: allowed
+		const href = typeof raw.href === 'string' ? raw.href.trim() : '';
+		if (href) {
+			if (href.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageHref(href)) {
+				return fail(400, `Block ${id} href must be an https, site-relative, mailto:, or tel: link`);
+			}
+			block.href = href;
 		}
 		return { ok: true, block };
 	}
