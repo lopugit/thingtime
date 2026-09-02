@@ -64,6 +64,30 @@ test('safe css url() targets pass, unsafe ones fail', () => {
 	assert.equal(page([{ id: 'u5', type: 'text', text: 'hi', css: { background: 'url(//protocol.relative/x)' } }]).ok, false);
 });
 
+test('text href accepts page links and refuses script/data/plain-http targets', () => {
+	const blocks = okBlocks(
+		page([
+			{ id: 'l1', type: 'text', text: 'Docs', href: 'https://thingtime.com/docs' },
+			{ id: 'l2', type: 'text', text: 'Register', href: '/register' },
+			{ id: 'l3', type: 'text', text: 'Mail', href: 'mailto:hello@example.com' },
+			{ id: 'l4', type: 'text', text: 'Call', href: 'tel:+61400000000' },
+			{ id: 'l5', type: 'text', text: 'Plain', href: '  ' }
+		])
+	);
+	assert.equal(blocks[0].href, 'https://thingtime.com/docs');
+	assert.equal(blocks[1].href, '/register');
+	assert.equal(blocks[2].href, 'mailto:hello@example.com');
+	assert.equal(blocks[3].href, 'tel:+61400000000');
+	// blank hrefs vanish rather than becoming empty anchors
+	assert.equal('href' in blocks[4], false);
+	assert.equal(page([{ id: 'b1', type: 'text', text: 'x', href: 'javascript:alert(1)' }]).ok, false);
+	assert.equal(page([{ id: 'b2', type: 'text', text: 'x', href: 'data:text/html,hi' }]).ok, false);
+	assert.equal(page([{ id: 'b3', type: 'text', text: 'x', href: 'http://plain.example/' }]).ok, false);
+	assert.equal(page([{ id: 'b4', type: 'text', text: 'x', href: '//protocol.relative/x' }]).ok, false);
+	assert.equal(page([{ id: 'b5', type: 'text', text: 'x', href: 'mailto: spaced@example.com' }]).ok, false);
+	assert.equal(page([{ id: 'b6', type: 'text', text: 'x', href: `/${'a'.repeat(3000)}` }]).ok, false);
+});
+
 test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 'm1', type: 'media', src: 'ftp://nope.com/x.png' }]).ok, false);
 	assert.equal(page([{ id: 'm2', type: 'media', src: 'javascript:alert(1)' }]).ok, false);

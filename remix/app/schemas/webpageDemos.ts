@@ -519,20 +519,42 @@ const body = (ctx: Ctx, name: string, text: string, size = 17, extra: Record<str
 	css: { 'font-size': `${size}px`, 'line-height': '1.55', color: ctx.tone.text, ...extra }
 });
 
+// Row containers give every child an equal flex share (the renderer's row
+// model), which is right for columns of content and wrong for labels — a
+// nav link or pill must take exactly its own width. Blocks opt out per item.
+const ROW_ITEM_CSS = { flex: '0 0 auto' } as const;
+
 // pill-shaped call to action: a text block dressed by css (blocks never carry
-// markup; the builder keeps it editable like any other text)
-const button = (ctx: Ctx, name: string, label: string, variant: 'solid' | 'ghost' = 'solid'): DemoBlock => ({
+// markup; the builder keeps it editable like any other text). Every demo
+// button LINKS somewhere — solid pills to /register, ghost pills to /docs —
+// and shrink-wraps to its label: `align` keeps a standalone pill from
+// stretching to the column (100%-wide is the renderer's unaligned default),
+// ROW_ITEM_CSS keeps it from being flexed to a share of a row, and nowrap
+// keeps the label on one line (the renderer forwards it to the text).
+const button = (
+	ctx: Ctx,
+	name: string,
+	label: string,
+	variant: 'solid' | 'ghost' = 'solid',
+	options: { align?: 'start' | 'center' | 'end' | 'stretch'; href?: string } = {}
+): DemoBlock => ({
 	id: ctx.id(name),
 	type: 'text',
 	text: label,
 	style: 'body',
 	tag: 'span',
-	// nowrap: row containers flex their children, and a wrapped pill label
-	// reads as a broken button rather than a narrow one
+	href: options.href || (variant === 'solid' ? '/register' : '/docs'),
+	align: options.align || 'start',
 	css:
 		variant === 'solid'
-			? { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', background: ctx.tone.accent, color: ctx.tone.accentInk, 'font-weight': '700', 'font-size': '15px', 'white-space': 'nowrap' }
-			: { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', border: `1px solid ${ctx.tone.border}`, color: ctx.tone.ink, 'font-weight': '600', 'font-size': '15px', 'white-space': 'nowrap' }
+			? { ...ROW_ITEM_CSS, display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', background: ctx.tone.accent, color: ctx.tone.accentInk, 'font-weight': '700', 'font-size': '15px', 'white-space': 'nowrap', 'text-align': 'center' }
+			: { ...ROW_ITEM_CSS, display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', border: `1px solid ${ctx.tone.border}`, color: ctx.tone.ink, 'font-weight': '600', 'font-size': '15px', 'white-space': 'nowrap', 'text-align': 'center' }
+});
+
+// a nav/footer link label: its own width in the row, and a real link
+const navLink = (ctx: Ctx, name: string, label: string, extra: Record<string, string> = {}): DemoBlock => ({
+	...body(ctx, name, label, 14, { color: ctx.tone.text, 'font-weight': '500', 'white-space': 'nowrap', ...ROW_ITEM_CSS, ...extra }),
+	href: `/${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 });
 
 const container = (
@@ -604,7 +626,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 				eyebrow(ctx, 'eyebrow', ctx.copy.eyebrow, { 'text-align': 'center' }),
 				heading(ctx, 'title', ctx.copy.tagline, 48, { 'text-align': 'center' }),
 				body(ctx, 'blurb', ctx.copy.blurb, 18, { 'text-align': 'center' }),
-				button(ctx, 'primary', ctx.copy.ctaPrimary),
+				button(ctx, 'primary', ctx.copy.ctaPrimary, 'solid', { align: 'center' }),
 				container(ctx, 'stats', 'grid', ctx.copy.stats.map((stat, index) =>
 					container(ctx, `stat-${index}`, 'column', [
 						{ id: ctx.id(`value-${index}`), type: 'text', text: stat.value, style: 'heading', tag: 'h3', css: typo(ctx.tone, 30, 800, { 'text-align': 'center' }) },
@@ -672,12 +694,12 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					card(ctx, `plan-${index}`, [
 						eyebrow(ctx, `pname-${index}`, plan.name),
 						container(ctx, `price-${index}`, 'row', [
-							{ id: ctx.id(`amount-${index}`), type: 'text', text: plan.price, style: 'heading', tag: 'h3', css: typo(ctx.tone, 34, 800, { 'white-space': 'nowrap' }) },
-							body(ctx, `period-${index}`, plan.period, 13, { color: ctx.tone.muted })
+							{ id: ctx.id(`amount-${index}`), type: 'text', text: plan.price, style: 'heading', tag: 'h3', css: typo(ctx.tone, 30, 800, { 'white-space': 'nowrap', ...ROW_ITEM_CSS }) },
+							body(ctx, `period-${index}`, plan.period, 13, { color: ctx.tone.muted, ...ROW_ITEM_CSS })
 						], { gap: 2, css: { 'align-items': 'baseline' } }),
 						body(ctx, `pblurb-${index}`, plan.blurb, 14),
 						html(ctx, `perks-${index}`, `<ul style="margin:8px 0 0;padding-left:18px;color:${ctx.tone.text};font-size:14px;line-height:1.7">${plan.perks.map((perk) => `<li>${perk}</li>`).join('')}</ul>`),
-						button(ctx, `pcta-${index}`, index === 1 ? ctx.copy.ctaPrimary : 'Choose plan', index === 1 ? 'solid' : 'ghost')
+						button(ctx, `pcta-${index}`, index === 1 ? ctx.copy.ctaPrimary : 'Choose plan', index === 1 ? 'solid' : 'ghost', { align: 'stretch' })
 					], index === 1 ? { border: `2px solid ${ctx.tone.accent}` } : {})
 				), { columns: 3, gap: 4 })
 			], { gap: 5, css: { padding: '40px 0' } })
@@ -734,7 +756,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 			container(ctx, 'wrap', 'column', [
 				heading(ctx, 'title', `Ready to try ${ctx.copy.brand}?`, 34, { color: ctx.tone.accentInk, 'text-align': 'center' }),
 				body(ctx, 'blurb', ctx.copy.blurb, 16, { color: ctx.tone.accentInk, opacity: '0.85', 'text-align': 'center' }),
-				{ id: ctx.id('button'), type: 'text', text: ctx.copy.ctaPrimary, style: 'body', tag: 'span', css: { display: 'inline-block', padding: '12px 24px', 'border-radius': '999px', background: ctx.tone.accentInk, color: ctx.tone.accent, 'font-weight': '700' } }
+				{ id: ctx.id('button'), type: 'text', text: ctx.copy.ctaPrimary, style: 'body', tag: 'span', href: '/register', align: 'center', css: { ...ROW_ITEM_CSS, display: 'inline-block', padding: '12px 24px', 'border-radius': '999px', background: ctx.tone.accentInk, color: ctx.tone.accent, 'font-weight': '700', 'white-space': 'nowrap', 'text-align': 'center' } }
 			], { gap: 4, align: 'center', css: { background: ctx.tone.accent, 'border-radius': '24px', padding: '48px 32px' } })
 		],
 		split: (ctx) => [
@@ -905,7 +927,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		minimal: (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				body(ctx, 'legal', `© 2026 ${ctx.copy.brand}`, 13, { color: ctx.tone.muted }),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.text, 'white-space': 'nowrap' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => navLink(ctx, `link-${index}`, link, { 'font-size': '13px', 'font-weight': '400' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
 			], { gap: 4, css: { 'border-top': `1px solid ${ctx.tone.border}`, padding: '20px 0', 'align-items': 'center', 'flex-wrap': 'wrap' } })
 		],
 		'cta-links': (ctx) => [
@@ -914,7 +936,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					heading(ctx, 'title', ctx.copy.ctaPrimary, 26),
 					button(ctx, 'button', ctx.copy.ctaPrimary)
 				], { gap: 4, css: { 'align-items': 'center', 'justify-content': 'space-between', 'flex-wrap': 'wrap' } }),
-				container(ctx, 'links', 'row', ctx.copy.links.map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.muted })), { gap: 4, css: { 'flex-wrap': 'wrap' } })
+				container(ctx, 'links', 'row', ctx.copy.links.map((link, index) => navLink(ctx, `link-${index}`, link, { 'font-size': '13px', color: ctx.tone.muted, 'font-weight': '400' })), { gap: 4, css: { 'flex-wrap': 'wrap' } })
 			], { gap: 5, css: { background: ctx.tone.soft, 'border-radius': '20px', padding: '28px 32px' } })
 		]
 	},
@@ -922,19 +944,19 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		simple: (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				logo(ctx, 'logo'),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text, 'font-weight': '500', 'white-space': 'nowrap' })), { gap: 5, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => navLink(ctx, `link-${index}`, link)), { gap: 5, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
 			], { gap: 4, css: { padding: '14px 0', 'align-items': 'center', 'border-bottom': `1px solid ${ctx.tone.border}` } })
 		],
 		centered: (ctx) => [
 			container(ctx, 'wrap', 'column', [
 				logo(ctx, 'logo'),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 5).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.muted, 'text-transform': 'uppercase', 'letter-spacing': '0.08em', 'white-space': 'nowrap' })), { gap: 5, align: 'center', css: { 'flex-wrap': 'wrap', 'justify-content': 'center' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 5).map((link, index) => navLink(ctx, `link-${index}`, link, { 'font-size': '13px', color: ctx.tone.muted, 'text-transform': 'uppercase', 'letter-spacing': '0.08em', 'font-weight': '400' })), { gap: 5, align: 'center', css: { 'flex-wrap': 'wrap', 'justify-content': 'center' } })
 			], { gap: 3, align: 'center', css: { padding: '20px 0', 'border-bottom': `1px solid ${ctx.tone.border}` } })
 		],
 		'with-cta': (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				{ id: ctx.id('brand'), type: 'text', text: ctx.copy.brand, style: 'heading', tag: 'span', css: typo(ctx.tone, 18, 800) },
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 3).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text, 'white-space': 'nowrap' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } }),
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 3).map((link, index) => navLink(ctx, `link-${index}`, link, { 'font-weight': '400' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } }),
 				button(ctx, 'cta', ctx.copy.ctaPrimary)
 			], { gap: 5, css: { padding: '12px 0', 'align-items': 'center', 'flex-wrap': 'wrap' } })
 		]
@@ -1051,9 +1073,9 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		],
 		pill: (ctx) => [
 			container(ctx, 'wrap', 'row', [
-				body(ctx, 'tag', 'New', 12, { 'font-weight': '800', color: ctx.tone.accentInk, background: ctx.tone.accent, padding: '2px 10px', 'border-radius': '999px' }),
-				body(ctx, 'text', ctx.copy.posts[0].title, 14, { color: ctx.tone.ink, 'font-weight': '500' }),
-				body(ctx, 'arrow', '→', 14, { color: ctx.tone.muted })
+				body(ctx, 'tag', 'New', 12, { 'font-weight': '800', color: ctx.tone.accentInk, background: ctx.tone.accent, padding: '2px 10px', 'border-radius': '999px', ...ROW_ITEM_CSS }),
+				body(ctx, 'text', ctx.copy.posts[0].title, 14, { color: ctx.tone.ink, 'font-weight': '500', 'white-space': 'nowrap', ...ROW_ITEM_CSS }),
+				body(ctx, 'arrow', '→', 14, { color: ctx.tone.muted, ...ROW_ITEM_CSS })
 			], { gap: 3, align: 'center', css: { border: `1px solid ${ctx.tone.border}`, background: ctx.tone.surface, 'border-radius': '999px', padding: '8px 16px', 'align-items': 'center', 'align-self': 'center' } })
 		],
 		gradient: (ctx) => [
@@ -1118,7 +1140,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					artwork(ctx, `art-${index}`, 160),
 					container(ctx, `row-${index}`, 'row', [
 						{ id: ctx.id(`pname-${index}`), type: 'text', text: plan.name, style: 'heading', tag: 'h3', css: typo(ctx.tone, 17, 700) },
-						body(ctx, `price-${index}`, plan.price, 15, { color: ctx.tone.ink, 'font-weight': '600', 'margin-left': 'auto' })
+						body(ctx, `price-${index}`, plan.price, 15, { color: ctx.tone.ink, 'font-weight': '600', 'margin-left': 'auto', ...ROW_ITEM_CSS })
 					], { gap: 2 }),
 					body(ctx, `pblurb-${index}`, plan.blurb, 14, { color: ctx.tone.muted })
 				], { gap: 2 })
@@ -1212,7 +1234,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					container(ctx, `dish-${index}`, 'column', [
 						container(ctx, `row-${index}`, 'row', [
 							{ id: ctx.id(`dname-${index}`), type: 'text', text: plan.name, style: 'heading', tag: 'h3', css: typo(ctx.tone, 18, 700) },
-							body(ctx, `dprice-${index}`, plan.price, 15, { color: ctx.tone.ink, 'margin-left': 'auto' })
+							body(ctx, `dprice-${index}`, plan.price, 15, { color: ctx.tone.ink, 'margin-left': 'auto', ...ROW_ITEM_CSS })
 						], { gap: 3 }),
 						body(ctx, `ddesc-${index}`, plan.perks.join(', '), 14, { color: ctx.tone.muted })
 					], { gap: 1, css: { 'border-bottom': `1px dashed ${ctx.tone.border}`, padding: '12px 0' } })
@@ -1389,7 +1411,7 @@ const COMPONENT_PAGES: Array<{ key: string; title: string; description: string; 
 		description: 'Library cards arranged in a grid with text blocks between.',
 		build: (ctx) => [
 			heading(ctx, 'title', 'Cards from the library', 30),
-			container(ctx, 'grid', 'grid', [0, 1, 2].map((index) => ({ id: ctx.id(`card-${index}`), type: 'component' as const, component: COMPONENT_DEMO_REFS[2], args: { title: ctx.copy.features[index].title, body: ctx.copy.features[index].body } })), { columns: 3, gap: 4 })
+			container(ctx, 'grid', 'grid', [0, 1].map((index) => ({ id: ctx.id(`card-${index}`), type: 'component' as const, component: COMPONENT_DEMO_REFS[2], args: { title: ctx.copy.features[index].title, body: ctx.copy.features[index].body } })), { columns: 2, gap: 4 })
 		]
 	},
 	{

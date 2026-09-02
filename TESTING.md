@@ -4292,6 +4292,28 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       seeded + the /p/ link; GET /admin/webpages/seed reports
       siteSeeded/demosSeeded/demosTotal/suitesSeeded/suitesTotal alongside
       totalSeeded.
+- [ ] Text blocks accept an optional `href` (https, site-relative, mailto:,
+      tel:; javascript:/data:/http: refused — `test:schemas` →
+      webpageBlockGate) and render as an anchor (`data-testid`
+      text-block-link; external targets open in a new tab with noopener; the
+      edit canvas never navigates); the inspector's Link field round-trips
+      it. Every demo pill links (/register, /docs) and every demo nav label
+      links to its slug. Block css `white-space` reaches the text element (a
+      nowrap pill in a flex row stays on one line despite Main's global
+      pre-wrap); standalone pills shrink-wrap via `align` and row labels keep
+      their own width via `flex: 0 0 auto`.
+- [ ] Run-or-install: on a seeded suite page (/p/webpage-demo-suite-<key>)
+      or the gallery preview, a signed-in viewer's control click that finds
+      no owned action (executor: owner-only delegated resolution) installs
+      the suite into their things, re-runs the SAME click, then opens their
+      own copy; signed-out → login. Owned actions run directly. Foreign
+      user pages stay inert for non-owners (`useTtActionClicks` onUnowned,
+      `installSuite`, `routes/p.tsx`).
+- [ ] Demo gallery thumbnails scale to the card (ResizeObserver: scale =
+      box width / 760) — no clipped right edge at any grid column width;
+      layout audit script (scratchpad/audit-demos.js idiom: wrapped pills by
+      Range line count, overflow by scrollWidth, wide pills in columns)
+      reports zero defects across all cards.
 - [ ] Behaviour suites (`schemas/behaviourSuites.ts`, `pnpm --dir remix run
       test:schemas` → behaviourSuites asserts every schema/component/action/
       data/page crystal clears its kind gate in BOTH materialisations): the

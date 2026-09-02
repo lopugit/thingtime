@@ -35,6 +35,9 @@ export interface WebpageBlock {
 	// (render-side sanitised through the allowlist renderer — never trusted raw)
 	tag?: string;
 	html?: string;
+	// text: optional link target (https / site-relative / mailto: / tel:) —
+	// the text renders as an anchor, so a styled text block IS a button
+	href?: string;
 	// media
 	src?: string;
 	alt?: string;

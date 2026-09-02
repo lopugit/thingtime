@@ -6,6 +6,7 @@ import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { BEHAVIOUR_SUITES, materializeSuite, summarizeBehaviourSuite, type BehaviourSuite, type MaterializedSuite } from '~/schemas/behaviourSuites';
+import { installSuite as installSuiteThings, suiteKeyFromActionKey } from './installSuite';
 import {
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
@@ -74,6 +75,24 @@ const suiteComponentsByRef = (materialized: MaterializedSuite): ComponentsByRef 
 const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList; background: string; componentsByRef?: ComponentsByRef }) => {
 	const ref = React.useRef<HTMLDivElement | null>(null);
 	const [visible, setVisible] = React.useState(false);
+	// the canvas is laid out at THUMB_WIDTH and scaled to the card: a fixed
+	// scale clipped the right edge wherever the grid's minmax gave a card less
+	// than 760 × scale, so the scale follows the measured box width instead
+	const [scale, setScale] = React.useState(THUMB_SCALE);
+
+	React.useEffect(() => {
+		const node = ref.current;
+		if (!node) return;
+		const fit = () => {
+			const width = node.clientWidth;
+			if (width > 0) setScale(Math.min(1, width / THUMB_WIDTH));
+		};
+		fit();
+		if (typeof ResizeObserver === 'undefined') return;
+		const observer = new ResizeObserver(fit);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
 
 	React.useEffect(() => {
 		const node = ref.current;
@@ -113,7 +132,7 @@ const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList;
 			data-testid="demo-thumb"
 		>
 			{visible ? (
-				<Box width={`${THUMB_WIDTH}px`} transform={`scale(${THUMB_SCALE})`} transformOrigin="top left" padding="20px 24px">
+				<Box width={`${THUMB_WIDTH}px`} transform={`scale(${scale})`} transformOrigin="top left" padding="20px 24px">
 					<WebpageBlocksRenderer blocks={blocks as WebpageBlock[]} componentsByRef={componentsByRef || {}} />
 				</Box>
 			) : null}
@@ -349,25 +368,9 @@ export default function DemoLibraryPage() {
 		if (!requireUser('install a suite')) return;
 		setBusyKey(`suite:${suite.key}`);
 		try {
+			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
 			const bundle = materializeSuite(suite, 'own');
-			const create = async (payload: Record<string, unknown>): Promise<string> => {
-				const resp: any = await apiRef.current.v1.things.create(payload);
-				if (!resp?.ok) throw resp;
-				return resp?.thing?.id || resp?.id;
-			};
-			const schemaIds = new Map<string, string>();
-			for (const schema of bundle.schemas) schemaIds.set(schema.key, await create({ thingtime: ['schema'], crystal: schema.crystal, acl: ['tt:user'] }));
-			for (const component of bundle.components) await create({ thingtime: ['component'], crystal: component.crystal, acl: ['tt:user'] });
-			for (const action of bundle.actions) await create({ thingtime: ['action'], crystal: action.crystal, acl: ['tt:user'] });
-			for (const entry of bundle.data) {
-				await create({ thingtime: ['data'], crystal: { ...entry.crystal, schemaId: schemaIds.get(entry.schemaKey) }, acl: ['tt:user'] });
-			}
-			const { pageKey: _pageKey, ...pageCrystal } = bundle.page.crystal as Record<string, unknown> & { pageKey?: string };
-			const pageId = await create({
-				thingtime: ['webpage'],
-				crystal: { ...pageCrystal, ...(seededState.suites.has(suite.key) ? { forkOf: bundle.page.shareId } : {}) },
-				acl: ['tt:user']
-			});
+			const pageId = installed.pageId;
 			lopu({
 				title: `${suite.emoji} ${suite.title} installed ✨`,
 				description: `${bundle.schemas.length} schemas · ${bundle.components.length} controls · ${bundle.actions.length} actions · ${bundle.data.length} data things · 1 page — tap a control to run your program.`,
@@ -382,6 +385,28 @@ export default function DemoLibraryPage() {
 			setBusyKey(null);
 		}
 	};
+
+	// a control clicked in a suite preview: a signed-in viewer with no copy of
+	// the program gets the suite installed on the spot, the same click re-runs,
+	// and their own page opens — the modal's controls are never inert for them
+	const onPreviewUnowned = React.useCallback(
+		async (action: string): Promise<boolean> => {
+			const key = suiteKeyFromActionKey(action, BEHAVIOUR_SUITES) || (preview?.kind === 'suite' ? preview.suite.key : null);
+			const suite = key ? BEHAVIOUR_SUITES.find((entry) => entry.key === key) : null;
+			if (!suite || !user?.id) return false;
+			lopu({ title: `Installing the ${suite.emoji} ${suite.title} suite…`, description: 'Your own schemas, controls, actions, and sample data.', status: 'info', duration: 4000 });
+			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
+			lopu({
+				title: `${suite.emoji} ${suite.title} installed ✨`,
+				description: 'Running your click now — your own copy of the page is one tap away.',
+				status: 'success',
+				duration: 8000,
+				link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.pageId)}` }
+			});
+			return true;
+		},
+		[lopu, preview, seededState.suites, user?.id]
+	);
 
 	const seedDemos = async () => {
 		setSeeding(true);
@@ -536,7 +561,7 @@ export default function DemoLibraryPage() {
 								{preview?.kind === 'demo' ? preview.demo.name : preview ? `${preview.suite.emoji} ${preview.suite.title} · behaviour suite` : ''}
 							</Text>
 							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" fontWeight={400}>
-								{preview?.kind === 'demo' ? preview.demo.description : preview ? `${preview.suite.description} Controls are inert in the preview — install the suite to run them as your own programs.` : ''}
+								{preview?.kind === 'demo' ? preview.demo.description : preview ? `${preview.suite.description} ${user?.id ? 'Tap a control: it installs the suite as your own programs and runs.' : 'Sign in and tap a control to install the suite as your own programs.'}` : ''}
 							</Text>
 							<Flex columnGap={2} rowGap={2} flexWrap="wrap" marginTop={2}>
 								{preview?.kind === 'demo' ? (
@@ -565,7 +590,12 @@ export default function DemoLibraryPage() {
 					<ModalBody paddingBottom={8} data-testid="demo-modal-body">
 						{preview ? (
 							<Box width="100%" maxWidth="960px" marginX="auto" whiteSpace="normal">
-								<WebpageBlocksRenderer blocks={previewBlocks as WebpageBlock[]} componentsByRef={previewComponents} />
+								<WebpageBlocksRenderer
+									blocks={previewBlocks as WebpageBlock[]}
+									componentsByRef={previewComponents}
+									interactive={preview.kind === 'suite' && !!user?.id}
+									onTtActionUnowned={preview.kind === 'suite' ? onPreviewUnowned : undefined}
+								/>
 							</Box>
 						) : null}
 					</ModalBody>
