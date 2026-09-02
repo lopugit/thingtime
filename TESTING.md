@@ -4399,3 +4399,35 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
+
+- Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
+  on `/builder/demos`), then open `/builder/demos` → **📱 Apps**: both cards
+  show pages counts, a tagline, **Open /p/<key>** when seeded, **Install app**.
+- Signed OUT: `/p/pokeworld` and `/p/starsalign` render the seeded pages with
+  every bound block in its **signed-out** state (sign-in card), nav links work,
+  no fetch is attempted (Network: no `/actions/run`).
+- Signed IN, not installed: the same pages show the app's **Install** card;
+  pressing it (or any control) installs through the server endpoint and the
+  same URL now serves your copy (`/api/v1/webpages/resolve?id=pokeworld` →
+  `source: "user"`). Re-installing reports `created: 0`.
+- Pokeworld: begin the journey (name ≤7, sprite) → the 11×9 viewport paints
+  with you in the centre; each D-pad press moves one tile (blocked tiles keep
+  the facing), items/signs toast, tall grass eventually spawns a battle; the
+  battle panel shows sprites + HP bars, four moves with PP, balls with counts,
+  items, RUN; catching adds to the party/box and the pokédex; PARTY (make lead,
+  deposit, heal), BAG (use on), POKéDEX (100/page, silhouettes until seen),
+  PC (withdraw), OPTION (name/sprite, teleport by lat/lng, badges). Every
+  control's run lands on `/actions/<id>`.
+- StarsAlign: signed in without a profile → welcome card with the live
+  sun/moon; Settings → save a birth date (future dates refused), find a city
+  (chips), set the place, save again (updates, no duplicate) → Today shows
+  greeting, chips incl. rising, the wheel (svg), the sky rows, transits or the
+  quiet-sky card, houses; School search/section/entry/Combinator; Erase
+  removes the profile and Today returns to the welcome.
+- Layout: check desktop (≥1024) and mobile (375) — the map grid scales with
+  its container, D-pad stays 48px cells, nav wraps, no horizontal scroll.
+- Regression classes: an `if` branch must not evaluate when untaken (a
+  `set` with an empty key inside the untaken branch used to fail the run);
+  the run payload's own `status` must never shadow the HTTP status in scripts.

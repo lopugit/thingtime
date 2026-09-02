@@ -861,6 +861,42 @@ reserved against squatters), refreshes drifted crystals in place, and never
 touches foreign docs. `GET` on the same path returns the census.
 Verification: `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`.
 
+## App suites (Pokeworld + StarsAlign on Thingtime)
+
+Two real apps ship as **installable app suites** — schema things + component
+things + action things + data things + builder pages, defined in
+`remix/app/schemas/appSuites/` and driven by the action domain packs in
+`remix/app/api/utils/actions/packs/` (`astro.*` on `astronomy-engine`,
+`pokeworld.*`). Design notes: `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
+
+Fork-safe setup (no secrets involved):
+
+1. Seed the demo library as an admin — `POST /api/v1/admin/webpages/seed-demos`
+   or the 🌱 button on `/builder/demos`. This writes the seeded system copies
+   of every suite (pages at `/p/pokeworld`, `/p/starsalign`) plus the public
+   content data things (school entries, species). Re-running converges.
+2. Sign in and open `/builder/demos` → **📱 Apps** → **Install app**, or press
+   any control on the seeded page. `POST /api/v1/webpages/suites/install
+   { key }` upserts the whole suite into your things by stable key
+   (idempotent), and the same `/p/<key>` URLs now serve your copy.
+3. Assets load from the original sites (`https://www.pokeworld.center/tiles/…`
+   and `/sprites/…`); no keys, map APIs, or env vars are needed.
+
+Verify end to end against a running stack:
+
+```sh
+node remix/scripts/verify-app-suites.mjs http://127.0.0.1:<web-port>
+```
+
+The script registers a throwaway user, installs both suites, plays (walks
+into an encounter, battles, throws balls), and drives every StarsAlign
+program; set `TT_VERIFY_ADMIN_USER` / `TT_VERIFY_ADMIN_PASS` to an
+`ADMIN_USERNAMES` account to seed first (register that account **before**
+allowlisting it — env admins cannot self-register). If the shared local
+Mongo sits at the 64-index cap, run the stack against a private replica set:
+`mongod --port 27117 --replSet rsapps --dbpath <dir>` + `rs.initiate()` and
+`MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27117/?replicaSet=rsapps&directConnection=true'`.
+
 ## Admin access
 
 Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
