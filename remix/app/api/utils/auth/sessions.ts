@@ -64,14 +64,15 @@ export const getLiveSession = async (jti: string) => {
 // on its own revoke path.
 export const REVOKED_SESSION_REAP_MS = 1000 * 60 * 60 * 24 * 30;
 
-// The $set BODY, not an update document. $ifNull only evaluates inside an
-// aggregation pipeline, so this must always be wrapped — hence the `Set`
-// suffix, and hence revokedSessionPipeline() below, which every caller should
-// reach for instead. Passed to a plain updateOne/updateMany the driver stores
-// the literal { $ifNull: [...] } sub-document into expiresAt: no error, no type
-// complaint, but the field is no longer a Date, so the TTL index skips it and
-// the row is stranded exactly as before the fix — the bug silently returns.
-export const revokedSessionSet = (revokedAt: Date) => ({
+// The $set BODY, not an update document, and module-private so it can only be
+// reached through the wrapped form below. $ifNull evaluates only inside an
+// aggregation pipeline: handed to a plain updateOne/updateMany the driver
+// stores the literal { $ifNull: [...] } sub-document into expiresAt — no error,
+// no type complaint, but the field is no longer a Date, so the TTL index skips
+// it and the row is stranded exactly as before the fix. Keeping this unexported
+// makes that silent regression unreachable from outside this module rather than
+// merely discouraged; callers get revokedSessionPipeline() and cannot get this.
+const revokedSessionSet = (revokedAt: Date) => ({
   revokedAt,
   expiresAt: { $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)] }
 });
