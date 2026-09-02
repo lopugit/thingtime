@@ -112,8 +112,20 @@ assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$
 // `recovery != 'true'` between them -- and demanding adjacency did not make
 // the rule stricter, it just made it permanently red, so it stopped checking
 // anything at all. Scoping to the block is what keeps this strict.
-const featureStackMergeIf =
-	/\n {2}feature_stack_merge:\n(?:.*\n)*? {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow);
+//
+// Take the job's own block first, and only then look inside it for the guard.
+// The body is every following line that is blank or indented past the job
+// header, so the scan stops at the next job instead of running on through the
+// file. That bound is what makes this strict rather than merely non-adjacent:
+// scanning forward from the header for the first `if: >-` will happily cross
+// into a later job, so a `feature_stack_merge` that lost its `if:` altogether
+// would be checked against some other job's guard and this contract would
+// report OK on exactly the regression it exists to catch. The decoy is
+// structural, not bad luck -- `feature_stack_progress` gates on the same two
+// `needs` and today its block is byte-identical to this one.
+const featureStackMergeJob = /\n {2}feature_stack_merge:\n((?: {4,}.*\n|\n)*)/u.exec(workflow);
+assert.ok(featureStackMergeJob, "feature_stack_merge declares a job block");
+const featureStackMergeIf = /^ {4}if: >-\n((?: {6}.*\n)+)/mu.exec(featureStackMergeJob[1]);
 assert.ok(featureStackMergeIf, "feature_stack_merge declares a multi-line if: guard");
 for (const clause of [
 	/^ *!cancelled\(\)\s*\n/u,

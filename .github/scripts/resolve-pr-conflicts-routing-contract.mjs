@@ -1575,9 +1575,12 @@ function assertAdminModelRouting(
     // Nearest enclosing job for a step line. Inside `jobs:` the only
     // two-space-indented bare key is a job name (a job's own `env:`/`steps:`
     // sit at four, its steps at six), so walking back to the first one names
-    // the job that owns this call. In a composite `action.yml` or a shell
-    // runtime there is no such key to match, which is the safe answer: those
-    // files get no exemption at all.
+    // the job that owns this call. Outside `jobs:` it returns whatever
+    // two-space key happens to precede -- `steps` in a composite `action.yml`,
+    // whose `runs:` sits at zero -- so treat the result as a name to compare,
+    // never as proof that a job was found. Only the exact string below is
+    // exempt, so every other answer, right or meaningless, denies the
+    // exemption and applies the generic rule.
     const enclosingJob = (line) => {
       for (let cursor = line; cursor >= 0; cursor -= 1) {
         const header = /^ {2}([A-Za-z0-9_-]+):\s*$/u.exec(lines[cursor]);
@@ -1586,7 +1589,15 @@ function assertAdminModelRouting(
       return null;
     };
     for (let index = 0; index < lines.length; index += 1) {
-      if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+      // Keep this prefix set in step with `aiRuntimePattern` above, which is
+      // what selected these files. It already accepts `control-plane/`; this
+      // rule did not, so `all-branch.yml` was pulled into the scanned set by
+      // its three lopu-agent calls and then every one of them was skipped
+      // here. They do all pass both slots today, so this closes a latent hole
+      // rather than fixing a live one -- but an enforcement pattern narrower
+      // than the selection pattern that feeds it is how a credential rule
+      // silently stops covering a call site.
+      if (!/uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
