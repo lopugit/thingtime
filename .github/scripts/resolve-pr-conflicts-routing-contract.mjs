@@ -281,17 +281,22 @@ function assertCapturedStdoutStaysClean(source, label) {
       .map(({ name }) => name),
   );
   for (const { name, start, end, multiLine } of definitions) {
-    if (!multiLine) {
-      continue;
-    }
     if (!new RegExp(`\\$\\(\\s*${name}\\b`, "u").test(source)) {
       continue;
     }
-    assert.notStrictEqual(
-      end,
-      -1,
-      `${label}:${start + 1}: ${name}() must close at its own indentation`,
-    );
+    // A one-line definition is checked under capture too, not merely collected
+    // into `loud`. The indirect case is the one that actually shipped, but the
+    // direct one -- `emit() { echo "::warning::.."; }` read as `v="$(emit)"` --
+    // is the same defect with one less hop, and skipping it would leave the
+    // guard blind to exactly the terse helper shape the note above says is the
+    // likeliest to end up inside a capture.
+    if (multiLine) {
+      assert.notStrictEqual(
+        end,
+        -1,
+        `${label}:${start + 1}: ${name}() must close at its own indentation`,
+      );
+    }
     for (let line = start; line <= end; line += 1) {
       if (ANNOTATION.test(lines[line])) {
         assert.match(
