@@ -89,6 +89,86 @@ test('a public host cannot redirect the fetch into private space', async () => {
   assert.deepEqual(calls, ['https://example.com/feed.xml'], 'only the first public hop may be fetched');
 });
 
+// --- credentials across a redirect -------------------------------------------
+// Redirects are walked by hand here, so the credential-stripping `fetch` does
+// for free on `redirect: 'follow'` has to be done by hand too. Every
+// token-bearing call in providers.ts is a GET, which is precisely the case
+// that DOES follow a redirect — so without this, one 302 out of a provider
+// (an open redirect on its own domain, a hijacked API subdomain) hands that
+// user's OAuth access token to the host named in Location, and that host only
+// has to be public to pass the target guard.
+
+const mastodonAccount: any = connectionProviderById('mastodon-account');
+
+// Same shape as stubFetch, but keeps each hop's Authorization header — the
+// header is the whole assertion here, so recording only URLs would pass while
+// the token leaked.
+let hops: { url: string; authorization: string | null }[] = [];
+const stubFetchWithHeaders = (impl: (url: string) => Response) => {
+  hops = [];
+  (globalThis as any).fetch = async (url: unknown, init?: any) => {
+    hops.push({ url: String(url), authorization: new Headers(init?.headers).get('authorization') });
+    return impl(String(url));
+  };
+};
+
+const timeline = (body: unknown) =>
+  new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+
+const mastodonStatuses = [{ id: '1', url: 'https://example.com/@a/1', content: 'hi', account: { acct: 'a' } }];
+
+test('an authenticated GET keeps its token on a same-origin redirect', async () => {
+  stubFetchWithHeaders((url) =>
+    url.startsWith('https://example.com/api/v1/timelines/home')
+      ? new Response(null, { status: 302, headers: { location: 'https://example.com/api/v2/timelines/home' } })
+      : timeline(mastodonStatuses)
+  );
+  const result = await mastodonAccount.fetchFeed(
+    { config: { instance: 'example.com' } },
+    { limit: 5, tokens: { accessToken: 'secret-token' } }
+  );
+  assert.equal(result.ok, true);
+  assert.equal(hops.length, 2, 'the same-origin redirect must be followed');
+  assert.equal(hops[0].authorization, 'Bearer secret-token');
+  assert.equal(hops[1].authorization, 'Bearer secret-token', 'a same-origin hop must keep the token');
+});
+
+test('an authenticated GET drops its token on a cross-origin redirect', async () => {
+  stubFetchWithHeaders((url) =>
+    url.startsWith('https://example.com/api/v1/timelines/home')
+      ? new Response(null, { status: 302, headers: { location: 'https://attacker.test/collect' } })
+      : timeline([])
+  );
+  await mastodonAccount.fetchFeed(
+    { config: { instance: 'example.com' } },
+    { limit: 5, tokens: { accessToken: 'secret-token' } }
+  );
+  assert.equal(hops.length, 2, 'the cross-origin hop is still made — only the credential is withheld');
+  assert.equal(hops[0].authorization, 'Bearer secret-token');
+  assert.equal(hops[1].authorization, null, "the user's provider token must never reach another origin");
+});
+
+test('a token dropped cross-origin is not reinstated by a redirect back', async () => {
+  // Stripping keyed to the ORIGINAL origin instead of the previous hop would
+  // hand the token back here, so the round trip is the test.
+  stubFetchWithHeaders((url) => {
+    if (url.startsWith('https://example.com/api/v1/timelines/home')) {
+      return new Response(null, { status: 302, headers: { location: 'https://attacker.test/bounce' } });
+    }
+    if (url === 'https://attacker.test/bounce') {
+      return new Response(null, { status: 302, headers: { location: 'https://example.com/api/v1/back' } });
+    }
+    return timeline([]);
+  });
+  await mastodonAccount.fetchFeed(
+    { config: { instance: 'example.com' } },
+    { limit: 5, tokens: { accessToken: 'secret-token' } }
+  );
+  assert.equal(hops.length, 3);
+  assert.equal(hops[1].authorization, null);
+  assert.equal(hops[2].authorization, null, 'a bounce back to the start must not restore the token');
+});
+
 test('redirects between public hosts still work', async () => {
   stubFetch((url) =>
     url === 'https://example.com/feed.xml'

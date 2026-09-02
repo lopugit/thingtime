@@ -397,16 +397,27 @@ const blockedTargetReason = async (raw: string): Promise<string | null> => {
   return null;
 };
 
+// Credentials must not survive a hop to a different origin. `fetch` strips
+// these itself on `redirect: 'follow'`; following redirects by hand means
+// doing it here too, or the "never replayed to a new origin" rule below holds
+// only for the non-GET half. An authenticated GET is the other half: every
+// token-bearing call in this file is a GET, so a single 302 out of a provider
+// (an open redirect on its own domain, a hijacked API subdomain) would hand
+// that user's OAuth access token to whatever public host the Location names —
+// and a public host is exactly what blockedTargetReason lets through.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
 // One guarded fetch for every outbound provider call: validates the target,
 // then walks redirects by hand re-validating each hop.
 const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
   const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
   const method = init.method || 'GET';
   let target = url;
+  let headers = new Headers(init.headers);
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
     const blocked = await blockedTargetReason(target);
     if (blocked) throw new BlockedTargetError(blocked);
-    const resp = await fetch(target, { ...init, signal, redirect: 'manual' });
+    const resp = await fetch(target, { ...init, headers, signal, redirect: 'manual' });
     if (resp.status < 300 || resp.status > 399) return resp;
     const location = resp.headers.get('location');
     // Only idempotent GETs follow a redirect — a POST carrying client
@@ -418,7 +429,15 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
     // added for: the host on the other end is user-supplied and may be
     // hostile, and it gets one of these per hop.
     await resp.body?.cancel().catch(() => {});
-    target = new URL(location, target).toString();
+    const next = new URL(location, target);
+    // Compare against the origin we just talked to, not the original one, so
+    // credentials dropped on an earlier hop are never reinstated by a later
+    // redirect back to the starting origin.
+    if (next.origin !== new URL(target).origin) {
+      headers = new Headers(headers);
+      for (const name of CREDENTIAL_HEADERS) headers.delete(name);
+    }
+    target = next.toString();
   }
   throw new BlockedTargetError('that URL redirected too many times');
 };
