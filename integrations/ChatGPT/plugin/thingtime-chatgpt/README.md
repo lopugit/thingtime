@@ -109,10 +109,13 @@ remain revocable server-side; each refresh credential is single-use and is
 rotated on renewal. Removing the final connected account revokes the encrypted
 connection record and every access or refresh credential that references it.
 
-In ChatGPT or Codex, use `@Thingtime login` to start the host’s secure OAuth
-browser flow. The callback is bound to the client’s registered redirect and the
-connection page can add multiple named accounts. Use `@Thingtime list accounts`
-to list the authenticated accounts without exposing any token value.
+In Codex, `@Thingtime login` starts the configured server’s native
+`codex mcp login thingtime` OAuth command. It opens the host browser, binds the
+callback to the client’s registered redirect, and the connection page can add
+multiple named accounts. This login command is deliberately separate from MCP
+tool calls, which remain protected until OAuth succeeds. Use
+`@Thingtime list accounts` to list the authenticated accounts without exposing
+any token value.
 
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.
