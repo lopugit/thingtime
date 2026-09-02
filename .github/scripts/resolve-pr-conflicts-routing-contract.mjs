@@ -217,6 +217,28 @@ function assertRoute(name, input, expected) {
 // loud one, and a guard that fails loudly beats one that misses silently.
 const ANNOTATION = /::(?:warning|notice|error)::/u;
 
+// Where a call to a loud helper can start. A diagnostic helper is one that
+// *returns nonzero*, so the shapes that matter are the conditional ones, and
+// they were the gap: `if`/`elif`/`while`/`until` and a leading `!` are how this
+// control plane actually reads such a helper 28 times over. The most pointed
+// miss was `resolve-pr-conflicts.yml`'s own `if ! gh_read_retry --paginate` --
+// the exact line inside `complete_large_pr_files()` whose stream discipline this
+// guard exists to hold. A detector that cannot see the call site it was written
+// for is the silent miss the note above rules out, so the conditional keywords
+// join `then`/`else`/`do` rather than being left to a future drift.
+// A backtick is deliberately NOT a starter. Legacy `` `cmd` `` substitution
+// appears nowhere in the scanned surfaces -- every backtick here opens a
+// markdown code span in a comment, prompt, or annotation string, 147 lines of
+// them -- so accepting one would buy no real call site and would fail the suite
+// on prose like the `fail()` note in resolve-pr-conflicts.yml. `$(helper` is
+// already covered by the `(` in the class, which is the substitution form this
+// control plane uses.
+const CALLS_HELPER = (helper) =>
+  new RegExp(
+    `(?:^|\\|\\||&&|[;(|!]|\\b(?:then|else|elif|do|if|while|until)\\b)\\s*${helper}\\b`,
+    "u",
+  );
+
 // A heredoc body is data, not shell, so a `}` inside it does not close anything.
 // `classify_output()` is the live proof: it wraps a `node - <<'NODE'` program
 // whose `catch {` block closes on a line that is byte-identical to the function's
@@ -311,7 +333,7 @@ function assertCapturedStdoutStaysClean(source, label) {
         }
         assert.doesNotMatch(
           lines[line],
-          new RegExp(`(?:^|\\|\\||&&|[;(|]|\\bthen\\b|\\belse\\b|\\bdo\\b)\\s*${helper}\\b`, "u"),
+          CALLS_HELPER(helper),
           `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so it must not call ${helper}(), which annotates on stdout`,
         );
       }
