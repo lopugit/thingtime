@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 #!/usr/bin/env node
 // Live end-to-end verification of the APP SUITES (Pokeworld + StarsAlign)
 // against a running Thingtime API — FUNDAMENTALS §2: everything goes through
@@ -14,6 +13,8 @@ import { randomBytes } from 'node:crypto';
 // section/entry/combos/erase) as delegated component clicks (source:
 // 'component', owner-only) and assert on the results → resolve the app pages
 // by KEY and confirm the viewer's twins outrank the seeded copies.
+
+import { randomBytes } from 'node:crypto';
 
 const base = (process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:18500').replace(/\/$/, '');
 const adminUser = process.env.TT_VERIFY_ADMIN_USER || null;
