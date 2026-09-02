@@ -27,6 +27,26 @@ export const petMotionEnabled = (general?: { motion?: boolean } | null): boolean
 export const petVisible = (general?: { pet?: boolean } | null): boolean => general?.pet !== false;
 
 /**
+ * Whether the pet belongs in the tree at all — the Pet switch, but only once
+ * the stored answer is actually known.
+ *
+ * Thingtime state restores asynchronously (ThingtimeProvider awaits localforage
+ * and holds `loading` true until it resolves), so every setting reads as its
+ * default until then. Mounting on that default would flash a full-size animated
+ * unicorn into the corner on every single load for exactly the users who
+ * switched it off — the annoying end of the eggs.ts rule this pet is built
+ * around, and worse than simply leaving it on. Staying absent while `loading`
+ * mirrors the drawer, which stays closed until its persisted state restores
+ * (useDrawer/Main) rather than guessing its position and animating twice.
+ *
+ * `petVisible` keeps defaulting to on, so the pet-on majority — including a
+ * stored theme that predates the key — is unaffected beyond appearing one
+ * hydration tick later. A non-boolean `loading` (no provider, as in an embed or
+ * a test harness) reads as "not loading", so the pet still shows.
+ */
+export const petMounted = (loading?: boolean | null, general?: { pet?: boolean } | null): boolean => !loading && petVisible(general);
+
+/**
  * A Chakra `animation` value, or undefined when decorative motion is off —
  * dropping the declaration entirely so no animation is even scheduled.
  *

@@ -1,16 +1,18 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 
+import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useTtCustomClasses, useTtTheme } from '~/hooks/useTtTheme';
 
-import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore';
+import { petAnimation, petInset, petMotionEnabled, petMounted } from './petCore';
 
 /**
  * 🦄 Lopuuuuuuuuuu — an app-wide decorative pet, rendered by Main.
  *
  * Purely ornamental: `pointerEvents: none` and a low z-index keep it under all
- * real chrome (nav 10050, DevKit 99999) and out of every interaction. Motion is
- * opt-out twice over, per docs/design/DESIGN_LANGUAGE.md and the eggs.ts house
- * rule that delight is "never annoying, always polite about motion":
+ * real chrome (nav 9999, Commander 10050, DevKit 99999) and out of every
+ * interaction. Motion is opt-out twice over, per docs/design/DESIGN_LANGUAGE.md
+ * and the eggs.ts house rule that delight is "never annoying, always polite
+ * about motion":
  *   - `prefers-reduced-motion` via CSS, so it lands on the first paint
  *   - the theme's Motion switch (Settings → Motion), so it is user-controllable
  * With motion off the pet stays put and simply doesn't animate.
@@ -22,6 +24,9 @@ import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore'
  */
 export const LopuuuPet = () => {
 	const { theme } = useTtTheme();
+	// Stored settings arrive asynchronously, so the Pet switch is only readable
+	// once hydration resolves — see petMounted.
+	const { loading } = useThingtime();
 	const motion = petMotionEnabled(theme?.general);
 	// Above the early return: hooks must run in the same order on every render,
 	// and the pet unmounts below when it is switched off.
@@ -29,7 +34,7 @@ export const LopuuuPet = () => {
 
 	// Unmount rather than hide: a display:none pet would still cost the three
 	// infinite animations (one of them a filter: hue-rotate sweep) on every page.
-	if (!petVisible(theme?.general)) return null;
+	if (!petMounted(loading, theme?.general)) return null;
 
 	return (
 		<Box

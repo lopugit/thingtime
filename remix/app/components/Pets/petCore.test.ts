@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore';
+import { petAnimation, petInset, petMotionEnabled, petMounted, petVisible } from './petCore';
 
 test('decorative motion follows the theme switch and defaults to on', () => {
 	assert.equal(petMotionEnabled({ motion: true }), true);
@@ -20,6 +20,31 @@ test('the pet can be switched off entirely, and defaults to on', () => {
 	assert.equal(petVisible({}), true);
 	assert.equal(petVisible(undefined), true);
 	assert.equal(petVisible(null), true);
+});
+
+test('the pet stays absent until the stored Pet switch is actually readable', () => {
+	// the whole point: while thingtime is still restoring, every setting reads
+	// as its default, so mounting on it flashes the pet at the users who
+	// switched it off. Nothing mounts until loading resolves.
+	assert.equal(petMounted(true, { pet: false }), false);
+	assert.equal(petMounted(true, { pet: true }), false);
+	assert.equal(petMounted(true, undefined), false);
+
+	// once restored, it is exactly the Pet switch again
+	assert.equal(petMounted(false, { pet: true }), true);
+	assert.equal(petMounted(false, { pet: false }), false);
+	assert.equal(petMounted(false, {}), true);
+	assert.equal(petMounted(false, undefined), true);
+	assert.equal(petMounted(false, null), true);
+});
+
+test('a missing loading flag means "not loading", not "never show the pet"', () => {
+	// outside a ThingtimeProvider (embeds, harnesses) loading is absent — the
+	// pet must not be permanently suppressed by a signal that never arrives
+	assert.equal(petMounted(undefined, { pet: true }), true);
+	assert.equal(petMounted(null, { pet: true }), true);
+	// but an explicit off still wins
+	assert.equal(petMounted(undefined, { pet: false }), false);
 });
 
 test('visibility and motion are independent switches', () => {
