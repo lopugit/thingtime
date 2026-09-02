@@ -1572,6 +1572,19 @@ function assertAdminModelRouting(
     );
 
     const lines = runtime.split("\n");
+    // Nearest enclosing job for a step line. Inside `jobs:` the only
+    // two-space-indented bare key is a job name (a job's own `env:`/`steps:`
+    // sit at four, its steps at six), so walking back to the first one names
+    // the job that owns this call. In a composite `action.yml` or a shell
+    // runtime there is no such key to match, which is the safe answer: those
+    // files get no exemption at all.
+    const enclosingJob = (line) => {
+      for (let cursor = line; cursor >= 0; cursor -= 1) {
+        const header = /^ {2}([A-Za-z0-9_-]+):\s*$/u.exec(lines[cursor]);
+        if (header) return header[1];
+      }
+      return null;
+    };
     for (let index = 0; index < lines.length; index += 1) {
       if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
         continue;
@@ -1584,7 +1597,17 @@ function assertAdminModelRouting(
       // fallback while the vault is down -- masking exactly the outage the probe
       // exists to catch. Exempt it, but require it to still be vault-driven, so
       // this stays a checked exception rather than an unconditional skip.
-      if (/^\s*id:\s*live_probe\s*$/mu.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
+      //
+      // The exemption is keyed on the JOB as well as the step id, because a
+      // bare `id: live_probe` is not an identity: any step in any job may
+      // adopt that id, and a real secret-bearing worker that did would
+      // silently shed both fallback-slot assertions below while this contract
+      // stayed green. A job boundary cannot be adopted that way. Rename or
+      // drop `verify_credential_vault` and the probe simply stops being
+      // exempt -- it then fails the generic rule, which is the fail-closed
+      // direction for a credential contract.
+      const inVaultProbeJob = enclosingJob(index) === "verify_credential_vault";
+      if (inVaultProbeJob && /^\s*id:\s*live_probe\s*$/mu.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
         assert.match(
           call,
           /thingtime-ci-router-secret:/u,
