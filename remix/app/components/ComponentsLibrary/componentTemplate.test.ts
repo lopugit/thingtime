@@ -223,3 +223,23 @@ test('ttActionInputs spend the shared budget, not a fresh one per node', () => {
 		`ttActionInputs produced ${produced} values, above the ${MAX_RESOLVED_VALUES} shared budget`
 	);
 });
+
+test('nested ttEach flattens into one list of nodes (a grid of rows of tiles)', () => {
+	const template = {
+		tag: 'div',
+		children: [{ ttEach: { arg: 'rows', node: { ttEach: { arg: 'item', node: { tag: 'img', props: { src: '{item.url}' } } } } } }]
+	};
+	const resolved = resolveTemplate(template, { rows: [[{ url: 'https://a/1.png' }, { url: 'https://a/2.png' }], [{ url: 'https://a/3.png' }]] }) as { children: unknown[] };
+	assert.equal(resolved.children.length, 3);
+	assert.deepEqual(resolved.children.map((child: any) => child.props.src), ['https://a/1.png', 'https://a/2.png', 'https://a/3.png']);
+});
+
+test('ttEach binds item/index/count and dotted tokens read nested scope', () => {
+	const template = { ttEach: { arg: 'result.items', node: { tag: 'li', children: ['{n}/{count} {item.name} {first}'] } } };
+	const resolved = resolveTemplate(template, { result: { items: [{ name: 'a' }, { name: 'b' }] } }) as any[];
+	assert.deepEqual(resolved.map((node) => node.children[0]), ['1/2 a true', '2/2 b false']);
+	const empty = resolveTemplate({ ttEach: { arg: 'result.items', node: 'x', empty: 'none' } }, { result: { items: [] } });
+	assert.equal(empty, 'none');
+	const ops = resolveTemplate({ ttIf: { arg: 'hp', op: 'gt', value: 50, then: 'high', else: 'low' } }, { hp: 51 });
+	assert.equal(ops, 'high');
+});

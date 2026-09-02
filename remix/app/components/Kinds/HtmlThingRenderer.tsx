@@ -60,6 +60,11 @@ const ALLOWED_TAGS = new Set([
 	'figure',
 	'figcaption',
 	'label',
+	// a FORM GROUP: the ttAction click wrapper reads named fields from the
+	// control's closest fieldset (else the whole component), so one component
+	// can hold several independent forms
+	'fieldset',
+	'legend',
 	'input',
 	'textarea',
 	'select',
@@ -69,10 +74,16 @@ const ALLOWED_TAGS = new Set([
 	'svg',
 	'path',
 	'circle',
+	'ellipse',
 	'rect',
 	'line',
 	'polyline',
-	'polygon'
+	'polygon',
+	// svg text + grouping: pure drawing primitives with no URL or script
+	// surface (a chart wheel, a badge, a stat ring)
+	'text',
+	'tspan',
+	'g'
 ]);
 
 const ALLOWED_PROPS = new Set([
@@ -92,6 +103,24 @@ const ALLOWED_PROPS = new Set([
 	'value',
 	'checked',
 	'disabled',
+	// form-field props: a NAMED field inside a component root is what the
+	// trusted ttAction click wrapper reads into the run inputs
+	// (useTtActionClicks) — inert markup otherwise, no URL or JS sink
+	'name',
+	'min',
+	'max',
+	'step',
+	'maxLength',
+	'required',
+	'readOnly',
+	'htmlFor',
+	'selected',
+	'autoComplete',
+	'inputMode',
+	'pattern',
+	'role',
+	'aria-label',
+	'aria-hidden',
 	'rows',
 	'cols',
 	'controls',
@@ -118,6 +147,19 @@ const ALLOWED_PROPS = new Set([
 	'ry',
 	'points',
 	'xmlns',
+	'transform',
+	'opacity',
+	'fillOpacity',
+	'strokeOpacity',
+	'strokeDasharray',
+	'textAnchor',
+	'dominantBaseline',
+	'fontSize',
+	'fontWeight',
+	'fontFamily',
+	'letterSpacing',
+	'dx',
+	'dy',
 	// the ONLY data-* attributes allowed through: the component ttAction
 	// binding (componentTemplate.ts) — inert markup that a trusted-surface
 	// click wrapper reads to run an action AS the viewer. Values are plain
@@ -178,6 +220,27 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 	return out;
 };
 
+// Form fields render UNCONTROLLED: a template's `value` / `checked` becomes
+// the field's initial value so people can actually type into it (a React
+// `value` without onChange is read-only), and the click wrapper reads the
+// live DOM value by `name` when a control fires. `option` keeps `value` —
+// that is the option's submit value, not a field state.
+const FIELD_TAGS = new Set(['input', 'textarea', 'select']);
+
+const fieldProps = (tag: string, props: Record<string, unknown>): Record<string, unknown> => {
+	if (!FIELD_TAGS.has(tag)) return props;
+	const out: Record<string, unknown> = { ...props };
+	if ('value' in out) {
+		out.defaultValue = out.value;
+		delete out.value;
+	}
+	if ('checked' in out) {
+		out.defaultChecked = out.checked === true || out.checked === 'true' || out.checked === 'checked';
+		delete out.checked;
+	}
+	return out;
+};
+
 export type HtmlThingNode =
 	| string
 	| number
@@ -207,7 +270,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	}
 
-	const props = sanitizeProps(node.props);
+	const props = fieldProps(tag, sanitizeProps(node.props));
 
 	if (VOID_TAGS.has(tag)) {
 		return React.createElement(tag, { ...props, key });

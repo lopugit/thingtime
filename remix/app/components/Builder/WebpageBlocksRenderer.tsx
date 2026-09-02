@@ -2,15 +2,19 @@ import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
+import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import type { ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks } from '../Actions/useTtActionClicks';
+import { useTtActionClicks, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { useApi } from '~/hooks/useApi';
+import { readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
 import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
+import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
 
 // Draws a webpage block tree. Component blocks resolve their referenced
 // component thing's template through the existing arg DSL and draw ONLY
@@ -659,7 +663,11 @@ const TYPO_CSS_KEYS: Record<string, string> = {
 	'text-align': 'textAlign',
 	'text-transform': 'textTransform',
 	'font-style': 'fontStyle',
-	'text-decoration': 'textDecoration'
+	'text-decoration': 'textDecoration',
+	// Main's `*` pre-wrap rule lands on the text element itself, so a
+	// white-space set on the block frame never reached it — pill labels
+	// wrapped mid-word inside flex rows
+	'white-space': 'whiteSpace'
 };
 
 const typographyFromCss = (css?: Record<string, string>): Record<string, unknown> | null => {
@@ -667,7 +675,11 @@ const typographyFromCss = (css?: Record<string, string>): Record<string, unknown
 	const out: Record<string, unknown> = {};
 	for (const [cssKey, prop] of Object.entries(TYPO_CSS_KEYS)) {
 		const value = css[cssKey];
-		if (value) out[prop] = value;
+		if (!value) continue;
+		// Main's `.root *` pre-wrap rule ties a text element's own class on
+		// specificity and is injected later, so an author's white-space only
+		// holds when it is marked important
+		out[prop] = prop === 'whiteSpace' && !/!important/.test(value) ? `${value} !important` : value;
 	}
 	return Object.keys(out).length ? out : null;
 };
@@ -708,18 +720,129 @@ for (const [key, style] of Object.entries(TEXT_STYLES)) {
 	TEXT_STYLE_TYPO[key] = typo;
 }
 
+// A SOURCE-BOUND block: the page runtime runs `block.source.action` as the
+// viewer (delegated, owner-only — exactly a ttAction click with no click) on
+// load and again whenever any control on the page reports a run, and the
+// template sees the result as `result` plus `state` / `error` / `last` /
+// `viewer` / `query`. Optimistic paint: the last result for this page+block
+// paints from localStorage before the fetch lands, and the fresh value
+// replaces it (house rule — never a spinner when a last-known value exists).
+// Nothing runs off a trusted surface: `interactive` false (builder canvas,
+// gallery thumbnails, someone else's page) keeps the block inert with
+// state 'inert', and a signed-out viewer gets state 'signed-out' so the
+// template can offer the sign-in.
+type BlockSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
+
+const useBlockSource = (
+	block: WebpageBlock,
+	argValues: Record<string, unknown>,
+	interactive: boolean
+): { scope: Record<string, unknown> } => {
+	const runtime = useWebpageRuntime();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const sourceKey = JSON.stringify(block.source || null);
+	const source = block.source;
+	const active = !!source && interactive;
+	const [state, setState] = React.useState<{ status: BlockSourceState; result: unknown; error: string | null }>(() => ({
+		status: !source ? 'inert' : !runtime.viewer.signedIn ? 'signed-out' : !interactive ? 'inert' : 'loading',
+		result: source ? readSourceCache(runtime.pageId, block.id) : undefined,
+		error: null
+	}));
+	// inputs interpolate {arg} tokens against the block args and {query.x}
+	// against the URL — the same substitution the template itself gets
+	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
+	const inputs = React.useMemo(() => {
+		if (!source?.inputs) return {};
+		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
+		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
+	}, [inputsKey]);
+	const manual = source?.refresh === 'manual';
+	// 'interval' sources tick on their own clock (bounded by the gate) on top
+	// of the runtime's version — a clock or live tally refreshes without a
+	// click and without touching `last`
+	const intervalMs = source?.refresh === 'interval' ? Math.max(MIN_WEBPAGE_SOURCE_INTERVAL_MS, Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Number(source.intervalMs) || DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS)) : 0;
+	const [tick, setTick] = React.useState(0);
+	React.useEffect(() => {
+		if (!intervalMs || !interactive || !runtime.viewer.signedIn) return;
+		const handle = window.setInterval(() => setTick((current) => current + 1), intervalMs);
+		return () => window.clearInterval(handle);
+	}, [intervalMs, interactive, runtime.viewer.signedIn]);
+	const runVersion = manual ? 0 : runtime.version + tick * 1_000_003;
+	const signedIn = runtime.viewer.signedIn;
+	const pageId = runtime.pageId;
+	const blockId = block.id;
+
+	React.useEffect(() => {
+		if (!source) return;
+		// signed-out wins over inert: the template offers the sign-in even on
+		// a seeded page that is not (yet) interactive for this viewer
+		if (!signedIn) {
+			setState((current) => (current.status === 'signed-out' ? current : { ...current, status: 'signed-out' }));
+			return;
+		}
+		if (!active) {
+			setState((current) => (current.status === 'inert' ? current : { ...current, status: 'inert' }));
+			return;
+		}
+		let cancelled = false;
+		setState((current) => (current.result === undefined || current.status === 'signed-out' ? { ...current, status: 'loading' } : current));
+		(async () => {
+			try {
+				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick });
+				const response: any = await runtime.load(shareKey, () => apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
+				if (cancelled) return;
+				if (response?.status === 'ok') {
+					writeSourceCache(pageId, blockId, response.result ?? null);
+					setState({ status: 'ok', result: response.result ?? null, error: null });
+				} else {
+					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
+				}
+			} catch (error: unknown) {
+				if (cancelled) return;
+				const message = (error as { error?: string; message?: string })?.error || (error as { message?: string })?.message || '';
+				const unowned = /no action you own matches/i.test(message);
+				setState((current) => ({ ...current, status: unowned ? 'not-installed' : 'error', error: unowned ? null : message || 'The source action failed' }));
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal and the interval tick; runtime.load is version-keyed
+	}, [active, signedIn, sourceKey, inputsKey, runVersion, pageId, blockId]);
+
+	const scope = React.useMemo(
+		() => ({
+			result: state.result,
+			state: state.status,
+			error: state.error,
+			last: runtime.last,
+			viewer: runtime.viewer,
+			query: runtime.query,
+			installing: runtime.installing,
+			hasSource: !!source
+		}),
+		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source]
+	);
+	return { scope };
+};
+
 const ComponentBlockView = ({
 	block,
 	component,
 	interactive,
-	chrome
+	chrome,
+	onUnowned
 }: {
 	block: WebpageBlock;
 	component: ComponentThingLike | null;
 	interactive: boolean;
 	chrome?: BuilderChrome | null;
+	onUnowned?: TtActionUnownedHandler;
 }) => {
-	const onTtAction = useTtActionClicks();
+	const onTtAction = useTtActionClicks({ onUnowned });
 	const crystal = component?.crystal;
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
 	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
@@ -732,10 +855,11 @@ const ComponentBlockView = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
 	);
+	const source = useBlockSource(block, argValues, interactive);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
-		return resolveTemplate(crystal.render, argValues);
-	}, [crystal?.render, argValues]);
+		return resolveTemplate(crystal.render, { ...argValues, ...source.scope });
+	}, [crystal?.render, argValues, source.scope]);
 
 	// Inline text editing INSIDE components: double-click a piece of rendered
 	// text and, when it matches a string/text arg's current value verbatim, a
@@ -856,6 +980,9 @@ export type WebpageBlocksRendererProps = {
 	// wire ttAction clicks (owner-viewing surfaces only — the PreviewModal
 	// trust rule: interactive for the page owner, inert for everyone else)
 	interactive?: boolean;
+	// what to do when a delegated click names an action the viewer does not
+	// own (demo surfaces install the suite, then re-run); see useTtActionClicks
+	onTtActionUnowned?: TtActionUnownedHandler;
 	// how native blocks render (site pages pass the app screen; builders pass
 	// a placeholder; /p/ pages omit → native blocks render nothing)
 	renderNative?: (key: string, block: WebpageBlock) => React.ReactNode;
@@ -940,6 +1067,34 @@ const BlockView = (
 				</Text>
 			);
 		}
+		// a linked text block is an anchor around the styled text: same
+		// protocol screen as every other untrusted URL, external targets drop
+		// the opener, and the edit canvas never navigates on click
+		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? block.href : null;
+		if (href && !(chrome && chrome.selectedId === block.id)) {
+			// external = leaves this origin, decided on the RESOLVED url rather
+			// than a scheme prefix: a stored `/\host` href (written before the
+			// gate refused the backslash form) resolves off-site, and it must
+			// still get the new tab + dropped opener every other off-site link
+			// gets instead of silently replacing the viewer's tab.
+			const external = isExternalHref(href);
+			body = (
+				<Box
+					as="a"
+					href={href}
+					{...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+					display="block"
+					width="100%"
+					color="inherit"
+					textDecoration="none"
+					_hover={{ textDecoration: 'none', opacity: 0.92 }}
+					onClick={chrome ? (event: React.MouseEvent) => event.preventDefault() : undefined}
+					data-testid="text-block-link"
+				>
+					{body}
+				</Box>
+			);
+		}
 	} else if (block.type === 'media') {
 		const src = block.src || '';
 		if (!src) {
@@ -990,6 +1145,7 @@ const BlockView = (
 				component={componentsByRef[block.component || ''] ?? null}
 				interactive={!!interactive}
 				chrome={chrome}
+				onUnowned={props.onTtActionUnowned}
 			/>
 		);
 	} else if (block.type === 'native') {
@@ -1016,8 +1172,17 @@ const BlockView = (
 			<BlockList {...props} blocks={block.children || []} containerId={block.id} parentDirection={block.direction || 'column'} />
 		);
 		if (block.direction === 'grid') {
+			// the authored column count is the desktop layout; phones fold a grid
+			// to one column and small tablets to at most two, so a 3–4 column
+			// section never squeezes its cells to a few characters wide
+			const columns = block.columns || 2;
+			const cols = (count: number) => `repeat(${Math.max(1, count)}, minmax(0, 1fr))`;
 			body = (
-				<Grid templateColumns={`repeat(${block.columns || 2}, minmax(0, 1fr))`} gap={block.gap ?? 4} width="100%">
+				<Grid
+					templateColumns={columns > 1 ? { base: cols(1), sm: cols(Math.min(columns, 2)), md: cols(columns) } : cols(1)}
+					gap={block.gap ?? 4}
+					width="100%"
+				>
 					{children}
 				</Grid>
 			);

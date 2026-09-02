@@ -39,6 +39,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `/migrations` (dry run, then confirm) to move existing rows and reclaim the
   index files; boot alone only frees the retired indexes.
 
+### 2026-09-02 — App suites: Pokeworld + StarsAlign on Thingtime — Claude (AI)
+
+- Grouped summary; details in `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
+- **Apps are installable suites**: multi-page behaviour suites with `app`
+  metadata (`remix/app/schemas/appSuites/`), seeded as public system copies,
+  installed idempotently by `POST /api/v1/webpages/suites/install`; pages
+  resolve by key (`/p/pokeworld`, `/p/starsalign`) with the viewer's twin ahead
+  of the seed. Seeding also writes 418 school entries + 386 species as public
+  data things.
+- **Page runtime**: source-bound component blocks, form-field gathering on
+  ttAction clicks, `last`/`viewer`/`query` template scope, `ttEach`/`ttIf`
+  ops/`ttFormat`, uncontrolled form fields, `$refresh`/`$install`.
+- **Action grammar v2**: `compute`, `things.delete`, `each`, `fail`, `when`,
+  `{ ttExpr }` expressions + `astro.*`/`pokeworld.*` packs, filtered/public
+  `things.search`, `$viewer`; caps raised (40 steps, depth 16, 100 ops,
+  templates 2000 nodes / 48KB / depth 48, `actions.run` 240/min).
+- Local dev: `scripts/verify-app-suites.mjs` (52 live checks). The shared local
+  Mongo can sit at the 64-index cap; run e2e against a private replica set.
 
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 
