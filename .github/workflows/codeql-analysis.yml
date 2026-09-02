@@ -197,7 +197,17 @@ jobs:
                 analysis_ref="refs/pull/$PR_NUMBER/head"
                 analysis_sha="$live_head_sha"
                 checkout_ref="$analysis_ref"
-                echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+                # Report the two facts the block now keeps apart. Saying "no
+                # merge ref" for a ref that is merely stale is what made the
+                # PR #557 incident hard to read: the log claimed the ref was
+                # absent on the line directly after announcing it was stale,
+                # which hid that a live pull_request run was analyzing that
+                # very ref. Only a PR GitHub cannot merge is refless.
+                if [ "$mergeable_pr" = true ]; then
+                  echo "PR #$PR_NUMBER has a stale merge ref and reached the exact-head fallback anyway; a pull_request run may be analyzing its merge ref concurrently."
+                else
+                  echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+                fi
               fi
 
               if [ "$analyze" = true ]; then
