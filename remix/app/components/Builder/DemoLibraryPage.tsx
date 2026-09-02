@@ -72,7 +72,14 @@ const DemoThumb = ({ demo }: { demo: WebpageDemo }) => {
 			{ rootMargin: '400px 0px' }
 		);
 		observer.observe(node);
-		return () => observer.disconnect();
+		// browsers throttle observer callbacks in hidden/background documents —
+		// a card that is on screen must never stay blank, so the page's own
+		// (paginated, ≤36) cards mount on a short fallback timer regardless
+		const fallback = window.setTimeout(() => setVisible(true), 1200);
+		return () => {
+			observer.disconnect();
+			window.clearTimeout(fallback);
+		};
 	}, [visible]);
 
 	return (

@@ -672,7 +672,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					card(ctx, `plan-${index}`, [
 						eyebrow(ctx, `pname-${index}`, plan.name),
 						container(ctx, `price-${index}`, 'row', [
-							{ id: ctx.id(`amount-${index}`), type: 'text', text: plan.price, style: 'heading', tag: 'h3', css: typo(ctx.tone, 34, 800) },
+							{ id: ctx.id(`amount-${index}`), type: 'text', text: plan.price, style: 'heading', tag: 'h3', css: typo(ctx.tone, 34, 800, { 'white-space': 'nowrap' }) },
 							body(ctx, `period-${index}`, plan.period, 13, { color: ctx.tone.muted })
 						], { gap: 2, css: { 'align-items': 'baseline' } }),
 						body(ctx, `pblurb-${index}`, plan.blurb, 14),
@@ -693,7 +693,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 					card(ctx, `plan-${index}`, [
 						container(ctx, `head-${index}`, 'row', [
 							{ id: ctx.id(`pname-${index}`), type: 'text', text: plan.name, style: 'heading', tag: 'h3', css: typo(ctx.tone, 18, 700) },
-							{ id: ctx.id(`amount-${index}`), type: 'text', text: `${plan.price} ${plan.period}`, style: 'body', css: { 'font-size': '14px', color: ctx.tone.muted, 'margin-left': 'auto' } }
+							{ id: ctx.id(`amount-${index}`), type: 'text', text: `${plan.price} ${plan.period}`, style: 'body', css: { 'font-size': '14px', color: ctx.tone.muted, 'margin-left': 'auto', 'white-space': 'nowrap' } }
 						], { gap: 3, css: { 'align-items': 'baseline' } }),
 						body(ctx, `pblurb-${index}`, `${plan.blurb} ${plan.perks.join(' · ')}`, 14)
 					])
