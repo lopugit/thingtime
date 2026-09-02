@@ -17,7 +17,7 @@ import {
 } from '~/schemas/webpageDemos';
 import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
-import { WebpageBlocksRenderer, type ComponentsByRef } from './WebpageBlocksRenderer';
+import { WebpageBlocksRenderer, buildComponentsByRef, type ComponentsByRef } from './WebpageBlocksRenderer';
 import type { WebpageBlock } from './webpageBlocks';
 
 // /builder/demos — the builder DEMO LIBRARY: every catalog demo (sections,
@@ -27,7 +27,9 @@ import type { WebpageBlock } from './webpageBlocks';
 // (schemas/webpageDemos, schemas/behaviourSuites), so the gallery paints
 // instantly from the modules; GET /api/v1/webpages/demos then reconciles
 // which entries are seeded on this deployment (those open at /p/ and in the
-// builder directly). "Use this template" clones a demo, and "Install suite"
+// builder directly) and hands back the platform library components the
+// component-kind demos reference — the one part of a demo that lives in the
+// DB rather than in code. "Use this template" clones a demo, and "Install suite"
 // clones a whole bundle, into the viewer's own things through the ordinary
 // things write path — the same call the builder's New page makes — so both
 // work before any seed runs and never mutate the shared seed.
@@ -120,14 +122,28 @@ const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList;
 
 type DemoBlockList = WebpageDemo['blocks'];
 
-const DemoCard = ({ demo, seeded, onPreview, onUse, busy }: { demo: WebpageDemo; seeded: boolean; onPreview: () => void; onUse: () => void; busy: boolean }) => {
+const DemoCard = ({
+	demo,
+	seeded,
+	onPreview,
+	onUse,
+	busy,
+	componentsByRef
+}: {
+	demo: WebpageDemo;
+	seeded: boolean;
+	onPreview: () => void;
+	onUse: () => void;
+	busy: boolean;
+	componentsByRef: ComponentsByRef;
+}) => {
 	const family = WEBPAGE_DEMO_FAMILIES.find((entry) => entry.key === demo.family);
 	const id = webpageDemoShareId(demo.slug);
 	const blockCount = React.useMemo(() => countDemoBlocks(demo.blocks), [demo.blocks]);
 	return (
 		<Flex {...CARD_STYLES} flexDirection="column" rowGap={3} padding={3} minWidth={0} data-testid="demo-card" data-demo-slug={demo.slug}>
 			<Box cursor="pointer" onClick={onPreview} role="button" aria-label={`Preview ${demo.name}`}>
-				<Thumb blocks={demo.blocks} background={demo.previewBg} />
+				<Thumb blocks={demo.blocks} background={demo.previewBg} componentsByRef={componentsByRef} />
 			</Box>
 			<Flex flexDirection="column" rowGap={1} minWidth={0}>
 				<Text color="var(--tt-ink, #16161a)" fontWeight={700} fontSize="sm" noOfLines={1} minWidth={0}>
@@ -223,6 +239,10 @@ export default function DemoLibraryPage() {
 	const [search, setSearch] = React.useState(searchParams.get('q') || '');
 	const [shown, setShown] = React.useState(PAGE_SIZE);
 	const [seededState, setSeededState] = React.useState<SeededState>({ seeded: new Set(), suites: new Set(), seededCount: 0, total: demos.length });
+	// the platform library components the component-kind demos reference — the
+	// catalog can paint everything else from code, but these live in the DB, so
+	// they arrive with the same reconcile that brings the seeded flags
+	const [libraryComponents, setLibraryComponents] = React.useState<ComponentsByRef>({});
 	const [preview, setPreview] = React.useState<Preview | null>(null);
 	const [busyKey, setBusyKey] = React.useState<string | null>(null);
 	const [seeding, setSeeding] = React.useState(false);
@@ -241,6 +261,7 @@ export default function DemoLibraryPage() {
 			if (!response.ok) return;
 			const data = await response.json();
 			if (!data?.ok || !Array.isArray(data.demos)) return;
+			setLibraryComponents(buildComponentsByRef(data));
 			setSeededState({
 				seeded: new Set(data.demos.filter((entry: any) => entry.seeded).map((entry: any) => entry.slug)),
 				suites: new Set((Array.isArray(data.suites) ? data.suites : []).filter((entry: any) => entry.seeded).map((entry: any) => entry.key)),
@@ -293,7 +314,7 @@ export default function DemoLibraryPage() {
 		return false;
 	};
 
-	const useTemplate = async (demo: WebpageDemo) => {
+	const copyTemplate = async (demo: WebpageDemo) => {
 		if (!requireUser('use a template')) return;
 		setBusyKey(demo.slug);
 		try {
@@ -378,7 +399,10 @@ export default function DemoLibraryPage() {
 
 	const previewBlocks = preview ? (preview.kind === 'demo' ? preview.demo.blocks : (preview.materialized.page.crystal.blocks as DemoBlockList)) : [];
 	const previewBg = preview ? (preview.kind === 'demo' ? preview.demo.previewBg : String(preview.materialized.page.crystal.previewBg || '')) : '';
-	const previewComponents = React.useMemo(() => (preview?.kind === 'suite' ? suiteComponentsByRef(preview.materialized) : {}), [preview]);
+	const previewComponents = React.useMemo(
+		() => (preview?.kind === 'suite' ? suiteComponentsByRef(preview.materialized) : libraryComponents),
+		[preview, libraryComponents]
+	);
 	const previewSeeded = preview ? (preview.kind === 'demo' ? seededState.seeded.has(preview.demo.slug) : seededState.suites.has(preview.suite.key)) : false;
 	const previewSeededId = preview ? (preview.kind === 'demo' ? webpageDemoShareId(preview.demo.slug) : preview.materialized.page.shareId) : '';
 	const notSeeded = seededState.total + BEHAVIOUR_SUITES.length - seededState.seededCount - seededState.suites.size;
@@ -486,8 +510,9 @@ export default function DemoLibraryPage() {
 							demo={demo}
 							seeded={seededState.seeded.has(demo.slug)}
 							onPreview={() => setPreview({ kind: 'demo', demo })}
-							onUse={() => useTemplate(demo)}
+							onUse={() => copyTemplate(demo)}
 							busy={busyKey === demo.slug}
+							componentsByRef={libraryComponents}
 						/>
 					))}
 				</Box>
@@ -514,7 +539,7 @@ export default function DemoLibraryPage() {
 							</Text>
 							<Flex columnGap={2} rowGap={2} flexWrap="wrap" marginTop={2}>
 								{preview?.kind === 'demo' ? (
-									<Button size="xs" onClick={() => useTemplate(preview.demo)} isLoading={busyKey === preview.demo.slug} data-testid="demo-modal-use">
+									<Button size="xs" onClick={() => copyTemplate(preview.demo)} isLoading={busyKey === preview.demo.slug} data-testid="demo-modal-use">
 										Use template ✨
 									</Button>
 								) : preview ? (

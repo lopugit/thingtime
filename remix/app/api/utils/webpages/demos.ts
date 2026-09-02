@@ -1,5 +1,6 @@
 import { getThingsCollection } from '../mongodb/collections';
-import { fail, type Fail } from '../things/things';
+import { fail, type Fail, type PublicThing } from '../things/things';
+import { resolveBlockComponents } from './webpages';
 import { COMPONENT_KEY_PATTERN, MAX_COMPONENT_KEY_CHARS } from '~/schemas/registry';
 import {
 	BEHAVIOUR_SUITES,
@@ -10,6 +11,7 @@ import {
 	type MaterializedSuite
 } from '~/schemas/behaviourSuites';
 import {
+	COMPONENT_DEMO_REFS,
 	WEBPAGE_DEMO_FAMILIES,
 	getWebpageDemo,
 	getWebpageDemos,
@@ -22,10 +24,11 @@ import {
 } from '~/schemas/webpageDemos';
 
 // Read model for the builder demo library: the deterministic catalogs
-// (schemas/webpageDemos + schemas/behaviourSuites) joined with ONE projection
-// query for which demos are seeded on this deployment. The catalogs are code,
-// so listing never touches the DB for content — only the seeded census does,
-// and it is bounded by the catalog size.
+// (schemas/webpageDemos + schemas/behaviourSuites) joined with two bounded
+// queries — one projection for which demos are seeded on this deployment, and
+// one batched lookup of the handful of platform library components the
+// component-kind demos reference. The catalogs themselves are code, so no
+// demo content is ever read from the DB.
 
 export type ListedWebpageDemo = WebpageDemoSummary & { seeded: boolean };
 export type ListedBehaviourSuite = BehaviourSuiteSummary & { seeded: boolean };
@@ -37,6 +40,13 @@ export type ListWebpageDemosResult = {
 	families: Array<WebpageDemoFamily & { count: number }>;
 	demos: ListedWebpageDemo[];
 	suites: ListedBehaviourSuite[];
+	// the platform library components the component-kind demos reference,
+	// resolved the way /webpages/resolve resolves a page's blocks — feed both
+	// into buildComponentsByRef to draw those demos. A null ref means that
+	// componentKey is not seeded on this deployment, so the block draws
+	// nothing (the "not found" card is builder chrome, never a viewer's view).
+	components: PublicThing[];
+	refs: Record<string, string | null>;
 	// present only for ?slug= — the full block tree for "use this template"
 	demo?: ListedWebpageDemo & { crystal: Record<string, unknown> };
 	// present only for ?suite= — the installable bundle (own-mode refs) plus
@@ -81,6 +91,12 @@ export const listWebpageDemos = async (query: {
 	if (suiteKey && !singleSuite) return fail(404, 'Behaviour suite not found');
 
 	const seeded = await seededDemoShareIds();
+	// resolved anonymously on purpose: this endpoint's contract is that every
+	// caller sees the same catalog, and the platform library is public anyway
+	const library = await resolveBlockComponents(
+		null,
+		COMPONENT_DEMO_REFS.map((ref) => ({ type: 'component', component: ref }))
+	);
 	const all = getWebpageDemos();
 	const demos = all
 		.filter((demo) => (!family || demo.family === family) && (!kind || demo.kind === kind))
@@ -96,7 +112,9 @@ export const listWebpageDemos = async (query: {
 		seededCount: all.filter((demo) => seeded.has(webpageDemoShareId(demo.slug))).length,
 		families: webpageDemoFamilyCounts(),
 		demos,
-		suites
+		suites,
+		components: library.components,
+		refs: library.refs
 	};
 	if (single) {
 		result.demo = { ...summarizeWebpageDemo(single), seeded: seeded.has(webpageDemoShareId(single.slug)), crystal: webpageDemoCrystal(single) };

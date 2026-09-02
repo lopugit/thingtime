@@ -111,6 +111,15 @@ const resolveComponents = async (
 	return { components, refs: resolved };
 };
 
+// Same batched resolution for a block list that is not a stored page — the
+// demo library resolves the library components its catalog demos reference so
+// a gallery thumbnail draws the same component things /p/ would.
+export const resolveBlockComponents = async (
+	viewer: Viewer,
+	blocks: unknown
+): Promise<{ components: PublicThing[]; refs: Record<string, string | null> }> =>
+	resolveComponents(viewer, { crystal: { blocks } } as unknown as ThingDoc);
+
 const resultFor = async (
 	viewer: Viewer,
 	doc: ThingDoc | null,

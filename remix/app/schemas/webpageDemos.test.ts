@@ -10,6 +10,7 @@ import {
 	validateThingtimeCrystal
 } from './registry';
 import {
+	COMPONENT_DEMO_REFS,
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
 	getWebpageDemo,
@@ -18,7 +19,8 @@ import {
 	webpageDemoCrystal,
 	webpageDemoFamilyCounts,
 	webpageDemoPageKey,
-	webpageDemoShareId
+	webpageDemoShareId,
+	type DemoBlock
 } from './webpageDemos';
 
 // The library's contract: a few hundred demos, every one of which the real
@@ -37,8 +39,8 @@ test('every demo clears validateThingtimeCrystal(["webpage"]) unchanged', () => 
 	for (const demo of getWebpageDemos()) {
 		const crystal = webpageDemoCrystal(demo);
 		const validated = validateThingtimeCrystal(['webpage'], crystal);
-		assert.equal(validated.ok, true, `${demo.slug}: ${validated.ok === false ? validated.error : ''}`);
-		if (validated.ok === false) continue;
+		// assert.ok narrows the union, so the crystal below needs no second guard
+		assert.ok(validated.ok, `${demo.slug}: ${validated.ok === false ? validated.error : ''}`);
 		// the gate must not have had to drop or rewrite anything — seeds and
 		// viewer forks then share byte-identical blocks
 		assert.deepEqual(validated.crystal.blocks, demo.blocks, `${demo.slug}: gate rewrote the block tree`);
@@ -72,6 +74,31 @@ test('every family in the registry has demos and every demo names a registered f
 		assert.ok(demo.tags.includes(demo.family) && demo.tags.includes('demo'), `${demo.slug} tags miss family/demo`);
 	}
 	assert.ok(counts.find((family) => family.kind === 'page')!.count >= 20, 'expected at least 20 full-page demos');
+});
+
+// api/utils/webpages/demos resolves exactly COMPONENT_DEMO_REFS to hand the
+// gallery its ref → component map, so a component block naming anything else
+// would draw nothing (an unresolved ref is invisible outside the builder — the
+// "not found" card is edit chrome). Keep the two in lockstep.
+test('component-block demos reference only the declared library component keys', () => {
+	const refs = new Set<string>();
+	const walk = (blocks: DemoBlock[]) => {
+		for (const block of blocks) {
+			if (block.type === 'component') refs.add(String(block.component || ''));
+			if (block.children) walk(block.children);
+		}
+	};
+	for (const demo of getWebpageDemos()) walk(demo.blocks);
+	assert.ok(refs.size > 0, 'no demo references a library component');
+	for (const ref of refs) assert.ok(COMPONENT_DEMO_REFS.includes(ref), `${ref} is not in COMPONENT_DEMO_REFS`);
+	for (const ref of COMPONENT_DEMO_REFS) {
+		// the platform library names every entry <library>-<family>-<variant>;
+		// a family stem like "thingtime-card" is not a componentKey and resolves
+		// to nothing
+		assert.match(ref, COMPONENT_KEY_PATTERN, ref);
+		assert.ok(ref.split('-').length >= 3, `${ref} looks like a family stem, not a seeded componentKey`);
+		assert.ok(refs.has(ref), `${ref} is declared but no demo uses it`);
+	}
 });
 
 test('the catalog is deterministic and memoised', () => {

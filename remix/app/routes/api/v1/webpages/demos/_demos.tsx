@@ -15,7 +15,9 @@ import { listWebpageDemos } from '~/api/utils/webpages/demos';
 //   ?suite=<key>   one behaviour suite WITH its installable bundle (schemas,
 //                  components, actions, data, page — own-mode references)
 //
-// Every response also lists the behaviour suites (summary + seeded flag).
+// Every response also lists the behaviour suites (summary + seeded flag) and
+// components/refs — the platform library components the component-kind demos
+// reference, in the same shape /webpages/resolve returns them.
 // Public and read-only: the catalogs are code, the seeded census is one
 // indexed projection query. The gallery paints the catalog before this answers.
 export const loader = async ({ request }: { request: Request }) => {

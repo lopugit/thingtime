@@ -1345,9 +1345,29 @@ const PAGES: Array<{ key: string; title: string; description: string; sections: 
 ];
 
 // Component-block demos reference LIBRARY component keys (the components-db
-// seed) — unresolved refs render as edit-chrome placeholders, so these pages
-// stay valid before the component seed runs and light up after it.
-const COMPONENT_DEMO_REFS = ['thingtime-button-solid', 'thingtime-button-outline', 'thingtime-card', 'thingtime-badge', 'thingtime-input', 'thingtime-avatar'];
+// seed). The library names every entry `<library>-<family>-<variant>`, so a
+// ref must be a whole seeded componentKey — a family stem like
+// `thingtime-card` matches nothing. An unresolved ref renders as NOTHING for a
+// viewer (the "not found" card is edit chrome — WebpageBlocksRenderer only
+// draws it when the builder passes chrome), so a wrong key here shows an empty
+// demo rather than a placeholder. Keep the per-block args below in step with
+// the referenced component's own arg names.
+export const COMPONENT_DEMO_REFS = [
+	'thingtime-button-solid',
+	'thingtime-button-outline',
+	'thingtime-card-basic',
+	'thingtime-badge-solid',
+	'thingtime-input-text',
+	'thingtime-avatar-status'
+];
+
+// thingtime-avatar-status draws `initials`, not a full name — one- or
+// two-word demo names both fold to a two-letter monogram.
+const monogram = (name: string): string => {
+	const words = name.trim().split(/\s+/).filter(Boolean);
+	if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
+	return (words[0] || '').slice(0, 2).toUpperCase();
+};
 
 const COMPONENT_PAGES: Array<{ key: string; title: string; description: string; build: (ctx: Ctx) => DemoBlock[] }> = [
 	{
@@ -1391,7 +1411,7 @@ const COMPONENT_PAGES: Array<{ key: string; title: string; description: string; 
 		description: 'Native text and containers around library badges and avatars.',
 		build: (ctx) => [
 			container(ctx, 'head', 'row', [
-				{ id: ctx.id('avatar'), type: 'component', component: COMPONENT_DEMO_REFS[5], args: { name: ctx.copy.team[0].name } },
+				{ id: ctx.id('avatar'), type: 'component', component: COMPONENT_DEMO_REFS[5], args: { initials: monogram(ctx.copy.team[0].name) } },
 				container(ctx, 'names', 'column', [
 					{ id: ctx.id('name'), type: 'text', text: ctx.copy.team[0].name, style: 'heading', tag: 'h3', css: typo(ctx.tone, 18, 700) },
 					{ id: ctx.id('badge'), type: 'component', component: COMPONENT_DEMO_REFS[3], args: { label: ctx.copy.team[0].role } }

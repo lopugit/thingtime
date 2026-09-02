@@ -2276,6 +2276,29 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'webpages-demos-library-components',
+    name: 'Demo library resolves every component key it references',
+    description:
+      'Component-kind demos reference platform library component things by componentKey, and the response carries components[] + refs so a client can draw them. Resolution is all-or-nothing: on a deployment where the library is seeded every ref resolves, so a partially-null refs map means the catalog names a componentKey the library does not have (a demo that renders empty). A fresh DB with no library seeded resolves none, which is also correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => {
+        if (body?.ok !== true || !body?.refs || typeof body.refs !== 'object' || !Array.isArray(body?.components)) return false;
+        const entries = Object.entries(body.refs as Record<string, unknown>);
+        if (!entries.length) return false;
+        const resolved = entries.filter(([, id]) => typeof id === 'string' && id);
+        if (resolved.length && resolved.length !== entries.length) return false;
+        const byId = new Set(body.components.map((component: any) => component?.id));
+        return entries.every(([ref, id]) => typeof ref === 'string' && (id === null || (typeof id === 'string' && byId.has(id))));
+      },
+      'Every referenced library componentKey resolved (or the library is not seeded here and none did).'
+    )
+  },
+  {
     id: 'webpages-demos-family-filter',
     name: 'Demo library filters by family',
     description: 'family=hero returns only hero demos, and every family entry keeps its catalog-wide count.',

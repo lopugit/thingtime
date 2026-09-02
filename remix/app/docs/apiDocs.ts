@@ -10090,7 +10090,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'suite.bundle — the OWN-mode materialisation (schemas referenced by name, child actions by actionKey) a ' +
       'client posts part by part to /api/v1/things (schemas, then components, actions, data stamped with the ' +
       'created schema ids, then the page) so the page’s controls run the caller’s own programs end to end. ' +
-      'Read-only and public; the seeded census is one bounded projection query.',
+      'Every response also carries components[] + refs — the platform library component things the ' +
+      'component-kind demos reference, resolved exactly as /api/v1/webpages/resolve resolves a page’s blocks, ' +
+      'so a client can draw those demos without a second round trip; a null ref means that componentKey is not ' +
+      'seeded here and the block draws nothing. Read-only and public; two bounded queries, no per-viewer state.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see the same catalog and seeded flags — nothing here is per-viewer.'
@@ -10099,6 +10102,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with no query for the whole catalog, or family=<key> / kind=section|page|component to filter.',
       'Read families[] (key, title, emoji, kind, description, count), total, seededCount, and suites[].',
+      'Draw kind=component demos by folding components[] + refs into a ref → component map (buildComponentsByRef).',
       'Pass slug=<slug> to receive demo.crystal — POST it to /api/v1/things with thingtime ["webpage"] to copy it.',
       'Pass suite=<key> to receive suite.bundle and install it: POST each schema, component, action, data (add schemaId), then the page.',
       'Treat seeded: true as “/p/<id> and the builder open this demo directly” (suites: /actions/<actionId> runs the seeded program).',
@@ -10163,7 +10167,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               schemaIds: ['schema-demo-guestbook-entry'],
               seeded: true
             }
-          ]
+          ],
+          refs: { 'thingtime-button-solid': 'component-thingtime-button-solid', 'thingtime-card-basic': 'component-thingtime-card-basic' },
+          components: [{ id: 'component-thingtime-button-solid', thingtime: ['component'], visibility: 'public', crystal: { name: 'Solid Button', componentKey: 'thingtime-button-solid', args: [], render: {} } }]
         }
       }
     ]

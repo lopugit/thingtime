@@ -4274,6 +4274,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       full-size modal; Use template ✨ copies the demo into the viewer's own
       page (signed-out → login) and opens the builder; the Builder header
       links to the library.
+- [ ] Component blocks: the 🧩 Component blocks chip shows demos whose blocks
+      reference PLATFORM LIBRARY components by componentKey. Those blocks draw
+      real library components (buttons, a card, a text input, a badge, a status
+      avatar) in the thumbnail AND in the Preview modal once the demos endpoint
+      answers — an unresolved ref renders as NOTHING for a viewer, so a blank
+      card here means the catalog names a componentKey the components-db seed
+      does not have. Cross-check with
+      `GET /api/v1/webpages/demos` → every entry in `refs` non-null (the
+      `webpages-demos-library-components` apiTest asserts exactly this).
 - [ ] GET /api/v1/webpages/demos lists the catalog anonymously with seeded
       flags (0 seeded on a fresh DB is correct), family/kind filters, slug=
       returns the crystal, unknown family → 400, unknown slug → 404; admin
