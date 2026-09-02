@@ -10,13 +10,14 @@ export const CHATGPT_MCP_PATH = '/api/v1/integrations/chatgpt/mcp';
 export const CHATGPT_AUTHORIZE_PATH = '/api/v1/integrations/chatgpt/oauth/authorize';
 export const CHATGPT_TOKEN_PATH = '/api/v1/integrations/chatgpt/oauth/token';
 export const CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH = '/api/v1/integrations/chatgpt/oauth/register';
+export const CHATGPT_OAUTH_RELAY_PATH = '/api/v1/integrations/chatgpt/oauth/relay';
 export const CHATGPT_PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
 export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server';
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.3.0',
-  'chatgpt.oauth': '1.5.0',
+  'chatgpt.oauth': '1.6.0',
   'chatgpt.connections': '1.2.0',
   'chatgpt.things.read': '1.3.0',
   'chatgpt.things.write': '1.1.0',
@@ -83,6 +84,8 @@ export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_AUTHORIZE_PATH, feature: 'chatgpt.oauth' },
   { method: 'POST', path: CHATGPT_TOKEN_PATH, feature: 'chatgpt.oauth' },
   { method: 'POST', path: CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, feature: 'chatgpt.oauth' },
+  { method: 'GET', path: CHATGPT_OAUTH_RELAY_PATH, feature: 'chatgpt.oauth' },
+  { method: 'POST', path: CHATGPT_OAUTH_RELAY_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_PROTECTED_RESOURCE_METADATA_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_CAPABILITY_MANIFEST_PATH, feature: 'chatgpt.mcp' }
@@ -262,14 +265,38 @@ export const normalizeDynamicClientRedirectUri = (value: unknown): string | null
   }
 };
 
+// Remote Codex sessions cannot receive a phone browser's loopback callback.
+// A relay callback remains first-party, HTTPS-only, short lived, and is bound
+// to a 256-bit handoff identifier minted by the relay-start endpoint.
+export const normalizeChatGptOAuthRelayRedirectUri = (value: unknown, origin: string): string | null => {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.origin !== origin ||
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.pathname !== CHATGPT_OAUTH_RELAY_PATH ||
+      url.hash ||
+      url.searchParams.size !== 1
+    ) return null;
+    const handoff = url.searchParams.get('handoff');
+    if (!handoff || !/^[A-Za-z0-9_-]{43}$/.test(handoff)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 // ChatGPT's current developer-app flow uses an opaque dynamically registered
 // public client and returns to its exact connector callback. Treat that callback
 // with the same registration binding as a native loopback client: it must be
 // included in the signed registration and in the later authorization request.
 // Nothing broad is accepted here; both supported ChatGPT callbacks are exact
 // constants above.
-export const normalizeRegisteredClientRedirectUri = (value: unknown): string | null =>
-  normalizeDynamicClientRedirectUri(value) || normalizeChatGptRedirectUri(value);
+export const normalizeRegisteredClientRedirectUri = (value: unknown, origin?: string): string | null =>
+  normalizeDynamicClientRedirectUri(value) || normalizeChatGptRedirectUri(value) || (origin ? normalizeChatGptOAuthRelayRedirectUri(value, origin) : null);
 
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
@@ -289,7 +316,7 @@ export const parseChatGptAuthorizationRequest = (
   if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
 
   const redirectUri = registeredDynamicClient
-    ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'))
+    ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'), origin)
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
       : normalizeChatGptRedirectUri(params.get('redirect_uri'));

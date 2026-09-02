@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
@@ -11,6 +11,7 @@ import { validateThingtimeCrystal, validateValueAgainstFields } from '~/schemas/
 import {
   CHATGPT_AUTHORIZE_PATH,
   CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
+  CHATGPT_OAUTH_RELAY_PATH,
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
   CHATGPT_MCP_PATH,
   CHATGPT_MCP_INSTRUCTIONS,
@@ -56,6 +57,7 @@ import {
 const OAUTH_REQUEST_PURPOSE = 'chatgpt-oauth-request';
 const OAUTH_CODE_PURPOSE = 'chatgpt-oauth-code';
 const OAUTH_DYNAMIC_CLIENT_PURPOSE = 'chatgpt-oauth-dynamic-client';
+const OAUTH_RELAY_PURPOSE = 'chatgpt-oauth-relay';
 const MCP_SESSION_PURPOSE = 'chatgpt-mcp';
 const MCP_REFRESH_SESSION_PURPOSE = 'chatgpt-mcp-refresh';
 const MCP_CONNECTION_PURPOSE = 'chatgpt-mcp-connection';
@@ -197,10 +199,10 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
   return { clientId, redirectUri, state, codeChallenge, resource, scope };
 };
 
-const dynamicClientFromId = async (clientId: string): Promise<ChatGptDynamicOAuthClient | null> => {
+const dynamicClientFromId = async (clientId: string, origin: string): Promise<ChatGptDynamicOAuthClient | null> => {
   const claims = await verifyPurposeToken(clientId, OAUTH_DYNAMIC_CLIENT_PURPOSE);
   if (!claims || !Array.isArray(claims.redirectUris)) return null;
-  const redirectUris = [...new Set(claims.redirectUris.map(normalizeRegisteredClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  const redirectUris = [...new Set(claims.redirectUris.map((value) => normalizeRegisteredClientRedirectUri(value, origin)).filter((value): value is string => Boolean(value)))];
   if (!redirectUris.length || redirectUris.length > 8) return null;
   return { clientId, redirectUris };
 };
@@ -411,7 +413,7 @@ const resolveMcpBundle = async (session: SessionDoc, origin: string): Promise<Re
 
 export const beginChatGptAuthorization = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
-  const dynamicClient = await dynamicClientFromId(params.get('client_id')?.trim() || '');
+  const dynamicClient = await dynamicClientFromId(params.get('client_id')?.trim() || '', requestOrigin(request));
   const parsed = parseChatGptAuthorizationRequest(params, requestOrigin(request), dynamicClient);
   if (parsed.ok === false) return oauthErrorPage(400, parsed.error);
   const allowed = allowedThingtimeEndpoints();
@@ -439,9 +441,9 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
   if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length < 1 || rawRedirectUris.length > 8) {
     return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight supported ChatGPT or loopback callbacks' }, { status: 400, headers: noStoreHeaders });
   }
-  const redirectUris = [...new Set(rawRedirectUris.map(normalizeRegisteredClientRedirectUri).filter((value): value is string => Boolean(value)))];
+  const redirectUris = [...new Set(rawRedirectUris.map((value) => normalizeRegisteredClientRedirectUri(value, requestOrigin(request))).filter((value): value is string => Boolean(value)))];
   if (redirectUris.length !== rawRedirectUris.length) {
-    return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact ChatGPT connector or http://127.0.0.1:<port>/callback URL' }, { status: 400, headers: noStoreHeaders });
+    return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact ChatGPT connector, loopback callback, or a first-party short-lived OAuth relay callback' }, { status: 400, headers: noStoreHeaders });
   }
   const clientId = await signPurposeToken(OAUTH_DYNAMIC_CLIENT_PURPOSE, { redirectUris }, '1y');
   return json(
@@ -456,6 +458,78 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
     },
     { status: 201, headers: noStoreHeaders }
   );
+};
+
+const relayPollTokenHash = (value: string) => createHash('sha256').update(value).digest('base64url');
+
+const relayPollTokenMatches = (provided: string, expected: unknown) => {
+  if (!provided || typeof expected !== 'string') return false;
+  const actual = Buffer.from(relayPollTokenHash(provided));
+  const stored = Buffer.from(expected);
+  return actual.length === stored.length && timingSafeEqual(actual, stored);
+};
+
+const relayCallbackUrl = (origin: string, handoffId: string) => {
+  const callback = new URL(`${origin}${CHATGPT_OAUTH_RELAY_PATH}`);
+  callback.searchParams.set('handoff', handoffId);
+  return callback.toString();
+};
+
+const relayPage = (message: string) => new Response(
+  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Thingtime connected</title><main><h1>Thingtime connected</h1><p>${escapeHtml(message)}</p></main>`,
+  { status: 200, headers: { ...noStoreHeaders, 'Content-Type': 'text/html; charset=utf-8' } }
+);
+
+// Starts a first-party, one-time relay. The poll token never appears in the
+// browser URL; it stays with the local helper that forwards the callback into
+// Codex's listener after the user finishes on another device.
+export const startChatGptOAuthRelay = async ({ request }: { request: Request }) => {
+  const handoffId = randomBytes(32).toString('base64url');
+  const pollToken = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + OAUTH_CODE_TTL_MS);
+  await createSession(`chatgpt-relay:${handoffId}`, {
+    purpose: OAUTH_RELAY_PURPOSE,
+    expiresAt,
+    meta: { handoffId, pollTokenHash: relayPollTokenHash(pollToken) }
+  });
+  return json({ handoffId, pollToken, callbackUrl: relayCallbackUrl(requestOrigin(request), handoffId), expiresAt: expiresAt.toISOString() }, { status: 201, headers: noStoreHeaders });
+};
+
+export const handleChatGptOAuthRelay = async ({ request }: { request: Request }) => {
+  const url = new URL(request.url);
+  const handoffId = url.searchParams.get('handoff') || '';
+  if (!/^[A-Za-z0-9_-]{43}$/.test(handoffId)) return oauthErrorPage(400, 'This mobile login handoff is invalid or has expired.');
+  const sessions = await getSessionsCollection();
+  const now = new Date();
+  const relay = await sessions.findOne({ jti: handoffId, purpose: OAUTH_RELAY_PURPOSE, revokedAt: null, expiresAt: { $gt: now } });
+  if (!relay) return oauthErrorPage(400, 'This mobile login handoff is invalid or has expired.');
+
+  const code = url.searchParams.get('code');
+  if (code) {
+    const state = url.searchParams.get('state') || '';
+    const issuer = url.searchParams.get('iss') || '';
+    const claims = await verifyJwt(code);
+    const codeSession = claims ? await getLiveSession(claims.jti) : null;
+    const expectedRedirect = relayCallbackUrl(requestOrigin(request), handoffId);
+    if (
+      !claims || !codeSession || codeSession.purpose !== OAUTH_CODE_PURPOSE ||
+      codeSession.userId !== claims.sub || issuer !== requestOrigin(request) ||
+      codeSession.meta?.redirectUri !== expectedRedirect || codeSession.meta?.state !== state
+    ) return oauthErrorPage(400, 'This mobile login response is invalid or has expired.');
+    await sessions.updateOne(
+      { jti: handoffId, purpose: OAUTH_RELAY_PURPOSE, revokedAt: null, expiresAt: { $gt: now } },
+      { $set: { 'meta.authorizationResponse': { code, state, iss: issuer }, 'meta.completedAt': now } }
+    );
+    return relayPage('You can return to Codex. The remote connection is finishing securely.');
+  }
+
+  const pollToken = request.headers.get('x-thingtime-oauth-relay-token') || '';
+  if (!relayPollTokenMatches(pollToken, relay.meta?.pollTokenHash)) return json({ error: 'unauthorized' }, { status: 401, headers: noStoreHeaders });
+  const response = relay.meta?.authorizationResponse;
+  if (!response || typeof response.code !== 'string' || typeof response.state !== 'string' || typeof response.iss !== 'string') {
+    return json({ status: 'pending' }, { headers: noStoreHeaders });
+  }
+  return json({ status: 'complete', response }, { headers: noStoreHeaders });
 };
 
 export const submitChatGptAuthorization = async ({ request }: { request: Request }) => {

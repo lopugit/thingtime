@@ -16,7 +16,7 @@ export type SessionDoc = {
   // revocable the same way
   // 'device-pairing'/'device' — the desktop mesh handshake and the long-lived
   // credential it upgrades into, revocable the same way
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
   meta?: Record<string, any>;
 };
 

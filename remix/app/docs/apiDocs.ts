@@ -1,5 +1,5 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
-import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -1008,6 +1008,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 201, description: 'A signed public client ID bound to the supplied loopback callback.', body: { client_id: '<signed-opaque-client-id>', redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' } },
       { status: 400, description: 'The client attempted an unsupported redirect URI.' }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-relay',
+    group: 'integrations',
+    title: 'ChatGPT OAuth mobile relay',
+    endpoint: CHATGPT_OAUTH_RELAY_PATH,
+    summary: 'One-time first-party relay for completing a Codex OAuth login from another device.',
+    detail:
+      'POST creates a five-minute handoff with an opaque callback URL and a separate polling secret. After the user completes the Thingtime connection page on mobile, GET records the PKCE-bound authorization response without exposing it in the success page. Only the helper holding the polling secret can retrieve that response and forward it to Codex’s OAuth listener.',
+    auth: { mode: 'none', description: 'The handoff identifier is random and the polling response additionally requires a separate 256-bit secret.' },
+    methods: ['GET', 'POST'],
+    steps: ['Create a one-time relay from the remote Codex helper.', 'Open the returned authorization URL on mobile or scan its QR code.', 'The helper polls with its private secret and forwards the response to Codex for the normal PKCE exchange.'],
+    requestExamples: [],
+    responseExamples: [
+      { status: 201, description: 'A short-lived handoff for the local helper.', body: { handoffId: '<opaque-id>', pollToken: '<private-helper-secret>', callbackUrl: 'https://thingtime.com/api/v1/integrations/chatgpt/oauth/relay?handoff=<opaque-id>' } },
+      { status: 200, description: 'A pending or completed relay response.', body: { status: 'pending' } },
+      { status: 401, description: 'Polling secret is missing or invalid.', body: { error: 'unauthorized' } }
     ]
   }),
   endpoint({
