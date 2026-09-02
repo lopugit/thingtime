@@ -1081,6 +1081,11 @@ export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
 export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
 export const MAX_WEBPAGE_HTML_CHARS = 20000;
 export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
+// source-bound blocks may poll on an interval (a clock, a live tally):
+// bounded below so one page can never hammer the executor
+export const MIN_WEBPAGE_SOURCE_INTERVAL_MS = 5_000;
+export const MAX_WEBPAGE_SOURCE_INTERVAL_MS = 3_600_000;
+export const DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS = 15_000;
 export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
 export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
 export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
@@ -4512,9 +4517,21 @@ const sanitizeWebpageBlock = (
 				}
 				if (Object.keys(inputs).length) source.inputs = inputs;
 			}
+			// refresh: 'load' (default — again after every control run), 'manual'
+			// (once, on load), or 'interval' (also every intervalMs — a clock, a
+			// live tally; bounded so a page can never poll the executor hard)
 			if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-				if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual') return fail(400, `Block ${id} source.refresh must be load or manual`);
-				if (rawSource.refresh === 'manual') source.refresh = 'manual';
+				if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
+					return fail(400, `Block ${id} source.refresh must be load, manual, or interval`);
+				}
+				if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+			}
+			if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
+				const intervalMs = Number(rawSource.intervalMs);
+				if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
+					return fail(400, `Block ${id} source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
+				}
+				if (source.refresh === 'interval') source.intervalMs = intervalMs;
 			}
 			block.source = source;
 		}

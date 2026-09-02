@@ -16,8 +16,10 @@ export interface WebpageBlockSource {
 	action: string;
 	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
 	inputs?: Record<string, string | number | boolean>;
-	// 'load' (default) refetches after every control run; 'manual' only on load
-	refresh?: 'load' | 'manual';
+	// 'load' (default) refetches after every control run; 'manual' only on
+	// load; 'interval' also every intervalMs (5s–1h, default 15s)
+	refresh?: 'load' | 'manual' | 'interval';
+	intervalMs?: number;
 }
 
 export interface WebpageBlock {

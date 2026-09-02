@@ -14,6 +14,7 @@ import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
 import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
+import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
 
 // Draws a webpage block tree. Component blocks resolve their referenced
 // component thing's template through the existing arg DSL and draw ONLY
@@ -759,7 +760,17 @@ const useBlockSource = (
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
 	}, [inputsKey]);
 	const manual = source?.refresh === 'manual';
-	const runVersion = manual ? 0 : runtime.version;
+	// 'interval' sources tick on their own clock (bounded by the gate) on top
+	// of the runtime's version — a clock or live tally refreshes without a
+	// click and without touching `last`
+	const intervalMs = source?.refresh === 'interval' ? Math.max(MIN_WEBPAGE_SOURCE_INTERVAL_MS, Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Number(source.intervalMs) || DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS)) : 0;
+	const [tick, setTick] = React.useState(0);
+	React.useEffect(() => {
+		if (!intervalMs || !interactive || !runtime.viewer.signedIn) return;
+		const handle = window.setInterval(() => setTick((current) => current + 1), intervalMs);
+		return () => window.clearInterval(handle);
+	}, [intervalMs, interactive, runtime.viewer.signedIn]);
+	const runVersion = manual ? 0 : runtime.version + tick * 1_000_003;
 	const signedIn = runtime.viewer.signedIn;
 	const pageId = runtime.pageId;
 	const blockId = block.id;
@@ -780,7 +791,7 @@ const useBlockSource = (
 		setState((current) => (current.result === undefined || current.status === 'signed-out' ? { ...current, status: 'loading' } : current));
 		(async () => {
 			try {
-				const shareKey = JSON.stringify({ a: source.action, i: inputs });
+				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick });
 				const response: any = await runtime.load(shareKey, () => apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
 				if (cancelled) return;
 				if (response?.status === 'ok') {
@@ -799,7 +810,7 @@ const useBlockSource = (
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion is the runtime's refetch signal; runtime.load is version-keyed
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal and the interval tick; runtime.load is version-keyed
 	}, [active, signedIn, sourceKey, inputsKey, runVersion, pageId, blockId]);
 
 	const scope = React.useMemo(

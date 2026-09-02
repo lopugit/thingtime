@@ -150,3 +150,29 @@ test('previewBg refuses rule breakout and unsafe url() targets', () => {
 		assert.equal(pageBg(value).ok, false, `expected previewBg to refuse ${value}`);
 	}
 });
+
+// ── source-bound component blocks (the page runtime's data binding) ────────
+
+test('a component block keeps a well-formed source binding and refuses malformed ones', () => {
+	const base = { name: 'Bound page', blocks: [{ id: 'hud', type: 'component', component: 'app-pokeworld-hud', source: { action: 'app-pokeworld-state', inputs: { page: '{query.page}', n: 2, live: true }, refresh: 'interval', intervalMs: 15000 } }] };
+	const ok = validateThingtimeCrystal(['webpage'], base);
+	assert.equal(ok.ok, true, ok.ok === false ? ok.error : '');
+	if (ok.ok) {
+		const block = (ok.crystal.blocks as Record<string, unknown>[])[0];
+		assert.deepEqual(block.source, { action: 'app-pokeworld-state', inputs: { page: '{query.page}', n: 2, live: true }, refresh: 'interval', intervalMs: 15000 });
+	}
+	const loadDefault = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'app-pokeworld-state', refresh: 'load' } }] });
+	assert.equal(loadDefault.ok, true);
+	if (loadDefault.ok) assert.deepEqual((loadDefault.crystal.blocks as Record<string, unknown>[])[0].source, { action: 'app-pokeworld-state' });
+	const badAction = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'Not A Slug' } }] });
+	assert.equal(badAction.ok, false);
+	const badRefresh = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', refresh: 'always' } }] });
+	assert.equal(badRefresh.ok, false);
+	const tooFast = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', refresh: 'interval', intervalMs: 100 } }] });
+	assert.equal(tooFast.ok, false);
+	const objectInput = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', inputs: { nested: { a: 1 } } } }] });
+	assert.equal(objectInput.ok, false);
+	const suiteKey = validateThingtimeCrystal(['webpage'], { ...base, suiteKey: 'pokeworld' });
+	assert.equal(suiteKey.ok, true);
+	if (suiteKey.ok) assert.equal(suiteKey.crystal.suiteKey, 'pokeworld');
+});
