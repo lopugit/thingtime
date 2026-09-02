@@ -370,6 +370,13 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   lopuCredentials: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
+  // CI control-plane satellite (api/utils/ciControl): every ci-* Thing —
+  // current-state projections AND the append-only ci-event history — lives
+  // here, NOT in `things`. Machine-written webhook telemetry arrives at
+  // hundreds of thousands of rows per day and must never share a collection
+  // (or its ~60-index write amplification and wildcard text index) with user
+  // content. Rows carry root `expiresAt` retention (ciControl/retentionCore.ts).
+  ciControl: 1,
   email_events: 1,
   email_templates: 1,
   email_subscriptions: 1,
@@ -1049,6 +1056,32 @@ export const COMPONENT_ARG_TYPES = ['string', 'text', 'number', 'boolean', 'enum
 export const COMPONENT_ARG_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const COMPONENT_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+// Webpage block-tree caps (grammar + sanitizer live beside the component
+// sanitizer further down; see the webpage block grammar section).
+export const MAX_WEBPAGE_BLOCKS = 120;
+export const MAX_WEBPAGE_BLOCK_DEPTH = 8;
+export const MAX_WEBPAGE_BLOCK_ID_CHARS = 40;
+export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
+export const MAX_WEBPAGE_TEXT_CHARS = 2000;
+export const MAX_WEBPAGE_BLOCKS_BYTES = 48 * 1024;
+export const MAX_WEBPAGE_ROUTE_CHARS = 120;
+export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html'] as const;
+export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
+export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
+export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
+export const WEBPAGE_ROUTE_PATTERN = /^\/[a-z0-9\-/_]*$/;
+// Figma-style per-block custom CSS + rich/raw HTML bounds. HTML is never
+// trusted at render (the client parses it through the sanitising allowlist
+// renderer); the gate bounds size and blocks the classic CSS escape hatches.
+export const MAX_WEBPAGE_CSS_PROPS = 40;
+export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
+export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
+export const MAX_WEBPAGE_HTML_CHARS = 20000;
+export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
+export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
+export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
+export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
+
 const componentSchema: ThingtimeSchema = {
 	id: 'component',
 	version: 1,
@@ -1128,6 +1161,70 @@ const componentSchema: ThingtimeSchema = {
 			props: { type: 'button', style: { padding: '0 16px', height: '36px', borderRadius: '9px', background: '#16161a', color: '#ffffff' } },
 			children: ['{label}']
 		}
+	}
+};
+
+// Webpages are things too (thingtime ["webpage"]). A webpage is a bounded
+// ordered block tree: component blocks reference component things by
+// componentKey/shareId (resolved + drawn client-side through the sanitising
+// allowlist renderers, one budget per block), container blocks lay children
+// out, text blocks carry short copy, and native blocks mark where a built-in
+// app screen sits on a site page. The whole site is block-based: system
+// webpage-route-<key> docs describe every built-in route, users personalise
+// them with their own pageKey twin (siteRoute match, viewer-owned wins), and
+// standalone pages publish at /p/<id>. Built and edited with the /builder.
+const webpageSchema: ThingtimeSchema = {
+	id: 'webpage',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Webpage',
+	summary: 'A block-based page built from component things — create and edit with the /builder.',
+	detail:
+		'A webpage thing is an ordered, bounded tree of blocks: component blocks reference ' +
+		'component things (by componentKey or shareId) with per-block arg overrides, container ' +
+		'blocks arrange children in columns/rows/grids, text blocks hold short copy, and native ' +
+		'blocks mark where a built-in Thingtime screen renders on a site page. Blocks never carry ' +
+		'raw markup — referenced components resolve through the existing arg-template DSL and are ' +
+		'drawn only through the sanitising allowlist renderers, each block with its own render ' +
+		'budget. System webpage-route-<key> docs make every built-in route a block site; a ' +
+		'viewer-owned webpage with the same siteRoute personalises it. Standalone pages serve at ' +
+		'/p/<shareId>.',
+	fields: [
+		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "My portfolio".' },
+		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this page is for.' },
+		{ name: 'pageKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions of one page.' },
+		{ name: 'siteRoute', type: 'string', required: false, max: MAX_WEBPAGE_ROUTE_CHARS, description: 'App route this page describes (site pages only), e.g. /status.' },
+		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a pageKey.' },
+		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the webpage this one was forked from (provenance only).' },
+		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the page canvas.' },
+		{
+			name: 'blocks',
+			type: 'record',
+			required: true,
+			max: MAX_WEBPAGE_BLOCKS,
+			description:
+				`Ordered block tree, max ${MAX_WEBPAGE_BLOCKS} blocks / ${MAX_WEBPAGE_BLOCK_DEPTH} deep: ` +
+				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
+				'text (text + style), or native (built-in screen key) — plus align/maxWidth per block }.'
+		}
+	],
+	example: {
+		name: 'Launch page',
+		pageKey: 'launch-page',
+		blocks: [
+			{ id: 'hero-title', type: 'text', text: 'A GUI for the internet.', style: 'heading', align: 'center' },
+			{
+				id: 'cta-row',
+				type: 'container',
+				direction: 'row',
+				gap: 4,
+				align: 'center',
+				children: [
+					{ id: 'cta', type: 'component', component: 'thingtime-button-solid', args: { label: 'Join the waitlist 🚀' } }
+				]
+			}
+		]
 	}
 };
 
@@ -1641,7 +1738,8 @@ const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-e
     'A private, system-owned control-plane projection written only by signed GitHub/Vercel webhook ingestion, ' +
     'an administrator reconciliation, or an allowlisted administrator dispatch. The deterministic shareId ' +
     'keeps one current projection per external entity; status changes are stored separately as relational ' +
-    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it.',
+    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it. ' +
+    'Stored in the ciControl satellite collection (never in things); activity rows carry root expiresAt retention.',
   createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
   fields: [
     { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Authoritative provider.' },
@@ -1722,7 +1820,8 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail:
       'A relational audit record keyed by provider delivery id and parent entity. Events are append-only and ' +
       'bounded; retries of the same signed webhook do not duplicate history. Generic Thing CRUD cannot create, ' +
-      'edit, or delete it.',
+      'edit, or delete it. Stored in the ciControl satellite collection with root expiresAt retention ' +
+      '(THINGTIME_CI_EVENT_RETENTION_DAYS, default 14); a delivery that changes nothing on the repository row records no event.',
     createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
     fields: [
       { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Event provider.' },
@@ -3206,6 +3305,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   dataSchema,
   schemaThingSchema,
   componentSchema,
+  webpageSchema,
   actionSchema,
   actionRunSchema,
   saveThingSchema,
@@ -4218,6 +4318,314 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 };
 
 // ---------------------------------------------------------------------------
+// Webpage block grammar — the save-time half of the block-based site builder.
+// A webpage crystal embeds a BOUNDED ordered block tree (the component
+// precedent: bounded replace-on-write document, NOT an accumulating list, so
+// FUNDAMENTALS §3's relational rule doesn't apply). Blocks never carry render
+// markup themselves: a 'component' block references a component thing by
+// componentKey/shareId and the client resolves + draws it through the
+// existing sanitising allowlist renderers with a per-block budget —
+// composition happens at the block layer so the template DSL (and its
+// external components-db resolver twin) stays untouched. 'native' blocks mark
+// where a built-in app screen renders and only ever resolve on the matching
+// site route — /p/ pages ignore them.
+
+// One css declaration value: no nested rules/markup, no expression()/@import,
+// no javascript: url — url() only with https/site-relative/data-image targets.
+const isSafeWebpageCssValue = (value: string): boolean => {
+	// no markup/nested-rule characters; `;` stays legal (data: URIs need it, and
+	// values are applied per-property through style objects, where a semicolon
+	// can never open a second declaration)
+	if (/[<>{}]/.test(value)) return false;
+	const lower = value.toLowerCase();
+	if (lower.includes('expression(') || lower.includes('@import') || lower.includes('javascript:')) return false;
+	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
+	for (const match of urlMatches) {
+		const target = (match[1] || '').trim();
+		if (!/^(https:\/\/|\/(?!\/)|data:image\/)/.test(target)) return false;
+	}
+	return true;
+};
+
+const isSafeWebpageMediaSrc = (value: string): boolean =>
+	/^(https:\/\/|\/(?!\/))/.test(value) && !/\s/.test(value);
+
+const sanitizeWebpageBlock = (
+	input: unknown,
+	depth: number,
+	state: { nodes: number; ids: Set<string> }
+): { ok: true; block: Record<string, unknown> } | Fail => {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+		return fail(400, 'Each webpage block must be an object');
+	}
+	if (depth > MAX_WEBPAGE_BLOCK_DEPTH) return fail(400, `Webpage blocks nest at most ${MAX_WEBPAGE_BLOCK_DEPTH} levels`);
+	state.nodes += 1;
+	if (state.nodes > MAX_WEBPAGE_BLOCKS) return fail(400, `Webpages can hold at most ${MAX_WEBPAGE_BLOCKS} blocks`);
+
+	const raw = input as Record<string, unknown>;
+	const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+	if (!id || id.length > MAX_WEBPAGE_BLOCK_ID_CHARS || !COMPONENT_KEY_PATTERN.test(id)) {
+		return fail(400, 'Every block needs a lowercase-dashed id');
+	}
+	if (state.ids.has(id)) return fail(400, `Duplicate block id: ${id}`);
+	state.ids.add(id);
+
+	const type = typeof raw.type === 'string' ? raw.type : '';
+	if (!(WEBPAGE_BLOCK_TYPES as readonly string[]).includes(type)) {
+		return fail(400, `Block ${id} has an unknown type (expected ${WEBPAGE_BLOCK_TYPES.join('/')})`);
+	}
+
+	const block: Record<string, unknown> = { id, type };
+
+	const align = typeof raw.align === 'string' ? raw.align : '';
+	if (align) {
+		if (!(WEBPAGE_BLOCK_ALIGNS as readonly string[]).includes(align)) {
+			return fail(400, `Block ${id} align must be ${WEBPAGE_BLOCK_ALIGNS.join('/')}`);
+		}
+		block.align = align;
+	}
+	if (raw.maxWidth !== undefined && raw.maxWidth !== null) {
+		const maxWidth = Number(raw.maxWidth);
+		if (!Number.isInteger(maxWidth) || maxWidth < 120 || maxWidth > 1680) {
+			return fail(400, `Block ${id} maxWidth must be 120–1680`);
+		}
+		block.maxWidth = maxWidth;
+	}
+	if (raw.css !== undefined && raw.css !== null) {
+		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
+			return fail(400, `Block ${id} css must be an object of css property → value`);
+		}
+		const entries = Object.entries(raw.css as Record<string, unknown>);
+		if (entries.length > MAX_WEBPAGE_CSS_PROPS) {
+			return fail(400, `Block ${id} css can hold at most ${MAX_WEBPAGE_CSS_PROPS} properties`);
+		}
+		const css: Record<string, string> = {};
+		for (const [key, value] of entries) {
+			if (!WEBPAGE_CSS_KEY_PATTERN.test(key) || key.length > MAX_WEBPAGE_CSS_KEY_CHARS) {
+				return fail(400, `Block ${id} css key "${key.slice(0, 40)}" must be a kebab-case css property`);
+			}
+			if (typeof value !== 'string' || !value.trim()) continue;
+			if (value.length > MAX_WEBPAGE_CSS_VALUE_CHARS) {
+				return fail(400, `Block ${id} css value for ${key} is too long (max ${MAX_WEBPAGE_CSS_VALUE_CHARS})`);
+			}
+			if (!isSafeWebpageCssValue(value)) {
+				return fail(400, `Block ${id} css value for ${key} contains a blocked construct`);
+			}
+			css[key] = value.trim();
+		}
+		if (Object.keys(css).length) block.css = css;
+	}
+
+	if (type === 'component') {
+		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
+		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
+			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
+		}
+		block.component = component;
+		if (raw.args !== undefined && raw.args !== null) {
+			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
+				return fail(400, `Block ${id} args must be an object of scalar arg values`);
+			}
+			const args: Record<string, unknown> = {};
+			const entries = Object.entries(raw.args as Record<string, unknown>);
+			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
+				return fail(400, `Block ${id} args can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
+			}
+			for (const [key, value] of entries) {
+				if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+					return fail(400, `Block ${id} arg key "${key.slice(0, 40)}" is not a valid arg name`);
+				}
+				const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
+				if (scalar === null && value !== null) return fail(400, `Block ${id} arg ${key} must be a string, number, or boolean`);
+				if (scalar !== null) args[key] = scalar;
+			}
+			if (Object.keys(args).length) block.args = args;
+		}
+		return { ok: true, block };
+	}
+
+	if (type === 'container') {
+		const direction = typeof raw.direction === 'string' ? raw.direction : 'column';
+		if (!(WEBPAGE_CONTAINER_DIRECTIONS as readonly string[]).includes(direction)) {
+			return fail(400, `Block ${id} direction must be ${WEBPAGE_CONTAINER_DIRECTIONS.join('/')}`);
+		}
+		block.direction = direction;
+		if (raw.gap !== undefined && raw.gap !== null) {
+			const gap = Number(raw.gap);
+			if (!Number.isInteger(gap) || gap < 0 || gap > 12) return fail(400, `Block ${id} gap must be 0–12`);
+			block.gap = gap;
+		}
+		if (raw.columns !== undefined && raw.columns !== null) {
+			const columns = Number(raw.columns);
+			if (!Number.isInteger(columns) || columns < 1 || columns > 6) return fail(400, `Block ${id} columns must be 1–6`);
+			block.columns = columns;
+		}
+		const children: Record<string, unknown>[] = [];
+		if (raw.children !== undefined && raw.children !== null) {
+			if (!Array.isArray(raw.children)) return fail(400, `Block ${id} children must be a list of blocks`);
+			for (const child of raw.children) {
+				const sanitized = sanitizeWebpageBlock(child, depth + 1, state);
+				if (isFail(sanitized)) return sanitized;
+				children.push(sanitized.block);
+			}
+		}
+		block.children = children;
+		return { ok: true, block };
+	}
+
+	if (type === 'text') {
+		const text = typeof raw.text === 'string' ? raw.text : '';
+		const html = typeof raw.html === 'string' ? raw.html : '';
+		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
+		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
+		if (html.trim()) {
+			// rich WYSIWYG content — size-bounded here; the client renders it ONLY
+			// through the sanitising allowlist renderer (tags/props/urls/styles)
+			if (html.length > MAX_WEBPAGE_HTML_CHARS) {
+				return fail(400, `Block ${id} rich text is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
+			}
+			block.html = html;
+		}
+		const style = typeof raw.style === 'string' ? raw.style : '';
+		if (style) {
+			if (!(WEBPAGE_TEXT_STYLES as readonly string[]).includes(style)) {
+				return fail(400, `Block ${id} style must be ${WEBPAGE_TEXT_STYLES.join('/')}`);
+			}
+			block.style = style;
+		}
+		const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : '';
+		if (tag) {
+			if (!(WEBPAGE_TEXT_TAGS as readonly string[]).includes(tag)) {
+				return fail(400, `Block ${id} tag must be ${WEBPAGE_TEXT_TAGS.join('/')}`);
+			}
+			block.tag = tag;
+		}
+		return { ok: true, block };
+	}
+
+	if (type === 'media') {
+		const src = typeof raw.src === 'string' ? raw.src.trim() : '';
+		if (src && (src.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageMediaSrc(src))) {
+			return fail(400, `Block ${id} src must be an https or site-relative URL`);
+		}
+		block.src = src;
+		const media = typeof raw.media === 'string' ? raw.media : 'image';
+		if (!(WEBPAGE_MEDIA_KINDS as readonly string[]).includes(media)) {
+			return fail(400, `Block ${id} media must be ${WEBPAGE_MEDIA_KINDS.join('/')}`);
+		}
+		block.media = media;
+		const alt = typeof raw.alt === 'string' ? raw.alt.trim() : '';
+		if (alt) block.alt = alt.slice(0, 300);
+		return { ok: true, block };
+	}
+
+	if (type === 'html') {
+		const html = typeof raw.html === 'string' ? raw.html : '';
+		if (!html.trim()) return fail(400, `Block ${id} needs html`);
+		if (html.length > MAX_WEBPAGE_HTML_CHARS) {
+			return fail(400, `Block ${id} html is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
+		}
+		// stored verbatim, never rendered raw: the client parses it into the
+		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
+		block.html = html;
+		return { ok: true, block };
+	}
+
+	// native — a built-in app screen slot; only the matching site route renders
+	// it, everywhere else it is inert (never markup, never fetched).
+	const native = typeof raw.native === 'string' ? raw.native.trim() : '';
+	if (!native || native.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(native)) {
+		return fail(400, `Block ${id} needs a native screen key (lowercase-dashed slug)`);
+	}
+	block.native = native;
+	return { ok: true, block };
+};
+
+const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
+	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
+	const state = { nodes: 0, ids: new Set<string>() };
+	const blocks: Record<string, unknown>[] = [];
+	for (const entry of input) {
+		const sanitized = sanitizeWebpageBlock(entry, 1, state);
+		if (isFail(sanitized)) return sanitized;
+		blocks.push(sanitized.block);
+	}
+	let serialized = '';
+	try {
+		serialized = JSON.stringify(blocks);
+	} catch {
+		return fail(400, 'Webpage blocks must be JSON-serialisable');
+	}
+	if (serialized.length > MAX_WEBPAGE_BLOCKS_BYTES) {
+		return fail(400, `Webpage blocks are too large (max ${MAX_WEBPAGE_BLOCKS_BYTES} bytes)`);
+	}
+	return { ok: true, blocks };
+};
+
+const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+	const name = typeof input.name === 'string' ? input.name.trim() : '';
+	if (!name) return fail(400, 'Webpages need a name');
+	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Webpage name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
+
+	const crystal: Record<string, unknown> = { name };
+
+	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
+	if (description) crystal.description = description;
+
+	if (input.pageKey !== undefined && input.pageKey !== null && input.pageKey !== '') {
+		const pageKey = typeof input.pageKey === 'string' ? input.pageKey.trim() : '';
+		if (!pageKey || pageKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(pageKey)) {
+			return fail(400, 'pageKey must be a lowercase-dashed slug');
+		}
+		crystal.pageKey = pageKey;
+	}
+
+	// siteRoute binds a site page (system default or a user's personal
+	// override) to an app route; /p/ pages leave it unset.
+	if (input.siteRoute !== undefined && input.siteRoute !== null && input.siteRoute !== '') {
+		const siteRoute = typeof input.siteRoute === 'string' ? input.siteRoute.trim() : '';
+		if (!siteRoute || siteRoute.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(siteRoute)) {
+			return fail(400, 'siteRoute must be an app path like /status');
+		}
+		crystal.siteRoute = siteRoute;
+	}
+
+	if (input.version !== undefined && input.version !== null) {
+		const version = Number(input.version);
+		if (!Number.isInteger(version) || version < 1 || version > 999999) return fail(400, 'version must be a positive integer');
+		crystal.version = version;
+	}
+
+	if (input.forkOf !== undefined && input.forkOf !== null && input.forkOf !== '') {
+		const forkOf = typeof input.forkOf === 'string' ? input.forkOf.trim() : '';
+		if (!forkOf || forkOf.length > 128 || /[$\s]/.test(forkOf)) return fail(400, 'forkOf must be a thing id');
+		crystal.forkOf = forkOf;
+	}
+
+	if (input.previewBg !== undefined && input.previewBg !== null && input.previewBg !== '') {
+		const previewBg = typeof input.previewBg === 'string' ? input.previewBg.trim() : '';
+		// Same screen the per-block `css` values above get, not the looser
+		// component-era `[<>]|javascript:` check: a webpage's previewBg is drawn
+		// on /p/<id>, where the viewer is NOT the author, so it has to refuse
+		// nested-rule characters, expression()/@import, and off-site url()
+		// targets exactly like every other author-supplied css value on a page.
+		if (!previewBg || previewBg.length > MAX_COMPONENT_PREVIEW_BG_CHARS || !isSafeWebpageCssValue(previewBg)) {
+			return fail(400, 'previewBg must be a short CSS background value');
+		}
+		crystal.previewBg = previewBg;
+	}
+
+	if (input.blocks === undefined || input.blocks === null) {
+		return fail(400, 'Webpages need a blocks list (may be empty)');
+	}
+	const blocks = sanitizeWebpageBlocks(input.blocks);
+	if (isFail(blocks)) return blocks;
+	crystal.blocks = blocks.blocks;
+
+	return { ok: true, crystal };
+};
+
+// ---------------------------------------------------------------------------
 // Action grammar — the save-time half of the bounded-execution contract.
 // Pure and shared: the executor (api/utils/actions/) re-uses the ref parser
 // and limit tables, the /actions inspector derives its effect summary from
@@ -4914,6 +5322,7 @@ const crystalSanitizers: Record<
   save: () => ({ ok: true, crystal: {} }),
   schema: sanitizeSchemaCrystal,
   component: sanitizeComponentCrystal,
+  webpage: sanitizeWebpageCrystal,
   // action-run deliberately has NO sanitizer — run records are executor-
   // minted only, and the missing entry makes the generic write path 403.
   action: sanitizeActionCrystal,

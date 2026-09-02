@@ -2887,6 +2887,67 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
+
+Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
+which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
+(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
+
+- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
+      signed synthetic `workflow_job` delivery to
+      `/api/v1/integrations/github/webhook` on a local stack and confirm
+      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
+      the repository, job, and event rows (admin query workbench, collection
+      `ciControl`).
+- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
+      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
+      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
+      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
+      an update to a job refreshes its stamp from the new `updatedAt`.
+- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
+      from new events (kept forever); a non-numeric value falls back to the
+      default; values above 3650 clamp.
+- [ ] Repository no-op suppression: two consecutive deliveries for the same
+      repository with status `active` record ONE `ci-event` whose parent is the
+      repository row (the insert), not one per delivery; an `archived`
+      transition records one more. Entity events (PR `synchronize` with an
+      unchanged status) are still recorded.
+- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
+      `freshness.latestEventAt` still populate from the satellite; the
+      per-parent history drawer still lists events newest-first.
+- [ ] Boot ensure on a database that carries the seven retired `things`
+      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
+      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
+      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
+      and `sandboxExpiresAt_1` originals are replaced by the partial
+      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
+      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
+      never shows neither).
+- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
+      `ci_control_repository_updated`, `ci_control_repository_status`,
+      `ci_control_repository_external_id`, `ci_control_parent_created`, and
+      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
+- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
+      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
+      per-kind relocate/expired counts and writes nothing; the confirmed run
+      copies live rows (insert-if-absent by shareId — a satellite row that
+      already exists keeps its newer state), deletes every matched `things`
+      row including already-expired ones, and reports `drained`. A run that
+      hits its time budget says so and the panel's pending count keeps the
+      migration actionable until it reads 0. Non-CI things are untouched.
+- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
+      on-disk, and index bytes per physical collection with an orange `N× docs`
+      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
+      lists plan-owned indexes and any residue it would leave alone; the
+      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
+      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
+      total index bytes drop, and a duplicate `shareId` insert attempted during
+      the run is still rejected with E11000.
+- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
+      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
+      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
+      (collection allowlist now includes `ciControl`).
+
 ## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
 
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
@@ -4228,3 +4289,110 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Used by: /actions/:key lists the viewer's components binding the action
       via ttAction as clickable 🧩 chips; exact-token matching (an action key
       that prefixes another never cross-matches).
+
+## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
+      migrations, apps, raw, admin + sub-panels) renders the PageShell surface
+      wash, clears the fixed nav (no underlap at 54px), and shows the mono
+      eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
+- [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
+      private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
+      sub-blocks highlight innermost-wins; clicking selects (solid outline)
+      and opens the inspector in the right drawer.
+- [ ] Inline "+ add block" lines appear between siblings on hover; the menu
+      offers quick structural blocks and a live component search backed by
+      /api/v1/components/browse; picking a component renders it instantly.
+- [ ] Inspector args derive from the component's arg specs (string/text/
+      number/boolean/enum inputs); edits re-render the canvas live; align +
+      max-width apply; delete removes the block (native blocks can't be
+      deleted, only moved).
+- [ ] Drag the ⠿ chip onto any insert line to reorder/move blocks, including
+      into/out of containers; dropping a container into its own subtree is
+      refused.
+- [ ] Save on a fresh page creates the thing (private by default); the Public
+      toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
+      see public pages read-only (ttActions inert — owner-only interactivity).
+- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
+      /authorize) enters in-place editing of the current route; the live app
+      screen renders as the locked 🔒 native block; Save my version forks a
+      viewer-owned twin; leaving edit mode shows the personalised blocks in
+      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
+      refetch or remount on client navigation.
+- [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →
+      unchanged), GET returns the census, non-admins get 401/403, and
+      webpage- shareIds are refused on generic creates (reserved prefix).
+- [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
+      builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Nested blocks select on click: with a container (grid/row/column) holding
+      children, clicking a CHILD selects the child (inspector shows its
+      fields), clicking the container's own area selects the container —
+      ancestors never steal the capture-phase click (regression: outermost
+      frame always won and stopped propagation).
+- [ ] Grid ×2 + two blocks: first block lands in the LEFT cell, second sits
+      beside it, the trailing add-tile takes the next free cell (regression:
+      interleaved insert zones consumed grid cells and shoved blocks right).
+- [ ] Row container with two text blocks: children share one line via flex
+      sizing (regression: width-100% frames wrapped each child onto its own
+      line); row insert zones are slim vertical strips.
+- [ ] Inline WYSIWYG: clicking a text block edits in place with the caret
+      preserved while typing (regression: tag flips mid-edit replaced the DOM
+      node under the mount-only init and ATE the text); Enter/Shift+Enter
+      insert soft breaks; selecting text floats the B/I/U/S/link toolbar;
+      formatting survives deselect (renders through the allowlist renderer).
+- [ ] Custom CSS/tag/html/media fields round-trip a save and the gate rejects
+      `expression()`, `@import`, `javascript:`, non-https `url()`, script/
+      iframe text tags, ftp/js media src, and >20KB html
+      (`pnpm --dir remix run test:schemas` → webpageBlockGate).
+- [ ] Edit mode shows no white body bar between the 🌐 Global strip and the
+      page region (canvas paints the surface wash) and the Global eyebrow has
+      clear air below the navbar (view + edit).
+- [ ] Dropping an image FILE onto a media block replaces its src (never opens
+      the file in the browser); dropping anywhere else in edit mode uploads
+      and appends a media block (window-level guard); ⌘/Ctrl+V of a clipboard
+      image while a block is selected uploads at the selection, and plain
+      text paste into inputs/the inline editor is untouched.
+- [ ] Media inspector offers BOTH ⬆️ Upload file and a URL field; the Kind
+      select never wraps its option text (FieldPair min-width regression).
+- [ ] Inspector padding/margin mode toggles (▢/⬍⬌/⛶) write the css shorthand
+      and round-trip (axes ↔ sides keep values); per-corner radius, border
+      and shadow composers produce valid shorthands
+      (`pnpm --dir remix run test:webpages` → figmaControlValues).
+- [ ] Align=center on a block visibly centers it (fit-content + justify-self
+      in grids — regression: align-self alone did nothing on 100%-wide
+      blocks and was the wrong axis in grid cells).
+- [ ] Text block 📝 Rich editor (Editor.js) applies headers/lists/tables/code
+      as sanitised html and reopens editable; double-click on text inside a
+      component block opens the inline arg editor and patches the arg.
+- [ ] Drawer resizes by dragging its left edge (handle reachable even with
+      the inspector scrolled — content scrolls, not the shell); width
+      persists across reloads and the canvas padding follows live; selected
+      inline text editor shows ONE outline (no double border once padding is
+      set).
+- [ ] TRUE WYSIWYG: a saved block's top/left/size are IDENTICAL in edit mode
+      and view mode (toggle ✏️/Done and measure) — insert affordances are
+      overlay strips on block seams and never occupy layout; the 🌐 Global
+      label floats in the nav breathing band; grids have no add-tile cell.
+- [ ] Selecting a text block mounts the FULL Editor.js editor inline
+      (headings/lists/tables/quotes); a heading typed there renders at real
+      heading scale after deselect (regression: Chakra reset flattened
+      rendered rich markup to body size); right-click a text block →
+      "Advanced rich editor…" opens the modal.
+- [ ] Right-click any block (or the chip ⊞): Wrap with block drill-down wraps
+      IN PLACE (block becomes the container's only child), Duplicate
+      deep-clones with fresh ids, move/delete work
+      (`pnpm --dir remix run test:webpages` → wrapBlock/duplicateBlock).
+- [ ] Numeric inspector fields never rewrite mid-typing: type "300" into Max
+      width — it must NOT snap to 120 at the "3" (clamps commit on
+      blur/Enter); spaces can be typed in the uniform padding input.
+- [ ] Dropping the SAME OS file twice starts two uploads (regression: the
+      uploader's session dedupe silently swallowed re-drops); Rich-editor
+      Apply shows immediately in the still-mounted inline editor and is not
+      overwritten by its blur commit (external-change sync); pasting into
+      drawer inputs or the Editor.js modal is never hijacked by the
+      paste-to-upload listener; a padding of calc(100% - 20px) survives the
+      Sides control (paren-aware tokenizer) and a multi-token shorthand is
+      shown raw in uniform mode, never as an empty field.
+- [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
