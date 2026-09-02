@@ -188,6 +188,12 @@ export type ExpressionContext = {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	!!value && typeof value === 'object' && !Array.isArray(value);
 
+// Keys that must never be written onto a result object: assigning them reaches
+// Object.prototype's accessors instead of adding an own property. Shared so the
+// object builders (`set`, `merge`) refuse exactly the same set — the same trio
+// api/utils/things/embeddedThings.ts and api/utils/mongodb/querySafety.ts refuse.
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 const toNumber = (value: unknown, ctx: ExpressionContext, label: string): number => {
 	if (typeof value === 'number') {
 		if (!Number.isFinite(value)) ctx.fail(`${label} is not a finite number`);
@@ -628,12 +634,24 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 		// ── object ──
 		case 'merge': {
 			const out: Record<string, unknown> = {};
-			for (const value of args) if (isPlainObject(value)) Object.assign(out, value);
+			// Own-key copy rather than Object.assign: assign writes through [[Set]], so
+			// an own `__proto__` key on a merged object reaches Object.prototype's
+			// setter and re-points THIS result's prototype instead of landing as data.
+			// JSON.parse keeps `__proto__` as an own property, so any caller-supplied
+			// $input can carry one. `set` refuses those keys already; merge has to
+			// agree, or the guard is only one function wide.
+			for (const value of args) {
+				if (!isPlainObject(value)) continue;
+				for (const key of Object.keys(value)) {
+					if (UNSAFE_OBJECT_KEYS.has(key)) ctx.fail(`merge needs safe keys, got ${key}`);
+					out[key] = value[key];
+				}
+			}
 			return out;
 		}
 		case 'set': {
 			const key = text(1);
-			if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') ctx.fail('set needs a safe key');
+			if (!key || UNSAFE_OBJECT_KEYS.has(key)) ctx.fail('set needs a safe key');
 			return { ...(isPlainObject(args[0]) ? args[0] : {}), [key]: args[2] ?? null };
 		}
 		case 'pick': {

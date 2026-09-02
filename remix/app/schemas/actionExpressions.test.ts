@@ -163,6 +163,45 @@ test('object and date functions', () => {
 	assert.equal(run(['formatDate', '2026-09-02T00:00:00.000Z', 'weekday']), 'Wednesday');
 });
 
+test('the object builders refuse prototype-accessor keys, not just `set`', () => {
+	// Defence in depth: today a `__proto__` key cannot reach here — action step
+	// keys are refused at save time (ACTION_STEP_KEY_PATTERN +
+	// ACTION_BANNED_SEGMENTS), stored data keys by the data walk
+	// (PROTOTYPE_POLLUTION_KEYS), and run inputs are coerced to scalars. This
+	// pins the catalogue's own guarantee so it does not silently depend on all
+	// three staying exactly as they are.
+	//
+	// The args are handed straight to evaluateExpression rather than through
+	// `run`, because the harness resolver rebuilds every object it walks and
+	// would consume the own key itself before the function ever saw it.
+	const direct = (expression: unknown[]): unknown =>
+		evaluateExpression(expression, {
+			resolve: (value) => value,
+			budget: { nodes: 1000 },
+			packs: {},
+			random: () => 0.5,
+			fail: (message) => {
+				throw new Error(message);
+			}
+		});
+
+	// JSON.parse, not an object literal: `{ __proto__: … }` in source SETS the
+	// prototype, while JSON.parse keeps `__proto__` as an own enumerable
+	// property — the shape that makes a [[Set]]-based copy re-point a prototype.
+	const hostile = JSON.parse('{"__proto__": {"polluted": "ATTACKER"}, "ok": 1}');
+	assert.ok(Object.prototype.hasOwnProperty.call(hostile, '__proto__'), 'fixture must carry an OWN __proto__ key');
+
+	assert.throws(() => direct(['merge', hostile, { b: 2 }]), /safe keys/);
+	assert.throws(() => direct(['merge', { a: 1 }, JSON.parse('{"constructor": 1}')]), /safe keys/);
+	assert.throws(() => direct(['set', {}, '__proto__', 1]), /safe key/);
+
+	// benign merges are untouched: later wins, non-objects are skipped
+	const merged = direct(['merge', { a: 1, b: 1 }, 'ignored', { b: 2 }]) as Record<string, unknown>;
+	assert.deepEqual(merged, { a: 1, b: 2 });
+	assert.equal(Object.getPrototypeOf(merged), Object.prototype, 'a benign merge keeps the ordinary prototype');
+	assert.equal((({}) as Record<string, unknown>).polluted, undefined, 'nothing reaches the global prototype');
+});
+
 test('if / and / or / coalesce short-circuit — the untaken branch never evaluates', () => {
 	// `set` with an empty key throws; inside the untaken branch it must not run
 	assert.equal(run(['if', false, { ttExpr: ['set', {}, '', 1] }, 'safe']), 'safe');
