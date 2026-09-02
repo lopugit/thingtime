@@ -1,13 +1,15 @@
 import React from 'react';
-import { Badge, Box, Button, Flex, Heading, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Heading, Text } from '@chakra-ui/react';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import { appDataStorageLabel } from './ConnectedAppsSection';
 import type { AppDataRow } from './ConnectedAppsSection';
+import { PageHeader, PageShell } from '../Layout/PageShell';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { CARD_STYLES } from '~/theme/card';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 // /apps — browse everything each connected app stores in your account.
@@ -16,6 +18,18 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 // its shared slice (App view — the same lens the app reads through, built
 // from your live grant). Everything an app stores is YOURS: per-entry delete
 // and namespace-wide delete-all live here.
+
+// House chip: mono uppercase micro-label on a tokened tint.
+const CHIP_STYLES = {
+  fontFamily: 'var(--tt-font-mono, ui-monospace, Menlo, monospace)',
+  fontSize: '10px',
+  fontWeight: 600,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  borderRadius: 'var(--tt-radius-xs, 7px)',
+  paddingX: 2,
+  paddingY: 0.5
+} as const;
 
 type PublicThingWire = {
   id: string;
@@ -56,16 +70,16 @@ const EntryCard = ({
       ? 'shared with app users'
       : thing.visibility;
   return (
-    <Box borderWidth="1px" borderRadius="md" p={3} mb={3}>
+    <Box {...CARD_STYLES} p={3} mb={3}>
       <Flex alignItems="center" gap={2} flexWrap="wrap" mb={2}>
         {thing.thingtime.map((id) => (
-          <Badge key={id} fontSize="0.65em">
+          <Box key={id} {...CHIP_STYLES} background="var(--tt-accent-tint, #fff5fa)" color="var(--tt-accent, hotpink)">
             {id}
-          </Badge>
+          </Box>
         ))}
-        <Badge fontSize="0.65em" variant="outline">
+        <Box {...CHIP_STYLES} background="var(--tt-surface-alt, #f5f5f7)" color="var(--tt-muted, #9a9aa6)">
           {audience}
-        </Badge>
+        </Box>
         {thing.author && !mine && (
           <Text fontSize="xs" opacity={0.7}>
             by {getUserDisplayName(thing.author)}
@@ -76,7 +90,7 @@ const EntryCard = ({
           {new Date(thing.updatedAt).toLocaleString()}
         </Text>
       </Flex>
-			<Box as="pre" fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap" wordBreak="break-word" maxHeight="14em" overflowY="auto" opacity={0.85}>
+			<Box as="pre" fontSize="xs" fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)" whiteSpace="pre-wrap" wordBreak="break-word" maxHeight="14em" overflowY="auto" opacity={0.85}>
         {preview}
       </Box>
       {mine && onDelete && (
@@ -206,45 +220,36 @@ export const AppsDataPage = () => {
     }
   };
 
-  // same shell as /settings: full-width, centered column, cleared below the
-  // fixed nav
-  const pageShell = {
-    justifyContent: 'center',
-    width: '100%',
-    minHeight: '100vh',
-    paddingTop: 'calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))'
-  } as const;
-
   if (!user) {
     return (
-      <Flex {...pageShell}>
-        <Box textAlign="center" maxWidth="30em" px={4} py={10}>
-          <Heading size="md" mb={2}>
-            App data 📦
-          </Heading>
-          <Text opacity={0.7} mb={4}>
-            Sign in to browse everything your connected apps store in your Thingtime.
-          </Text>
+      <PageShell width={680}>
+        <PageHeader
+          eyebrow="Thingtime · app data"
+          title="App data 📦"
+          variant="rainbow"
+          subtitle="Sign in to browse everything your connected apps store in your Thingtime."
+        />
+        <Box>
           <Button size="sm" onClick={() => navigate('/login')}>
             Log in 🗝️
           </Button>
         </Box>
-      </Flex>
+      </PageShell>
     );
   }
 
   const selectedRow = apps.find((app) => app.appId === selected) || null;
 
   return (
-    <Flex {...pageShell}>
-			<Flex width="100%" maxWidth="60em" flexDirection={{ base: 'column', md: 'row' }} gap={6} alignItems="flex-start" px={4} py={6} pb={12}>
+    <PageShell width={680}>
+      <PageHeader
+        eyebrow="Thingtime · app data"
+        title="App data 📦"
+        variant="rainbow"
+        subtitle="Everything your connected apps store in your account — yours to browse and delete."
+      />
+      <Flex width="100%" flexDirection={{ base: 'column', md: 'row' }} gap={6} alignItems="flex-start">
         <Box width={{ base: '100%', md: '18em' }} flexShrink={0}>
-          <Heading size="md" mb={1}>
-            App data 📦
-          </Heading>
-          <Text fontSize="sm" opacity={0.7} mb={4}>
-            Everything your connected apps store in your account — yours to browse and delete.
-          </Text>
           {apps.length === 0 && (
             <Text fontSize="sm" opacity={0.7}>
               {appsLoaded ? 'No app has stored anything yet.' : ' '}
@@ -253,19 +258,22 @@ export const AppsDataPage = () => {
           {apps.map((app) => (
             <Box
               key={app.appId}
-              borderWidth="1px"
-              borderRadius="md"
+              {...CARD_STYLES}
               p={3}
               mb={2}
               cursor="pointer"
-              borderColor={selected === app.appId ? 'purple.400' : undefined}
+              borderColor={selected === app.appId ? 'var(--tt-accent, hotpink)' : 'var(--tt-border, #ececef)'}
               onClick={() => setParams({ app: app.appId })}
             >
               <Flex alignItems="center" gap={2}>
                 <Text fontWeight="bold" fontSize="sm">
                   {app.appName || 'Deleted app'}
                 </Text>
-                {!app.appName && <Badge fontSize="0.6em">orphaned</Badge>}
+                {!app.appName && (
+                  <Box {...CHIP_STYLES} background="rgba(214, 69, 90, 0.12)" color="var(--tt-danger, #d6455a)">
+                    orphaned
+                  </Box>
+                )}
               </Flex>
               <Text fontSize="xs" opacity={0.65}>
 								{appDataStorageLabel(app)}
@@ -274,7 +282,7 @@ export const AppsDataPage = () => {
           ))}
         </Box>
 
-        <Box flex={1} width="100%">
+        <Box flex={1} width="100%" minWidth={0}>
           {!selected && (
             <Text fontSize="sm" opacity={0.7} py={6}>
               Pick an app to see what it has stored for you.
@@ -301,7 +309,7 @@ export const AppsDataPage = () => {
                 </Text>
               )}
               {tab === 'appview' && appViewError && (
-                <Box borderWidth="1px" borderRadius="md" p={4} mb={3}>
+                <Box {...CARD_STYLES} p={4} mb={3}>
                   <Text fontSize="sm" opacity={0.8}>
                     {appViewError}
                   </Text>
@@ -330,7 +338,14 @@ export const AppsDataPage = () => {
 
               {tab === 'stored' && entries.length > 0 && (
                 <Flex mt={6} justifyContent="flex-end">
-                  <Button size="xs" colorScheme={confirmWipe ? 'red' : undefined} variant="outline" onClick={wipeApp}>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    color={confirmWipe ? 'var(--tt-danger, #d6455a)' : undefined}
+                    borderColor={confirmWipe ? 'var(--tt-danger, #d6455a)' : undefined}
+                    _hover={confirmWipe ? { background: 'rgba(214, 69, 90, 0.12)' } : undefined}
+                    onClick={wipeApp}
+                  >
                     {confirmWipe ? 'Really delete ALL of this app’s data? 🗑️' : 'Delete all data for this app'}
                   </Button>
                 </Flex>
@@ -339,7 +354,7 @@ export const AppsDataPage = () => {
           )}
         </Box>
       </Flex>
-    </Flex>
+    </PageShell>
   );
 };
 

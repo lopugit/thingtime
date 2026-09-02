@@ -936,7 +936,7 @@ export const SearchPage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="760px" pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth="760px" pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         {/* Commander, grown up: the same rainbow-ringed input, page-sized */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">

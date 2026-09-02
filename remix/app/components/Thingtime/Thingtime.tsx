@@ -541,7 +541,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						paddingX="8px"
 						paddingY="2px"
 						borderRadius="var(--tt-radius-xs, 7px)"
-						background={thing ? 'var(--tt-positive-tint, #e4f6ea)' : 'var(--tt-surface-alt, #f5f5f7)'}
+						background={thing ? 'var(--tt-positive-soft, rgba(88,202,112,0.14))' : 'var(--tt-surface-alt, #f5f5f7)'}
 						color={thing ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
 						fontFamily="var(--tt-font-mono, monospace)"
 						fontSize="15px"

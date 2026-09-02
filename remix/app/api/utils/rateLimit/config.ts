@@ -45,9 +45,15 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'embed.write': { limit: 60, windowMs: 60_000, enabled: true },
   // component browsing (/api/v1/components/browse) — same read-only shape
   'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // webpage resolution (/api/v1/webpages/resolve) — read-only, one page +
+  // batched component refs per call; every client navigation may hit it
+  'webpages.resolve': { limit: 240, windowMs: 60_000, enabled: true },
   // admin component-library seeding (/api/v1/admin/components/seed) — batch
   // writes; enforced fail-closed at the route
   'components.seed': { limit: 30, windowMs: 60_000, enabled: true },
+  // admin site-page seeding (/api/v1/admin/webpages/seed) — deterministic
+  // table upserts; enforced fail-closed at the route
+  'webpages.seed': { limit: 30, windowMs: 60_000, enabled: true },
   // action execution (POST /api/v1/actions/run) — compute + writes; each run
   // is additionally bounded by its own budget envelope (registry limits)
   'actions.run': { limit: 60, windowMs: 60_000, enabled: true },

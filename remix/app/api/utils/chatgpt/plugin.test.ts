@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { beginChatGptAuthorization, callThingtimeTool, consumedSessionPatch, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
-import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES } from './pluginCore';
+import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri } from './pluginCore';
 import { REVOKED_SESSION_REAP_MS, revokedSessionPatch } from '~/api/utils/auth/sessions';
 
 const connectedContext = {
@@ -322,7 +322,19 @@ test('MCP publishes prompts and static resources before account authorization', 
   assert.equal(ui.contents[0].text.includes('test-token-not-returned-to-the-client'), false);
 });
 
-test('OAuth dynamic client registration signs only exact local loopback or ChatGPT callbacks', async () => {
+test('OAuth remote relay callbacks stay first-party and require a 256-bit handoff id', () => {
+  const origin = 'https://thingtime.example';
+  const handoff = 'A'.repeat(43);
+  assert.equal(
+    normalizeRegisteredClientRedirectUri(`${origin}/api/v1/integrations/chatgpt/oauth/relay?handoff=${handoff}`, origin),
+    `${origin}/api/v1/integrations/chatgpt/oauth/relay?handoff=${handoff}`
+  );
+  assert.equal(normalizeRegisteredClientRedirectUri(`https://attacker.invalid/api/v1/integrations/chatgpt/oauth/relay?handoff=${handoff}`, origin), null);
+  assert.equal(normalizeRegisteredClientRedirectUri(`${origin}/api/v1/integrations/chatgpt/oauth/relay?handoff=short`, origin), null);
+  assert.equal(normalizeRegisteredClientRedirectUri(`${origin}/api/v1/integrations/chatgpt/oauth/relay?handoff=${handoff}&extra=1`, origin), null);
+});
+
+test('OAuth dynamic client registration signs only exact local, ChatGPT, or first-party relay callbacks', async () => {
   const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
   const registration = await registerChatGptOAuthClient({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {
@@ -375,6 +387,19 @@ test('OAuth dynamic client registration signs only exact local loopback or ChatG
     })}`)
   });
   assert.notEqual(chatGptAuthorization.status, 400);
+
+  const handoff = 'B'.repeat(43);
+  const relayRedirectUri = `https://thingtime.example/api/v1/integrations/chatgpt/oauth/relay?handoff=${handoff}`;
+  const relayRegistration = await registerChatGptOAuthClient({
+    request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: [relayRedirectUri], token_endpoint_auth_method: 'none' })
+    })
+  });
+  const relayPayload: any = await relayRegistration.json();
+  assert.equal(relayRegistration.status, 201);
+  assert.equal(relayPayload.redirect_uris[0], relayRedirectUri);
 
   const invalid = await registerChatGptOAuthClient({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/oauth/register', {

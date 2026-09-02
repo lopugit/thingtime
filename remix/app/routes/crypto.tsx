@@ -1,7 +1,4 @@
 import {
-  Alert,
-  AlertIcon,
-  Badge,
   Box,
   Button,
   Flex,
@@ -19,6 +16,9 @@ import {
 } from '@chakra-ui/react';
 import { Copy, FileCheck2, KeyRound, Link2, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import React, { useCallback, useState } from 'react';
+
+import { PageHeader, PageShell } from '../components/Layout/PageShell';
+import { CARD_STYLES } from '../theme/card';
 
 type CryptoStandard = 'ES256' | 'ES384' | 'RS256' | 'EdDSA';
 type KeyEncoding = 'auto' | 'pem' | 'escaped-pem' | 'base64-pem' | 'base64url-pem' | 'jwk-json';
@@ -52,8 +52,6 @@ const textEncodingOptions: Array<{ value: TextEncoding; label: string }> = [
   { value: 'base64url', label: 'Base64url' },
   { value: 'hex', label: 'Hex' }
 ];
-
-const PAGE_MAX_WIDTH = '920px';
 
 const postCrypto = async (body: Record<string, unknown>) => {
   const res = await fetch('/api/v1/crypto', {
@@ -106,6 +104,22 @@ const CopyButton = ({ value, label = 'Copy' }: { value?: string; label?: string 
   );
 };
 
+const StatusDot = ({ color, label }: { color: string; label: React.ReactNode }) => (
+  <Flex alignItems="center" gap={1.5}>
+    <Box boxSize="8px" borderRadius="2px" bg={color} flexShrink={0} />
+    <Text
+      fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
+      fontSize="10px"
+      fontWeight={600}
+      letterSpacing="0.05em"
+      textTransform="uppercase"
+      color="var(--tt-muted, #9a9aa6)"
+    >
+      {label}
+    </Text>
+  </Flex>
+);
+
 const ToolPanel = ({
   title,
   icon,
@@ -117,22 +131,32 @@ const ToolPanel = ({
   badge?: string;
   children: React.ReactNode;
 }) => (
-  <Box
-    borderWidth="1px"
-    borderColor="var(--tt-border, #E2E8F0)"
-    borderRadius="var(--tt-radius-md, 12px)"
-    p={5}
-    bg="var(--tt-card, #ffffff)"
-    boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
-    w="100%"
-    minW={0}
-  >
+  <Box {...CARD_STYLES} p={5} w="100%" minW={0}>
     <Flex alignItems="center" justifyContent="space-between" gap={3} mb={4}>
       <Flex alignItems="center" gap={2}>
-        <Icon as={icon} boxSize={5} color="var(--tt-link, #319795)" />
-        <Heading size="sm">{title}</Heading>
+        <Icon as={icon} boxSize={5} color="var(--tt-accent, hotpink)" />
+        <Heading size="sm" color="var(--tt-ink, #16161a)">
+          {title}
+        </Heading>
       </Flex>
-      {badge ? <Badge colorScheme="teal">{badge}</Badge> : null}
+      {badge ? (
+        <Box
+          as="span"
+          bg="var(--tt-accent-tint, #fff5fa)"
+          color="var(--tt-accent, hotpink)"
+          borderRadius="var(--tt-radius-pill, 999px)"
+          px={2}
+          py={0.5}
+          fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
+          fontSize="10px"
+          fontWeight={600}
+          letterSpacing="0.05em"
+          textTransform="uppercase"
+          whiteSpace="nowrap"
+        >
+          {badge}
+        </Box>
+      ) : null}
     </Flex>
     {children}
   </Box>
@@ -303,22 +327,24 @@ export default function CryptoPage() {
   }, [message, messageEncoding, signature, signatureEncoding, signatureKeyEncoding, signaturePrivateKey, signaturePublicKey, signatureStandard]);
 
   return (
-    <Box minH="100vh" w="100%" minW={0} bg="var(--tt-surface, #fafafb)" pt={{ base: 28, md: 32 }} pb={{ base: 6, md: 10 }} px={{ base: 3, md: 12 }} display="flex" justifyContent="center">
-      <Box as="main" data-testid="crypto-shell" maxW={PAGE_MAX_WIDTH} w="100%">
-        <Flex alignItems="center" justifyContent="center" gap={4} mb={6} flexDirection="column" textAlign="center">
-          <Box minW={0}>
-            <Heading size="lg">Crypto</Heading>
-            <Text color="var(--tt-muted, #718096)" fontSize="sm" mt={1} fontFamily="mono">
-              `/api/v1/crypto`
+    <PageShell width={920}>
+      <Box as="main" data-testid="crypto-shell" w="100%" minW={0}>
+        <PageHeader
+          eyebrow="Thingtime · crypto"
+          title="Crypto 🔒"
+          variant="ink"
+          subtitle={
+            <Text as="span" fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)" fontSize="xs">
+              /api/v1/crypto
             </Text>
-          </Box>
-          <CopyButton value={generatedEnvValue(generated, outputEncoding)} label="Copy env" />
-        </Flex>
+          }
+          after={<CopyButton value={generatedEnvValue(generated, outputEncoding)} label="Copy env" />}
+        />
 
-        <Grid templateColumns={{ base: '1fr', xl: '1fr 1fr' }} gap={5} alignItems="start" w="100%">
+        <Grid templateColumns={{ base: '1fr', xl: '1fr 1fr' }} gap={5} alignItems="start" w="100%" mt={6}>
           <ToolPanel title="Password Hasher" icon={Lock} badge="bcrypt">
             <Stack spacing={4}>
-              <Text fontSize="xs" color="var(--tt-muted, #718096)">
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 Turns a password into the exact hash Thingtime stores, and hands you a mongosh snippet that writes it
                 into a user — the manual way back in when you own the database but forgot the password. Nothing is
                 written here: the hash is computed and returned, you run the update yourself.
@@ -351,7 +377,6 @@ export default function CryptoPage() {
                 <Button
                   size="sm"
                   variant={hashGenerate ? 'solid' : 'outline'}
-                  colorScheme={hashGenerate ? 'teal' : 'gray'}
                   leftIcon={<Icon as={RefreshCw} boxSize={3.5} />}
                   onClick={() => setHashGenerate((value) => !value)}
                 >
@@ -378,21 +403,35 @@ export default function CryptoPage() {
                 Hash password
               </Button>
               {hashError ? (
-                <Alert status="error" borderRadius="md">
-                  <AlertIcon />
+                <Box
+                  bg="rgba(214, 69, 90, 0.12)"
+                  color="var(--tt-danger, #d6455a)"
+                  borderRadius="var(--tt-radius-sm, 9px)"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                >
                   {hashError}
-                </Alert>
+                </Box>
               ) : null}
               {hashResult ? (
                 <Stack spacing={3}>
-                  <Flex gap={2} wrap="wrap" alignItems="center">
-                    <Badge colorScheme={hashResult.verified ? 'green' : 'red'}>
-                      {hashResult.verified ? 'verified' : 'NOT verified'}
-                    </Badge>
-                    <Badge colorScheme="teal">
-                      {hashResult.algorithm} cost {hashResult.cost}
-                    </Badge>
-                    {hashResult.meetsRegisterPolicy ? null : <Badge colorScheme="orange">under 6 chars</Badge>}
+                  <Flex gap={3} wrap="wrap" alignItems="center">
+                    <StatusDot
+                      color={hashResult.verified ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-danger, #d6455a)'}
+                      label={hashResult.verified ? 'verified' : 'NOT verified'}
+                    />
+                    <StatusDot
+                      color="var(--tt-muted, #9a9aa6)"
+                      label={
+                        <>
+                          {hashResult.algorithm} cost {hashResult.cost}
+                        </>
+                      }
+                    />
+                    {hashResult.meetsRegisterPolicy ? null : (
+                      <StatusDot color="var(--tt-warning, #ffbc48)" label="under 6 chars" />
+                    )}
                   </Flex>
                   {hashResult.password ? (
                     <FormControl>
@@ -408,7 +447,7 @@ export default function CryptoPage() {
                   <OutputTextarea label="Password hash" value={hashResult.hash} minH="60px" />
                   <OutputTextarea label="mongosh snippet — paste and run" value={hashResult.mongosh} minH="220px" />
                   {(hashResult.notes || []).map((note: string) => (
-                    <Text key={note} fontSize="xs" color="var(--tt-muted, #718096)">
+                    <Text key={note} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                       • {note}
                     </Text>
                   ))}
@@ -421,7 +460,7 @@ export default function CryptoPage() {
             <Stack spacing={4}>
               <Flex gap={2} wrap="wrap">
                 {standards.map((item) => (
-                  <Button key={item.value} size="sm" variant={standard === item.value ? 'solid' : 'outline'} colorScheme={standard === item.value ? 'teal' : 'gray'} onClick={() => selectStandard(item.value)}>
+                  <Button key={item.value} size="sm" variant={standard === item.value ? 'solid' : 'outline'} onClick={() => selectStandard(item.value)}>
                     {item.label}
                   </Button>
                 ))}
@@ -452,10 +491,16 @@ export default function CryptoPage() {
                 Generate
               </Button>
               {generateError ? (
-                <Alert status="error" borderRadius="md">
-                  <AlertIcon />
+                <Box
+                  bg="rgba(214, 69, 90, 0.12)"
+                  color="var(--tt-danger, #d6455a)"
+                  borderRadius="var(--tt-radius-sm, 9px)"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                >
                   {generateError}
-                </Alert>
+                </Box>
               ) : null}
               {generated ? (
                 <Stack spacing={4}>
@@ -509,10 +554,16 @@ export default function CryptoPage() {
                 Verify JWT
               </Button>
               {jwtError ? (
-                <Alert status="error" borderRadius="md">
-                  <AlertIcon />
+                <Box
+                  bg="rgba(214, 69, 90, 0.12)"
+                  color="var(--tt-danger, #d6455a)"
+                  borderRadius="var(--tt-radius-sm, 9px)"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                >
                   {jwtError}
-                </Alert>
+                </Box>
               ) : null}
               <JsonOutput value={jwtResult} />
             </Stack>
@@ -544,10 +595,16 @@ export default function CryptoPage() {
                 Match keys
               </Button>
               {matchError ? (
-                <Alert status="error" borderRadius="md">
-                  <AlertIcon />
+                <Box
+                  bg="rgba(214, 69, 90, 0.12)"
+                  color="var(--tt-danger, #d6455a)"
+                  borderRadius="var(--tt-radius-sm, 9px)"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                >
                   {matchError}
-                </Alert>
+                </Box>
               ) : null}
               <JsonOutput value={matchResult} />
             </Stack>
@@ -619,16 +676,22 @@ export default function CryptoPage() {
                 Verify signature
               </Button>
               {signatureError ? (
-                <Alert status="error" borderRadius="md">
-                  <AlertIcon />
+                <Box
+                  bg="rgba(214, 69, 90, 0.12)"
+                  color="var(--tt-danger, #d6455a)"
+                  borderRadius="var(--tt-radius-sm, 9px)"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                >
                   {signatureError}
-                </Alert>
+                </Box>
               ) : null}
               <JsonOutput value={signatureResult} />
             </Stack>
           </ToolPanel>
         </Grid>
       </Box>
-    </Box>
+    </PageShell>
   );
 }
