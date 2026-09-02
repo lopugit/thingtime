@@ -297,9 +297,10 @@ export function MigrationsPanel() {
                     <Th>Collection</Th>
                     <Th>Generation</Th>
                     <Th isNumeric>Docs</Th>
-                    <Th isNumeric>Documents</Th>
+                    {/* bytes, not a count — `Docs` beside it is the count */}
+                    <Th isNumeric>Doc bytes</Th>
                     <Th isNumeric>On disk</Th>
-                    <Th isNumeric>Indexes</Th>
+                    <Th isNumeric>Index bytes · count</Th>
                     <Th>Status</Th>
                   </Tr>
                 </Thead>

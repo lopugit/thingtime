@@ -65,6 +65,47 @@ only by `partialFilterExpression` coexist (so the create-then-drop swap really
 is slot-safe), and both `{kind:'post'}` and `{kind:{$in:[…]}}` use the partial
 index — the feed `$or` still plans `SORT_MERGE`, no blocking sort.
 
+## Review round 2 (Lopu, 2026-09-02) — the text index now really is rebuilt last
+
+`rebuild-things-indexes`'s operator-facing description promises "the wildcard
+text index is rebuilt last, so ranked text search errors for the seconds it
+takes to build". It did not: `rebuildPlanIndexes` walked `listIndexes` order,
+which is creation order, and replaying the real plan against MongoDB 8.0 put
+`things_text_search` **36th of 57**. That ordering matters more than it looks —
+`$text` against a collection with no text index is a hard `IndexNotFound (27)`
+("text index required for $text query", reproduced), so ranked
+`/api/v1/things/search` (`things/search.ts:578`) *errors* for that window while
+every other plan index's absence only costs a scan. So the one hard-failure
+window landed at an unpredictable point in the middle of a multi-minute
+destructive run instead of at the end, where the description says it is.
+
+Fixed by ordering text indexes last (`sort()` is stable, so every other index
+keeps creation order), with the `{_fts,_ftsx}` test extracted to
+`isTextIndexDefinition` so the ordering and the recreate path cannot disagree
+about what a text index is. Re-verified on 8.0: `things_text_search` is now
+57 of 57, and the full 57-index rebuild still round-trips **every index spec
+byte-identically** (name set and full `listIndexes` output equal before/after,
+10 unique constraints twinned, zero leftover twins, `$text` working after).
+One new unit test covers the order for both the real run and the dry-run
+preview.
+
+Also independently re-validated on 8.0 this round, all clean: `thingsIndexPlanNames()`
+matches the names MongoDB actually assigns **exactly** (57/57, no index left
+`skipped`, so the rebuild cannot silently miss one); the relocation cursor
+(`{thingtime:$in}, _id:$gt`, sort `_id`) plans `LIMIT ← FETCH ← IXSCAN{_id_}`
+with **no blocking sort** — 500 docs examined per batch, 60k rows drained in
+11.4 s (≈350 s for production's 1.82 M, matching the "re-run until pending is 0"
+design); `relocate-ci-control-telemetry`'s `pending()` is a pure index scan
+(500k rows counted in 353 ms, 0 docs examined); and the unique+`partialFilterExpression`
+twin coexists with, and enforces uniqueness in place of, both the sparse
+(`shareId_1`) and partial (`things_reaction_unique`) originals.
+
+Second fix: the `/migrations` storage table had adjacent numeric columns
+**Docs** (a count) and **Documents** (bytes). Renamed to `Doc bytes` and
+`Index bytes · count` — this table is where an operator decides to run a
+destructive migration, so two near-identical numeric headers meaning different
+things is worth one word.
+
 ## Verification
 
 - Unit suites green: collections 34, ci-control 59, migrations 48, schemas 109, capabilities 4, migration UI 5; typecheck ratchet at baseline (108).

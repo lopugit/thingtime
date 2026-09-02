@@ -393,3 +393,31 @@ test('a text index is recreated from its weights, and server-managed fields are 
     { keys: { expiresAt: 1 }, options: { name: 'ttl', expireAfterSeconds: 0, partialFilterExpression: { a: 1 } } }
   );
 });
+
+test('the text index is rebuilt last, because it is the only one whose absence is an error', async () => {
+  const rebuilt: string[] = [];
+  const definitions = [
+    { v: 2, name: '_id_', key: { _id: 1 } },
+    { v: 2, name: 'shareId_1', key: { shareId: 1 }, unique: true, sparse: true },
+    // listIndexes returns creation order, and on the real plan the text index
+    // sits in the middle of it (36th of 57)
+    { v: 2, name: 'things_text_search', key: { _fts: 'text', _ftsx: 1 }, weights: { '$**': 1 } },
+    { v: 2, name: 'tags_1_createdAt_-1_shareId_1', key: { tags: 1, createdAt: -1, shareId: 1 } }
+  ];
+  const collection = {
+    async indexes() {
+      return definitions;
+    },
+    async createIndex(_keys: Record<string, unknown>, options: Record<string, unknown> = {}) {
+      if (!String(options.name).endsWith('__rebuild')) rebuilt.push(String(options.name));
+    },
+    async dropIndex() {}
+  };
+  const planNames = new Set(['shareId_1', 'things_text_search', 'tags_1_createdAt_-1_shareId_1']);
+  const report = await rebuildPlanIndexes({ collection, planNames, ensurePlan: async () => {}, dryRun: false });
+  assert.deepEqual(report.rebuilt, ['shareId_1', 'tags_1_createdAt_-1_shareId_1', 'things_text_search']);
+  assert.deepEqual(rebuilt, ['shareId_1', 'tags_1_createdAt_-1_shareId_1', 'things_text_search']);
+  // the dry run previews the same order the real run will take
+  const dry = await rebuildPlanIndexes({ collection, planNames, ensurePlan: async () => {}, dryRun: true });
+  assert.deepEqual(dry.rebuilt, ['shareId_1', 'tags_1_createdAt_-1_shareId_1', 'things_text_search']);
+});

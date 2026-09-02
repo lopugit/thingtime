@@ -212,13 +212,17 @@ const dropIndexIfPresent = async (collection: RebuildCollection, name: string) =
   }
 };
 
+// A text index is listed as {_fts,_ftsx} whatever its declared keys were.
+export const isTextIndexDefinition = (definition: { key?: Record<string, unknown> }): boolean =>
+  !!definition.key && typeof definition.key === 'object' && '_fts' in definition.key;
+
 // listIndexes output → the (keys, options) createIndex needs to recreate the
 // same index. Server-managed fields (v, ns, background, *IndexVersion) are
 // dropped; a text index is listed as {_fts,_ftsx} and must be rebuilt from its
 // weights map (every weighted path, including `$**`, is a text key).
 export const indexCreateSpecFromDefinition = (definition: Record<string, any>): { keys: Record<string, unknown>; options: Record<string, unknown> } => {
   const { v: _v, ns: _ns, background: _bg, textIndexVersion: _tv, '2dsphereIndexVersion': _sv, key, ...rest } = definition;
-  if (key && typeof key === 'object' && '_fts' in key) {
+  if (isTextIndexDefinition({ key })) {
     const weights = (rest.weights && typeof rest.weights === 'object' ? rest.weights : {}) as Record<string, number>;
     const keys: Record<string, unknown> = {};
     for (const [field, direction] of Object.entries(key as Record<string, unknown>)) {
@@ -282,7 +286,16 @@ export const rebuildPlanIndexes = async (options: {
     report.recovered = await reconcileRebuildTwins({ collection: options.collection, ensurePlan: options.ensurePlan, assertLease: options.assertLease });
   }
   const existing = (await options.collection.indexes()).filter((index) => index.name !== '_id_');
-  const owned = existing.filter((index) => options.planNames.has(index.name));
+  // Text indexes go LAST. Every other index's absence only costs a scan, but
+  // $text against a collection with no text index is a hard IndexNotFound (27)
+  // — ranked /things/search (things/search.ts) returns an error, not slower
+  // results — so that outage belongs at the end of a run the operator is
+  // watching, which is what this migration's description promises. listIndexes
+  // returns creation order, which otherwise puts things_text_search 36th of 57.
+  // sort() is stable, so everything else keeps that creation order.
+  const owned = existing
+    .filter((index) => options.planNames.has(index.name))
+    .sort((a, b) => Number(isTextIndexDefinition(a)) - Number(isTextIndexDefinition(b)));
   report.skipped = existing.filter((index) => !options.planNames.has(index.name) && !index.name.endsWith('__rebuild')).map((index) => index.name);
   let count = existing.length + 1; // + _id_
   if (options.dryRun) {
