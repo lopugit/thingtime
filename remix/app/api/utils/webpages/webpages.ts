@@ -176,7 +176,22 @@ export const resolveWebpage = async (
 	const match = visibility
 		? withMatch({ shareId: id, thingtime: 'webpage' }, visibility)
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
-	const doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+
+	// PAGE KEYS personalise like site routes: `/p/<pageKey>` (or the seeded
+	// `/p/webpage-<pageKey>`) resolves the VIEWER'S OWN page carrying that
+	// pageKey ahead of the system-seeded one. This is what makes an installed
+	// app suite work — its pages link to each other by key, the seeded copy
+	// answers for visitors, and the moment a viewer installs the suite the same
+	// URLs serve their own (interactive) twins. Only viewer-owned and
+	// system-owned docs take part: a stranger's page never resolves by key.
+	if (!doc || doc.ownerId === 'system') {
+		const pageKey = doc ? (typeof doc.crystal?.pageKey === 'string' ? doc.crystal.pageKey : null) : id;
+		if (pageKey && pageKey.length <= MAX_WEBPAGE_ROUTE_CHARS && COMPONENT_KEY_PATTERN.test(pageKey)) {
+			const { doc: keyed } = await findSitePage(viewer, { 'crystal.pageKey': pageKey });
+			if (keyed) doc = keyed;
+		}
+	}
 	if (!doc) return fail(404, 'Webpage not found');
 	// source 'user' means "the VIEWER owns this and saves update it in place".
 	// Someone else's shared page must report as 'system' so a viewer who edits

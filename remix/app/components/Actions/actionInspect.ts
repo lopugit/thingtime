@@ -75,12 +75,21 @@ export const displayRef = (ref: string, names?: Record<string, string>): string 
 export const describeActionStep = (step: Record<string, unknown>, names?: Record<string, string>): string => {
 	const op = String(step.op || '');
 	const schema = typeof step.schema === 'string' ? displayRef(step.schema, names) : 'data';
-	if (op === 'things.create') return `Create a ${schema} thing`;
-	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}`;
-	if (op === 'things.search') return `Search your ${schema} things${step.limit ? ` (max ${step.limit})` : ''}`;
-	if (op === 'things.update') return `Update ${String(step.id || 'a thing')}`;
-	if (op === 'actions.invoke') return `Invoke ⚡ ${String(step.action || '')}`;
-	if (op === 'return') return 'Return the result';
+	const guard = step.when !== undefined ? ' (when a condition holds)' : '';
+	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
+	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
+	if (op === 'things.search') {
+		const scope = step.scope === 'public' ? 'public' : 'your';
+		const filters = step.where || step.match ? ' matching a filter' : '';
+		return `Search ${scope} ${schema} things${filters}${step.limit ? ` (max ${step.limit})` : ''}${guard}`;
+	}
+	if (op === 'things.update') return `Update ${String(step.id || 'a thing')}${guard}`;
+	if (op === 'things.delete') return `Delete ${String(step.id || 'a thing')}${guard}`;
+	if (op === 'actions.invoke') return `Invoke ⚡ ${String(step.action || '')}${guard}`;
+	if (op === 'each') return `Invoke ⚡ ${String(step.action || '')} once per element${step.max ? ` (max ${step.max})` : ''}${guard}`;
+	if (op === 'compute') return `Compute a value${guard}`;
+	if (op === 'fail') return `Refuse the run with a message${guard}`;
+	if (op === 'return') return `Return the result${guard}`;
 	return op;
 };
 
@@ -109,7 +118,8 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 		if (step.op === 'things.create') need('things.create', schema);
 		if (step.op === 'things.get' || step.op === 'things.search') need('things.read', schema);
 		if (step.op === 'things.update') need('things.update');
-		if (step.op === 'actions.invoke') {
+		if (step.op === 'things.delete') need('things.delete');
+		if (step.op === 'actions.invoke' || step.op === 'each') {
 			need('actions.invoke');
 			if (typeof step.action === 'string' && step.action) invoked.add(step.action);
 			else invokeUnscoped = true;
@@ -216,7 +226,11 @@ export const ACTION_OP_TONES: Record<string, { label: string; tone: 'read' | 'wr
 	'things.get': { label: 'read', tone: 'read' },
 	'things.search': { label: 'read', tone: 'read' },
 	'things.update': { label: 'write', tone: 'write' },
+	'things.delete': { label: 'delete', tone: 'write' },
 	'actions.invoke': { label: 'invoke', tone: 'invoke' },
+	each: { label: 'invoke', tone: 'invoke' },
+	compute: { label: 'pure', tone: 'pure' },
+	fail: { label: 'pure', tone: 'pure' },
 	return: { label: 'pure', tone: 'pure' }
 };
 
@@ -230,15 +244,18 @@ export const ACTION_LIMIT_LABELS: Record<string, (value: number) => string> = {
 };
 
 // The complement summary — what this program can NEVER touch. The first
-// three are v1 vocabulary invariants; the rest derive from the declared
-// capability scopes.
+// two are vocabulary invariants (no op reaches the network or a secret); the
+// rest derive from the declared capabilities and their scopes. Deletes are a
+// declared capability since the v2 vocabulary, so "No deletes" is only
+// claimed when the program does not declare things.delete.
 export const actionCannotAccess = (
 	capabilities: ActionCapabilityEntry[] | undefined,
 	names?: Record<string, string>
 ): string[] => {
-	const list = ['No network', 'No secrets', 'No deletes'];
+	const list = ['No network', 'No secrets'];
 	const declared = capabilities || [];
 	const has = (capability: string) => declared.some((entry) => entry.capability === capability);
+	if (!has('things.delete')) list.push('No deletes');
 	// An action that invokes another action cannot honestly claim the absolute
 	// negatives: the child runs on ITS own declaration, so "Cannot create
 	// things" would be a claim about code this page never read. Only the three
@@ -249,6 +266,7 @@ export const actionCannotAccess = (
 	if (!has('things.read') && !composes) list.push('Cannot read things');
 	if (!has('things.create') && !composes) list.push('Cannot create things');
 	if (!has('things.update') && !composes) list.push('Cannot update things');
+	if (has('things.delete')) list.push('Can delete your own data things it names');
 	if (!composes) list.push('Cannot invoke other actions');
 	else list.push('Runs other actions — their effects are listed on their own pages');
 	for (const entry of declared) {

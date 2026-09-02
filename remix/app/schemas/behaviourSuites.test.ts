@@ -127,7 +127,8 @@ test('suite keys and slugs are unique and summaries count what the catalog holds
 			schemas: suite.schemas.length,
 			components: suite.components.length,
 			actions: suite.actions.length,
-			data: suite.data.length
+			data: suite.data.length,
+			pages: 1
 		});
 		assert.equal(summary.actionIds.length, suite.actions.length);
 	}

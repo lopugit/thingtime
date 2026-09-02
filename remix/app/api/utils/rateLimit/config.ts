@@ -51,6 +51,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // demo library listing (/api/v1/webpages/demos) — read-only, the catalog is
   // code and the seeded census is one bounded projection; browse-shaped
   'webpages.demos': { limit: 120, windowMs: 60_000, enabled: true },
+  // suite / app install (/api/v1/webpages/suites/install) — one call upserts a
+  // whole bundle into the caller's own things through the ordinary write
+  // path; installs are rare and idempotent, so keep the window tight
+  'webpages.install': { limit: 12, windowMs: 60_000, enabled: true },
   // admin component-library seeding (/api/v1/admin/components/seed) — batch
   // writes; enforced fail-closed at the route
   'components.seed': { limit: 30, windowMs: 60_000, enabled: true },

@@ -1,24 +1,29 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+	ACL_ALL,
 	ACL_OWNER,
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
+	MAX_ACTION_EACH_ITEMS,
 	MAX_ACTION_RUN_ERROR_CHARS,
 	MAX_ACTION_RUN_HISTORY,
 	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
+	MAX_ACTION_SEARCH_MATCH_CHARS,
 	MAX_ACTION_TRACE_ENTRIES,
 	parseActionRef,
 	sanitizeActionCrystal,
 	type ActionCapabilityEntry,
 	type ActionStep
 } from '~/schemas/registry';
+import { MAX_EXPRESSION_NODES_PER_RUN, evaluateExpression, type ExpressionContext, type ExpressionLambdaScope } from '~/schemas/actionExpressions';
 import { getThingsCollection } from '../mongodb/collections';
 import { newThingDoc } from '../messenger/shared';
 import {
 	ACTION_RESERVED_ID_PREFIX,
 	createThing,
+	deleteThing,
 	fail,
 	getThing,
 	isFail,
@@ -26,6 +31,7 @@ import {
 	type Fail,
 	type Viewer
 } from '../things/things';
+import { bindPacks } from './packs/index';
 
 // The Action Thing executor — the run-time half of the bounded-execution
 // contract (save-time lives in registry.ts sanitizeActionCrystal).
@@ -38,11 +44,18 @@ import {
 // - Closed vocabulary: an op that isn't in the sanitized program cannot run,
 //   and the executor has no fetch, no env access, and no raw Mongo writes on
 //   behalf of the program (its only direct collection reads are the
-//   owner-scoped searches below and the run-record insert).
+//   scoped searches below and the run-record insert).
 // - One shared budget per root invocation: deadline, operation count, depth,
-//   child-action count. actions.invoke recurses with the SAME budget object,
-//   so A→B→A terminates by construction (and direct cycles are refused with
-//   a clear error before the budget even drains).
+//   child-action count, and (v2) expression evaluations. actions.invoke and
+//   each recurse with the SAME budget object, so A→B→A terminates by
+//   construction (and direct cycles are refused with a clear error before the
+//   budget even drains).
+// - v2 compute: step values may hold `{ ttExpr: [fn, ...args] }` expressions
+//   over the closed catalogue in schemas/actionExpressions.ts (math, logic,
+//   text, list, object, date, random, and the domain packs bound in
+//   ./packs). Expressions are pure: they read refs and return values, never
+//   touch the database, and are bounded by a per-run node budget. Pack calls
+//   count as operations because they are the only non-trivial CPU.
 // - Every run lands one protected action-run thing (targetId = the action),
 //   owner-private, storageClass 'control' like the CI event family —
 //   operational telemetry with hard size caps, not billable content. Because
@@ -80,6 +93,8 @@ type ActionBudget = {
 	// delegated run (a ttAction click): every action resolved anywhere in this
 	// invocation tree must be one the invoker owns
 	ownedOnly: boolean;
+	// expression evaluations left for the whole run (shared like the rest)
+	expressionNodes: { nodes: number };
 };
 
 type ActionProgram = {
@@ -240,17 +255,20 @@ const validateRunInputs = (
 			if (typeof descriptor.max === 'number' && num > descriptor.max) return fail(400, `Input ${name} max is ${descriptor.max}`);
 			inputs[name] = num;
 		} else if (type === 'boolean') {
-			inputs[name] = value === true || value === 'true';
+			inputs[name] = value === true || value === 'true' || value === 'on' || value === 1 || value === '1';
 		} else if (type === 'enum') {
 			const values = Array.isArray(descriptor.values) ? descriptor.values.map(String) : [];
 			const candidate = String(value);
 			if (!values.includes(candidate)) return fail(400, `Input ${name} must be one of ${values.join(', ')}`);
 			inputs[name] = candidate;
 		} else {
-			if (typeof value !== 'string') return fail(400, `Input ${name} must be text`);
+			// text inputs accept scalars from form controls (a number input's
+			// value arrives as text anyway; a boolean is coerced to its word)
+			const text = typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : null;
+			if (text === null) return fail(400, `Input ${name} must be text`);
 			const maxLength = typeof descriptor.maxLength === 'number' ? descriptor.maxLength : 2000;
-			if (value.length > maxLength) return fail(400, `Input ${name} caps at ${maxLength} characters`);
-			inputs[name] = value;
+			if (text.length > maxLength) return fail(400, `Input ${name} caps at ${maxLength} characters`);
+			inputs[name] = text;
 		}
 	}
 	const declared = new Set(descriptors.map((descriptor) => String(descriptor.name)));
@@ -265,6 +283,8 @@ type StepScope = {
 	inputs: Record<string, unknown>;
 	// index n-1 = the (JSON-safe) result of step n
 	steps: unknown[];
+	viewer: { id: string; username: string | null };
+	expressions: ExpressionContext;
 };
 
 const resolvePath = (root: unknown, path: string[]): unknown => {
@@ -277,7 +297,7 @@ const resolvePath = (root: unknown, path: string[]): unknown => {
 	return current;
 };
 
-const resolveValue = (value: unknown, scope: StepScope): unknown => {
+const resolveValue = (value: unknown, scope: StepScope, lambda?: ExpressionLambdaScope): unknown => {
 	if (typeof value === 'string') {
 		if (value.startsWith('$$')) return value.slice(1);
 		const ref = parseActionRef(value);
@@ -292,30 +312,50 @@ const resolveValue = (value: unknown, scope: StepScope): unknown => {
 		if (ref.kind === 'input') {
 			return Object.prototype.hasOwnProperty.call(scope.inputs, ref.name) ? scope.inputs[ref.name] : undefined;
 		}
+		if (ref.kind === 'viewer') return scope.viewer[ref.field];
+		if (ref.kind === 'item') {
+			if (!lambda) return runError(`${value.slice(0, 40)} is only bound inside an each step or a list lambda`);
+			return ref.path.length ? resolvePath(lambda.item, ref.path) : lambda.item;
+		}
+		if (ref.kind === 'index') {
+			if (!lambda) return runError('$index is only bound inside an each step or a list lambda');
+			return lambda.index;
+		}
 		const stepResult = scope.steps[ref.step - 1];
 		if (stepResult === undefined) return runError(`$step.${ref.step} has no result yet`);
 		return ref.path.length ? resolvePath(stepResult, ref.path) : stepResult;
 	}
-	if (Array.isArray(value)) return value.map((entry) => resolveValue(entry, scope));
+	if (Array.isArray(value)) return value.map((entry) => resolveValue(entry, scope, lambda));
 	if (value && typeof value === 'object') {
 		const record = value as Record<string, unknown>;
 		const keys = Object.keys(record);
 		if (keys.length === 1 && keys[0] === 'ttConcat' && Array.isArray(record.ttConcat)) {
 			return record.ttConcat
 				.map((part) => {
-					const resolved = resolveValue(part, scope);
+					const resolved = resolveValue(part, scope, lambda);
 					return resolved === undefined || resolved === null ? '' : String(resolved);
 				})
 				.join('');
 		}
+		if (keys.length === 1 && keys[0] === 'ttExpr' && Array.isArray(record.ttExpr)) {
+			return evaluateExpression(record.ttExpr, scope.expressions, lambda);
+		}
 		const resolved: Record<string, unknown> = {};
 		for (const key of keys) {
-			const entry = resolveValue(record[key], scope);
+			const entry = resolveValue(record[key], scope, lambda);
 			if (entry !== undefined) resolved[key] = entry;
 		}
 		return resolved;
 	}
 	return value;
+};
+
+const truthy = (value: unknown): boolean => {
+	if (value === null || value === undefined) return false;
+	if (typeof value === 'string') return value.trim() !== '' && value !== 'false' && value !== '0';
+	if (Array.isArray(value)) return value.length > 0;
+	if (typeof value === 'object') return Object.keys(value as object).length > 0;
+	return !!value;
 };
 
 // ── schema + capability helpers ─────────────────────────────────────────────
@@ -337,17 +377,26 @@ const resolveSchemaRef = async (viewer: Viewer, ref: string): Promise<ResolvedSc
 		const crystal = (own.crystal || {}) as Record<string, unknown>;
 		return { id: own.shareId, name: typeof crystal.name === 'string' ? crystal.name : ref };
 	}
+	// A seeded system schema is addressable by its NAME too (its shareId is
+	// `schema-<slug>` and its crystal.name the slug), so an installed program
+	// that names a public shape still resolves when the viewer owns no copy.
+	const seeded = await things.findOne({ ownerId: 'system', thingtime: 'schema', 'crystal.name': ref } as any);
+	if (seeded) {
+		const crystal = (seeded.crystal || {}) as Record<string, unknown>;
+		return { id: seeded.shareId, name: typeof crystal.name === 'string' ? crystal.name : ref };
+	}
 	return runError(`Schema "${ref.slice(0, 80)}" was not found (pass a schema thing id or one of your schema names)`) as never;
 };
 
 // Actions read and write Data Things only — the same kind boundary that
 // things.create (`thingtime: ['data']`) and things.search (`thingtime:
-// 'data'`) already enforce. things.get/things.update resolve a target by
-// dynamic id, and a schema scope only constrains BY schema; non-data kinds
-// (action, schema, post, component, folder) carry no schema, so a schema
-// check alone can't hold this line. Requiring the resolved target to be a
-// data thing keeps every data-op inside one kind and out of the program's
-// own definition and other kinds. Data things carry 'data' in `thingtime`.
+// 'data'`) already enforce. things.get/things.update/things.delete resolve a
+// target by dynamic id, and a schema scope only constrains BY schema;
+// non-data kinds (action, schema, post, component, folder) carry no schema,
+// so a schema check alone can't hold this line. Requiring the resolved target
+// to be a data thing keeps every data-op inside one kind and out of the
+// program's own definition and other kinds. Data things carry 'data' in
+// `thingtime`.
 const isDataThing = (thingtime: unknown): boolean => Array.isArray(thingtime) && thingtime.includes('data');
 
 // Run-time defense-in-depth on top of the save-time coverage check: when a
@@ -367,6 +416,14 @@ const schemaIdentityOf = (crystal: unknown): (string | null)[] => {
 	];
 };
 
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const scalarFilterValue = (value: unknown, label: string): string | number | boolean | null => {
+	if (value === null || value === undefined) return null;
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+	return runError(`${label} resolved to a non-scalar filter value`);
+};
+
 // ── the engine ──────────────────────────────────────────────────────────────
 
 const consumeOp = (budget: ActionBudget): void => {
@@ -378,6 +435,15 @@ const consumeOp = (budget: ActionBudget): void => {
 
 const pushTrace = (budget: ActionBudget, entry: ActionRunTraceEntry): void => {
 	if (budget.trace.length < MAX_ACTION_TRACE_ENTRIES) budget.trace.push(entry);
+};
+
+const stepValueLabel = (value: unknown): string => {
+	if (typeof value === 'string') return value.slice(0, 200);
+	try {
+		return JSON.stringify(value).slice(0, 200);
+	} catch {
+		return 'a value';
+	}
 };
 
 const executeProgram = async (
@@ -403,14 +469,60 @@ const executeProgram = async (
 	const depth = budget.stack.length - 1;
 	if (depth > budget.depthUsed) budget.depthUsed = depth;
 	try {
-		const scope: StepScope = { inputs, steps: [] };
+		const scope: StepScope = {
+			inputs,
+			steps: [],
+			viewer: { id: viewer!.id, username: viewer!.username ?? null },
+			expressions: {
+				resolve: (value, lambda) => resolveValue(value, scope, lambda),
+				budget: budget.expressionNodes,
+				packs: bindPacks({ random: Math.random, now: () => new Date() }),
+				onPackCall: () => consumeOp(budget),
+				random: Math.random,
+				fail: runError
+			}
+		};
 		let returned: unknown = null;
+
+		// The one composition primitive shared by actions.invoke and each.
+		const invokeChild = async (label: string, actionRef: string, rawInputs: unknown, childProgram?: ActionProgram): Promise<{ program: ActionProgram; result: unknown }> => {
+			if (budget.stack.length > budget.maxDepth) runError(`Depth budget exhausted (max ${budget.maxDepth})`);
+			if (budget.childActionsRemaining <= 0) runError('Child-action budget exhausted');
+			budget.childActionsRemaining -= 1;
+			budget.childActionsUsed += 1;
+			const invokeScope = capabilityOf(effective, 'actions.invoke');
+			if (!invokeScope) runError(`Step ${label} invokes without an actions.invoke capability in the inherited envelope`);
+			if (invokeScope!.actions?.length && !invokeScope!.actions.includes(actionRef)) {
+				runError(`Step ${label} invokes "${actionRef}" outside the declared actions.invoke allowlist`);
+			}
+			// A child named by the PARENT's program text is a deliberate
+			// composition, so it resolves the same way the parent did.
+			let child = childProgram;
+			if (!child) {
+				const resolved = await resolveActionProgram(viewer, actionRef, { ownedOnly: budget.ownedOnly });
+				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
+				child = resolved as ActionProgram;
+			}
+			const childInputs = validateRunInputs(child.inputs, rawInputs);
+			if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
+			const result = await executeProgram(viewer, child, (childInputs as { ok: true; inputs: Record<string, unknown> }).inputs, budget, label);
+			return { program: child, result };
+		};
+
 		for (let index = 0; index < program.steps.length; index += 1) {
 			const step = program.steps[index];
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
 			let target: string | undefined;
 			let note: string | undefined;
+
+			// `when` — branching by omission: a falsy guard skips the step and
+			// its result reads null. Guards resolve before the op is charged.
+			if (step.when !== undefined && !truthy(resolveValue(step.when, scope))) {
+				scope.steps[index] = null;
+				pushTrace(budget, { step: label, op: step.op, ms: Date.now() - startedAt, note: 'skipped' });
+				continue;
+			}
 
 			if (step.op === 'return') {
 				returned = resolveValue(step.value, scope);
@@ -421,7 +533,12 @@ const executeProgram = async (
 
 			consumeOp(budget);
 
-			if (step.op === 'things.create') {
+			if (step.op === 'compute') {
+				scope.steps[index] = resolveValue(step.value, scope) ?? null;
+			} else if (step.op === 'fail') {
+				const message = resolveValue(step.message, scope);
+				runError(typeof message === 'string' && message.trim() ? message.slice(0, MAX_ACTION_RUN_ERROR_CHARS) : `Step ${label} refused the run`);
+			} else if (step.op === 'things.create') {
 				const schema = await resolveSchemaRef(viewer, String(step.schema));
 				// Save-time coverage proves the program's OWN declaration; this
 				// re-check is what binds a child frame to the inherited envelope.
@@ -472,10 +589,14 @@ const executeProgram = async (
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
 			} else if (step.op === 'things.search') {
-				// v1 search = YOUR OWN data things of one schema, newest first.
-				// Own-docs-only keeps ACL trivially correct without dragging the
-				// full search pipeline into the executor.
+				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all
+				// data things of ONE schema (the sanitizer requires the schema).
+				// Both keep ACL trivially correct without dragging the full search
+				// pipeline into the executor: own docs are yours, public docs are
+				// everyone's.
 				const limit = typeof step.limit === 'number' ? step.limit : Math.min(20, MAX_ACTION_SEARCH_LIMIT);
+				const offset = typeof step.offset === 'number' ? step.offset : 0;
+				const scopeKind = step.scope === 'public' ? 'public' : 'own';
 				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
 					const schema = await resolveSchemaRef(viewer, step.schema);
@@ -491,17 +612,38 @@ const executeProgram = async (
 						$or: readScope.schemas.flatMap((ref) => [{ 'crystal.schemaId': ref }, { 'crystal.schema': ref }])
 					});
 				}
-				const filter: Record<string, unknown> = { ownerId: viewer!.id, thingtime: 'data', ...(clauses.length ? { $and: clauses } : {}) };
+				// where: equality on crystal fields; match: case-insensitive
+				// substring. Field names were pattern-checked at save time.
+				if (step.where && typeof step.where === 'object') {
+					for (const [field, raw] of Object.entries(step.where as Record<string, unknown>)) {
+						clauses.push({ [`crystal.${field}`]: scalarFilterValue(resolveValue(raw, scope), `Step ${label} where.${field}`) });
+					}
+				}
+				if (step.match && typeof step.match === 'object') {
+					for (const [field, raw] of Object.entries(step.match as Record<string, unknown>)) {
+						const needle = String(scalarFilterValue(resolveValue(raw, scope), `Step ${label} match.${field}`) ?? '').slice(0, MAX_ACTION_SEARCH_MATCH_CHARS);
+						if (needle.trim()) clauses.push({ [`crystal.${field}`]: { $regex: escapeRegExp(needle), $options: 'i' } });
+					}
+				}
+				const filter: Record<string, unknown> = {
+					thingtime: 'data',
+					...(scopeKind === 'public' ? { acl: ACL_ALL } : { ownerId: viewer!.id }),
+					...(clauses.length ? { $and: clauses } : {})
+				};
+				const sortSpec = step.sort as { field: string; dir: string } | undefined;
+				const sortField = sortSpec ? (sortSpec.field === 'createdAt' || sortSpec.field === 'updatedAt' ? sortSpec.field : `crystal.${sortSpec.field}`) : 'createdAt';
+				const sortDir = sortSpec?.dir === 'asc' ? 1 : -1;
 				const things = await getThingsCollection();
 				const docs = (
 					await things
 						.find(filter as any)
-						.sort({ createdAt: -1, shareId: 1 })
+						.sort({ [sortField]: sortDir, shareId: 1 })
+						.skip(offset)
 						.limit(limit)
 						.toArray()
 				).filter((doc: any) => schemaScopeAllows(readScope, schemaIdentityOf(doc.crystal)));
-				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}`;
-				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt }));
+				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'public' ? ' (public)' : ''}`;
+				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt, ownerId: doc.ownerId }));
 			} else if (step.op === 'things.update') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
@@ -533,32 +675,55 @@ const executeProgram = async (
 				const thing = (updated as { ok: true; thing: { id: string; crystal: unknown } }).thing;
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, crystal: thing.crystal };
-			} else if (step.op === 'actions.invoke') {
-				if (budget.stack.length > budget.maxDepth) runError(`Depth budget exhausted (max ${budget.maxDepth})`);
-				if (budget.childActionsRemaining <= 0) runError('Child-action budget exhausted');
-				budget.childActionsRemaining -= 1;
-				budget.childActionsUsed += 1;
-				const invokeScope = capabilityOf(effective, 'actions.invoke');
-				if (!invokeScope) runError(`Step ${label} invokes without an actions.invoke capability in the inherited envelope`);
-				if (invokeScope!.actions?.length && !invokeScope!.actions.includes(String(step.action))) {
-					runError(`Step ${label} invokes "${String(step.action)}" outside the declared actions.invoke allowlist`);
+			} else if (step.op === 'things.delete') {
+				const id = resolveValue(step.id, scope);
+				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				const current = await getThing(viewer, String(id));
+				if (current.ok === false) runError(`Step ${label} delete target unreadable: ${current.error}`);
+				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown; author?: { id?: string } } }).thing;
+				if (!isDataThing(currentThing.thingtime)) {
+					runError(`Step ${label} delete target "${currentThing.id}" is not a data thing — actions read and write Data Things only`);
 				}
-				// A child named by the PARENT's program text is a deliberate
-				// composition, so it resolves the same way the parent did.
-				const child = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly });
-				if (isFail(child)) runError(`Step ${label} invoke failed: ${child.error}`);
-				const childProgram = child as ActionProgram;
+				// Deletes are OWN data only: the delete util enforces ownership
+				// itself, but refusing early keeps the message honest and the
+				// scope check meaningful.
+				if (currentThing.author?.id && currentThing.author.id !== viewer!.id) {
+					runError(`Step ${label} cannot delete "${currentThing.id}" — actions delete only your own data things`);
+				}
+				const deleteScope = capabilityOf(effective, 'things.delete');
+				if (!deleteScope) runError(`Step ${label} deletes without a things.delete capability in the inherited envelope`);
+				if (!schemaScopeAllows(deleteScope, schemaIdentityOf(currentThing.crystal))) {
+					runError(`Step ${label} deletes "${currentThing.id}" outside the declared things.delete schema scope`);
+				}
+				const deleted = await deleteThing(viewer, String(id));
+				if (isFail(deleted)) runError(`Step ${label} delete failed: ${deleted.error}`);
+				target = currentThing.id;
+				scope.steps[index] = { id: currentThing.id, deleted: true };
+			} else if (step.op === 'actions.invoke') {
 				const rawInputs = step.inputs === undefined ? {} : resolveValue(step.inputs, scope);
-				const childInputs = validateRunInputs(childProgram.inputs, rawInputs);
-				if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
-				target = childProgram.id;
-				scope.steps[index] = await executeProgram(
-					viewer,
-					childProgram,
-					(childInputs as { ok: true; inputs: Record<string, unknown> }).inputs,
-					budget,
-					label
-				);
+				const invoked = await invokeChild(label, String(step.action), rawInputs);
+				target = invoked.program.id;
+				scope.steps[index] = invoked.result;
+			} else if (step.op === 'each') {
+				const list = resolveValue(step.list, scope);
+				if (!Array.isArray(list)) runError(`Step ${label} list resolved to ${stepValueLabel(list)} — each needs a list`);
+				const max = typeof step.max === 'number' ? step.max : MAX_ACTION_EACH_ITEMS;
+				const items = (list as unknown[]).slice(0, max);
+				// resolve the child ONCE; every element still consumes a child
+				// budget slot and runs on the shared envelope
+				const resolved = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly });
+				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
+				const child = resolved as ActionProgram;
+				const results: unknown[] = [];
+				for (let position = 0; position < items.length; position += 1) {
+					const lambda: ExpressionLambdaScope = { item: items[position], index: position };
+					const rawInputs = step.inputs === undefined ? {} : resolveValue(step.inputs, scope, lambda);
+					const invoked = await invokeChild(`${label}[${position}]`, String(step.action), rawInputs, child);
+					results.push(invoked.result ?? null);
+				}
+				target = child.id;
+				note = `${items.length} item${items.length === 1 ? '' : 's'}${(list as unknown[]).length > items.length ? ` (of ${(list as unknown[]).length})` : ''}`;
+				scope.steps[index] = results;
 			}
 
 			pushTrace(budget, { step: label, op: step.op, ms: Date.now() - startedAt, ...(target ? { target } : {}), ...(note ? { note } : {}) });
@@ -709,7 +874,8 @@ export const runAction = async (
 		childActionsUsed: 0,
 		trace: [],
 		stack: [],
-		ownedOnly
+		ownedOnly,
+		expressionNodes: { nodes: MAX_EXPRESSION_NODES_PER_RUN }
 	};
 
 	let status: 'ok' | 'error' = 'ok';

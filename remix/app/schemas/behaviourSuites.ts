@@ -95,6 +95,25 @@ export type SuiteActionDef = {
 };
 export type SuiteDataDef = { schema: string; values: Record<string, unknown> };
 
+// A page of a multi-page suite (an APP). The entry page's pageKey is the
+// suite key itself (so it opens at /p/<suiteKey>); every other page is
+// <suiteKey>-<pageKey>. Pages resolve BY KEY: the viewer's installed twin
+// outranks the seeded copy at the same URL (api/utils/webpages resolveWebpage).
+export type SuitePageDef = {
+	key: string;
+	name: string;
+	description?: string;
+	blocks: (ctx: DemoBlockCtx, refs: SuiteRefs, suite: BehaviourSuite) => DemoBlock[];
+};
+
+export type SuiteAppDef = {
+	tagline: string;
+	// which SuitePageDef key is the entry page (defaults to the first page)
+	entry?: string;
+	// where the original app lives, for the gallery card
+	origin?: string;
+};
+
 export type BehaviourSuite = {
 	key: string;
 	title: string;
@@ -107,7 +126,11 @@ export type BehaviourSuite = {
 	components: SuiteComponentDef[];
 	actions: SuiteActionDef[];
 	data: SuiteDataDef[];
-	page: (ctx: DemoBlockCtx, refs: SuiteRefs, suite: BehaviourSuite) => DemoBlock[];
+	// single-page suites (the demo library's originals)
+	page?: (ctx: DemoBlockCtx, refs: SuiteRefs, suite: BehaviourSuite) => DemoBlock[];
+	// multi-page APP suites — installed as a whole, pages link by key
+	pages?: SuitePageDef[];
+	app?: SuiteAppDef;
 };
 
 // ---------------------------------------------------------------------------
@@ -1225,6 +1248,17 @@ export const suiteComponentShareId = (suiteKey: string, key: string): string => 
 export const suiteActionShareId = (suiteKey: string, key: string): string => `action-${suiteSlug(suiteKey, key)}`;
 export const suiteDataShareId = (suiteKey: string, index: number): string => `data-${SUITE_SLUG_PREFIX}${suiteKey}-${index + 1}`;
 export const suitePageShareId = (suiteKey: string): string => `webpage-${SUITE_SLUG_PREFIX}suite-${suiteKey}`;
+// App pages: the entry page IS the suite key (/p/pokeworld), the rest are
+// <suiteKey>-<pageKey> (/p/pokeworld-pokedex). The seeded shareId is the
+// reserved webpage- prefix plus that pageKey.
+export const suiteAppPageKey = (suite: Pick<BehaviourSuite, 'key' | 'pages' | 'app'>, pageKey: string): string => {
+	const entry = suite.app?.entry || suite.pages?.[0]?.key || '';
+	return pageKey === entry ? suite.key : `${suite.key}-${pageKey}`;
+};
+export const suiteAppPageShareId = (suite: Pick<BehaviourSuite, 'key' | 'pages' | 'app'>, pageKey: string): string => `webpage-${suiteAppPageKey(suite, pageKey)}`;
+export const isAppSuite = (suite: BehaviourSuite): boolean => !!suite.app && Array.isArray(suite.pages) && suite.pages.length > 0;
+export const suiteEntryPageKey = (suite: BehaviourSuite): string => (isAppSuite(suite) ? suite.key : `${SUITE_SLUG_PREFIX}suite-${suite.key}`);
+export const suiteEntryPageShareId = (suite: BehaviourSuite): string => (isAppSuite(suite) ? `webpage-${suite.key}` : suitePageShareId(suite.key));
 
 export const suiteRefsFor = (suite: BehaviourSuite, mode: SuiteMode): SuiteRefs => ({
 	schema: (key) => (mode === 'system' ? suiteSchemaShareId(suite.key, key) : suiteSlug(suite.key, key)),
@@ -1247,7 +1281,11 @@ export type MaterializedSuite = {
 	// data crystals carry `schema` (name); the caller stamps `schemaId` once
 	// it knows the schema thing's id (system: the seeded shareId)
 	data: Array<{ index: number; schemaKey: string; shareId: string; crystal: Record<string, unknown> }>;
+	// the entry page (single-page suites: the only page)
 	page: { slug: string; shareId: string; crystal: Record<string, unknown> };
+	// every page, entry first — app suites install all of them
+	pages: Array<{ key: string; slug: string; shareId: string; pageKey: string; crystal: Record<string, unknown> }>;
+	app: SuiteAppDef | null;
 };
 
 export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): MaterializedSuite => {
@@ -1306,18 +1344,46 @@ export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): Materi
 			shareId: suiteDataShareId(suite.key, index),
 			crystal: { ...entry.values, schema: refs.schemaName(entry.schema) }
 		})),
-		page: {
-			slug: pageSlug,
-			shareId: suitePageShareId(suite.key),
-			crystal: {
-				name: `${suite.emoji} ${suite.title} · behaviour suite`,
-				description: suite.description,
-				pageKey: `${SUITE_SLUG_PREFIX}${pageSlug}`,
-				version: 1,
-				previewBg: tone.bg,
-				blocks: suite.page(ctx, refs, suite)
+		...(() => {
+			if (isAppSuite(suite)) {
+				const entryKey = suite.app?.entry || suite.pages![0].key;
+				const ordered = [...suite.pages!].sort((a, b) => (a.key === entryKey ? -1 : b.key === entryKey ? 1 : 0));
+				const pages = ordered.map((page) => {
+					const pageKey = suiteAppPageKey(suite, page.key);
+					const pageCtx: DemoBlockCtx = { id: kit.makeIds(`app-${suite.key}-${page.key}`), tone, copy: kit.defaultCopy };
+					return {
+						key: page.key,
+						slug: pageKey,
+						shareId: suiteAppPageShareId(suite, page.key),
+						pageKey,
+						crystal: {
+							name: page.key === entryKey ? `${suite.emoji} ${suite.title}` : `${suite.emoji} ${suite.title} · ${page.name}`,
+							description: page.description || suite.description,
+							pageKey,
+							suiteKey: suite.key,
+							version: 1,
+							previewBg: tone.bg,
+							blocks: page.blocks(pageCtx, refs, suite)
+						}
+					};
+				});
+				return { page: { slug: pages[0].slug, shareId: pages[0].shareId, crystal: pages[0].crystal }, pages, app: suite.app || null };
 			}
-		}
+			const page = {
+				slug: pageSlug,
+				shareId: suitePageShareId(suite.key),
+				crystal: {
+					name: `${suite.emoji} ${suite.title} · behaviour suite`,
+					description: suite.description,
+					pageKey: `${SUITE_SLUG_PREFIX}${pageSlug}`,
+					suiteKey: suite.key,
+					version: 1,
+					previewBg: tone.bg,
+					blocks: suite.page!(ctx, refs, suite)
+				}
+			};
+			return { page, pages: [{ key: 'suite', slug: pageSlug, shareId: page.shareId, pageKey: `${SUITE_SLUG_PREFIX}${pageSlug}`, crystal: page.crystal }], app: null };
+		})()
 	};
 };
 
@@ -1330,10 +1396,14 @@ export type BehaviourSuiteSummary = {
 	description: string;
 	story: string[];
 	tone: string;
-	counts: { schemas: number; components: number; actions: number; data: number };
+	counts: { schemas: number; components: number; actions: number; data: number; pages: number };
 	pageId: string;
+	// the URL the entry page answers at for everyone (seeded or installed)
+	pageKey: string;
+	pageIds: string[];
 	actionIds: string[];
 	schemaIds: string[];
+	app: SuiteAppDef | null;
 };
 
 export const summarizeBehaviourSuite = (suite: BehaviourSuite): BehaviourSuiteSummary => ({
@@ -1343,8 +1413,29 @@ export const summarizeBehaviourSuite = (suite: BehaviourSuite): BehaviourSuiteSu
 	description: suite.description,
 	story: suite.story,
 	tone: suite.tone,
-	counts: { schemas: suite.schemas.length, components: suite.components.length, actions: suite.actions.length, data: suite.data.length },
-	pageId: suitePageShareId(suite.key),
+	counts: {
+		schemas: suite.schemas.length,
+		components: suite.components.length,
+		actions: suite.actions.length,
+		data: suite.data.length,
+		pages: isAppSuite(suite) ? suite.pages!.length : 1
+	},
+	pageId: suiteEntryPageShareId(suite),
+	pageKey: suiteEntryPageKey(suite),
+	pageIds: isAppSuite(suite) ? suite.pages!.map((page) => suiteAppPageShareId(suite, page.key)) : [suitePageShareId(suite.key)],
 	actionIds: suite.actions.map((action) => suiteActionShareId(suite.key, action.key)),
-	schemaIds: suite.schemas.map((schema) => suiteSchemaShareId(suite.key, schema.key))
+	schemaIds: suite.schemas.map((schema) => suiteSchemaShareId(suite.key, schema.key)),
+	app: suite.app || null
 });
+
+// The app suites live in their own modules (schemas/appSuites/*) and are
+// registered here so every consumer (seed, gallery, install, tests) iterates
+// ONE list. BEHAVIOUR_SUITES stays the demo originals; ALL_SUITES is what
+// materialises.
+export const APP_SUITES: BehaviourSuite[] = [];
+export const registerAppSuite = (suite: BehaviourSuite): BehaviourSuite => {
+	if (!APP_SUITES.some((entry) => entry.key === suite.key)) APP_SUITES.push(suite);
+	return suite;
+};
+export const getAllSuites = (): BehaviourSuite[] => [...BEHAVIOUR_SUITES, ...APP_SUITES];
+export const getAnySuite = (key: string): BehaviourSuite | null => getAllSuites().find((suite) => suite.key === key) || null;
