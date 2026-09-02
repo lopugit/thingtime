@@ -28,6 +28,9 @@ export type DemoBlock = {
 	text?: string;
 	style?: 'body' | 'heading' | 'eyebrow';
 	tag?: string;
+	// text: optional link target, mirroring WebpageBlock.href — the demo
+	// buttons and nav links below set it, so the catalog type has to carry it
+	href?: string;
 	html?: string;
 	src?: string;
 	alt?: string;

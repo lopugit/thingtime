@@ -88,6 +88,22 @@ test('text href accepts page links and refuses script/data/plain-http targets', 
 	assert.equal(page([{ id: 'b6', type: 'text', text: 'x', href: `/${'a'.repeat(3000)}` }]).ok, false);
 });
 
+// The URL parser folds `\` into `/` for http(s), so a single leading slash
+// followed by a backslash is protocol-relative in disguise: `/\evil.example`
+// resolves to https://evil.example. /p/ draws ANOTHER user's page, so a link
+// or media src that reads site-relative must never resolve off-origin.
+test('backslash-folded authorities are refused wherever a site-relative url is allowed', () => {
+	for (const href of ['/\\evil.example/login', '/\\\\evil.example', '/\\/evil.example']) {
+		assert.equal(page([{ id: 'bs1', type: 'text', text: 'x', href }]).ok, false, `expected href ${href} to be refused`);
+		assert.equal(page([{ id: 'bs2', type: 'media', src: href }]).ok, false, `expected media src ${href} to be refused`);
+		assert.equal(page([{ id: 'bs3', type: 'text', text: 'x', css: { background: `url(${href})` } }]).ok, false, `expected css url ${href} to be refused`);
+	}
+	// a backslash further along the path never forms an authority, and the
+	// ordinary site-relative link keeps working
+	assert.equal(page([{ id: 'bs4', type: 'text', text: 'x', href: '/docs/a\\b' }]).ok, true);
+	assert.equal(page([{ id: 'bs5', type: 'text', text: 'x', href: '/register' }]).ok, true);
+});
+
 test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 'm1', type: 'media', src: 'ftp://nope.com/x.png' }]).ok, false);
 	assert.equal(page([{ id: 'm2', type: 'media', src: 'javascript:alert(1)' }]).ok, false);

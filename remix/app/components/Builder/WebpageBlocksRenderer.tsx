@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
-import { isSafeUrl } from '../Kinds/safeUrl';
+import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import type { ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
@@ -959,7 +959,12 @@ const BlockView = (
 		// the opener, and the edit canvas never navigates on click
 		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? block.href : null;
 		if (href && !(chrome && chrome.selectedId === block.id)) {
-			const external = /^https?:/i.test(href);
+			// external = leaves this origin, decided on the RESOLVED url rather
+			// than a scheme prefix: a stored `/\host` href (written before the
+			// gate refused the backslash form) resolves off-site, and it must
+			// still get the new tab + dropped opener every other off-site link
+			// gets instead of silently replacing the viewer's tab.
+			const external = isExternalHref(href);
 			body = (
 				<Box
 					as="a"
