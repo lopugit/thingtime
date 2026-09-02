@@ -36,9 +36,12 @@ export const MAX_RESOLVED_NODES = 4000;
 // 9 KB one exhausted a 3 GB heap outright. So the same shared budget also
 // meters every string a resolve ALLOCATES. Strings with no token are returned
 // by reference — immutable and shared, so they cost nothing and are not
-// charged. Across 26,728 resolves — the whole 2800-component catalog with
-// every arg maxed out — the peak is 3,583 chars, so this sits ~73x above
-// anything real and truncates nothing that ships.
+// charged. Headroom, measured over the whole 2800-component catalog: 3,560
+// chars at each component's declared defaults, and 37,696 with every arg
+// driven to what a saved version may actually store (MAX_COMPONENT_SAVED_ARGS
+// 24 x MAX_COMPONENT_SAVED_ARG_CHARS 2000, every enum value swept). So the
+// real worst case sits ~7x under this cap — the same margin the node budget
+// keeps — and nothing that ships truncates.
 export const MAX_RESOLVED_CHARS = 256 * 1024;
 
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;

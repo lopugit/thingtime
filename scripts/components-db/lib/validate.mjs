@@ -30,7 +30,9 @@ export const MAX_RESOLVED_NODES = 550; // renderer cap is 600
 // Resolved TEXT, counted in characters — the resolver's own ceiling is 256KB
 // (MAX_RESOLVED_CHARS in resolve.mjs), so like the node cap above this sits
 // well below it: a token-heavy archetype fails generation loudly instead of
-// being silently truncated at render time. The catalog peaks at 3,583 chars.
+// being silently truncated at render time. Measured at the args each component
+// declares as defaults (what this validator resolves), the catalog peaks at
+// 3,560 chars — 9x under this cap.
 export const MAX_RESOLVED_CHARS = 32 * 1024;
 export const MAX_DEPTH = 22; // renderer cap is 24
 export const MAX_ARGS = 16;
@@ -126,6 +128,24 @@ const walkTemplate = (value, path, issues, argRefs, depth = 0) => {
 	}
 };
 
+// Every string anywhere inside a value. Used for the resolved-TEXT tally
+// below, which must see prop text too: walkResolved descends `children` only
+// (that is the right mirror for the NODE count — HtmlThingRenderer's 600-node
+// budget also only walks children), but the resolver charges its char budget
+// for every substituted string wherever it sits, props included. Counting
+// children alone, the highest reading anywhere in the catalog was 255 chars
+// while the most text a component actually resolves to is 3,560 — so the cap
+// below was watching a small fraction of the text it claims to bound, and a
+// component whose tokens expand inside props spent none of it at all.
+const textLength = (value) => {
+	if (typeof value === 'string') return value.length;
+	if (Array.isArray(value)) return value.reduce((sum, entry) => sum + textLength(entry), 0);
+	if (value && typeof value === 'object') {
+		return Object.values(value).reduce((sum, entry) => sum + textLength(entry), 0);
+	}
+	return 0;
+};
+
 // Walk a RESOLVED tree: allowlist tags/props, count nodes, measure depth,
 // catch leftover DSL objects.
 const walkResolved = (node, path, issues, state, depth = 0) => {
@@ -152,6 +172,9 @@ const walkResolved = (node, path, issues, state, depth = 0) => {
 	if (node.props !== undefined) {
 		if (!isPlainObject(node.props)) issues.push(`${path}: props must be an object`);
 		else {
+			// prop text is charged by the resolver, so it is charged here too —
+			// style values, alt/title, and SVG `d` path data are all token sinks
+			state.chars += textLength(node.props);
 			for (const key of Object.keys(node.props)) {
 				if (!ALLOWED_PROPS.has(key)) issues.push(`${path}: prop '${key}' not allowlisted`);
 			}

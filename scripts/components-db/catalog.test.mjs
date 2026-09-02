@@ -22,6 +22,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { MANIFEST_FILE, buildFolderDatabase, dbRoot, stableStringify } from './generate.mjs';
+import { MAX_RESOLVED_CHARS, validateDefinition } from './lib/validate.mjs';
 
 const built = await buildFolderDatabase();
 
@@ -48,6 +49,39 @@ test('every generated component definition validates', () => {
 	assert.deepEqual(built.errors, [], 'archetype modules must load without errors');
 	assert.deepEqual(built.issues, [], 'definitions must satisfy the render/server caps');
 	assert.ok(built.definitions.length > 0, 'the catalog must not be empty');
+});
+
+// Regression: the resolved-TEXT cap is what stops a token-heavy archetype
+// from shipping a component that the live resolver would silently truncate.
+// It counted `children` text only, so an archetype that expanded its tokens
+// into PROP text — SVG `d` path data, style values, alt/title — spent none of
+// the budget and generated clean at 262k resolved chars, 8x past the cap.
+test('the resolved-text cap sees prop text, not just children', () => {
+	const base = {
+		slug: 'thingtime-prop-text-guard',
+		name: 'Prop text guard',
+		library: 'thingtime',
+		category: 'test',
+		description: 'Fixture proving the resolved-text cap charges prop text the way the resolver does.',
+		tags: ['test'],
+		args: [{ name: 'd', type: 'string', default: 'M0 0 L10 10 '.repeat(160) }]
+	};
+	const svg = (props) => ({
+		ttRepeat: {
+			count: 24,
+			max: 24,
+			node: { tag: 'svg', props: { viewBox: '0 0 10 10' }, children: [{ tag: 'path', props }] }
+		}
+	});
+
+	// tokens in a prop: 24 repeats x 8 tokens x ~1,920 chars
+	const inProps = validateDefinition({ ...base, render: { tag: 'div', children: [svg({ d: '{d}{d}{d}{d}{d}{d}{d}{d}' })] } });
+	assert.equal(inProps.length, 1, `expected exactly one issue, got ${JSON.stringify(inProps)}`);
+	assert.match(inProps[0], new RegExp(`chars of text \\(> ${MAX_RESOLVED_CHARS}\\)`));
+
+	// the same shape without the token expansion still generates clean, so the
+	// cap is charging expansion rather than merely the presence of props
+	assert.deepEqual(validateDefinition({ ...base, render: { tag: 'div', children: [svg({ d: 'M0 0 L10 10' })] } }), []);
 });
 
 test('component slugs are unique across the whole catalog', () => {
