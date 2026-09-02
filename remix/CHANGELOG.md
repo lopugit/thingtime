@@ -17,6 +17,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/583-claude-thingtime-mongodb-index-storage-dffe19--ci-control-satellite-index-storage.md`)
+  and the audit report (`docs/architecture/mongodb-index-storage-audit.md`).
+- **Production audit**: `things_v2` was 1.82 M docs / 3.15 GB of index at the
+  64-index cap, 99.75 % of it `ci-*` webhook telemetry with no retention.
+- **New `ciControl` satellite collection** (`ciControl_v1`) for every `ci-*`
+  Thing, six-index plan, TTL retention on root `expiresAt`
+  (`THINGTIME_CI_{EVENT,JOB,ACTIVITY}_RETENTION_DAYS`, defaults 14/30/90,
+  `0` = forever); the repository row records events only on real transitions.
+- **`things` index plan**: seven dead/moved indexes retired at boot, `kind_*`
+  and the sandbox TTL made partial, cap-safe swaps, leftover rebuild twins
+  pruned.
+- **Admin migrations** `relocate-ci-control-telemetry` and
+  `rebuild-things-indexes`; `/migrations` shows a per-collection storage
+  census (`api.admin-migrations` 1.1.0); `ciControl` queryable in the
+  workbench (`api.mongodb-raw-results` 1.1.0).
+- **Deployment note**: after deploying, run the two migrations from
+  `/migrations` (dry run, then confirm) to move existing rows and reclaim the
+  index files; boot alone only frees the retired indexes.
+
+
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 8).
