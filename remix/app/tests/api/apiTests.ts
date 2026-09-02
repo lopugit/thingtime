@@ -2405,6 +2405,34 @@ export const apiTests: ApiTestDefinition[] = [
       'Demo seed answered the admin gate (or seeded as an admin).'
     )
   },
+  {
+    id: 'webpages-demos-census',
+    name: 'Demo seed census counts each catalog once',
+    description:
+      'GET /admin/webpages/seed-demos reports the census without writing. Suite pages carry both the demo and suite tags, so the two counts must stay disjoint: demosSeeded never exceeds demosTotal and suitesSeeded never exceeds suitesTotal, however much of the library is seeded.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/admin/webpages/seed-demos',
+    expect: expectJson(
+      [200, 401, 403],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            typeof body?.demosTotal === 'number' &&
+            body.demosTotal >= 200 &&
+            typeof body?.demosSeeded === 'number' &&
+            body.demosSeeded <= body.demosTotal &&
+            typeof body?.suitesTotal === 'number' &&
+            body.suitesTotal >= 10 &&
+            typeof body?.suitesSeeded === 'number' &&
+            body.suitesSeeded <= body.suitesTotal &&
+            typeof body?.siteSeeded === 'number' &&
+            typeof body?.totalSeeded === 'number' &&
+            body.totalSeeded >= body.demosSeeded + body.suitesSeeded + body.siteSeeded
+          : body?.ok === false && typeof body?.error === 'string',
+      'Census kept the demo and suite counts disjoint and inside their catalog totals.'
+    )
+  },
   ...apiDocsSmokeTests
 ];
 

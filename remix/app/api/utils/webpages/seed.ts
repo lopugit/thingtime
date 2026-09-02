@@ -93,16 +93,21 @@ type SeedFail = { ok: false; status: number; error: string };
 
 const fail = (status: number, error: string): SeedFail => ({ ok: false, status, error });
 
-const seededCount = async (tag?: string): Promise<number> => {
+const seededCount = async (tag?: string, withoutTag?: string): Promise<number> => {
 	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system', ...(tag ? { tags: tag } : {}) } as any);
+	const tagged = tag ? { tags: withoutTag ? { $all: [tag], $nin: [withoutTag] } : tag } : {};
+	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system', ...tagged } as any);
 };
 
 export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	ok: true,
 	totalSeeded: await seededCount(),
 	siteSeeded: await seededCount('site'),
-	demosSeeded: await seededCount('demo'),
+	// suite pages carry BOTH 'demo' (so the gallery's seeded projection finds
+	// them) and 'suite', so the demo census must exclude them — otherwise
+	// demosSeeded counts the 14 suite pages against demosTotal and a fully
+	// seeded deployment reports more demos seeded than the catalog holds
+	demosSeeded: await seededCount('demo', 'suite'),
 	demosTotal: getWebpageDemos().length,
 	suitesSeeded: await seededCount('suite'),
 	suitesTotal: BEHAVIOUR_SUITES.length

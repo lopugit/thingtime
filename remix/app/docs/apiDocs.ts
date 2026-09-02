@@ -10130,8 +10130,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Catalog slice returned.',
         body: {
           ok: true,
-          total: 314,
-          seededCount: 314,
+          total: 322,
+          seededCount: 322,
           families: [{ key: 'hero', title: 'Hero', emoji: '🌅', kind: 'section', description: 'Opening statements — centered, split, with stats, and minimal.', count: 24 }],
           demos: [
             {
@@ -10251,7 +10251,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the demo catalog is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing — the three seeded counts are disjoint, so a suite page counts once, under suitesSeeded.',
       'Re-run after the catalogs change — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
@@ -10269,14 +10269,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Seed report returned.',
         body: {
           ok: true,
-          received: 436,
-          created: 436,
+          received: 447,
+          created: 447,
           refreshed: 0,
           unchanged: 0,
           skipped: 0,
           notes: [],
-          totalSeeded: 363,
-          suites: { ok: true, received: 114, created: 114, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 363 }
+          totalSeeded: 364,
+          suites: { ok: true, received: 125, created: 125, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 364 }
         }
       }
     ]
@@ -10306,7 +10306,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the seed table is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages).',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the three seeded counts partition it.',
       'Re-run after adding routes to the seed table — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
@@ -10322,7 +10322,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Seed report returned.',
-        body: { ok: true, received: 27, created: 27, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 27 }
+        body: { ok: true, received: 28, created: 28, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 28 }
       }
     ]
   }),
