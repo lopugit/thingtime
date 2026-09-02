@@ -2887,6 +2887,67 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
+
+Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
+which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
+(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
+
+- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
+      signed synthetic `workflow_job` delivery to
+      `/api/v1/integrations/github/webhook` on a local stack and confirm
+      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
+      the repository, job, and event rows (admin query workbench, collection
+      `ciControl`).
+- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
+      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
+      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
+      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
+      an update to a job refreshes its stamp from the new `updatedAt`.
+- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
+      from new events (kept forever); a non-numeric value falls back to the
+      default; values above 3650 clamp.
+- [ ] Repository no-op suppression: two consecutive deliveries for the same
+      repository with status `active` record ONE `ci-event` whose parent is the
+      repository row (the insert), not one per delivery; an `archived`
+      transition records one more. Entity events (PR `synchronize` with an
+      unchanged status) are still recorded.
+- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
+      `freshness.latestEventAt` still populate from the satellite; the
+      per-parent history drawer still lists events newest-first.
+- [ ] Boot ensure on a database that carries the seven retired `things`
+      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
+      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
+      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
+      and `sandboxExpiresAt_1` originals are replaced by the partial
+      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
+      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
+      never shows neither).
+- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
+      `ci_control_repository_updated`, `ci_control_repository_status`,
+      `ci_control_repository_external_id`, `ci_control_parent_created`, and
+      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
+- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
+      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
+      per-kind relocate/expired counts and writes nothing; the confirmed run
+      copies live rows (insert-if-absent by shareId — a satellite row that
+      already exists keeps its newer state), deletes every matched `things`
+      row including already-expired ones, and reports `drained`. A run that
+      hits its time budget says so and the panel's pending count keeps the
+      migration actionable until it reads 0. Non-CI things are untouched.
+- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
+      on-disk, and index bytes per physical collection with an orange `N× docs`
+      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
+      lists plan-owned indexes and any residue it would leave alone; the
+      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
+      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
+      total index bytes drop, and a duplicate `shareId` insert attempted during
+      the run is still rejected with E11000.
+- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
+      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
+      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
+      (collection allowlist now includes `ciControl`).
+
 ## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
 
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature

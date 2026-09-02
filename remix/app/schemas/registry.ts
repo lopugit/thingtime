@@ -410,6 +410,13 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   lopuCredentials: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
+  // CI control-plane satellite (api/utils/ciControl): every ci-* Thing —
+  // current-state projections AND the append-only ci-event history — lives
+  // here, NOT in `things`. Machine-written webhook telemetry arrives at
+  // hundreds of thousands of rows per day and must never share a collection
+  // (or its ~60-index write amplification and wildcard text index) with user
+  // content. Rows carry root `expiresAt` retention (ciControl/retentionCore.ts).
+  ciControl: 1,
   email_events: 1,
   email_templates: 1,
   email_subscriptions: 1,
@@ -1771,7 +1778,8 @@ const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-e
     'A private, system-owned control-plane projection written only by signed GitHub/Vercel webhook ingestion, ' +
     'an administrator reconciliation, or an allowlisted administrator dispatch. The deterministic shareId ' +
     'keeps one current projection per external entity; status changes are stored separately as relational ' +
-    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it.',
+    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it. ' +
+    'Stored in the ciControl satellite collection (never in things); activity rows carry root expiresAt retention.',
   createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
   fields: [
     { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Authoritative provider.' },
@@ -1852,7 +1860,8 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail:
       'A relational audit record keyed by provider delivery id and parent entity. Events are append-only and ' +
       'bounded; retries of the same signed webhook do not duplicate history. Generic Thing CRUD cannot create, ' +
-      'edit, or delete it.',
+      'edit, or delete it. Stored in the ciControl satellite collection with root expiresAt retention ' +
+      '(THINGTIME_CI_EVENT_RETENTION_DAYS, default 14); a delivery that changes nothing on the repository row records no event.',
     createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
     fields: [
       { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Event provider.' },
