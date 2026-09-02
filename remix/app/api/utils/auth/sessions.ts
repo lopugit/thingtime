@@ -64,11 +64,22 @@ export const getLiveSession = async (jti: string) => {
 // on its own revoke path.
 export const REVOKED_SESSION_REAP_MS = 1000 * 60 * 60 * 24 * 30;
 
-export const revokedSessionPatch = (revokedAt: Date) => ({
+// The $set BODY, not an update document. $ifNull only evaluates inside an
+// aggregation pipeline, so this must always be wrapped — hence the `Set`
+// suffix, and hence revokedSessionPipeline() below, which every caller should
+// reach for instead. Passed to a plain updateOne/updateMany the driver stores
+// the literal { $ifNull: [...] } sub-document into expiresAt: no error, no type
+// complaint, but the field is no longer a Date, so the TTL index skips it and
+// the row is stranded exactly as before the fix — the bug silently returns.
+export const revokedSessionSet = (revokedAt: Date) => ({
   revokedAt,
   expiresAt: { $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)] }
 });
 
+// The pipeline form — safe to hand straight to updateOne/updateMany/
+// findOneAndUpdate, and to spread when a caller needs extra stages after it.
+export const revokedSessionPipeline = (revokedAt: Date) => [{ $set: revokedSessionSet(revokedAt) }];
+
 export const revokeSession = async (jti: string) => {
-  await (await getSessionsCollection()).updateOne({ jti }, [{ $set: revokedSessionPatch(new Date()) }]);
+  await (await getSessionsCollection()).updateOne({ jti }, revokedSessionPipeline(new Date()));
 };

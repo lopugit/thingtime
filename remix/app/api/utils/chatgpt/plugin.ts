@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { json, redirect } from '~/api/http';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
-import { createSession, getLiveSession, revokedSessionPatch, revokeSession } from '~/api/utils/auth/sessions';
+import { createSession, getLiveSession, revokedSessionPipeline, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
@@ -86,10 +86,10 @@ const infiniteExpiryFilter = (now: Date) => ({
 // one never-expiring refresh session and mints another — so a plain
 // `$set: { revokedAt }` would leave each consumed row at expiresAt: null, which
 // the sessions TTL index skips, orphaning one document per rotation forever.
-// revokedSessionPatch fills a missing expiry and preserves a real one, so this
-// is also correct for grants that already carry a short TTL.
-export const consumedSessionPatch = (now: Date) => [
-  { $set: revokedSessionPatch(now) },
+// revokedSessionPipeline fills a missing expiry and preserves a real one, so
+// this is also correct for grants that already carry a short TTL.
+export const consumedSessionPipeline = (now: Date) => [
+  ...revokedSessionPipeline(now),
   { $set: { 'meta.consumedAt': now } }
 ];
 
@@ -689,7 +689,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (resource) refreshFilter['meta.resource'] = resource;
   const consumed = await (await getSessionsCollection()).findOneAndUpdate(
     refreshFilter,
-    consumedSessionPatch(now),
+    consumedSessionPipeline(now),
     { returnDocument: 'before' }
   );
   if (!consumed) return invalidGrant();
@@ -782,10 +782,10 @@ const revokeMcpConnection = async (context: McpSession) => {
   const now = new Date();
   // Bridge sessions no longer expire on their own, so a disconnect has to leave
   // behind a reap date: the sessions TTL index skips expiresAt: null, and these
-  // revoked records would accumulate forever without one. revokedSessionPatch
+  // revoked records would accumulate forever without one. revokedSessionPipeline
   // fills a missing expiry and preserves a real one (legacy bridge sessions
   // minted before the infinite-expiry switch still carry theirs).
-  const revoked = [{ $set: revokedSessionPatch(now) }, { $set: { 'meta.revokedAt': now } }];
+  const revoked = [...revokedSessionPipeline(now), { $set: { 'meta.revokedAt': now } }];
   await Promise.all([
     sessions.updateOne(
       {
