@@ -183,6 +183,8 @@ const FLAT_PLACE_KEYS = ['placeName', 'placeCountry', 'lat', 'lon', 'tz'] as con
  * engine's BirthProfile. `displayName` is optional and only feeds the day
  * summary's closing line.
  */
+const nonZeroCoordinate = (value: unknown): boolean => !isBlank(value) && Number.isFinite(Number(value)) && Number(value) !== 0;
+
 export const normaliseProfile = (fn: string, value: unknown): NormalisedProfile => {
 	if (!isRecord(value)) return refuse(fn, 'profile must be an object like { birthDate, birthTime?, timeKnown, place? }');
 	const birthDate = parseBirthDate(fn, value.birthDate);
@@ -196,7 +198,11 @@ export const normaliseProfile = (fn: string, value: unknown): NormalisedProfile 
 		placeSource = value.place;
 	} else if (!isBlank(value.place)) {
 		return refuse(fn, 'profile.place must be an object like { name, country?, lat, lon, tz }');
-	} else if (FLAT_PLACE_KEYS.some((key) => !isBlank(value[key]))) {
+	} else if (!isBlank(value.placeName) || !isBlank(value.tz) || nonZeroCoordinate(value.lat) || nonZeroCoordinate(value.lon)) {
+		// A FLAT profile (the app's data thing) counts as having a place only
+		// when it names one or carries a zone: a cleared place stores
+		// placeName '' / tz '' with lat 0 / lon 0, and that must read as
+		// "no place" (solar chart), never as the Gulf of Guinea.
 		placeSource = { name: value.placeName, country: value.placeCountry, lat: value.lat, lon: value.lon, tz: value.tz };
 		prefix = 'profile';
 	}

@@ -225,6 +225,8 @@ for (const key of ['pokeworld', 'starsalign']) {
 	check('save-profile refuses a future date', bad.result === null && /future/i.test(bad.error || ''), bad.error);
 	const save = await run('app-starsalign-save-profile', { birthDate: '1990-07-15', birthTime: '10:30', timeKnown: true, displayName: 'Ada' });
 	check('save-profile creates the profile', save.http === 200 && /Saved/.test(save.result?.title || ''), save);
+	const noPlace = await run('app-starsalign-today', {});
+	check('today with a profile but no place is a solar chart (cleared place reads as none)', noPlace.result?.hasProfile === true && noPlace.result?.today?.natal?.solar === true && !noPlace.result?.today?.chips?.rising, noPlace.error || noPlace.result?.today?.natal);
 	const city = await run('app-starsalign-pick-city', { q: 'melb' });
 	check('pick-city finds Melbourne', city.result?.cities?.[0]?.name === 'Melbourne', city.result?.cities);
 	const place = await run('app-starsalign-set-place', { placeName: 'Melbourne', placeCountry: 'Australia', lat: -37.81, lon: 144.96, tz: 'Australia/Melbourne' });

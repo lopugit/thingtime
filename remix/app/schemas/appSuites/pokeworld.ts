@@ -77,6 +77,9 @@ const row = (children: unknown[], style: Record<string, unknown> = {}): Record<s
 const INPUT_STYLE = { fontFamily: PIXEL, fontSize: '12px', padding: '8px 10px', border: `2px solid ${NAVY}`, borderRadius: '6px', background: '#ffffff', color: TEXT, width: '100%', boxSizing: 'border-box' };
 const input = (name: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 'input', props: { name, style: INPUT_STYLE, ...props } });
 const field = (title: string, control: Record<string, unknown>): Record<string, unknown> => el('label', { display: 'grid', gap: '4px' }, [label(title), control]);
+// a FORM GROUP: a control reads the named fields of its closest fieldset
+const group = (children: unknown[], style: Record<string, unknown> = {}): Record<string, unknown> =>
+	el('fieldset', { border: 'none', margin: 0, padding: 0, minWidth: 0, display: 'grid', gap: '8px', ...style }, children);
 const whenState = (state: string, then: unknown, otherwise?: unknown): Record<string, unknown> => ({ ttIf: { arg: 'state', equals: state, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 const ifTruthy = (arg: string, then: unknown, otherwise?: unknown): Record<string, unknown> => ({ ttIf: { arg, then, ...(otherwise !== undefined ? { else: otherwise } : {}) } });
 const each = (arg: string, node: unknown, options: { max?: number; empty?: unknown } = {}): Record<string, unknown> => ({ ttEach: { arg, node, ...options } });
@@ -138,8 +141,10 @@ const hudComponent: SuiteComponentDef = {
 					textbox([
 						text('Hello there! Welcome to the world of POKéMON!', { fontWeight: 700 }),
 						text('Your very own POKéMON legend is about to unfold. First, tell me a little about yourself.'),
-						row([field('Your name (max 7)', input('name', { type: 'text', maxLength: 7, placeholder: 'LOPU' })), field('Are you a boy or a girl?', { tag: 'select', props: { name: 'gender', style: INPUT_STYLE }, children: [{ tag: 'option', props: { value: 'boy' }, children: ['BOY'] }, { tag: 'option', props: { value: 'girl' }, children: ['GIRL'] }] })]),
-						row([button('Begin the journey ▶', refs.actionKey('start'))]),
+						group([
+							row([field('Your name (max 7)', input('name', { type: 'text', maxLength: 7, placeholder: 'LOPU' })), field('Are you a boy or a girl?', { tag: 'select', props: { name: 'gender', style: INPUT_STYLE }, children: [{ tag: 'option', props: { value: 'boy' }, children: ['BOY'] }, { tag: 'option', props: { value: 'girl' }, children: ['GIRL'] }] })]),
+							row([button('Begin the journey ▶', refs.actionKey('start'))])
+						]),
 						text('You start with TREECKO, RALTS and ZIGZAGOON, three more in the PC, a few POTIONs and six POKé BALLs.', { fontSize: '10px', color: MUTED })
 					])
 				)
@@ -368,14 +373,21 @@ const settingsComponent: SuiteComponentDef = {
 					el('div', { display: 'grid', gap: '12px' }, [
 						textbox([
 							text('OPTION', { fontWeight: 700 }),
-							row([field('PLAYER NAME', input('name', { type: 'text', maxLength: 7, value: '{result.trainer.name}' })), field('SPRITE', { tag: 'select', props: { name: 'gender', style: INPUT_STYLE }, children: [{ tag: 'option', props: { value: 'boy', selected: { ttIf: { arg: 'result.trainer.gender', equals: 'boy', then: true, else: false } } }, children: ['BOY'] }, { tag: 'option', props: { value: 'girl', selected: { ttIf: { arg: 'result.trainer.gender', equals: 'girl', then: true, else: false } } }, children: ['GIRL'] }] })]),
-							row([button('SAVE', refs.actionKey('settings'))])
+							group([
+								row([field('PLAYER NAME', input('name', { type: 'text', maxLength: 7, value: '{result.trainer.name}' })), field('SPRITE', { tag: 'select', props: { name: 'gender', style: INPUT_STYLE }, children: [{ tag: 'option', props: { value: 'boy', selected: { ttIf: { arg: 'result.trainer.gender', equals: 'boy', then: true, else: false } } }, children: ['BOY'] }, { tag: 'option', props: { value: 'girl', selected: { ttIf: { arg: 'result.trainer.gender', equals: 'girl', then: true, else: false } } }, children: ['GIRL'] }] })]),
+								row([button('SAVE', refs.actionKey('settings'))])
+							])
 						]),
 						textbox([
 							text('LOCATION', { fontWeight: 700 }),
 							text('Stand on the real map: your latitude / longitude picks the same Mercator block the original game used, so legendary POKéMON roam where they should (Uluru, Tokyo, the Great Barrier Reef…).', { fontSize: '10px', color: MUTED }),
-							row([field('LATITUDE', input('lat', { type: 'number', step: 'any', min: -87, max: 87, value: '{result.trainer.lat}' })), field('LONGITUDE', input('lng', { type: 'number', step: 'any', min: -180, max: 180, value: '{result.trainer.lng}' }))]),
-							row([button('TELEPORT', refs.actionKey('set-location'), {}, 'cream'), button('MELBOURNE', refs.actionKey('set-location'), { lat: -37.8757, lng: 145.0057 }, 'grey'), button('ULURU', refs.actionKey('set-location'), { lat: -25.3444, lng: 131.0369 }, 'grey'), button('TOKYO', refs.actionKey('set-location'), { lat: 35.6762, lng: 139.6503 }, 'grey')])
+							group([
+								row([field('LATITUDE', input('lat', { type: 'number', step: 'any', min: -87, max: 87, value: '{result.trainer.lat}' })), field('LONGITUDE', input('lng', { type: 'number', step: 'any', min: -180, max: 180, value: '{result.trainer.lng}' }))]),
+								row([button('TELEPORT', refs.actionKey('set-location'), {}, 'cream')])
+							]),
+							// presets carry their own coordinates — their own group so the
+							// typed fields above never override them
+							group([row([button('MELBOURNE', refs.actionKey('set-location'), { lat: -37.8757, lng: 145.0057 }, 'grey'), button('ULURU', refs.actionKey('set-location'), { lat: -25.3444, lng: 131.0369 }, 'grey'), button('TOKYO', refs.actionKey('set-location'), { lat: 35.6762, lng: 139.6503 }, 'grey')])])
 						]),
 						textbox([
 							text('BADGES', { fontWeight: 700 }),

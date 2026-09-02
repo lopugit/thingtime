@@ -135,10 +135,14 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				const parsed = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
 				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) inputs = parsed;
 			} catch {}
-			// named fields inside the SAME component root become inputs — a
+			// named fields inside the control's FORM GROUP become inputs — a
 			// component with an <input name="nickname"> and a button IS a form.
-			// Field values win over the static inputs; untouched fields keep them.
-			inputs = { ...inputs, ...gatherFormFields(event.currentTarget as HTMLElement) };
+			// The group is the closest <fieldset> around the control (so one
+			// component can hold several independent forms), else the whole
+			// component root. Field values win over the static inputs; untouched
+			// fields keep them.
+			const group = (control.closest('fieldset') as HTMLElement | null) || (event.currentTarget as HTMLElement);
+			inputs = { ...inputs, ...gatherFormFields(group) };
 			busyRef.current = true;
 			(async () => {
 				try {

@@ -95,6 +95,9 @@ const field = (label: string, control: Record<string, unknown>): Record<string, 
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', background: RAISED, color: INK, border: `1px solid ${HAIR_STRONG}`, borderRadius: '999px', padding: '11px 18px', fontFamily: SANS, fontSize: '0.95rem' };
 const input = (name: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 'input', props: { name, style: INPUT_STYLE, ...props } });
 const spinner = (label: string): Record<string, unknown> => text(`✶ ${label}`, { color: FAINT });
+// a FORM GROUP: a control reads the named fields of its closest fieldset
+const group = (children: unknown[], style: Record<string, unknown> = {}): Record<string, unknown> =>
+	el('fieldset', { border: 'none', margin: 0, padding: 0, minWidth: 0, display: 'grid', gap: '10px', ...style }, children);
 
 // Templates branch on the runtime scope: `state` (signed-out / not-installed /
 // loading / ok / error), `viewer`, `result` (the source action's return),
@@ -239,29 +242,34 @@ const birthFormComponent: SuiteComponentDef = {
 					card([
 						eyebrow('Your birth data'),
 						ifTruthy('result.hasProfile', text('Saved to your Thingtime ✶ — {result.profile.birthDate}', { color: ACCENT, fontSize: '0.9rem' }), text('Nothing saved yet — the sky insists on a birth date.', { color: FAINT, fontSize: '0.9rem' })),
+						group([
 						field('Birth date', input('birthDate', { type: 'date', min: '1900-01-01', value: '{result.profile.birthDate}', required: true })),
 						field('Birth time (optional)', input('birthTime', { type: 'time', value: '{result.profile.birthTime}' })),
 						el('label', { display: 'flex', gap: '10px', alignItems: 'center', fontFamily: SANS, color: DIM, fontSize: '0.9rem' }, [{ tag: 'input', props: { type: 'checkbox', name: 'timeKnown', checked: '{result.profile.timeKnown}' } }, 'I know my birth time']),
 						field('Display name', input('displayName', { type: 'text', maxLength: 60, placeholder: 'How the sky should greet you', value: '{result.profile.displayName}' })),
 						ifTruthy(
 							'result.profile.placeName',
-							row([chip([glyph('⌖'), '{result.profile.placeName}, {result.profile.placeCountry} · {result.profile.tz}']), button('× clear place', refs.actionKey('set-place'), { placeName: '', placeCountry: '', lat: 0, lon: 0, tz: '' }, 'ghost')]),
+							group([row([chip([glyph('⌖'), '{result.profile.placeName}, {result.profile.placeCountry} · {result.profile.tz}']), button('× clear place', refs.actionKey('set-place'), { placeName: '', placeCountry: '', lat: 0, lon: 0, tz: '' }, 'ghost')])]),
 							text('No birth place yet — pick a city below to unlock your rising sign.', { fontSize: '0.85rem', color: FAINT })
 						),
 						row([button('Save my sky ✶', refs.actionKey('save-profile'))])
+						])
 					]),
 					card([
 						eyebrow('Birth place'),
-						field('Search a city', input('q', { type: 'search', placeholder: 'Type a city or country…', maxLength: 80 })),
-						row([button('Find', refs.actionKey('pick-city'), {}, 'ghost')]),
+						group([field('Search a city', input('q', { type: 'search', placeholder: 'Type a city or country…', maxLength: 80 })), row([button('Find', refs.actionKey('pick-city'), {}, 'ghost')])]),
 						{
 							ttIf: {
 								arg: 'last.action',
 								equals: refs.actionKey('pick-city'),
-								then: each('last.result.cities', button('{item.name}, {item.country}', refs.actionKey('set-place'), { placeName: '{item.name}', placeCountry: '{item.country}', lat: '{item.lat}', lon: '{item.lon}', tz: '{item.tz}' }, 'ghost'), {
-									max: 8,
-									empty: text('No city matched — try the nearest big one.', { fontSize: '0.85rem', color: FAINT })
-								})
+								then: group([
+									row([
+										each('last.result.cities', button('{item.name}, {item.country}', refs.actionKey('set-place'), { placeName: '{item.name}', placeCountry: '{item.country}', lat: '{item.lat}', lon: '{item.lon}', tz: '{item.tz}' }, 'ghost'), {
+											max: 8,
+											empty: text('No city matched — try the nearest big one.', { fontSize: '0.85rem', color: FAINT })
+										})
+									])
+								])
 							}
 						}
 					]),

@@ -60,6 +60,11 @@ const ALLOWED_TAGS = new Set([
 	'figure',
 	'figcaption',
 	'label',
+	// a FORM GROUP: the ttAction click wrapper reads named fields from the
+	// control's closest fieldset (else the whole component), so one component
+	// can hold several independent forms
+	'fieldset',
+	'legend',
 	'input',
 	'textarea',
 	'select',

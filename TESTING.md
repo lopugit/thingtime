@@ -4430,4 +4430,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
   its container, D-pad stays 48px cells, nav wraps, no horizontal scroll.
 - Regression classes: an `if` branch must not evaluate when untaken (a
   `set` with an empty key inside the untaken branch used to fail the run);
-  the run payload's own `status` must never shadow the HTTP status in scripts.
+  the run payload's own `status` must never shadow the HTTP status in scripts;
+  a control gathers only the named fields of its closest `<fieldset>` (the
+  city Find button used to send the birth-date fields to `pick-city`, which
+  refused them as unknown inputs); a profile whose place was cleared
+  (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
+  refusal; nested `ttEach` must flatten (the tile grid rendered empty).

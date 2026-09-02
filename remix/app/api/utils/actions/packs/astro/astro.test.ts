@@ -21,7 +21,7 @@ import {
 	wholeSignHouses,
 	zonedTimeToUtc
 } from './engine';
-import { ASTRO_CITIES, ASTRO_PACK_ARITIES, ASTRO_SCHOOL_ENTRIES, astroPack } from './index';
+import { ASTRO_CITIES, ASTRO_PACK_ARITIES, ASTRO_SCHOOL_ENTRIES, astroPack, normaliseProfile } from './index';
 import { SECTIONS } from './school';
 
 const closeTo = (actual: number, expected: number, epsilon = 0.005) =>
@@ -684,4 +684,12 @@ describe('astro.entry', () => {
 		entry.short.push('mutated');
 		assert.equal(call('astro.entry', 'sun').short.length, entry.short.length - 1);
 	});
+});
+
+it('a flat profile with a cleared place (empty name/tz, zero coordinates) reads as no place', () => {
+	const profile = normaliseProfile('astro.today', { birthDate: '1990-07-15', birthTime: '10:30', timeKnown: true, placeName: '', placeCountry: '', lat: 0, lon: 0, tz: '', displayName: 'Ada' });
+	assert.equal(profile.place, undefined);
+	const model = astroPack['astro.today']([{ birthDate: '1990-07-15', birthTime: '', timeKnown: false, placeName: '', lat: 0, lon: 0, tz: '' }, '2026-09-02T00:00:00.000Z'], { random: () => 0.5, now: () => new Date('2026-09-02T00:00:00.000Z') }) as Record<string, any>;
+	assert.equal(model.natal.solar, true);
+	assert.equal(model.sky.length, 10);
 });

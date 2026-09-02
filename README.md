@@ -881,6 +881,10 @@ Fork-safe setup (no secrets involved):
    (idempotent), and the same `/p/<key>` URLs now serve your copy.
 3. Assets load from the original sites (`https://www.pokeworld.center/tiles/…`
    and `/sprites/…`); no keys, map APIs, or env vars are needed.
+4. Existing checkouts: the astro pack adds the `astronomy-engine` dependency —
+   run `corepack pnpm --dir remix install --frozen-lockfile` (or
+   `npm run worktree-setup`) once, or the Nitro dev worker dies with
+   `Could not resolve 'astronomy-engine'` and every `/api` call 503s.
 
 Verify end to end against a running stack:
 
