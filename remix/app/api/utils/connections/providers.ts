@@ -190,6 +190,31 @@ const stripBlocks = (value: string, tags: string[]): string => {
   return out;
 };
 
+// Linear tag removal, for the same reason stripBlocks above is linear:
+// `<[^>]+>` backtracks from every `<` in the input when no `>` follows it, so
+// 100KB of bare `<` — the cap below, reached by one feed item — cost ~8s of
+// blocked event loop on its own.
+const stripTags = (value: string): string => {
+  let out = '';
+  let cursor = 0;
+  while (cursor < value.length) {
+    const start = value.indexOf('<', cursor);
+    if (start === -1) break;
+    const close = value.indexOf('>', start + 1);
+    // an unterminated `<` is literal text, and `<>` has nothing inside to
+    // strip — both true of the `<[^>]+>` pattern this replaces
+    if (close === -1) break;
+    if (close === start + 1) {
+      out += value.slice(cursor, close + 1);
+      cursor = close + 1;
+      continue;
+    }
+    out += `${value.slice(cursor, start)} `;
+    cursor = close + 1;
+  }
+  return out + value.slice(cursor);
+};
+
 // Bound regex work: nothing downstream keeps more than MAX_TEXT_CHARS, so
 // hostile multi-megabyte bodies never reach the pattern passes.
 const STRIP_INPUT_CAP = 100_000;
@@ -200,10 +225,11 @@ export const stripHtml = (value: unknown): string => {
   // Atom bodies carry &lt;div&gt;…&amp;#32;…) unescape to markup on the first
   // pass, lose the markup on the strip, and surface clean text on the second
   return decodeEntities(
-    stripBlocks(decodeEntities(value.slice(0, STRIP_INPUT_CAP)), ['script', 'style'])
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
-      .replace(/<[^>]+>/g, ' ')
+    stripTags(
+      stripBlocks(decodeEntities(value.slice(0, STRIP_INPUT_CAP)), ['script', 'style'])
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
+    )
   )
     .replace(/[ \t]+/g, ' ')
     .replace(/ ?\n ?/g, '\n')
@@ -716,38 +742,128 @@ const sanitizeHost = (value: unknown): string | null => {
 
 // --- minimal RSS/Atom parsing (well-formed feeds; no new dependencies) ------
 
-const tagContent = (xml: string, tag: string): string | null => {
-  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'));
-  if (!match) return null;
-  const inner = match[1].trim();
-  const cdata = inner.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
-  return (cdata ? cdata[1] : inner).trim();
+// Every helper below walks the document with indexOf rather than letting a
+// regex backtrack — the same rule stripBlocks/stripTags follow, and for the
+// same reason: this XML is attacker-fetched. The lazy `<tag…>([\s\S]*?)</tag>`
+// and `<tag[^>]*…>` patterns these replace retried from EVERY occurrence of the
+// opening tag when the closing one never arrived, so a body of `<title>`
+// repeated with no `</title>` was quadratic — 256KB cost ~3s, and the response
+// cap is 3MB. Any signed-in account can point the RSS provider at a host it
+// controls, so that was a remote stall of the whole event loop.
+
+// Index just past the `>` that ends the tag whose name ends at `from`, or -1.
+// Quoted attribute values are skipped: XML only requires `<` and `&` to be
+// escaped, so `href="…?a=1>2"` is legal and its `>` does not end the tag. The
+// old `[^>]*` … `"([^"]*)"` pair happened to tolerate that (the VALUE class
+// could cross `>`), and a differential fuzz against it surfaced exactly this
+// case — so the scan is quote-aware rather than truncating such a tag and
+// silently dropping the attribute.
+const tagEndsAt = (xml: string, from: number): number => {
+  let quote = '';
+  for (let at = from; at < xml.length; at += 1) {
+    const char = xml[at];
+    if (quote) {
+      if (char === quote) quote = '';
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '>') {
+      return at + 1;
+    }
+  }
+  return -1;
 };
 
-const tagAttr = (xml: string, tag: string, attr: string): string | null => {
-  const match = xml.match(new RegExp(`<${tag}[^>]*\\s${attr}="([^"]*)"[^>]*/?>`, 'i'));
-  return match ? decodeEntities(match[1]) : null;
-};
-
-// Attribute order in real feeds is arbitrary (<enclosure url=… type=…/> is the
-// common shape) — find the first tag whose full attribute text satisfies
-// `where`, then pull the attribute out separately.
-const tagAttrWhere = (xml: string, tag: string, attr: string, where: RegExp): string | null => {
-  const tags = xml.match(new RegExp(`<${tag}\\b[^>]*/?>`, 'gi')) || [];
-  for (const entry of tags) {
-    if (!where.test(entry)) continue;
-    const match = entry.match(new RegExp(`\\s${attr}="([^"]*)"`, 'i'));
-    if (match) return decodeEntities(match[1]);
+// The next `<tag …>` at or after `from`: its `<` index, the index just past the
+// opening `>`, and the raw tag text. null once no further opening tag exists.
+const nextOpenTag = (
+  xml: string,
+  lower: string,
+  tag: string,
+  from: number
+): { start: number; bodyAt: number; text: string } | null => {
+  // `lower` is the whole document lowercased, so the NAME has to be lowered
+  // too or a mixed-case tag (`pubDate`, `media:thumbnail`) never matches —
+  // the patterns this replaces carried the `i` flag, which covered both sides.
+  const open = `<${tag.toLowerCase()}`;
+  let cursor = from;
+  while (cursor < lower.length) {
+    const start = lower.indexOf(open, cursor);
+    if (start === -1) return null;
+    // the name has to END here: `<link>` and `<link …>` are the `link` tag,
+    // `<linkinfo>` is not (the `\s`/`\b` the old patterns spelled out)
+    const boundary = lower[start + open.length];
+    if (boundary === '>' || (boundary !== undefined && /\s/.test(boundary))) {
+      const bodyAt = tagEndsAt(xml, start + open.length);
+      if (bodyAt === -1) return null; // never terminated — no usable tag follows
+      return { start, bodyAt, text: xml.slice(start, bodyAt) };
+    }
+    cursor = start + open.length;
   }
   return null;
 };
 
+const tagContent = (xml: string, tag: string): string | null => {
+  const lower = xml.toLowerCase();
+  const opened = nextOpenTag(xml, lower, tag, 0);
+  if (!opened) return null;
+  const end = lower.indexOf(`</${tag.toLowerCase()}>`, opened.bodyAt);
+  if (end === -1) return null;
+  const inner = xml.slice(opened.bodyAt, end).trim();
+  const cdata = inner.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+  return (cdata ? cdata[1] : inner).trim();
+};
+
+// `attr="…"` inside ONE already-bounded tag's text.
+const attrValueIn = (tagText: string, attr: string): string | null => {
+  const lower = tagText.toLowerCase();
+  const needle = `${attr.toLowerCase()}="`;
+  let cursor = 0;
+  while (cursor < lower.length) {
+    const at = lower.indexOf(needle, cursor);
+    if (at === -1) return null;
+    // whitespace before the name, as the old patterns required — so
+    // `data-href="…"` never answers a request for `href`
+    if (at > 0 && /\s/.test(tagText[at - 1])) {
+      const close = tagText.indexOf('"', at + needle.length);
+      if (close === -1) return null;
+      return decodeEntities(tagText.slice(at + needle.length, close));
+    }
+    cursor = at + needle.length;
+  }
+  return null;
+};
+
+// Attribute order in real feeds is arbitrary (<enclosure url=… type=…/> is the
+// common shape) — find the first tag whose full attribute text satisfies
+// `where`, then pull the attribute out separately. Without `where` this is the
+// plain "first <tag> carrying that attribute" lookup.
+const tagAttrWhere = (xml: string, tag: string, attr: string, where?: RegExp): string | null => {
+  const lower = xml.toLowerCase();
+  let cursor = 0;
+  for (;;) {
+    const opened = nextOpenTag(xml, lower, tag, cursor);
+    if (!opened) return null;
+    cursor = opened.bodyAt;
+    if (where && !where.test(opened.text)) continue;
+    const value = attrValueIn(opened.text, attr);
+    if (value !== null) return value;
+  }
+};
+
+const tagAttr = (xml: string, tag: string, attr: string): string | null => tagAttrWhere(xml, tag, attr);
+
 const blocksOf = (xml: string, tag: string): string[] => {
+  const lower = xml.toLowerCase();
+  const close = `</${tag.toLowerCase()}>`;
   const blocks: string[] = [];
-  const pattern = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'gi');
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(xml)) && blocks.length < FEED_FETCH_LIMIT * 2) {
-    blocks.push(match[1]);
+  let cursor = 0;
+  while (blocks.length < FEED_FETCH_LIMIT * 2) {
+    const opened = nextOpenTag(xml, lower, tag, cursor);
+    if (!opened) break;
+    const end = lower.indexOf(close, opened.bodyAt);
+    if (end === -1) break;
+    blocks.push(xml.slice(opened.bodyAt, end));
+    cursor = end + close.length;
   }
   return blocks;
 };
@@ -761,7 +877,10 @@ export const parseRssOrAtom = (xml: string): ParsedFeed | null => {
     const headEnd = xml.search(/<entry[\s>]/i);
     const head = headEnd === -1 ? xml : xml.slice(0, headEnd);
     const feedTitle = boundedText(tagContent(head, 'title') || '', MAX_TITLE_CHARS);
-    const feedLink = tagAttr(head, 'link[^>]*rel="alternate"', 'href') || tagAttr(head, 'link', 'href');
+    // `where` rather than a regex fragment smuggled through the tag name, now
+    // that tag names are matched literally — and it no longer requires href to
+    // come after rel, which real feeds do not guarantee
+    const feedLink = tagAttrWhere(head, 'link', 'href', /rel="alternate"/i) || tagAttr(head, 'link', 'href');
     for (const entry of blocksOf(xml, 'entry')) {
       const id = tagContent(entry, 'id') || tagAttr(entry, 'link', 'href') || '';
       if (!id) continue;
