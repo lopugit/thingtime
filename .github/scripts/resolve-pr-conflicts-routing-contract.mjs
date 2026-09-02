@@ -294,13 +294,28 @@ function assertWorkflowSource() {
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
   const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
-  // Every shell surface of this control plane, not just the two workflows: the
-  // rebase action carries six captured helpers of its own (hash_trusted_tree,
-  // hash_rebase_state, classify_output), and the sources are already read here.
-  assertCapturedStdoutStaysClean(source, "resolve-pr-conflicts.yml");
-  assertCapturedStdoutStaysClean(rebaseSource, "rebase-pr-stacks.yml");
-  assertCapturedStdoutStaysClean(rebaseActionSource, "rebase-conflict-round/action.yml");
-  assertCapturedStdoutStaysClean(lopuActionSource, "lopu-agent/action.yml");
+  // Every shell surface of this control plane, enumerated rather than listed.
+  // The hazard is a helper that becomes captured, or a captured helper added to
+  // a file nobody remembered to add here -- so a hand-kept list is the one shape
+  // guaranteed to miss it. Naming the four sources read above left twelve
+  // captured helpers unscanned, including `hash_index_entries` and
+  // `hash_rebase_state`, which exist in *both* the listed
+  // rebase-conflict-round/action.yml and the unlisted
+  // .github/scripts/rebase-stack/prepare-round.sh. One guarded copy and one
+  // unguarded copy of the same helper is precisely the drift the `fail()` note
+  // in resolve-pr-conflicts.yml warns about, so the walk is the guard, not the
+  // list. Files with no shell function are a no-op, which is why this can safely
+  // cover every workflow, action, and script instead of the resolver's own.
+  for (const shellSurface of [
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "scripts")),
+  ]) {
+    assertCapturedStdoutStaysClean(
+      readFileSync(shellSurface, "utf8"),
+      relative(REPO_ROOT, shellSurface),
+    );
+  }
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
