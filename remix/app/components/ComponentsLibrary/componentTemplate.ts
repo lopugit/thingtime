@@ -267,7 +267,10 @@ export const resolveTemplate = (
 		for (let index = 0; index < n; index++) {
 			if (budget.left <= 0) break;
 			const resolved = resolveTemplate(spec.node, { ...scope, index, n: index + 1 }, budget);
-			if (resolved !== null && resolved !== undefined) out.push(resolved);
+			// a nested repeat resolves to a list — flatten it so the renderer sees
+			// nodes, never lists of lists (a grid of rows of tiles)
+			if (Array.isArray(resolved)) out.push(...resolved);
+			else if (resolved !== null && resolved !== undefined) out.push(resolved);
 		}
 		return out;
 	}
@@ -290,7 +293,8 @@ export const resolveTemplate = (
 				{ ...scope, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1 },
 				budget
 			);
-			if (resolved !== null && resolved !== undefined) out.push(resolved);
+			if (Array.isArray(resolved)) out.push(...resolved);
+			else if (resolved !== null && resolved !== undefined) out.push(resolved);
 		}
 		return out;
 	}

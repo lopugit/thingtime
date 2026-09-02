@@ -156,8 +156,14 @@ const mapComponent: SuiteComponentDef = {
 	args: [],
 	render: (refs) =>
 		el('div', { background: SHELL, borderRadius: '18px', padding: '14px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', display: 'grid', gap: '12px' }, [
-			...gates(
-				'MAPPING NEARBY ROUTES…',
+			// the screen keeps its own signed-out / not-installed idle frames — the
+			// HUD above already carries the sign-in and install cards
+			whenState('signed-out', el('div', { background: SCREEN, borderRadius: '10px', padding: '40px 16px', border: `4px solid ${TEXT}`, textAlign: 'center' }, [text('PRESS START', { color: GREEN, fontWeight: 700, fontSize: '14px' }), text('Sign in to explore the world.', { color: '#9aa', fontSize: '10px' })])),
+			whenState('not-installed', el('div', { background: SCREEN, borderRadius: '10px', padding: '40px 16px', border: `4px solid ${TEXT}`, textAlign: 'center' }, [text('PRESS START', { color: GREEN, fontWeight: 700, fontSize: '14px' }), text('Install the game to begin.', { color: '#9aa', fontSize: '10px' })])),
+			whenState('loading', el('div', { background: SCREEN, borderRadius: '10px', padding: '40px 16px', border: `4px solid ${TEXT}`, textAlign: 'center' }, [text('MAPPING NEARBY ROUTES…', { color: GREEN, fontSize: '11px' })])),
+			whenState('error', textbox([text('MAP SIGNAL LOST', { color: RED, fontWeight: 700 }), text('{error}', { fontSize: '10px', color: MUTED }), row([button('RETRY', '$refresh', {}, 'cream')])])),
+			whenState(
+				'ok',
 				ifTruthy(
 					'result.hasTrainer',
 					el('div', { display: 'grid', gap: '12px' }, [
@@ -204,7 +210,8 @@ const mapComponent: SuiteComponentDef = {
 							{ alignItems: 'flex-start' }
 						),
 						{ ttIf: { arg: 'last.result.message', then: textbox([text('{last.result.message}')]) } }
-					])
+					]),
+					el('div', { background: SCREEN, borderRadius: '10px', padding: '40px 16px', border: `4px solid ${TEXT}`, textAlign: 'center' }, [text('PRESS START', { color: GREEN, fontWeight: 700, fontSize: '14px' }), text('Begin your journey above.', { color: '#9aa', fontSize: '10px' })])
 				)
 			)
 		])
