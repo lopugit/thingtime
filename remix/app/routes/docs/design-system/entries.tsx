@@ -99,6 +99,7 @@ export const designSystemEntries: DesignSystemEntry[] = [
 					{ name: 'general.borderWidth', type: 'number', defaultValue: '1', description: 'Hairline width for app chrome → --tt-border-w (and --tt-border-w-bold = max(2, w)). Fable uses 2.' },
 					{ name: 'general.shadow', type: "'soft' | 'hard'", defaultValue: "'soft'", description: 'The dialect switch: the themed shadow set renders soft blurs or hard ink offsets.' },
 					{ name: 'general.motion / animSpeed', type: 'boolean / number', defaultValue: 'true / 200', description: 'Master switch for decorative motion (--tt-rainbow-anim: none when off) and the base UI transition in ms.' },
+					{ name: 'general.pet', type: 'boolean', defaultValue: 'true', description: 'Mounts the app-wide decorative pet (components/Pets). Separate from motion: motion off leaves it still, pet off unmounts it. Read from JS like iconStyle rather than emitted as a var; custom CSS scopes to .tt-pet.' },
 					{ name: 'general.iconStyle', type: "'emoji' | 'lucide'", defaultValue: "'emoji'", description: 'UI icon language for surfaces that support both.' },
 					{ name: 'windows', type: 'TtThemeWindows', description: 'Editor-window traffic lights: per-button colour ("" = follow rainbow stop 1/2/3) and radius.' },
 					{ name: 'resolveTheme(base, patch)', type: 'helper', description: 'Merges a user/API patch over a builtin, sanitising every value (colours through sanitizeCssValue, fonts against the curated list, numbers clamped). Shared themes are untrusted input.' },

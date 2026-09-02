@@ -1,6 +1,6 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 
-import { useTtTheme } from '~/hooks/useTtTheme';
+import { useTtCustomClasses, useTtTheme } from '~/hooks/useTtTheme';
 
 import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore';
 
@@ -23,6 +23,9 @@ import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore'
 export const LopuuuPet = () => {
 	const { theme } = useTtTheme();
 	const motion = petMotionEnabled(theme?.general);
+	// Above the early return: hooks must run in the same order on every render,
+	// and the pet unmounts below when it is switched off.
+	const customClasses = useTtCustomClasses('general.pet');
 
 	// Unmount rather than hide: a display:none pet would still cost the three
 	// infinite animations (one of them a filter: hue-rotate sweep) on every page.
@@ -40,6 +43,9 @@ export const LopuuuPet = () => {
 			// bottom-anchored fixed chrome clears the home indicator / rounded
 			// corners, same as DevKit's bubble and the footer
 			bottom={{ base: petInset(16, 'bottom'), md: petInset(24, 'bottom') }}
+			// `tt-pet` is the stable selector TT_CUSTOM_TARGETS['general.pet']
+			// scopes custom CSS to — keep the two in step (customise.test.ts).
+			className={customClasses ? `tt-pet ${customClasses}` : 'tt-pet'}
 			pointerEvents="none"
 			position="fixed"
 			right={{ base: petInset(12, 'right'), md: petInset(24, 'right') }}
