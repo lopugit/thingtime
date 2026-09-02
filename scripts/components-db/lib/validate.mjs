@@ -23,6 +23,18 @@ export const ALLOWED_PROPS = new Set([
 ]);
 
 const DSL_KEYS = new Set(['ttArg', 'ttMap', 'ttIf', 'ttMerge', 'ttRepeat']);
+
+// The one place the two resolvers deliberately disagree. componentTemplate.ts
+// strips `ttAction`/`ttActionInputs` from the node and folds them into the
+// allowlisted data-tt-action / data-tt-action-inputs props; resolve.mjs — the
+// generator's semantics twin — has no such branch and would emit them as
+// literal node keys, which walkResolved does not inspect. That twin's header
+// records the divergence as safe *because* "the catalog generator never emits
+// one", so make it a rule the generator enforces rather than a promise it
+// happens to keep: an archetype that reaches for an interactive marker fails
+// generation loudly instead of validating against semantics it does not have.
+const RUNTIME_ONLY_KEYS = new Set(['ttAction', 'ttActionInputs']);
+
 export const ARG_TYPES = new Set(['string', 'text', 'number', 'boolean', 'enum', 'color']);
 
 export const MAX_RENDER_BYTES = 30 * 1024; // server cap is 32KB — keep headroom
@@ -122,6 +134,10 @@ const walkTemplate = (value, path, issues, argRefs, depth = 0) => {
 		}
 		if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
 			issues.push(`${path}: forbidden key '${key}'`);
+			continue;
+		}
+		if (RUNTIME_ONLY_KEYS.has(key)) {
+			issues.push(`${path}: '${key}' is a runtime-only marker — resolve.mjs has no branch for it (see componentTemplate.ts)`);
 			continue;
 		}
 		walkTemplate(entry, `${path}.${key}`, issues, argRefs, depth + 1);
