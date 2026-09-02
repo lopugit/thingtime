@@ -1219,8 +1219,18 @@ function assertWorkflowSource() {
   );
   assert.match(
     reviewBlock,
-    /if candidate_merge_sha="\$\(\s*\n\s*gh api "repos\/\$REPO\/git\/ref\/pull\/\$number\/merge"/u,
+    /if candidate_merge_sha="\$\(\s*\n\s*gh_read_retry api "repos\/\$REPO\/git\/ref\/pull\/\$number\/merge"/u,
     "the merge-ref read keeps gh's exit status so a missing merge ref stays empty",
+  );
+  // Once the empty outcome is soft, an unretried read degrades silently: a
+  // 502 or transport reset would drop every merge-ref alert from the snapshot
+  // and from the disposition authority derived from it, indistinguishably
+  // from a PR that genuinely has no merge ref. So this read must use the same
+  // helper as the two above it, and the empty result must reach the log.
+  assert.match(
+    reviewBlock,
+    /if \[ -z "\$merge_sha" \]; then\s*\n\s*echo "::notice::PR #\$number has no readable merge ref/u,
+    "a merge ref that could not be read narrows the alert snapshot visibly, not silently",
   );
   assert.match(
     reviewBlock,
