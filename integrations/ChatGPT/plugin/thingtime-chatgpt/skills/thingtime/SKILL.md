@@ -9,9 +9,13 @@ Use the Thingtime MCP tools only for accounts the user has connected. Start a
 new task by listing accounts when the requested account is ambiguous, then
 select the requested account explicitly.
 
-Treat `@Thingtime login` as an explicit request to call `login_thingtime`.
-When no connection is active, its OAuth requirement opens the host browser and
-uses the registered callback; never ask the user to paste a token into chat.
+Treat `@Thingtime login` as an explicit request to start the installed
+Thingtime MCP server's native OAuth flow. Run `codex mcp login thingtime`
+instead of calling `login_thingtime`: before a connection exists, MCP tool
+calls are intentionally protected and cannot bootstrap authentication. The
+Codex command opens the host browser and completes its registered callback;
+never ask the user to paste a token into chat. After it succeeds, call
+`list_thingtime_accounts` to report the safe account metadata.
 Treat `@Thingtime list accounts` as an explicit request to call
 `list_thingtime_accounts` and return only its safe account metadata.
 
