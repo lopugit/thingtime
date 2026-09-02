@@ -2345,11 +2345,15 @@ export const apiTests: ApiTestDefinition[] = [
         body?.ok === true &&
         Array.isArray(body?.suites) &&
         body.suites.length >= 10 &&
+        // the demo suites seed at webpage-demo-suite-<key>; app suites
+        // (Pokeworld, StarsAlign) keep their own keyed page ids under the
+        // same reserved webpage- prefix
+        body.suites.filter((suite: any) => typeof suite?.pageId === 'string' && suite.pageId.startsWith('webpage-demo-suite-')).length >= 10 &&
         body.suites.every(
           (suite: any) =>
             typeof suite?.key === 'string' &&
             typeof suite?.pageId === 'string' &&
-            suite.pageId.startsWith('webpage-demo-suite-') &&
+            suite.pageId.startsWith('webpage-') &&
             Array.isArray(suite?.actionIds) &&
             suite.actionIds.length > 0 &&
             typeof suite?.counts?.actions === 'number' &&
