@@ -654,17 +654,30 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			if (!key || UNSAFE_OBJECT_KEYS.has(key)) ctx.fail('set needs a safe key');
 			return { ...(isPlainObject(args[0]) ? args[0] : {}), [key]: args[2] ?? null };
 		}
+		// `pick` and `omit` copy keys onto a fresh object exactly like `merge`,
+		// so they need the same guard: `out[key] = …` is a [[Set]], and for the
+		// accessor trio that walks up to Object.prototype's setter and re-points
+		// THIS result's prototype instead of landing as data. Silently dropping
+		// would be worse than refusing — the key vanishes from the result while
+		// the prototype quietly changes — so both fail the way `merge` does.
 		case 'pick': {
 			const source = isPlainObject(args[0]) ? args[0] : {};
 			const out: Record<string, unknown> = {};
-			for (const key of list(1).map(toText)) if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key];
+			for (const key of list(1).map(toText)) {
+				if (UNSAFE_OBJECT_KEYS.has(key)) ctx.fail(`pick needs safe keys, got ${key}`);
+				if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key];
+			}
 			return out;
 		}
 		case 'omit': {
 			const source = isPlainObject(args[0]) ? args[0] : {};
 			const drop = new Set(list(1).map(toText));
 			const out: Record<string, unknown> = {};
-			for (const key of Object.keys(source)) if (!drop.has(key)) out[key] = source[key];
+			for (const key of Object.keys(source)) {
+				if (drop.has(key)) continue;
+				if (UNSAFE_OBJECT_KEYS.has(key)) ctx.fail(`omit needs safe keys, got ${key}`);
+				out[key] = source[key];
+			}
 			return out;
 		}
 		case 'keys':

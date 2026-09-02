@@ -195,10 +195,27 @@ test('the object builders refuse prototype-accessor keys, not just `set`', () =>
 	assert.throws(() => direct(['merge', { a: 1 }, JSON.parse('{"constructor": 1}')]), /safe keys/);
 	assert.throws(() => direct(['set', {}, '__proto__', 1]), /safe key/);
 
+	// `pick` and `omit` build objects the same [[Set]] way, so the guarantee in
+	// this test's name has to cover them too: `pick` when the key list NAMES an
+	// accessor key, `omit` when the source merely CARRIES one (no hostile arg
+	// needed — an untouched `omit` walks every own key of its input).
+	assert.throws(() => direct(['pick', hostile, ['__proto__']]), /safe keys/);
+	assert.throws(() => direct(['omit', hostile, []]), /safe keys/);
+	assert.throws(() => direct(['omit', hostile, ['ok']]), /safe keys/);
+
 	// benign merges are untouched: later wins, non-objects are skipped
 	const merged = direct(['merge', { a: 1, b: 1 }, 'ignored', { b: 2 }]) as Record<string, unknown>;
 	assert.deepEqual(merged, { a: 1, b: 2 });
 	assert.equal(Object.getPrototypeOf(merged), Object.prototype, 'a benign merge keeps the ordinary prototype');
+
+	// benign pick/omit keep both their data AND an ordinary prototype
+	const picked = direct(['pick', { a: 1, b: 2 }, ['a']]) as Record<string, unknown>;
+	assert.deepEqual(picked, { a: 1 });
+	assert.equal(Object.getPrototypeOf(picked), Object.prototype, 'a benign pick keeps the ordinary prototype');
+	const omitted = direct(['omit', { a: 1, b: 2 }, ['a']]) as Record<string, unknown>;
+	assert.deepEqual(omitted, { b: 2 });
+	assert.equal(Object.getPrototypeOf(omitted), Object.prototype, 'a benign omit keeps the ordinary prototype');
+
 	assert.equal((({}) as Record<string, unknown>).polluted, undefined, 'nothing reaches the global prototype');
 });
 
