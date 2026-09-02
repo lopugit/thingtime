@@ -4265,6 +4265,23 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       webpage- shareIds are refused on generic creates (reserved prefix).
 - [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
       builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Demo library: /builder/demos paints the whole catalog (200–500 demos,
+      `pnpm --dir remix run test:schemas` → webpageDemos asserts every demo
+      clears validateThingtimeCrystal(["webpage"]) unchanged and stays under
+      the block/byte caps) instantly with no spinner; kind + family chips and
+      the search box filter with the URL in sync; thumbnails mount lazily as
+      you scroll and stay mounted; Show more paginates; Preview opens the
+      full-size modal; Use template ✨ copies the demo into the viewer's own
+      page (signed-out → login) and opens the builder; the Builder header
+      links to the library.
+- [ ] GET /api/v1/webpages/demos lists the catalog anonymously with seeded
+      flags (0 seeded on a fresh DB is correct), family/kind filters, slug=
+      returns the crystal, unknown family → 400, unknown slug → 404; admin
+      POST /api/v1/admin/webpages/seed-demos converges (re-run → unchanged),
+      after which every demo opens at /p/webpage-demo-<slug> and in the
+      builder (edits fork, the seed never changes) and the gallery shows 🌱
+      seeded + the /p/ link; GET /admin/webpages/seed reports
+      siteSeeded/demosSeeded/demosTotal alongside totalSeeded.
 - [ ] Nested blocks select on click: with a container (grid/row/column) holding
       children, clicking a CHILD selects the child (inspector shows its
       fields), clicking the container's own area selects the container —

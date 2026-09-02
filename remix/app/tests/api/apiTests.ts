@@ -2250,6 +2250,99 @@ export const apiTests: ApiTestDefinition[] = [
       'Created webpage was deleted (or was never created and the guard answered).'
     )
   },
+  // ---- webpages demo library (catalog is code; seeded flags are per-deploy) --
+  {
+    id: 'webpages-demos-catalog',
+    name: 'Demo library lists the catalog anonymously',
+    description:
+      'GET /webpages/demos answers the whole deterministic catalog (200–500 demos, families with counts, seededCount) for anonymous callers — the seeded census may be 0 on a fresh DB, which is correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.demos) &&
+        body.demos.length >= 200 &&
+        body.demos.length <= 500 &&
+        body.demos.length === body.total &&
+        Array.isArray(body?.families) &&
+        body.families.every((family: any) => typeof family?.key === 'string' && typeof family?.count === 'number') &&
+        typeof body?.seededCount === 'number' &&
+        body.demos.every((demo: any) => typeof demo?.id === 'string' && demo.id.startsWith('webpage-demo-') && typeof demo?.seeded === 'boolean' && typeof demo?.blockCount === 'number'),
+      'Demo catalog listed with families, seeded flags, and bounded size.'
+    )
+  },
+  {
+    id: 'webpages-demos-family-filter',
+    name: 'Demo library filters by family',
+    description: 'family=hero returns only hero demos, and every family entry keeps its catalog-wide count.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=hero&kind=section',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.demos) && body.demos.length > 0 && body.demos.every((demo: any) => demo?.family === 'hero' && demo?.kind === 'section'),
+      'Family filter returned only hero sections.'
+    )
+  },
+  {
+    id: 'webpages-demos-single-with-crystal',
+    name: 'Demo library returns one demo with its crystal',
+    description: 'slug=hero-centered-paper adds demo.crystal (name, pageKey demo-<slug>, blocks) — the payload a client posts to /things to copy it.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=hero-centered-paper',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.demo?.slug === 'hero-centered-paper' &&
+        body.demo?.crystal?.pageKey === 'demo-hero-centered-paper' &&
+        Array.isArray(body.demo?.crystal?.blocks) &&
+        body.demo.crystal.blocks.length > 0,
+      'Single demo carried its crystal with blocks.'
+    )
+  },
+  {
+    id: 'webpages-demos-unknown-family',
+    name: 'Demo library validates the family filter',
+    description: 'An unknown family is a 400 error shape; an unknown slug is a 404.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=not-a-family',
+    anonymous: true,
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown family was rejected with a 400 error shape.')
+  },
+  {
+    id: 'webpages-demos-unknown-slug',
+    name: 'Demo library unknown slug',
+    description: 'slug=definitely-missing-demo resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=definitely-missing-demo',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown demo slug returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-demos-seed-admin-only',
+    name: 'Demo seed is admin-only',
+    description: 'POST /admin/webpages/seed-demos refuses anonymous (401) and non-admin (403) callers without writing; an admin session seeds (200) — all three are correct shapes.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/admin/webpages/seed-demos',
+    body: {},
+    mutates: true,
+    expect: expectJson(
+      [200, 401, 403, 429],
+      (body, response) => (response.status === 200 ? body?.ok === true && typeof body?.received === 'number' && body.received >= 200 : body?.ok === false && typeof body?.error === 'string'),
+      'Demo seed answered the admin gate (or seeded as an admin).'
+    )
+  },
   ...apiDocsSmokeTests
 ];
 

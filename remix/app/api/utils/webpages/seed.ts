@@ -2,6 +2,7 @@ import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, validateThingtimeCrystal } from '~/schemas/registry';
+import { WEBPAGE_DEMO_SLUG_PREFIX, getWebpageDemos, webpageDemoCrystal } from '~/schemas/webpageDemos';
 import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 
 // Seed the built-in SITE PAGES: one system-owned webpage thing per app route
@@ -14,6 +15,11 @@ import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 // 'system', storageClass 'control', acl ['tt:all'], reserved prefix,
 // uniqueKeys, reconciling genuineness-fenced upserts. The definitions live
 // server-side (deterministic table) so seeding takes no payload.
+//
+// The DEMO LIBRARY (shareId webpage-demo-<slug>) rides the same upsert: its
+// definitions come from the deterministic schemas/webpageDemos catalog, so a
+// deployment can seed hundreds of example pages with one admin POST and every
+// demo opens at /p/ and in the builder (viewers fork, never edit the seed).
 
 type SitePageSeed = {
 	key: string; // route key → shareId webpage-route-<key>, native block key
@@ -52,7 +58,8 @@ export const SITE_PAGE_SEEDS: SitePageSeed[] = [
 	{ key: 'crypto', path: '/crypto', name: 'Crypto' },
 	{ key: 'raw', path: '/raw', name: 'MongoDB query' },
 	{ key: 'ode', path: '/ode', name: 'Ode', sections: ['ode-poem'] },
-	{ key: 'builder', path: '/builder', name: 'Builder' }
+	{ key: 'builder', path: '/builder', name: 'Builder' },
+	{ key: 'builder-demos', path: '/builder/demos', name: 'Builder demos' }
 ];
 
 export type SeedWebpagesResult = {
@@ -66,6 +73,15 @@ export type SeedWebpagesResult = {
 	totalSeeded: number;
 };
 
+export type SeedWebpagesCensus = {
+	ok: true;
+	// every system-owned webpage thing (site pages + global doc + demos)
+	totalSeeded: number;
+	siteSeeded: number;
+	demosSeeded: number;
+	demosTotal: number;
+};
+
 type SeedFail = { ok: false; status: number; error: string };
 
 const fail = (status: number, error: string): SeedFail => ({ ok: false, status, error });
@@ -73,17 +89,25 @@ const fail = (status: number, error: string): SeedFail => ({ ok: false, status, 
 const genuineSeededWebpage = (twin: any): boolean =>
 	!!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes('webpage') && twin.ownerId === 'system';
 
-const seededCount = async (): Promise<number> => {
+const seededCount = async (tag?: string): Promise<number> => {
 	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system' } as any);
+	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system', ...(tag ? { tags: tag } : {}) } as any);
 };
 
-export const countSeededWebpages = async (): Promise<{ ok: true; totalSeeded: number }> => ({
+export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	ok: true,
-	totalSeeded: await seededCount()
+	totalSeeded: await seededCount(),
+	siteSeeded: await seededCount('site'),
+	demosSeeded: await seededCount('demo'),
+	demosTotal: getWebpageDemos().length
 });
 
-export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult> => {
+type SeedDefinition = { slug: string; tags: string[]; crystalInput: Record<string, unknown> };
+
+// Reconciling upsert shared by the site and demo seeds: insert missing docs,
+// refresh drifted genuine ones in place, and never touch a foreign doc
+// squatting a destination id (genuineness lives IN the update filter).
+const upsertSystemWebpages = async (definitions: SeedDefinition[]): Promise<SeedWebpagesResult> => {
 	await ensureIndexes();
 	const things = await getThingsCollection();
 	const notes: string[] = [];
@@ -91,35 +115,6 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 	let refreshed = 0;
 	let unchanged = 0;
 	let skipped = 0;
-
-	const definitions: Array<{ slug: string; crystalInput: Record<string, unknown> }> = [
-		...SITE_PAGE_SEEDS.map((seed) => ({
-			slug: `route-${seed.key}`,
-			crystalInput: {
-				name: seed.name,
-				description: `Site page for ${seed.path} — personalise it with the builder's site edit mode.`,
-				pageKey: `route-${seed.key}`,
-				siteRoute: seed.path,
-				version: 1,
-				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
-					id: `native-${sectionKey}`,
-					type: 'native',
-					native: sectionKey
-				}))
-			}
-		})),
-		{
-			slug: SITE_GLOBAL_PAGE_KEY,
-			crystalInput: {
-				name: 'Global blocks',
-				description:
-					'Blocks that render on every page and persist across navigation — personalise with the builder.',
-				pageKey: SITE_GLOBAL_PAGE_KEY,
-				version: 1,
-				blocks: []
-			}
-		}
-	];
 
 	for (const def of definitions) {
 		const validated = validateThingtimeCrystal(['webpage'], def.crystalInput);
@@ -129,7 +124,7 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 			continue;
 		}
 
-		const tags = ['webpage', 'site'];
+		const tags = def.tags;
 		const shareId = `${WEBPAGE_RESERVED_ID_PREFIX}${def.slug}`;
 		const now = new Date();
 		const thing = {
@@ -188,3 +183,49 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 		totalSeeded: await seededCount()
 	};
 };
+
+export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult> => {
+	const tags = ['webpage', 'site'];
+	const definitions: SeedDefinition[] = [
+		...SITE_PAGE_SEEDS.map((seed) => ({
+			slug: `route-${seed.key}`,
+			tags,
+			crystalInput: {
+				name: seed.name,
+				description: `Site page for ${seed.path} — personalise it with the builder's site edit mode.`,
+				pageKey: `route-${seed.key}`,
+				siteRoute: seed.path,
+				version: 1,
+				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
+					id: `native-${sectionKey}`,
+					type: 'native',
+					native: sectionKey
+				}))
+			}
+		})),
+		{
+			slug: SITE_GLOBAL_PAGE_KEY,
+			tags,
+			crystalInput: {
+				name: 'Global blocks',
+				description:
+					'Blocks that render on every page and persist across navigation — personalise with the builder.',
+				pageKey: SITE_GLOBAL_PAGE_KEY,
+				version: 1,
+				blocks: []
+			}
+		}
+	];
+	return upsertSystemWebpages(definitions);
+};
+
+// The demo library: shareId webpage-demo-<slug>, tags carry the family so the
+// gallery census and the seeded-flag projection are one indexed tag match.
+export const seedDemoWebpages = async (): Promise<SeedFail | SeedWebpagesResult> =>
+	upsertSystemWebpages(
+		getWebpageDemos().map((demo) => ({
+			slug: `${WEBPAGE_DEMO_SLUG_PREFIX}${demo.slug}`,
+			tags: ['webpage', 'demo', demo.family, demo.kind],
+			crystalInput: webpageDemoCrystal(demo)
+		}))
+	);

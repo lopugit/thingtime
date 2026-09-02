@@ -149,6 +149,9 @@ export const router = createBrowserRouter([
       // the block-based site builder — create webpages from component things;
       // ?page=<id> opens the canvas (site pages included)
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // the demo library — a few hundred example sections/pages to preview and
+      // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too

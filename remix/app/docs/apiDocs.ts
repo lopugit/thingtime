@@ -10070,6 +10070,76 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-demos',
+    group: 'webpages',
+    title: 'Browse the builder demo library',
+    endpoint: '/api/v1/webpages/demos',
+    summary: 'Lists the deterministic catalog of builder demos (sections, full pages, component-block pages) with a seeded flag per demo.',
+    detail:
+      'The demo library is code: schemas/webpageDemos generates a few hundred example webpages from family × ' +
+      'layout × tone tables, each of which clears the webpage write gate unchanged. This endpoint lists that ' +
+      'catalog — id (the seeded shareId webpage-demo-<slug>), slug, name, family, kind, tone, layout, tags, ' +
+      'description, blockCount — plus families with counts and, per demo, whether its system doc is seeded on ' +
+      'this deployment (then /p/<id> and /builder?page=<id> open it directly; the builder forks a viewer’s edits ' +
+      'into their own twin). Pass slug=<slug> to also get that one demo’s full crystal (blocks included) — the ' +
+      'payload a client posts to /api/v1/things to make its own copy, seeded or not. Read-only and public; the ' +
+      'seeded census is one bounded projection query.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see the same catalog and seeded flags — nothing here is per-viewer.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with no query for the whole catalog, or family=<key> / kind=section|page|component to filter.',
+      'Read families[] (key, title, emoji, kind, description, count), total, and seededCount.',
+      'Pass slug=<slug> to receive demo.crystal — POST it to /api/v1/things with thingtime ["webpage"] to copy it.',
+      'Treat seeded: true as “/p/<id> and the builder open this demo directly”.',
+      'Handle 400 for an unknown family/kind/slug shape, 404 for an unknown slug, and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Browse one family',
+        description: 'Every hero demo.',
+        method: 'GET',
+        query: { family: 'hero' }
+      },
+      {
+        name: 'Fetch one demo with blocks',
+        description: 'The crystal to clone.',
+        method: 'GET',
+        query: { slug: 'hero-centered-paper' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Catalog slice returned.',
+        body: {
+          ok: true,
+          total: 314,
+          seededCount: 314,
+          families: [{ key: 'hero', title: 'Hero', emoji: '🌅', kind: 'section', description: 'Opening statements — centered, split, with stats, and minimal.', count: 24 }],
+          demos: [
+            {
+              id: 'webpage-demo-hero-centered-paper',
+              slug: 'hero-centered-paper',
+              name: 'Hero · Centered · Paper',
+              family: 'hero',
+              kind: 'section',
+              tone: 'paper',
+              layout: 'centered',
+              tags: ['webpage', 'demo', 'hero', 'section', 'paper', 'centered'],
+              description: 'Opening statements — centered, split, with stats, and minimal. Centered layout in the paper tone, copy from Thingtime.',
+              previewBg: '#fafafb',
+              blockCount: 7,
+              seeded: true
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -10124,7 +10194,52 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-webpages-seed-demos',
+    group: 'admin',
+    title: 'Seed the builder demo library',
+    endpoint: '/api/v1/admin/webpages/seed-demos',
+    summary: 'Upserts every builder demo (example sections, full pages, and component-block pages) as system-owned public webpage things.',
+    detail:
+      'The write path for the builder demo library: the deterministic schemas/webpageDemos catalog seeds one ' +
+      'system-owned webpage thing per demo (shareId webpage-demo-<slug>, reserved prefix, pageKey demo-<slug>, ' +
+      'tags webpage/demo/<family>/<kind>), storageClass "control", acl ["tt:all"], hashed webpage:<slug> ' +
+      'uniqueKeys — the same envelope and reconciling upsert as the site-page seed. Crystals pass ' +
+      'validateThingtimeCrystal(["webpage"]), the exact write gate user pages clear. Idempotent and self-healing: ' +
+      're-runs leave matching docs unchanged, refresh drifted crystals/tags in place, and skip (never touch) ' +
+      'foreign docs squatting a destination id. Once seeded, every demo opens at /p/webpage-demo-<slug> and in ' +
+      'the builder, where a viewer’s edits fork into their own twin (forkOf provenance) and never mutate the ' +
+      'seed. GET returns the seed census (site + demo counts) without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST with an empty body — the demo catalog is server-side and deterministic.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal } to check the census without writing.',
+      'Re-run after the catalog changes — converges, never duplicates.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed the demo library',
+        description: 'Upsert every catalog demo.',
+        method: 'POST',
+        body: {}
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: { ok: true, received: 314, created: 314, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 341 }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-webpages-seed',
+    contractVersion: '1.1.0',
     group: 'admin',
     title: 'Seed site webpages',
     endpoint: '/api/v1/admin/webpages/seed',
@@ -10147,7 +10262,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the seed table is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded } to check the census without writing.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages).',
       'Re-run after adding routes to the seed table — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
@@ -10163,7 +10278,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Seed report returned.',
-        body: { ok: true, received: 26, created: 26, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 26 }
+        body: { ok: true, received: 27, created: 27, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 27 }
       }
     ]
   }),
