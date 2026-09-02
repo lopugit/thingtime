@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 #!/usr/bin/env node
 // Live end-to-end verification of the APP SUITES (Pokeworld + StarsAlign)
 // against a running Thingtime API — FUNDAMENTALS §2: everything goes through
@@ -67,7 +68,9 @@ const run = async (action, inputs = {}) => {
 
 const suffix = Date.now().toString(36).slice(-6);
 const username = `apps-${suffix}`;
-const password = `Apps-${suffix}-pass!`;
+// per-run throwaway credential: random bytes, never a password-shaped literal
+// (GitGuardian flags those even for test fixtures)
+const password = `Apps-${randomBytes(9).toString('base64url')}!1`;
 
 console.log(`\n▶ verify-app-suites against ${base}`);
 
