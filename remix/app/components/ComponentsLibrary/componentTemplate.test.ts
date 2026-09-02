@@ -28,7 +28,12 @@ const countChars = (value: unknown): number => {
 	if (typeof value === 'string') return value.length;
 	if (Array.isArray(value)) return value.reduce((sum: number, entry) => sum + countChars(entry), 0);
 	if (value && typeof value === 'object') {
-		return Object.values(value as Record<string, unknown>).reduce((sum: number, entry) => sum + countChars(entry), 0);
+		// reduce<number> like countValues above: Object.values() of an unknown
+		// record is unknown[], so without the explicit type argument reduce picks
+		// its T-returning overload with T = unknown and this stops matching the
+		// declared `: number` return. tsc flags it; the ratchet is non-blocking,
+		// so it would have slipped through as a warning.
+		return Object.values(value as Record<string, unknown>).reduce<number>((sum, entry) => sum + countChars(entry), 0);
 	}
 	return 0;
 };
