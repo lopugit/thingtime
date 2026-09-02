@@ -7,6 +7,7 @@ import {
 } from '../mongodb/collections';
 
 import { hashPassword } from './passwords';
+import { revokedSessionPatch } from './sessions';
 import { consumeSingleUseToken, createSingleUseToken, type ConsumeTokenResult } from './singleUseTokens';
 import { setUserPasswordHash } from './users';
 
@@ -49,8 +50,17 @@ export const applyPasswordReset = async (userId: string, password: string): Prom
   const rotated = await setUserPasswordHash(userId, await hashPassword(password));
   if (!rotated) return false;
   await Promise.all([
-    // revoke live sessions (stolen cookies/bearer tokens stop working)
-    (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now } }),
+    // Revoke live sessions (stolen cookies/bearer tokens stop working). This is
+    // the one sweep that hits every purpose the user owns at once, including the
+    // never-expiring ones (service accounts, PATs, the ChatGPT MCP bridge), so
+    // it is also the widest source of unreapable rows: the sessions TTL index
+    // skips expiresAt: null, and a plain `$set: { revokedAt }` would strand each
+    // of those documents in Mongo forever. revokedSessionPatch fills a missing
+    // expiry and preserves a real one, so a browser session keeps its own TTL.
+    // Aggregation-pipeline form is required — $ifNull only resolves in one.
+    (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, [
+      { $set: revokedSessionPatch(now) }
+    ]),
     // burn any other unconsumed reset tokens for this user — a captured second
     // link must not let someone rotate the password right back
     (await getPasswordResetsCollection()).updateMany(
