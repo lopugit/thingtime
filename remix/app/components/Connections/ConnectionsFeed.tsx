@@ -130,7 +130,10 @@ export const ConnectionsFeedPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection]);
 
-  const handlePostChanged = (id: string, next: PostChange) => {
+  // PostCard calls onChanged(id, change) — the id comes FIRST precisely so one
+  // stable handler serves every card (PostCardProps.onChanged), which is why
+  // every other call site passes this straight through rather than wrapping it.
+  const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
     setPosts((current) =>
       current.flatMap((post) => {
         if (post.id !== id) return [post];
@@ -138,7 +141,7 @@ export const ConnectionsFeedPage = () => {
         return value ? [value] : [];
       })
     );
-  };
+  }, []);
 
   const hiddenCount = posts.filter((post) => hideMatches(post).length > 0).length;
   const visible = posts.filter((post) => hideMatches(post).length === 0);
@@ -263,7 +266,7 @@ export const ConnectionsFeedPage = () => {
             />
           );
         }
-        return <PostCard key={post.id} post={post} onChanged={(next) => handlePostChanged(post.id, next)} />;
+        return <PostCard key={post.id} post={post} onChanged={handlePostChanged} />;
       })}
 
       {!visible.length && !loading && !signedOut ? (
