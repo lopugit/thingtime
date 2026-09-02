@@ -45,3 +45,9 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 		authorityOrigin: 'https://dev.thingtime.com'
 	});
 });
+
+test('the storage census and ciControl workbench allowlist publish their minor capability updates', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.admin-migrations'], '1.1.0');
+	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
+});
