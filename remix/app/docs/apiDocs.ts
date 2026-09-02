@@ -4001,8 +4001,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'mongodb',
     title: 'MongoDB query workbench',
     endpoint: '/api/v1/mongodb/raw-results',
-    // 1.1.0: the collection allowlist gained `ciControl` (additive)
-    featureVersion: '1.1.0',
+    // 1.1.0: the collection allowlist gained `ciControl` (additive).
+    // contractVersion is what the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
       'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
@@ -10193,8 +10194,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
     // 1.1.0: every generation row carries its storage census (dataBytes,
-    // storageBytes, indexBytes, indexes) — additive
-    featureVersion: '1.1.0',
+    // storageBytes, indexBytes, indexes) — additive. contractVersion is what
+    // the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
