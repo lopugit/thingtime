@@ -223,8 +223,9 @@ export const writeSourceCache = (pageId: string | null, blockId: string, value: 
 // Named form fields inside one component root, read the way the click
 // wrapper reads them: input/select/textarea with a `name`, checkboxes as
 // booleans, radios only when checked, everything else as its string value.
-// Empty strings are dropped so a static ttActionInputs value survives an
-// untouched field. Pure DOM, shared by the click hook and its tests.
+// Password inputs are never read (see below). Empty strings are dropped so a
+// static ttActionInputs value survives an untouched field. Pure DOM, shared by
+// the click hook and its tests.
 export const gatherFormFields = (root: HTMLElement | null): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	if (!root) return out;
@@ -233,6 +234,17 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 		const name = field.getAttribute('name') || '';
 		if (!name || !QUERY_KEY_PATTERN.test(name)) return;
 		if (field instanceof HTMLInputElement) {
+			// A PASSWORD field is never an action input. ACTION_INPUT_TYPES is
+			// string/text/number/boolean/enum — there is no credential type — and
+			// no suite renders one. But component markup IS untrusted data, and
+			// `autoComplete` now passes the HtmlThingRenderer allowlist, so a
+			// crafted component can put `<input type="password"
+			// autoComplete="current-password">` on this origin and let the
+			// viewer's password manager fill it. Reading that value would carry
+			// the viewer's own site password into a run's inputs — stored on
+			// their data thing and echoed in their run record. Never gather one:
+			// the field can still render and fill, the value just goes nowhere.
+			if (field.type === 'password') return;
 			if (field.type === 'checkbox') {
 				out[name] = field.checked;
 				return;
