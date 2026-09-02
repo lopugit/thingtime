@@ -1980,6 +1980,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
