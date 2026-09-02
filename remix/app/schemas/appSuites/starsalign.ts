@@ -188,7 +188,7 @@ const todayBody = (): Record<string, unknown> =>
 			'result.hasProfile',
 			el('div', { display: 'grid', gap: '16px' }, [
 				eyebrow('{result.today.dateLabel}'),
-				serif('{result.today.greeting}, {viewer.displayName}', '2.4rem'),
+				{ ttIf: { arg: 'result.profile.displayName', then: serif('{result.today.greeting}, {result.profile.displayName}', '2.4rem'), else: serif('{result.today.greeting}, {viewer.displayName}', '2.4rem') } },
 				row([
 					chip([glyph('☉'), '{result.today.chips.sun.signName} sun']),
 					chip([glyph('☾'), '{result.today.chips.moon.signName} moon']),
