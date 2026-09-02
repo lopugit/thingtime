@@ -300,6 +300,14 @@ export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
 // counts (an anti-manipulation surface) stay under platform control even when
 // a request carries a custom data-endpoint override.
 export const getPostViewsCollection = async () => getHomeCollection('postViews');
+// CI control plane (api/utils/ciControl): every ci-* Thing — current-state
+// projections AND the append-only ci-event history — lives in its own
+// home-pinned satellite, never in `things`. Measured in production
+// (2026-09-02): 1.82M of things_v2's 1.82M docs were CI telemetry, and every
+// one of the collection's 60+ indexes paid an entry per row (3.1 GB of index
+// for ~4.5k real content docs). A satellite gets a six-index plan sized for
+// its two readers (dashboard + per-parent history) and TTL retention.
+export const getCiControlCollection = async () => getHomeCollection('ciControl');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -370,6 +378,17 @@ const createIndexReplacing = async (
   try {
     await collection.createIndex(keys, options);
   } catch (err: any) {
+    if (err?.code === 67 && legacyNames.length) {
+      // CannotCreateIndex: the collection is parked at MongoDB's 64-index cap
+      // (observed on a local mongod shared by many worktrees, each ensuring
+      // its own branch's residue). Create-then-drop needs a free slot it
+      // cannot get, so degrade to drop-then-create for the legacy names —
+      // a brief no-index window, taken only in this degenerate state and
+      // never while the swap can run slot-safe.
+      for (const legacy of legacyNames) await dropIndexRetrying(collection, legacy);
+      await collection.createIndex(keys, options);
+      return;
+    }
     if (err?.code !== 85 && err?.code !== 86) throw err;
     // The new spec conflicts with an existing index of the same name (evolved
     // options) or a legacy name (same spec, different name) — drop the conflicting
@@ -386,6 +405,10 @@ const createIndexReplacing = async (
     await dropIndexRetrying(collection, legacy); // absent = fine
   }
 };
+
+// Test seam for the swap's cap fallback (indexBudget.test.ts) — the swap
+// itself is only ever driven by the plan above.
+export const createIndexReplacingForTests = createIndexReplacing;
 
 // Wrap a collection so createIndex failures carry `<logical>.<index name>`:
 // Promise.all surfaces only the first rejection, and driver messages don't
@@ -503,7 +526,29 @@ export const RETIRED_THINGS_INDEXES = [
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
 	// Device event pagination now supplies the deterministic control-scope key,
 	// so the retention index serves the same cursor in either scan direction.
-	'things_device_event_cursor'
+	'things_device_event_cursor',
+	// Measured live on production things_v2 (2026-09-02): five indexes over
+	// root fields that exist on ZERO documents (`typeId`, `search.tokens`,
+	// `acl.readKeys`, `acl.searchKeys`, `deletedAt` — a pre-Things data model
+	// no code in this repository has ever written). Each still held one null
+	// entry per document: ~137 MB apiece, ~685 MB of index for nothing.
+	'kind_1_typeId_1_ownerId_1_updatedAt_-1_shareId_1',
+	'kind_1_typeId_1_search.tokens_1_updatedAt_-1_shareId_1',
+	'kind_1_typeId_1_acl.searchKeys_1_updatedAt_-1_shareId_1',
+	'kind_1_typeId_1_acl.readKeys_1_updatedAt_-1_shareId_1',
+	'kind_1_deletedAt_1_updatedAt_-1_shareId_1',
+	// CI control-plane rows moved to the ciControl satellite collection; their
+	// two purpose-built things indexes (169 MB + 124 MB live) go with them.
+	// Nothing outside api/utils/ciControl ever paired thingtime with parentId
+	// (legacy comment/reaction cascades ride kind_1_parentId_1_createdAt_1).
+	'thingtime_1_parentId_1_createdAt_-1_shareId_1',
+	'things_ci_repository_updated'
+	// NOT listed: the unfiltered v1-era `kind_*` and `sandboxExpiresAt_1`
+	// originals. Those are swapped for partial replacements by
+	// createIndexReplacing (create the new one, THEN drop the old name) so a
+	// database never sits without them mid-swap; pruning them here first would
+	// open exactly that window. Retiring the seven names above frees enough
+	// slots for the swaps to run even on a collection parked at the 64 cap.
 ] as const;
 
 // Home-only: a custom data endpoint belongs to the user and may legitimately
@@ -512,6 +557,34 @@ export const RETIRED_THINGS_INDEXES = [
 export const pruneRetiredHomeThingsIndexes = async (db: any) => {
 	const col = taggedCollection(thingsCollection(db), 'things');
 	for (const name of RETIRED_THINGS_INDEXES) await dropIndexRetrying(col, name);
+};
+
+// `<name>__rebuild` twins are the transient same-key indexes the
+// rebuild-things-indexes migration holds while it drops and recreates a
+// unique index (migrations/ciControlRelocationCore.ts). A rebuild that was
+// interrupted (deploy, timeout) can leave them behind, each occupying one of
+// the 64 slots the plan below needs — and because the migration runner
+// bootstraps indexes before it runs, the migration that would clean them up
+// could never start. So the boot ensure clears them first: a twin whose
+// original still exists is redundant, and an orphan twin's original is
+// recreated by the plan a moment later (a brief window, only ever in this
+// abnormal state — a running rebuild holds at most one twin, and that one is
+// re-dropped by the rebuild itself).
+export const REBUILD_TWIN_SUFFIX = '__rebuild';
+export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
+	const raw = thingsCollection(db);
+	let names: string[] = [];
+	try {
+		names = (await raw.indexes()).map((index: any) => String(index.name));
+	} catch (err: any) {
+		// NamespaceNotFound (26): a fresh database has no things collection yet
+		if (err?.code === 26 || err?.codeName === 'NamespaceNotFound') return [];
+		throw err;
+	}
+	const twins = names.filter((name) => name.endsWith(REBUILD_TWIN_SUFFIX));
+	const col = taggedCollection(raw, 'things');
+	for (const name of twins) await dropIndexRetrying(col, name);
+	return twins;
 };
 
 // Pre-release mesh builds used one unique/TTL index per protected device kind
@@ -651,11 +724,36 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // admin roster: a partial index over just the (rare) admin user things,
     // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
 		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
-    col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
-    col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // v1-era (`kind`-rooted) indexes are PARTIAL on kind's existence. Every
+    // things-era doc carries `thingtime` and no `kind`, so an unfiltered kind
+    // index holds one null entry per doc — five of them, each ~124–142 MB on
+    // production where NOT ONE document has `kind` (measured 2026-09-02) —
+    // and every insert wrote five useless keys. The planner still uses a
+    // partial index for any predicate that implies `kind` exists (equality,
+    // $in), which is every v1 branch in postMatch/cascade/legacy counts.
+    // Custom data-plane endpoints holding unmigrated v1 docs keep exactly the
+    // same coverage; the auto-named unfiltered originals are retired
+    // (RETIRED_THINGS_INDEXES) or swapped in place here.
+    createIndexReplacing(
+      col,
+      { kind: 1, visibility: 1, createdAt: -1, shareId: 1 },
+      { name: 'things_v1_kind_visibility_created', partialFilterExpression: { kind: { $exists: true } } },
+      ['kind_1_visibility_1_createdAt_-1_shareId_1']
+    ),
+    createIndexReplacing(
+      col,
+      { kind: 1, ownerId: 1, createdAt: -1, shareId: 1 },
+      { name: 'things_v1_kind_owner_created', partialFilterExpression: { kind: { $exists: true } } },
+      ['kind_1_ownerId_1_createdAt_-1_shareId_1']
+    ),
     // embed SDK: listEmbeddedThings pages a single owner's `kind: 'embed'`
     // things by most-recently-updated, so that sort needs its own index
-    col.createIndex({ kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
+    createIndexReplacing(
+      col,
+      { kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 },
+      { name: 'things_v1_kind_owner_updated', partialFilterExpression: { kind: { $exists: true } } },
+      ['kind_1_ownerId_1_updatedAt_-1_shareId_1']
+    ),
     // The feed and profile matches are $or over BOTH eras
     // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
     // thingtime side had its (createdAt desc, shareId asc) index above; the
@@ -671,7 +769,12 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
     // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
     // no blocking sort (38 examined).
-    col.createIndex({ kind: 1, createdAt: -1, shareId: 1 }),
+    createIndexReplacing(
+      col,
+      { kind: 1, createdAt: -1, shareId: 1 },
+      { name: 'things_v1_kind_created', partialFilterExpression: { kind: { $exists: true } } },
+      ['kind_1_createdAt_-1_shareId_1']
+    ),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
@@ -733,14 +836,9 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
     col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
-    // Control-plane history is relational: one ci-event per provider delivery
-    // and parent entity, never an unbounded status array on the current row.
-    col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
-    // Admin CI snapshots are repository-scoped and ordered by the latest
-    // provider update. Without this exact sort index, MongoDB must materialize
-    // every growing ci-event/run/deployment row before applying the dashboard
-    // limit and eventually trips its 32 MiB blocking-sort ceiling.
-    col.createIndex(CI_DASHBOARD_UPDATED_INDEX, { name: 'things_ci_repository_updated' }),
+    // (CI control-plane rows and their two indexes — per-parent ci-event
+    // history and the repository/updatedAt dashboard sort — live on the
+    // ciControl satellite: see createCiControlIndexes.)
     // The unread-notification badge counts (thingtime, ownerId, readAt: null).
     // The general (thingtime, ownerId, createdAt, shareId) index above narrows
     // to the user's notifications, but readAt is not a key in it, so the count
@@ -866,7 +964,12 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
-    col.createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+    createIndexReplacing(
+      col,
+      { kind: 1, parentId: 1, createdAt: 1 },
+      { name: 'things_v1_kind_parent_created', partialFilterExpression: { kind: { $exists: true } } },
+      ['kind_1_parentId_1_createdAt_1']
+    ),
 		col.createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
 		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
@@ -1088,7 +1191,15 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Sandbox app-data is ephemeral: only docs written under a sandbox
     // token carry sandboxExpiresAt (TTL skips docs without the field), so
     // pretend data reaps itself with the token's lifetime.
-    col.createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
+    // Partial on the field's existence: TTL reaping only ever touches docs
+    // that carry the stamp, and an unfiltered TTL index held one null entry
+    // per thing (10.6 MB live for a field on zero documents).
+    createIndexReplacing(
+      col,
+      { sandboxExpiresAt: 1 },
+      { name: 'things_sandbox_expires_at', expireAfterSeconds: 0, partialFilterExpression: { sandboxExpiresAt: { $exists: true } } },
+      ['sandboxExpiresAt_1']
+    ),
     // Full-power app namespaces: every thing written through an app token
     // carries a server-stamped scalar root appId (the namespace marker —
     // never inferred from acl, which users can hand-write). Own-namespace
@@ -1098,6 +1209,85 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } }),
     col.createIndex({ appId: 1, acl: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } })
   ];
+};
+
+// CI control-plane satellite (`ciControl`, home-pinned — see
+// getCiControlCollection). Six indexes, sized for exactly the reads in
+// api/utils/ciControl: the admin dashboard (one kind for one repository,
+// newest-updated first, plus exact status counts), the per-parent ci-event
+// history drawer, deterministic-shareId upserts, automation/policy lookups by
+// external id, and TTL retention. No wildcard text index: these rows are never
+// searched, and on `things` they were 18% of a 3.1 GB text index.
+export const createCiControlIndexes = (db: any): Promise<any>[] => {
+  const col = taggedCollection(db.collection(physicalCollectionName('ciControl')), 'ciControl');
+  return [
+    // deterministic ids: recordCiEvent/upsertCiEntity/claimCiDispatchRoute
+    // all key their idempotent upserts on shareId
+    col.createIndex({ shareId: 1 }, { name: 'ci_control_share_id_unique', unique: true }),
+    // dashboard readKind: {thingtime, crystal.repository} sorted
+    // (updatedAt desc, shareId asc) — fully index-provided page sort
+    col.createIndex(CI_DASHBOARD_UPDATED_INDEX, { name: 'ci_control_repository_updated' }),
+    // dashboard stats: exact countDocuments over {thingtime, repository,
+    // crystal.status ∈ [...]} — an index-only count instead of a residual
+    // filter over every run/PR/preview of the repository
+    col.createIndex({ thingtime: 1, 'crystal.repository': 1, 'crystal.status': 1 }, { name: 'ci_control_repository_status' }),
+    // automation policy + dispatch/stack lookups by provider external id
+    col.createIndex({ thingtime: 1, 'crystal.repository': 1, 'crystal.externalId': 1 }, { name: 'ci_control_repository_external_id' }),
+    // per-parent history: listCiEventsForParents pages one parent's events
+    // newest-first (repository is a cheap residual on an already-narrow set)
+    col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }, { name: 'ci_control_parent_created' }),
+    // retention: ciControl/retentionCore stamps root expiresAt on every
+    // event/job/activity row (entities without a window carry no field, and
+    // TTL skips docs without one)
+    col.createIndex({ expiresAt: 1 }, { name: 'ci_control_expires_at', expireAfterSeconds: 0 })
+  ];
+};
+
+// Home-only `things` indexes that ride beside createThingsDataIndexes in the
+// boot ensure (never on a custom endpoint's database).
+const createHomeOnlyThingsIndexes = (db: any): Promise<any>[] => [
+  // Migration diagnostics exist only on Thingtime's HOME plane. Keep this
+  // live TTL deleter out of createThingsDataIndexes(), which also installs
+  // indexes on user-supplied custom Mongo endpoints.
+  taggedCollection(thingsCollection(db), 'things').createIndex(
+    { expiresAt: 1 },
+    {
+      name: 'migration_diagnostic_expires_at',
+      expireAfterSeconds: 0,
+      partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
+    }
+  )
+];
+
+// The complete home `things` plan in one call: what the boot ensure converges
+// to, and what the rebuild-things-indexes migration re-runs after dropping.
+export const ensureHomeThingsIndexPlan = (db: any): Promise<any> =>
+  Promise.all([...createThingsDataIndexes(db), ...createHomeOnlyThingsIndexes(db)]);
+
+// The index NAMES the home `things` plan owns, derived by replaying the plan
+// against an in-memory recorder (the plan is only ever expressed as
+// createIndex calls, so this cannot drift from it). The rebuild migration
+// drops and recreates exactly these, and leaves every other index on the
+// collection alone.
+export const thingsIndexPlanNames = async (): Promise<Set<string>> => {
+  const names = new Set<string>();
+  const recorder = {
+    collection: () => ({
+      createIndex: async (keys: Record<string, unknown>, options: Record<string, unknown> = {}) => {
+        const name = String(
+          options.name ||
+            Object.entries(keys)
+              .map(([field, direction]) => `${field}_${direction}`)
+              .join('_')
+        );
+        names.add(name);
+        return name;
+      },
+      dropIndex: async () => undefined
+    })
+  };
+  await ensureHomeThingsIndexPlan(recorder);
+  return names;
 };
 
 // Lazily ensure the data-plane indexes on a CUSTOM endpoint's database, once
@@ -1131,6 +1321,7 @@ export const ensureIndexes = async () => {
 			// or the normal parallel ensure. On a full collection, trying to create
 			// first can never reach the later cleanup.
 			await pruneRetiredHomeThingsIndexes(db);
+			await pruneRebuildTwins(db);
 			await migrateDeviceIndexLayout(db);
       // indexes land on the current-generation physical collections; createIndex
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
@@ -1216,17 +1407,10 @@ export const ensureIndexes = async () => {
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
         ...createThingsDataIndexes(db),
-				// Migration diagnostics exist only on Thingtime's HOME plane. Keep
-				// this live TTL deleter out of createThingsDataIndexes(), which also
-				// installs indexes on user-supplied custom Mongo endpoints.
-				col('things').createIndex(
-					{ expiresAt: 1 },
-					{
-						name: 'migration_diagnostic_expires_at',
-						expireAfterSeconds: 0,
-						partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
-					}
-				),
+        // home-only `things` indexes (migration-diagnostic TTL)
+        ...createHomeOnlyThingsIndexes(db),
+        // the CI control-plane satellite — see createCiControlIndexes
+        ...createCiControlIndexes(db),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

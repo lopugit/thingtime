@@ -684,7 +684,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
-      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
+      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things on the ciControl satellite collection (never in things). Events, workflow job rows, and run/deployment/preview rows carry root expiresAt retention (THINGTIME_CI_EVENT_RETENTION_DAYS 14, THINGTIME_CI_JOB_RETENTION_DAYS 30, THINGTIME_CI_ACTIVITY_RETENTION_DAYS 90 by default; 0 keeps a class forever) and a delivery that changes nothing on the repository row records no event. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
@@ -4001,6 +4001,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'mongodb',
     title: 'MongoDB query workbench',
     endpoint: '/api/v1/mongodb/raw-results',
+    // 1.1.0: the collection allowlist gained `ciControl` (additive)
+    featureVersion: '1.1.0',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
       'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
@@ -10190,6 +10192,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
+    // 1.1.0: every generation row carries its storage census (dataBytes,
+    // storageBytes, indexBytes, indexes) — additive
+    featureVersion: '1.1.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -10233,8 +10238,30 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             }
           ],
           generations: [
-            { collection: 'things', physical: 'things_v2', version: 2, docs: 42, current: true, stale: false },
-            { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
+            {
+              collection: 'things',
+              physical: 'things_v2',
+              version: 2,
+              docs: 42,
+              current: true,
+              stale: false,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 1_310_720,
+              indexes: 57
+            },
+            {
+              collection: 'things',
+              physical: 'things',
+              version: null,
+              docs: 42,
+              current: false,
+              stale: true,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 274_432,
+              indexes: 19
+            }
           ],
           adoptionIssues: [],
           migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }]
@@ -10385,7 +10412,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
       'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
       'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
-			'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
+      'is destructive and additionally requires confirm: true on the non-dry run. relocate-ci-control-telemetry moves ' +
+      'every ci-* Thing out of things into the ciControl satellite (applying CI retention; time-budgeted, re-run until ' +
+      'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
+      'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
 			'bounded redacted adminDetail inline.',
     auth: {
@@ -10413,6 +10443,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Migrate v1 posts to unified v2 things.',
         method: 'POST',
         body: { migration: 'things-v1-to-v2' }
+      },
+      {
+        name: 'Relocate CI telemetry, then reclaim index storage',
+        description:
+          'Drain ci-* rows from things into ciControl (repeat until the report stops saying more rows remain), then rebuild the things indexes.',
+        method: 'POST',
+        body: { migration: 'relocate-ci-control-telemetry', confirm: true }
       }
     ],
     responseExamples: [

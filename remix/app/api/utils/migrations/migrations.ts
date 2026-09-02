@@ -1,7 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
-import { ensureIndexes, getAdoptionIssues, getCollection, getSettingsCollection, getThingtimeDb, withMongoTransaction } from '../mongodb/collections';
+import {
+  ensureHomeThingsIndexPlan,
+  ensureIndexes,
+  getAdoptionIssues,
+  getCiControlCollection,
+  getCollection,
+  getHomeThingtimeDb,
+  getSettingsCollection,
+  getThingtimeDb,
+  thingsIndexPlanNames,
+  withMongoTransaction
+} from '../mongodb/collections';
 import { COLLECTIONS, classifyPhysicalCollections, collectionVersion, physicalCollectionName } from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
 import {
@@ -63,15 +74,17 @@ import {
   ACL_INHERIT,
   ACL_OWNER,
   APP_STORAGE_ACCOUNTING_VERSION,
-	APP_STORAGE_RESERVED_ID_PREFIX,
+  APP_STORAGE_RESERVED_ID_PREFIX,
+  CI_CONTROL_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
-	USER_STORAGE_LEDGER_ENVELOPE_VERSION,
+  USER_STORAGE_LEDGER_ENVELOPE_VERSION,
   aclFromVisibility,
   projectBuiltinSchemaCrystal,
   thingtimeSchemas,
   validateThingtimeCrystal
 } from '~/schemas/registry';
+import { relocateCiControlRows, rebuildPlanIndexes } from './ciControlRelocationCore';
 
 // Admin-run database schema-version migrations. Every collection stores the
 // root-level schemaVersion each doc was written at (docs without one predate
@@ -2819,6 +2832,160 @@ const dropStaleCollectionGenerations: Migration = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// CI control-plane relocation. Every ci-* Thing (current-state projections +
+// the append-only ci-event history) now lives on the ciControl satellite
+// collection (FUNDAMENTALS §3). This moves the rows a pre-satellite deployment
+// left in `things`, applying the retention policy as it goes: a row whose
+// window has already closed is deleted without being copied. Insert-if-absent
+// by deterministic shareId, so a row the live writers have already re-created
+// on the satellite is never overwritten by its stale copy. Time-budgeted and
+// idempotent: one run drains as much as it can inside the request window and
+// reports what is left; re-run until pending reads 0.
+const CI_RELOCATION_BUDGET_MS = Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) > 0 ? Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) : 120_000;
+
+const relocateCiControlTelemetry: Migration = {
+  id: 'relocate-ci-control-telemetry',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Relocate CI control-plane rows out of things (into ciControl)',
+  description:
+    'Moves every ci-* Thing (ci-event history, workflow runs/jobs, deployments, previews, repository/branch/PR ' +
+    'projections, policies, dispatches, feature stacks) from things into the ciControl satellite collection, ' +
+    'stamping root expiresAt from the CI retention policy (events 14d, job rows 30d, runs/deployments/previews ' +
+    '90d by default; entities never expire). Rows already past their window are deleted without being copied. ' +
+    'Copies are insert-if-absent by shareId so live satellite rows are never overwritten. Each run works inside ' +
+    'a time budget and reports drained: false when more remains — re-run until pending is 0, then run ' +
+    'rebuild-things-indexes to reclaim the index storage the deleted rows leave behind. Destructive (deletes ' +
+    'from things): the real run requires confirm: true.',
+  pending: async () => (await getCollection('things')).countDocuments({ thingtime: { $in: [...CI_CONTROL_THINGTIME] } }),
+  run: async ({ dryRun, assertLease }) => {
+    const [things, satellite] = await Promise.all([getCollection('things'), getCiControlCollection()]);
+    const notes = makeNotes();
+    const report = await relocateCiControlRows({
+      source: things,
+      target: satellite,
+      kinds: CI_CONTROL_THINGTIME,
+      targetSchemaVersion: collectionVersion('ciControl'),
+      dryRun,
+      budgetMs: CI_RELOCATION_BUDGET_MS,
+      assertLease
+    });
+    for (const [kind, counts] of Object.entries(report.byKind).sort((a, b) => b[1].matched - a[1].matched)) {
+      notes.push(
+        `${kind}: ${counts.matched} row(s) — ${counts.copied} ${dryRun ? 'would relocate' : 'relocated'} (insert-if-absent by shareId), ` +
+          `${counts.expired} past retention (${dryRun ? 'would be ' : ''}deleted without copying)`
+      );
+    }
+    if (!report.drained) {
+      notes.push(`Time budget reached (${Math.round(CI_RELOCATION_BUDGET_MS / 1000)}s): more rows remain — run this migration again until pending reads 0`);
+    } else if (!dryRun && report.matched) {
+      notes.push('things has no ci-* rows left — run rebuild-things-indexes next to reclaim the index storage they occupied');
+    }
+    return { dryRun, matched: report.matched, migrated: report.copied, created: report.copied, skipped: report.expired, notes: notes.list() };
+  }
+};
+
+// Index rebuild. Deleting ~1.8M rows leaves every things index file at its
+// old size (WiredTiger keeps freed pages inside the file, and the boot ensure
+// only creates what is MISSING). Dropping an index releases its file, so this
+// drops every plan-owned things index and recreates it from the current plan.
+// Unique constraints never lapse: each unique index gets a same-key twin with
+// an equivalent partial filter first, and the twin is dropped once the rebuilt
+// original is back. Indexes the plan does not own (another deployment's
+// residue, an operator's ad-hoc index) are reported and left alone.
+const rebuildThingsIndexes: Migration = {
+  id: 'rebuild-things-indexes',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Rebuild things indexes (reclaim storage after mass deletes)',
+  description:
+    'Drops and recreates every index the current code plan owns on things so their storage shrinks to the rows ' +
+    'that remain — run it after relocate-ci-control-telemetry has drained. Unique indexes are protected by a ' +
+    'same-key twin throughout, so no duplicate can slip in mid-rebuild; non-unique indexes are briefly absent ' +
+    '(queries fall back to scans of a small collection). The wildcard text index is rebuilt last, so ranked ' +
+    'text search errors for the seconds it takes to build. Indexes the plan does not own are listed, never ' +
+    'dropped. pending() reports 1 while any plan-owned index is larger than 8× the collection data size ' +
+    '(the signature of a file that still holds freed pages). Requires confirm: true.',
+  pending: async () => {
+    const db = await getHomeThingtimeDb();
+    const physical = physicalCollectionName('things');
+    const stats = await collectionStorage(db, physical);
+    if (!stats) return 0;
+    const owned = await thingsIndexPlanNames();
+    const bloated = Object.entries(stats.indexSizes).filter(([name, bytes]) => owned.has(name) && bytes > Math.max(8 * stats.dataBytes, 64 * 1024 * 1024));
+    return bloated.length ? 1 : 0;
+  },
+  run: async ({ dryRun, assertLease }) => {
+    const db = await getHomeThingtimeDb();
+    const collection = db.collection(physicalCollectionName('things'));
+    const notes = makeNotes();
+    const before = await collectionStorage(db, physicalCollectionName('things'));
+    const report = await rebuildPlanIndexes({
+      collection,
+      planNames: await thingsIndexPlanNames(),
+      ensurePlan: () => ensureHomeThingsIndexPlan(db),
+      dryRun,
+      assertLease
+    });
+    notes.push(
+      `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
+    );
+    if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
+    for (const name of report.unprotected) notes.push(`${name}: rebuilt WITHOUT a twin — the collection sits at MongoDB's 64-index cap, so its uniqueness lapsed for the rebuild window`);
+    for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
+    if (!dryRun) {
+      const after = await collectionStorage(db, physicalCollectionName('things'));
+      if (before && after) notes.push(`things index storage: ${formatBytes(before.indexBytes)} → ${formatBytes(after.indexBytes)}`);
+    } else if (before) {
+      notes.push(`things index storage now: ${formatBytes(before.indexBytes)} for ${formatBytes(before.dataBytes)} of documents`);
+    }
+    return { dryRun, matched: report.rebuilt.length + report.skipped.length, migrated: dryRun ? 0 : report.rebuilt.length, created: 0, skipped: report.skipped.length, notes: notes.list() };
+  }
+};
+
+// Storage census for one physical collection ($collStats): document bytes,
+// on-disk storage, and per-index bytes — the numbers the generations table and
+// the index rebuild reason about. null when the collection does not exist.
+export type CollectionStorage = { docs: number; dataBytes: number; storageBytes: number; indexBytes: number; indexSizes: Record<string, number> };
+export const collectionStorage = async (db: any, physical: string): Promise<CollectionStorage | null> => {
+  try {
+    const [row] = await db
+      .collection(physical)
+      .aggregate([{ $collStats: { storageStats: {} } }])
+      .toArray();
+    const stats = row?.storageStats;
+    if (!stats) return null;
+    return {
+      docs: Number(stats.count) || 0,
+      dataBytes: Number(stats.size) || 0,
+      storageBytes: Number(stats.storageSize) || 0,
+      indexBytes: Number(stats.totalIndexSize) || 0,
+      indexSizes: Object.fromEntries(Object.entries(stats.indexSizes || {}).map(([name, bytes]) => [name, Number(bytes) || 0]))
+    };
+  } catch (error: any) {
+    // NamespaceNotFound (26): a generation that no longer exists
+    if (error?.code === 26 || error?.codeName === 'NamespaceNotFound') return null;
+    throw error;
+  }
+};
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+};
+
 // Does a registered migration still READ this stale physical collection while
 // having pending work? Cleanup keeps the collection until that migration is
 // done. (Declared via sourcePhysicals on future copy-forward migrations.)
@@ -2944,6 +3111,8 @@ export const migrations: Migration[] = [
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
+	relocateCiControlTelemetry,
+	rebuildThingsIndexes,
   dropStaleCollectionGenerations
 ];
 
@@ -2968,6 +3137,13 @@ export type CollectionGenerationStatus = {
   docs: number;
   current: boolean;
   stale: boolean;
+  // storage census ($collStats): uncompressed document bytes, on-disk
+  // collection bytes, total index bytes, and the index count — so "which
+  // generation is eating the cluster" is visible where cleanup is decided
+  dataBytes: number;
+  storageBytes: number;
+  indexBytes: number;
+  indexes: number;
 };
 
 // Per-collection version census + storage generations + which registered
@@ -3011,14 +3187,21 @@ export const getMigrationStatus = async (): Promise<{
   // admin sees exactly what cleanup would drop before running it
   const physicalNames = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
   const generations = await Promise.all(
-    classifyPhysicalCollections(physicalNames).map(async (row) => ({
-      collection: row.collection,
-      physical: row.physical,
-      version: row.version,
-      docs: await db.collection(row.physical).estimatedDocumentCount(),
-      current: row.current,
-      stale: row.stale
-    }))
+    classifyPhysicalCollections(physicalNames).map(async (row) => {
+      const storage = await collectionStorage(db, row.physical);
+      return {
+        collection: row.collection,
+        physical: row.physical,
+        version: row.version,
+        docs: storage ? storage.docs : await db.collection(row.physical).estimatedDocumentCount(),
+        current: row.current,
+        stale: row.stale,
+        dataBytes: storage?.dataBytes ?? 0,
+        storageBytes: storage?.storageBytes ?? 0,
+        indexBytes: storage?.indexBytes ?? 0,
+        indexes: storage ? Object.keys(storage.indexSizes).length : 0
+      };
+    })
   );
   generations.sort((a, b) => a.collection.localeCompare(b.collection) || (a.version ?? 0) - (b.version ?? 0));
 
