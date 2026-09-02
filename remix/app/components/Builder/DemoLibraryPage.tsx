@@ -320,7 +320,7 @@ export default function DemoLibraryPage() {
 
 	const needle = search.trim().toLowerCase();
 	const filtered = React.useMemo(() => {
-		if (kind === 'suite') return [];
+		if (kind === 'suite' || kind === 'app') return [];
 		return demos.filter(
 			(demo) =>
 				(!family || demo.family === family) &&
@@ -486,7 +486,7 @@ export default function DemoLibraryPage() {
 
 			<Flex flexDirection="column" rowGap={3}>
 				<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-					{(['all', 'section', 'page', 'component', 'suite'] as const).map((entry) => (
+					{(['all', 'section', 'page', 'component', 'suite', 'app'] as const).map((entry) => (
 						<Button key={entry} size="xs" sx={chipSx(kind === entry)} onClick={() => setParam('kind', entry === 'all' ? '' : entry)} data-testid={`demos-kind-${entry}`}>
 							{KIND_LABELS[entry]}
 						</Button>
@@ -498,16 +498,16 @@ export default function DemoLibraryPage() {
 							setSearch(event.target.value);
 							setShown(PAGE_SIZE);
 						}}
-						placeholder={kind === 'suite' ? 'Search suites — guestbook, orders…' : 'Search demos — hero, pricing, ink…'}
+						placeholder={kind === 'suite' ? 'Search suites — guestbook, orders…' : kind === 'app' ? 'Search apps — pokeworld, starsalign…' : 'Search demos — hero, pricing, ink…'}
 						maxWidth="280px"
 						marginLeft={{ base: 0, md: 'auto' }}
 						borderRadius="999px"
 						data-testid="demos-search"
 					/>
 				</Flex>
-				{kind === 'suite' ? (
+				{kind === 'suite' || kind === 'app' ? (
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" data-testid="demos-count">
-						{filteredSuites.length} suite{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{ALL_SUITES.length} seeded on this deployment
+						{filteredSuites.length} {kind === 'app' ? 'app' : 'suite'}{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{ALL_SUITES.length} seeded on this deployment
 					</Text>
 				) : (
 					<>
@@ -529,7 +529,7 @@ export default function DemoLibraryPage() {
 				)}
 			</Flex>
 
-			{kind === 'suite' ? (
+			{kind === 'suite' || kind === 'app' ? (
 				filteredSuites.length === 0 ? (
 					<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
 						<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
@@ -575,7 +575,7 @@ export default function DemoLibraryPage() {
 				</Box>
 			)}
 
-			{kind !== 'suite' && visible.length < filtered.length ? (
+			{kind !== 'suite' && kind !== 'app' && visible.length < filtered.length ? (
 				<Flex justifyContent="center">
 					<Button variant="outline" size="sm" onClick={() => setShown((count) => count + PAGE_SIZE)} data-testid="demos-show-more">
 						Show {Math.min(PAGE_SIZE, filtered.length - visible.length)} more ({filtered.length - visible.length} left)
