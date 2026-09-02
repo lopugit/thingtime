@@ -107,6 +107,7 @@ jobs:
             state="$(jq -r '.state' <<<"$pr_json")"
             live_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
             base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+            base_ref="$(jq -r '.base.ref' <<<"$pr_json")"
             if [ "$state" != open ]; then
               analyze=false
               echo "PR #$PR_NUMBER is no longer open; the stale scan is a no-op."
@@ -129,6 +130,23 @@ jobs:
                 fi
               fi
 
+              # `pulls/N.base.sha` is GitHub's cached base pointer and
+              # `refs/pull/N/merge` is recomputed independently, so the two
+              # skew in both directions whenever the base branch advances.
+              # Resolve the live base branch tip as a second accepted parent so
+              # a freshly recomputed merge ref is never misread as stale.
+              base_branch_sha=""
+              if [[ "$base_ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+                if candidate_base_branch_sha="$(
+                  gh api "repos/$REPO/git/ref/heads/$base_ref" \
+                    --jq .object.sha 2>/dev/null
+                )"; then
+                  if [[ "$candidate_base_branch_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
+                    base_branch_sha="$candidate_base_branch_sha"
+                  fi
+                fi
+              fi
+
               merge_ref="refs/pull/$PR_NUMBER/merge"
               merge_sha=""
               # `gh api` writes GitHub's JSON error body to stdout for a
@@ -148,8 +166,11 @@ jobs:
               fi
               if [ -n "$merge_sha" ]; then
                 merge_parents="$(gh api "repos/$REPO/git/commits/$merge_sha" --jq '[.parents[].sha]')"
-                if ! jq -e --arg base "$base_sha" --arg head "$live_head_sha" \
-                    'length == 2 and .[0] == $base and .[1] == $head' <<<"$merge_parents" >/dev/null; then
+                if ! jq -e --arg base "$base_sha" --arg branch_base "$base_branch_sha" --arg head "$live_head_sha" \
+                    'length == 2
+                      and .[1] == $head
+                      and (.[0] == $base
+                        or ($branch_base != "" and .[0] == $branch_base))' <<<"$merge_parents" >/dev/null; then
                   echo "PR #$PR_NUMBER has a stale merge ref; ignoring it because its parents do not match the live base and head."
                   merge_sha=""
                 fi
