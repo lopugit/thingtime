@@ -23,6 +23,15 @@ import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpag
 
 export type TtActionUnownedHandler = (action: string, inputs: Record<string, unknown>) => Promise<boolean> | boolean;
 
+// `confirm` is the CATALOG-SIDE gate (claude-todo/20-tester-runs-actions.md):
+// a surface where the viewer did not compose the page — a component's own
+// page, a demo — asks before the first run of each action so a stray click
+// on author-controlled markup never executes a program by surprise. It runs
+// AFTER the sign-in gate and BEFORE any request; answering false runs
+// nothing and writes no run record. runDelegatedAction stays the sole
+// caller of onUnowned.
+export type TtActionConfirmHandler = (request: { action: string; inputs: Record<string, unknown> }) => Promise<boolean> | boolean;
+
 const UNOWNED_PATTERN = /no action you own matches/i;
 
 const messageOf = (error: unknown): string => {
@@ -79,7 +88,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -88,6 +97,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	lopuRef.current = lopu;
 	const onUnownedRef = React.useRef(options?.onUnowned);
 	onUnownedRef.current = options?.onUnowned;
+	const confirmRef = React.useRef(options?.confirm);
+	confirmRef.current = options?.confirm;
 	const busyRef = React.useRef(false);
 	const runtime = useWebpageRuntime();
 	const runtimeRef = React.useRef(runtime);
@@ -146,6 +157,10 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			busyRef.current = true;
 			(async () => {
 				try {
+					if (confirmRef.current) {
+						const approved = await confirmRef.current({ action, inputs });
+						if (!approved) return;
+					}
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
 					// path must never hand the viewer's authority to a stranger's
