@@ -800,6 +800,10 @@ export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
 // reserve the prefix so a client can't pre-claim (and impersonate) a seeded
 // library component.
 export const COMPONENT_RESERVED_ID_PREFIX = 'component-';
+// Site webpage seed mints shareId `webpage-route-<key>`/`webpage-<slug>`
+// deterministically — reserve the prefix so a client can't pre-claim (and
+// impersonate) a seeded site page.
+export const WEBPAGE_RESERVED_ID_PREFIX = 'webpage-';
 // The action- prefix is reserved for system use the same way: user creates
 // refuse it, and the executor mints `action-run-<uuid>` run-record ids
 // under it.
@@ -828,6 +832,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(WEBPAGE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
