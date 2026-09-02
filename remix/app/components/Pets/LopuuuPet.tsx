@@ -14,7 +14,10 @@ import { PET_DEVKIT_CLEARANCE, petAnimation, petDisplay, petInset, petMotionEnab
  * about motion":
  *   - `prefers-reduced-motion` via CSS, so it lands on the first paint
  *   - the theme's Motion switch (Settings → Motion), so it is user-controllable
- * With motion off the pet stays put and simply doesn't animate.
+ * With motion off the pet stays put and simply doesn't animate. Both land on
+ * the first paint: the Motion switch is Tier 2 like the Pet switch, so it rides
+ * the pre-paint `--tt-pet-anim` as well as the post-hydration read — see
+ * petAnimation.
  *
  * Visibility is a third, separate control (Settings → Pet). This is permanent
  * chrome on every non-full-bleed page, so per AI_ALL.md's "Feature

@@ -536,6 +536,16 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
     // flag, same idiom as --tt-rainbow-anim, so the pet just spends it on
     // `display` without a second token to interpret it.
     '--tt-pet-display': g.pet ? 'block' : 'none',
+    // ...and the same problem for the Motion switch, which is Tier 2 too: a
+    // motion-off user would otherwise get one animated frame per load, making
+    // the pet the only decorative surface in the app that ignores the switch
+    // pre-paint (banners/avatars ride --tt-rainbow-anim, JS effects read
+    // --tt-motion). The pet has three different animation shorthands, so this
+    // cannot bake one in like --tt-rainbow-anim does. `initial` is the CSS-wide
+    // keyword that makes a custom property guaranteed-invalid, so each element's
+    // own `var(--tt-pet-anim, <its spec>)` falls back to its own animation when
+    // motion is on, and all of them collapse to `none` together when it is off.
+    '--tt-pet-anim': g.motion ? 'initial' : 'none',
   }
   return vars
 }

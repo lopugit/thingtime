@@ -62,9 +62,33 @@ test('visibility and motion are independent switches', () => {
 test('animations are dropped entirely when motion is off', () => {
 	const float = 'lopuuu-float 4.8s ease-in-out infinite';
 
-	assert.equal(petAnimation(float, true), float);
 	// undefined, not 'none': Chakra then emits no animation declaration at all
 	assert.equal(petAnimation(float, false), undefined);
+	// and the on/pre-hydration branch keeps the spec, reached through the
+	// pre-paint var rather than emitted bare
+	assert.match(petAnimation(float, true) ?? '', new RegExp(float.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+});
+
+test('motion is gated pre-paint too, not only after hydration', () => {
+	// theme.general.motion is Tier 2 like the pet switch, so `true` here is also
+	// what a motion-OFF user renders with on their first paint. Wrapping the
+	// spec in --tt-pet-anim is what stops that paint from animating: tt-boot.js
+	// has already set the var to `none`. Emitting the spec bare would make the
+	// pet the only decorative surface in the app that ignores the Motion switch
+	// until localforage resolves.
+	assert.equal(petAnimation('lopuuu-float 4.8s ease-in-out infinite', true), 'var(--tt-pet-anim, lopuuu-float 4.8s ease-in-out infinite)');
+	// every animated element shares the one var, each falling back to its own
+	// spec — so the switch cannot half-apply and leave sparkles running
+	assert.equal(petAnimation('lopuuu-sparkle 1.8s ease-in-out infinite 0.35s', true), 'var(--tt-pet-anim, lopuuu-sparkle 1.8s ease-in-out infinite 0.35s)');
+});
+
+test('the pre-paint motion var survives tt-boot.js and falls back when unset', () => {
+	const [, name, fallback] = /^var\((--tt-[\w-]+), (.+)\)$/u.exec(petAnimation('lopuuu-rainbow 7s linear infinite', true) ?? '') ?? [];
+
+	// tt-boot.js only replays keys matching /^--tt-[\w-]+$/
+	assert.match(name ?? '', /^--tt-[\w-]+$/u);
+	// a first-ever visit has no snapshot, so the pet must still animate
+	assert.equal(fallback, 'lopuuu-rainbow 7s linear infinite');
 });
 
 test('insets clear the device safe area on both axes', () => {

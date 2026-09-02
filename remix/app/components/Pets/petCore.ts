@@ -57,11 +57,29 @@ export const petDisplay = (): string => 'var(--tt-pet-display, block)';
  * A Chakra `animation` value, or undefined when decorative motion is off —
  * dropping the declaration entirely so no animation is even scheduled.
  *
+ * Two tiers, for the same reason `petDisplay` has them: `theme.general.motion`
+ * is Tier 2 (the async localforage blob), so the `motion` argument cannot
+ * decide a first paint. Left to itself it would animate one frame at every
+ * load for a user who turned Motion off — and the pet would be the only
+ * decorative surface in the app that ignores the switch pre-paint, since
+ * banners and avatars ride `--tt-rainbow-anim` and imperative effects read
+ * `--tt-motion` (design-system Identity: "one toggle stops everything
+ * decorative"). So the spec is wrapped in the pre-paint `--tt-pet-anim`, which
+ * tt-boot.js reapplies before React loads:
+ *   - motion off: the var is `none`, so the animation never starts
+ *   - motion on: the var is `initial` — guaranteed-invalid, so `var()` falls
+ *     back to this element's own spec, which is why one shared var can gate
+ *     three different animations without knowing any of them
+ * Once the stored value is readable the `motion` argument drops the
+ * declaration outright. Both states mean "no animation", so nothing pops when
+ * hydration confirms what the var already painted.
+ *
  * `prefers-reduced-motion` is deliberately NOT handled here: it is a CSS media
  * query on the component so it applies on the very first paint, with no
  * client-only state that could diverge from the server render.
  */
-export const petAnimation = (spec: string, motion: boolean): string | undefined => (motion ? spec : undefined);
+export const petAnimation = (spec: string, motion: boolean): string | undefined =>
+	motion ? `var(--tt-pet-anim, ${spec})` : undefined;
 
 /**
  * A fixed-position offset that clears the device safe area, matching the

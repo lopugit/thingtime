@@ -75,6 +75,19 @@ test('the pet switch is published as a var so it can gate the first paint', () =
   assert.equal(themeToCssVars(resolveTheme(THINGTIME_THEME, { general: { pet: false } }))['--tt-pet-display'], 'none');
 });
 
+test('the motion switch reaches the pet pre-paint, like every other decorative surface', () => {
+  // The pet's animations are gated by a var for the same reason its visibility
+  // is: general.motion is Tier 2, so a motion-off user would otherwise animate
+  // for one frame per load. `initial` makes the property guaranteed-invalid, so
+  // each element's var(--tt-pet-anim, <its own spec>) falls back to its own
+  // animation — one var gating three different shorthands.
+  assert.equal(themeToCssVars(THINGTIME_THEME)['--tt-pet-anim'], 'initial')
+  assert.equal(themeToCssVars(resolveTheme(THINGTIME_THEME, { general: { motion: false } }))['--tt-pet-anim'], 'none')
+  // and it is the motion switch that owns it, not the pet switch: a hidden pet
+  // still animates if it is ever shown again
+  assert.equal(themeToCssVars(resolveTheme(THINGTIME_THEME, { general: { pet: false } }))['--tt-pet-anim'], 'initial')
+})
+
 test('the pet var survives the pre-paint script’s key filter', () => {
   // tt-boot.js only replays keys matching /^--tt-[\w-]+$/ — a name outside that
   // shape would be silently dropped and the pet would flash back on

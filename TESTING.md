@@ -1361,6 +1361,10 @@ email whose link points at the attacker.
 - [ ] Settings → Motion off leaves the pet visible but completely still, and
       Pet off removes it while the rest of the app keeps animating — the two
       switches are independent in both directions.
+- [ ] Settings → Motion off, then RELOAD: the pet is already still on the very
+      first painted frame — it must not bob/sparkle for a beat and then stop
+      (same Tier-2 trap as the Pet switch; the pet is the only decorative
+      surface not already covered by --tt-rainbow-anim/--tt-motion).
 - [ ] OS "reduce motion" freezes the pet on first paint, without toggling
       anything in Settings.
 - [ ] Theme Studio → Pet → Customise applies CSS to the pet ONLY (try
