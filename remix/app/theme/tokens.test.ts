@@ -65,6 +65,23 @@ test('the pet switch is independent of the motion switch', () => {
   assert.equal(motionOff.general.pet, true);
 });
 
+test('the pet switch is published as a var so it can gate the first paint', () => {
+  // ThemeHost mirrors themeToCssVars() to localStorage and tt-boot.js reapplies
+  // it render-blocking before React loads. Emitting the switch here is what
+  // lets a pet-off user's first paint already be correct — reading
+  // theme.general in the component cannot, because the localforage blob that
+  // backs it has not resolved yet.
+  assert.equal(themeToCssVars(THINGTIME_THEME)['--tt-pet-display'], 'block');
+  assert.equal(themeToCssVars(resolveTheme(THINGTIME_THEME, { general: { pet: false } }))['--tt-pet-display'], 'none');
+});
+
+test('the pet var survives the pre-paint script’s key filter', () => {
+  // tt-boot.js only replays keys matching /^--tt-[\w-]+$/ — a name outside that
+  // shape would be silently dropped and the pet would flash back on
+  assert.match('--tt-pet-display', /^--tt-[\w-]+$/u);
+  assert.ok(Object.keys(themeToCssVars(THINGTIME_THEME)).every((key) => /^--tt-[\w-]+$/u.test(key)));
+});
+
 test('a non-boolean pet override is ignored rather than coerced', () => {
   for (const junk of ['false', 0, null, {}] as unknown[]) {
     const theme = resolveTheme(THINGTIME_THEME, { general: { pet: junk } } as never);

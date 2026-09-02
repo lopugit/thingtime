@@ -1345,6 +1345,27 @@ email whose link points at the attacker.
       with ordinary visual spacing, not a large blank/dead-scroll region; its
       links and controls remain reachable without horizontal overflow.
 
+## Decorative pet (`remix/app/components/Pets/`, `general.pet`)
+
+- [ ] The pet sits bottom-right on ordinary pages and is absent from
+      full-bleed surfaces (chat/Commander), where it would land on the
+      composer. It never blocks a click or a focus ring anywhere it shows.
+- [ ] On a non-production build the pet sits CLEAR of the DevKit bubble
+      rather than behind it (regression: a raw-corner inset rendered a 74px
+      unicorn underneath the dev trigger on every preview and local run).
+- [ ] Settings → Pet off, then RELOAD: the pet is absent from the very first
+      painted frame — it must not appear and then disappear (regression: the
+      switch was read from the async localforage blob, which resolves after
+      first paint, so every load flashed the pet at users who turned it off).
+      With it on, reload and confirm it does NOT pop in a beat late either.
+- [ ] Settings → Motion off leaves the pet visible but completely still, and
+      Pet off removes it while the rest of the app keeps animating — the two
+      switches are independent in both directions.
+- [ ] OS "reduce motion" freezes the pet on first paint, without toggling
+      anything in Settings.
+- [ ] Theme Studio → Pet → Customise applies CSS to the pet ONLY (try
+      `opacity: 0.4`) — the rest of the page is untouched.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /

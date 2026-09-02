@@ -1,9 +1,8 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 
-import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useTtCustomClasses, useTtTheme } from '~/hooks/useTtTheme';
 
-import { PET_DEVKIT_CLEARANCE, petAnimation, petInset, petMotionEnabled, petMounted } from './petCore';
+import { PET_DEVKIT_CLEARANCE, petAnimation, petDisplay, petInset, petMotionEnabled, petVisible } from './petCore';
 
 /**
  * 🦄 Lopuuuuuuuuuu — an app-wide decorative pet, rendered by Main.
@@ -21,20 +20,26 @@ import { PET_DEVKIT_CLEARANCE, petAnimation, petInset, petMotionEnabled, petMoun
  * chrome on every non-full-bleed page, so per AI_ALL.md's "Feature
  * customization defaults" it ships with an off switch; default on, so nothing
  * changes for anyone who never opens Settings.
+ *
+ * That switch is honoured in two tiers, because `theme.general` is Tier 2 (the
+ * async localforage blob) and cannot decide a first paint:
+ *   - `display: var(--tt-pet-display)`, written by themeToCssVars and reapplied
+ *     pre-paint by tt-boot.js, so a pet-off user never sees it flash
+ *   - this component's unmount, once the stored value is readable, so a pet-off
+ *     user doesn't keep an inert node (and its emoji glyphs) in the DOM
  */
 export const LopuuuPet = () => {
 	const { theme } = useTtTheme();
-	// Stored settings arrive asynchronously, so the Pet switch is only readable
-	// once hydration resolves — see petMounted.
-	const { loading } = useThingtime();
 	const motion = petMotionEnabled(theme?.general);
 	// Above the early return: hooks must run in the same order on every render,
 	// and the pet unmounts below when it is switched off.
 	const customClasses = useTtCustomClasses('general.pet');
 
-	// Unmount rather than hide: a display:none pet would still cost the three
-	// infinite animations (one of them a filter: hue-rotate sweep) on every page.
-	if (!petMounted(loading, theme?.general)) return null;
+	// Defaults to on, so this only ever fires *after* hydration hands back a
+	// stored `pet: false` — never on the pre-hydration default, which would
+	// unmount the pet out from under everyone for a tick. The pre-paint var
+	// above has already hidden it by then, so there is nothing to flash.
+	if (!petVisible(theme?.general)) return null;
 
 	return (
 		<Box
@@ -55,6 +60,10 @@ export const LopuuuPet = () => {
 			// `tt-pet` is the stable selector TT_CUSTOM_TARGETS['general.pet']
 			// scopes custom CSS to — keep the two in step (customise.test.ts).
 			className={customClasses ? `tt-pet ${customClasses}` : 'tt-pet'}
+			// The first-paint half of the Pet switch — see petDisplay. Must stay a
+			// var rather than a JS read: the stored answer isn't available yet on
+			// the render that decides what the user first sees.
+			display={petDisplay()}
 			pointerEvents="none"
 			position="fixed"
 			right={petInset(PET_DEVKIT_CLEARANCE, 'right')}

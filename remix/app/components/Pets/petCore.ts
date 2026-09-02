@@ -23,28 +23,35 @@ export const petMotionEnabled = (general?: { motion?: boolean } | null): boolean
  * Defaults to on like every other general token, so an older stored theme that
  * predates the key — or a theme that hasn't hydrated yet — keeps the pet rather
  * than flashing it away on first paint.
+ *
+ * This is the second of the two tiers: `petDisplay` decides the first paint from
+ * the pre-paint var, then this unmounts the node once the stored answer is
+ * actually readable. Defaulting to on is what makes that ordering safe — React
+ * never removes a pet the snapshot had already painted.
  */
 export const petVisible = (general?: { pet?: boolean } | null): boolean => general?.pet !== false;
 
 /**
- * Whether the pet belongs in the tree at all — the Pet switch, but only once
- * the stored answer is actually known.
+ * The `display` the pet paints with before React knows anything.
  *
- * Thingtime state restores asynchronously (ThingtimeProvider awaits localforage
- * and holds `loading` true until it resolves), so every setting reads as its
- * default until then. Mounting on that default would flash a full-size animated
- * unicorn into the corner on every single load for exactly the users who
- * switched it off — the annoying end of the eggs.ts rule this pet is built
- * around, and worse than simply leaving it on. Staying absent while `loading`
- * mirrors the drawer, which stays closed until its persisted state restores
- * (useDrawer/Main) rather than guessing its position and animating twice.
+ * The Pet switch decides what the FIRST paint looks like, and `theme.general`
+ * only becomes readable after ThingtimeProvider's localforage restore resolves
+ * — Tier 2, which per AI_ALL.md ("the async localforage `thingtime` blob cannot
+ * seed the first render") and the design-system Practices entry ("the ONLY tier
+ * fast enough to gate first paint" is Tier 1) must not gate a first paint.
  *
- * `petVisible` keeps defaulting to on, so the pet-on majority — including a
- * stored theme that predates the key — is unaffected beyond appearing one
- * hydration tick later. A non-boolean `loading` (no provider, as in an embed or
- * a test harness) reads as "not loading", so the pet still shows.
+ * So visibility rides the pre-paint path every other theme token uses instead:
+ * `themeToCssVars` writes `--tt-pet-display`, ThemeHost mirrors the var set to
+ * localStorage, and tt-boot.js reapplies it render-blocking in <head> before
+ * React loads. A user who switched the pet off gets `display: none` from that
+ * snapshot on the very first paint — no flash — and the pet-on majority paints
+ * immediately rather than a hydration tick late. `display: none` also
+ * terminates the descendants' animations outright (CSS Animations §"Setting
+ * display to none"), so a hidden pet costs nothing while it waits to unmount.
+ *
+ * The fallback keeps a first-ever visit (no snapshot yet) on the default.
  */
-export const petMounted = (loading?: boolean | null, general?: { pet?: boolean } | null): boolean => !loading && petVisible(general);
+export const petDisplay = (): string => 'var(--tt-pet-display, block)';
 
 /**
  * A Chakra `animation` value, or undefined when decorative motion is off —

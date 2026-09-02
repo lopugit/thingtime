@@ -529,6 +529,13 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
       ? 'moving-rainbow 5s linear infinite'
       : 'none',
     '--tt-motion': g.motion ? '1' : '0',
+    // The pet's visibility has to be a var, not a JS read: it decides what the
+    // FIRST paint looks like, and the only tier fast enough for that is this
+    // one (ThemeHost mirrors these vars to localStorage; tt-boot.js reapplies
+    // them before React loads). A ready-to-use CSS value rather than a 1/0
+    // flag, same idiom as --tt-rainbow-anim, so the pet just spends it on
+    // `display` without a second token to interpret it.
+    '--tt-pet-display': g.pet ? 'block' : 'none',
   }
   return vars
 }
