@@ -1304,6 +1304,52 @@ function assertWorkflowSource() {
   );
 }
 
+// Blank lines and `#` comments are not structure. YAML allows both anywhere,
+// at any column, and neither one ends a step -- but a boundary scan that reads
+// indentation alone treats them as the end, and the window then answers for
+// the wrong lines in both directions: backwards it opens below the step's own
+// `id:`, forwards it closes above keys the step still owns.
+const isStructuralYamlLine = (line) => line.trim() !== "" && !/^\s*#/u.test(line);
+const yamlIndent = (line) => /^ */u.exec(line)[0].length;
+
+// Ordinary YAML quoting and spacing are not semantic here, so match the scalar
+// rather than one exact spelling of it. `id: 'live_probe'` is the same step as
+// `id: live_probe`, and reading it as a different one is not a harmless miss:
+// it costs the credential probe its exemption and reports the generic
+// slot message against it instead, which is the misdirection
+// `assertAdminModelRouting` goes to some length elsewhere to head off.
+const yamlScalarPattern = (key, value) =>
+  new RegExp(`^[ \\t]*(?:- )?${key}:[ \\t]*(['"]?)${value}\\1[ \\t]*$`, "mu");
+
+// The whole step that owns `lines[index]`: the `- ` marker that opens it,
+// every key under that marker, and nothing of the step or job that follows.
+// Both bounds come from the step's own indentation, so this does not assume
+// the six-space step depth of a workflow job over a composite action's.
+//
+// The end is keyed to the marker rather than to the matched line, because
+// those differ for a step written `- uses:` first: there the matched line *is*
+// the marker, every sibling step starts at that same column, and a strictly
+// less-indented bound would run the window past them to the end of the job.
+export function yamlStepAt(lines, index) {
+  const lineIndent = yamlIndent(lines[index]);
+  let start = index;
+  while (
+    start > 0 &&
+    !/^ *- /u.test(lines[start]) &&
+    (!isStructuralYamlLine(lines[start - 1]) || yamlIndent(lines[start - 1]) >= lineIndent)
+  ) {
+    start -= 1;
+  }
+  if (start > 0 && /^ *- /u.test(lines[start - 1])) start -= 1;
+  // Without a marker the step's extent is unknown, so fall back to the matched
+  // line's own indentation instead of guessing a wider one.
+  const bound = /^ *- /u.test(lines[start]) ? yamlIndent(lines[start]) : lineIndent - 1;
+  const offset = lines
+    .slice(start + 1)
+    .findIndex((line) => isStructuralYamlLine(line) && yamlIndent(line) <= bound);
+  return lines.slice(start, offset === -1 ? lines.length : start + 1 + offset).join("\n");
+}
+
 function aiRuntimeSourceFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -1661,21 +1707,12 @@ function assertAdminModelRouting(
       // green on it. That is the same misdirection the missing-job assertion
       // above is there to head off, reached by ordinary step maintenance
       // instead of a rename, so bound it by the step and it cannot happen.
-      const stepIndent = /^ */u.exec(lines[index])[0].length;
-      let stepStart = index;
-      while (
-        stepStart > 0 &&
-        !/^ *- /u.test(lines[stepStart]) &&
-        /^ */u.exec(lines[stepStart - 1])[0].length >= stepIndent
-      ) {
-        stepStart -= 1;
-      }
-      if (stepStart > 0 && /^ *- /u.test(lines[stepStart - 1])) stepStart -= 1;
-      const stepEnd = lines
-        .slice(index + 1)
-        .findIndex((line) => line.trim() !== "" && /^ */u.exec(line)[0].length < stepIndent);
-      const step = lines.slice(stepStart, stepEnd === -1 ? lines.length : index + 1 + stepEnd).join("\n");
-      if (inVaultProbeJob && /^\s*(?:- )?id:\s*live_probe\s*$/mu.test(step)) {
+      // `yamlStepAt` is what makes that bound hold for ordinary YAML: a blank
+      // line or a `#` note inside the probe, or an `id:` someone quoted, each
+      // used to drop the step's `id:` out of the window and produce exactly
+      // that message. Its fixtures pin all three.
+      const step = yamlStepAt(lines, index);
+      if (inVaultProbeJob && yamlScalarPattern("id", "live_probe").test(step)) {
         // Assert both halves of the exemption, not just the positive one.
         // Requiring the router secret proves the probe can reach the
         // waterfall; it does not stop the probe from *also* being handed a
@@ -1696,7 +1733,7 @@ function assertAdminModelRouting(
         // unconditional skip the paragraph above refuses to grant.
         assert.match(
           step,
-          /^\s+backend: claude\s*$/mu,
+          yamlScalarPattern("backend", "claude"),
           `${path}:${index + 1}: the credential probe must run the Claude backend that fetches the Thingtime waterfall`,
         );
         assert.match(
