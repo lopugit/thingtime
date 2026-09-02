@@ -117,5 +117,11 @@ tool calls, which remain protected until OAuth succeeds. Use
 `@Thingtime list accounts` to list the authenticated accounts without exposing
 any token value.
 
+For a remote or mobile Codex session, `@Thingtime login` can instead return a
+short-lived tappable link (and a QR image when the host has `qrencode`). The
+phone completes the same first-party connection page while the remote Codex
+helper relays only the PKCE-bound authorization response to its listener.
+Neither the personal access token nor the bridge credential is placed in chat.
+
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.
