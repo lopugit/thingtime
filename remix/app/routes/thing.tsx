@@ -395,7 +395,13 @@ export default function ThingPage() {
 							</Box>
 						) : null}
 
-						{showData ? (
+						{/* A diagnostic renders no Views card, so it must not be gated by
+						    those switches. `/thing/:id` keeps this component mounted across
+						    id changes, so `showData: false` carried over from a Thing would
+						    hide the redacted error with no control left to bring it back —
+						    only a reload would. Gate on the toggle only where the toggle
+						    exists. */}
+						{!thing || showData ? (
 							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} mb={3}>
 									<Heading as="h2" fontSize="md">
