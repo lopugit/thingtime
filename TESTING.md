@@ -4229,6 +4229,113 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       via ttAction as clickable 🧩 chips; exact-token matching (an action key
       that prefixes another never cross-matches).
 
+## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
+      migrations, apps, raw, admin + sub-panels) renders the PageShell surface
+      wash, clears the fixed nav (no underlap at 54px), and shows the mono
+      eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
+- [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
+      private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
+      sub-blocks highlight innermost-wins; clicking selects (solid outline)
+      and opens the inspector in the right drawer.
+- [ ] Inline "+ add block" lines appear between siblings on hover; the menu
+      offers quick structural blocks and a live component search backed by
+      /api/v1/components/browse; picking a component renders it instantly.
+- [ ] Inspector args derive from the component's arg specs (string/text/
+      number/boolean/enum inputs); edits re-render the canvas live; align +
+      max-width apply; delete removes the block (native blocks can't be
+      deleted, only moved).
+- [ ] Drag the ⠿ chip onto any insert line to reorder/move blocks, including
+      into/out of containers; dropping a container into its own subtree is
+      refused.
+- [ ] Save on a fresh page creates the thing (private by default); the Public
+      toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
+      see public pages read-only (ttActions inert — owner-only interactivity).
+- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
+      /authorize) enters in-place editing of the current route; the live app
+      screen renders as the locked 🔒 native block; Save my version forks a
+      viewer-owned twin; leaving edit mode shows the personalised blocks in
+      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
+      refetch or remount on client navigation.
+- [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →
+      unchanged), GET returns the census, non-admins get 401/403, and
+      webpage- shareIds are refused on generic creates (reserved prefix).
+- [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
+      builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Nested blocks select on click: with a container (grid/row/column) holding
+      children, clicking a CHILD selects the child (inspector shows its
+      fields), clicking the container's own area selects the container —
+      ancestors never steal the capture-phase click (regression: outermost
+      frame always won and stopped propagation).
+- [ ] Grid ×2 + two blocks: first block lands in the LEFT cell, second sits
+      beside it, the trailing add-tile takes the next free cell (regression:
+      interleaved insert zones consumed grid cells and shoved blocks right).
+- [ ] Row container with two text blocks: children share one line via flex
+      sizing (regression: width-100% frames wrapped each child onto its own
+      line); row insert zones are slim vertical strips.
+- [ ] Inline WYSIWYG: clicking a text block edits in place with the caret
+      preserved while typing (regression: tag flips mid-edit replaced the DOM
+      node under the mount-only init and ATE the text); Enter/Shift+Enter
+      insert soft breaks; selecting text floats the B/I/U/S/link toolbar;
+      formatting survives deselect (renders through the allowlist renderer).
+- [ ] Custom CSS/tag/html/media fields round-trip a save and the gate rejects
+      `expression()`, `@import`, `javascript:`, non-https `url()`, script/
+      iframe text tags, ftp/js media src, and >20KB html
+      (`pnpm --dir remix run test:schemas` → webpageBlockGate).
+- [ ] Edit mode shows no white body bar between the 🌐 Global strip and the
+      page region (canvas paints the surface wash) and the Global eyebrow has
+      clear air below the navbar (view + edit).
+- [ ] Dropping an image FILE onto a media block replaces its src (never opens
+      the file in the browser); dropping anywhere else in edit mode uploads
+      and appends a media block (window-level guard); ⌘/Ctrl+V of a clipboard
+      image while a block is selected uploads at the selection, and plain
+      text paste into inputs/the inline editor is untouched.
+- [ ] Media inspector offers BOTH ⬆️ Upload file and a URL field; the Kind
+      select never wraps its option text (FieldPair min-width regression).
+- [ ] Inspector padding/margin mode toggles (▢/⬍⬌/⛶) write the css shorthand
+      and round-trip (axes ↔ sides keep values); per-corner radius, border
+      and shadow composers produce valid shorthands
+      (`pnpm --dir remix run test:webpages` → figmaControlValues).
+- [ ] Align=center on a block visibly centers it (fit-content + justify-self
+      in grids — regression: align-self alone did nothing on 100%-wide
+      blocks and was the wrong axis in grid cells).
+- [ ] Text block 📝 Rich editor (Editor.js) applies headers/lists/tables/code
+      as sanitised html and reopens editable; double-click on text inside a
+      component block opens the inline arg editor and patches the arg.
+- [ ] Drawer resizes by dragging its left edge (handle reachable even with
+      the inspector scrolled — content scrolls, not the shell); width
+      persists across reloads and the canvas padding follows live; selected
+      inline text editor shows ONE outline (no double border once padding is
+      set).
+- [ ] TRUE WYSIWYG: a saved block's top/left/size are IDENTICAL in edit mode
+      and view mode (toggle ✏️/Done and measure) — insert affordances are
+      overlay strips on block seams and never occupy layout; the 🌐 Global
+      label floats in the nav breathing band; grids have no add-tile cell.
+- [ ] Selecting a text block mounts the FULL Editor.js editor inline
+      (headings/lists/tables/quotes); a heading typed there renders at real
+      heading scale after deselect (regression: Chakra reset flattened
+      rendered rich markup to body size); right-click a text block →
+      "Advanced rich editor…" opens the modal.
+- [ ] Right-click any block (or the chip ⊞): Wrap with block drill-down wraps
+      IN PLACE (block becomes the container's only child), Duplicate
+      deep-clones with fresh ids, move/delete work
+      (`pnpm --dir remix run test:webpages` → wrapBlock/duplicateBlock).
+- [ ] Numeric inspector fields never rewrite mid-typing: type "300" into Max
+      width — it must NOT snap to 120 at the "3" (clamps commit on
+      blur/Enter); spaces can be typed in the uniform padding input.
+- [ ] Dropping the SAME OS file twice starts two uploads (regression: the
+      uploader's session dedupe silently swallowed re-drops); Rich-editor
+      Apply shows immediately in the still-mounted inline editor and is not
+      overwritten by its blur commit (external-change sync); pasting into
+      drawer inputs or the Editor.js modal is never hijacked by the
+      paste-to-upload listener; a padding of calc(100% - 20px) survives the
+      Sides control (paren-aware tokenizer) and a multi-token shorthand is
+      shown raw in uniform mode, never as an empty field.
+- [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
 Automated first: `pnpm --dir remix run verify:connections` (94 real-API

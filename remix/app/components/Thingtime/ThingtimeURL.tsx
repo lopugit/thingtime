@@ -6,6 +6,7 @@ import { EditorSplit } from './EditorSplit';
 import { Thingtime } from './Thingtime';
 import { parseThingMode, parseThingPath } from './thingRoute';
 import { useThingtime } from './useThingtime';
+import { PAGE_TOP_CLEARANCE } from '../Layout/PageShell';
 import { ThingtimeTypes } from '~/Providers/ThingtimeProvider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -67,13 +68,16 @@ export const ThingtimeURL = (props) => {
       flexDirection={'column'}
       width="100%"
       maxWidth="100%"
+      minHeight="100vh"
+      background="var(--tt-surface, #fafafb)"
+      paddingTop={PAGE_TOP_CLEARANCE}
+      paddingBottom="48px"
     >
       <Thingtime
         className="inEditModeThingtime"
         edit={inEditMode}
         path={path}
         thing={thing}
-        chakras={{ marginY: '200px' }}
         width="100%"
       ></Thingtime>
     </Flex>

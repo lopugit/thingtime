@@ -86,6 +86,7 @@ import {
 } from '~/api/utils/ciControl/featureStackLifecycleCore';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { CARD_STYLES } from '~/theme/card';
 import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
 import {
 	ALL_PULL_REQUEST_STATUS_FILTER_IDS,
@@ -110,20 +111,54 @@ const READY_STATUSES = new Set(['clean', 'ready', 'success', 'succeeded', 'compl
 
 const normalizedStatus = normalizePullRequestStatus;
 
-const statusColor = (status: unknown) => {
+const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
+
+type StatusTone = 'danger' | 'active' | 'positive' | 'warning' | 'neutral';
+
+const statusTone = (status: unknown): StatusTone => {
   const normalized = normalizedStatus(status);
-  if (CONFLICT_STATUSES.has(normalized)) return 'red';
-  if (ACTIVE_STATUSES.has(normalized)) return 'blue';
-  if (READY_STATUSES.has(normalized)) return 'green';
-  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped' || normalized === 'needs-attention') return 'orange';
-  return 'gray';
+  if (CONFLICT_STATUSES.has(normalized)) return 'danger';
+  if (ACTIVE_STATUSES.has(normalized)) return 'active';
+  if (READY_STATUSES.has(normalized)) return 'positive';
+  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped' || normalized === 'needs-attention') return 'warning';
+  return 'neutral';
 };
 
-const StatusBadge = ({ status }: { status: unknown }) => (
-  <Badge colorScheme={statusColor(status)} borderRadius="999px" px={2} py="2px" textTransform="none">
-    {String(status || 'unknown').replace(/_/g, ' ')}
-  </Badge>
-);
+const STATUS_CHIP_STYLES: Record<StatusTone, { bg: string; color: string }> = {
+  danger: { bg: 'rgba(214, 69, 90, 0.12)', color: 'var(--tt-danger, #d6455a)' },
+  active: { bg: 'rgba(47, 143, 214, 0.12)', color: 'var(--tt-link, #2f8fd6)' },
+  positive: { bg: 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))', color: 'var(--tt-positive, #2f8f4f)' },
+  warning: { bg: 'rgba(255, 188, 72, 0.18)', color: 'var(--tt-warning, #ffbc48)' },
+  neutral: { bg: 'var(--tt-surface-alt, #f5f5f7)', color: 'var(--tt-muted, #9a9aa6)' }
+};
+
+const STATUS_DOT_COLORS: Record<StatusTone, string> = {
+  danger: 'var(--tt-danger, #d6455a)',
+  active: 'var(--tt-link, #2f8fd6)',
+  positive: 'var(--tt-positive, #2f8f4f)',
+  warning: 'var(--tt-warning, #ffbc48)',
+  neutral: 'var(--tt-faint, #b6b6c0)'
+};
+
+const StatusBadge = ({ status }: { status: unknown }) => {
+  const chip = STATUS_CHIP_STYLES[statusTone(status)];
+  return (
+    <Box
+      as="span"
+      display="inline-block"
+      bg={chip.bg}
+      color={chip.color}
+      borderRadius="var(--tt-radius-pill, 999px)"
+      px={2}
+      py="2px"
+      fontSize="xs"
+      fontWeight={600}
+      whiteSpace="nowrap"
+    >
+      {String(status || 'unknown').replace(/_/g, ' ')}
+    </Box>
+  );
+};
 
 const parseTime = (value: unknown) => {
   const date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
@@ -171,7 +206,15 @@ const selectPrimaryPr = (feature: CiEntity | null, pullRequests: CiEntity[]) => 
 
 const DetailSection = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <Box>
-    <Text fontSize="10px" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" opacity={0.48} mb={2}>
+    <Text
+      fontFamily={MONO}
+      fontSize="10px"
+      fontWeight={600}
+      letterSpacing="0.08em"
+      textTransform="uppercase"
+      color="var(--tt-muted, #9a9aa6)"
+      mb={2}
+    >
       {label}
     </Text>
     {children}
@@ -179,7 +222,7 @@ const DetailSection = ({ label, children }: { label: string; children: React.Rea
 );
 
 const EmptyLine = ({ children }: { children: React.ReactNode }) => (
-  <Text fontSize="sm" opacity={0.58}>
+  <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
     {children}
   </Text>
 );
@@ -226,10 +269,10 @@ const FeatureDetail = ({
       <Box>
         <Flex align="flex-start" justify="space-between" gap={3}>
           <Box minW={0}>
-            <Heading size="sm" lineHeight="1.35" noOfLines={2}>
+            <Heading size="sm" lineHeight="1.35" noOfLines={2} color="var(--tt-ink, #16161a)">
               {feature.title || pr?.title || 'Untitled feature'}
             </Heading>
-            <Text fontSize="xs" opacity={0.55} mt={1}>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt={1}>
               {feature.repository || pr?.repository || 'Repository unavailable'}
             </Text>
           </Box>
@@ -250,7 +293,6 @@ const FeatureDetail = ({
             <Button
               size="xs"
               leftIcon={<FiPlay />}
-              colorScheme={CONFLICT_STATUSES.has(normalizedStatus(pr.status)) ? 'purple' : 'gray'}
               onClick={() => onDispatch('resolve-conflicts', pr)}
               isDisabled={!canDispatch}
             >
@@ -265,22 +307,55 @@ const FeatureDetail = ({
         </Flex>
       </Box>
 
-      <Divider />
+      <Box borderTop="1px solid var(--tt-border-light, #f0f0f2)" />
 
       <DetailSection label="Topology">
         {pr ? (
           <Flex align="center" gap={2} wrap="wrap" fontSize="sm">
-            <Badge variant="subtle" colorScheme="gray" maxW="100%" overflow="hidden" textOverflow="ellipsis">
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-surface-alt, #f5f5f7)"
+              color="var(--tt-text, #5a5a66)"
+              maxW="100%"
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+            >
               {headRef}
-            </Badge>
-            <Text opacity={0.42}>→</Text>
-            <Badge variant="subtle" colorScheme="purple">
+            </Text>
+            <Text color="var(--tt-faint, #b6b6c0)">→</Text>
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-accent-tint, #fff5fa)"
+              color="var(--tt-accent, hotpink)"
+              whiteSpace="nowrap"
+            >
               PR #{String(pr.number ?? pr.externalId ?? '')}
-            </Badge>
-            <Text opacity={0.42}>→</Text>
-            <Badge variant="subtle" colorScheme="gray">
+            </Text>
+            <Text color="var(--tt-faint, #b6b6c0)">→</Text>
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-surface-alt, #f5f5f7)"
+              color="var(--tt-text, #5a5a66)"
+              whiteSpace="nowrap"
+            >
               {baseRef}
-            </Badge>
+            </Text>
           </Flex>
         ) : (
           <EmptyLine>No pull request is linked to this feature yet.</EmptyLine>
@@ -359,13 +434,9 @@ const FeatureDetail = ({
                       {run.title || `Run ${String(run.runNumber ?? run.externalId ?? '')}`}
                     </Link>
                   ) : (
-										<Text fontWeight="600" noOfLines={1}>
-											{run.title || 'Workflow run'}
-										</Text>
+                    <Text fontWeight="600" noOfLines={1} color="var(--tt-ink, #16161a)">{run.title || 'Workflow run'}</Text>
                   )}
-									<Text fontSize="xs" opacity={0.5}>
-										{relativeTime(entityTime(run))}
-									</Text>
+                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{relativeTime(entityTime(run))}</Text>
                 </Box>
                 <StatusBadge status={run.conclusion ?? run.status} />
               </Flex>
@@ -382,14 +453,14 @@ const FeatureDetail = ({
             {events.slice(0, 8).map((event, index) => (
               <Flex key={event.id} gap={3} minH="54px">
                 <Flex direction="column" align="center" width="12px" flex="0 0 12px">
-                  <Box mt="5px" width="8px" height="8px" borderRadius="50%" bg={`${statusColor(event.statusTo)}.400`} />
-                  {index < Math.min(events.length, 8) - 1 ? <Box flex="1" width="1px" bg="var(--tt-border, #e7e7eb)" /> : null}
+                  <Box mt="5px" width="8px" height="8px" borderRadius="50%" bg={STATUS_DOT_COLORS[statusTone(event.statusTo)]} />
+                  {index < Math.min(events.length, 8) - 1 ? <Box flex="1" width="1px" bg="var(--tt-border-light, #f0f0f2)" /> : null}
                 </Flex>
                 <Box pb={3} minW={0}>
-                  <Text fontSize="sm" fontWeight="600" noOfLines={1}>
+                  <Text fontSize="sm" fontWeight="600" noOfLines={1} color="var(--tt-ink, #16161a)">
                     {event.action || event.eventType || 'Status updated'}
                   </Text>
-                  <Text fontSize="xs" opacity={0.56}>
+                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                     {event.statusFrom && event.statusTo ? `${event.statusFrom} → ${event.statusTo} · ` : ''}
                     {formatTime(event.occurredAt ?? entityTime(event))}
                   </Text>
@@ -459,7 +530,7 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
         <ModalCloseButton isDisabled={isSubmitting} />
         <ModalBody>
           <Stack spacing={4}>
-            <Alert status="info" borderRadius="md" fontSize="sm">
+            <Alert status="info" borderRadius="var(--tt-radius-md, 12px)" fontSize="sm">
               <AlertIcon />
               {executionProvider === 'vercel-sandbox'
                 ? 'Vercel Workflow will provision an isolated Sandbox runner, then GitHub will execute the exact protected workflow on that Vercel compute.'
@@ -486,8 +557,8 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
             </FormControl>
             <FormControl>
               <FormLabel fontSize="sm">Workflow entry ref</FormLabel>
-              <Input value={entryRef} isReadOnly bg="var(--tt-surface-alt, #f6f6f8)" />
-              <Text mt={1} fontSize="xs" opacity={0.56}>
+              <Input value={entryRef} isReadOnly fontFamily={MONO} bg="var(--tt-surface-alt, #f5f5f7)" />
+              <Text mt={1} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 Fixed server-side so arbitrary feature-branch workflow YAML can never run. The implementation is pinned to github-actions.
               </Text>
             </FormControl>
@@ -509,7 +580,6 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
 						Cancel
 					</Button>
           <Button
-            colorScheme={sensitive ? 'orange' : 'purple'}
             leftIcon={<FiPlay />}
             onClick={submit}
             isLoading={isSubmitting}
@@ -748,14 +818,24 @@ const FeatureStackComposer = ({
 										<Flex gap={1} mt={1} wrap="wrap">
 											{stack.targets.map((target) => {
 												const targetProgress = progress.find((item) => item.target === target);
+												const targetStatus = lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status;
+												const chip = STATUS_CHIP_STYLES[statusTone(targetStatus)];
 												return (
-												<Badge
+												<Box
+													as="span"
 													key={target}
-													colorScheme={statusColor(lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status)}
-													textTransform="none"
+													display="inline-block"
+													bg={chip.bg}
+													color={chip.color}
+													borderRadius="var(--tt-radius-pill, 999px)"
+													px={2}
+													py="2px"
+													fontSize="xs"
+													fontWeight={600}
+													whiteSpace="nowrap"
 												>
-													{target}: {lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status}
-													</Badge>
+													{target}: {targetStatus}
+													</Box>
 												);
 											})}
 										</Flex>
@@ -1883,9 +1963,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     return (
       <Flex minH="280px" align="center" justify="center" gap={3}>
         <Spinner size="sm" />
-				<Text fontSize="sm" opacity={0.62}>
-					Loading CI control data…
-				</Text>
+        <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">Loading CI control data…</Text>
       </Flex>
     );
   }
@@ -1894,8 +1972,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     <Box>
       <Flex align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={4} direction={{ base: 'column', md: 'row' }} mb={5}>
         <Box>
-          <Heading size="md">CI Control</Heading>
-          <Text mt={1} fontSize="sm" opacity={0.62}>
+          <Heading size="md" color="var(--tt-ink, #16161a)">CI Control</Heading>
+          <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
             Features, branches, pull requests, automation, previews, and status history in one place.
           </Text>
         </Box>
@@ -1914,7 +1992,6 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
           </Button>
           <Button
             size="sm"
-            colorScheme="purple"
             leftIcon={<FiPlay />}
             onClick={() => openDispatch('promote-features', null)}
             isDisabled={!integration?.githubAppConfigured}
@@ -1925,7 +2002,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       </Flex>
 
       {loadFailed ? (
-        <Alert status="warning" mb={4} borderRadius="md" fontSize="sm">
+        <Alert status="warning" mb={4} borderRadius="var(--tt-radius-md, 12px)" fontSize="sm">
           <AlertIcon />
           Live refresh failed. Last-known cached state remains visible and will retry
 				{nextRetryAt
@@ -1935,7 +2012,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       ) : null}
 
       {setupRequired || awaitingInitialReconcile ? (
-        <Alert status={setupRequired ? 'warning' : 'info'} mb={4} borderRadius="md" alignItems="flex-start">
+        <Alert status={setupRequired ? 'warning' : 'info'} mb={4} borderRadius="var(--tt-radius-md, 12px)" alignItems="flex-start">
           <AlertIcon mt="2px" />
           <Box>
             <Text fontSize="sm" fontWeight="650">
@@ -1951,9 +2028,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       ) : null}
 
       <Flex
-        border="1px solid var(--tt-border, #e7e7eb)"
-        borderRadius="var(--tt-radius-md, 12px)"
-        bg="var(--tt-card, #fff)"
+        {...CARD_STYLES}
         px={4}
         py={3}
         gap={{ base: 3, md: 6 }}
@@ -1967,23 +2042,51 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
           ['Ready previews', dashboard?.stats.readyPreviews ?? 0]
         ].map(([label, value]) => (
           <Box key={String(label)} minW="88px">
-						<Text fontSize="10px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" opacity={0.45}>
-							{label}
-						</Text>
-						<Text fontSize="xl" fontWeight="700">
-							{value}
-						</Text>
+            <Text
+              fontFamily={MONO}
+              fontSize="10px"
+              fontWeight={600}
+              textTransform="uppercase"
+              letterSpacing="0.06em"
+              color="var(--tt-muted, #9a9aa6)"
+            >
+              {label}
+            </Text>
+            <Text fontSize="xl" fontWeight="700" color="var(--tt-ink, #16161a)">{value}</Text>
           </Box>
         ))}
         <Box ml={{ base: 0, md: 'auto' }} minW="190px">
-          <Flex gap={1.5} wrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
-            <Badge colorScheme={integration?.githubAppConfigured ? 'green' : 'gray'}>GitHub App</Badge>
-            <Badge colorScheme={integration?.githubWebhookConfigured ? 'green' : 'gray'}>GitHub webhook</Badge>
-            <Badge colorScheme={integration?.vercelWebhookConfigured ? 'green' : 'gray'}>Vercel webhook</Badge>
-            <Badge colorScheme={integration?.providerRouterConfigured ? 'green' : 'gray'}>Provider router</Badge>
-            <Badge colorScheme={integration?.vercelRunnerReady ? 'green' : 'gray'}>Vercel runner</Badge>
+          <Flex gap={2.5} rowGap={1} wrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
+            {[
+              ['GitHub App', Boolean(integration?.githubAppConfigured)] as const,
+              ['GitHub webhook', Boolean(integration?.githubWebhookConfigured)] as const,
+              ['Vercel webhook', Boolean(integration?.vercelWebhookConfigured)] as const,
+              ['Provider router', Boolean(integration?.providerRouterConfigured)] as const,
+              ['Vercel runner', Boolean(integration?.vercelRunnerReady)] as const
+            ].map(([label, ready]) => (
+              <Flex key={label} align="center" gap={1.5}>
+                <Box
+                  width="7px"
+                  height="7px"
+                  borderRadius="full"
+                  flexShrink={0}
+                  bg={ready ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-faint, #b6b6c0)'}
+                />
+                <Text
+                  fontFamily={MONO}
+                  fontSize="10px"
+                  fontWeight={600}
+                  letterSpacing="0.06em"
+                  textTransform="uppercase"
+                  color="var(--tt-muted, #9a9aa6)"
+                  whiteSpace="nowrap"
+                >
+                  {label}
+                </Text>
+              </Flex>
+            ))}
           </Flex>
-          <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" opacity={0.5}>
+          <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
             Last event {relativeTime(dashboard?.freshness.latestEventAt)}
           </Text>
         </Box>
@@ -2059,9 +2162,9 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       />
 
       <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)' }} gap={4}>
-        <Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" overflow="hidden">
-          <Flex p={3} gap={2} borderBottom="1px solid var(--tt-border, #e7e7eb)" direction={{ base: 'column', sm: 'row' }}>
-            <Flex align="center" gap={2} flex="1" border="1px solid var(--tt-border, #e7e7eb)" borderRadius="md" px={3}>
+        <Box {...CARD_STYLES} overflow="hidden">
+          <Flex p={3} gap={2} borderBottom="1px solid var(--tt-border, #ececef)" direction={{ base: 'column', sm: 'row' }}>
+            <Flex align="center" gap={2} flex="1" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-sm, 9px)" px={3}>
               <FiSearch opacity={0.45} />
 							<Input
 								value={query}
@@ -2125,11 +2228,12 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             gap={3}
             px={4}
             py={2}
+            fontFamily={MONO}
             fontSize="10px"
-            fontWeight="700"
+            fontWeight={600}
             textTransform="uppercase"
             letterSpacing="0.06em"
-            opacity={0.45}
+            color="var(--tt-muted, #9a9aa6)"
           >
 						<Text aria-hidden="true">Add</Text>
 						<Text>Feature</Text>
@@ -2156,9 +2260,9 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
                   alignItems="center"
                   px={4}
                   py={3}
-                  borderTop="1px solid var(--tt-border, #eeeeF1)"
-                  bg={selected ? 'var(--tt-surface-alt, #f6f6f8)' : 'transparent'}
-                  _hover={{ bg: 'var(--tt-surface-alt, #f6f6f8)' }}
+                  borderTop="1px solid var(--tt-border-light, #f0f0f2)"
+                  bg={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+                  _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
                 >
                   <Checkbox
                     gridColumn={{ base: '1', md: 'auto' }}
@@ -2206,7 +2310,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             {!features.length ? (
               <Box p={8} textAlign="center">
                 <FiGitBranch style={{ margin: '0 auto 8px', opacity: 0.35 }} />
-                <Text fontSize="sm" opacity={0.58}>
+                <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
                   {dashboard?.features.length
                     ? 'No features match this search or status filter.'
                     : setupRequired
@@ -2220,9 +2324,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
         <Box
           display={{ base: 'none', lg: 'block' }}
-          border="1px solid var(--tt-border, #e7e7eb)"
-          borderRadius="var(--tt-radius-md, 12px)"
-          bg="var(--tt-card, #fff)"
+          {...CARD_STYLES}
           p={5}
           alignSelf="start"
           position="sticky"
@@ -2248,11 +2350,15 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
       <Drawer isOpen={mobileDetailOpen} placement="bottom" onClose={() => setMobileDetailOpen(false)} size="full">
         <DrawerOverlay />
-				<DrawerContent height="min(86dvh, 760px)" maxH="86dvh" borderTopRadius="18px" bg="var(--tt-card, #fff)" color="var(--tt-ink, #17171c)">
+        <DrawerContent
+          height="min(86dvh, 760px)"
+          maxH="86dvh"
+          borderTopRadius="var(--tt-radius-xl, 20px)"
+          bg="var(--tt-card, #ffffff)"
+          color="var(--tt-ink, #16161a)"
+        >
           <DrawerCloseButton />
-					<DrawerHeader borderBottom="1px solid var(--tt-border, #e7e7eb)" fontSize="sm">
-						Feature details
-					</DrawerHeader>
+          <DrawerHeader borderBottom="1px solid var(--tt-border, #ececef)" fontSize="sm">Feature details</DrawerHeader>
           <DrawerBody py={5} pb="calc(24px + env(safe-area-inset-bottom))">
             <FeatureDetail
               feature={selectedFeature}

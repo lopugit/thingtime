@@ -182,3 +182,26 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 	member = false;
 	assert.equal(await canView({ id: 'reader-1' }, attachment), false);
 });
+
+test('post-purpose media binds to webpage targets too — authorized by the page ACL, filter-shape exact', async () => {
+	let captured: any = null;
+	let page: any = { shareId: 'page-1', ownerId: 'owner-1', thingtime: ['webpage'], targetId: null, acl: ['tt:all'] };
+	const canView = createCanViewHomeAttachmentTarget({
+		getThings: async () =>
+			({
+				findOne: async (filter: any) => {
+					captured = filter;
+					return page;
+				}
+			} as any),
+		getUsers: async () => ({ findOne: async () => null } as any)
+	});
+	const attachment = { shareId: 'att-1', ownerId: 'owner-1', attachmentPurpose: 'post', targetId: 'page-1' } as any;
+	// public page: anonymous viewer sees the media
+	assert.equal(await canView(null, attachment), true);
+	assert.deepEqual(captured.thingtime, { $in: ['post', 'webpage'] });
+	// private page: only the owner does
+	page = { ...page, acl: ['tt:user'] };
+	assert.equal(await canView(null, attachment), false);
+	assert.equal(await canView({ id: 'owner-1' } as any, attachment), true);
+});

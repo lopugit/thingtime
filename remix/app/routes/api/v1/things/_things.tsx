@@ -9,6 +9,7 @@ import {
   syncReadyAttachmentsForTarget
 } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { bindOwnedWebpageAttachments } from '~/api/utils/webpages/webpageAttachments';
 import {
   attachmentPostActorAllowed,
   postAttachmentRequest,
@@ -283,6 +284,12 @@ export const action = async ({ request }: { request: Request }) => {
       if (result.ok === false) {
         return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
       }
+      // webpage saves claim the owner's referenced builder uploads so the
+      // draft reaper can't take a page's media out from under it (tolerant:
+      // foreign/external/expired references are simply not bound)
+      if (actor.kind !== 'app' && user.accountKind === 'user' && (result.doc.thingtime || []).includes('webpage')) {
+        await bindOwnedWebpageAttachments(user.id, result.doc.crystal, result.doc.shareId);
+      }
       if (app) {
         const thing = (await toPublicThings([result.doc], viewer))[0];
         await appShapeProjections(app, [result.doc], [thing]);
@@ -334,6 +341,15 @@ export const action = async ({ request }: { request: Request }) => {
     );
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+    }
+    const updatedThing = result.thing as { id?: unknown; thingtime?: unknown; crystal?: unknown } | undefined;
+    if (
+      actor.kind !== 'app' &&
+      user.accountKind === 'user' &&
+      Array.isArray(updatedThing?.thingtime) &&
+      (updatedThing.thingtime as unknown[]).includes('webpage')
+    ) {
+      await bindOwnedWebpageAttachments(user.id, updatedThing.crystal, String(updatedThing.id || ''));
     }
     return json({ ok: true, thing: result.thing, post: result.post }, { headers: cors });
   }

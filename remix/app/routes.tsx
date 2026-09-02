@@ -146,6 +146,13 @@ export const router = createBrowserRouter([
       { path: 'apps/manage', lazy: lazyRoute(() => import('./routes/apps-manage')) },
       { path: 'branding', lazy: lazyRoute(() => import('./routes/branding/_index')) },
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
+      // the block-based site builder — create webpages from component things;
+      // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // published block-based webpages (reserved prefix — outranks the * catch-all)
+      { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      // the storybook-style design-system docs own the canonical short URL too
+      { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       // third-party app connections — no guard: both pages render their own
       // signed-out quiet state (the /settings, /apps idiom)
       { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
@@ -175,11 +182,9 @@ export const router = createBrowserRouter([
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
       { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
-      {
-        path: 'mongodb-status',
-        lazy: lazyRoute(() => import('./routes/mongodb-status')),
-        loader: () => fetchJson('/api/v1/mongodb/status-data')
-      },
+      // mongodb-status renders from its native-section registry list; the
+      // sections' shared hook fetches — no navigation-blocking loader
+      { path: 'mongodb-status', lazy: lazyRoute(() => import('./routes/mongodb-status')) },
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
@@ -220,11 +225,9 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs })
       },
       { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
-      {
-        path: 'status',
-        lazy: lazyRoute(() => import('./routes/status')),
-        loader: () => fetchJson('/api/v1/vercel/status')
-      },
+      // status renders from its native-section registry list; the sections'
+      // shared hook fetches — no navigation-blocking loader
+      { path: 'status', lazy: lazyRoute(() => import('./routes/status')) },
       {
         path: 'vercel',
         lazy: lazyRoute(() => import('./routes/vercel')),

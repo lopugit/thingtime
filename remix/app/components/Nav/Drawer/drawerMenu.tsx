@@ -114,6 +114,18 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'builder',
+		label: 'Builder',
+		icon: '🧱',
+		to: '/builder',
+		children: [
+			{ id: 'builder-pages', label: 'My pages', icon: '📄', to: '/builder' },
+			{ id: 'builder-components', label: 'Components', icon: '🧩', to: '/components' },
+			{ id: 'builder-actions', label: 'Actions', icon: '⚡', to: '/actions' },
+			{ id: 'builder-design-system', label: 'Design system', icon: '🎨', to: '/docs/design-system' }
+		]
+	},
+	{
 		id: 'things',
 		label: 'Things',
 		icon: '📦',

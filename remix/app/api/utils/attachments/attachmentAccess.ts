@@ -35,11 +35,13 @@ type ProfileAttachmentTargetDoc = {
 };
 
 export const attachmentTargetAclAllows = (doc: AttachmentTargetAclDoc | null, viewer: AttachmentAccessViewer): boolean => {
+	// exactly a top-level post OR a webpage (builder saves bind post-purpose
+	// media to page things) — anything else fails closed
 	if (
 		!doc ||
 		!Array.isArray(doc.thingtime) ||
 		doc.thingtime.length !== 1 ||
-		doc.thingtime[0] !== 'post' ||
+		(doc.thingtime[0] !== 'post' && doc.thingtime[0] !== 'webpage') ||
 		(doc.targetId !== undefined && doc.targetId !== null)
 	) {
 		return false;
@@ -251,9 +253,14 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 			return canViewEmojiAttachment(things, viewer, attachment);
 		}
 		if (attachment.attachmentPurpose !== undefined && attachment.attachmentPurpose !== 'post') return false;
-		const target = (await things.findOne({ shareId: targetId, thingtime: 'post', targetId: null } as any, {
-			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
-		})) as AttachmentTargetAclDoc | null;
+		// post-purpose media binds to top-level posts AND to webpages (builder
+		// saves) — both authorize by the target's own top-level ACL
+		const target = (await things.findOne(
+			{ shareId: targetId, thingtime: { $in: ['post', 'webpage'] }, targetId: null } as any,
+			{
+				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
+			}
+		)) as AttachmentTargetAclDoc | null;
 		return attachmentTargetAclAllows(target, viewer);
 	};
 };

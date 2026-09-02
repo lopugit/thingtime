@@ -6,11 +6,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogOverlay,
-  Badge,
   Box,
   Button,
   Checkbox,
-  Divider,
   Flex,
   FormControl,
   FormLabel,
@@ -52,11 +50,70 @@ import { safeUrl } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { TierCard } from '~/components/Subscriptions/TierCard';
 import { useApi } from '~/hooks/useApi';
+import { CARD_STYLES } from '~/theme/card';
 
 import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
 import type { AdminRowField } from './adminRowQuery';
 
 const MB = 1024 * 1024;
+
+const MONO_FONT = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
+
+// Mono uppercase eyebrow used for every section label in this manager.
+const SECTION_LABEL_STYLES = {
+  color: 'var(--tt-muted, #9a9aa6)',
+  fontFamily: MONO_FONT,
+  fontSize: '11px',
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase'
+} as const;
+
+const CHIP_STYLES = {
+  alignItems: 'center',
+  borderRadius: 'var(--tt-radius-pill, 999px)',
+  display: 'inline-flex',
+  fontFamily: MONO_FONT,
+  fontSize: '11px',
+  fontWeight: 600,
+  lineHeight: '18px',
+  px: 2
+} as const;
+
+const NEUTRAL_CHIP_STYLES = {
+  ...CHIP_STYLES,
+  bg: 'var(--tt-surface-alt, #f5f5f7)',
+  color: 'var(--tt-muted, #9a9aa6)'
+} as const;
+
+const ACCENT_CHIP_STYLES = {
+  ...CHIP_STYLES,
+  bg: 'var(--tt-accent-tint, #fff5fa)',
+  color: 'var(--tt-accent, hotpink)'
+} as const;
+
+const INPUT_STYLES = {
+  bg: 'var(--tt-card, #ffffff)',
+  borderColor: 'var(--tt-border, #ececef)',
+  borderRadius: 'var(--tt-radius-sm, 9px)',
+  focusBorderColor: 'var(--tt-accent, hotpink)'
+} as const;
+
+const POSITIVE_BUTTON_STYLES = {
+  bg: 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))',
+  color: 'var(--tt-positive, #2f8f4f)',
+  _hover: { bg: 'rgba(88, 202, 112, 0.22)' },
+  _active: { bg: 'rgba(88, 202, 112, 0.3)' }
+} as const;
+
+const DANGER_BUTTON_STYLES = {
+  bg: 'rgba(214, 69, 90, 0.12)',
+  color: 'var(--tt-danger, #d6455a)',
+  _hover: { bg: 'rgba(214, 69, 90, 0.18)' },
+  _active: { bg: 'rgba(214, 69, 90, 0.24)' }
+} as const;
+
+const HAIRLINE = '1px solid var(--tt-border-light, #f0f0f2)';
 
 const PRICE_LABELS: Record<TierPricePeriod, string> = {
   daily: 'Daily price',
@@ -378,32 +435,41 @@ const TierEditorModal = ({
   return (
     <Modal isOpen={open} onClose={onClose} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
-      <ModalContent mx={3} maxH="94vh">
-        <ModalHeader pr={12}>{tier ? `Edit ${tier.title} · draft v${tier.version}` : 'Create a tier draft'}</ModalHeader>
+      <ModalContent
+        bg="var(--tt-card, #ffffff)"
+        borderRadius="var(--tt-radius-xl, 20px)"
+        boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
+        mx={3}
+        maxH="94vh"
+      >
+        <ModalHeader color="var(--tt-ink, #16161a)" pr={12}>
+          {tier ? `Edit ${tier.title} · draft v${tier.version}` : 'Create a tier draft'}
+        </ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6} alignItems="start">
             <Flex direction="column" gap={5} minW={0}>
               <Box>
-                <Heading size="sm" mb={3}>
+                <Text {...SECTION_LABEL_STYLES} mb={3}>
                   Identity
-                </Heading>
+                </Text>
                 <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
                   <FormControl isRequired>
-                    <FormLabel fontSize="xs">Name</FormLabel>
-                    <Input size="sm" value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Name</FormLabel>
+                    <Input {...INPUT_STYLES} size="sm" value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
                   </FormControl>
                   <FormControl>
-                    <FormLabel fontSize="xs">Emoji</FormLabel>
-                    <Input size="sm" value={emoji} maxLength={16} onChange={(event) => setEmoji(event.target.value)} />
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Emoji</FormLabel>
+                    <Input {...INPUT_STYLES} size="sm" value={emoji} maxLength={16} onChange={(event) => setEmoji(event.target.value)} />
                   </FormControl>
                   <FormControl gridColumn={{ sm: '1 / -1' }}>
-                    <FormLabel fontSize="xs">Subtitle / tagline</FormLabel>
-                    <Input size="sm" value={tagline} maxLength={240} onChange={(event) => setTagline(event.target.value)} />
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Subtitle / tagline</FormLabel>
+                    <Input {...INPUT_STYLES} size="sm" value={tagline} maxLength={240} onChange={(event) => setTagline(event.target.value)} />
                   </FormControl>
                   <FormControl gridColumn={{ sm: '1 / -1' }}>
-                    <FormLabel fontSize="xs">Banner image URL</FormLabel>
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Banner image URL</FormLabel>
                     <Input
+                      {...INPUT_STYLES}
                       size="sm"
                       type="url"
                       placeholder="https://…"
@@ -418,35 +484,43 @@ const TierEditorModal = ({
                         width="100%"
                         height="92px"
                         objectFit="cover"
-                        borderRadius="md"
+                        border={HAIRLINE}
+                        borderRadius="var(--tt-radius-md, 12px)"
                         mt={2}
                       />
                     ) : null}
                   </FormControl>
                   <FormControl>
-                    <FormLabel fontSize="xs">Sort order</FormLabel>
-                    <Input size="sm" type="number" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} />
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Sort order</FormLabel>
+                    <Input {...INPUT_STYLES} size="sm" type="number" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} />
                   </FormControl>
                   <FormControl>
-                    <FormLabel fontSize="xs">Currency</FormLabel>
-                    <Input size="sm" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
+                    <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">Currency</FormLabel>
+                    <Input
+                      {...INPUT_STYLES}
+                      size="sm"
+                      value={currency}
+                      maxLength={3}
+                      onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+                    />
                   </FormControl>
                 </SimpleGrid>
               </Box>
 
-              <Divider />
+              <Box borderTop={HAIRLINE} />
               <Box>
-                <Heading size="sm" mb={1}>
+                <Text {...SECTION_LABEL_STYLES} mb={1}>
                   Pricing
-                </Heading>
-                <Text fontSize="xs" opacity={0.6} mb={3}>
+                </Text>
+                <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mb={3}>
                   Leave a renewal option blank when it is not offered.
                 </Text>
                 <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
                   {(Object.keys(PRICE_LABELS) as TierPricePeriod[]).map((period) => (
                     <FormControl key={period}>
-                      <FormLabel fontSize="xs">{PRICE_LABELS[period]}</FormLabel>
+                      <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">{PRICE_LABELS[period]}</FormLabel>
                       <Input
+                        {...INPUT_STYLES}
                         size="sm"
                         type="number"
                         min={0}
@@ -461,26 +535,35 @@ const TierEditorModal = ({
               </Box>
 
               <Box>
-                <Heading size="sm" mb={1}>
+                <Text {...SECTION_LABEL_STYLES} mb={1}>
                   Percentage saved
-                </Heading>
-                <Text fontSize="xs" opacity={0.6} mb={3}>
+                </Text>
+                <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mb={3}>
                   Computed values annualize each renewal option. Choose Custom to save your own percentage.
                 </Text>
-                <Flex direction="column" gap={2}>
+                <Flex border={HAIRLINE} borderRadius="var(--tt-radius-md, 12px)" direction="column">
                   {TIER_DISCOUNT_COMPARISONS.map((comparison) => {
                     const input = discountInputs[comparison.key];
                     return (
-                      <Flex key={comparison.key} align="center" gap={2} wrap="wrap" borderWidth="1px" borderRadius="md" p={2}>
+                      <Flex
+                        key={comparison.key}
+                        align="center"
+                        gap={2}
+                        wrap="wrap"
+                        px={3}
+                        py={2}
+                        _notFirst={{ borderTop: HAIRLINE }}
+                      >
                         <Box flex="1 1 220px">
-                          <Text fontSize="sm" fontWeight={650}>
+                          <Text color="var(--tt-ink, #16161a)" fontSize="sm" fontWeight={650}>
                             {comparison.label}
                           </Text>
-                          <Text fontSize="xs" opacity={0.55}>
+                          <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
                             {formatDiscount(previewDiscounts[comparison.key])}
                           </Text>
                         </Box>
                         <Select
+                          {...INPUT_STYLES}
                           size="xs"
                           width="105px"
                           value={input.mode}
@@ -498,6 +581,7 @@ const TierEditorModal = ({
                         {input.mode === 'custom' ? (
                           <Flex align="center" gap={1}>
                             <Input
+                              {...INPUT_STYLES}
                               size="xs"
                               width="88px"
                               type="number"
@@ -513,7 +597,9 @@ const TierEditorModal = ({
                                 }))
                               }
                             />
-                            <Text fontSize="xs">%</Text>
+                            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
+                              %
+                            </Text>
                           </Flex>
                         ) : null}
                       </Flex>
@@ -522,12 +608,12 @@ const TierEditorModal = ({
                 </Flex>
               </Box>
 
-              <Divider />
+              <Box borderTop={HAIRLINE} />
               <Box>
-                <Heading size="sm" mb={1}>
+                <Text {...SECTION_LABEL_STYLES} mb={1}>
                   Inclusions
-                </Heading>
-                <Text fontSize="xs" opacity={0.6} mb={3}>
+                </Text>
+                <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mb={3}>
                   This Editor.js content appears directly on the tier card.
                 </Text>
                 <LongTextEditor
@@ -541,12 +627,12 @@ const TierEditorModal = ({
                 />
               </Box>
 
-              <Divider />
+              <Box borderTop={HAIRLINE} />
               <Box>
                 <Flex align="center" justify="space-between" gap={3} mb={3}>
                   <Box>
-                    <Heading size="sm">Allowance defaults</Heading>
-                    <Text fontSize="xs" opacity={0.6}>
+                    <Text {...SECTION_LABEL_STYLES}>Allowance defaults</Text>
+                    <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
                       Snapshotted into every assignment of this version.
                     </Text>
                   </Box>
@@ -571,9 +657,10 @@ const TierEditorModal = ({
                     const input = quotas[field];
                     return (
                       <FormControl key={field}>
-                        <FormLabel fontSize="xs">{QUOTA_LABELS[field].label}</FormLabel>
+                        <FormLabel color="var(--tt-text, #5a5a66)" fontSize="xs">{QUOTA_LABELS[field].label}</FormLabel>
                         <Flex gap={2}>
                           <Select
+                            {...INPUT_STYLES}
                             size="sm"
                             width="116px"
                             value={input.unlimited ? 'unlimited' : 'limited'}
@@ -590,6 +677,7 @@ const TierEditorModal = ({
                           </Select>
                           {!input.unlimited ? (
                             <Input
+                              {...INPUT_STYLES}
                               size="sm"
                               type="number"
                               min={0}
@@ -601,7 +689,7 @@ const TierEditorModal = ({
                             />
                           ) : null}
                           {!input.unlimited ? (
-                            <Text alignSelf="center" fontSize="xs">
+                            <Text alignSelf="center" color="var(--tt-muted, #9a9aa6)" fontFamily={MONO_FONT} fontSize="xs">
                               {QUOTA_LABELS[field].unit}
                             </Text>
                           ) : null}
@@ -615,15 +703,13 @@ const TierEditorModal = ({
 
             <Box position={{ xl: 'sticky' }} top={0} minW={0}>
               <Flex align="center" justify="space-between" mb={2}>
-                <Text fontSize="xs" fontWeight={700} textTransform="uppercase" opacity={0.5}>
-                  Live card preview
-                </Text>
+                <Text {...SECTION_LABEL_STYLES}>Live card preview</Text>
                 {tier ? (
-                  <Badge>
+                  <Box {...NEUTRAL_CHIP_STYLES}>
                     {tier.id} · v{tier.version}
-                  </Badge>
+                  </Box>
                 ) : (
-                  <Badge>new draft</Badge>
+                  <Box {...ACCENT_CHIP_STYLES}>new draft</Box>
                 )}
               </Flex>
               <TierCard
@@ -640,7 +726,7 @@ const TierEditorModal = ({
           <Button size="sm" variant="outline" onClick={onClose} isDisabled={saving}>
             Cancel
           </Button>
-          <Button size="sm" colorScheme="purple" onClick={save} isLoading={saving}>
+          <Button size="sm" onClick={save} isLoading={saving}>
             Save draft
           </Button>
         </ModalFooter>
@@ -670,12 +756,12 @@ const CatalogSection = ({
   onArchive: (tier: SubscriptionTierDescriptor) => void;
   draftTierIds: Set<string>;
 }) => (
-  <Box>
-    <Flex align="baseline" gap={2} mb={1} wrap="wrap">
-      <Heading size="md">{title}</Heading>
-      <Badge>{tiers.length}</Badge>
+  <Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
+    <Flex align="center" gap={2} mb={1} wrap="wrap">
+      <Text {...SECTION_LABEL_STYLES}>{title}</Text>
+      <Box {...NEUTRAL_CHIP_STYLES}>{tiers.length}</Box>
     </Flex>
-    <Text fontSize="sm" opacity={0.62} mb={3}>
+    <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm" mb={3}>
       {description}
     </Text>
     {tiers.length ? (
@@ -711,7 +797,7 @@ const CatalogSection = ({
                   <Button
                     size="xs"
                     flex="1 1 80px"
-                    colorScheme="green"
+                    {...POSITIVE_BUTTON_STYLES}
                     isLoading={busyVersionId === tier.versionId}
                     aria-label={`Publish ${tier.title} version ${tier.version}`}
                     onClick={() => onPublish(tier)}
@@ -723,7 +809,9 @@ const CatalogSection = ({
                   <Button
                     size="xs"
                     variant="ghost"
-                    colorScheme="orange"
+                    color="var(--tt-danger, #d6455a)"
+                    _hover={{ bg: 'rgba(214, 69, 90, 0.12)' }}
+                    _active={{ bg: 'rgba(214, 69, 90, 0.18)' }}
                     isLoading={busyVersionId === tier.versionId}
                     aria-label={`Archive ${tier.title} version ${tier.version}`}
                     onClick={() => onArchive(tier)}
@@ -737,8 +825,8 @@ const CatalogSection = ({
         ))}
       </SimpleGrid>
     ) : (
-      <Box borderWidth="1px" borderStyle="dashed" borderRadius="lg" p={5}>
-        <Text fontSize="sm" opacity={0.55}>
+      <Box border="1px dashed var(--tt-border, #ececef)" borderRadius="var(--tt-radius-md, 12px)" p={5}>
+        <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
           No tiers in this section.
         </Text>
       </Box>
@@ -820,8 +908,8 @@ export const TierManager = () => {
 
   if (!tiers) {
     return loadError ? (
-      <Box borderWidth="1px" borderRadius="lg" p={5} textAlign="center">
-        <Text fontSize="sm" mb={3}>
+      <Box {...CARD_STYLES} p={5} textAlign="center">
+        <Text color="var(--tt-text, #5a5a66)" fontSize="sm" mb={3}>
           {loadError}
         </Text>
         <Button size="sm" variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
@@ -830,7 +918,7 @@ export const TierManager = () => {
       </Box>
     ) : (
       <Flex justify="center" py={12}>
-        <Spinner />
+        <Spinner color="var(--tt-muted, #9a9aa6)" />
       </Flex>
     );
   }
@@ -844,12 +932,14 @@ export const TierManager = () => {
     <Flex direction="column" gap={7}>
       <Flex align="center" justify="space-between" gap={3} wrap="wrap">
         <Box>
-          <Heading size="md">Tier catalog</Heading>
-          <Text fontSize="sm" opacity={0.62} mt={1}>
+          <Heading color="var(--tt-ink, #16161a)" size="md">
+            Tier catalog
+          </Heading>
+          <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm" mt={1}>
             Draft changes safely, publish immutable versions, and keep every historical assignment traceable.
           </Text>
         </Box>
-        <Button size="sm" colorScheme="purple" onClick={() => setEditing({ open: true, tier: null })}>
+        <Button size="sm" onClick={() => setEditing({ open: true, tier: null })}>
           Add new tier
         </Button>
       </Flex>
@@ -901,16 +991,23 @@ export const TierManager = () => {
       <TierEditorModal open={editing.open} tier={editing.tier} onClose={() => setEditing({ open: false, tier: null })} onSaved={accept} />
       <AlertDialog isOpen={!!confirmation} leastDestructiveRef={cancelConfirmationRef} onClose={() => setConfirmation(null)} isCentered>
         <AlertDialogOverlay />
-        <AlertDialogContent mx={3}>
-          <AlertDialogHeader>{confirmation?.action === 'publish' ? 'Publish tier revision?' : 'Archive tier revision?'}</AlertDialogHeader>
+        <AlertDialogContent
+          bg="var(--tt-card, #ffffff)"
+          borderRadius="var(--tt-radius-xl, 20px)"
+          boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
+          mx={3}
+        >
+          <AlertDialogHeader color="var(--tt-ink, #16161a)">
+            {confirmation?.action === 'publish' ? 'Publish tier revision?' : 'Archive tier revision?'}
+          </AlertDialogHeader>
           <AlertDialogBody>
             {confirmation?.action === 'publish' ? (
-              <Text fontSize="sm">
+              <Text color="var(--tt-text, #5a5a66)" fontSize="sm">
                 {confirmation.tier.title} v{confirmation.tier.version} will become selectable. Its previous live revision will move to Archived, while
                 existing assignments stay pinned to their original version.
               </Text>
             ) : confirmation ? (
-              <Text fontSize="sm">
+              <Text color="var(--tt-text, #5a5a66)" fontSize="sm">
                 {confirmation.tier.title} v{confirmation.tier.version} will no longer be selectable. Existing assignments remain linked to this
                 historical version.
               </Text>
@@ -922,7 +1019,7 @@ export const TierManager = () => {
             </Button>
             <Button
               size="sm"
-              colorScheme={confirmation?.action === 'publish' ? 'green' : 'orange'}
+              {...(confirmation?.action === 'publish' ? POSITIVE_BUTTON_STYLES : DANGER_BUTTON_STYLES)}
               onClick={() => {
                 const pending = confirmation;
                 setConfirmation(null);

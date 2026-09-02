@@ -365,16 +365,30 @@ const sourceFilesUnder = (dir: string): string[] => {
 	});
 };
 
-// The text of each setThingtime(...) call, so a multi-line options object is
-// inspected as one statement rather than line by line.
+// The text of each setThingtime(...) call, from its opening paren to that
+// paren's own balanced close, so a multi-line options object is inspected as
+// one statement rather than line by line. Stopping at the balanced close and
+// not at the next `);` anywhere later in the file is what keeps a mention that
+// is not a call — the design-system entries quote this API in prose — from
+// swallowing the lines after it and matching a key it never writes.
 const setThingtimeCalls = (source: string): string[] => {
 	const calls: string[] = [];
 	const call = /setThingtime\??\.?\(/g;
 	let match = call.exec(source);
 
 	while (match) {
-		const end = source.indexOf(');', match.index);
-		calls.push(source.slice(match.index, end === -1 ? source.length : end));
+		let depth = 0;
+		let end = source.length;
+
+		for (let index = match.index + match[0].length - 1; index < source.length; index += 1) {
+			if (source[index] === '(') depth += 1;
+			else if (source[index] === ')' && (depth -= 1) === 0) {
+				end = index + 1;
+				break;
+			}
+		}
+
+		calls.push(source.slice(match.index, end));
 		match = call.exec(source);
 	}
 

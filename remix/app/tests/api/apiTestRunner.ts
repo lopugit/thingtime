@@ -20,7 +20,8 @@ export type ApiTestGroup =
   | 'themes'
   | 'things'
   | 'vercel'
-  | 'waitlist';
+  | 'waitlist'
+  | 'webpages';
 
 export type ApiTestResultStatus = 'pass' | 'fail';
 

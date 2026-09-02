@@ -1,9 +1,6 @@
 import React from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import {
-  Alert,
-  AlertIcon,
-  Badge,
   Box,
   Button,
   Flex,
@@ -46,6 +43,7 @@ import {
 	type AdminStorageProjection
 } from '~/components/Admin/adminStorageProjection';
 import { formatBytes } from '~/components/Apps/ConnectedAppsSection';
+import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -111,6 +109,95 @@ const formatAdminDate = (value: string | null | undefined): string => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 };
 
+// House chip: a tokened tint + mono uppercase label, replacing the Chakra
+// colorScheme badges so every status color rides the --tt-* palette.
+type ChipTone = 'accent' | 'positive' | 'danger' | 'warning' | 'info' | 'neutral';
+
+const CHIP_TONE_STYLES: Record<ChipTone, { bg: string; color: string }> = {
+  accent: { bg: 'var(--tt-accent-tint, #fff5fa)', color: 'var(--tt-accent, hotpink)' },
+  positive: { bg: 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))', color: 'var(--tt-positive, #2f8f4f)' },
+  danger: { bg: 'rgba(214, 69, 90, 0.12)', color: 'var(--tt-danger, #d6455a)' },
+  warning: { bg: 'rgba(255, 188, 72, 0.2)', color: 'var(--tt-ink, #16161a)' },
+  info: { bg: 'rgba(47, 143, 214, 0.12)', color: 'var(--tt-link, #2f8fd6)' },
+  neutral: { bg: 'var(--tt-surface-alt, #f5f5f7)', color: 'var(--tt-muted, #9a9aa6)' }
+};
+
+const Chip = ({
+  tone = 'neutral',
+  title,
+  children,
+  ...rest
+}: {
+  tone?: ChipTone;
+  title?: string;
+  children: React.ReactNode;
+} & Record<string, unknown>) => (
+  <Box
+    as="span"
+    display="inline-flex"
+    alignItems="center"
+    bg={CHIP_TONE_STYLES[tone].bg}
+    color={CHIP_TONE_STYLES[tone].color}
+    borderRadius="var(--tt-radius-pill, 999px)"
+    fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
+    fontSize="10px"
+    fontWeight={600}
+    letterSpacing="0.04em"
+    lineHeight="1.5"
+    px="7px"
+    textTransform="uppercase"
+    title={title}
+    verticalAlign="middle"
+    whiteSpace="nowrap"
+    {...rest}
+  >
+    {children}
+  </Box>
+);
+
+// House status pattern: a small token-colored dot + mono uppercase label.
+const StatusDot = ({ color, label }: { color: string; label: string }) => (
+  <Flex align="center" display="inline-flex" gap="6px">
+    <Box bg={color} borderRadius="2px" boxSize="7px" flexShrink={0} />
+    <Text
+      as="span"
+      color="var(--tt-muted, #9a9aa6)"
+      fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
+      fontSize="10px"
+      fontWeight={600}
+      letterSpacing="0.05em"
+      textTransform="uppercase"
+    >
+      {label}
+    </Text>
+  </Flex>
+);
+
+const STORAGE_CHIP_TONES: Record<string, ChipTone> = {
+  green: 'positive',
+  orange: 'warning',
+  red: 'danger'
+};
+
+// Segmented-control tabs: pill row on --tt-surface-alt, selected segment
+// lifted onto the card surface. Behavior stays Chakra Tabs (unstyled).
+const ADMIN_TAB_STYLES = {
+  borderRadius: 'var(--tt-radius-pill, 999px)',
+  color: 'var(--tt-muted, #9a9aa6)',
+  fontFamily: 'var(--tt-font-mono, ui-monospace, Menlo, monospace)',
+  fontSize: '12px',
+  fontWeight: 600,
+  px: 3,
+  py: 1.5,
+  whiteSpace: 'nowrap',
+  _hover: { color: 'var(--tt-ink, #16161a)' },
+  _selected: {
+    bg: 'var(--tt-card, #ffffff)',
+    boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))',
+    color: 'var(--tt-ink, #16161a)'
+  }
+} as const;
+
 const StorageUsage = ({ storage }: { storage: AdminStorageProjection | null | undefined }) => {
 	const state = storageStatusPresentation(storage);
 	const usageCanBeTrusted = !!storage && storage.status !== 'unavailable' && storage.usedBytes !== null;
@@ -123,14 +210,8 @@ const StorageUsage = ({ storage }: { storage: AdminStorageProjection | null | un
 				<Text as="span" whiteSpace="nowrap">
 					{usedCompact} / {allowance}
 				</Text>
-				<Badge colorScheme={state.colorScheme} fontSize="0.55em">
-					{state.label}
-				</Badge>
-				{!!storage?.overageBytes && (
-					<Badge colorScheme="red" fontSize="0.55em">
-						over {formatBytes(storage.overageBytes)}
-					</Badge>
-				)}
+				<Chip tone={STORAGE_CHIP_TONES[state.colorScheme] ?? 'neutral'}>{state.label}</Chip>
+				{!!storage?.overageBytes && <Chip tone="danger">over {formatBytes(storage.overageBytes)}</Chip>}
 			</Flex>
 			<Text fontSize="10px" opacity={0.62} whiteSpace="nowrap">
 				{usedExact}
@@ -311,14 +392,14 @@ const appRowId = (row: AppRow) => row.clientId;
 
 const TierBadge = ({ subscription }: { subscription: UserRow['subscription'] }) => (
   <Flex gap={1} align="center" wrap="wrap">
-    <Badge colorScheme={subscription.tier === 'payg' ? 'orange' : subscription.isDefault ? 'gray' : 'purple'} fontSize="0.65em">
+    <Chip tone={subscription.tier === 'payg' ? 'warning' : subscription.isDefault ? 'neutral' : 'info'}>
       {subscription.tierName || subscription.tier}
       {subscription.tierVersion ? ` · v${subscription.tierVersion}` : ''}
-    </Badge>
+    </Chip>
     {subscription.overrides && (
-      <Badge colorScheme="pink" fontSize="0.6em" title="Admin quota overrides are active">
+      <Chip tone="accent" title="Admin quota overrides are active">
         custom
-      </Badge>
+      </Chip>
     )}
   </Flex>
 );
@@ -362,8 +443,18 @@ const useAdminRows = <T,>(fetcher: (signal: AbortSignal) => Promise<CompleteAdmi
 };
 
 const SnapshotErrorNotice = ({ hasPreviousRows, onRetry }: { hasPreviousRows: boolean; onRetry: () => void }) => (
-  <Alert borderRadius="md" fontSize="xs" mb={3} status="error" variant="left-accent">
-    <AlertIcon boxSize={4} />
+  <Flex
+    align="center"
+    bg="rgba(214, 69, 90, 0.08)"
+    borderLeft="3px solid var(--tt-danger, #d6455a)"
+    borderRadius="var(--tt-radius-sm, 9px)"
+    color="var(--tt-danger, #d6455a)"
+    fontSize="xs"
+    mb={3}
+    px={3}
+    py={2}
+    role="alert"
+  >
     <Box flex="1">
       {hasPreviousRows
         ? 'Could not refresh the complete directory. The last complete snapshot remains visible.'
@@ -372,7 +463,7 @@ const SnapshotErrorNotice = ({ hasPreviousRows, onRetry }: { hasPreviousRows: bo
     <Button ml={3} onClick={onRetry} size="xs" variant="outline">
       Retry
     </Button>
-  </Alert>
+  </Flex>
 );
 
 // File/media uploads are withheld from every account created since the
@@ -421,17 +512,16 @@ const UploadApprovalsControl = ({ row, onChanged }: { row: UserRow; onChanged: (
 
   const pending = row.publicUploadsPending || row.privateUploadsPending;
   const summary = pub && priv ? 'all' : pub ? 'public' : priv ? 'private' : pending ? 'pending' : 'off';
-  const summaryColor = pub && priv ? 'green' : pub || priv ? 'teal' : pending ? 'orange' : 'gray';
+  const summaryTone: ChipTone = pub && priv ? 'positive' : pub || priv ? 'info' : pending ? 'warning' : 'neutral';
 
   return (
     <Flex align="center" gap={2}>
-      <Badge
-        colorScheme={summaryColor}
-        fontSize="0.6em"
+      <Chip
+        tone={summaryTone}
         title={`Public uploads: ${pub ? 'enabled' : 'withheld'} · Private uploads: ${priv ? 'enabled' : 'withheld'}`}
       >
         {summary}
-      </Badge>
+      </Chip>
       {row.isAdmin ? (
         <Text fontSize="10px" opacity={0.55}>
           admin
@@ -499,11 +589,23 @@ const UsersTab = () => {
         />
       </Box>
       {pendingUploadCount > 0 && (
-        <Alert status="warning" mb={3} borderRadius="md" fontSize="sm">
-          <AlertIcon />
-          {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting file &amp; media upload
-          approval — use Approve on a row to enable public, private, or all uploads.
-        </Alert>
+        <Flex
+          align="center"
+          bg="rgba(255, 188, 72, 0.14)"
+          borderLeft="3px solid var(--tt-warning, #ffbc48)"
+          borderRadius="var(--tt-radius-sm, 9px)"
+          color="var(--tt-text, #5a5a66)"
+          fontSize="sm"
+          mb={3}
+          px={3}
+          py={2}
+          role="status"
+        >
+          <Box flex="1">
+            {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting file &amp; media upload
+            approval — use Approve on a row to enable public, private, or all uploads.
+          </Box>
+        </Flex>
       )}
       {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (
@@ -534,14 +636,14 @@ const UsersTab = () => {
                     <Text fontWeight={600} fontSize="sm">
                       @{row.username}
                       {row.isAdmin && (
-                        <Badge ml={1} colorScheme="green" fontSize="0.6em">
+                        <Chip ml={1} tone="positive">
                           admin
-                        </Badge>
+                        </Chip>
                       )}
                       {row.accountKind === 'service' && (
-                        <Badge ml={1} colorScheme="blue" fontSize="0.6em">
+                        <Chip ml={1} tone="info">
                           service
-                        </Badge>
+                        </Chip>
                       )}
                     </Text>
                     <Text fontSize="xs" opacity={0.6} overflow="hidden" textOverflow="ellipsis" maxW="220px">
@@ -725,7 +827,14 @@ const AppsTab = () => {
                     <Text fontWeight={600} fontSize="sm">
                       {row.name}
                     </Text>
-                    <Text fontSize="xs" opacity={0.6} fontFamily="mono" overflow="hidden" textOverflow="ellipsis" maxW="200px">
+                    <Text
+                      fontSize="xs"
+                      opacity={0.6}
+                      fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      maxW="200px"
+                    >
                       {row.clientId}
                     </Text>
                   </Td>
@@ -752,13 +861,9 @@ const AppsTab = () => {
                   </Td>
                   <Td>
                     {row.revokedAt ? (
-                      <Badge colorScheme="red" fontSize="0.65em">
-                        suspended
-                      </Badge>
+                      <StatusDot color="var(--tt-danger, #d6455a)" label="suspended" />
                     ) : (
-                      <Badge colorScheme="green" fontSize="0.65em">
-                        active
-                      </Badge>
+                      <StatusDot color="var(--tt-positive, #2f8f4f)" label="active" />
                     )}
                   </Td>
                   <Td whiteSpace="nowrap">
@@ -770,7 +875,16 @@ const AppsTab = () => {
                     </Button>
                     {confirmRevoke === row.clientId ? (
                       <>
-                        <Button size="xs" colorScheme="red" mr={1} isLoading={busyClientId === row.clientId} onClick={() => toggleRevoked(row)}>
+                        <Button
+                          size="xs"
+                          mr={1}
+                          bg="var(--tt-danger, #d6455a)"
+                          color="var(--tt-accent-contrast, #ffffff)"
+                          _hover={{ bg: 'var(--tt-danger, #d6455a)', opacity: 0.85 }}
+                          _active={{ bg: 'var(--tt-danger, #d6455a)', opacity: 0.75 }}
+                          isLoading={busyClientId === row.clientId}
+                          onClick={() => toggleRevoked(row)}
+                        >
                           Confirm
                         </Button>
                         <Button size="xs" variant="ghost" onClick={() => setConfirmRevoke(null)}>
@@ -781,7 +895,7 @@ const AppsTab = () => {
                       <Button
                         size="xs"
                         variant="ghost"
-                        colorScheme={row.revokedAt ? 'green' : 'red'}
+                        color={row.revokedAt ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-danger, #d6455a)'}
                         isLoading={busyClientId === row.clientId}
                         onClick={() => (row.revokedAt ? toggleRevoked(row) : setConfirmRevoke(row.clientId))}
                       >
@@ -856,31 +970,32 @@ export const AdminDashboard = () => {
   }
 
   return (
-    <Box
-      maxW="1280px"
-      mx="auto"
-      px={{ base: 3, md: 6 }}
-      py={6}
-      paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 16px)"
-      width="100%"
-    >
-      <Heading size="lg" mb={1}>
-        Admin
-      </Heading>
-      <Text fontSize="sm" opacity={0.65} mb={4}>
-        Manage users, apps, subscription tiers, CI automation, external integrations, quotas, and ownership.
-      </Text>
+    <PageShell width={1280}>
+      <PageHeader
+        eyebrow="Thingtime · control room"
+        title="Admin 🛠️"
+        variant="ink"
+        subtitle="Manage users, apps, subscription tiers, CI automation, external integrations, quotas, and ownership."
+      />
       <Tabs
-        variant="enclosed"
+        variant="unstyled"
         size="sm"
         isLazy
         lazyBehavior="keepMounted"
         index={selectedTabIndex ?? 0}
         onChange={(index) => navigate(adminTabPath(index))}
       >
-        <TabList flexWrap="wrap">
+        <TabList
+          bg="var(--tt-surface-alt, #f5f5f7)"
+          borderRadius="var(--tt-radius-pill, 999px)"
+          padding="3px"
+          gap="2px"
+          flexWrap="wrap"
+          width="fit-content"
+          maxWidth="100%"
+        >
           {ADMIN_TABS.map((tab) => (
-            <Tab key={tab.slug} as={RouterLink} to={`/admin/${tab.slug}`}>
+            <Tab key={tab.slug} as={RouterLink} to={`/admin/${tab.slug}`} {...ADMIN_TAB_STYLES}>
               {tab.label}
             </Tab>
           ))}
@@ -909,6 +1024,6 @@ export const AdminDashboard = () => {
           </TabPanel>
         </TabPanels>
       </Tabs>
-    </Box>
+    </PageShell>
   );
 };
