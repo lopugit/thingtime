@@ -1,7 +1,12 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, fail, isFail, updateThing, type Fail, type Viewer } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
-import { getAnySuite, materializeSuite, suiteEntryPageKey, type BehaviourSuite } from '~/schemas/behaviourSuites';
+import { materializeSuite, suiteEntryPageKey, type BehaviourSuite } from '~/schemas/behaviourSuites';
+// Import the app-suite REGISTRY, not just the lookup: registration is a
+// module side effect, and this route can be the first server module to run
+// after a dev rebuild — without this import `pokeworld` would 404 here until
+// some other module (seed, demos) happened to load the apps.
+import { ALL_SUITES } from '~/schemas/appSuites/index';
 
 // Server-side suite / app install: the suite's OWN-mode bundle written into
 // the viewer's things through the ordinary create/update utils — the same
@@ -59,7 +64,7 @@ const SAMPLE_STAMP = 'suiteSample';
 export const installSuiteForViewer = async (viewer: Viewer, key: unknown): Promise<Fail | InstallSuiteResult> => {
 	if (!viewer?.id) return fail(401, 'Sign in to install a suite');
 	const suiteKey = typeof key === 'string' ? key.trim() : '';
-	const suite: BehaviourSuite | null = suiteKey ? getAnySuite(suiteKey) : null;
+	const suite: BehaviourSuite | null = suiteKey ? ALL_SUITES.find((entry) => entry.key === suiteKey) || null : null;
 	if (!suite) return fail(404, `No suite matches "${suiteKey.slice(0, 40)}"`);
 
 	const bundle = materializeSuite(suite, 'own');

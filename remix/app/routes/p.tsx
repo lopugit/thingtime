@@ -5,7 +5,9 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { getAllSuites, getAnySuite } from '~/schemas/behaviourSuites';
+// the REGISTRY module (not just the lookups): importing it registers the app
+// suites, so a cold load of /p/pokeworld knows the page belongs to an app
+import { ALL_SUITES } from '~/schemas/appSuites/index';
 import { isSafeCssText } from '../components/Kinds/safeUrl';
 import { PageShell } from '../components/Layout/PageShell';
 import { WebpageBlocksRenderer } from '../components/Builder/WebpageBlocksRenderer';
@@ -48,7 +50,7 @@ export default function PublicWebpage() {
 		typeof page?.id === 'string' &&
 		page.id.startsWith('webpage-') &&
 		!!suiteKey &&
-		!!getAnySuite(suiteKey) &&
+		!!ALL_SUITES.some((suite) => suite.key === suiteKey) &&
 		draft.resolved?.source !== 'user';
 	// /p/ renders ANOTHER user's page, so previewBg is untrusted here. The write
 	// gate only bounds it (length, no <>, no javascript:); isSafeCssText is the
@@ -71,7 +73,7 @@ export default function PublicWebpage() {
 	// part-by-part client install and open the personal copy by id.
 	const installForViewer = React.useCallback(
 		async (key: string): Promise<{ href: string | null } | null> => {
-			const suite = getAnySuite(key);
+			const suite = ALL_SUITES.find((entry) => entry.key === key) || null;
 			if (!suite) return null;
 			if (!user?.id) {
 				lopu({ title: 'Sign in to install this 🗝️', description: 'Installing it makes the programs — and the data — yours.', status: 'info' });
@@ -107,7 +109,7 @@ export default function PublicWebpage() {
 	// then take them to their own copy where every control is theirs
 	const onUnowned = React.useCallback(
 		async (action: string): Promise<boolean> => {
-			const key = suiteKeyFromActionKey(action, getAllSuites()) || suiteKey;
+			const key = suiteKeyFromActionKey(action, ALL_SUITES) || suiteKey;
 			if (!key) return false;
 			try {
 				const outcome = await installForViewer(key);
