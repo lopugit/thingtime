@@ -160,6 +160,7 @@ function runGit(root, args, options = {}) {
     encoding: "utf8",
     stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
     env: options.env ?? process.env,
+    maxBuffer: options.maxBuffer ?? 1024 * 1024,
   }).trim()
 }
 
@@ -173,6 +174,49 @@ function sha256Parts(parts) {
     hash.update(part)
   }
   return hash.digest("hex")
+}
+
+/**
+ * Drop nested-repository gitlinks from the scratch fingerprint index.
+ *
+ * Controller jobs check a second copy of this repository out inside the product
+ * worktree, matched by no ignore rule. `git add -A` records that directory as a
+ * mode-160000 gitlink whose SHA is the control plane's own HEAD, so the source
+ * key moved with every unrelated control-plane commit and no ordinary checkout
+ * could reproduce it. This repository has no submodules: a gitlink here is
+ * always a co-located checkout, never source.
+ *
+ * Matching on the mode rather than on a name is deliberate. The nested checkout
+ * is not always called `trusted/`: `all-branch.yml` uses `control-plane/`, and
+ * `promote-develop-to-main.yml` / `promote-features-to-main.yml` both use
+ * `workflow-control/`. One mode test covers every such path and any future one,
+ * where a name list would silently regrow this bug. (`build-all-branch.mjs`
+ * solves the same problem for itself with a name-based `:(exclude)control-plane`
+ * pathspec; do not narrow this to match it.)
+ */
+function dropNestedRepositories(root, env) {
+  // This is the only git call here that captures a whole index rather than a
+  // single line, and execFileSync throws ENOBUFS past its 1 MiB default. One
+  // entry costs 50 bytes plus its path, so the default ceiling would start
+  // failing every fingerprint — not just missing the cache — on a large tree.
+  // 64 MiB is what the other whole-tree control-plane readers already use.
+  const staged = runGit(root, ["ls-files", "--stage", "-z"], {
+    env,
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  const links = staged
+    .split("\0")
+    .filter((entry) => entry.startsWith("160000 "))
+    .map((entry) => entry.slice(entry.indexOf("\t") + 1))
+    .filter(Boolean)
+  for (let index = 0; index < links.length; index += 100) {
+    runGit(
+      root,
+      ["update-index", "--force-remove", "--", ...links.slice(index, index + 100)],
+      { env },
+    )
+  }
+  return links
 }
 
 /**
@@ -203,6 +247,7 @@ export function computeSourceFingerprint(root) {
       ["add", "-A", "--", ".", ":(exclude)graphify-out"],
       { env },
     )
+    dropNestedRepositories(root, env)
     const sourceTree = runGit(root, ["write-tree"], { env })
     const sourceFingerprint = sha256Parts([
       `${SNAPSHOT_SCHEMA}\0`,
