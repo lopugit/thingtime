@@ -4372,13 +4372,17 @@ const isSafeWebpageCssValue = (value: string): boolean => {
 	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
 	for (const match of urlMatches) {
 		const target = (match[1] || '').trim();
-		if (!/^(https:\/\/|\/(?!\/)|data:image\/)/.test(target)) return false;
+		if (!/^(https:\/\/|\/(?![/\\])|data:image\/)/.test(target)) return false;
 	}
 	return true;
 };
 
+// Site-relative or explicit https. The second character matters: the WHATWG URL
+// parser folds `\` into `/` for special schemes, so `/\evil.example` resolves to
+// https://evil.example — a protocol-relative URL wearing a site-relative coat.
+// Both slash shapes are refused so "site-relative" really means same-origin.
 const isSafeWebpageMediaSrc = (value: string): boolean =>
-	/^(https:\/\/|\/(?!\/))/.test(value) && !/\s/.test(value);
+	/^(https:\/\/|\/(?![/\\]))/.test(value) && !/\s/.test(value);
 
 // A text block's link target: the media-src screen plus mailto:/tel: (a page
 // button or nav link), never javascript:/data:/protocol-relative.
