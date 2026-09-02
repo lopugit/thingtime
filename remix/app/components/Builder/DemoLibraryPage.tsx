@@ -7,6 +7,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import {
 	WEBPAGE_DEMO_FAMILIES,
+	countDemoBlocks,
 	getWebpageDemos,
 	webpageDemoCrystal,
 	webpageDemoShareId,
@@ -98,6 +99,7 @@ const DemoThumb = ({ demo }: { demo: WebpageDemo }) => {
 const DemoCard = ({ demo, seeded, onPreview, onUse, busy }: { demo: WebpageDemo; seeded: boolean; onPreview: () => void; onUse: () => void; busy: boolean }) => {
 	const family = WEBPAGE_DEMO_FAMILIES.find((entry) => entry.key === demo.family);
 	const id = webpageDemoShareId(demo.slug);
+	const blockCount = React.useMemo(() => countDemoBlocks(demo.blocks), [demo.blocks]);
 	return (
 		<Flex {...CARD_STYLES} flexDirection="column" rowGap={3} padding={3} minWidth={0} data-testid="demo-card" data-demo-slug={demo.slug}>
 			<Box cursor="pointer" onClick={onPreview} role="button" aria-label={`Preview ${demo.name}`}>
@@ -114,7 +116,7 @@ const DemoCard = ({ demo, seeded, onPreview, onUse, busy }: { demo: WebpageDemo;
 						{family?.emoji} {family?.title || demo.family}
 					</Text>
 					<Text fontSize="11px" color="var(--tt-muted, #9a9aa6)">
-						· {demo.blocks.length} root block{demo.blocks.length === 1 ? '' : 's'}
+						· {blockCount} block{blockCount === 1 ? '' : 's'}
 					</Text>
 					{seeded ? (
 						<Text fontSize="11px" color="var(--tt-muted, #9a9aa6)" title="Seeded on this deployment — opens at /p/ and in the builder">

@@ -527,10 +527,12 @@ const button = (ctx: Ctx, name: string, label: string, variant: 'solid' | 'ghost
 	text: label,
 	style: 'body',
 	tag: 'span',
+	// nowrap: row containers flex their children, and a wrapped pill label
+	// reads as a broken button rather than a narrow one
 	css:
 		variant === 'solid'
-			? { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', background: ctx.tone.accent, color: ctx.tone.accentInk, 'font-weight': '700', 'font-size': '15px' }
-			: { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', border: `1px solid ${ctx.tone.border}`, color: ctx.tone.ink, 'font-weight': '600', 'font-size': '15px' }
+			? { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', background: ctx.tone.accent, color: ctx.tone.accentInk, 'font-weight': '700', 'font-size': '15px', 'white-space': 'nowrap' }
+			: { display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', border: `1px solid ${ctx.tone.border}`, color: ctx.tone.ink, 'font-weight': '600', 'font-size': '15px', 'white-space': 'nowrap' }
 });
 
 const container = (
