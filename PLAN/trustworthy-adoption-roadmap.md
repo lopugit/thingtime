@@ -104,7 +104,9 @@ again without expert guidance.
   proof contract for export, restore, selective deletion, and account closure;
   do not substitute a paginated list or custom-endpoint switch for portability.
 - Add keyboard, screen-reader, touch, reduced-motion, narrow-screen, and error
-  recovery checks to the journey.
+  recovery checks to the journey through the shared
+  [accessibility and language-readiness roadmap](./accessibility-and-language-readiness-roadmap.md),
+  rather than inventing one-off acceptance rules.
 - Validate with structured sessions before scaling acquisition.
 
 **Gate:** the target completion rate improves without a severe accessibility,
@@ -159,8 +161,10 @@ and credited.
   because a component is popular.
 - Publish contributor guidance, review expectations, accessibility criteria,
   and a transparent removal/appeal process.
-- Internationalize discovery metadata and examples before declaring broad
-  accessibility.
+- Internationalize discovery metadata and examples through the canonical
+  locale contract in the
+  [accessibility and language-readiness roadmap](./accessibility-and-language-readiness-roadmap.md)
+  before declaring broad accessibility.
 - Prefer quality and successful reuse over upload counts.
 
 **Gate:** the ecosystem has safe reuse proof, moderation capacity, accessible

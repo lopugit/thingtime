@@ -37,6 +37,9 @@ experiment by itself.
 
 - [`FUNDAMENTALS.md`](../../FUNDAMENTALS.md) and
   [`DECISIONS.md`](../../DECISIONS.md) remain the architectural constraints.
+- [TODO 25](./25-accessibility-and-language-readiness.md) owns the shared
+  complete-journey accessibility and locale release gates. Adoption work may
+  not replace them with one-off checks or an aggregate score.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

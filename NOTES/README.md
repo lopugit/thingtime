@@ -12,6 +12,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Ethical adoption baseline](./ethical-adoption-baseline.md) | Current product and delivery evidence, adoption gaps, privacy boundaries, and open questions | 2026-09-01 |
 | [Data portability and graceful-exit baseline](./data-portability-and-exit-baseline.md) | Evidence behind Thingtime's no-lock-in promise, current API gaps, archive/deletion boundaries, and open decisions | 2026-09-01 |
 | [Attention agency and calm-use baseline](./attention-agency-baseline.md) | Evidence on feed continuation, passive algorithm training, correction/explanation gaps, notification defaults, and calm-use decisions | 2026-09-02 |
+| [Accessibility and language-readiness baseline](./accessibility-and-language-readiness-baseline.md) | Evidence on shared interaction affordances, release-wide accessibility gaps, static English semantics, locale ownership, and privacy boundaries | 2026-09-02 |
 
 ## Conventions
 

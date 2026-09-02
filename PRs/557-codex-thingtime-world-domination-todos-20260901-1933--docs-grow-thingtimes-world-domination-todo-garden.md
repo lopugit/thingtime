@@ -52,3 +52,33 @@ growth ideas without redefining retention or dwell time as product goals.
 The final CI, CodeQL, and Vercel preview state is recorded in the PR body for
 the exact pushed head rather than frozen here, because those receipts change
 with every garden update.
+
+## 2026-09-02 — accessibility and language readiness
+
+This run records the difference between useful local affordances and a
+release-level access contract. It adds:
+
+- `NOTES/accessibility-and-language-readiness-baseline.md`, a dated evidence
+  ledger covering the static English shell, existing motion/focus/announcement
+  work, missing owned audit/i18n commands, privacy boundaries, and open
+  decisions;
+- `PLAN/accessibility-and-language-readiness-roadmap.md`, a gated sequence from
+  complete-journey baseline through shared interaction repair, one canonical
+  locale path, a human-reviewed pilot language, and continuous quality;
+- `TODO/claude-todo/25-accessibility-and-language-readiness.md`, an
+  implementation-ready epic with owners, dependencies, phases, security/
+  privacy safeguards, acceptance criteria, and a first decision packet.
+
+The proposal recommends considering WCAG 2.2 AA for explicitly approved core
+web journeys, without making a conformance claim until the complete evidence
+pack exists. It separates UI locale, authored-content language, and optional
+translation; private user content never leaves Thingtime for translation or
+auditing without a separately approved contract.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption baseline, trustworthy-adoption roadmap, and
+TODO 22 dependency list. It does not implement UI, install audit tooling,
+translate copy, or change settings/API behavior.
+
+Validation and exact-head CI/preview receipts for this run are recorded in the
+PR body after publication.

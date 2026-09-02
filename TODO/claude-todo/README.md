@@ -38,6 +38,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 23 | Custom schema presentation via declarative vocabulary (data describes; versioned code interprets — never hydrate functions from documents) | 📐 Standing principle | [23-declarative-schema-presentation-vocabulary.md](./23-declarative-schema-presentation-vocabulary.md) |
 | 23 | Data portability and graceful exit — inventory, verified export, safe restore, selective deletion, and account closure | 🟣 Proposed · owner decision needed | [23-data-portability-and-exit.md](./23-data-portability-and-exit.md) |
 | 24 | Attention agency and calm use — feed continuation, training pause/correction/explanation, stopping points, and notification defaults | 🟣 Proposed · owner decision needed | [24-attention-agency-and-calm-use.md](./24-attention-agency-and-calm-use.md) |
+| 25 | Accessibility and language readiness — complete-journey access matrix, shared interaction foundations, canonical locale semantics, and pilot language | 🟣 Proposed · owner decision needed | [25-accessibility-and-language-readiness.md](./25-accessibility-and-language-readiness.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

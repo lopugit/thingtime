@@ -354,3 +354,18 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     notification opens. Start with the evidence note and phased roadmap, then
     execute `claude-todo/24-attention-agency-and-calm-use.md` only after the
     owner approves defaults, migration behavior, and guardrail owners.
+
+24. **🌍 Make accessibility and language readiness a release contract.**
+
+    Preserve Thingtime's existing reduced-motion, announcement, focus, and
+    feature-level keyboard work while replacing scattered checks with one
+    complete-journey matrix, impact-led severity policy, shared interaction
+    foundation, and canonical locale/formatting layer. Target WCAG 2.2 AA for
+    approved core web journeys only if the owner accepts the decision packet;
+    do not publish a conformance claim from lint or automated scores. Keep UI
+    locale, authored-content language, and translation separate, and never send
+    private Things to a translator without a distinct approved data contract.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/25-accessibility-and-language-readiness.md` after the owner
+    approves scope, locales, test environments, severity, and accountable
+    owners.
