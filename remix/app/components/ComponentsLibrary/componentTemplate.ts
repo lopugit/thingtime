@@ -34,9 +34,12 @@ export const MAX_RESOLVED_NODES = 4000;
 // gigabytes of text. Measured against this resolver: a 695-byte template that
 // clears every server cap (16 raw nodes, depth 6) resolved to 43.9 MB, and a
 // 9 KB one exhausted a 3 GB heap outright. So the same shared budget also
-// meters every string a resolve ALLOCATES. Strings with no token are returned
-// by reference — immutable and shared, so they cost nothing and are not
-// charged. Headroom, measured over the whole 2800-component catalog: 3,560
+// meters every string a resolve puts in the tree — by OCCURRENCE, including
+// tokenless ones returned by reference. Sharing makes a repeated string free in
+// memory, so charging it looks pessimistic, but the saving is an illusion the
+// moment anything serialises the tree: JSON.stringify(ttActionInputs) copies
+// every shared reference out by value (see resolveNode). Headroom, measured
+// over the whole 2800-component catalog: 3,560
 // chars at each component's declared defaults, and 37,696 with every arg
 // driven to what a saved version may actually store (MAX_COMPONENT_SAVED_ARGS
 // 24 x MAX_COMPONENT_SAVED_ARG_CHARS 2000, every enum value swept). So the
@@ -108,8 +111,20 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	budget.left -= 1;
 
 	if (typeof template === 'string') {
-		// tokenless strings are returned by reference — no allocation, no charge
-		return template.includes('{') ? substitute(template, scope, budget) : template;
+		if (template.includes('{')) return substitute(template, scope, budget);
+		// EVERY string that lands in the tree is charged, including tokenless ones
+		// returned by reference. Sharing makes the repeat free in memory, but not
+		// on the ttAction path: JSON.stringify(ttActionInputs) below flattens each
+		// shared reference into its own copy. Uncharged, one 28KB tokenless string
+		// under 3 nested ttRepeats (28,854 bytes / 17 raw nodes / depth 8 — inside
+		// every server cap) serialised to 104.7 MB while this budget still read as
+		// unspent. Charging by occurrence bounds the serialised size too, and
+		// matches what the generator's validator already counts (walkResolved
+		// charges every resolved string): the catalog peaks at 3,560 chars there,
+		// so ordinary components keep ~70x headroom under MAX_RESOLVED_CHARS.
+		budget.chars -= template.length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, draw the partial tree
+		return template;
 	}
 	if (Array.isArray(template)) {
 		const out: unknown[] = [];

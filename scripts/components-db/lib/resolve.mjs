@@ -32,8 +32,9 @@ export const MAX_RESOLVED_NODES = 4000;
 // resolving to an arg value up to 2000 chars, so the ~4000 string nodes the
 // node budget still permits can materialise gigabytes of text. See the twin in
 // remix/app/components/ComponentsLibrary/componentTemplate.ts for the measured
-// numbers. Tokenless strings are returned by reference and cost nothing, so
-// only substituted strings are charged.
+// numbers. Every string in the tree is charged by occurrence, tokenless ones
+// included: sharing makes a repeated string free in memory, but not once the
+// tree is serialised — see that twin's resolveNode.
 export const MAX_RESOLVED_CHARS = 256 * 1024;
 
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -76,8 +77,13 @@ const resolveNode = (template, scope, budget) => {
 	budget.left -= 1;
 
 	if (typeof template === 'string') {
-		// tokenless strings are returned by reference — no allocation, no charge
-		return template.includes('{') ? substitute(template, scope, budget) : template;
+		if (template.includes('{')) return substitute(template, scope, budget);
+		// charged by OCCURRENCE even though it is returned by reference — see the
+		// twin's resolveNode: sharing is free in memory but not once the tree is
+		// serialised, and this resolver must stay semantically identical to it
+		budget.chars -= template.length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, return the partial tree
+		return template;
 	}
 	if (Array.isArray(template)) {
 		const out = [];

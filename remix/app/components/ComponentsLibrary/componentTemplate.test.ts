@@ -98,11 +98,41 @@ test('token substitution cannot expand past the resolve budget', () => {
 	// a saved-version arg value at its maximum stored length
 	const produced = countChars(resolveTemplate(attack, { a: 'A'.repeat(2000) }));
 
-	// Only substituted strings are charged — tokenless ones (here the 'div' tag)
-	// are returned by reference, so they cost no memory however often they
-	// repeat. Allow the raw template's own size on top of the budget.
+	// Allow the raw template's own size on top of the budget: the last string to
+	// overspend is charged in full rather than truncated mid-write.
 	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
 	assert.ok(produced <= ceiling, `resolution produced ${produced} chars, over the ${ceiling} ceiling`);
+	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
+// Regression: tokenless strings used to be exempt from the char budget on the
+// reasoning that a string returned by reference is shared, so repeating it costs
+// no memory. True of the tree — but NOT of anything that serialises it, and
+// resolveNode itself does exactly that for ttActionInputs. Uncharged, the
+// template below (28,854 bytes / 17 raw nodes / depth 8 — inside every server
+// cap of 32KB / 600 / 24) produced a 104.7 MB data-tt-action-inputs string while
+// the 256KB char budget still read as unspent. Charge by occurrence, and the
+// serialised size is bounded by the same budget as the tree.
+test('a shared tokenless string cannot expand through ttActionInputs', () => {
+	const big = 'A'.repeat(28 * 1024);
+	// 3 nestings is already 24^3 = 13824 >= MAX_RESOLVED_NODES
+	const nest = (depth: number): unknown =>
+		depth === 0 ? big : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
+	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
+	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
+
+	const started = Date.now();
+	const resolved = resolveTemplate(attack, {}) as { props?: Record<string, unknown> };
+	const serialized = String(resolved.props?.['data-tt-action-inputs'] ?? '');
+
+	// the shared string is charged once per occurrence, so the budget stops the
+	// repeat long before the serialisation can multiply it
+	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
+	assert.ok(
+		serialized.length <= ceiling,
+		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
+	);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 

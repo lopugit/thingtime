@@ -816,7 +816,6 @@ host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
 ## Components library (`/components` + the external catalog)
-## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
 (thingtime `["component"]`) carry an arg-templated render tree (drawn only
