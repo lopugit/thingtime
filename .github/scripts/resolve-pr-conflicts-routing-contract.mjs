@@ -217,6 +217,26 @@ function assertRoute(name, input, expected) {
 // loud one, and a guard that fails loudly beats one that misses silently.
 const ANNOTATION = /::(?:warning|notice|error)::/u;
 
+// A heredoc body is data, not shell, so a `}` inside it does not close anything.
+// `classify_output()` is the live proof: it wraps a `node - <<'NODE'` program
+// whose `catch {` block closes on a line that is byte-identical to the function's
+// own closing sentinel, nineteen lines before the real `}`. Matching the sentinel
+// blindly truncated that body and silently dropped every later line from the
+// scan -- the one outcome this guard must not have, since the whole point is to
+// fail loudly rather than miss. Skipping heredoc payloads keeps the sentinel
+// unambiguous; an unterminated one runs to EOF and leaves `end` at -1, which the
+// captured-function assertion below reports rather than swallows.
+// Only a real heredoc opener counts. The three near-misses in this control plane
+// are all `<<` that redirect nothing: `$((1 << attempt))` (arithmetic shift, so
+// the tag may not be separated by space), `<<<<<<< HEAD` (a conflict marker in a
+// fixture, so `<` may neither precede nor follow the pair), and
+// `echo "unresolved_paths<<TT_UNRESOLVED_EOF"` (a GITHUB_OUTPUT delimiter, so a
+// word character may not precede it). Treating any of them as a heredoc would
+// swallow the rest of the enclosing function and reintroduce the silent miss
+// from the other direction.
+const HEREDOC_OPEN =
+  /(?<![\w<])<<-?(?!<)(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\1|([A-Za-z_][A-Za-z0-9_]*))/u;
+
 function shellFunctions(lines) {
   const found = [];
   for (let index = 0; index < lines.length; index += 1) {
@@ -224,11 +244,18 @@ function shellFunctions(lines) {
     if (multi) {
       const closing = `${multi[1]}}`;
       let end = -1;
+      let heredoc = null;
       for (let scan = index + 1; scan < lines.length; scan += 1) {
+        if (heredoc !== null) {
+          if (lines[scan].trim() === heredoc) heredoc = null;
+          continue;
+        }
         if (lines[scan] === closing) {
           end = scan;
           break;
         }
+        const opener = HEREDOC_OPEN.exec(lines[scan]);
+        if (opener) heredoc = opener[2] ?? opener[3];
       }
       found.push({ name: multi[2], start: index, end, multiLine: true });
       continue;
