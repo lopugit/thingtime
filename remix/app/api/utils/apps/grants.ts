@@ -97,13 +97,17 @@ export const revokeGrant = async (
     return { ok: false, status: 400, error: 'clientId is required' };
   }
 
-  // Same reap rule as every other revoke path (see auth/sessions.ts): the
-  // sessions TTL index skips expiresAt: null, so a plain `$set: { revokedAt }`
-  // strands those rows forever. liveAppSessionsFilter above deliberately admits
-  // expiresAt: null, so this sweep can match one; issueAppToken always stamps a
-  // real expiry today, which makes this a guard rather than a live leak — but
-  // it is the guard that keeps it that way if app sessions ever go
-  // never-expiring, the way the bridge and service purposes already have.
+  // Same reap rule as every revoke path that can actually see a never-expiring
+  // row (see auth/sessions.ts): the sessions TTL index skips expiresAt: null, so
+  // a plain `$set: { revokedAt }` strands those rows forever. liveAppSessionsFilter
+  // above deliberately admits expiresAt: null, so this sweep can match one;
+  // issueAppToken always stamps a real expiry today, which makes this a guard
+  // rather than a live leak — but it is the guard that keeps it that way if app
+  // sessions ever go never-expiring, the way the bridge and service purposes
+  // already have. The sibling purpose: 'app' sweeps (appTokens.ts, apps.ts,
+  // appLifecycleCore.ts) still use a plain $set; they are safe for the same
+  // issueAppToken reason, and making the rule uniform across them is a
+  // deliberate follow-up rather than something this path can claim.
   const result = await (await getSessionsCollection()).updateMany(
     { ...liveAppSessionsFilter(userId), 'meta.clientId': clientId.trim() },
     revokedSessionPipeline(new Date())
