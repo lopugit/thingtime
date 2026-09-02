@@ -63,3 +63,20 @@ export const petAnimation = (spec: string, motion: boolean): string | undefined 
  */
 export const petInset = (px: number, axis: 'bottom' | 'right'): string =>
 	`calc(${px}px + var(--thingtime-safe-area-${axis}, env(safe-area-inset-${axis}, 0px)))`;
+
+/**
+ * How far in from the right edge the pet has to sit to stay off the DevKit
+ * bubble.
+ *
+ * The bottom-right corner is already spoken for: DevKit pins a 52px trigger at
+ * `safe-area-right + 20px`, and it is on whenever the deploy env is not
+ * production — every preview deployment and every local dev session, i.e.
+ * exactly where this pet gets looked at. Raw-corner chrome lands under it.
+ *
+ * Clearing it is the house rule rather than a one-off: InspectorReopenPill
+ * already sits at `right: 84px` "clear of the DevKit bubble bottom-right", and
+ * AutoLoginPopup carries the same note. 20 + 52 + a 12px gutter is that same
+ * 84, so the pet steps left of the bubble while keeping its bottom anchor (and
+ * with it the home-indicator clearance petInset exists for).
+ */
+export const PET_DEVKIT_CLEARANCE = 84;

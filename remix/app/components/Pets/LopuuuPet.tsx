@@ -3,7 +3,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useTtCustomClasses, useTtTheme } from '~/hooks/useTtTheme';
 
-import { petAnimation, petInset, petMotionEnabled, petMounted } from './petCore';
+import { PET_DEVKIT_CLEARANCE, petAnimation, petInset, petMotionEnabled, petMounted } from './petCore';
 
 /**
  * 🦄 Lopuuuuuuuuuu — an app-wide decorative pet, rendered by Main.
@@ -48,12 +48,16 @@ export const LopuuuPet = () => {
 			// bottom-anchored fixed chrome clears the home indicator / rounded
 			// corners, same as DevKit's bubble and the footer
 			bottom={{ base: petInset(16, 'bottom'), md: petInset(24, 'bottom') }}
+			// ...and steps left of the DevKit bubble rather than under it — see
+			// PET_DEVKIT_CLEARANCE. The pet is pointerEvents:none at z-index 20,
+			// so the collision was never a blocked click; it was a 74px unicorn
+			// rendered behind the dev bubble on every non-production build.
 			// `tt-pet` is the stable selector TT_CUSTOM_TARGETS['general.pet']
 			// scopes custom CSS to — keep the two in step (customise.test.ts).
 			className={customClasses ? `tt-pet ${customClasses}` : 'tt-pet'}
 			pointerEvents="none"
 			position="fixed"
-			right={{ base: petInset(12, 'right'), md: petInset(24, 'right') }}
+			right={petInset(PET_DEVKIT_CLEARANCE, 'right')}
 			sx={{
 				'@keyframes lopuuu-float': {
 					'0%, 100%': { transform: 'translate3d(0, 0, 0) rotate(-2deg)' },

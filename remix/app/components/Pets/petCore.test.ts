@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { petAnimation, petInset, petMotionEnabled, petMounted, petVisible } from './petCore';
+import { PET_DEVKIT_CLEARANCE, petAnimation, petInset, petMotionEnabled, petMounted, petVisible } from './petCore';
 
 test('decorative motion follows the theme switch and defaults to on', () => {
 	assert.equal(petMotionEnabled({ motion: true }), true);
@@ -66,4 +67,27 @@ test('insets clear the device safe area on both axes', () => {
 	assert.equal(petInset(16, 'bottom'), 'calc(16px + var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))');
 	assert.equal(petInset(24, 'bottom'), 'calc(24px + var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))');
 	assert.equal(petInset(12, 'right'), 'calc(12px + var(--thingtime-safe-area-right, env(safe-area-inset-right, 0px)))');
+});
+
+test('the pet stays off the DevKit bubble in the bottom-right corner', () => {
+	// DevKit.tsx pins a 52px round trigger at safe-area-right + 20px, and shows
+	// it whenever the deploy env is not production — so every preview build and
+	// every local dev session. A pet in the raw corner renders underneath it.
+	const devKitTriggerReach = 20 + 52;
+
+	assert.ok(
+		PET_DEVKIT_CLEARANCE >= devKitTriggerReach,
+		`a ${PET_DEVKIT_CLEARANCE}px right inset overlaps the DevKit trigger, which reaches ${devKitTriggerReach}px in from the edge`
+	);
+	// the same clearance InspectorReopenPill already uses for this exact corner
+	assert.equal(petInset(PET_DEVKIT_CLEARANCE, 'right'), 'calc(84px + var(--thingtime-safe-area-right, env(safe-area-inset-right, 0px)))');
+});
+
+test('the pet renders at the DevKit-clearing inset, not the raw corner', async () => {
+	const source = await readFile(new URL('./LopuuuPet.tsx', import.meta.url), 'utf8');
+
+	// the constant is only worth having if the component actually reads it —
+	// a literal right={petInset(24, 'right')} would silently reintroduce the
+	// overlap while this file's arithmetic kept passing
+	assert.match(source, /right=\{petInset\(PET_DEVKIT_CLEARANCE, 'right'\)\}/u);
 });
