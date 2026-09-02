@@ -47,3 +47,27 @@ test('an empty custom padding intentionally uses the Small fallback', () => {
   assert.equal(theme.general.thingsBadgeCustomPadding, '');
   assert.equal(themeToCssVars(theme)['--tt-things-badge-padding'], THINGS_BADGE_PADDING_PRESETS.small);
 });
+
+test('the pet switch is on by default and survives a stored theme that predates it', () => {
+  assert.equal(THINGTIME_THEME.general.pet, true);
+  assert.equal(resolveTheme(THINGTIME_THEME, { general: { motion: false } }).general.pet, true);
+  assert.equal(resolveTheme(THINGTIME_THEME, {}).general.pet, true);
+});
+
+test('the pet switch is independent of the motion switch', () => {
+  const petOff = resolveTheme(THINGTIME_THEME, { general: { pet: false } });
+  assert.equal(petOff.general.pet, false);
+  // turning the pet off must not silently stop the rest of the app animating
+  assert.equal(petOff.general.motion, true);
+
+  const motionOff = resolveTheme(THINGTIME_THEME, { general: { motion: false } });
+  assert.equal(motionOff.general.motion, false);
+  assert.equal(motionOff.general.pet, true);
+});
+
+test('a non-boolean pet override is ignored rather than coerced', () => {
+  for (const junk of ['false', 0, null, {}] as unknown[]) {
+    const theme = resolveTheme(THINGTIME_THEME, { general: { pet: junk } } as never);
+    assert.equal(theme.general.pet, true, String(junk));
+  }
+});

@@ -75,6 +75,13 @@ export interface TtThemeGeneral {
   shadow: 'soft' | 'hard'
   /** Master switch for decorative motion (rainbow panning, bobbing). */
   motion: boolean
+  /**
+   * Whether the app-wide decorative pet (components/Pets) is mounted at all.
+   * Separate from `motion`: motion off keeps the pet, just still; pet off
+   * removes it entirely. Defaults on, so an older stored theme that predates
+   * this key keeps today's behaviour.
+   */
+  pet: boolean
   /** Base UI transition speed in ms (tt.Button already reads a speed). */
   animSpeed: number
   /** UI icon language: playful emoji or coloured Lucide line icons. */
@@ -203,6 +210,7 @@ export const THINGTIME_THEME: TtTheme = {
     borderWidth: 1,
     shadow: 'soft',
     motion: true,
+    pet: true,
     animSpeed: 200,
     iconStyle: 'emoji',
     thingsBadgePadding: 'small',
@@ -240,6 +248,7 @@ export const FABLE_THEME: TtTheme = {
     borderWidth: 2,
     shadow: 'hard',
     motion: true,
+    pet: true,
     animSpeed: 120,
     iconStyle: 'emoji',
     thingsBadgePadding: 'small',
@@ -385,6 +394,7 @@ export const resolveTheme = (
     out.general.borderWidth = clampNumber(general.borderWidth, 1, 4, out.general.borderWidth)
     if (general.shadow === 'soft' || general.shadow === 'hard') out.general.shadow = general.shadow
     if (typeof general.motion === 'boolean') out.general.motion = general.motion
+    if (typeof general.pet === 'boolean') out.general.pet = general.pet
     out.general.animSpeed = clampNumber(general.animSpeed, 0, 2000, out.general.animSpeed)
     if (general.iconStyle === 'emoji' || general.iconStyle === 'lucide') out.general.iconStyle = general.iconStyle
     if (

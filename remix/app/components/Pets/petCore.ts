@@ -14,6 +14,19 @@
 export const petMotionEnabled = (general?: { motion?: boolean } | null): boolean => general?.motion !== false;
 
 /**
+ * The theme's pet switch (Settings → Pet / `theme.general.pet`). Deliberately
+ * separate from `motion`: motion off keeps the pet and stops it animating, pet
+ * off unmounts it entirely — the pet is permanent app-wide chrome, so "I don't
+ * want to see this at all" is a real user choice and needs its own control
+ * (AI_ALL.md, "Feature customization defaults").
+ *
+ * Defaults to on like every other general token, so an older stored theme that
+ * predates the key — or a theme that hasn't hydrated yet — keeps the pet rather
+ * than flashing it away on first paint.
+ */
+export const petVisible = (general?: { pet?: boolean } | null): boolean => general?.pet !== false;
+
+/**
  * A Chakra `animation` value, or undefined when decorative motion is off —
  * dropping the declaration entirely so no animation is even scheduled.
  *

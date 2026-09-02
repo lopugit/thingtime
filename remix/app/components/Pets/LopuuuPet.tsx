@@ -2,7 +2,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { useTtTheme } from '~/hooks/useTtTheme';
 
-import { petAnimation, petInset, petMotionEnabled } from './petCore';
+import { petAnimation, petInset, petMotionEnabled, petVisible } from './petCore';
 
 /**
  * 🦄 Lopuuuuuuuuuu — an app-wide decorative pet, rendered by Main.
@@ -14,10 +14,19 @@ import { petAnimation, petInset, petMotionEnabled } from './petCore';
  *   - `prefers-reduced-motion` via CSS, so it lands on the first paint
  *   - the theme's Motion switch (Settings → Motion), so it is user-controllable
  * With motion off the pet stays put and simply doesn't animate.
+ *
+ * Visibility is a third, separate control (Settings → Pet). This is permanent
+ * chrome on every non-full-bleed page, so per AI_ALL.md's "Feature
+ * customization defaults" it ships with an off switch; default on, so nothing
+ * changes for anyone who never opens Settings.
  */
 export const LopuuuPet = () => {
 	const { theme } = useTtTheme();
 	const motion = petMotionEnabled(theme?.general);
+
+	// Unmount rather than hide: a display:none pet would still cost the three
+	// infinite animations (one of them a filter: hue-rotate sweep) on every page.
+	if (!petVisible(theme?.general)) return null;
 
 	return (
 		<Box
