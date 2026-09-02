@@ -2332,7 +2332,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          fail() { echo "::error::$*"; exit 1; }
+          # Same helper, same stream rule as the promotion worker's copy: keep
+          # the two identically-named `fail`s in step so neither drifts into a
+          # captured function and loses its own error message.
+          fail() { echo "::error::$*" >&2; exit 1; }
           encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
@@ -6287,7 +6290,13 @@ jobs:
           live_ref_sha() {
             GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
-          fail() { echo "::error::$*"; exit 1; }
+          # Annotation on stderr, for the same reason as gh_read_retry's: this
+          # helper is reached from inside make_attestation(), whose stdout is
+          # captured by `attestation="$(make_attestation "$final_head")"`. On
+          # stdout the message lands in that variable and the `exit 1` only
+          # leaves the substitution's subshell, so the step aborted under
+          # `set -e` with both streams empty and nothing to diagnose it by.
+          fail() { echo "::error::$*" >&2; exit 1; }
           (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
             || fail "Validated model audit context is oversized or contains control characters."
           case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac

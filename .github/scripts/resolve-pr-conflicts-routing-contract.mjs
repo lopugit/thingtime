@@ -199,40 +199,90 @@ function assertRoute(name, input, expected) {
 // GitHub refuses to generate (HTTP 422) poisoned the shared open-PR inventory
 // and took the repository-wide conflict scan down for *every* open PR, on every
 // push and every scheduled sweep, for as long as that PR stayed open.
-// Multi-line definitions only; the one-line helpers carry no diagnostic branch.
+// The rule has to survive one indirection, because the annotation does not have
+// to be written by the captured function itself. `make_attestation()` -- read as
+// `attestation="$(make_attestation "$final_head")"` -- carried no annotation of
+// its own, but its oversize-payload branch called the one-line `fail()` helper,
+// which echoed `::error::` on stdout. That message went into `$attestation`
+// instead of the log, and `fail`'s `exit 1` only left the substitution's
+// subshell, so the promotion worker aborted under `set -e` with *both* streams
+// empty. So one-line definitions are scanned too: they are exactly where the
+// terse `fail`/`die` helpers live, and a helper that is nothing but a diagnostic
+// branch is the likeliest one to be reached from inside a capture.
+// A helper is "loud" if any line of its definition annotates without `>&2`.
+// That is fine at top level and only becomes a fault under capture, so loudness
+// alone is not asserted on -- only calling a loud helper from a captured body
+// is. The loud set is collected per file rather than per `run:` block, which can
+// only over-approximate: it may flag a clean same-named helper, never miss a
+// loud one, and a guard that fails loudly beats one that misses silently.
+const ANNOTATION = /::(?:warning|notice|error)::/u;
+
+function shellFunctions(lines) {
+  const found = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const multi = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*$/u.exec(lines[index]);
+    if (multi) {
+      const closing = `${multi[1]}}`;
+      let end = -1;
+      for (let scan = index + 1; scan < lines.length; scan += 1) {
+        if (lines[scan] === closing) {
+          end = scan;
+          break;
+        }
+      }
+      found.push({ name: multi[2], start: index, end, multiLine: true });
+      continue;
+    }
+    const single = /^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*\S.*\}\s*$/u.exec(lines[index]);
+    if (single) {
+      found.push({ name: single[1], start: index, end: index, multiLine: false });
+    }
+  }
+  return found;
+}
+
 function assertCapturedStdoutStaysClean(source, label) {
   const lines = source.split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    const opened = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*$/u.exec(lines[index]);
-    if (!opened) {
+  const definitions = shellFunctions(lines);
+  const loud = new Set(
+    definitions
+      .filter(
+        ({ start, end }) =>
+          end >= 0 &&
+          lines.slice(start, end + 1).some((line) => ANNOTATION.test(line) && !/>&2/u.test(line)),
+      )
+      .map(({ name }) => name),
+  );
+  for (const { name, start, end, multiLine } of definitions) {
+    if (!multiLine) {
       continue;
     }
-    const [, indent, name] = opened;
     if (!new RegExp(`\\$\\(\\s*${name}\\b`, "u").test(source)) {
       continue;
-    }
-    const closing = `${indent}}`;
-    let end = -1;
-    for (let scan = index + 1; scan < lines.length; scan += 1) {
-      if (lines[scan] === closing) {
-        end = scan;
-        break;
-      }
     }
     assert.notStrictEqual(
       end,
       -1,
-      `${label}:${index + 1}: ${name}() must close at its own indentation`,
+      `${label}:${start + 1}: ${name}() must close at its own indentation`,
     );
-    for (let line = index; line <= end; line += 1) {
-      if (!/::(?:warning|notice|error)::/u.test(lines[line])) {
-        continue;
+    for (let line = start; line <= end; line += 1) {
+      if (ANNOTATION.test(lines[line])) {
+        assert.match(
+          lines[line],
+          />&2/u,
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so this annotation must be redirected to stderr`,
+        );
       }
-      assert.match(
-        lines[line],
-        />&2/u,
-        `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so this annotation must be redirected to stderr`,
-      );
+      for (const helper of loud) {
+        if (helper === name || new RegExp(`^\\s*${helper}\\(\\)`, "u").test(lines[line])) {
+          continue;
+        }
+        assert.doesNotMatch(
+          lines[line],
+          new RegExp(`(?:^|\\|\\||&&|[;(|]|\\bthen\\b|\\belse\\b|\\bdo\\b)\\s*${helper}\\b`, "u"),
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so it must not call ${helper}(), which annotates on stdout`,
+        );
+      }
     }
   }
 }
@@ -244,8 +294,13 @@ function assertWorkflowSource() {
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
   const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
+  // Every shell surface of this control plane, not just the two workflows: the
+  // rebase action carries six captured helpers of its own (hash_trusted_tree,
+  // hash_rebase_state, classify_output), and the sources are already read here.
   assertCapturedStdoutStaysClean(source, "resolve-pr-conflicts.yml");
   assertCapturedStdoutStaysClean(rebaseSource, "rebase-pr-stacks.yml");
+  assertCapturedStdoutStaysClean(rebaseActionSource, "rebase-conflict-round/action.yml");
+  assertCapturedStdoutStaysClean(lopuActionSource, "lopu-agent/action.yml");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
