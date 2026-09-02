@@ -12,9 +12,12 @@ import { listWebpageDemos } from '~/api/utils/webpages/demos';
 //   ?family=<key>  only that family
 //   ?kind=<kind>   section | page | component
 //   ?slug=<slug>   one demo, WITH its block tree (for "use this template")
+//   ?suite=<key>   one behaviour suite WITH its installable bundle (schemas,
+//                  components, actions, data, page — own-mode references)
 //
-// Public and read-only: the catalog is code, the seeded census is one indexed
-// projection query. The gallery paints the catalog before this answers.
+// Every response also lists the behaviour suites (summary + seeded flag).
+// Public and read-only: the catalogs are code, the seeded census is one
+// indexed projection query. The gallery paints the catalog before this answers.
 export const loader = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 
@@ -27,7 +30,8 @@ export const loader = async ({ request }: { request: Request }) => {
 	const result = await listWebpageDemos({
 		family: params.get('family') || undefined,
 		kind: params.get('kind') || undefined,
-		slug: params.get('slug') || undefined
+		slug: params.get('slug') || undefined,
+		suite: params.get('suite') || undefined
 	});
 	if (result.ok === false) {
 		return json({ ok: false, error: result.error }, { status: result.status });

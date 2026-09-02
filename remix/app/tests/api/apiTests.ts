@@ -2309,6 +2309,68 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'webpages-demos-suites-listed',
+    name: 'Demo library lists behaviour suites',
+    description: 'Every response carries suites[] — bundles of schema/component/action/data/page things — with counts, the system ids, and a seeded flag.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=video',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.suites) &&
+        body.suites.length >= 10 &&
+        body.suites.every(
+          (suite: any) =>
+            typeof suite?.key === 'string' &&
+            typeof suite?.pageId === 'string' &&
+            suite.pageId.startsWith('webpage-demo-suite-') &&
+            Array.isArray(suite?.actionIds) &&
+            suite.actionIds.length > 0 &&
+            typeof suite?.counts?.actions === 'number' &&
+            typeof suite?.seeded === 'boolean'
+        ),
+      'Behaviour suites listed with counts, ids, and seeded flags.'
+    )
+  },
+  {
+    id: 'webpages-demos-suite-bundle',
+    name: 'Demo library returns an installable suite bundle',
+    description: 'suite=guestbook adds suite.bundle in OWN mode: schemas by name, actions by actionKey, data carrying schema names, and the page — the parts a client posts to /things to install.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=guestbook',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.suite?.key === 'guestbook' &&
+        body.suite?.bundle?.mode === 'own' &&
+        Array.isArray(body.suite.bundle?.schemas) &&
+        body.suite.bundle.schemas.length >= 1 &&
+        Array.isArray(body.suite.bundle?.actions) &&
+        body.suite.bundle.actions.every((action: any) => typeof action?.crystal?.actionKey === 'string' && Array.isArray(action.crystal?.steps)) &&
+        body.suite.bundle.actions.some((action: any) => JSON.stringify(action.crystal.steps).includes('"demo-guestbook-entry"')) &&
+        Array.isArray(body.suite.bundle?.data) &&
+        body.suite.bundle.data.every((entry: any) => entry?.crystal?.schema === 'demo-guestbook-entry') &&
+        Array.isArray(body.suite.bundle?.page?.crystal?.blocks),
+      'Suite bundle carried own-mode schemas, actions, data, and page.'
+    )
+  },
+  {
+    id: 'webpages-demos-unknown-suite',
+    name: 'Demo library unknown suite',
+    description: 'suite=definitely-missing-suite resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=definitely-missing-suite',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown suite returned a 404 error shape.')
+  },
+  {
     id: 'webpages-demos-unknown-family',
     name: 'Demo library validates the family filter',
     description: 'An unknown family is a 400 error shape; an unknown slug is a 404.',

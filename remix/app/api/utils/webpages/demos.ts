@@ -2,6 +2,14 @@ import { getThingsCollection } from '../mongodb/collections';
 import { fail, type Fail } from '../things/things';
 import { COMPONENT_KEY_PATTERN, MAX_COMPONENT_KEY_CHARS } from '~/schemas/registry';
 import {
+	BEHAVIOUR_SUITES,
+	getBehaviourSuite,
+	materializeSuite,
+	summarizeBehaviourSuite,
+	type BehaviourSuiteSummary,
+	type MaterializedSuite
+} from '~/schemas/behaviourSuites';
+import {
 	WEBPAGE_DEMO_FAMILIES,
 	getWebpageDemo,
 	getWebpageDemos,
@@ -13,13 +21,14 @@ import {
 	type WebpageDemoSummary
 } from '~/schemas/webpageDemos';
 
-// Read model for the builder demo library: the deterministic catalog
-// (schemas/webpageDemos) joined with ONE projection query for which demos are
-// seeded on this deployment. The catalog is code, so listing never touches
-// the DB for content — only the seeded census does, and it is bounded by the
-// catalog size.
+// Read model for the builder demo library: the deterministic catalogs
+// (schemas/webpageDemos + schemas/behaviourSuites) joined with ONE projection
+// query for which demos are seeded on this deployment. The catalogs are code,
+// so listing never touches the DB for content — only the seeded census does,
+// and it is bounded by the catalog size.
 
 export type ListedWebpageDemo = WebpageDemoSummary & { seeded: boolean };
+export type ListedBehaviourSuite = BehaviourSuiteSummary & { seeded: boolean };
 
 export type ListWebpageDemosResult = {
 	ok: true;
@@ -27,8 +36,12 @@ export type ListWebpageDemosResult = {
 	seededCount: number;
 	families: Array<WebpageDemoFamily & { count: number }>;
 	demos: ListedWebpageDemo[];
+	suites: ListedBehaviourSuite[];
 	// present only for ?slug= — the full block tree for "use this template"
 	demo?: ListedWebpageDemo & { crystal: Record<string, unknown> };
+	// present only for ?suite= — the installable bundle (own-mode refs) plus
+	// the system copy's ids for linking when seeded
+	suite?: ListedBehaviourSuite & { bundle: MaterializedSuite };
 };
 
 const DEMO_KINDS = new Set(['section', 'page', 'component']);
@@ -37,12 +50,17 @@ const seededDemoShareIds = async (): Promise<Set<string>> => {
 	const things = await getThingsCollection();
 	const docs = await things
 		.find({ thingtime: 'webpage', ownerId: 'system', tags: 'demo' } as any, { projection: { shareId: 1 } })
-		.limit(getWebpageDemos().length + 64)
+		.limit(getWebpageDemos().length + BEHAVIOUR_SUITES.length + 64)
 		.toArray();
 	return new Set(docs.map((doc: any) => doc.shareId).filter((id: unknown): id is string => typeof id === 'string'));
 };
 
-export const listWebpageDemos = async (query: { family?: unknown; kind?: unknown; slug?: unknown }): Promise<ListWebpageDemosResult | Fail> => {
+export const listWebpageDemos = async (query: {
+	family?: unknown;
+	kind?: unknown;
+	slug?: unknown;
+	suite?: unknown;
+}): Promise<ListWebpageDemosResult | Fail> => {
 	const family = typeof query.family === 'string' ? query.family.trim() : '';
 	if (family && !WEBPAGE_DEMO_FAMILIES.some((entry) => entry.key === family)) {
 		return fail(400, `Unknown demo family — one of ${WEBPAGE_DEMO_FAMILIES.map((entry) => entry.key).join(', ')}`);
@@ -55,22 +73,37 @@ export const listWebpageDemos = async (query: { family?: unknown; kind?: unknown
 	}
 	const single = slug ? getWebpageDemo(slug) : null;
 	if (slug && !single) return fail(404, 'Demo not found');
+	const suiteKey = typeof query.suite === 'string' ? query.suite.trim() : '';
+	if (suiteKey && (suiteKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(suiteKey))) {
+		return fail(400, 'suite must be a lowercase-dashed suite key');
+	}
+	const singleSuite = suiteKey ? getBehaviourSuite(suiteKey) : null;
+	if (suiteKey && !singleSuite) return fail(404, 'Behaviour suite not found');
 
 	const seeded = await seededDemoShareIds();
 	const all = getWebpageDemos();
 	const demos = all
 		.filter((demo) => (!family || demo.family === family) && (!kind || demo.kind === kind))
 		.map((demo) => ({ ...summarizeWebpageDemo(demo), seeded: seeded.has(webpageDemoShareId(demo.slug)) }));
+	const suites = BEHAVIOUR_SUITES.map((suite) => {
+		const summary = summarizeBehaviourSuite(suite);
+		return { ...summary, seeded: seeded.has(summary.pageId) };
+	});
 
 	const result: ListWebpageDemosResult = {
 		ok: true,
 		total: all.length,
 		seededCount: all.filter((demo) => seeded.has(webpageDemoShareId(demo.slug))).length,
 		families: webpageDemoFamilyCounts(),
-		demos
+		demos,
+		suites
 	};
 	if (single) {
 		result.demo = { ...summarizeWebpageDemo(single), seeded: seeded.has(webpageDemoShareId(single.slug)), crystal: webpageDemoCrystal(single) };
+	}
+	if (singleSuite) {
+		const summary = summarizeBehaviourSuite(singleSuite);
+		result.suite = { ...summary, seeded: seeded.has(summary.pageId), bundle: materializeSuite(singleSuite, 'own') };
 	}
 	return result;
 };

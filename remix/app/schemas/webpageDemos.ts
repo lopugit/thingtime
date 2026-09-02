@@ -905,7 +905,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		minimal: (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				body(ctx, 'legal', `© 2026 ${ctx.copy.brand}`, 13, { color: ctx.tone.muted }),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.text })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.text, 'white-space': 'nowrap' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
 			], { gap: 4, css: { 'border-top': `1px solid ${ctx.tone.border}`, padding: '20px 0', 'align-items': 'center', 'flex-wrap': 'wrap' } })
 		],
 		'cta-links': (ctx) => [
@@ -922,19 +922,19 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		simple: (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				logo(ctx, 'logo'),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text, 'font-weight': '500' })), { gap: 5, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 4).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text, 'font-weight': '500', 'white-space': 'nowrap' })), { gap: 5, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } })
 			], { gap: 4, css: { padding: '14px 0', 'align-items': 'center', 'border-bottom': `1px solid ${ctx.tone.border}` } })
 		],
 		centered: (ctx) => [
 			container(ctx, 'wrap', 'column', [
 				logo(ctx, 'logo'),
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 5).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.muted, 'text-transform': 'uppercase', 'letter-spacing': '0.08em' })), { gap: 5, align: 'center', css: { 'flex-wrap': 'wrap', 'justify-content': 'center' } })
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 5).map((link, index) => body(ctx, `link-${index}`, link, 13, { color: ctx.tone.muted, 'text-transform': 'uppercase', 'letter-spacing': '0.08em', 'white-space': 'nowrap' })), { gap: 5, align: 'center', css: { 'flex-wrap': 'wrap', 'justify-content': 'center' } })
 			], { gap: 3, align: 'center', css: { padding: '20px 0', 'border-bottom': `1px solid ${ctx.tone.border}` } })
 		],
 		'with-cta': (ctx) => [
 			container(ctx, 'wrap', 'row', [
 				{ id: ctx.id('brand'), type: 'text', text: ctx.copy.brand, style: 'heading', tag: 'span', css: typo(ctx.tone, 18, 800) },
-				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 3).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } }),
+				container(ctx, 'links', 'row', ctx.copy.links.slice(0, 3).map((link, index) => body(ctx, `link-${index}`, link, 14, { color: ctx.tone.text, 'white-space': 'nowrap' })), { gap: 4, css: { 'margin-left': 'auto', 'flex-wrap': 'wrap' } }),
 				button(ctx, 'cta', ctx.copy.ctaPrimary)
 			], { gap: 5, css: { padding: '12px 0', 'align-items': 'center', 'flex-wrap': 'wrap' } })
 		]
@@ -1515,4 +1515,21 @@ export const webpageDemoFamilyCounts = (): Array<WebpageDemoFamily & { count: nu
 	const counts = new Map<string, number>();
 	for (const demo of getWebpageDemos()) counts.set(demo.family, (counts.get(demo.family) || 0) + 1);
 	return WEBPAGE_DEMO_FAMILIES.map((family) => ({ ...family, count: counts.get(family.key) || 0 }));
+};
+
+// The block helpers, exported for sibling catalogs (schemas/behaviourSuites)
+// so every generated page shares one typographic and layout idiom.
+export type DemoBlockCtx = Ctx;
+export const demoBlockKit = {
+	makeIds,
+	toneByKey: (key: string): Tone => toneByKey.get(key) || TONES[0],
+	defaultCopy: COPY[0],
+	heading,
+	eyebrow,
+	body,
+	button,
+	container,
+	card,
+	artwork,
+	html
 };

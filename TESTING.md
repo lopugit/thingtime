@@ -4281,7 +4281,23 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       after which every demo opens at /p/webpage-demo-<slug> and in the
       builder (edits fork, the seed never changes) and the gallery shows 🌱
       seeded + the /p/ link; GET /admin/webpages/seed reports
-      siteSeeded/demosSeeded/demosTotal alongside totalSeeded.
+      siteSeeded/demosSeeded/demosTotal/suitesSeeded/suitesTotal alongside
+      totalSeeded.
+- [ ] Behaviour suites (`schemas/behaviourSuites.ts`, `pnpm --dir remix run
+      test:schemas` → behaviourSuites asserts every schema/component/action/
+      data/page crystal clears its kind gate in BOTH materialisations): the
+      🧪 Suites tab on /builder/demos lists 14 suites with counts; Preview
+      renders the suite page with its ttAction controls from the catalog (no
+      seed needed); Install suite ✨ (signed-in) creates the viewer's OWN
+      schemas → components → actions → data (stamped schemaId) → page through
+      /things and opens /p/<page>; clicking a control there runs the viewer's
+      own action (source component → owner-only resolution) and the Lopu
+      toast links to the run record; capture-and-qualify / open-with-note
+      exercise actions.invoke + $step refs + ttConcat; complete/escalate/pay
+      exercise things.get + things.update by id. Seeded suites (admin
+      seed-demos) are browsable on /schemas, /components, /actions and
+      /p/webpage-demo-suite-<key>; running action-demo-* from /actions mints
+      the viewer's own data things against the public schema id.
 - [ ] Nested blocks select on click: with a container (grid/row/column) holding
       children, clicking a CHILD selects the child (inspector shows its
       fields), clicking the container's own area selects the container —
