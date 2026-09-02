@@ -1588,6 +1588,22 @@ function assertAdminModelRouting(
       }
       return null;
     };
+    // The probe exemption below keys on this job name, so losing the name
+    // retires the exemption without retiring the probe. That direction is
+    // fail-closed, but its message is not: the probe falls through to the
+    // generic rule and reports "every Lopu call receives the secondary
+    // API-key slot", and a maintainer who acts on that message literally
+    // hands the vault probe a static slot -- the masking regression the
+    // exemption exists to prevent -- whereupon the contract goes green on it.
+    // Verified: rename the job and the suite reports exactly that line, and
+    // adding the two slots it asks for turns the suite green. Name the real
+    // cause here so that misdirecting message is never the one that gets read.
+    if (path === ".github/workflows/resolve-pr-conflicts.yml") {
+      assert.ok(
+        lines.some((line) => /^ {2}verify_credential_vault:\s*$/u.test(line)),
+        `${path}: the credential-probe exemption keys on the verify_credential_vault job, which is missing`,
+      );
+    }
     for (let index = 0; index < lines.length; index += 1) {
       // Keep this prefix set in step with `aiRuntimePattern` above, which is
       // what selected these files. It already accepts `control-plane/`; this
@@ -1619,10 +1635,39 @@ function assertAdminModelRouting(
       // direction for a credential contract.
       const inVaultProbeJob = enclosingJob(index) === "verify_credential_vault";
       if (inVaultProbeJob && /^\s*id:\s*live_probe\s*$/mu.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
+        // Assert both halves of the exemption, not just the positive one.
+        // Requiring the router secret proves the probe can reach the
+        // waterfall; it does not stop the probe from *also* being handed a
+        // static slot, and a probe carrying one authenticates on that slot and
+        // reports green while the vault is down -- the exact outage it exists
+        // to catch, and the exact reason the paragraph above gives for
+        // exempting it. Left unasserted, the exemption rests on a property
+        // nothing checks, which is how it silently becomes an unconditional
+        // skip for the one call site allowed to carry no slots.
+        //
+        // Scope both assertions to the probe step. `call` is a fixed 32-line
+        // window that here runs past this step and into the next job, so a
+        // negative assertion over it would answer for lines the probe does not
+        // own. The step is every following line that is blank or indented at
+        // least as far as this `uses:`, which ends at the next `- name:` --
+        // taken from the line's own indentation so this does not assume the
+        // six-space step depth of a workflow job over a composite action's.
+        const stepIndent = /^ */u.exec(lines[index])[0].length;
+        const stepEnd = lines
+          .slice(index + 1)
+          .findIndex((line) => line.trim() !== "" && /^ */u.exec(line)[0].length < stepIndent);
+        const probeStep = lines
+          .slice(index, stepEnd === -1 ? lines.length : index + 1 + stepEnd)
+          .join("\n");
         assert.match(
-          call,
-          /thingtime-ci-router-secret:/u,
+          probeStep,
+          /^\s+thingtime-ci-router-secret:/mu,
           `${path}:${index + 1}: the credential probe must authenticate through the Thingtime waterfall`,
+        );
+        assert.doesNotMatch(
+          probeStep,
+          /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
+          `${path}:${index + 1}: the credential probe must exercise only the Thingtime waterfall, never a static slot`,
         );
         continue;
       }
