@@ -27,6 +27,44 @@ Production `things_v2` (measured read-only on 2026-09-02): 1,824,527 docs, 1,177
 4. The migrations panel is at `/migrations` (docs previously pointed at `/docs/schemas`); an env-allowlisted admin username cannot be registered, so bootstrap a local admin by registering first or via `POST /api/v1/admin/set-admin`.
 5. **GitHub stopped synchronizing the PR head** after the graphify refresh commit: `scripts/graphify update .` pruned the 170 snapshot files develop tracks (1.4 GB, 37 M lines), and GitHub's compare API answered "this diff is taking too long to generate" — the PR sat at the docs commit with `commits: 2` for 40 minutes while the branch was three commits ahead. Restoring develop's `graphify-out` on the branch (`git checkout origin/develop -- graphify-out`, drop the branch-only snapshot) synchronized the PR in 10 seconds. This PR therefore carries no graphify-out changes; the graph refresh belongs to the merge-time hooks. The `api.admin-migrations` / `api.mongodb-raw-results` bumps also had to move from the unread `featureVersion` field to `contractVersion`, which is what the capabilities manifest publishes.
 
+## Review round (Lopu, 2026-09-02) — two defects fixed in `ciControlRelocationCore.ts`
+
+Both were reproduced against a real MongoDB 8.0.29 replica set before and after
+the fix, and both are covered by new unit tests (the file goes 11 → 13 tests).
+
+1. **`relocate-ci-control-telemetry` silently lost shareId-less rows.** `things`
+   indexes `shareId` unique **sparse**, so a legacy `ci-*` row can legitimately
+   carry none. The copy was keyed on `{ shareId: relocated.shareId }`, which for
+   such a row serializes to `{ shareId: null }`: the first one upserted a
+   `shareId: null` doc and every later one *matched* it, was counted as
+   `copied`, and was then deleted from `things`. Repro: two shareId-less rows in
+   → one row on the satellite, both deleted, `copied: 2`. Unrecoverable, and
+   silent — the migration reported success. Fix: `relocationShareId()` falls
+   back to a deterministic `ci-relocated-<_id>` key (cannot collide with a real
+   `ci-` + 48-hex id, and re-runs still insert-if-absent — verified). Repro now
+   gives 4 in → 4 out with a truthful count.
+2. **The boot ensure could abort `rebuild-things-indexes` mid-run.** This PR's
+   own `pruneRebuildTwins` runs inside `ensureIndexes`, which any bootstrap
+   caller (a signup on a fresh serverless instance) can trigger during the
+   multi-minute step-3 rebuild. It drops the live `__rebuild` twin, so the
+   rebuild's own `dropIndex` raised `IndexNotFound` (27) and the run died
+   partway — skipping the remaining indexes and the closing `ensurePlan()`.
+   Repro: `THREW code=27`, 3 of 3 indexes not rebuilt. Fix: `dropIndexIfPresent`
+   — every drop in the rebuild is "converge this name to absent", so an index
+   already gone is the state it wanted. Repro now completes 3 of 3 while the
+   pruner drops 2 twins underneath it.
+
+Independently re-verified after the fixes (MongoDB 8.0.29): 7 plan indexes
+rebuilt one at a time, 3 unique constraints held by twins, index name set
+identical before/after, zero twins left, 79 concurrent duplicate-`shareId`
+inserts **all** rejected (0 accepted), wildcard text index round-tripped with
+identical weights and `$text` still working, TTL + partial filter preserved.
+
+The partial-`kind` swap was also confirmed on 8.0.29: same-key indexes differing
+only by `partialFilterExpression` coexist (so the create-then-drop swap really
+is slot-safe), and both `{kind:'post'}` and `{kind:{$in:[…]}}` use the partial
+index — the feed `$or` still plans `SORT_MERGE`, no blocking sort.
+
 ## Verification
 
 - Unit suites green: collections 34, ci-control 59, migrations 48, schemas 109, capabilities 4, migration UI 5; typecheck ratchet at baseline (108).

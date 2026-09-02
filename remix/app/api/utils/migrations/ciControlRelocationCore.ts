@@ -62,6 +62,21 @@ const baseTimeOf = (doc: any, now: Date): Date => {
   return now;
 };
 
+// The key the copy is deduplicated on. Live CI writers always stamp a
+// deterministic `stableShareId` (`ci-` + 48 hex), but `things` indexes shareId
+// UNIQUE **SPARSE** — a row written before that stamp existed, or by any path
+// that skipped it, legitimately carries none, and this migration sweeps the
+// whole history of the collection. Such a row must not be keyed on a missing
+// shareId: the upsert filter would serialize to `{shareId: null}`, so the
+// FIRST one inserts a `shareId: null` doc and every later one silently matches
+// it, is counted as copied, and is then deleted from `things` — unrecoverable
+// loss (reproduced against MongoDB 8.0: two shareId-less rows in, one row out).
+// The `_id` fallback is deterministic, so re-running still inserts-if-absent,
+// and it cannot collide with a real CI id ('relocated' is not hex). Every
+// MongoDB document has an `_id`, which the batch cursor already relies on.
+export const relocationShareId = (doc: any): string =>
+  typeof doc?.shareId === 'string' && doc.shareId ? doc.shareId : `ci-relocated-${String(doc?._id)}`;
+
 // The satellite copy of a things row: same Thing envelope, ciControl schema
 // version, root expiresAt from the retention policy (measured from the row's
 // last update so already-old telemetry is not resurrected for a full window).
@@ -78,6 +93,8 @@ export const relocatedCiDoc = (
   if (expiresAt && expiresAt.getTime() <= options.now.getTime()) return null;
   return {
     ...rest,
+    // never inherited from `rest`: a row with no shareId gets its _id fallback
+    shareId: relocationShareId(doc),
     schemaVersion: options.targetSchemaVersion,
     ...(expiresAt ? { expiresAt } : {})
   };
@@ -179,6 +196,22 @@ export type RebuildReport = { rebuilt: string[]; skipped: string[]; twins: strin
 
 export const MONGODB_INDEX_LIMIT = 64;
 
+// Every drop below is "converge this name to absent", and the desired state is
+// reached whether we dropped it or someone else did. Tolerating IndexNotFound
+// matters because the BOOT ensure prunes `__rebuild` twins
+// (collections.ts pruneRebuildTwins) and any bootstrap caller — a signup
+// reaching ensureIndexes on a fresh serverless instance — can fire while this
+// migration is mid-run. Without this the rebuild dies on code 27 partway
+// through, skipping the remaining indexes AND the closing ensurePlan()
+// (reproduced against MongoDB 8.0).
+const dropIndexIfPresent = async (collection: RebuildCollection, name: string) => {
+  try {
+    await collection.dropIndex(name);
+  } catch (error: any) {
+    if (error?.code !== 27 && error?.codeName !== 'IndexNotFound') throw error;
+  }
+};
+
 // listIndexes output → the (keys, options) createIndex needs to recreate the
 // same index. Server-managed fields (v, ns, background, *IndexVersion) are
 // dropped; a text index is listed as {_fts,_ftsx} and must be rebuilt from its
@@ -218,7 +251,7 @@ export const reconcileRebuildTwins = async (options: {
     if (options.assertLease) await options.assertLease();
     const original = twin.name.slice(0, -'__rebuild'.length);
     if (!names.has(original)) orphaned = true;
-    await options.collection.dropIndex(twin.name);
+    await dropIndexIfPresent(options.collection, twin.name);
     recovered.push(twin.name);
   }
   if (orphaned) await options.ensurePlan();
@@ -272,13 +305,13 @@ export const rebuildPlanIndexes = async (options: {
         report.unprotected.push(index.name);
       }
     }
-    await options.collection.dropIndex(index.name);
+    await dropIndexIfPresent(options.collection, index.name);
     count -= 1;
     await options.collection.createIndex(spec.keys, spec.options);
     count += 1;
     report.rebuilt.push(index.name);
     if (twin) {
-      await options.collection.dropIndex(String(twin.name));
+      await dropIndexIfPresent(options.collection, String(twin.name));
       count -= 1;
     }
   }

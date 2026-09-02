@@ -7,7 +7,8 @@ import {
   rebuildTwinOptions,
   reconcileRebuildTwins,
   relocateCiControlRows,
-  relocatedCiDoc
+  relocatedCiDoc,
+  relocationShareId
 } from './ciControlRelocationCore.ts';
 import { ciRetentionPolicy, DEFAULT_CI_RETENTION_DAYS } from '../ciControl/retentionCore.ts';
 
@@ -122,6 +123,43 @@ test('relocation copies live rows insert-if-absent, deletes every matched row, a
   }
   // two batches of two plus a final short batch
   assert.deepEqual(source.deletes.map((ids) => ids.length), [2, 2]);
+});
+
+test('shareId-less rows get a deterministic _id key instead of collapsing into one null doc', async () => {
+  // `things` indexes shareId unique SPARSE, so a legacy ci row can carry none.
+  // Keyed on a missing shareId every such row upserts against {shareId: null}:
+  // the first inserts, the rest silently match it and are then deleted from
+  // things. Verified against MongoDB 8.0 before the fix — two rows in, one out.
+  const bare = (id: number, note: string) => ({
+    _id: id,
+    thingtime: ['ci-event'],
+    crystal: { repository: 'lopugit/thingtime', note },
+    createdAt: new Date(NOW.getTime() - DAY_MS),
+    updatedAt: new Date(NOW.getTime() - DAY_MS)
+  });
+  const source = fakeSource([bare(1, 'first'), bare(2, 'second'), row(3, 'ci-event', 1)]);
+  const target = fakeTarget();
+  const report = await relocateCiControlRows({
+    source,
+    target,
+    kinds: ['ci-event'],
+    targetSchemaVersion: 1,
+    dryRun: false,
+    policy,
+    now: NOW
+  });
+  assert.equal(report.copied, 3);
+  // three DISTINCT upsert keys — nothing is deleted from things without a copy
+  assert.deepEqual(
+    target.writes.map((write) => write.updateOne.filter.shareId),
+    ['ci-relocated-1', 'ci-relocated-2', 'ci-ci-event-3']
+  );
+  for (const write of target.writes) assert.equal(write.updateOne.filter.shareId, write.updateOne.update.$setOnInsert.shareId);
+  // the fallback is derived from the immutable source _id, so a re-run keys
+  // the same row the same way and inserts nothing new; a row that HAS a
+  // shareId always keeps its own
+  assert.equal(relocationShareId(bare(1, 'first')), 'ci-relocated-1');
+  assert.equal(relocationShareId(row(7, 'ci-event', 1)), 'ci-ci-event-7');
 });
 
 test('a dry run counts and classifies without writing or deleting anything', async () => {
@@ -286,6 +324,52 @@ test('an interrupted run is recovered first: twins are dropped and orphaned orig
   });
   assert.deepEqual(recovered, ['shareId_1__rebuild', 'uniqueKeys_1__rebuild']);
   assert.deepEqual(actions, ['drop:shareId_1__rebuild', 'drop:uniqueKeys_1__rebuild', 'ensure-plan']);
+});
+
+test('the boot ensure pruning a twin mid-rebuild does not abort the run', async () => {
+  // collections.ts pruneRebuildTwins runs on every bootstrap ensureIndexes, so
+  // a signup on a fresh instance can drop the live twin while this migration
+  // holds it. dropIndex then raises IndexNotFound (27) — verified on MongoDB
+  // 8.0 — and the rebuild must treat "already absent" as the state it wanted.
+  const live = new Set(['_id_', 'shareId_1', 'thingtime_1_createdAt_-1']);
+  const rebuilt: string[] = [];
+  const collection = {
+    async indexes() {
+      return [
+        { name: '_id_', key: { _id: 1 } },
+        { name: 'shareId_1', key: { shareId: 1 }, unique: true, sparse: true },
+        { name: 'thingtime_1_createdAt_-1', key: { thingtime: 1, createdAt: -1 } }
+      ].filter((index) => live.has(index.name));
+    },
+    async createIndex(_keys: Record<string, unknown>, options: Record<string, unknown> = {}) {
+      const name = String(options.name);
+      live.add(name);
+      // the boot pruner races in the instant the twin exists
+      if (name.endsWith('__rebuild')) live.delete(name);
+    },
+    async dropIndex(name: string) {
+      if (!live.has(name)) {
+        const error: any = new Error(`index not found with name [${name}]`);
+        error.code = 27;
+        error.codeName = 'IndexNotFound';
+        throw error;
+      }
+      live.delete(name);
+      rebuilt.push(name);
+    }
+  };
+  const report = await rebuildPlanIndexes({
+    collection,
+    planNames: new Set(['shareId_1', 'thingtime_1_createdAt_-1']),
+    ensurePlan: async () => {
+      live.add('shareId_1');
+      live.add('thingtime_1_createdAt_-1');
+    },
+    dryRun: false
+  });
+  // both plan indexes still rebuilt, and the closing ensurePlan() still ran
+  assert.deepEqual(report.rebuilt, ['shareId_1', 'thingtime_1_createdAt_-1']);
+  assert.deepEqual([...live].sort(), ['_id_', 'shareId_1', 'thingtime_1_createdAt_-1']);
 });
 
 test('a text index is recreated from its weights, and server-managed fields are dropped', () => {
