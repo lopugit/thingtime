@@ -891,6 +891,29 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
   assert.match(codeql, /git\/commits\/\$merge_sha/u);
   assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  // A stale merge ref and an absent one are different facts and must stay
+  // separately recorded. The freshness check clears `merge_sha`; only a PR
+  // GitHub cannot merge clears `mergeable_pr`, and only that PR has no
+  // `pull_request` run of its own. Gating listener ownership on the cleared
+  // `merge_sha` is what sent a dispatched backfill down the exact-head
+  // fallback alongside a live `pull_request` merge-ref analysis, split one
+  // PR's two languages across two refs, and closed its aggregate CodeQL check
+  // `timed_out` (PR #557 @ bb151336, run 33624842347).
+  assert.match(
+    codeql,
+    /mergeable_pr=true/u,
+    "the analyzer scope records that GitHub published a merge ref independently of whether that ref is current",
+  );
+  assert.match(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ "\$mergeable_pr" = true \] \\\n\s+&& \[ "\$BACKFILL_LISTENER_OWNED" != true \]; then\n\s+analyze=false/u,
+    "a mergeable listener-owned PR is never centrally re-analyzed on its exact head beside its own pull_request run",
+  );
+  assert.doesNotMatch(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ -n "\$merge_sha" \]/u,
+    "listener ownership must not be decided by the freshness-cleared merge SHA",
+  );
   assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
   assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
   assert.match(codeql, /^      security-events: read$/mu);
