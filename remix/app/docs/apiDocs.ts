@@ -8567,13 +8567,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
-      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience.',
+      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience. Saving a webpage thing (create or update) additionally binds the owner\'s own ready builder uploads referenced by its media blocks to the page — clearing their draft expiry and inheriting the page\'s audience; foreign or external references are left untouched.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -10004,6 +10004,72 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-resolve',
+    group: 'webpages',
+    title: 'Resolve a webpage',
+    endpoint: '/api/v1/webpages/resolve',
+    summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
+    detail:
+      'Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
+      'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
+      'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
+      'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +
+      'viewer-owned personalised doc outranks the seeded system default), or global=1 (the site-global block ' +
+      'doc) — together with every referenced component in one batched query. Component refs resolve exact ' +
+      'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
+      'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
+      'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
+      'only reads.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers resolve public pages and the seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with exactly one of id=<shareId>, path=</route>, or global=1.',
+      'Read page (null when no doc matches a path/global lookup) and source ("user" | "system").',
+      'Render blocks by looking each component block’s ref up in the refs map, then in components[].',
+      'Treat a null refs entry as an unresolvable component (render a placeholder).',
+      'Handle 400 for a malformed query, 404 for an id that doesn’t resolve, and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Resolve a standalone page',
+        description: 'The read behind /p/<id>.',
+        method: 'GET',
+        query: { id: 'my-launch-page' }
+      },
+      {
+        name: 'Resolve a site page',
+        description: 'The block doc bound to an app route (viewer-personalised when a fork exists).',
+        method: 'GET',
+        query: { path: '/status' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Page and referenced components returned.',
+        body: {
+          ok: true,
+          page: {
+            id: 'webpage-route-status',
+            thingtime: ['webpage'],
+            crystal: {
+              name: 'Status',
+              pageKey: 'route-status',
+              siteRoute: '/status',
+              blocks: [{ id: 'native-status', type: 'native', native: 'status' }]
+            }
+          },
+          source: 'system',
+          components: [],
+          refs: {}
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -10054,6 +10120,50 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Seed report returned.',
         body: { ok: true, received: 1, created: 1, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 1 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-webpages-seed',
+    group: 'admin',
+    title: 'Seed site webpages',
+    endpoint: '/api/v1/admin/webpages/seed',
+    summary: 'Upserts the built-in site-page docs (one webpage thing per app route, native-block bodies) plus the site-global doc.',
+    detail:
+      'The write path that makes every built-in Thingtime route a block-based site: a deterministic server-side ' +
+      'table seeds one system-owned webpage thing per app route (shareId webpage-route-<key>, the prefix is ' +
+      'reserved against squatters) whose block list is the locked native block for that screen, plus the empty ' +
+      'site-global doc (webpage-site-global). storageClass "control", acl ["tt:all"], hashed webpage:<slug> ' +
+      'uniqueKeys. Crystals pass validateThingtimeCrystal(["webpage"]) — the exact write gate user pages clear. ' +
+      'Idempotent and self-healing: re-runs leave matching docs unchanged, refresh drifted crystals/tags in ' +
+      'place, and skip (never touch) foreign docs squatting a destination id. Viewers personalise site pages by ' +
+      'saving their own webpage twin (same pageKey/siteRoute) through the builder — the seeds themselves never ' +
+      'change per user. GET returns the seed census without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST with an empty body — the seed table is server-side and deterministic.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded } to check the census without writing.',
+      'Re-run after adding routes to the seed table — converges, never duplicates.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed the site pages',
+        description: 'Upsert every built-in route doc + the global doc.',
+        method: 'POST',
+        body: {}
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: { ok: true, received: 26, created: 26, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 26 }
       }
     ]
   }),

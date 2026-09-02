@@ -815,6 +815,7 @@ and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
 host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
+## Components library (`/components` + the external catalog)
 ## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
@@ -823,14 +824,18 @@ through the sanitising allowlist renderers) plus arg descriptors the page
 turns into a live tester. "Save version" stores the current tester state as a
 user-owned component thing in your Things.
 
-The 2800-component platform catalog (styled after Ant Design, Bootstrap, MUI,
+The platform component catalog (styled after Ant Design, Bootstrap, MUI,
 shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
-lives in the repo as a folder database: one JSON file per component under
-`components-db/components/<library>/<slug>.json` plus an `index.json`
-manifest, produced deterministically by `scripts/components-db/generate.mjs`
-from archetype builders in `scripts/components-db/lib/archetypes/`. The
-manifest's `count`/`target` are the source of truth for the catalog size —
-tranche 2 grew it to 70 archetypes / 350 families / 2800 components.
+lives in its own public repository —
+[lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+— as a folder database (one JSON per component + manifest) alongside the
+deterministic generator/validator/seeder pipeline. This app repo ships only
+the component runtime and the Thingtime-required components; catalog
+components live in MongoDB as system `component` things and the frontend
+fetches them from there (`GET /api/v1/components/browse`). That catalog
+repo's `components-db/index.json` `count`/`target` are the source of truth
+for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
+2800 components.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 
@@ -839,15 +844,17 @@ Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 #    that user on the admin allowlist:
 ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
 
-# 2. Put the credentials where the seeder finds them (untracked file):
+# 2. Clone the catalog repo and put credentials where the seeder finds them:
+git clone https://github.com/lopugit/thingtime-components.git
+cd thingtime-components
 cat > scripts/components-db/.seed-env <<'ENV'
 TT_SEED_BASE=http://127.0.0.1:<nitro-port>
 TT_SEED_ADMIN_USER=<your-seed-user>
 TT_SEED_ADMIN_PASS=<your-seed-password>
 ENV
 
-# 3. Regenerate + validate the catalog, then seed (idempotent, batched):
-node scripts/components-db/generate.mjs
+# 3. Validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs --check
 node scripts/components-db/seed.mjs
 ```
 
