@@ -144,7 +144,23 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 	if (!isPlainObject(template)) return template;
 
 	if ('ttArg' in template) {
-		return argValue(scope, String(template.ttArg));
+		// A { ttArg } leaf drops an arg value straight into the tree, so it is
+		// tree text exactly like the '{arg}' token it is the wrapper form of —
+		// and it was the one branch that returned a value without charging for
+		// it, so the budget metered tokens but not their ttArg twin. savedArgs
+		// values run to MAX_COMPONENT_SAVED_ARG_CHARS (2000) and `component` is
+		// not protected, so nested ttRepeat around a { ttArg } leaf bought
+		// MAX_RESOLVED_NODES x 2000 chars: a 139-byte template (14 raw nodes,
+		// depth 8 — inside every server cap) resolved to 7.66 MB, 29x over this
+		// budget, and serialised the same again through ttActionInputs, while
+		// the identical template with a '{a}' leaf stayed at 1.0x. Charged by
+		// occurrence like the string branch above; the value is returned whole
+		// rather than truncated, so the overshoot is one arg value at most.
+		const value = argValue(scope, String(template.ttArg));
+		if (value === undefined) return undefined;
+		budget.chars -= typeof value === 'string' ? value.length : String(value).length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, draw the partial tree
+		return value;
 	}
 	if ('ttMap' in template) {
 		const spec = isPlainObject(template.ttMap) ? template.ttMap : {};

@@ -101,7 +101,15 @@ const resolveNode = (template, scope, budget) => {
 	if (!isPlainObject(template)) return template;
 
 	if ('ttArg' in template) {
-		return argValue(scope, template.ttArg);
+		// charged by occurrence like every string above — a { ttArg } leaf is the
+		// wrapper form of an '{arg}' token, so it is tree text too. See the twin's
+		// resolveNode: uncharged, nested ttRepeat around a { ttArg } leaf resolved
+		// a 139-byte template to 7.66 MB, 29x over MAX_RESOLVED_CHARS.
+		const value = argValue(scope, template.ttArg);
+		if (value === undefined) return undefined;
+		budget.chars -= typeof value === 'string' ? value.length : String(value).length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, return the partial tree
+		return value;
 	}
 	if ('ttMap' in template) {
 		const spec = template.ttMap || {};

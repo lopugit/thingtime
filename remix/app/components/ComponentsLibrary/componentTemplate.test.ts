@@ -166,6 +166,73 @@ test('a long node key cannot expand through ttActionInputs', () => {
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
+// The same amplifier once more, through the last unmetered path: { ttArg }.
+// It is the wrapper form of a '{arg}' token, but it returned the scope value
+// straight out without charging it, so the char budget metered the token form
+// and not this one. A saved version stores up to MAX_COMPONENT_SAVED_ARGS
+// values of MAX_COMPONENT_SAVED_ARG_CHARS (2000) chars each, and `component` is
+// not in PROTECTED_THINGTIME, so any signed-in user can publish this. Uncharged,
+// the 139-byte template below (14 raw nodes, depth 8 — inside every server cap)
+// resolved to 7,658,014 chars, 29x over the 256KB budget, while the identical
+// template with a '{a}' leaf stayed at 1.0x.
+const MAX_SAVED_ARG_CHARS = 2000; // MAX_COMPONENT_SAVED_ARG_CHARS in schemas/registry.ts
+
+test('a ttArg leaf cannot expand past the resolve budget', () => {
+	const nest = (depth: number): unknown =>
+		depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const attack = { tag: 'div', children: [nest(3)] };
+	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
+	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
+
+	const started = Date.now();
+	const produced = countChars(resolveTemplate(attack, { a: 'A'.repeat(MAX_SAVED_ARG_CHARS) }));
+
+	// the last value to overspend is charged whole rather than truncated, so one
+	// arg value of headroom on top of the budget — like the template-sized
+	// allowance the token test above makes
+	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length + MAX_SAVED_ARG_CHARS;
+	assert.ok(produced <= ceiling, `resolution produced ${produced} chars, over the ${ceiling} ceiling`);
+	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
+test('a ttArg leaf cannot expand through ttActionInputs', () => {
+	const nest = (depth: number): unknown =>
+		depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
+	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
+	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
+
+	const started = Date.now();
+	const resolved = resolveTemplate(attack, { a: 'A'.repeat(MAX_SAVED_ARG_CHARS) }) as {
+		props?: Record<string, unknown>;
+	};
+	const serialized = String(resolved.props?.['data-tt-action-inputs'] ?? '');
+
+	// The budget meters tree TEXT; JSON.stringify also emits punctuation it does
+	// not meter ({} [] "" , :), which is O(1) per resolved node and therefore
+	// bounded by MAX_RESOLVED_NODES. Allow that on top of the budget, the
+	// template, and the one arg value charged whole — 7.67 MB uncharged still
+	// clears this by 27x, which is what the test is here to catch.
+	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length + MAX_SAVED_ARG_CHARS + 4 * MAX_RESOLVED_NODES;
+	assert.ok(
+		serialized.length <= ceiling,
+		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
+	);
+	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
+// A charged ttArg must still RESOLVE normally — the budget only bounds the
+// total, it must not clip an ordinary value or turn a declared arg undefined.
+test('charging ttArg leaves ordinary values intact', () => {
+	assert.equal(resolveTemplate({ ttArg: 'label' }, { label: 'Save' }), 'Save');
+	assert.equal(resolveTemplate({ ttArg: 'count' }, { count: 42 }), 42);
+	assert.equal(resolveTemplate({ ttArg: 'on' }, { on: false }), false);
+	assert.equal(resolveTemplate({ ttArg: 'missing' }, { label: 'x' }), undefined);
+	// a full-length saved arg resolves whole, uncut
+	const long = 'A'.repeat(MAX_SAVED_ARG_CHARS);
+	assert.equal(resolveTemplate({ ttArg: 'a' }, { a: long }), long);
+});
+
 test('ordinary templates resolve untouched by the budget', () => {
 	const template = {
 		tag: 'button',
