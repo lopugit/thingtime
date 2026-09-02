@@ -6,14 +6,20 @@ import {
 	BEHAVIOUR_SUITES,
 	getBehaviourSuite,
 	materializeSuite,
+	isAppSuite,
 	suiteActionShareId,
-	suitePageShareId,
+	suiteEntryPageShareId,
 	suiteRefsFor,
 	suiteSlug,
 	summarizeBehaviourSuite,
 	type SuiteMode
 } from './behaviourSuites';
 import { countDemoBlocks, type DemoBlock } from './webpageDemos';
+import { ALL_SUITES } from './appSuites/index';
+
+// Controls may also name the page runtime's pseudo-actions (a refresh, an
+// install) — those never reach the run endpoint.
+const PSEUDO_ACTIONS = new Set(['$refresh', '$install']);
 
 // A suite is only a demo if every part of it would save through the real
 // write gates — in BOTH materialisations (the seeded system copy and the
@@ -29,7 +35,8 @@ const expectValid = (kinds: string[], crystal: Record<string, unknown>, label: s
 
 test('every suite part clears its kind gate in both materialisations', () => {
 	assert.ok(BEHAVIOUR_SUITES.length >= 10, `expected at least 10 suites, got ${BEHAVIOUR_SUITES.length}`);
-	for (const suite of BEHAVIOUR_SUITES) {
+	assert.ok(ALL_SUITES.length > BEHAVIOUR_SUITES.length, 'the app suites register alongside the demo suites');
+	for (const suite of ALL_SUITES) {
 		for (const mode of MODES) {
 			const materialized = materializeSuite(suite, mode);
 			for (const schema of materialized.schemas) expectValid(['schema'], schema.crystal, `${mode} schema ${schema.slug}`);
@@ -47,15 +54,20 @@ test('every suite part clears its kind gate in both materialisations', () => {
 				expectValid(['data'], { ...entry.crystal, schemaId: `schema-demo-${suite.key}-${entry.schemaKey}` }, `${mode} data ${entry.shareId}`);
 				assert.ok(suite.schemas.some((schema) => schema.key === entry.schemaKey), `${suite.key}: data names undeclared schema ${entry.schemaKey}`);
 			}
-			const page = expectValid(['webpage'], materialized.page.crystal, `${mode} page ${materialized.page.slug}`);
-			assert.deepEqual(page.blocks, materialized.page.crystal.blocks, `${mode} page ${materialized.page.slug}: gate rewrote the blocks`);
-			assert.ok(countDemoBlocks(materialized.page.crystal.blocks as DemoBlock[]) <= MAX_WEBPAGE_BLOCKS - 8, `${materialized.page.slug} leaves no edit headroom`);
+			assert.equal(materialized.pages[0].shareId, materialized.page.shareId, `${suite.key}: the entry page leads pages[]`);
+			for (const entry of materialized.pages) {
+				const page = expectValid(['webpage'], entry.crystal, `${mode} page ${entry.slug}`);
+				assert.deepEqual(page.blocks, entry.crystal.blocks, `${mode} page ${entry.slug}: gate rewrote the blocks`);
+				assert.equal(page.pageKey, entry.pageKey, `${mode} page ${entry.slug}: pageKey survives the gate`);
+				assert.equal(page.suiteKey, suite.key, `${mode} page ${entry.slug}: suiteKey stamps the page`);
+				assert.ok(countDemoBlocks(entry.crystal.blocks as DemoBlock[]) <= MAX_WEBPAGE_BLOCKS - 8, `${entry.slug} leaves no edit headroom`);
+			}
 		}
 	}
 });
 
 test('every control binds an action the same suite declares, by actionKey', () => {
-	for (const suite of BEHAVIOUR_SUITES) {
+	for (const suite of ALL_SUITES) {
 		const keys = new Set(suite.actions.map((action) => suiteSlug(suite.key, action.key)));
 		const refs = suiteRefsFor(suite, 'own');
 		const bound = new Set<string>();
@@ -63,7 +75,7 @@ test('every control binds an action the same suite declares, by actionKey', () =
 			if (!node || typeof node !== 'object') return;
 			if (Array.isArray(node)) return node.forEach(walk);
 			const record = node as Record<string, unknown>;
-			if (typeof record.ttAction === 'string') {
+			if (typeof record.ttAction === 'string' && !PSEUDO_ACTIONS.has(record.ttAction)) {
 				assert.ok(keys.has(record.ttAction), `${suite.key}: control binds unknown action ${record.ttAction}`);
 				bound.add(record.ttAction);
 				assert.ok(record.ttActionInputs && typeof record.ttActionInputs === 'object', `${suite.key}: ${record.ttAction} control has no inputs object`);
@@ -89,7 +101,7 @@ test('every control binds an action the same suite declares, by actionKey', () =
 });
 
 test('references differ only by mode: system copies name shareIds, installs name own keys', () => {
-	for (const suite of BEHAVIOUR_SUITES) {
+	for (const suite of ALL_SUITES) {
 		const system = materializeSuite(suite, 'system');
 		const own = materializeSuite(suite, 'own');
 		for (const [index, action] of system.actions.entries()) {
@@ -108,7 +120,7 @@ test('references differ only by mode: system copies name shareIds, installs name
 		}
 		// data names the schema so both the search step and /search find it
 		for (const entry of own.data) assert.equal(entry.crystal.schema, suiteSlug(suite.key, entry.schemaKey));
-		assert.equal(system.page.shareId, suitePageShareId(suite.key));
+		assert.equal(system.page.shareId, suiteEntryPageShareId(suite));
 	}
 });
 
@@ -116,7 +128,7 @@ test('suite keys and slugs are unique and summaries count what the catalog holds
 	const keys = BEHAVIOUR_SUITES.map((suite) => suite.key);
 	assert.equal(new Set(keys).size, keys.length, 'suite keys collide');
 	const slugs = new Set<string>();
-	for (const suite of BEHAVIOUR_SUITES) {
+	for (const suite of ALL_SUITES) {
 		const materialized = materializeSuite(suite, 'system');
 		for (const part of [...materialized.schemas, ...materialized.components, ...materialized.actions]) {
 			assert.ok(!slugs.has(part.shareId), `shareId collides: ${part.shareId}`);
@@ -128,7 +140,7 @@ test('suite keys and slugs are unique and summaries count what the catalog holds
 			components: suite.components.length,
 			actions: suite.actions.length,
 			data: suite.data.length,
-			pages: 1
+			pages: isAppSuite(suite) ? suite.pages!.length : 1
 		});
 		assert.equal(summary.actionIds.length, suite.actions.length);
 	}

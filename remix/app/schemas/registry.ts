@@ -918,9 +918,18 @@ export const MAX_SCHEMA_UNIT_CHARS = 20;
 export const MAX_SCHEMA_FIELD_DEPTH = 6;
 // `render`: the optional serialised component tree a schema can carry (chakra
 // or element shaped) — caps match the client renderers' node/depth gates.
-export const MAX_SCHEMA_RENDER_BYTES = 32 * 1024;
-export const MAX_SCHEMA_RENDER_DEPTH = 24;
-export const MAX_SCHEMA_RENDER_NODES = 600;
+// A stored render TEMPLATE counts every value (each style key is a node), so
+// an app screen with a few dozen styled elements runs to ~1500 nodes while
+// still drawing well under the renderers' 600-element DOM budget (branches
+// and repeats resolve to one path at draw time). 2000 / 48KB is the stored
+// bound; the resolver's MAX_RESOLVED_VALUES and the renderers' MAX_NODES
+// stay the draw-time bounds.
+export const MAX_SCHEMA_RENDER_BYTES = 48 * 1024;
+// stored depth counts wrapper objects (a ttIf → then → ttEach → node chain is
+// four levels for one drawn element), so it sits well above the renderers'
+// 24-level DOM cap, which the RESOLVED tree still has to clear
+export const MAX_SCHEMA_RENDER_DEPTH = 48;
+export const MAX_SCHEMA_RENDER_NODES = 2000;
 export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
@@ -1262,7 +1271,9 @@ export const MAX_ACTION_KEY_CHARS = 80;
 export const MAX_ACTION_SCHEMA_REF_CHARS = 128;
 export const MAX_ACTION_STEP_VALUE_KEYS = 48;
 export const MAX_ACTION_STEP_STRING_CHARS = 2000;
-export const MAX_ACTION_STEP_VALUE_DEPTH = 8;
+// expressions nest two levels per call ({ ttExpr: [ … ] }), so a readable
+// program composes six or seven calls deep — the run-time budget bounds cost
+export const MAX_ACTION_STEP_VALUE_DEPTH = 16;
 export const MAX_ACTION_CONCAT_PARTS = 24;
 export const MAX_ACTION_SEARCH_LIMIT = 100;
 export const MAX_ACTION_SEARCH_OFFSET = 1000;
@@ -5054,13 +5065,33 @@ const sanitizeActionSteps = (
 			if (value === undefined || value === null) {
 				return required ? fail(400, `Step ${stepIndex} (${op}) needs ${field}`) : null;
 			}
+			// a whole-value ref ("$step.3.player") or one expression may stand in
+			// for the object — the executor still refuses a non-object at run time
+			if (typeof value === 'string') {
+				const ref = value.trim().startsWith('$') ? parseActionRef(value.trim()) : null;
+				if (!ref || !('kind' in ref)) return fail(400, `Step ${stepIndex} ${field} must be an object or a $ref to one`);
+				const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
+				if (isFail(checked)) return checked;
+				step[field] = value.trim();
+				return null;
+			}
 			if (typeof value !== 'object' || Array.isArray(value)) return fail(400, `Step ${stepIndex} ${field} must be an object`);
 			const checked = validateActionValue(value, stepIndex, 0, scope);
 			if (isFail(checked)) return checked;
 			step[field] = value;
 			return null;
 		};
+		// an id / list / message is a ref string, a literal, or ONE expression
+		// object ({ ttExpr } / { ttConcat }) that resolves at run time
+		const isExpressionObject = (value: unknown): boolean =>
+			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
 		const checkRefString = (value: unknown, field: string): Fail | null => {
+			if (isExpressionObject(value)) {
+				const checked = validateActionValue(value, stepIndex);
+				if (isFail(checked)) return checked;
+				step[field] = value;
+				return null;
+			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
 			const checked = validateActionValue(value.trim(), stepIndex);
 			if (isFail(checked)) return checked;

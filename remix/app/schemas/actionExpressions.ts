@@ -151,7 +151,7 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	'pokeworld.encounter': sig(1, 1, 'Roll a wild encounter for { biome, lat?, lng? } (legendary geofences apply), or null.', { pack: 'pokeworld' }),
 	'pokeworld.newPokemon': sig(1, 1, 'A full party-member record for { speciesId, level, gender?, shiny?, nickname? }.', { pack: 'pokeworld' }),
 	'pokeworld.stats': sig(1, 1, 'Level-scaled Gen III stats for { speciesId, level }.', { pack: 'pokeworld' }),
-	'pokeworld.moves': sig(1, 2, 'The move set for a species (or type list) at a level.', { pack: 'pokeworld' }),
+	'pokeworld.moves': sig(2, 2, 'The move set for a species (or type list) at a level.', { pack: 'pokeworld' }),
 	'pokeworld.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, status, accuracy, crit, STAB, chip).', { pack: 'pokeworld' }),
 	'pokeworld.catchRoll': sig(1, 1, 'A Gen III catch attempt from { wild, ball, player? } → caught, shakes, message (+ the wild’s reply turn).', { pack: 'pokeworld' }),
 	'pokeworld.runRoll': sig(1, 1, 'A run attempt from { player, wild, attempts } → escaped, message (+ the wild’s reply turn).', { pack: 'pokeworld' }),
@@ -360,6 +360,29 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 	const rawArgs = expression.slice(1);
 	if (rawArgs.length < signature.min || rawArgs.length > signature.max) {
 		ctx.fail(`${fn} takes ${signature.min === signature.max ? signature.min : `${signature.min}–${signature.max}`} args`);
+	}
+	// SHORT-CIRCUIT forms resolve their args lazily, so a branch that is not
+	// taken never evaluates (and never fails): `if` picks one branch, `and` /
+	// `or` stop at the first decisive value, `coalesce` at the first present one.
+	if (fn === 'if') {
+		const condition = ctx.resolve(rawArgs[0], lambda);
+		if (truthy(condition)) return ctx.resolve(rawArgs[1], lambda);
+		return rawArgs.length > 2 ? ctx.resolve(rawArgs[2], lambda) : null;
+	}
+	if (fn === 'and') {
+		for (const arg of rawArgs) if (!truthy(ctx.resolve(arg, lambda))) return false;
+		return true;
+	}
+	if (fn === 'or') {
+		for (const arg of rawArgs) if (truthy(ctx.resolve(arg, lambda))) return true;
+		return false;
+	}
+	if (fn === 'coalesce') {
+		for (const arg of rawArgs) {
+			const value = ctx.resolve(arg, lambda);
+			if (value !== null && value !== undefined && value !== '') return value;
+		}
+		return null;
 	}
 	// lambda args stay RAW — they are evaluated per element below
 	const args = rawArgs.map((arg, index) => (signature.lambda?.includes(index) ? arg : ctx.resolve(arg, lambda)));

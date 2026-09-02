@@ -3,13 +3,13 @@ import { fail, type Fail, type PublicThing } from '../things/things';
 import { resolveBlockComponents } from './webpages';
 import { COMPONENT_KEY_PATTERN, MAX_COMPONENT_KEY_CHARS } from '~/schemas/registry';
 import {
-	BEHAVIOUR_SUITES,
-	getBehaviourSuite,
+	getAnySuite,
 	materializeSuite,
 	summarizeBehaviourSuite,
 	type BehaviourSuiteSummary,
 	type MaterializedSuite
 } from '~/schemas/behaviourSuites';
+import { ALL_SUITES } from '~/schemas/appSuites/index';
 import {
 	COMPONENT_DEMO_REFS,
 	WEBPAGE_DEMO_FAMILIES,
@@ -59,8 +59,8 @@ const DEMO_KINDS = new Set(['section', 'page', 'component']);
 const seededDemoShareIds = async (): Promise<Set<string>> => {
 	const things = await getThingsCollection();
 	const docs = await things
-		.find({ thingtime: 'webpage', ownerId: 'system', tags: 'demo' } as any, { projection: { shareId: 1 } })
-		.limit(getWebpageDemos().length + BEHAVIOUR_SUITES.length + 64)
+		.find({ thingtime: 'webpage', ownerId: 'system', tags: { $in: ['demo', 'app'] } } as any, { projection: { shareId: 1 } })
+		.limit(getWebpageDemos().length + ALL_SUITES.length * 8 + 64)
 		.toArray();
 	return new Set(docs.map((doc: any) => doc.shareId).filter((id: unknown): id is string => typeof id === 'string'));
 };
@@ -87,7 +87,7 @@ export const listWebpageDemos = async (query: {
 	if (suiteKey && (suiteKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(suiteKey))) {
 		return fail(400, 'suite must be a lowercase-dashed suite key');
 	}
-	const singleSuite = suiteKey ? getBehaviourSuite(suiteKey) : null;
+	const singleSuite = suiteKey ? getAnySuite(suiteKey) : null;
 	if (suiteKey && !singleSuite) return fail(404, 'Behaviour suite not found');
 
 	const seeded = await seededDemoShareIds();
@@ -101,7 +101,7 @@ export const listWebpageDemos = async (query: {
 	const demos = all
 		.filter((demo) => (!family || demo.family === family) && (!kind || demo.kind === kind))
 		.map((demo) => ({ ...summarizeWebpageDemo(demo), seeded: seeded.has(webpageDemoShareId(demo.slug)) }));
-	const suites = BEHAVIOUR_SUITES.map((suite) => {
+	const suites = ALL_SUITES.map((suite) => {
 		const summary = summarizeBehaviourSuite(suite);
 		return { ...summary, seeded: seeded.has(summary.pageId) };
 	});

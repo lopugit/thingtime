@@ -31,13 +31,48 @@ export const installSuite = async (
 	for (const entry of bundle.data) {
 		await createId({ thingtime: ['data'], crystal: { ...entry.crystal, schemaId: schemaIds[entry.schemaKey] }, acl: ['tt:user'] });
 	}
-	const { pageKey: _pageKey, ...pageCrystal } = bundle.page.crystal as Record<string, unknown> & { pageKey?: string };
-	const pageId = await createId({
-		thingtime: ['webpage'],
-		crystal: { ...pageCrystal, ...(options.seeded ? { forkOf: bundle.page.shareId } : {}) },
-		acl: ['tt:user']
-	});
+	// App suites (bundle.app) install EVERY page and KEEP each pageKey: that is
+	// what makes /p/<pageKey> resolve the viewer's copy ahead of the seeded
+	// one, so the app's own links keep working after install. Demo suites
+	// still drop the key (their page is a personal copy, not a keyed twin).
+	let pageId = '';
+	for (const page of bundle.app ? bundle.pages : [bundle.pages[0]]) {
+		const { pageKey: _pageKey, ...pageCrystal } = page.crystal as Record<string, unknown> & { pageKey?: string };
+		const id = await createId({
+			thingtime: ['webpage'],
+			crystal: { ...(bundle.app ? page.crystal : pageCrystal), ...(options.seeded ? { forkOf: page.shareId } : {}) },
+			acl: ['tt:user']
+		});
+		if (!pageId) pageId = id;
+	}
 	return { pageId, actionIds, schemaIds };
+};
+
+// The server-side install: one request, idempotent (upserts by key), the
+// route every APP suite prefers — see api/utils/webpages/suites.ts. Falls
+// back to the client part-by-part install above when the endpoint is
+// unavailable (an older deployment), so both paths write the same things.
+export type ServerInstalledSuite = {
+	ok: true;
+	suite: string;
+	title: string;
+	created: number;
+	updated: number;
+	pageIds: Record<string, string>;
+	entryPageId: string;
+	entryPageKey: string;
+};
+
+export const installSuiteOnServer = async (key: string): Promise<ServerInstalledSuite> => {
+	const response = await fetch('/api/v1/webpages/suites/install', {
+		method: 'POST',
+		credentials: 'include',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ key })
+	});
+	const data = await response.json().catch(() => null);
+	if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };
+	return data as ServerInstalledSuite;
 };
 
 // A suite's own-mode actionKeys are `demo-<suite>-<key>`; recover the suite a
@@ -46,11 +81,18 @@ export const installSuite = async (
 export const suiteKeyFromActionKey = (actionKey: string, suites: BehaviourSuite[]): string | null => {
 	let best: string | null = null;
 	for (const suite of suites) {
-		if (actionKey.startsWith(`demo-${suite.key}-`) && (!best || suite.key.length > best.length)) best = suite.key;
+		if ((actionKey.startsWith(`demo-${suite.key}-`) || actionKey.startsWith(`app-${suite.key}-`)) && (!best || suite.key.length > best.length)) best = suite.key;
 	}
 	return best;
 };
 
-// The seeded system page's pageKey is `demo-suite-<key>`.
+// The seeded system page's pageKey is `demo-suite-<key>` for the demo suites;
+// app suite pages carry crystal.suiteKey directly (suiteKeyOfPage below).
 export const suiteKeyFromPageKey = (pageKey: unknown): string | null =>
 	typeof pageKey === 'string' && pageKey.startsWith('demo-suite-') ? pageKey.slice('demo-suite-'.length) : null;
+
+export const suiteKeyOfPage = (crystal: { suiteKey?: unknown; pageKey?: unknown } | null | undefined): string | null => {
+	if (!crystal) return null;
+	if (typeof crystal.suiteKey === 'string' && crystal.suiteKey) return crystal.suiteKey;
+	return suiteKeyFromPageKey(crystal.pageKey);
+};

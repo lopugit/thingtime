@@ -163,6 +163,15 @@ test('object and date functions', () => {
 	assert.equal(run(['formatDate', '2026-09-02T00:00:00.000Z', 'weekday']), 'Wednesday');
 });
 
+test('if / and / or / coalesce short-circuit — the untaken branch never evaluates', () => {
+	// `set` with an empty key throws; inside the untaken branch it must not run
+	assert.equal(run(['if', false, { ttExpr: ['set', {}, '', 1] }, 'safe']), 'safe');
+	assert.equal(run(['if', true, 'taken', { ttExpr: ['div', 1, 0] }]), 'taken');
+	assert.equal(run(['and', false, { ttExpr: ['div', 1, 0] }]), false);
+	assert.equal(run(['or', true, { ttExpr: ['div', 1, 0] }]), true);
+	assert.equal(run(['coalesce', 'x', { ttExpr: ['div', 1, 0] }]), 'x');
+});
+
 test('domain pack functions dispatch through the bound table and count as pack calls', () => {
 	let calls = 0;
 	const ctx = makeContext();

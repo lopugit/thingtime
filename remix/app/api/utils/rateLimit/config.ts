@@ -63,7 +63,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'webpages.seed': { limit: 30, windowMs: 60_000, enabled: true },
   // action execution (POST /api/v1/actions/run) — compute + writes; each run
   // is additionally bounded by its own budget envelope (registry limits)
-  'actions.run': { limit: 60, windowMs: 60_000, enabled: true },
+  // interactive APP pages run one action per control press (a D-pad step, a
+  // battle turn) plus their source loads — 4/s sustained is the ceiling a
+  // human can drive, and every run stays inside the executor's own budgets
+  'actions.run': { limit: 240, windowMs: 60_000, enabled: true },
   // run-history reads (GET /api/v1/actions/runs) — read-only, browse-shaped
   'actions.runs': { limit: 120, windowMs: 60_000, enabled: true },
   // public theme gallery list (GET /api/v1/themes/shared with no id) — the same

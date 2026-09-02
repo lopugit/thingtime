@@ -184,6 +184,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
   'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
   'v1/webpages/demos': () => import('../../../app/routes/api/v1/webpages/demos/_demos'),
+  'v1/webpages/suites/install': () => import('../../../app/routes/api/v1/webpages/suites/install/_install'),
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
   'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),

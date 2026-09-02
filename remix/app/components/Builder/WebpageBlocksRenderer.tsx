@@ -8,6 +8,8 @@ import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { useTtActionClicks, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { useApi } from '~/hooks/useApi';
+import { readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
 import { RICH_HTML_SX } from './richHtmlStyles';
@@ -717,6 +719,105 @@ for (const [key, style] of Object.entries(TEXT_STYLES)) {
 	TEXT_STYLE_TYPO[key] = typo;
 }
 
+// A SOURCE-BOUND block: the page runtime runs `block.source.action` as the
+// viewer (delegated, owner-only — exactly a ttAction click with no click) on
+// load and again whenever any control on the page reports a run, and the
+// template sees the result as `result` plus `state` / `error` / `last` /
+// `viewer` / `query`. Optimistic paint: the last result for this page+block
+// paints from localStorage before the fetch lands, and the fresh value
+// replaces it (house rule — never a spinner when a last-known value exists).
+// Nothing runs off a trusted surface: `interactive` false (builder canvas,
+// gallery thumbnails, someone else's page) keeps the block inert with
+// state 'inert', and a signed-out viewer gets state 'signed-out' so the
+// template can offer the sign-in.
+type BlockSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
+
+const useBlockSource = (
+	block: WebpageBlock,
+	argValues: Record<string, unknown>,
+	interactive: boolean
+): { scope: Record<string, unknown> } => {
+	const runtime = useWebpageRuntime();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const sourceKey = JSON.stringify(block.source || null);
+	const source = block.source;
+	const active = !!source && interactive;
+	const [state, setState] = React.useState<{ status: BlockSourceState; result: unknown; error: string | null }>(() => ({
+		status: !source ? 'inert' : !runtime.viewer.signedIn ? 'signed-out' : !interactive ? 'inert' : 'loading',
+		result: source ? readSourceCache(runtime.pageId, block.id) : undefined,
+		error: null
+	}));
+	// inputs interpolate {arg} tokens against the block args and {query.x}
+	// against the URL — the same substitution the template itself gets
+	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
+	const inputs = React.useMemo(() => {
+		if (!source?.inputs) return {};
+		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
+		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
+	}, [inputsKey]);
+	const manual = source?.refresh === 'manual';
+	const runVersion = manual ? 0 : runtime.version;
+	const signedIn = runtime.viewer.signedIn;
+	const pageId = runtime.pageId;
+	const blockId = block.id;
+
+	React.useEffect(() => {
+		if (!source) return;
+		// signed-out wins over inert: the template offers the sign-in even on
+		// a seeded page that is not (yet) interactive for this viewer
+		if (!signedIn) {
+			setState((current) => (current.status === 'signed-out' ? current : { ...current, status: 'signed-out' }));
+			return;
+		}
+		if (!active) {
+			setState((current) => (current.status === 'inert' ? current : { ...current, status: 'inert' }));
+			return;
+		}
+		let cancelled = false;
+		setState((current) => (current.result === undefined || current.status === 'signed-out' ? { ...current, status: 'loading' } : current));
+		(async () => {
+			try {
+				const shareKey = JSON.stringify({ a: source.action, i: inputs });
+				const response: any = await runtime.load(shareKey, () => apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
+				if (cancelled) return;
+				if (response?.status === 'ok') {
+					writeSourceCache(pageId, blockId, response.result ?? null);
+					setState({ status: 'ok', result: response.result ?? null, error: null });
+				} else {
+					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
+				}
+			} catch (error: unknown) {
+				if (cancelled) return;
+				const message = (error as { error?: string; message?: string })?.error || (error as { message?: string })?.message || '';
+				const unowned = /no action you own matches/i.test(message);
+				setState((current) => ({ ...current, status: unowned ? 'not-installed' : 'error', error: unowned ? null : message || 'The source action failed' }));
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion is the runtime's refetch signal; runtime.load is version-keyed
+	}, [active, signedIn, sourceKey, inputsKey, runVersion, pageId, blockId]);
+
+	const scope = React.useMemo(
+		() => ({
+			result: state.result,
+			state: state.status,
+			error: state.error,
+			last: runtime.last,
+			viewer: runtime.viewer,
+			query: runtime.query,
+			installing: runtime.installing,
+			hasSource: !!source
+		}),
+		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source]
+	);
+	return { scope };
+};
+
 const ComponentBlockView = ({
 	block,
 	component,
@@ -743,10 +844,11 @@ const ComponentBlockView = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
 	);
+	const source = useBlockSource(block, argValues, interactive);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
-		return resolveTemplate(crystal.render, argValues);
-	}, [crystal?.render, argValues]);
+		return resolveTemplate(crystal.render, { ...argValues, ...source.scope });
+	}, [crystal?.render, argValues, source.scope]);
 
 	// Inline text editing INSIDE components: double-click a piece of rendered
 	// text and, when it matches a string/text arg's current value verbatim, a

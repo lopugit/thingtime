@@ -10176,6 +10176,62 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-suites-install',
+    contractVersion: '1.0.0',
+    group: 'webpages',
+    title: 'Install a behaviour suite or app suite',
+    endpoint: '/api/v1/webpages/suites/install',
+    summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
+    detail:
+      'A suite is an installable program bundle (schemas/behaviourSuites): schema things, ttAction-bound component ' +
+      'things, action things, sample data things, and one or more builder pages. App suites (Pokeworld, StarsAlign) are ' +
+      'multi-page suites whose pages link to each other by pageKey. This endpoint writes the OWN-mode bundle through the ' +
+      'ordinary create/update utils as the caller — the same things the part-by-part client install creates — but ' +
+      'IDEMPOTENTLY: each part has a stable key inside the caller’s things (schema name, componentKey, actionKey, ' +
+      'pageKey, sample stamp), so a second call updates the existing copy in place instead of duplicating it, and sample ' +
+      'data is seeded once and never clobbered. Pages keep their pageKey, which is what makes /p/<pageKey> resolve the ' +
+      'caller’s copy ahead of the seeded one. Session-only, like actions.run: an install creates programs the caller ' +
+      'will run as themselves; delegated controls on the installed pages resolve owner-only.',
+    auth: {
+      mode: 'session',
+      description: 'A signed-in session. App tokens and personal access tokens are refused — installing programs is a first-party act.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { key } where key is a suite key from GET /api/v1/webpages/demos (suites[].key).',
+      'Read created / updated counts, the per-part id maps (schemaIds, componentIds, actionIds, pageIds, dataIds), and entryPageKey.',
+      'Open /p/<entryPageKey> — the resolver now answers with the caller’s own copy; every control runs their own programs.',
+      'Call again after the catalog changes to refresh the copy in place (data things are never touched).',
+      'Handle 401 signed out, 404 for an unknown key, 422 when a part refuses to save (the message names the part), 429 when rate-limited (12/min).'
+    ],
+    requestExamples: [
+      { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },
+      { name: 'Install the guestbook demo suite', description: 'A single-page behaviour suite.', method: 'POST', body: { key: 'guestbook' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Installed (first call).',
+        body: {
+          ok: true,
+          suite: 'pokeworld',
+          title: 'Pokeworld',
+          created: 31,
+          updated: 0,
+          schemaIds: { trainer: 'a1b2…' },
+          componentIds: { map: 'c3d4…' },
+          actionIds: { move: 'e5f6…' },
+          pageIds: { play: 'g7h8…' },
+          dataIds: [],
+          entryPageId: 'g7h8…',
+          entryPageKey: 'pokeworld'
+        }
+      },
+      { status: 200, description: 'Re-installed after a catalog update — refreshed in place.', body: { ok: true, suite: 'pokeworld', title: 'Pokeworld', created: 0, updated: 4, schemaIds: {}, componentIds: {}, actionIds: {}, pageIds: {}, dataIds: [], entryPageId: 'g7h8…', entryPageKey: 'pokeworld' } },
+      { status: 404, description: 'Unknown suite.', body: { ok: false, error: 'No suite matches "nope"' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',

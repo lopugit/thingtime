@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
 
 // The click half of the ttAction binding (componentTemplate.ts resolves the
 // markup half). Attach the returned handler as onClickCapture on a TRUSTED
@@ -52,6 +55,30 @@ export const runDelegatedAction = async (params: {
 	}
 };
 
+// Pseudo-actions a control may name instead of a program: `$refresh` bumps
+// the page runtime (every source-bound block refetches) and `$install`
+// installs the page's suite for the viewer. Neither reaches the run endpoint.
+export const REFRESH_ACTION = '$refresh';
+export const INSTALL_ACTION = '$install';
+
+// A result that carries a `message` string narrates itself in the toast —
+// "You caught PIKACHU!" beats "38ms · 4 ops" on an app page. `title` and
+// `status` are honoured the same way; everything else keeps the run summary.
+export const toastFromResult = (
+	result: unknown,
+	fallback: { title: string; description: string }
+): { title: string; description: string; status: 'success' | 'error' | 'info' } | null => {
+	const record = result && typeof result === 'object' && !Array.isArray(result) ? (result as Record<string, unknown>) : null;
+	// `silent: true` = the page itself shows the outcome (a map step, a
+	// re-render) — no toast at all
+	if (record && record.silent === true) return null;
+	const message = record && typeof record.message === 'string' && record.message.trim() ? record.message.trim().slice(0, 400) : null;
+	const title = record && typeof record.title === 'string' && record.title.trim() ? record.title.trim().slice(0, 120) : null;
+	const status = record && (record.status === 'error' || record.status === 'info') ? record.status : 'success';
+	if (!message && !title) return { ...fallback, status: 'success' };
+	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
+};
+
 export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
@@ -62,52 +89,95 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	const onUnownedRef = React.useRef(options?.onUnowned);
 	onUnownedRef.current = options?.onUnowned;
 	const busyRef = React.useRef(false);
+	const runtime = useWebpageRuntime();
+	const runtimeRef = React.useRef(runtime);
+	runtimeRef.current = runtime;
+	const user = useCurrentUser();
+	const signedIn = !!user?.id;
+	const navigate = useNavigate();
 
-	return React.useCallback((event: React.MouseEvent) => {
-		const origin = event.target as HTMLElement | null;
-		const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
-		// closest() can walk past the wrapper — only act on controls INSIDE it
-		if (!control || !(event.currentTarget as HTMLElement).contains(control)) return;
-		event.preventDefault();
-		event.stopPropagation();
-		if (busyRef.current) return;
-		const action = control.getAttribute('data-tt-action') || '';
-		if (!action) return;
-		let inputs: Record<string, unknown> = {};
-		try {
-			const parsed = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
-			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) inputs = parsed;
-		} catch {}
-		busyRef.current = true;
-		(async () => {
-			try {
-				// source: 'component' NARROWS server-side resolution to actions
-				// this viewer owns. Markup can name any id, so the delegated
-				// path must never hand the viewer's authority to a stranger's
-				// program (execute.ts resolveActionProgram, ownedOnly).
-				const outcome = await runDelegatedAction({
-					action,
-					inputs,
-					run: () => apiRef.current.v1.actions.run({ action, inputs, source: 'component' }),
-					onUnowned: onUnownedRef.current
-				});
-				const response = outcome.response;
-				if (outcome.error !== undefined) {
-					lopuRef.current({ title: 'That didn’t work 😔', description: outcome.error || undefined, status: 'error' });
-				} else if (response?.status === 'ok') {
-					lopuRef.current({
-						title: `⚡ Action ran ✓`,
-						description: `${response.durationMs}ms · ${response.opsUsed} ops`,
-						status: 'success',
-						duration: 6000,
-						link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` }
-					});
-				} else {
-					lopuRef.current({ title: 'The action finished with an error 🧯', description: response?.error || undefined, status: 'error' });
-				}
-			} finally {
-				busyRef.current = false;
+	return React.useCallback(
+		(event: React.MouseEvent) => {
+			const origin = event.target as HTMLElement | null;
+			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
+			// closest() can walk past the wrapper — only act on controls INSIDE it
+			if (!control || !(event.currentTarget as HTMLElement).contains(control)) return;
+			// a click that lands ON a form field is the viewer typing, not firing
+			const tag = origin?.tagName?.toLowerCase();
+			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
+			event.preventDefault();
+			event.stopPropagation();
+			if (busyRef.current) return;
+			const action = control.getAttribute('data-tt-action') || '';
+			if (!action) return;
+			if (action === REFRESH_ACTION) {
+				runtimeRef.current.refresh();
+				return;
 			}
-		})();
-	}, []);
+			if (!signedIn) {
+				lopuRef.current({ title: 'Sign in to use this 🗝️', description: 'Controls run as you, on your own things.', status: 'info', duration: 6000 });
+				navigate('/login');
+				return;
+			}
+			if (action === INSTALL_ACTION) {
+				const install = runtimeRef.current.install;
+				if (!install) return;
+				busyRef.current = true;
+				install()
+					.catch(() => false)
+					.finally(() => {
+						busyRef.current = false;
+					});
+				return;
+			}
+			let inputs: Record<string, unknown> = {};
+			try {
+				const parsed = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
+				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) inputs = parsed;
+			} catch {}
+			// named fields inside the SAME component root become inputs — a
+			// component with an <input name="nickname"> and a button IS a form.
+			// Field values win over the static inputs; untouched fields keep them.
+			inputs = { ...inputs, ...gatherFormFields(event.currentTarget as HTMLElement) };
+			busyRef.current = true;
+			(async () => {
+				try {
+					// source: 'component' NARROWS server-side resolution to actions
+					// this viewer owns. Markup can name any id, so the delegated
+					// path must never hand the viewer's authority to a stranger's
+					// program (execute.ts resolveActionProgram, ownedOnly).
+					const outcome = await runDelegatedAction({
+						action,
+						inputs,
+						run: () => apiRef.current.v1.actions.run({ action, inputs, source: 'component' }),
+						onUnowned: onUnownedRef.current
+					});
+					const response = outcome.response;
+					if (outcome.error !== undefined) {
+						lopuRef.current({ title: 'That didn’t work 😔', description: outcome.error || undefined, status: 'error' });
+						runtimeRef.current.report({ action, ok: false, result: null, error: outcome.error || 'failed' });
+					} else if (response?.status === 'ok') {
+						const toast = toastFromResult(response.result, {
+							title: '⚡ Action ran ✓',
+							description: `${response.durationMs}ms · ${response.opsUsed} ops`
+						});
+						if (toast) {
+							lopuRef.current({
+								...toast,
+								duration: 6000,
+								link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` }
+							});
+						}
+						runtimeRef.current.report({ action, ok: true, result: response.result ?? null, error: null });
+					} else {
+						lopuRef.current({ title: 'The action finished with an error 🧯', description: response?.error || undefined, status: 'error' });
+						runtimeRef.current.report({ action, ok: false, result: null, error: response?.error || 'error' });
+					}
+				} finally {
+					busyRef.current = false;
+				}
+			})();
+		},
+		[navigate, signedIn]
+	);
 };

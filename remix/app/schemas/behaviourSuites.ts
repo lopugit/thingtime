@@ -30,14 +30,18 @@ export const SUITE_SLUG_PREFIX = 'demo-';
 
 type SchemaField = {
 	name: string;
-	type: 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]';
+	type: 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'array';
 	description?: string;
 	required?: boolean;
 	values?: string[];
 	min?: number;
 	max?: number;
 	maxLength?: number;
+	maxItems?: number;
 	unit?: string;
+	// object: nested fields; array: the entry spec
+	children?: SchemaField[];
+	items?: Omit<SchemaField, 'name'> & { name?: string };
 };
 
 type ArgSpec = {
@@ -1248,13 +1252,18 @@ export const BEHAVIOUR_SUITES: BehaviourSuite[] = [
 
 export type SuiteMode = 'system' | 'own';
 
-export const suiteSlug = (suiteKey: string, key: string): string => `${SUITE_SLUG_PREFIX}${suiteKey}-${key}`;
+// App suites (registered below) slug as `app-<suite>-<key>` so their schema
+// names, componentKeys, actionKeys, and seeded shareIds read as the app's,
+// not as demos; the demo originals keep `demo-`.
+export const APP_SLUG_PREFIX = 'app-';
+export const suiteSlugPrefix = (suiteKey: string): string => (APP_SUITES.some((suite) => suite.key === suiteKey) ? APP_SLUG_PREFIX : SUITE_SLUG_PREFIX);
+export const suiteSlug = (suiteKey: string, key: string): string => `${suiteSlugPrefix(suiteKey)}${suiteKey}-${key}`;
 
 // System-copy shareIds (reserved kind prefixes; system seeding writes them).
 export const suiteSchemaShareId = (suiteKey: string, key: string): string => `schema-${suiteSlug(suiteKey, key)}`;
 export const suiteComponentShareId = (suiteKey: string, key: string): string => `component-${suiteSlug(suiteKey, key)}`;
 export const suiteActionShareId = (suiteKey: string, key: string): string => `action-${suiteSlug(suiteKey, key)}`;
-export const suiteDataShareId = (suiteKey: string, index: number): string => `data-${SUITE_SLUG_PREFIX}${suiteKey}-${index + 1}`;
+export const suiteDataShareId = (suiteKey: string, index: number): string => `data-${suiteSlugPrefix(suiteKey)}${suiteKey}-${index + 1}`;
 export const suitePageShareId = (suiteKey: string): string => `webpage-${SUITE_SLUG_PREFIX}suite-${suiteKey}`;
 // App pages: the entry page IS the suite key (/p/pokeworld), the rest are
 // <suiteKey>-<pageKey> (/p/pokeworld-pokedex). The seeded shareId is the

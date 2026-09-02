@@ -2,7 +2,10 @@ import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, validateThingtimeCrystal } from '~/schemas/registry';
-import { BEHAVIOUR_SUITES, materializeSuite } from '~/schemas/behaviourSuites';
+import { isAppSuite, materializeSuite } from '~/schemas/behaviourSuites';
+import { ALL_SUITES, APP_SUITE_LIST } from '~/schemas/appSuites/index';
+import { ASTRO_SCHOOL_ENTRIES } from '../actions/packs/astro/index';
+import { POKEWORLD_SPECIES_SEED } from '../actions/packs/pokeworld/index';
 import { WEBPAGE_DEMO_SLUG_PREFIX, getWebpageDemos, webpageDemoCrystal } from '~/schemas/webpageDemos';
 import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 
@@ -87,6 +90,8 @@ export type SeedWebpagesCensus = {
 	// suites count by their seeded PAGE (one per suite)
 	suitesSeeded: number;
 	suitesTotal: number;
+	appsSeeded: number;
+	appsTotal: number;
 };
 
 type SeedFail = { ok: false; status: number; error: string };
@@ -110,7 +115,11 @@ export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	demosSeeded: await seededCount('demo', 'suite'),
 	demosTotal: getWebpageDemos().length,
 	suitesSeeded: await seededCount('suite'),
-	suitesTotal: BEHAVIOUR_SUITES.length
+	suitesTotal: ALL_SUITES.length,
+	// app suites count by their ENTRY page; app content (school entries,
+	// species) is system data that installs never copy
+	appsSeeded: await seededCount('app-entry'),
+	appsTotal: APP_SUITE_LIST.length
 });
 
 // One system thing to upsert: the kind names its gate, the shareId carries
@@ -317,9 +326,10 @@ export const seedDemoWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 // shareId exactly as the executor stamps things it creates.
 export const seedDemoSuites = async (): Promise<SeedFail | SeedWebpagesResult> => {
 	const definitions: SeedDefinition[] = [];
-	for (const suite of BEHAVIOUR_SUITES) {
+	for (const suite of ALL_SUITES) {
 		const materialized = materializeSuite(suite, 'system');
-		const tags = (kind: string) => ['demo', 'suite', suite.key, kind];
+		const app = isAppSuite(suite);
+		const tags = (kind: string) => [app ? 'app' : 'demo', 'suite', suite.key, kind];
 		for (const schema of materialized.schemas) {
 			definitions.push({ shareId: schema.shareId, uniqueKey: `demo:${schema.shareId}`, kind: 'schema', tags: tags('schema'), crystalInput: schema.crystal });
 		}
@@ -339,7 +349,57 @@ export const seedDemoSuites = async (): Promise<SeedFail | SeedWebpagesResult> =
 				crystalInput: { ...entry.crystal, schemaId: schemaIdByKey.get(entry.schemaKey) }
 			});
 		}
-		definitions.push(webpageDefinition(`${WEBPAGE_DEMO_SLUG_PREFIX}${materialized.page.slug}`, ['webpage', 'demo', 'suite', suite.key], materialized.page.crystal));
+		if (app) {
+			// app pages seed at webpage-<pageKey> (the entry page IS the suite
+			// key), every page tagged so the census finds the entry
+			for (const [index, page] of materialized.pages.entries()) {
+				definitions.push(webpageDefinition(page.pageKey, ['webpage', 'app', 'suite', suite.key, ...(index === 0 ? ['app-entry'] : [])], page.crystal));
+			}
+		} else {
+			definitions.push(webpageDefinition(`${WEBPAGE_DEMO_SLUG_PREFIX}${materialized.page.slug}`, ['webpage', 'demo', 'suite', suite.key], materialized.page.crystal));
+		}
 	}
+	definitions.push(...appContentDefinitions());
 	return upsertSystemThings(definitions);
+};
+
+// App CONTENT: public system data things the app suites read in public scope
+// (StarsAlign's 418 school entries, Pokeworld's 386 species). They are
+// seeded once here, browsable on /things, and never part of an install — an
+// installed program reads them exactly as the seeded one does.
+const appContentDefinitions = (): SeedDefinition[] => {
+	const definitions: SeedDefinition[] = [];
+	const schemaIdOf = (suiteKey: string, schemaKey: string) => `schema-app-${suiteKey}-${schemaKey}`;
+	const schemaNameOf = (suiteKey: string, schemaKey: string) => `app-${suiteKey}-${schemaKey}`;
+	for (const entry of ASTRO_SCHOOL_ENTRIES) {
+		const shareId = `data-app-starsalign-entry-${entry.id}`;
+		definitions.push({
+			shareId,
+			uniqueKey: `app:${shareId}`,
+			kind: 'data',
+			tags: ['app', 'starsalign', 'content', 'entry', entry.section],
+			crystalInput: {
+				entryId: entry.id,
+				section: entry.section,
+				title: entry.title,
+				essence: entry.essence,
+				keywords: entry.keywords,
+				short: entry.short,
+				deep: entry.deep,
+				schema: schemaNameOf('starsalign', 'entry'),
+				schemaId: schemaIdOf('starsalign', 'entry')
+			}
+		});
+	}
+	for (const species of POKEWORLD_SPECIES_SEED) {
+		const shareId = `data-app-pokeworld-species-${species.id}`;
+		definitions.push({
+			shareId,
+			uniqueKey: `app:${shareId}`,
+			kind: 'data',
+			tags: ['app', 'pokeworld', 'content', 'species', ...(species.isLegendary ? ['legendary'] : [])],
+			crystalInput: { ...species, schema: schemaNameOf('pokeworld', 'species'), schemaId: schemaIdOf('pokeworld', 'species') }
+		});
+	}
+	return definitions;
 };

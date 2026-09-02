@@ -6,7 +6,8 @@ import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { BEHAVIOUR_SUITES, materializeSuite, summarizeBehaviourSuite, type BehaviourSuite, type MaterializedSuite } from '~/schemas/behaviourSuites';
-import { installSuite as installSuiteThings, suiteKeyFromActionKey } from './installSuite';
+import { ALL_SUITES, APP_SUITE_LIST } from '~/schemas/appSuites/index';
+import { installSuite as installSuiteThings, installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
 import {
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
@@ -42,9 +43,9 @@ const THUMB_HEIGHT = 200;
 
 type SeededState = { seeded: Set<string>; suites: Set<string>; seededCount: number; total: number };
 
-type KindFilter = WebpageDemoKind | 'all' | 'suite';
+type KindFilter = WebpageDemoKind | 'all' | 'suite' | 'app';
 
-const KIND_LABELS: Record<KindFilter, string> = { all: 'Everything', section: 'Sections', page: 'Pages', component: 'Component blocks', suite: '🧪 Behaviour suites' };
+const KIND_LABELS: Record<KindFilter, string> = { all: 'Everything', section: 'Sections', page: 'Pages', component: 'Component blocks', suite: '🧪 Behaviour suites', app: '📱 Apps' };
 
 type Preview = { kind: 'demo'; demo: WebpageDemo } | { kind: 'suite'; suite: BehaviourSuite; materialized: MaterializedSuite };
 
@@ -218,16 +219,26 @@ const SuiteCard = ({ suite, seeded, onPreview, onInstall, busy }: { suite: Behav
 					{suite.description}
 				</Text>
 				<Text fontSize="11px" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" color="var(--tt-muted, #9a9aa6)" textTransform="uppercase" letterSpacing="0.08em">
-					{counts.schemas} schema{counts.schemas === 1 ? '' : 's'} · {counts.components} control{counts.components === 1 ? '' : 's'} · {counts.actions} action{counts.actions === 1 ? '' : 's'} · {counts.data} data
+					{counts.schemas} schema{counts.schemas === 1 ? '' : 's'} · {counts.components} control{counts.components === 1 ? '' : 's'} · {counts.actions} action{counts.actions === 1 ? '' : 's'} · {suite.app ? `${counts.pages} pages` : `${counts.data} data`}
 					{seeded ? ' · 🌱 seeded' : ''}
 				</Text>
+				{suite.app ? (
+					<Text color="var(--tt-text, #5a5a66)" fontSize="xs">
+						{suite.app.tagline}
+					</Text>
+				) : null}
 			</Flex>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap">
 				<Button size="xs" variant="outline" onClick={onPreview} data-testid="suite-preview">
 					Preview
 				</Button>
+				{suite.app && seeded ? (
+					<Button as={Link} to={`/p/${encodeURIComponent(summary.pageKey)}`} size="xs" variant="ghost" data-testid="suite-open-app">
+						Open /p/{summary.pageKey} ↗
+					</Button>
+				) : null}
 				<Button size="xs" onClick={onInstall} isLoading={busy} data-testid="suite-install">
-					Install suite ✨
+					{suite.app ? 'Install app ✨' : 'Install suite ✨'}
 				</Button>
 				{seeded ? (
 					<>
@@ -319,8 +330,8 @@ export default function DemoLibraryPage() {
 	}, [demos, family, kind, needle]);
 	const filteredSuites = React.useMemo(
 		() =>
-			kind === 'suite'
-				? BEHAVIOUR_SUITES.filter((suite) => !needle || suite.title.toLowerCase().includes(needle) || suite.description.toLowerCase().includes(needle) || suite.key.includes(needle))
+			kind === 'suite' || kind === 'app'
+				? (kind === 'app' ? APP_SUITE_LIST : BEHAVIOUR_SUITES).filter((suite) => !needle || suite.title.toLowerCase().includes(needle) || suite.description.toLowerCase().includes(needle) || suite.key.includes(needle))
 				: [],
 		[kind, needle]
 	);
@@ -368,6 +379,20 @@ export default function DemoLibraryPage() {
 		if (!requireUser('install a suite')) return;
 		setBusyKey(`suite:${suite.key}`);
 		try {
+			if (suite.app) {
+				// an APP: one idempotent server install (every page keeps its key),
+				// then the entry page — the same URL now serves the viewer's copy
+				const installed = await installSuiteOnServer(suite.key);
+				lopu({
+					title: `${suite.emoji} ${suite.title} installed ✨`,
+					description: `${installed.created} things created · ${installed.updated} refreshed — opening your copy at /p/${installed.entryPageKey}.`,
+					status: 'success',
+					duration: 8000
+				});
+				setPreview(null);
+				navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`);
+				return;
+			}
 			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
 			const bundle = materializeSuite(suite, 'own');
 			const pageId = installed.pageId;
@@ -391,9 +416,15 @@ export default function DemoLibraryPage() {
 	// and their own page opens — the modal's controls are never inert for them
 	const onPreviewUnowned = React.useCallback(
 		async (action: string): Promise<boolean> => {
-			const key = suiteKeyFromActionKey(action, BEHAVIOUR_SUITES) || (preview?.kind === 'suite' ? preview.suite.key : null);
-			const suite = key ? BEHAVIOUR_SUITES.find((entry) => entry.key === key) : null;
+			const key = suiteKeyFromActionKey(action, ALL_SUITES) || (preview?.kind === 'suite' ? preview.suite.key : null);
+			const suite = key ? ALL_SUITES.find((entry) => entry.key === key) : null;
 			if (!suite || !user?.id) return false;
+			if (suite.app) {
+				const installed = await installSuiteOnServer(suite.key);
+				lopu({ title: `${suite.emoji} ${suite.title} installed ✨`, description: `Opening your copy at /p/${installed.entryPageKey}.`, status: 'success', duration: 6000 });
+				window.setTimeout(() => navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`), 800);
+				return true;
+			}
 			lopu({ title: `Installing the ${suite.emoji} ${suite.title} suite…`, description: 'Your own schemas, controls, actions, and sample data.', status: 'info', duration: 4000 });
 			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
 			lopu({
@@ -431,7 +462,7 @@ export default function DemoLibraryPage() {
 	);
 	const previewSeeded = preview ? (preview.kind === 'demo' ? seededState.seeded.has(preview.demo.slug) : seededState.suites.has(preview.suite.key)) : false;
 	const previewSeededId = preview ? (preview.kind === 'demo' ? webpageDemoShareId(preview.demo.slug) : preview.materialized.page.shareId) : '';
-	const notSeeded = seededState.total + BEHAVIOUR_SUITES.length - seededState.seededCount - seededState.suites.size;
+	const notSeeded = seededState.total + ALL_SUITES.length - seededState.seededCount - seededState.suites.size;
 
 	return (
 		<PageShell width={1280}>
@@ -476,7 +507,7 @@ export default function DemoLibraryPage() {
 				</Flex>
 				{kind === 'suite' ? (
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" data-testid="demos-count">
-						{filteredSuites.length} suite{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{BEHAVIOUR_SUITES.length} seeded on this deployment
+						{filteredSuites.length} suite{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{ALL_SUITES.length} seeded on this deployment
 					</Text>
 				) : (
 					<>
