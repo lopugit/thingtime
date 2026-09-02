@@ -67,6 +67,29 @@ export default function PublicWebpage() {
 		}
 	}, [page?.crystal?.name]);
 
+	// The post-install hand-off is deferred so the "installed ✨" toast is
+	// readable before the page moves. That timer OUTLIVES this component if the
+	// viewer navigates away inside the delay, and it would then yank them off
+	// whatever they opened next (or reload it). Held in a ref so unmount — and
+	// a second install — cancels the pending hand-off.
+	const handoffRef = React.useRef<number | null>(null);
+	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
+		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
+		handoffRef.current = window.setTimeout(() => {
+			handoffRef.current = null;
+			run();
+		}, delayMs);
+	}, []);
+	React.useEffect(
+		() => () => {
+			if (handoffRef.current !== null) {
+				window.clearTimeout(handoffRef.current);
+				handoffRef.current = null;
+			}
+		},
+		[]
+	);
+
 	// Install the page's suite for the viewer. App suites go through the
 	// one-request idempotent server install (every page keeps its key, so the
 	// current URL now serves the viewer's own copy); the demo suites keep the
@@ -116,7 +139,7 @@ export default function PublicWebpage() {
 				if (!outcome) return false;
 				if (outcome.href) {
 					const target = outcome.href;
-					window.setTimeout(() => {
+					scheduleHandoff(() => {
 						// same URL for app suites — a reload re-resolves the viewer's twin
 						if (target === window.location.pathname) window.location.reload();
 						else navigate(target);
@@ -128,7 +151,7 @@ export default function PublicWebpage() {
 				return false;
 			}
 		},
-		[installForViewer, lopu, navigate, suiteKey]
+		[installForViewer, lopu, navigate, scheduleHandoff, suiteKey]
 	);
 
 	const onInstall = React.useCallback(async (): Promise<boolean> => {

@@ -245,9 +245,14 @@ const SuiteCard = ({ suite, seeded, onPreview, onInstall, busy }: { suite: Behav
 						<Button as={Link} to={`/p/${encodeURIComponent(summary.pageId)}`} size="xs" variant="ghost" data-testid="suite-open-p">
 							/p/ ↗
 						</Button>
-						<Button as={Link} to={`/actions/${encodeURIComponent(summary.actionIds[0])}`} size="xs" variant="ghost" data-testid="suite-open-action">
-							⚡ /actions
-						</Button>
+						{/* nothing enforces that a suite declares an action, and
+						    encodeURIComponent(undefined) is the string "undefined" —
+						    a zero-action suite would ship a link to /actions/undefined */}
+						{summary.actionIds[0] ? (
+							<Button as={Link} to={`/actions/${encodeURIComponent(summary.actionIds[0])}`} size="xs" variant="ghost" data-testid="suite-open-action">
+								⚡ /actions
+							</Button>
+						) : null}
 					</>
 				) : null}
 			</Flex>
@@ -277,6 +282,28 @@ export default function DemoLibraryPage() {
 	const [preview, setPreview] = React.useState<Preview | null>(null);
 	const [busyKey, setBusyKey] = React.useState<string | null>(null);
 	const [seeding, setSeeding] = React.useState(false);
+
+	// The post-install hand-off waits so the "installed ✨" toast is readable
+	// before the gallery navigates. That timer OUTLIVES this page if the viewer
+	// leaves inside the delay, and it would then pull them off whatever they
+	// opened next. Held in a ref so unmount cancels the pending hand-off.
+	const handoffRef = React.useRef<number | null>(null);
+	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
+		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
+		handoffRef.current = window.setTimeout(() => {
+			handoffRef.current = null;
+			run();
+		}, delayMs);
+	}, []);
+	React.useEffect(
+		() => () => {
+			if (handoffRef.current !== null) {
+				window.clearTimeout(handoffRef.current);
+				handoffRef.current = null;
+			}
+		},
+		[]
+	);
 
 	const setParam = (key: string, value: string) => {
 		const next = new URLSearchParams(searchParams);
@@ -422,7 +449,7 @@ export default function DemoLibraryPage() {
 			if (suite.app) {
 				const installed = await installSuiteOnServer(suite.key);
 				lopu({ title: `${suite.emoji} ${suite.title} installed ✨`, description: `Opening your copy at /p/${installed.entryPageKey}.`, status: 'success', duration: 6000 });
-				window.setTimeout(() => navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`), 800);
+				scheduleHandoff(() => navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`), 800);
 				return true;
 			}
 			lopu({ title: `Installing the ${suite.emoji} ${suite.title} suite…`, description: 'Your own schemas, controls, actions, and sample data.', status: 'info', duration: 4000 });
@@ -436,7 +463,7 @@ export default function DemoLibraryPage() {
 			});
 			return true;
 		},
-		[lopu, preview, seededState.suites, user?.id]
+		[lopu, navigate, preview, scheduleHandoff, seededState.suites, user?.id]
 	);
 
 	const seedDemos = async () => {
