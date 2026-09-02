@@ -2,7 +2,7 @@ import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, validateThingtimeCrystal } from '~/schemas/registry';
-import { isAppSuite, materializeSuite } from '~/schemas/behaviourSuites';
+import { isAppSuite, materializeSuite, summarizeBehaviourSuite } from '~/schemas/behaviourSuites';
 import { ALL_SUITES, APP_SUITE_LIST } from '~/schemas/appSuites/index';
 import { ASTRO_SCHOOL_ENTRIES } from '../actions/packs/astro/index';
 import { POKEWORLD_SPECIES_SEED } from '../actions/packs/pokeworld/index';
@@ -104,6 +104,16 @@ const seededCount = async (tag?: string, withoutTag?: string): Promise<number> =
 	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system', ...tagged } as any);
 };
 
+const seededSuiteCount = async (): Promise<number> => {
+	const things = await getThingsCollection();
+	const docs = await things
+		.find({ thingtime: 'webpage', ownerId: 'system', tags: 'suite' } as any, { projection: { shareId: 1 } })
+		.limit(ALL_SUITES.length * 16 + 64)
+		.toArray();
+	const seeded = new Set(docs.map((doc: any) => doc.shareId));
+	return ALL_SUITES.filter((suite) => seeded.has(summarizeBehaviourSuite(suite).pageId)).length;
+};
+
 export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	ok: true,
 	totalSeeded: await seededCount(),
@@ -114,7 +124,10 @@ export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	// seeded deployment reports more demos seeded than the catalog holds
 	demosSeeded: await seededCount('demo', 'suite'),
 	demosTotal: getWebpageDemos().length,
-	suitesSeeded: await seededCount('suite'),
+	// a suite counts as seeded when its ENTRY page is — app suites carry
+	// several pages tagged 'suite', so counting pages would report more
+	// suites seeded than the registry holds
+	suitesSeeded: await seededSuiteCount(),
 	suitesTotal: ALL_SUITES.length,
 	// app suites count by their ENTRY page; app content (school entries,
 	// species) is system data that installs never copy
