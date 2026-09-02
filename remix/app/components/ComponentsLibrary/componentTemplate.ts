@@ -38,13 +38,17 @@ export const MAX_RESOLVED_NODES = 4000;
 // tokenless ones returned by reference. Sharing makes a repeated string free in
 // memory, so charging it looks pessimistic, but the saving is an illusion the
 // moment anything serialises the tree: JSON.stringify(ttActionInputs) copies
-// every shared reference out by value (see resolveNode). Headroom, measured
-// over the whole 2800-component catalog: 3,560
-// chars at each component's declared defaults, and 37,696 with every arg
-// driven to what a saved version may actually store (MAX_COMPONENT_SAVED_ARGS
-// 24 x MAX_COMPONENT_SAVED_ARG_CHARS 2000, every enum value swept). So the
-// real worst case sits ~7x under this cap — the same margin the node budget
-// keeps — and nothing that ships truncates.
+// every shared reference out by value (see resolveNode). Node KEYS are charged
+// for the same reason: a key is tree text like any other, it is NOT bounded by
+// the arg caps (it comes from the stored template, where the render gate
+// screens keys for dots/$/prototype names but never for LENGTH), and
+// JSON.stringify copies it out per occurrence exactly like a shared string.
+// Headroom, measured over the whole 2800-component catalog: 6,611 chars at
+// each component's declared defaults (3,560 of values + 3,051 of keys), and
+// 40,593 with every arg driven to what a saved version may actually store
+// (MAX_COMPONENT_SAVED_ARGS 24 x MAX_COMPONENT_SAVED_ARG_CHARS 2000, every
+// enum value swept — 37,696 of values + 2,897 of keys). So the real worst case
+// sits ~6.5x under this cap and nothing that ships truncates.
 export const MAX_RESOLVED_CHARS = 256 * 1024;
 
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -118,10 +122,10 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 		// shared reference into its own copy. Uncharged, one 28KB tokenless string
 		// under 3 nested ttRepeats (28,854 bytes / 17 raw nodes / depth 8 — inside
 		// every server cap) serialised to 104.7 MB while this budget still read as
-		// unspent. Charging by occurrence bounds the serialised size too, and
-		// matches what the generator's validator already counts (walkResolved
-		// charges every resolved string): the catalog peaks at 3,560 chars there,
-		// so ordinary components keep ~70x headroom under MAX_RESOLVED_CHARS.
+		// unspent. Charging by occurrence bounds the serialised size too. The
+		// object branch charges node KEYS on exactly the same grounds — a key is
+		// tree text that JSON.stringify copies out per occurrence. Together the
+		// catalog peaks at 6,611 chars, ~40x under MAX_RESOLVED_CHARS.
 		budget.chars -= template.length;
 		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, draw the partial tree
 		return template;
@@ -187,7 +191,18 @@ const resolveNode = (template: unknown, scope: ComponentArgValues, budget: Resol
 		// allowlisted data-* props below — never copied through as node keys
 		if (key === 'ttAction' || key === 'ttActionInputs') continue;
 		const resolved = resolveNode(value, scope, budget);
-		if (resolved !== undefined) out[key] = resolved;
+		if (resolved === undefined) continue;
+		// A node KEY is tree text exactly like a string value, and nothing else
+		// bounds it: the render gate screens keys for dots/$/prototype names but
+		// never for LENGTH, so a ~28KB key fits in a 32KB template, and nested
+		// ttRepeat then re-materialises it once per iteration. Uncharged, that
+		// serialised to a 52.2 MB data-tt-action-inputs string (28,160-byte
+		// template, 15 raw nodes, depth 10 — inside every server cap) while the
+		// char budget read 7 of 262,144 spent. Charge by occurrence, like the
+		// string branch above, and the key path is bounded by the same budget.
+		budget.chars -= key.length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, draw the partial tree
+		out[key] = resolved;
 	}
 	// ttAction: '<actionKey-or-id>' on a node marks it as a runnable control.
 	// It resolves to data-tt-action / data-tt-action-inputs attributes (the

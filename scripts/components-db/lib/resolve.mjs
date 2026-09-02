@@ -34,7 +34,9 @@ export const MAX_RESOLVED_NODES = 4000;
 // remix/app/components/ComponentsLibrary/componentTemplate.ts for the measured
 // numbers. Every string in the tree is charged by occurrence, tokenless ones
 // included: sharing makes a repeated string free in memory, but not once the
-// tree is serialised — see that twin's resolveNode.
+// tree is serialised — see that twin's resolveNode. Node KEYS are charged for
+// the same reason and are bounded by nothing else: the render gate screens keys
+// for dots/$/prototype names but never for LENGTH.
 export const MAX_RESOLVED_CHARS = 256 * 1024;
 
 const TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -143,7 +145,11 @@ const resolveNode = (template, scope, budget) => {
 	for (const [key, value] of Object.entries(template)) {
 		if (budget.left <= 0) break;
 		const resolved = resolveNode(value, scope, budget);
-		if (resolved !== undefined) out[key] = resolved;
+		if (resolved === undefined) continue;
+		// keys are tree text too — charged by occurrence like every string above
+		budget.chars -= key.length;
+		if (budget.chars <= 0) budget.left = 0; // spent → stop expanding, return the partial tree
+		out[key] = resolved;
 	}
 	return out;
 };

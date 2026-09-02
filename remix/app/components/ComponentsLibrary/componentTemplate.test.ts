@@ -136,6 +136,36 @@ test('a shared tokenless string cannot expand through ttActionInputs', () => {
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
+// Same amplifier as the test above, reached through the one piece of tree text
+// the char budget did not meter: an object KEY. Nothing bounds a key's length —
+// checkSchemaRenderTree screens keys for dots, null bytes, '$' prefixes and
+// prototype names, but never for size — so a ~28KB key fits inside the 32KB
+// template cap, and nested ttRepeat re-materialises it once per iteration.
+// Uncharged, the template below (28,160 bytes / 15 raw nodes / depth 10 —
+// inside every server cap) serialised to a 52.2 MB data-tt-action-inputs string
+// while the 256KB char budget read 7 of 262,144 spent.
+test('a long node key cannot expand through ttActionInputs', () => {
+	const bigKey = 'k'.repeat(28 * 1024); // no dot / '$' / prototype name: the render gate accepts it
+	const nest = (depth: number): unknown =>
+		depth === 0 ? { [bigKey]: 1 } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
+	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
+	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
+
+	const started = Date.now();
+	const resolved = resolveTemplate(attack, {}) as { props?: Record<string, unknown> };
+	const serialized = String(resolved.props?.['data-tt-action-inputs'] ?? '');
+
+	// one key is charged per occurrence, so the budget stops the repeat before
+	// the serialisation can multiply it
+	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
+	assert.ok(
+		serialized.length <= ceiling,
+		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
+	);
+	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
+});
+
 test('ordinary templates resolve untouched by the budget', () => {
 	const template = {
 		tag: 'button',
