@@ -39,4 +39,3 @@ export const generationIndexRatio = (generation: { dataBytes?: number; indexByte
   if (generation.dataBytes <= 0) return generation.indexBytes > 0 ? Infinity : null;
   return generation.indexBytes / generation.dataBytes;
 };
-

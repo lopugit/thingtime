@@ -2889,7 +2889,17 @@ const relocateCiControlTelemetry: Migration = {
       );
     }
     if (!report.drained) {
-      notes.push(`Time budget reached (${Math.round(CI_RELOCATION_BUDGET_MS / 1000)}s): more rows remain — run this migration again until pending reads 0`);
+      // A dry run writes nothing, so pending cannot move: telling the operator
+      // to "re-run until pending reads 0" here would be an instruction that can
+      // never be satisfied. On the 1.8M-row production collection the dry run
+      // hits the budget every time, so this is the note the rollout actually
+      // starts on — the counts above are a sample, not the whole collection.
+      const budgetSeconds = Math.round(CI_RELOCATION_BUDGET_MS / 1000);
+      notes.push(
+        dryRun
+          ? `Time budget reached (${budgetSeconds}s): the counts above cover only the rows scanned so far, not every pending row — pending() is the authoritative total`
+          : `Time budget reached (${budgetSeconds}s): more rows remain — run this migration again until pending reads 0`
+      );
     } else if (!dryRun && report.matched) {
       notes.push('things has no ci-* rows left — run rebuild-things-indexes next to reclaim the index storage they occupied');
     }
@@ -2959,7 +2969,18 @@ const rebuildThingsIndexes: Migration = {
 
 // Storage census for one physical collection ($collStats): document bytes,
 // on-disk storage, and per-index bytes — the numbers the generations table and
-// the index rebuild reason about. null when the collection does not exist.
+// the index rebuild reason about. null when there is no census to report.
+//
+// ADVISORY, never fatal. $collStats is not universally available: it is
+// rejected on a view (CommandNotSupportedOnView 166), restricted on some
+// managed tiers, and gone the moment a generation is dropped
+// (NamespaceNotFound 26). Every caller already has a null path — the
+// generations table falls back to estimatedDocumentCount and renders "—",
+// and rebuild-things-indexes reports no pending work — so a census that
+// cannot be taken must degrade, not 500 /api/v1/admin/migrations. That
+// endpoint is the ONLY in-app way to run relocate-ci-control-telemetry and
+// rebuild-things-indexes, so losing it to a decorative number would block
+// the very rollout the census exists to guide.
 export type CollectionStorage = { docs: number; dataBytes: number; storageBytes: number; indexBytes: number; indexSizes: Record<string, number> };
 export const collectionStorage = async (db: any, physical: string): Promise<CollectionStorage | null> => {
   try {
@@ -2976,10 +2997,8 @@ export const collectionStorage = async (db: any, physical: string): Promise<Coll
       indexBytes: Number(stats.totalIndexSize) || 0,
       indexSizes: Object.fromEntries(Object.entries(stats.indexSizes || {}).map(([name, bytes]) => [name, Number(bytes) || 0]))
     };
-  } catch (error: any) {
-    // NamespaceNotFound (26): a generation that no longer exists
-    if (error?.code === 26 || error?.codeName === 'NamespaceNotFound') return null;
-    throw error;
+  } catch {
+    return null;
   }
 };
 
@@ -3148,11 +3167,15 @@ export type CollectionGenerationStatus = {
   stale: boolean;
   // storage census ($collStats): uncompressed document bytes, on-disk
   // collection bytes, total index bytes, and the index count — so "which
-  // generation is eating the cluster" is visible where cleanup is decided
-  dataBytes: number;
-  storageBytes: number;
-  indexBytes: number;
-  indexes: number;
+  // generation is eating the cluster" is visible where cleanup is decided.
+  // OPTIONAL: absent when the census could not be taken (collectionStorage).
+  // "Unknown" must not serialize as 0 — 0 B of documents beside 0 B of index
+  // is what a genuinely empty generation looks like, and the panel decides
+  // whether to raise its bloat badge from exactly these numbers.
+  dataBytes?: number;
+  storageBytes?: number;
+  indexBytes?: number;
+  indexes?: number;
 };
 
 // Per-collection version census + storage generations + which registered
@@ -3196,8 +3219,17 @@ export const getMigrationStatus = async (): Promise<{
   // admin sees exactly what cleanup would drop before running it
   const physicalNames = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
   const generations = await Promise.all(
-    classifyPhysicalCollections(physicalNames).map(async (row) => {
+    classifyPhysicalCollections(physicalNames).map(async (row): Promise<CollectionGenerationStatus> => {
       const storage = await collectionStorage(db, row.physical);
+      // omitted, not zeroed, when there is no census — see CollectionStorage
+      const census: Partial<CollectionGenerationStatus> = storage
+        ? {
+            dataBytes: storage.dataBytes,
+            storageBytes: storage.storageBytes,
+            indexBytes: storage.indexBytes,
+            indexes: Object.keys(storage.indexSizes).length
+          }
+        : {};
       return {
         collection: row.collection,
         physical: row.physical,
@@ -3205,10 +3237,7 @@ export const getMigrationStatus = async (): Promise<{
         docs: storage ? storage.docs : await db.collection(row.physical).estimatedDocumentCount(),
         current: row.current,
         stale: row.stale,
-        dataBytes: storage?.dataBytes ?? 0,
-        storageBytes: storage?.storageBytes ?? 0,
-        indexBytes: storage?.indexBytes ?? 0,
-        indexes: storage ? Object.keys(storage.indexSizes).length : 0
+        ...census
       };
     })
   );

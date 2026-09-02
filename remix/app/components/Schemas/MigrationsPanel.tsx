@@ -7,9 +7,7 @@ import { apiAdminErrorDetail, apiDiagnosticThingId, apiErrorMessage, hasUnknownM
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
-import { formatGenerationBytes, generationIndexRatio } from './migrationUiCore';
-
-import { actionableAdoptionIssues } from './migrationUiCore';
+import { actionableAdoptionIssues, formatGenerationBytes, generationIndexRatio } from './migrationUiCore';
 
 type CollectionCensus = {
   collection: string;
