@@ -914,6 +914,25 @@ export function assertControlPlaneContract() {
     /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ -n "\$merge_sha" \]/u,
     "listener ownership must not be decided by the freshness-cleared merge SHA",
   );
+  // The three assertions above pin how `mergeable_pr` is read but not how it
+  // is written, and the regression that matters is a write: adding
+  // `mergeable_pr=false` beside the `merge_sha=""` in the freshness check
+  // re-collapses the two facts and reproduces #557 exactly (`analyze=true`,
+  // `ref=refs/pull/N/head` beside the live `pull_request` merge-ref run) while
+  // leaving all three green. Pin the variable's whole lifecycle instead: two
+  // assignments, in this order, and the `true` only where a well-formed
+  // published merge SHA is captured. Nothing between the lookup and the
+  // ownership gate may touch it.
+  assert.deepEqual(
+    codeql.match(/^\s*mergeable_pr=\S+$/gmu)?.map((assignment) => assignment.trim()),
+    ["mergeable_pr=false", "mergeable_pr=true"],
+    "`mergeable_pr` is initialized false and set true exactly once, so the freshness check cannot clear it",
+  );
+  assert.match(
+    codeql,
+    /merge_sha="\$candidate_merge_sha"\n\s+mergeable_pr=true$/mu,
+    "`mergeable_pr` records the published merge SHA GitHub actually returned, never an unconditional default",
+  );
   assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
   assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
   assert.match(codeql, /^      security-events: read$/mu);
