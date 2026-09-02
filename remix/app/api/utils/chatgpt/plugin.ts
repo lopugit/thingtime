@@ -1,7 +1,8 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
+import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
 import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
@@ -460,13 +461,11 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
   );
 };
 
-const relayPollTokenHash = (value: string) => createHash('sha256').update(value).digest('base64url');
+const relayPollTokenHash = (value: string) => hashPassword(value);
 
-const relayPollTokenMatches = (provided: string, expected: unknown) => {
+const relayPollTokenMatches = async (provided: string, expected: unknown) => {
   if (!provided || typeof expected !== 'string') return false;
-  const actual = Buffer.from(relayPollTokenHash(provided));
-  const stored = Buffer.from(expected);
-  return actual.length === stored.length && timingSafeEqual(actual, stored);
+  return verifyPassword(provided, expected);
 };
 
 const relayCallbackUrl = (origin: string, handoffId: string) => {
@@ -490,7 +489,7 @@ export const startChatGptOAuthRelay = async ({ request }: { request: Request }) 
   await createSession(`chatgpt-relay:${handoffId}`, {
     purpose: OAUTH_RELAY_PURPOSE,
     expiresAt,
-    meta: { handoffId, pollTokenHash: relayPollTokenHash(pollToken) }
+    meta: { handoffId, pollTokenHash: await relayPollTokenHash(pollToken) }
   });
   return json({ handoffId, pollToken, callbackUrl: relayCallbackUrl(requestOrigin(request), handoffId), expiresAt: expiresAt.toISOString() }, { status: 201, headers: noStoreHeaders });
 };
@@ -524,7 +523,7 @@ export const handleChatGptOAuthRelay = async ({ request }: { request: Request })
   }
 
   const pollToken = request.headers.get('x-thingtime-oauth-relay-token') || '';
-  if (!relayPollTokenMatches(pollToken, relay.meta?.pollTokenHash)) return json({ error: 'unauthorized' }, { status: 401, headers: noStoreHeaders });
+  if (!await relayPollTokenMatches(pollToken, relay.meta?.pollTokenHash)) return json({ error: 'unauthorized' }, { status: 401, headers: noStoreHeaders });
   const response = relay.meta?.authorizationResponse;
   if (!response || typeof response.code !== 'string' || typeof response.state !== 'string' || typeof response.iss !== 'string') {
     return json({ status: 'pending' }, { headers: noStoreHeaders });
