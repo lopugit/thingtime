@@ -244,3 +244,9 @@ six-index plan without a text index), `things_v2` holding only user content.
 - **Atlas tier.** The database is 3.48 GB on disk today and will be a few
   hundred MB after the rollout; check whether the current tier was sized for
   the bloat.
+- **Graphify snapshots in git.** `develop` tracks 170 snapshot files
+  (1.4 GB); a branch that runs `scripts/graphify update .` prunes them all
+  and GitHub can no longer compute the pull request diff (it stopped
+  synchronizing this PR's head until develop's snapshot set was restored).
+  Either the wrapper should stop pruning on feature branches, or snapshots
+  should leave git for a content-addressed store.
