@@ -1054,8 +1054,17 @@ const BlockView = (
 			<BlockList {...props} blocks={block.children || []} containerId={block.id} parentDirection={block.direction || 'column'} />
 		);
 		if (block.direction === 'grid') {
+			// the authored column count is the desktop layout; phones fold a grid
+			// to one column and small tablets to at most two, so a 3–4 column
+			// section never squeezes its cells to a few characters wide
+			const columns = block.columns || 2;
+			const cols = (count: number) => `repeat(${Math.max(1, count)}, minmax(0, 1fr))`;
 			body = (
-				<Grid templateColumns={`repeat(${block.columns || 2}, minmax(0, 1fr))`} gap={block.gap ?? 4} width="100%">
+				<Grid
+					templateColumns={columns > 1 ? { base: cols(1), sm: cols(Math.min(columns, 2)), md: cols(columns) } : cols(1)}
+					gap={block.gap ?? 4}
+					width="100%"
+				>
 					{children}
 				</Grid>
 			);

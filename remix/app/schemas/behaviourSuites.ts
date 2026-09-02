@@ -210,12 +210,20 @@ const suitePage = (
 				14,
 				{ color: ctx.tone.ink, background: ctx.tone.soft, border: `1px solid ${ctx.tone.border}`, 'border-radius': '12px', padding: '10px 14px' }
 			),
+			// a wrapping row, not a grid: each control takes at least 300px and
+			// the row folds to one column on a phone
 			kit.container(
 				ctx,
 				'controls',
-				'grid',
-				controls.map((control, index) => ({ id: ctx.id(`control-${index}`), type: 'component' as const, component: refs.component(control.component), ...(control.args ? { args: control.args } : {}) })),
-				{ columns: Math.min(2, Math.max(1, controls.length)), gap: 4, css: { 'margin-top': '8px' } }
+				'row',
+				controls.map((control, index) => ({
+					id: ctx.id(`control-${index}`),
+					type: 'component' as const,
+					component: refs.component(control.component),
+					...(control.args ? { args: control.args } : {}),
+					css: { flex: '1 1 300px', 'min-width': '0' }
+				})),
+				{ gap: 4, css: { 'margin-top': '8px', 'flex-wrap': 'wrap' } }
 			),
 			kit.html(
 				ctx,
