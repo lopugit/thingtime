@@ -1332,18 +1332,33 @@ const yamlScalarPattern = (key, value) =>
 // less-indented bound would run the window past them to the end of the job.
 export function yamlStepAt(lines, index) {
   const lineIndent = yamlIndent(lines[index]);
+  // Not every `- ` line opens a step. One opens *this* step only if it sits
+  // shallower than the matched line -- or is that line itself, for a step
+  // written `- uses:` first. A sequence nested inside the step is deeper: an
+  // `env:` list, an `allowedTools` list, a `- ` bullet inside one of the
+  // prompt block scalars these calls all carry. Reading one of those as the
+  // marker collapses the window onto that single item, which drops the step's
+  // own `id:` out of view -- so the probe falls through to the generic rule
+  // and the suite reports "every Lopu call receives the secondary API-key
+  // slot" against it. That is exactly the misdirection this window exists to
+  // prevent, and a maintainer who applies that message literally hands the
+  // vault probe the static slot the exemption is there to keep off it.
+  // Verified: adding an `env:` list above the probe's `uses:` reproduces that
+  // message on the probe line; the fixtures pin it.
+  const opensStep = (cursor) =>
+    /^ *- /u.test(lines[cursor]) && (cursor === index || yamlIndent(lines[cursor]) < lineIndent);
   let start = index;
   while (
     start > 0 &&
-    !/^ *- /u.test(lines[start]) &&
+    !opensStep(start) &&
     (!isStructuralYamlLine(lines[start - 1]) || yamlIndent(lines[start - 1]) >= lineIndent)
   ) {
     start -= 1;
   }
-  if (start > 0 && /^ *- /u.test(lines[start - 1])) start -= 1;
+  if (start > 0 && opensStep(start - 1)) start -= 1;
   // Without a marker the step's extent is unknown, so fall back to the matched
   // line's own indentation instead of guessing a wider one.
-  const bound = /^ *- /u.test(lines[start]) ? yamlIndent(lines[start]) : lineIndent - 1;
+  const bound = opensStep(start) ? yamlIndent(lines[start]) : lineIndent - 1;
   const offset = lines
     .slice(start + 1)
     .findIndex((line) => isStructuralYamlLine(line) && yamlIndent(line) <= bound);

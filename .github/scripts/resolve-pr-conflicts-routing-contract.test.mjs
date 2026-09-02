@@ -157,6 +157,52 @@ test("the window stops at the next job when the call ends its own job", () => {
   assert.doesNotMatch(step, /anthropic-api-key-fallback:/u);
 });
 
+test("a sequence nested inside the step is not read as its marker", () => {
+  // Ordinary step maintenance: a sequence-valued key above the `uses:` line.
+  // Its items are `- ` lines too, and taking the nearest one as the marker
+  // collapses the window onto that single item -- dropping the `id:` and
+  // reporting the generic slot message against the vault probe.
+  const step = stepAroundUses(`jobs:
+  verify_credential_vault:
+    steps:
+      - name: Verify the credential waterfall with one live Claude turn
+        id: live_probe
+        env:
+          NEEDLES:
+            - alpha
+            - beta
+        ${USES}
+        with:
+          backend: claude
+`);
+  assert.match(step, /- name: Verify the credential waterfall/u);
+  assert.match(step, /id: live_probe/u);
+  assert.match(step, /backend: claude/u);
+});
+
+test("a `- ` bullet inside a prompt block scalar is not read as a marker", () => {
+  // Every one of these calls carries a prose `prompt:`, and Lopu's prompts are
+  // full of markdown bullets. Block-scalar text is not YAML structure at all,
+  // so a bullet there is a marker only to a scan that reads the raw line --
+  // and `with:` may legally precede `uses:`, which puts one above the call.
+  const step = stepAroundUses(`jobs:
+  verify_credential_vault:
+    steps:
+      - name: Verify the credential waterfall with one live Claude turn
+        id: live_probe
+        with:
+          backend: claude
+          prompt: |
+            Return exactly credential-ok:
+            - do not inspect the repository
+            - do not use tools
+        ${USES}
+`);
+  assert.match(step, /- name: Verify the credential waterfall/u);
+  assert.match(step, /id: live_probe/u);
+  assert.match(step, /backend: claude/u);
+});
+
 test("composite-action step depth is read from the step, not assumed", () => {
   // `rebase-conflict-round/action.yml` nests its steps two columns shallower
   // than a workflow job's.
