@@ -1634,7 +1634,42 @@ function assertAdminModelRouting(
       // exempt -- it then fails the generic rule, which is the fail-closed
       // direction for a credential contract.
       const inVaultProbeJob = enclosingJob(index) === "verify_credential_vault";
-      if (inVaultProbeJob && /^\s*id:\s*live_probe\s*$/mu.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
+      // This call's whole step, used both to find its `id:` and to scope the
+      // probe assertions below: the `- ` marker that opens the step, every key
+      // under it, and nothing of the step or job that follows. `call` is a
+      // fixed 32-line window that here runs past this step and into the next
+      // job, so a negative assertion over it would answer for lines the step
+      // does not own. Both bounds come from the `uses:` line's own
+      // indentation, so this does not assume the six-space step depth of a
+      // workflow job over a composite action's.
+      //
+      // The id is taken from the step rather than from a fixed count of lines
+      // above the `uses:`, because that window is what decides whether the
+      // exemption applies and a fixed one ties it to the probe's current
+      // shape. Give the probe a `continue-on-error:` and a small `env:` and
+      // the `id:` slides out of view: the probe falls through to the generic
+      // rule, and the suite reports "every Lopu call receives the secondary
+      // API-key slot" against the probe line. A maintainer who applies that
+      // message literally hands the vault probe a static slot -- the masking
+      // regression this exemption exists to prevent -- and the suite goes
+      // green on it. That is the same misdirection the missing-job assertion
+      // above is there to head off, reached by ordinary step maintenance
+      // instead of a rename, so bound it by the step and it cannot happen.
+      const stepIndent = /^ */u.exec(lines[index])[0].length;
+      let stepStart = index;
+      while (
+        stepStart > 0 &&
+        !/^ *- /u.test(lines[stepStart]) &&
+        /^ */u.exec(lines[stepStart - 1])[0].length >= stepIndent
+      ) {
+        stepStart -= 1;
+      }
+      if (stepStart > 0 && /^ *- /u.test(lines[stepStart - 1])) stepStart -= 1;
+      const stepEnd = lines
+        .slice(index + 1)
+        .findIndex((line) => line.trim() !== "" && /^ */u.exec(line)[0].length < stepIndent);
+      const step = lines.slice(stepStart, stepEnd === -1 ? lines.length : index + 1 + stepEnd).join("\n");
+      if (inVaultProbeJob && /^\s*(?:- )?id:\s*live_probe\s*$/mu.test(step)) {
         // Assert both halves of the exemption, not just the positive one.
         // Requiring the router secret proves the probe can reach the
         // waterfall; it does not stop the probe from *also* being handed a
@@ -1644,28 +1679,13 @@ function assertAdminModelRouting(
         // exempting it. Left unasserted, the exemption rests on a property
         // nothing checks, which is how it silently becomes an unconditional
         // skip for the one call site allowed to carry no slots.
-        //
-        // Scope both assertions to the probe step. `call` is a fixed 32-line
-        // window that here runs past this step and into the next job, so a
-        // negative assertion over it would answer for lines the probe does not
-        // own. The step is every following line that is blank or indented at
-        // least as far as this `uses:`, which ends at the next `- name:` --
-        // taken from the line's own indentation so this does not assume the
-        // six-space step depth of a workflow job over a composite action's.
-        const stepIndent = /^ */u.exec(lines[index])[0].length;
-        const stepEnd = lines
-          .slice(index + 1)
-          .findIndex((line) => line.trim() !== "" && /^ */u.exec(line)[0].length < stepIndent);
-        const probeStep = lines
-          .slice(index, stepEnd === -1 ? lines.length : index + 1 + stepEnd)
-          .join("\n");
         assert.match(
-          probeStep,
+          step,
           /^\s+thingtime-ci-router-secret:/mu,
           `${path}:${index + 1}: the credential probe must authenticate through the Thingtime waterfall`,
         );
         assert.doesNotMatch(
-          probeStep,
+          step,
           /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
           `${path}:${index + 1}: the credential probe must exercise only the Thingtime waterfall, never a static slot`,
         );
