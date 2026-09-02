@@ -41,7 +41,12 @@ test('every suite part clears its kind gate in both materialisations', () => {
 				assert.deepEqual(crystal.steps, action.crystal.steps, `${mode} action ${action.slug}: gate rewrote the steps`);
 				assert.equal(crystal.actionKey, suiteSlug(suite.key, action.key));
 			}
-			for (const entry of materialized.data) expectValid(['data'], entry.crystal, `${mode} data ${entry.shareId}`);
+			// seed and install both stamp schemaId on top of the catalog crystal —
+			// validate the shape that is actually written, not just the catalog's
+			for (const entry of materialized.data) {
+				expectValid(['data'], { ...entry.crystal, schemaId: `schema-demo-${suite.key}-${entry.schemaKey}` }, `${mode} data ${entry.shareId}`);
+				assert.ok(suite.schemas.some((schema) => schema.key === entry.schemaKey), `${suite.key}: data names undeclared schema ${entry.schemaKey}`);
+			}
 			const page = expectValid(['webpage'], materialized.page.crystal, `${mode} page ${materialized.page.slug}`);
 			assert.deepEqual(page.blocks, materialized.page.crystal.blocks, `${mode} page ${materialized.page.slug}: gate rewrote the blocks`);
 			assert.ok(countDemoBlocks(materialized.page.crystal.blocks as DemoBlock[]) <= MAX_WEBPAGE_BLOCKS - 8, `${materialized.page.slug} leaves no edit headroom`);

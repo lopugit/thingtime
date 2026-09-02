@@ -200,6 +200,16 @@ const suitePage = (
 			kit.eyebrow(ctx, 'eyebrow', `Behaviour suite · ${suite.emoji} ${suite.title}`),
 			kit.heading(ctx, 'title', suite.description, 40),
 			...suite.story.map((paragraph, index) => kit.body(ctx, `story-${index}`, paragraph, 16)),
+			// the controls below run the VIEWER'S OWN programs (delegated ttAction
+			// resolution is owner-only), so a seeded copy is look-but-don't-touch
+			// until the viewer installs the suite — say so where the buttons are
+			kit.body(
+				ctx,
+				'install-hint',
+				`🧪 These controls run your own copy of the programs. Install the ${suite.title} suite from /builder/demos (Suites tab) and they come alive on your page.`,
+				14,
+				{ color: ctx.tone.ink, background: ctx.tone.soft, border: `1px solid ${ctx.tone.border}`, 'border-radius': '12px', padding: '10px 14px' }
+			),
 			kit.container(
 				ctx,
 				'controls',

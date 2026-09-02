@@ -130,6 +130,13 @@ const genuineSeeded = (twin: any, kind: string): boolean =>
 // Reconciling upsert shared by every seed here: insert missing docs, refresh
 // drifted genuine ones in place, and never touch a foreign doc squatting a
 // destination id (genuineness lives IN the update filter).
+//
+// Two round trips regardless of size — one read of every destination id, one
+// unordered bulk write — instead of two per document. The demo library is
+// ~450 documents, and at serverless-to-Atlas latency the per-document loop
+// was a multi-minute request that a function timeout would cut short.
+const READ_CHUNK = 500;
+
 const upsertSystemThings = async (definitions: SeedDefinition[]): Promise<SeedWebpagesResult> => {
 	await ensureIndexes();
 	const things = await getThingsCollection();
@@ -139,6 +146,7 @@ const upsertSystemThings = async (definitions: SeedDefinition[]): Promise<SeedWe
 	let unchanged = 0;
 	let skipped = 0;
 
+	const planned: Array<{ def: SeedDefinition; thingtime: string[]; crystal: Record<string, unknown> }> = [];
 	for (const def of definitions) {
 		const validated = validateThingtimeCrystal([def.kind], def.crystalInput);
 		if (validated.ok === false) {
@@ -146,50 +154,102 @@ const upsertSystemThings = async (definitions: SeedDefinition[]): Promise<SeedWe
 			skipped += 1;
 			continue;
 		}
+		planned.push({ def, thingtime: validated.thingtime, crystal: validated.crystal });
+	}
 
+	const twins = new Map<string, any>();
+	const shareIds = planned.map((entry) => entry.def.shareId);
+	for (let index = 0; index < shareIds.length; index += READ_CHUNK) {
+		const docs = await things
+			.find({ shareId: { $in: shareIds.slice(index, index + READ_CHUNK) } } as any, {
+				projection: { shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, tags: 1, storageClass: 1 }
+			})
+			.toArray();
+		for (const doc of docs as any[]) twins.set(doc.shareId, doc);
+	}
+
+	const now = new Date();
+	const ops: any[] = [];
+	// shareId per op index, so a partial bulk failure can be attributed
+	const opShareIds: string[] = [];
+	let refreshPlanned = 0;
+	for (const { def, thingtime, crystal } of planned) {
 		const { shareId, tags } = def;
-		const now = new Date();
-		const thing = {
-			shareId,
-			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-			thingtime: validated.thingtime,
-			crystal: validated.crystal,
-			ownerId: 'system',
-			storageClass: 'control',
-			acl: [ACL_ALL],
-			targetId: null,
-			tags,
-			uniqueKeys: [toBin(def.uniqueKey)],
-			createdAt: now,
-			updatedAt: now
-		};
+		const twin = twins.get(shareId);
+		if (!twin) {
+			ops.push({
+				insertOne: {
+					document: {
+						shareId,
+						schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+						thingtime,
+						crystal,
+						ownerId: 'system',
+						storageClass: 'control',
+						acl: [ACL_ALL],
+						targetId: null,
+						tags,
+						uniqueKeys: [toBin(def.uniqueKey)],
+						createdAt: now,
+						updatedAt: now
+					}
+				}
+			});
+			opShareIds.push(shareId);
+			continue;
+		}
+		if (!genuineSeeded(twin, def.kind)) {
+			notes.push(`skipped ${shareId}: shareId held by a foreign doc — left unseeded`);
+			skipped += 1;
+			continue;
+		}
+		const crystalDrifted = JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(crystal);
+		const tagsDrifted = JSON.stringify(twin.tags ?? []) !== JSON.stringify(tags);
+		const storageDrifted = twin.storageClass !== 'control';
+		if (crystalDrifted || tagsDrifted || storageDrifted) {
+			// genuineness lives IN the filter — a foreign doc matches nothing
+			ops.push({
+				updateOne: {
+					filter: { shareId, ownerId: 'system', thingtime: def.kind },
+					update: { $set: { crystal, tags, storageClass: 'control', updatedAt: now } }
+				}
+			});
+			opShareIds.push(shareId);
+			refreshPlanned += 1;
+			continue;
+		}
+		unchanged += 1;
+	}
 
+	if (ops.length) {
+		// unordered: one refused document never blocks the rest; the driver
+		// reports the partial result alongside the per-op errors
+		let result: any = null;
+		let writeErrors: any[] = [];
 		try {
-			const res = await things.updateOne({ shareId } as any, { $setOnInsert: thing }, { upsert: true });
-			if (res.upsertedCount) {
-				created += 1;
-				continue;
-			}
-			const twin = await things.findOne({ shareId } as any);
-			if (!genuineSeeded(twin, def.kind)) {
-				notes.push(`skipped ${shareId}: shareId held by a foreign doc — left unseeded`);
-				skipped += 1;
-				continue;
-			}
-			const crystalDrifted = JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal);
-			const tagsDrifted = JSON.stringify(twin!.tags ?? []) !== JSON.stringify(tags);
-			const storageDrifted = twin!.storageClass !== 'control';
-			if (crystalDrifted || tagsDrifted || storageDrifted) {
-				// genuineness lives IN the filter — a foreign doc matches nothing
-				await things.updateOne({ shareId, ownerId: 'system', thingtime: def.kind } as any, {
-					$set: { crystal: validated.crystal, tags, storageClass: 'control', updatedAt: now }
-				});
-				refreshed += 1;
-				continue;
-			}
-			unchanged += 1;
+			result = await things.bulkWrite(ops, { ordered: false });
 		} catch (err: any) {
-			notes.push(`skipped ${shareId}: write failed (${err?.codeName || err?.message || 'unknown error'})`);
+			result = err?.result ?? null;
+			writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : [];
+			if (!result && !writeErrors.length) {
+				notes.push(`skipped ${ops.length} writes: bulk write failed (${err?.codeName || err?.message || 'unknown error'})`);
+				skipped += ops.length;
+			}
+		}
+		created += Number(result?.insertedCount) || 0;
+		// a refresh whose genuineness filter matched nothing lost a race to a
+		// foreign doc — it is skipped, not refreshed
+		const matched = Number(result?.matchedCount) || 0;
+		refreshed += Math.min(refreshPlanned, matched);
+		skipped += Math.max(0, refreshPlanned - matched);
+		for (const failure of writeErrors) {
+			const shareId = opShareIds[Number(failure?.index)] || 'unknown';
+			if (Number(failure?.code) === 11000) {
+				// a concurrent seed inserted it first — present, so nothing to do
+				unchanged += 1;
+				continue;
+			}
+			notes.push(`skipped ${shareId}: write failed (${failure?.codeName || failure?.errmsg || failure?.message || 'unknown error'})`);
 			skipped += 1;
 		}
 	}

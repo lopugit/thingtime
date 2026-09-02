@@ -90,12 +90,13 @@ const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList;
 		);
 		observer.observe(node);
 		// browsers throttle observer callbacks in hidden/background documents —
-		// a card that is on screen must never stay blank, so the page's own
-		// (paginated, ≤36) cards mount on a short fallback timer regardless
-		const fallback = window.setTimeout(() => setVisible(true), 1200);
+		// a card that is on screen must never stay blank, so a page that loads
+		// while hidden mounts its (paginated) cards on a short fallback timer;
+		// a visible document keeps the lazy observer path for off-screen cards
+		const fallback = document.visibilityState === 'hidden' ? window.setTimeout(() => setVisible(true), 1200) : null;
 		return () => {
 			observer.disconnect();
-			window.clearTimeout(fallback);
+			if (fallback !== null) window.clearTimeout(fallback);
 		};
 	}, [visible]);
 

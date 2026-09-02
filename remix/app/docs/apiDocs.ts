@@ -10071,7 +10071,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-demos',
-    contractVersion: '1.1.0',
+    // brand-new capability: everything this PR adds to the response is its 1.0.0 shape
+    contractVersion: '1.0.0',
     group: 'webpages',
     title: 'Browse the builder demo library',
     endpoint: '/api/v1/webpages/demos',
