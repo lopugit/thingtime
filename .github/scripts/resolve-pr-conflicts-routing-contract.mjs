@@ -1577,6 +1577,21 @@ function assertAdminModelRouting(
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
+      // The live credential-vault probe is the one deliberate exception. Its
+      // whole job is to prove Thingtime's ordered waterfall still authenticates
+      // on its own, so it passes only `thingtime-ci-router-secret` and none of
+      // the legacy static slots. Handing it a fallback would let it pass on the
+      // fallback while the vault is down -- masking exactly the outage the probe
+      // exists to catch. Exempt it, but require it to still be vault-driven, so
+      // this stays a checked exception rather than an unconditional skip.
+      if (/^\s*id:\s*live_probe\s*$/mu.test(lines.slice(Math.max(0, index - 4), index).join("\n"))) {
+        assert.match(
+          call,
+          /thingtime-ci-router-secret:/u,
+          `${path}:${index + 1}: the credential probe must authenticate through the Thingtime waterfall`,
+        );
+        continue;
+      }
       assert.match(
         call,
         /anthropic-api-key-fallback:/u,

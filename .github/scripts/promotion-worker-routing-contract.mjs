@@ -104,11 +104,28 @@ assert.match(
 	"Feature Stack admission validates the run id inside the decoded immutable plan",
 );
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
-assert.match(
-	workflow,
-	/feature_stack_merge:[\s\S]*?if: >-\s*!cancelled\(\)\s*&& needs\.feature_stack_plan\.result == 'success'\s*&& needs\.model_config\.result == 'success'/,
-	"Feature Stack workers still run when skipped indirect dependencies are expected",
-);
+// The rule is that this job leads with `!cancelled()` and then states an
+// explicit success check for each of its two `needs`, so a skipped job
+// elsewhere in the graph cannot silently skip it. Assert those three
+// requirements inside the job's own `if:` block instead of pinning them as
+// adjacent text: an extra orthogonal guard is legitimate -- d5e984a0 added
+// `recovery != 'true'` between them -- and demanding adjacency did not make
+// the rule stricter, it just made it permanently red, so it stopped checking
+// anything at all. Scoping to the block is what keeps this strict.
+const featureStackMergeIf =
+	/\n {2}feature_stack_merge:\n(?:.*\n)*? {4}if: >-\n((?: {6}.*\n)+)/u.exec(workflow);
+assert.ok(featureStackMergeIf, "feature_stack_merge declares a multi-line if: guard");
+for (const clause of [
+	/^ *!cancelled\(\)\s*\n/u,
+	/\n *&& needs\.feature_stack_plan\.result == 'success'\s*\n/u,
+	/\n *&& needs\.model_config\.result == 'success'\s*\n/u,
+]) {
+	assert.match(
+		featureStackMergeIf[1],
+		clause,
+		"Feature Stack workers still run when skipped indirect dependencies are expected",
+	);
+}
 assert.match(workflow, /feature-stack-plan\.mjs verify/);
 assert.match(workflow, /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"/);
 assert.match(workflow, /git -C "\$integration" update-ref "refs\/remotes\/origin\/\$head" "\$sha"/);
