@@ -1516,8 +1516,17 @@ function assertAdminModelRouting(
     "repository review keeps complete ancestry while lazily materializing selected PR blobs",
   );
 
-  const aiRuntimePattern =
-    /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
+  // One definition of a Lopu call, used both to select the files this contract
+  // scans and to pick the calls it enforces credential slots on below. Those
+  // were two copies, and they drifted: selection accepted `control-plane/` and
+  // enforcement did not, so `all-branch.yml` was pulled into the scanned set by
+  // its three lopu-agent calls and then every one of them was skipped. Deriving
+  // the wide pattern from the narrow one makes "enforce on every call you
+  // selected" a property of the code instead of a comment asking for it.
+  const lopuAgentCallPattern = /uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u;
+  const aiRuntimePattern = new RegExp(
+    `(?:anthropics/claude-code-action|openai/codex-action)@|${lopuAgentCallPattern.source}|\\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\\b`,
+  );
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -1605,15 +1614,12 @@ function assertAdminModelRouting(
       );
     }
     for (let index = 0; index < lines.length; index += 1) {
-      // Keep this prefix set in step with `aiRuntimePattern` above, which is
-      // what selected these files. It already accepts `control-plane/`; this
-      // rule did not, so `all-branch.yml` was pulled into the scanned set by
-      // its three lopu-agent calls and then every one of them was skipped
-      // here. They do all pass both slots today, so this closes a latent hole
-      // rather than fixing a live one -- but an enforcement pattern narrower
-      // than the selection pattern that feeds it is how a credential rule
-      // silently stops covering a call site.
-      if (!/uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+      // The same pattern `aiRuntimePattern` is built from, so this rule cannot
+      // cover fewer call sites than the scan that selected the file. Widening
+      // it to `control-plane/` is what brings `all-branch.yml`'s three calls
+      // under the slot assertions below; they all pass both slots today, so
+      // this closed a latent hole rather than a live one.
+      if (!lopuAgentCallPattern.test(lines[index])) {
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
@@ -1679,6 +1685,20 @@ function assertAdminModelRouting(
         // exempting it. Left unasserted, the exemption rests on a property
         // nothing checks, which is how it silently becomes an unconditional
         // skip for the one call site allowed to carry no slots.
+        // Carrying the router secret is not the same as using it. The action
+        // fetches the ordered bundle in a step gated on
+        // `inputs.backend == 'claude'` (lopu-agent/action.yml), so on any other
+        // backend the secret is inert and the waterfall is never touched.
+        // Verified: flip this step to `backend: codex` and every one of the
+        // eleven advisory contracts stays green while the live vault check the
+        // job is named for silently stops running -- the exemption would go on
+        // paying out for a probe that no longer probes anything, which is the
+        // unconditional skip the paragraph above refuses to grant.
+        assert.match(
+          step,
+          /^\s+backend: claude\s*$/mu,
+          `${path}:${index + 1}: the credential probe must run the Claude backend that fetches the Thingtime waterfall`,
+        );
         assert.match(
           step,
           /^\s+thingtime-ci-router-secret:/mu,
