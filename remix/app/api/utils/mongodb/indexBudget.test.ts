@@ -9,6 +9,7 @@ import {
 	createCiControlIndexes,
 	createIndexReplacingForTests,
 	createThingsDataIndexes,
+	ensureHomeThingsIndexPlan,
 	pruneRebuildTwins,
 	pruneRetiredHomeThingsIndexes
 } from './collections.ts';
@@ -67,6 +68,64 @@ test('current Things index plan keeps four slots free below MongoDB hard limit',
 	// carry their dashboard sort or per-parent history indexes any more
 	assert.equal(desired.has('things_ci_repository_updated'), false);
 	assert.equal(desired.has('thingtime_1_parentId_1_createdAt_-1_shareId_1'), false);
+});
+
+// A create-then-drop swap only costs a slot while its replacement is missing,
+// so what has to fit is the swaps PENDING on one boot — not every swap the
+// plan has ever performed. These six are the ones this change leaves pending:
+// a collection already converged to the plan still holds all six originals on
+// the first boot after the deploy, and that is the boot with the least room.
+// A later change adding one swap has exactly one pending, not seven.
+const SWAPPED_LEGACY_INDEXES = [
+	'kind_1_visibility_1_createdAt_-1_shareId_1',
+	'kind_1_ownerId_1_createdAt_-1_shareId_1',
+	'kind_1_ownerId_1_updatedAt_-1_shareId_1',
+	'kind_1_createdAt_-1_shareId_1',
+	'kind_1_parentId_1_createdAt_1',
+	'sandboxExpiresAt_1'
+];
+
+test('the boot ensure fits the 64-index cap at its PEAK, not just at rest', async () => {
+	// The budget test above measures the plan's FINAL set. It cannot see the
+	// transient state, and the transient state is what the server has to fit:
+	// every swap creates its replacement BEFORE dropping the original (so no
+	// database ever sits without the index), and the whole plan runs under one
+	// Promise.all — so both live at once. Over the cap, createIndexReplacing
+	// degrades to drop-then-create, which is a real index-less window on
+	// things_v2. Model occupancy over time instead of the final set:
+	// createIndex takes a slot, dropIndex gives one back, and setImmediate lets
+	// the fan-out interleave the way the driver does.
+	const live = new Set<string>(['_id_', ...SWAPPED_LEGACY_INDEXES]);
+	let peak = live.size;
+	const collection = {
+		async createIndex(keys: Record<string, unknown>, indexOptions: Record<string, any> = {}) {
+			const name = String(indexOptions.name || defaultIndexName(keys));
+			await new Promise((resolve) => setImmediate(resolve));
+			if (!live.has(name)) {
+				live.add(name);
+				peak = Math.max(peak, live.size);
+			}
+			return name;
+		},
+		async dropIndex(name: string) {
+			await new Promise((resolve) => setImmediate(resolve));
+			live.delete(name);
+		},
+		async updateMany() {
+			return { modifiedCount: 0 };
+		}
+	};
+	await ensureHomeThingsIndexPlan({ collection: () => collection });
+
+	assert.equal(SWAPPED_LEGACY_INDEXES.filter((name) => live.has(name)).length, 0, 'every swapped original is dropped once its replacement exists');
+	// Each pending swap costs exactly one extra slot for the length of its
+	// build. Adding a create-then-drop swap without listing it here moves this
+	// number and fails loudly rather than silently eating the headroom.
+	assert.equal(peak - live.size, SWAPPED_LEGACY_INDEXES.length, 'each create-then-drop swap costs exactly one transient slot');
+	assert.ok(
+		peak <= MONGODB_COLLECTION_INDEX_LIMIT,
+		`the boot ensure peaks at ${peak}/${MONGODB_COLLECTION_INDEX_LIMIT} index slots; above the cap the swaps degrade to drop-then-create, leaving things_v2 without those indexes mid-boot`
+	);
 });
 
 test('the five dead pre-Things indexes measured on production are retired by name', () => {
