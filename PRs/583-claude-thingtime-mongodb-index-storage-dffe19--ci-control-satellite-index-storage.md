@@ -106,9 +106,71 @@ Second fix: the `/migrations` storage table had adjacent numeric columns
 destructive migration, so two near-identical numeric headers meaning different
 things is worth one word.
 
+## Review round 3 (Lopu, 2026-09-02) — the twin prune could silently unprotect the key it claims to hold
+
+Round 2 fixed the *crash* when `pruneRebuildTwins` (boot ensure) dropped a live
+`__rebuild` twin underneath the rebuild — `dropIndexIfPresent` made the run
+survive it. But surviving it is not the same as being correct: the pruner
+dropped **every** twin unconditionally, including the one whose original is
+absent *because the rebuild is between `dropIndex` and `createIndex`*. In that
+window the twin is the only thing holding the unique key, so dropping it leaves
+`shareId` completely unconstrained while `rebuild-things-indexes` still reports
+it in `twins` and tells the operator "unique indexes are protected by a
+same-key twin throughout, so no duplicate can slip in mid-rebuild".
+
+This is not a rare interleaving: `mongo-warmup` calls `ensureIndexes()` on
+**every serverless cold start**, and the rebuild runs for minutes.
+
+Reproduced on MongoDB 8.0 by replaying the exact sequence (twin created →
+original dropped → prune runs → 20 duplicate-`shareId` inserts):
+
+| | twin after prune | accepted | rejected (E11000) |
+| --- | --- | --- | --- |
+| before | dropped | **20** | 0 |
+| after | preserved | 1 | 19 |
+
+Fix: the prune now decides per twin. A twin whose **original is present** is
+pure redundancy — dropped, exactly as before, and that is the shape that
+actually parked the collection at the cap (round 2's aborted run created its
+twins up front). An **orphan** twin is left to the rebuild's own
+`reconcileRebuildTwins`, *unless* the collection has no free slot at all, where
+a stuck boot ensure is the worse failure and the plan recreates the original
+moments later. `MONGODB_COLLECTION_INDEX_LIMIT` is now a named export instead
+of a number repeated in prose. Three unit tests cover the three branches.
+
+Second fix: **`relocate-ci-control-telemetry` read the wrong database plane.**
+Its source was `getCollection('things')` — the request's ACTIVE endpoint — while
+its target `getCiControlCollection()` is home-pinned like every satellite. The
+data-plane migrations follow the active endpoint on purpose, but ci-\* rows are
+control plane: every writer used `getHomeThingsCollection()` before this change.
+Every API route runs inside `runWithMongoEndpoint` (`server/routes/api/[...].ts`),
+so an admin with a `tt_mongo` override active would have had this destructive
+migration count and drain **their own database** into Thingtime's home
+`ciControl_v1` — and report `drained: true` while production `things_v2` was
+untouched. Pinned to `getHomeThingsCollection()`, matching `rebuild-things-indexes`
+directly below it.
+
+Independently re-verified this round on MongoDB 8.0: the wildcard text index
+round-trips through `indexCreateSpecFromDefinition` exactly — `listIndexes`
+reports `{_fts,_ftsx}`, the derived key becomes `$**` plus every weighted path,
+and MongoDB accepts it with **byte-identical weights** and working `$text`.
+
+Two notes, no change made:
+
+- `ci-dispatch` is retention class `permanent`, but `claimCiDispatchRoute`'s
+  `automatic:<workflow>:<deliveryKey>` id is per-delivery, so it would grow one
+  permanent row per routed dispatch. Dormant today — all eight workflows default
+  to `github-actions`, which returns before the claim — but it is the one CI kind
+  whose id is not bounded by repository cardinality.
+- The relocation's `bulkWrite` can raise E11000 if a live writer inserts the same
+  deterministic `shareId` in the gap between the upsert's read and insert. It
+  fails safe (the batch's `deleteMany` never runs, and a re-run matches the live
+  row) but it surfaces as a failed migration run rather than a skipped row.
+
 ## Verification
 
 - Unit suites green: collections 34, ci-control 59, migrations 48, schemas 109, capabilities 4, migration UI 5; typecheck ratchet at baseline (108).
+- Re-run after review round 3 (`npm run test:collections|migrations|ci-control|schemas|api-capabilities`): 36 / 51 / 59 / 109 / 5, all passing — collections gained the three twin-prune branch tests. Typecheck ratchet reports 109 both with and without round 3's change, so the +1 over the recorded 108 baseline predates it (and the check is non-blocking).
 - Live local stack (MongoDB 8.0 replica set, real API): 20 signed deliveries → 0 CI rows in `things_v2`, satellite rows with 14/30/90-day stamps, 1 repository event; relocation fixture (2,307 rows) dry-run wrote nothing, confirmed run relocated 807 / deleted 2,307 / kept the live satellite row's newer state; rebuild of 57 indexes with 10 twins, index set identical, text search working, duplicate probe 20,423 rejected / 0 accepted.
 - `/migrations` panel checked at desktop (1280) and mobile (375) widths.
 

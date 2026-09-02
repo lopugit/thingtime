@@ -331,6 +331,11 @@ let indexesEnsured: Promise<void> | null = null;
 // paths no longer call ensureIndexes, so clearing a failed run cannot recreate
 // the old all-request retry storm.
 
+// MongoDB's hard per-collection index ceiling, `_id_` included. A collection
+// sitting on it fails every createIndex with CannotCreateIndex (67), which is
+// why the swaps below degrade and why the twin prune has a cap escape hatch.
+export const MONGODB_COLLECTION_INDEX_LIMIT = 64;
+
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
 // options evolve (partial filters, text weights/overrides), drop the old
@@ -564,12 +569,25 @@ export const pruneRetiredHomeThingsIndexes = async (db: any) => {
 // unique index (migrations/ciControlRelocationCore.ts). A rebuild that was
 // interrupted (deploy, timeout) can leave them behind, each occupying one of
 // the 64 slots the plan below needs — and because the migration runner
-// bootstraps indexes before it runs, the migration that would clean them up
-// could never start. So the boot ensure clears them first: a twin whose
-// original still exists is redundant, and an orphan twin's original is
-// recreated by the plan a moment later (a brief window, only ever in this
-// abnormal state — a running rebuild holds at most one twin, and that one is
-// re-dropped by the rebuild itself).
+// bootstraps indexes before it runs (acquireMigrationLease awaits
+// ensureIndexes), the migration that would clean them up could never start.
+//
+// Which twin is safe to drop depends entirely on whether its ORIGINAL is
+// there, because ensureIndexes is not a rare event: mongo-warmup fires it on
+// every serverless cold start, so it runs *during* the multi-minute rebuild.
+//   - original present → the twin is pure redundancy and dropping it removes
+//     no constraint. This is also the shape that actually parked the
+//     collection at the cap (an aborted rebuild that created its twins up
+//     front), so it is what this prune exists for.
+//   - original ABSENT → the twin is orphaned precisely because a rebuild is
+//     between its dropIndex and createIndex, and it is then the ONLY thing
+//     holding that unique key. Dropping it leaves the key completely
+//     unprotected while rebuild-things-indexes still reports it as twinned
+//     ("protected by a same-key twin throughout"), so leave it to the
+//     rebuild's own reconcileRebuildTwins.
+// The exception is a collection with no free slot at all: there a stuck boot
+// ensure is the worse failure, so orphans are dropped to make room and the
+// plan below recreates the original moments later.
 export const REBUILD_TWIN_SUFFIX = '__rebuild';
 export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
 	const raw = thingsCollection(db);
@@ -581,10 +599,23 @@ export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
 		if (err?.code === 26 || err?.codeName === 'NamespaceNotFound') return [];
 		throw err;
 	}
+	const present = new Set(names);
+	const originalOf = (twin: string) => twin.slice(0, -REBUILD_TWIN_SUFFIX.length);
 	const twins = names.filter((name) => name.endsWith(REBUILD_TWIN_SUFFIX));
 	const col = taggedCollection(raw, 'things');
-	for (const name of twins) await dropIndexRetrying(col, name);
-	return twins;
+	const dropped: string[] = [];
+	for (const name of twins.filter((name) => present.has(originalOf(name)))) {
+		await dropIndexRetrying(col, name);
+		dropped.push(name);
+	}
+	const orphans = twins.filter((name) => !present.has(originalOf(name)));
+	if (orphans.length && names.length - dropped.length >= MONGODB_COLLECTION_INDEX_LIMIT) {
+		for (const name of orphans) {
+			await dropIndexRetrying(col, name);
+			dropped.push(name);
+		}
+	}
+	return dropped;
 };
 
 // Pre-release mesh builds used one unique/TTL index per protected device kind

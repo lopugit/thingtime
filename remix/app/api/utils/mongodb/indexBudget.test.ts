@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { fromBin } from '../auth/users.ts';
 import {
+	MONGODB_COLLECTION_INDEX_LIMIT,
 	RETIRED_THINGS_INDEXES,
 	backfillConsolidatedThingUniqueKeys,
 	createCiControlIndexes,
@@ -11,8 +12,6 @@ import {
 	pruneRebuildTwins,
 	pruneRetiredHomeThingsIndexes
 } from './collections.ts';
-
-const MONGODB_COLLECTION_INDEX_LIMIT = 64;
 const REQUIRED_INDEX_HEADROOM = 4;
 const HOME_ONLY_THINGS_INDEXES = 1; // migration_diagnostic_expires_at
 // The CI satellite is deliberately small: two readers, one TTL, one unique.
@@ -202,23 +201,51 @@ test('AI and device hashes backfill into domain-separated Binary root keys', asy
 	assert.deepEqual(operations[1].updateOne.update.$addToSet.uniqueKeys.$each.map(fromBin), ['deviceUniqueKey:event']);
 });
 
-test('the boot ensure clears leftover rebuild twins so a plan near the cap can converge', async () => {
+const twinPruneFixture = (names: string[]) => {
 	const dropped: string[] = [];
-	const collection = {
-		async indexes() {
-			return [{ name: '_id_' }, { name: 'shareId_1' }, { name: 'shareId_1__rebuild' }, { name: 'uniqueKeys_1__rebuild' }, { name: 'tags_1_createdAt_-1_shareId_1' }];
-		},
-		async dropIndex(name: string) {
-			dropped.push(name);
-		},
-		async createIndex() {
-			throw new Error('prune must not create');
+	return {
+		dropped,
+		db: {
+			collection: () => ({
+				async indexes() {
+					return names.map((name) => ({ name }));
+				},
+				async dropIndex(name: string) {
+					dropped.push(name);
+				},
+				async createIndex() {
+					throw new Error('prune must not create');
+				}
+			})
 		}
 	};
-	const twins = await pruneRebuildTwins({ collection: () => collection });
-	assert.deepEqual(twins, ['shareId_1__rebuild', 'uniqueKeys_1__rebuild']);
-	assert.deepEqual(dropped, twins);
+};
+
+test('the boot ensure clears redundant rebuild twins so a plan near the cap can converge', async () => {
+	const fixture = twinPruneFixture(['_id_', 'shareId_1', 'shareId_1__rebuild', 'tags_1_createdAt_-1_shareId_1']);
+	// the original is present, so the twin constrains nothing the original does
+	// not — this is the shape that parks the collection at the cap
+	assert.deepEqual(await pruneRebuildTwins(fixture.db), ['shareId_1__rebuild']);
+	assert.deepEqual(fixture.dropped, ['shareId_1__rebuild']);
 	// a fresh database (no things collection yet) is not an error
 	const missing = { collection: () => ({ async indexes() { const error: any = new Error('ns not found'); error.code = 26; throw error; }, async dropIndex() {} }) };
 	assert.deepEqual(await pruneRebuildTwins(missing), []);
+});
+
+test('an ORPHAN twin is left alone: it is the only thing holding a unique key mid-rebuild', async () => {
+	// rebuild-things-indexes is between dropIndex('uniqueKeys_1') and its
+	// recreate; mongo-warmup fires ensureIndexes on any cold start in that
+	// window. Dropping the twin here would silently unprotect the key while
+	// the migration still reports it as twinned.
+	const fixture = twinPruneFixture(['_id_', 'shareId_1', 'shareId_1__rebuild', 'uniqueKeys_1__rebuild']);
+	assert.deepEqual(await pruneRebuildTwins(fixture.db), ['shareId_1__rebuild']);
+	assert.equal(fixture.dropped.includes('uniqueKeys_1__rebuild'), false);
+});
+
+test('an orphan twin IS dropped when the collection has no free slot left', async () => {
+	// a stuck boot ensure (every createIndex failing with CannotCreateIndex) is
+	// the worse failure, and the plan recreates the original moments later
+	const filler = Array.from({ length: MONGODB_COLLECTION_INDEX_LIMIT - 2 }, (_value, index) => `filler_${index}`);
+	const fixture = twinPruneFixture(['_id_', ...filler, 'uniqueKeys_1__rebuild']);
+	assert.deepEqual(await pruneRebuildTwins(fixture.db), ['uniqueKeys_1__rebuild']);
 });

@@ -7,6 +7,7 @@ import {
   getAdoptionIssues,
   getCiControlCollection,
   getCollection,
+  getHomeThingsCollection,
   getHomeThingtimeDb,
   getSettingsCollection,
   getThingtimeDb,
@@ -2860,9 +2861,17 @@ const relocateCiControlTelemetry: Migration = {
     'a time budget and reports drained: false when more remains — re-run until pending is 0, then run ' +
     'rebuild-things-indexes to reclaim the index storage the deleted rows leave behind. Destructive (deletes ' +
     'from things): the real run requires confirm: true.',
-  pending: async () => (await getCollection('things')).countDocuments({ thingtime: { $in: [...CI_CONTROL_THINGTIME] } }),
+  // HOME things explicitly, NOT getCollection('things'). The data-plane
+  // migrations above follow the request's active endpoint on purpose (an
+  // override's things_v2 gets the same schema treatment), but ci-* rows are
+  // control plane: every writer used getHomeThingsCollection before this
+  // change and the target getCiControlCollection() is home-pinned like every
+  // satellite. Reading the active plane here would, under an endpoint
+  // override, count and drain the OPERATOR'S OWN database into Thingtime's
+  // home ciControl — and report drained: true while production is untouched.
+  pending: async () => (await getHomeThingsCollection()).countDocuments({ thingtime: { $in: [...CI_CONTROL_THINGTIME] } }),
   run: async ({ dryRun, assertLease }) => {
-    const [things, satellite] = await Promise.all([getCollection('things'), getCiControlCollection()]);
+    const [things, satellite] = await Promise.all([getHomeThingsCollection(), getCiControlCollection()]);
     const notes = makeNotes();
     const report = await relocateCiControlRows({
       source: things,
