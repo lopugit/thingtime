@@ -21,14 +21,19 @@ export const LopuuuPet = () => {
 
 	return (
 		<Box
-			aria-label="Lopuuuuuuuuuu, your rainbow brain unicorn pet"
+			// Ornament, not content: the pet carries no information a screen
+			// reader user would miss, and it is mounted on every non-full-bleed
+			// page. An accessible name here would announce it once per route
+			// change forever, which is the annoying end of the eggs.ts "delight,
+			// never annoying" rule. Same convention as every other decorative
+			// visual in the app (attachment/status icons, MediaLayoutControls).
+			aria-hidden="true"
 			// bottom-anchored fixed chrome clears the home indicator / rounded
 			// corners, same as DevKit's bubble and the footer
 			bottom={{ base: petInset(16, 'bottom'), md: petInset(24, 'bottom') }}
 			pointerEvents="none"
 			position="fixed"
 			right={{ base: petInset(12, 'right'), md: petInset(24, 'right') }}
-			role="img"
 			sx={{
 				'@keyframes lopuuu-float': {
 					'0%, 100%': { transform: 'translate3d(0, 0, 0) rotate(-2deg)' },
