@@ -1,7 +1,6 @@
 import { githubRequest, repositoryName } from './githubClient';
 import {
   adminPreviewCommentBody,
-  adminPreviewExpectedReadyAt,
   adminPreviewPersistentHostname,
   adminPreviewRemovedCommentBody,
   adminPreviewSnapshotUrl,
@@ -17,6 +16,7 @@ import { listCiPreviewPolicies, recordCiEvent, upsertCiEntity } from './store';
 
 const ACTIVE_VERCEL_STATES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING', 'READY']);
 const MAX_GITHUB_COMMENT_PAGES = 10;
+const DEFAULT_EXPECTED_BUILD_MINUTES = 5;
 
 type PreviewPullRequest = {
   number: number;
@@ -112,7 +112,7 @@ export type AdminPreviewDeploymentResult = {
   url: string | null;
   snapshotUrl: string | null;
   persistentUrl: string;
-  expectedReadyAt: number;
+  expectedReadyAt: string | null;
 };
 
 const deploymentStatus = (deployment: any): string =>
@@ -126,6 +126,21 @@ const deploymentCreatedAt = (deployment: any): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const expectedBuildMinutes = (): number => {
+  const configured = process.env.PREVIEW_EXPECTED_BUILD_MINUTES?.trim();
+  if (!configured) return DEFAULT_EXPECTED_BUILD_MINUTES;
+  const minutes = Number(configured);
+  if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
+    throw new Error('PREVIEW_EXPECTED_BUILD_MINUTES must be a whole number from 1 to 60');
+  }
+  return minutes;
+};
+
+const expectedReadyAtFor = (startedAt: number): string => {
+  const estimated = startedAt + expectedBuildMinutes() * 60_000;
+  return new Date(Math.ceil(estimated / 60_000) * 60_000).toISOString();
+};
+
 const newestOwnedDeployment = (deployments: any[], input: { prNumber: number; environment: CiPreviewEnvironment; sha: string }) =>
   deployments
     .filter((deployment) => ownedDeployment(deployment, input))
@@ -135,6 +150,22 @@ const persistentUrlFor = (prNumber: number, environment: CiPreviewEnvironment): 
   const config = previewConfig(environment);
   return `https://${adminPreviewPersistentHostname(prNumber, environment, config.aliasSuffixes)}/`;
 };
+
+export const queuedAdminPreviewDeployment = (
+  prNumber: number,
+  environment: CiPreviewEnvironment,
+  sha: string,
+  startedAt = Date.now()
+): AdminPreviewDeploymentResult => ({
+  environment,
+  deploymentId: '',
+  sha,
+  status: 'queued',
+  url: null,
+  snapshotUrl: null,
+  persistentUrl: persistentUrlFor(prNumber, environment),
+  expectedReadyAt: expectedReadyAtFor(startedAt)
+});
 
 const getOwnedAlias = async (projectId: string, alias: string) => {
   const query = new URLSearchParams({ projectId });
@@ -252,7 +283,8 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
   const snapshotUrl = adminPreviewSnapshotUrl(deployment.url);
   if (!snapshotUrl) throw new Error('Vercel returned an invalid preview deployment URL');
   const persistentUrl = persistentUrlFor(pr.number, environment);
-  const expectedReadyAt = adminPreviewExpectedReadyAt(deploymentCreatedAt(deployment) || Date.now());
+  const status = deploymentStatus(deployment);
+  const expectedReadyAt = status === 'ready' ? null : expectedReadyAtFor(deploymentCreatedAt(deployment) || Date.now());
   const entity = await upsertCiEntity({
     kind: 'ci-preview',
     provider: 'vercel',
@@ -288,7 +320,6 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
     occurredAt: new Date(),
     data: { prNumber: pr.number }
   });
-  const status = deploymentStatus(deployment);
   return {
     environment,
     deploymentId,
@@ -338,10 +369,11 @@ export const publishAdminPrPreviewComment = async (input: {
     const status = knownMatchesNewest || !deployment ? fromKnown?.status ?? deploymentStatus(deployment) : deploymentStatus(deployment);
     const snapshotUrl =
       knownMatchesNewest || !deployment ? fromKnown?.snapshotUrl ?? adminPreviewSnapshotUrl(deployment?.url) : adminPreviewSnapshotUrl(deployment?.url);
+    const terminal = ['ready', 'error', 'failed', 'canceled', 'cancelled'].includes(status);
+    const expectedReadyAt = terminal
+      ? null
+      : fromKnown?.expectedReadyAt ?? expectedReadyAtFor(deploymentCreatedAt(deployment) || Date.now());
     let persistentUrl = persistentUrlFor(input.pr.number, environment);
-    const expectedReadyAt =
-      (knownMatchesNewest || !deployment ? fromKnown?.expectedReadyAt : undefined) ??
-      adminPreviewExpectedReadyAt(deploymentCreatedAt(deployment) || Date.now());
     if (status === 'ready' && /^dpl_[A-Za-z0-9]+$/.test(deploymentId)) {
       persistentUrl = await assignPersistentAlias(input.pr, environment, deploymentId);
     }
@@ -349,28 +381,6 @@ export const publishAdminPrPreviewComment = async (input: {
   }
   const comment = await upsertPreviewComment(
     repository,
-    input.pr.number,
-    adminPreviewCommentBody({ prNumber: input.pr.number, sha: input.pr.head!.sha!, rows }),
-    rows.length > 0
-  );
-  return { ...comment, previews: rows };
-};
-
-export const publishAdminPrPreviewStartingComment = async (input: {
-  pr: PreviewPullRequest;
-  environments: readonly CiPreviewEnvironment[];
-  startedAt?: Date;
-}) => {
-  const startedAt = input.startedAt ?? new Date();
-  const rows = input.environments.map((environment) => ({
-    environment,
-    status: 'starting',
-    snapshotUrl: null,
-    persistentUrl: persistentUrlFor(input.pr.number, environment),
-    expectedReadyAt: adminPreviewExpectedReadyAt(startedAt)
-  }));
-  const comment = await upsertPreviewComment(
-    repositoryName(),
     input.pr.number,
     adminPreviewCommentBody({ prNumber: input.pr.number, sha: input.pr.head!.sha!, rows }),
     rows.length > 0
@@ -405,14 +415,13 @@ export const refreshAdminPrPreviewPublicationForDeployment = async (input: {
   sha: string;
   status: string;
   snapshotUrl: string | null;
-  createdAt?: string | number;
 }) =>
   refreshAdminPrPreviewPublication(input.prNumber, [
     {
       ...input,
       url: input.snapshotUrl,
       persistentUrl: persistentUrlFor(input.prNumber, input.environment),
-      expectedReadyAt: adminPreviewExpectedReadyAt(input.createdAt ?? Date.now())
+      expectedReadyAt: null
     }
   ]);
 
@@ -436,9 +445,16 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
   if (!PREVIEW_REFRESH_ACTIONS.has(action)) return { attempted: 0, failures: 0 };
 
   const pr = await validatedPreviewPullRequest(prNumber);
+  const startedAt = Date.now();
   let failures = 0;
   try {
-    await publishAdminPrPreviewStartingComment({ pr, environments: enabled });
+    await publishAdminPrPreviewComment({
+      pr,
+      policy,
+      knownDeployments: enabled.map((environment) =>
+        queuedAdminPreviewDeployment(prNumber, environment, pr.head!.sha!, startedAt)
+      )
+    });
   } catch {
     failures += 1;
   }
@@ -456,7 +472,7 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
           url: null,
           snapshotUrl: null,
           persistentUrl: persistentUrlFor(prNumber, enabled[index]),
-          expectedReadyAt: adminPreviewExpectedReadyAt(Date.now())
+          expectedReadyAt: null
         }
   );
   failures += results.filter((result) => result.status === 'rejected').length;

@@ -297,15 +297,15 @@ exact current same-repository PR SHA through Vercel; later `synchronize`,
 reopen, and ready-for-review deliveries rebuild every enabled environment.
 Production access requires an explicit admin acknowledgement and uses the
 project's Production environment values, but `autoAssignCustomDomains` remains
-false. Before starting the provider builds, the builder publishes one GitHub
-App-owned PR comment with every enabled environment's expected PR-scoped
-persistent URL and a five-minute expected-ready time. It updates the same
-comment with each immutable `*.vercel.app` snapshot URL as Vercel accepts the
-build. A READY webhook moves only that persistent alias to the verified current
-snapshot; it never replaces or aliases `thingtime.com` or `dev.thingtime.com`.
-Closing the PR removes only aliases and deployments carrying Thingtime's
-PR/environment ownership markers. Configure these server-only deployment values
-in every origin that hosts CI Control (placeholders only):
+false. Before starting the builds, the builder publishes one GitHub App-owned
+PR comment with each selected environment's expected persistent URL and
+estimated ready time. It updates that same comment with the immutable
+`*.vercel.app` snapshot URL as soon as Vercel identifies the deployment. A
+READY webhook moves only that persistent alias to the
+verified current snapshot; it never replaces or aliases `thingtime.com` or
+`dev.thingtime.com`. Closing the PR removes only aliases and deployments carrying
+Thingtime's PR/environment ownership markers. Configure these server-only
+deployment values in every origin that hosts CI Control (placeholders only):
 
 ```sh
 VERCEL_API_TOKEN="<Vercel-API-token>"
@@ -316,12 +316,15 @@ VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
 VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
 PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
 PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
 ```
 
 Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
 only for the Develop switch; the other five provider values are required for
 both. The alias suffixes default to Thingtime's two preview namespaces, so forks
 must set both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
 The GitHub App needs Issues or Pull requests write permission to create and
 update its marker comment.
 

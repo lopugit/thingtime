@@ -3083,14 +3083,14 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
       warning acknowledgement, and use Production values server-side. Confirm
-      one GitHub App-owned marker comment has a row for each enabled environment,
-      and appears before either provider build starts with each distinct
-      PR-scoped persistent URL and a five-minute expected-ready timestamp. The
-      same comment must gain each immutable `*.vercel.app` snapshot URL when
-      Vercel accepts it. A READY receipt must move only that environment's alias to
-      the verified current SHA; synchronize must update both rows without adding
-      another marker comment. Disable one environment and close the PR to prove
-      only owned aliases/deployments are removed, while `thingtime.com` and
+      one GitHub App-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
       `dev.thingtime.com` never move. Neither response, browser state, log,
       comment, nor status event may contain a credential value.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
