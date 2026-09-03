@@ -259,8 +259,11 @@ export const upsertAccountAndLink = async (
       { shareId: linkId, thingtime: EXTERNAL_LINK_KIND },
       {
         // the linked ACCOUNT as the relational parent, so "who links this
-        // account" rides (thingtime, parentId, createdAt, shareId) instead of
-        // scanning the whole link partition. $set (not $setOnInsert) heals
+        // account" is a root-field compare on the (thingtime, createdAt,
+        // shareId) index's kind-bounded scan rather than a crystal reach —
+        // see the connections note in createThingsDataIndexes for why the
+        // (thingtime, parentId, …) prefix is deliberately NOT revived.
+        // $set (not $setOnInsert) heals
         // links written by an earlier build; upsertedCount still reports
         // whether THIS call created the link.
         $set: { parentId: accountShareId },
@@ -515,9 +518,10 @@ const upsertExternalPosts = async (
           filter: { shareId: externalPostSourceShareId(postShareId, accountShareId), thingtime: EXTERNAL_POST_SOURCE_KIND },
           update: {
             // parentId (the sourcing ACCOUNT) is what the feed pages and what
-            // the tt:extsourced membership check filters on — it rides the
-            // existing (thingtime, parentId, createdAt, shareId) index rather
-            // than costing the saturated Things index budget a new slot. It
+            // the tt:extsourced membership check filters on — as a root-field
+            // residual over the existing (thingtime, createdAt, shareId) and
+            // (targetId, thingtime, …) indexes rather than costing the
+            // saturated Things index budget a new slot. It
             // lives in $set, not $setOnInsert, so rows written by an earlier
             // build converge on their next sync instead of needing a backfill.
             $set: { updatedAt: now, parentId: accountShareId },
@@ -791,8 +795,12 @@ export const readConnectionsFeed = async (
     // the viewer's accounts, newest first, then fetch that page's posts. The
     // rows carry the post's publish time as their own createdAt, so this sorts
     // and cursors identically to paging the posts directly — and it rides the
-    // existing (thingtime, parentId, createdAt, shareId) index, whose $in
-    // bounds keep the page sort index-provided instead of a blocking sort.
+    // existing `thingtime_1_createdAt_-1_shareId_1` index: `thingtime`
+    // equality bounds the scan to this kind and (createdAt:-1, shareId:1) is
+    // exactly the sort below, so the page order is index-provided rather than
+    // a blocking sort. The `parentId` $in applies as a residual on the way
+    // through — see the connections note in createThingsDataIndexes for why
+    // that is deliberate, and what to measure before adding an index.
     const match: Record<string, any> = {
       thingtime: EXTERNAL_POST_SOURCE_KIND,
       parentId: { $in: accountIds }

@@ -43,17 +43,23 @@ test('a state carrying only the nonce never leaks the verifier to whoever reads 
   const nonce = randomUUID();
   const verifier = pkceVerifierFor('x', nonce);
 
-  // Exactly the jti beginOAuth signs, and a stand-in for the signed-but-readable
-  // JWT it becomes. An earlier revision appended the verifier to this string.
-  const jti = `connections-oauth:x:${nonce}`;
+  // Exactly the claims beginOAuth signs, and a stand-in for the
+  // signed-but-readable JWT they become. An earlier revision appended the
+  // verifier to this payload.
+  const claims = { sub: 'user-1', provider: 'x', nonce, purpose: 'connections-oauth', iat: 1, exp: 2 };
   const state = `${Buffer.from('{"alg":"ES256"}').toString('base64url')}.${Buffer.from(
-    JSON.stringify({ sub: 'user-1', jti, iat: 1, exp: 2 })
+    JSON.stringify(claims)
   ).toString('base64url')}.signature`;
 
   // The whole point: decoding the state with no key at all — which is all an
   // interceptor of the callback URL has to do — must not yield the verifier.
   const payload = decodeJwtPayload(state);
-  assert.equal(payload.jti, jti);
+  assert.equal(payload.nonce, nonce);
+  // The state is a PURPOSE token, never a session JWT: verifyJwt requires a
+  // jti, so this envelope can never be replayed as a session/PAT/app token no
+  // matter who reads it off the callback URL.
+  assert.equal(payload.purpose, 'connections-oauth');
+  assert.equal(payload.jti, undefined);
   assert.ok(!state.includes(verifier));
   assert.ok(!JSON.stringify(payload).includes(verifier));
 

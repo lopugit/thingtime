@@ -3192,8 +3192,9 @@ const relationalExternalPostSources: Migration = {
 							{ shareId: externalPostSourceShareId(postShareId, accountId), thingtime: 'external-post-source' } as any,
 							{
 								// root parentId = the sourcing account: the feed and the
-								// tt:extsourced membership check both filter on it, riding the
-								// existing (thingtime, parentId, createdAt, shareId) index.
+								// tt:extsourced membership check both filter on it, as a
+								// root-field residual over the existing (thingtime, createdAt,
+								// shareId) and (targetId, thingtime, …) indexes.
 								// In $set so a row created by an earlier run converges too.
 								$set: { updatedAt: now, parentId: accountId },
 								$setOnInsert: {

@@ -544,8 +544,15 @@ export const RETIRED_THINGS_INDEXES = [
 	'kind_1_deletedAt_1_updatedAt_-1_shareId_1',
 	// CI control-plane rows moved to the ciControl satellite collection; their
 	// two purpose-built things indexes (169 MB + 124 MB live) go with them.
-	// Nothing outside api/utils/ciControl ever paired thingtime with parentId
-	// (legacy comment/reaction cascades ride kind_1_parentId_1_createdAt_1).
+	// The satellite keeps its own copy of this key (ci_control_parent_created
+	// in createCiControlIndexes); only the things_v2 copy retires.
+	// Connections DOES pair thingtime with parentId on things_v2 (the
+	// external-post-source feed read), but deliberately serves it as a
+	// residual over thingtime_1_createdAt_-1_shareId_1 rather than by
+	// reviving this name — see createThingsDataIndexes. Anything that needs
+	// this key as a real prefix must reclaim a budget slot under a NEW name,
+	// because every name in this list is dropped on every bootstrap.
+	// (Legacy comment/reaction cascades ride kind_1_parentId_1_createdAt_1.)
 	'thingtime_1_parentId_1_createdAt_-1_shareId_1',
 	'things_ci_repository_updated'
 	// NOT listed: the unfiltered v1-era `kind_*` and `sandboxExpiresAt_1`
@@ -936,18 +943,30 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // reclaim a slot. Connections rides two that already exist:
     //   • the feed read (the viewer's accounts' membership rows, newest first,
     //     chrono cursor) and the external-account-link reverse lookup ("who
-    //     links this account") are one kind + one ACCOUNT, so they page on
-    //     (thingtime, parentId, createdAt, shareId) above — the same relational
-    //     shape ci-events use, with the account as the parent entity;
+    //     links this account") ride `thingtime_1_createdAt_-1_shareId_1`
+    //     above. `thingtime` equality bounds the scan to the one kind, and
+    //     (createdAt:-1, shareId:1) IS the page sort, so it is index-provided
+    //     rather than a blocking sort; `parentId` (the account) applies as a
+    //     residual filter on the way through.
     //   • "does this viewer's account source this exact post?" narrows on
     //     (targetId, thingtime) above, which is already exactly that post's
     //     membership rows — one per sourcing account — leaving parentId a
     //     residual over a handful of docs.
-    // That is why external-post-source/external-account-link stamp a root
-    // `parentId` (the account's shareId) alongside crystal.accountId, and why
-    // `thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1` stays RETIRED
-    // above instead of coming back: re-creating a name in that list would drop
-    // and rebuild the index on every single bootstrap.
+    // Read the first bullet literally: `parentId` is RESIDUAL there, not part
+    // of the index key, so the feed read walks every external-post-source row
+    // newer than the cursor and keeps the viewer's. That is cheap while the
+    // over-fetch is 2×limit and sync volume is low, and it is the thing to
+    // re-measure first if connections traffic grows — the answer would be a
+    // partial index on this kind, NOT the two names below.
+    // That is also why external-post-source/external-account-link stamp a root
+    // `parentId` (the account's shareId) alongside crystal.accountId: it keeps
+    // the residual a root-field compare. Both of the purpose-built shapes that
+    // would serve it as an index PREFIX —
+    // `thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1` and
+    // `thingtime_1_parentId_1_createdAt_-1_shareId_1` — are listed in
+    // RETIRED_THINGS_INDEXES and dropped from this collection on every
+    // bootstrap, so re-creating either name here would drop and rebuild it
+    // forever. Reclaim a slot and give a new index a NEW name instead.
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone
     col.createIndex({ acl: 1, createdAt: -1, shareId: 1 }),

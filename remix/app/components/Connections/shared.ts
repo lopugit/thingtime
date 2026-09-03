@@ -11,7 +11,11 @@ export type Connection = {
   providerName: string;
   providerIcon: string;
   contentVisibility: 'public' | 'personal';
-  auth?: 'none' | 'oauth2';
+  // mirrors PublicConnection.auth in api/utils/connections/connections.ts —
+  // 'credential' is the Bluesky-style app-password exchange, and omitting it
+  // here would make an honest `auth === 'credential'` branch a TypeScript
+  // no-overlap error against a value the server really does send
+  auth?: 'none' | 'oauth2' | 'credential';
   account: { id: string; handle: string; displayName: string; avatarUrl: string | null; profileUrl: string | null };
   channels?: ChannelRef[];
   lastSyncedAt: string | null;

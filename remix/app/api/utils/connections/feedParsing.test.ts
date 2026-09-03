@@ -131,17 +131,39 @@ test('stripHtml keeps text, drops markup, and survives unterminated tags', () =>
 });
 
 // --- cost --------------------------------------------------------------------
-// Quadratic growth is the failure being guarded against, so each case measures
-// two sizes and asserts on the RATIO. An absolute millisecond budget would
-// either be flaky on a loaded CI runner or so loose it would pass against the
-// original code; the ratio is what distinguishes O(n) from O(n²) and it is
-// machine-independent.
+// Quadratic growth is the failure being guarded against, and each case asserts
+// an absolute BUDGET at one hostile size — the same shape as the end-to-end
+// test at the bottom of this file, which has never been flaky.
 //
-// The step is 4×, and that matters. QUADRUPLING the input costs a linear
-// scanner ~4× and a quadratic one ~16×, so a bar at 8× sits cleanly between the
-// two. A 2× step would not: it separates 2× from only 4×, and the regex
-// versions measured almost exactly 4× per doubling — a 2× step with a bar
-// anywhere above 4 passes against the very code these tests exist to reject.
+// These cases used to compare two sizes and assert on the RATIO (4× the input
+// must not cost 16× the work, bar at 8×), on the reasoning that a ratio is
+// machine-independent while an absolute budget would be "either flaky on a
+// loaded CI runner or so loose it would pass against the original code".
+// Measurement showed the opposite on both halves, because the real gap between
+// the two implementations is far larger than 4×:
+//
+//   case          fixed (linear)   original (quadratic)   gap
+//   title parse    1.5ms @256KB           3063ms         ~2000×
+//   attr lookup    3.8ms @256KB           8971ms         ~2300×
+//   strip tags     0.6ms  @48KB           1511ms         ~2400×
+//
+// So a 250ms bar is ~65× above the slowest fixed case and still 6-36× below
+// every quadratic one. Three orders of magnitude of signal were available, and
+// asserting on the ratio deliberately discarded them to measure a 4×-versus-16×
+// distinction with a millisecond stopwatch — then the ratio's denominator hit
+// its own 0.5ms floor, leaving a bar that a single GC or scheduler preemption
+// of ~4ms in the large run could clear on its own. That is not hypothetical:
+// `test:connections` runs seven files concurrently and the ratio form failed
+// roughly 1 run in 12 on a 4-core box, on a check that gates every PR.
+//
+// The budget keeps the guard strictly STRONGER (it fails on any regression that
+// costs more than 250ms, quadratic or not) while sitting far outside the noise
+// band that made the ratio unreliable.
+const BUDGET_MS = 250;
+// Timed REPEATS times, keeping the fastest: noise can only ever ADD time, so
+// the minimum is the observation closest to the code's real cost. It cannot
+// rescue a quadratic implementation, which is seconds slow on every repeat.
+const REPEATS = 3;
 
 const elapsed = (fn: () => void): number => {
   const started = process.hrtime.bigint();
@@ -149,26 +171,19 @@ const elapsed = (fn: () => void): number => {
   return Number(process.hrtime.bigint() - started) / 1e6;
 };
 
-// A floor keeps the ratio meaningful: sub-millisecond timings are dominated by
-// scheduler noise, and dividing two of them proves nothing either way. It can
-// only make the measured factor SMALLER, so it never manufactures a failure —
-// on the fixed code both runs are fast and the ratio is uninformative but
-// safely under the bar, while a quadratic implementation is far too slow at the
-// large size for the floor to rescue it.
-const STEP = 4;
-const growthFactor = (run: (size: number) => void, small: number): number => {
-  run(small); // warm the JIT so the first timed run is not the slow one
-  const first = Math.max(elapsed(() => run(small)), 0.5);
-  const second = elapsed(() => run(small * STEP));
-  return second / first;
+const cost = (run: (size: number) => void, size: number): number => {
+  run(size); // warm the JIT so the first timed run is not the slow one
+  let best = Infinity;
+  for (let attempt = 0; attempt < REPEATS; attempt += 1) best = Math.min(best, elapsed(() => run(size)));
+  return best;
 };
 
 test('an unclosed tag does not make parsing quadratic', () => {
   // The exact shape that stalled: a body that opens <title> forever and never
   // closes it. The feed is otherwise well-formed enough to reach the parser.
   const hostile = (bytes: number) => `<?xml version="1.0"?><rss version="2.0"><channel>${'<title>'.repeat(Math.floor(bytes / 7))}`;
-  const factor = growthFactor((size) => void parseRssOrAtom(hostile(size)), 64 * 1024);
-  assert.ok(factor < 8, `4× the body must not cost 16× the work (grew ${factor.toFixed(1)}× for ${STEP}× input)`);
+  const ms = cost((size) => void parseRssOrAtom(hostile(size)), 256 * 1024);
+  assert.ok(ms < BUDGET_MS, `256KB of unclosed <title> must not stall the parser (took ${ms.toFixed(1)}ms, was ~3063ms)`);
 });
 
 test('an unterminated tag does not make attribute lookup quadratic', () => {
@@ -179,16 +194,16 @@ test('an unterminated tag does not make attribute lookup quadratic', () => {
   // the old `[^>]*` ran to the end of the document and backtracked from every
   // occurrence.
   const hostile = (bytes: number) => `<?xml version="1.0"?><feed>${'<link '.repeat(Math.floor(bytes / 6))}`;
-  const factor = growthFactor((size) => void parseRssOrAtom(hostile(size)), 64 * 1024);
-  assert.ok(factor < 8, `attribute scanning must stay linear (grew ${factor.toFixed(1)}× for ${STEP}× input)`);
+  const ms = cost((size) => void parseRssOrAtom(hostile(size)), 256 * 1024);
+  assert.ok(ms < BUDGET_MS, `attribute scanning must stay linear (took ${ms.toFixed(1)}ms, was ~8971ms)`);
 });
 
 test('bare angle brackets do not make text stripping quadratic', () => {
   // stripHtml caps its own input at 100KB, but the cap alone did not save it:
   // 100KB of `<` measured ~8.4s before the fix, and a feed body can carry many
   // such fields.
-  const factor = growthFactor((size) => void stripHtml('<'.repeat(size)), 12 * 1024);
-  assert.ok(factor < 8, `tag stripping must stay linear (grew ${factor.toFixed(1)}× for ${STEP}× input)`);
+  const ms = cost((size) => void stripHtml('<'.repeat(size)), 48 * 1024);
+  assert.ok(ms < BUDGET_MS, `tag stripping must stay linear (took ${ms.toFixed(1)}ms, was ~1511ms)`);
 });
 
 test('a hostile feed body does not stall a connect request', () => {

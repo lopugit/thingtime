@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { signJwt, verifyJwt } from '../auth/jwt';
+import { signPurposeToken, verifyPurposeToken } from '../auth/jwt';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
 import { connectionProviderById, oauthCredsFor } from './providers';
 import { fail, pkceVerifierFor, type Fail } from './shared';
@@ -12,8 +12,18 @@ import { fail, pkceVerifierFor, type Fail } from './shared';
 // external-account's secure blob. CSRF/state protection rides the house JWT
 // signer: the state is a short-lived signed JWT bound to the beginning user's
 // id, so a callback can only complete for the session that started it.
-
-const STATE_JTI_PREFIX = 'connections-oauth:';
+//
+// It is a PURPOSE token, not a session JWT (signJwt), for the same reason the
+// ChatGPT connector signs its OAuth request state that way: this token is the
+// one credential-shaped value Thingtime deliberately hands to an arbitrary
+// third party — it rides the authorize URL into the provider, its logs, the
+// browser's history, and the callback's Referer. signJwt mints a `sub`+`jti`
+// pair that IS the shape of a session cookie, and it is only inert today
+// because every verifyJwt consumer independently re-checks the jti against a
+// live Mongo session. The purpose claim makes that fencing structural instead
+// of incidental: verifyJwt requires a jti, this token has none, so no session,
+// PAT, app-token, or authorization-code path can ever be fed one of these.
+const STATE_PURPOSE = 'connections-oauth';
 const STATE_TTL = '15m';
 
 type SessionUser = { id: string; username: string };
@@ -58,11 +68,7 @@ export const beginOAuth = async (
   const nonce = randomUUID();
   const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : null;
   const codeChallenge = codeVerifier ? createHash('sha256').update(codeVerifier).digest('base64url') : undefined;
-  const state = await signJwt({
-    sub: user.id,
-    jti: `${STATE_JTI_PREFIX}${provider.id}:${nonce}`,
-    expiresIn: STATE_TTL
-  });
+  const state = await signPurposeToken(STATE_PURPOSE, { sub: user.id, provider: provider.id, nonce }, STATE_TTL);
   return {
     ok: true,
     provider: provider.id,
@@ -85,12 +91,15 @@ export const completeOAuth = async (
   const code = typeof params.code === 'string' ? params.code : '';
   if (!state || !code) return fail(400, 'The sign-in response was missing its code or state');
 
-  const claims = await verifyJwt(state);
-  if (!claims || !claims.jti.startsWith(STATE_JTI_PREFIX)) return fail(400, 'The sign-in state is invalid or expired — start the connect again');
-  if (claims.sub !== user.id) return fail(403, 'This sign-in was started from a different Thingtime session');
-  const stateParts = claims.jti.slice(STATE_JTI_PREFIX.length).split(':');
-  const providerId = stateParts[0];
-  const nonce = stateParts[1] || '';
+  // verifyPurposeToken checks the signature, the expiry, and the purpose — a
+  // session cookie, a PAT, or another purpose's token can never satisfy it.
+  const claims = await verifyPurposeToken(state, STATE_PURPOSE);
+  if (!claims) return fail(400, 'The sign-in state is invalid or expired — start the connect again');
+  if (typeof claims.sub !== 'string' || claims.sub !== user.id) {
+    return fail(403, 'This sign-in was started from a different Thingtime session');
+  }
+  const providerId = typeof claims.provider === 'string' ? claims.provider : '';
+  const nonce = typeof claims.nonce === 'string' ? claims.nonce : '';
   const provider = connectionProviderById(providerId);
   if (!provider?.oauth) return fail(400, 'The sign-in state names an unknown provider');
   const creds = oauthCredsFor(provider);
