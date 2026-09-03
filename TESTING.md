@@ -1369,6 +1369,18 @@ email whose link points at the attacker.
       anything in Settings.
 - [ ] Theme Studio → Pet → Customise applies CSS to the pet ONLY (try
       `opacity: 0.4`) — the rest of the page is untouched.
+- [ ] The pre-paint snapshot survives hydration, for EVERY token and not just
+      the pet: pick a loud non-default theme (Fable, or a hot-pink page
+      background), reload, and watch the first second. The page must never
+      show the Thingtime defaults in between — ThemeHost writes `--tt-*`
+      inline on `<html>`, which outranks the snapshot, so it has to wait for
+      the localforage blob rather than publishing the built-in default theme
+      first (regression: it published immediately, so a custom theme painted
+      right, flipped to defaults for the length of hydration, then flipped
+      back; on a slow hydration the debounced snapshot write also persisted
+      those defaults and carried the flash into the next load).
+- [ ] Throttle the network/CPU hard and reload with a custom theme: still no
+      default-theme flash, and the theme is not lost on the NEXT reload either.
 
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 

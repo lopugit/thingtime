@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -100,4 +101,40 @@ test('a non-boolean pet override is ignored rather than coerced', () => {
     const theme = resolveTheme(THINGTIME_THEME, { general: { pet: junk } } as never);
     assert.equal(theme.general.pet, true, String(junk));
   }
+});
+
+test('every published var has a :root default, so skipping the write loses nothing', async () => {
+  // The pre-paint snapshot is applied INLINE on <html>, so it outranks this
+  // rule and a hydrated theme still wins. But it is what keeps a first-ever
+  // visit (no snapshot) and the getComputedStyle readers — eggs.ts,
+  // ConfettiCanvas — resolving every token while ThemeHost is still waiting.
+  const source = await readFile(new URL('../globals/GlobalStyles.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /':root':\s*\{\s*\.\.\.ttThemeDefaults/u);
+  assert.match(source, /const ttThemeDefaults = themeToCssVars\(THINGTIME_THEME\)/u);
+});
+
+test('ThemeHost waits for hydration before overwriting the pre-paint snapshot', async () => {
+  // The other half of the two-tier contract the pet vars above rely on.
+  // tt-boot.js applies the stored snapshot inline pre-paint; ThemeHost then
+  // re-applies vars from `theme`, which is the built-in DEFAULT until the
+  // localforage blob resolves. Writing during that window overwrites the
+  // snapshot at inline priority, so a pet-off (or custom-theme) user paints
+  // correctly, flips to the defaults for the length of hydration, then flips
+  // back — precisely the flash --tt-pet-display exists to prevent. Worse, the
+  // debounced snapshot write would persist those defaults and carry the flash
+  // into the next load.
+  const source = await readFile(new URL('../components/ThemeSettings/ThemeHost.tsx', import.meta.url), 'utf8');
+  const effect = source.slice(source.indexOf('const vars = React.useMemo'));
+
+  const guard = effect.indexOf('if (loading) return;');
+
+  assert.ok(guard >= 0, 'the var-writing effect must bail out while thingtime is still hydrating');
+  // and the guard has to be a dependency, or the write never lands once
+  // hydration finishes on an otherwise unchanged theme
+  assert.match(effect, /\}, \[vars, loading\]\);/u);
+  // ...ahead of both the inline write and the debounced snapshot write, since
+  // either one alone is enough to reintroduce the flash
+  assert.ok(guard < effect.indexOf('root.style.setProperty'), 'the guard must precede the inline var write');
+  assert.ok(guard < effect.indexOf('TT_THEME_SNAPSHOT_KEY'), 'the guard must precede the snapshot write');
 });

@@ -97,12 +97,28 @@ test('insets clear the device safe area on both axes', () => {
 	assert.equal(petInset(12, 'right'), 'calc(12px + var(--thingtime-safe-area-right, env(safe-area-inset-right, 0px)))');
 });
 
-test('the pet stays off the DevKit bubble in the bottom-right corner', () => {
-	// DevKit.tsx pins a 52px round trigger at safe-area-right + 20px, and shows
-	// it whenever the deploy env is not production — so every preview build and
+test('the pet stays off the DevKit bubble in the bottom-right corner', async () => {
+	// DevKit.tsx pins a round trigger in from the right edge, and shows it
+	// whenever the deploy env is not production — so every preview build and
 	// every local dev session. A pet in the raw corner renders underneath it.
-	const devKitTriggerReach = 20 + 52;
+	//
+	// Read that geometry out of DevKit rather than copying it, for the same
+	// reason the source scans below exist: hand-copied numbers keep agreeing
+	// with themselves. A DevKit trigger that grew or moved would slide the pet
+	// back under the bubble while `20 + 52` went on passing forever.
+	const devKit = await readFile(new URL('../DevKit/DevKit.tsx', import.meta.url), 'utf8');
+	// find the trigger by its label first, so the panel's width="260px" and the
+	// status dot's width="14px" cannot be measured instead
+	const trigger = devKit.slice(devKit.indexOf('aria-label="Move or open DevKit"'));
+	const size = Number(/width="(\d+)px"/u.exec(trigger)?.[1]);
+	// ...and its resting inset, which sits on top of the safe area
+	const inset = Number(/safe-area-inset-right, 0px\)\) \+ (\d+)px/u.exec(devKit)?.[1]);
+	const devKitTriggerReach = inset + size;
 
+	assert.ok(
+		Number.isFinite(size) && Number.isFinite(inset),
+		`could not read the DevKit trigger geometry (size=${size}, inset=${inset}) — re-anchor this scan rather than deleting it`
+	);
 	assert.ok(
 		PET_DEVKIT_CLEARANCE >= devKitTriggerReach,
 		`a ${PET_DEVKIT_CLEARANCE}px right inset overlaps the DevKit trigger, which reaches ${devKitTriggerReach}px in from the edge`
