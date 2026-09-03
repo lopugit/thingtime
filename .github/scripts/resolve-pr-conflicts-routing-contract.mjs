@@ -458,6 +458,10 @@ function assertWorkflowSource() {
     source.indexOf("      - name: Rebuild Graphify structure, then LLM semantics"),
     source.indexOf("      - name: Push merge commit"),
   );
+  const targetPushSelectionBlock = source.slice(
+    source.indexOf('          conflicting="$(jq -c \\'),
+    source.indexOf("          # Snapshot the exact live refs"),
+  );
 
   assert.match(source, /description: "PR base or head branch to scan;/);
   assert.doesNotMatch(source, /unique head|exact PR snapshot/);
@@ -629,7 +633,7 @@ function assertWorkflowSource() {
   assert.match(admissionBlock, /ai-rebase-in-progress/);
   assert.equal(
     resolveBlock.match(/steps\.admission\.outputs\.current == 'true'/g)?.length,
-    19,
+    20,
     "every post-admission resolution step is gated",
   );
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);
@@ -906,6 +910,26 @@ function assertWorkflowSource() {
     source,
     /select\(\.mergeable == "CONFLICTING" or \.mergeStateStatus == "BEHIND"\)/u,
     "conflicting and clean-but-behind PRs both enter Lopu's base-merge lane",
+  );
+  assert.match(
+    source,
+    /TARGET_PUSH:[\s\S]*github\.event_name == 'push'[\s\S]*github\.event\.deleted == false/u,
+    "a non-deleted push carries an authoritative target-update signal",
+  );
+  assert.match(
+    targetPushSelectionBlock,
+    /or \(\$target_push and \.baseRefName == \$event_ref\)/u,
+    "a pushed PR target enters the merge lane without waiting for stale GitHub mergeability",
+  );
+  assert.match(
+    source,
+    /git merge-base --is-ancestor "\$base" "\$pre_merge"[\s\S]*already_current=true/u,
+    "an already-current exact snapshot is a successful no-op",
+  );
+  assert.match(
+    source,
+    /steps\.merge\.outputs\.already_current != 'true'/u,
+    "an already-current worker cannot create a graph-only branch update",
   );
   assert.match(
     source,

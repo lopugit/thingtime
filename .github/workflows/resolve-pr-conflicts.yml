@@ -1189,6 +1189,16 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_REF: ${{ github.ref_name }}
+          # A base-branch push is an authoritative target-update signal even
+          # while GitHub is still lazily recomputing a PR's mergeability. The
+          # detector snapshots both live refs and the worker re-proves them
+          # under its lease, so this never trusts that eventually-consistent
+          # PR field for a branch write.
+          TARGET_PUSH: >-
+            ${{ github.event_name == 'push'
+                && github.event.deleted == false
+                && 'true'
+                || 'false' }}
           # Identity of the workflow that STARTED the run. Under
           # workflow_call that is the thin product-branch listener, not
           # this file; see CONTROL-PLANE IDENTITY at the top.
@@ -2098,7 +2108,15 @@ jobs:
           matched_open="$(jq 'length' <<<"$prs")"
           prs="$(jq -c '[.[] | select([.labels[].name] | index("no-ai-merge") == null)]' <<<"$prs")"
 
-          skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | .number] | join(", ")' <<<"$prs")"
+          skipped="$(jq -r --arg event_ref "$EVENT_REF" --argjson target_push "$TARGET_PUSH" '
+            [.[]
+              | select(.isCrossRepository)
+              | select(.mergeable == "CONFLICTING"
+                       or .mergeStateStatus == "BEHIND"
+                       or ($target_push and .baseRefName == $event_ref))
+              | .number]
+            | join(", ")
+          ' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping fork PR(s) #$skipped that need a base merge — cannot push to fork branches."
           while IFS= read -r encoded; do
             [ -n "$encoded" ] || continue
@@ -2108,7 +2126,14 @@ jobs:
             upsert_detect_comment "$fork_number" \
               "🤖 **Base merge needed — cannot update a fork PR.** This branch needs \`$fork_base\` merged into it, and Lopu cannot push to branches in a fork. Please merge \`$fork_base\` into your branch (resolving any conflicts), or rebase onto it." \
               || echo "::warning::Could not post the detect-status comment on #$fork_number."
-          done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | @base64' <<<"$prs")
+          done < <(jq -r --arg event_ref "$EVENT_REF" --argjson target_push "$TARGET_PUSH" '
+            .[]
+            | select(.isCrossRepository)
+            | select(.mergeable == "CONFLICTING"
+                     or .mergeStateStatus == "BEHIND"
+                     or ($target_push and .baseRefName == $event_ref))
+            | @base64
+          ' <<<"$prs")
           rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
           stacked_owned="$(jq -r --slurpfile all_open_inventory "$all_open_file" --arg default_ref "$default_ref" '
@@ -2131,14 +2156,33 @@ jobs:
             | join(", ")
           ' <<<"$prs")"
           [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI PR/stack rebase workflow owns stack history."
-          still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
+          still_unknown="$(jq -r --arg event_ref "$EVENT_REF" --argjson target_push "$TARGET_PUSH" '
+            [.[]
+              | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")
+              | select((($target_push and .baseRefName == $event_ref)) | not)
+              | .number]
+            | join(", ")
+          ' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked by the next event or scheduled sweep."
           while IFS= read -r unknown_number; do
             [ -n "$unknown_number" ] || continue
             upsert_detect_comment "$unknown_number" \
               "🤖 **Branch status still computing.** The base branch moved, and GitHub had not finished recomputing whether this PR conflicts or is behind after the detector waited ${MERGEABLE_POLL_SECONDS}s — so no branch update was started this round. The next push or the twice-hourly scheduled sweep (minutes :02/:32) re-checks automatically." \
               || echo "::warning::Could not post the detect-status comment on #$unknown_number."
-          done < <(jq -r '.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN") | .number' <<<"$prs")
+          done < <(jq -r --arg event_ref "$EVENT_REF" --argjson target_push "$TARGET_PUSH" '
+            .[]
+            | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")
+            | select((($target_push and .baseRefName == $event_ref)) | not)
+            | .number
+          ' <<<"$prs")
+          target_push_unknown="$(jq -r --arg event_ref "$EVENT_REF" --argjson target_push "$TARGET_PUSH" '
+            [.[]
+              | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")
+              | select($target_push and .baseRefName == $event_ref)
+              | .number]
+            | join(", ")
+          ' <<<"$prs")"
+          [ -n "$target_push_unknown" ] && echo "::notice::Target branch $EVENT_REF moved; PR(s) #$target_push_unknown will use exact live-ref snapshots instead of waiting for GitHub's stale mergeability verdict."
 
           # On a pull_request_target event, scan ONLY the triggering PR — the
           # other PRs sharing this base are not this event's business and are
@@ -2157,6 +2201,8 @@ jobs:
             --arg only "${ONLY_PR:-}" \
             --argjson manual_retry "$MANUAL_RETRY" \
             --argjson batch "$BATCH_JSON" \
+            --arg event_ref "$EVENT_REF" \
+            --argjson target_push "$TARGET_PUSH" \
             --slurpfile all_open_inventory "$all_open_file" \
             --arg default_ref "$default_ref" '
             ($all_open_inventory[0]) as $all
@@ -2164,13 +2210,17 @@ jobs:
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
-              | select(.mergeable == "CONFLICTING" or .mergeStateStatus == "BEHIND")
-              | select(.mergeable != "UNKNOWN" and .mergeStateStatus != "UNKNOWN")
+              | select(.mergeable == "CONFLICTING"
+                       or .mergeStateStatus == "BEHIND"
+                       or ($target_push and .baseRefName == $event_ref))
+              | select((.mergeable != "UNKNOWN" and .mergeStateStatus != "UNKNOWN")
+                       or ($target_push and .baseRefName == $event_ref))
               | select([.labels[].name]
                   | all(. != "ai-rebase-in-progress"))
               | select([.labels[].name] | index("ai-merge-paused") == null)
               | select(
                   (.mergeStateStatus == "BEHIND")
+                  or ($target_push and .baseRefName == $event_ref)
                   or ([.labels[].name] | index("no-ai-rebase") != null)
                   or (any($all[];
                       .number != $pr.number
@@ -8054,6 +8104,23 @@ jobs:
             || { echo "::error::Checkout does not match the snapshotted PR head."; exit 1; }
           echo "$pre_merge" > "$RUNNER_TEMP/pre_merge_sha.txt"
 
+          # A target-push candidate may already contain the live target by the
+          # time its exact worker is admitted (for example, GitHub's stale
+          # mergeability field selected an otherwise-current PR). This is a
+          # successful no-op, not a failed merge: do not spend Graphify/model
+          # time or manufacture a graph-only branch update.
+          if git merge-base --is-ancestor "$base" "$pre_merge"; then
+            {
+              echo "already_current=true"
+              echo "conflicted=false"
+              echo "graphify_reset=false"
+              echo "workflows_blocked=false"
+            } >> "$GITHUB_OUTPUT"
+            echo "::notice::PR head already contains the exact target snapshot; no branch update is needed."
+            exit 0
+          fi
+          echo "already_current=false" >> "$GITHUB_OUTPUT"
+
           # Keep the normal checkout blobless: downloading the repository's
           # multi-gigabyte history for every candidate would make routine
           # no-conflict updates needlessly expensive. GitHub can occasionally
@@ -8811,6 +8878,7 @@ jobs:
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.already_current != 'true'
         # This refresh is a nicety, never worth losing a verified resolution:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
@@ -9084,6 +9152,7 @@ jobs:
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.already_current != 'true'
         env:
           PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
           DEFAULT_TOKEN: ${{ github.token }}
@@ -9246,6 +9315,36 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "::error::Ambiguous push outcome: live head is unexpected ($remote_sha)."
           exit 1
+
+      - name: Comment on PR (already current)
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.already_current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/already-current-comment.md"
+          {
+            echo "✅ \`$HEAD_REF\` already contains the exact \`$BASE_REF\` snapshot when Lopu's target-update worker was admitted, so no merge or branch push was needed."
+            echo
+            echo "$RUN_STATUS_MARKER"
+          } > "$body"
+          comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+            | jq -r --arg marker "$RUN_STATUS_MARKER" '
+                add // []
+                | [.[]
+                    | select(.user.login == "github-actions[bot]")
+                    | select(.body | contains($marker))
+                    | .id]
+                | last // empty
+              ')"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+          fi
 
       - name: Requeue after a moving-ref race
         if: >-
