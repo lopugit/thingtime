@@ -1076,6 +1076,7 @@ const applyMutationPreview = async (
 };
 
 const oauthSecurityScheme = [{ type: 'oauth2', scopes: ['thingtime'] }] as const;
+const loginSecuritySchemes = [{ type: 'noauth' }, ...oauthSecurityScheme] as const;
 const protectedToolContract = {
   title: 'Thingtime action',
   securitySchemes: oauthSecurityScheme,
@@ -1089,16 +1090,27 @@ const protectedToolContract = {
   outputSchema: { type: 'object', additionalProperties: true }
 } as const;
 
+const loginToolContract = {
+  ...protectedToolContract,
+  securitySchemes: loginSecuritySchemes,
+  _meta: {
+    ...protectedToolContract._meta,
+    securitySchemes: loginSecuritySchemes
+  }
+} as const;
+
 const protectedTool = <T extends Record<string, unknown>>(tool: T) => ({ ...protectedToolContract, ...tool });
+const loginTool = <T extends Record<string, unknown>>(tool: T) => ({ ...loginToolContract, ...tool });
 
 type ChatGptMcpToolName = keyof typeof CHATGPT_MCP_TOOL_FEATURES;
 const protectedThingtimeTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => protectedTool(tool);
+const loginThingtimeTool = <T extends Record<string, unknown> & { name: 'login_thingtime' }>(tool: T) => loginTool(tool);
 
 export const thingtimeToolDefinitions = [
-  protectedThingtimeTool({
+  loginThingtimeTool({
     name: 'login_thingtime',
     title: 'Log in to Thingtime',
-    description: 'Use for “@Thingtime login”. Without a current Thingtime connection, this OAuth-protected action makes ChatGPT or Codex open the native browser authorization flow and complete its registered callback. The connection page can add multiple named accounts.',
+    description: 'Use for “@Thingtime login”. This public bootstrap returns a tool-level OAuth challenge when no connection exists, so the invoking ChatGPT or Codex host opens its native browser authorization flow and owns the registered callback. The connection page can add multiple named accounts.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
@@ -1857,6 +1869,18 @@ const mcpAuthorizationDenied = (id: unknown, request: Request, context: Failure)
   return json(jsonRpcResponse(id, denied), { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } });
 };
 
+const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: Failure) => {
+  const challenge = authChallenge(requestOrigin(request));
+  const denied = {
+    ...mcpToolResult({ error: context.error }, true),
+    _meta: { 'mcp/www_authenticate': [challenge] }
+  };
+  // A login bootstrap is an MCP tool result, not a failed HTTP transport.
+  // Returning 200 lets the invoking host read mcp/www_authenticate and own
+  // the PKCE browser/callback lifecycle for this exact MCP session.
+  return json(jsonRpcResponse(id, denied), { headers: noStoreHeaders });
+};
+
 export const handleChatGptMcp = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
@@ -1930,12 +1954,16 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
     }
     return json(jsonRpcResponse(id, resource.value));
   }
-  const context = await resolveMcpSession(request);
-  if (context.ok === false) return mcpAuthorizationDenied(id, request, context);
   const name = typeof message.params?.name === 'string' ? message.params.name : '';
   const args = asRecord(message.params?.arguments) || {};
   if (!thingtimeToolDefinitions.some((tool) => tool.name === name)) {
     return json(jsonRpcResponse(id, mcpToolResult({ error: 'Unknown Thingtime tool' }, true)));
+  }
+  const context = await resolveMcpSession(request);
+  if (context.ok === false) {
+    return name === 'login_thingtime'
+      ? mcpToolAuthorizationChallenge(id, request, context)
+      : mcpAuthorizationDenied(id, request, context);
   }
   const result = await callThingtimeTool(name, args, context.value);
   const isError = Boolean(result && typeof result === 'object' && 'error' in result);
