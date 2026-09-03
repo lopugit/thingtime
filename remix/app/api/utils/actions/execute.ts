@@ -590,13 +590,23 @@ const executeProgram = async (
 				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
 			} else if (step.op === 'things.search') {
 				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all
-				// data things of ONE schema (the sanitizer requires the schema).
-				// Both keep ACL trivially correct without dragging the full search
-				// pipeline into the executor: own docs are yours, public docs are
-				// everyone's.
+				// data things of ONE schema from ANYONE; 'system' = tt:all data
+				// things of ONE schema that the SEED owns (the sanitizer requires
+				// the schema for both cross-owner scopes). All three keep ACL
+				// trivially correct without dragging the full search pipeline into
+				// the executor: own docs are yours, public and system docs are
+				// already world-readable.
+				//
+				// 'system' is not a convenience alias for 'public'. `crystal.schema`
+				// is a free-form field on the open `data` crystal and a seeded
+				// schema is world-readable, so ANY signed-in account can publish a
+				// public data thing wearing a platform schema's stamp. A platform
+				// program that reads its own seeded corpus in 'public' scope reads
+				// a corpus strangers can write into — and with the default
+				// newest-first sort, a forged row sorts ABOVE the seeded one.
 				const limit = typeof step.limit === 'number' ? step.limit : Math.min(20, MAX_ACTION_SEARCH_LIMIT);
 				const offset = typeof step.offset === 'number' ? step.offset : 0;
-				const scopeKind = step.scope === 'public' ? 'public' : 'own';
+				const scopeKind = step.scope === 'public' || step.scope === 'system' ? step.scope : 'own';
 				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
 					const schema = await resolveSchemaRef(viewer, step.schema);
@@ -627,7 +637,11 @@ const executeProgram = async (
 				}
 				const filter: Record<string, unknown> = {
 					thingtime: 'data',
-					...(scopeKind === 'public' ? { acl: ACL_ALL } : { ownerId: viewer!.id }),
+					...(scopeKind === 'public'
+						? { acl: ACL_ALL }
+						: scopeKind === 'system'
+							? { acl: ACL_ALL, ownerId: 'system' }
+							: { ownerId: viewer!.id }),
 					...(clauses.length ? { $and: clauses } : {})
 				};
 				const sortSpec = step.sort as { field: string; dir: string } | undefined;
@@ -642,7 +656,7 @@ const executeProgram = async (
 						.limit(limit)
 						.toArray()
 				).filter((doc: any) => schemaScopeAllows(readScope, schemaIdentityOf(doc.crystal)));
-				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'public' ? ' (public)' : ''}`;
+				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'own' ? '' : ` (${scopeKind})`}`;
 				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt, ownerId: doc.ownerId }));
 			} else if (step.op === 'things.update') {
 				const id = resolveValue(step.id, scope);

@@ -79,7 +79,7 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
 	if (op === 'things.search') {
-		const scope = step.scope === 'public' ? 'public' : 'your';
+		const scope = step.scope === 'public' ? 'public' : step.scope === 'system' ? 'the platform’s' : 'your';
 		const filters = step.where || step.match ? ' matching a filter' : '';
 		return `Search ${scope} ${schema} things${filters}${step.limit ? ` (max ${step.limit})` : ''}${guard}`;
 	}

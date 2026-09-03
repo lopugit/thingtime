@@ -100,6 +100,11 @@ export const ActionCard = ({
 							reads everyone’s public {displayRef(schema, schemaNames)}
 						</ActionChip>
 					))}
+					{effects.systemReads.map((schema) => (
+						<ActionChip key={`sr-${schema}`} size={size} tone="read">
+							reads the platform’s {displayRef(schema, schemaNames)}
+						</ActionChip>
+					))}
 					{effects.updates ? (
 						<ActionChip size={size} tone="write">
 							updates things

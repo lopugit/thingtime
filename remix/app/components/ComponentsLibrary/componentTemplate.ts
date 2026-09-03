@@ -23,10 +23,13 @@ export const EACH_HARD_CAP = 160;
 
 // REPEAT_HARD_CAP bounds ONE ttRepeat; it does not bound the PRODUCT across
 // nested ones. `{ ttRepeat: { node: … } }` costs 2 levels of template depth
-// and ~3 nodes, so 11 nested repeats still pass the stored-crystal gates in
-// schemas/registry.ts (MAX_SCHEMA_RENDER_DEPTH 24 / _NODES 600 / _BYTES 32Ki)
-// while expanding to 24^11 values here. The renderers' own 600-node budgets
-// cannot help: this resolver materialises the whole tree BEFORE they see it,
+// and ~3 nodes, so the stored-crystal gates in schemas/registry.ts
+// (MAX_SCHEMA_RENDER_DEPTH 48 / _NODES 2000 / _BYTES 48Ki) admit 24 nested
+// repeats — depth binds first — while they expand to 24^24 values here. Those
+// gates were raised for app-screen templates, so this bound grew with them:
+// the budget below is what actually holds the line, not the crystal gates.
+// The renderers' own 600-node budgets cannot help either: this resolver
+// materialises the whole tree BEFORE they see it,
 // so a hostile public component would hang the tab of everyone who opened
 // /components. Resolution therefore carries ONE budget for the entire tree —
 // once spent the remainder is dropped, degrading to a truncated preview

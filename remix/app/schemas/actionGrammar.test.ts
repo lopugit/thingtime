@@ -368,6 +368,7 @@ test('search accepts scope, where, match, sort and offset within their caps', ()
 	assert.equal(result.ok, true);
 	if (result.ok) assert.deepEqual(deriveActionEffects(result.crystal.steps).publicReads, ['species']);
 	expectFail({ name: 'Bad', steps: [{ op: 'things.search', scope: 'public' }], capabilities: [{ capability: 'things.read' }] }, /must name a schema/, 'public needs schema');
+	expectFail({ name: 'Bad', steps: [{ op: 'things.search', schema: 'species', scope: 'everyone' }], capabilities: [{ capability: 'things.read' }] }, /scope must be/, 'closed scope list');
 	expectFail(
 		{ name: 'Bad', steps: [{ op: 'things.search', where: { schemaId: 'x' } }], capabilities: [{ capability: 'things.read' }] },
 		/not a plain crystal field/,
@@ -377,6 +378,52 @@ test('search accepts scope, where, match, sort and offset within their caps', ()
 		{ name: 'Bad', steps: [{ op: 'things.search', sort: { field: '$bad' } }], capabilities: [{ capability: 'things.read' }] },
 		/sort.field/,
 		'sort field grammar'
+	);
+});
+
+// `public` and `system` are NOT interchangeable, and the effect summary is
+// where a reader learns which one they are consenting to. `crystal.schema` is
+// a free-form field on the open `data` crystal and a seeded schema is
+// world-readable, so anyone can publish a public data thing wearing a platform
+// schema's stamp: under `public` scope a forged row sorts above the seeded one
+// (newest-first) and `limit: 1` hands it to every reader. A program that means
+// "the rows the seed wrote" must say `system`, and must not be able to claim
+// the narrower chip while running the wider query.
+test('system scope is its own effect and never collapses into public', () => {
+	const seeded = sanitizeActionCrystal({
+		name: 'Entry',
+		inputs: [{ name: 'id', type: 'string', required: true }],
+		steps: [
+			{ op: 'things.search', schema: 'entry', scope: 'system', where: { entryId: '$input.id' }, limit: 1 },
+			{ op: 'return', value: '$step.1' }
+		],
+		capabilities: [{ capability: 'things.read', schemas: ['entry'] }]
+	});
+	assert.equal(seeded.ok, true);
+	if (seeded.ok) {
+		const steps = seeded.crystal.steps as Array<Record<string, unknown>>;
+		// the scope has to SURVIVE sanitization — a dropped scope silently
+		// widens the query back to the caller's own things at run time
+		assert.equal(steps[0].scope, 'system');
+		const effects = deriveActionEffects(steps);
+		assert.deepEqual(effects.systemReads, ['entry']);
+		assert.deepEqual(effects.publicReads, []);
+	}
+	// and the reverse: a public search never claims the platform-only chip
+	const open = sanitizeActionCrystal({
+		name: 'Open',
+		steps: [
+			{ op: 'things.search', schema: 'entry', scope: 'public', limit: 1 },
+			{ op: 'return', value: '$step.1' }
+		],
+		capabilities: [{ capability: 'things.read', schemas: ['entry'] }]
+	});
+	assert.equal(open.ok, true);
+	if (open.ok) assert.deepEqual(deriveActionEffects(open.crystal.steps).systemReads, []);
+	expectFail(
+		{ name: 'Bad', steps: [{ op: 'things.search', scope: 'system' }], capabilities: [{ capability: 'things.read' }] },
+		/must name a schema/,
+		'system needs schema'
 	);
 });
 

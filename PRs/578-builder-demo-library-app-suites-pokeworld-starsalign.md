@@ -169,3 +169,51 @@ All three are repaired in this branch; unit tests pin each one.
 Validation: `test:schemas` 147 ✓, `test:actions` 52 ✓ (+2), `test:webpages`
 36 ✓, `test:action-packs` 122 ✓, `test:editorjs` 66 ✓ (+3), targeted ESLint
 clean, `tsc --noEmit` unchanged at the branch's pre-existing count.
+
+## Lopu review round 2 — 2026-09-03
+
+One cross-user defect in the new `scope: 'public'` search, plus a comment
+that stopped describing the code it justifies.
+
+4. **A `public`-scope search let any account rewrite what every viewer reads**
+   (`schemas/registry.ts`, `api/utils/actions/execute.ts`,
+   `schemas/appSuites/starsalign.ts`). `school-entry` searched the seeded
+   school corpus with `scope: 'public'`, `where: { entryId }`, `limit: 1`,
+   then merged the found crystal **over** the pack's trusted entry. But
+   "public" is not "platform-authored": `crystal.schema` is a free-form field
+   on the open `data` crystal, and `resolveDataSchemaProvenance` only checks
+   that a supplied `schemaId` resolves to a schema the writer can **see** —
+   the seeded entry schema is world-readable, and the server then stamps
+   `crystal.schema` from it. So one `POST /api/v1/things` with
+   `{ thingtime: ['data'], acl: ['tt:all'], crystal: { schemaId:
+   'schema-app-starsalign-entry', entryId: 'sun-aries', title, short, deep } }`
+   satisfies both arms of the search's `$or`, and with the default
+   newest-first sort it outranks the seeded row for **every** reader of that
+   entry. Not XSS — the renderers still sanitize — but arbitrary stored
+   content served to all viewers of a platform page.
+
+   Fixed by making the distinction sayable instead of implicit: a third
+   search scope `system` pins `ownerId: 'system'` alongside `acl: tt:all`, so
+   a program that means "the rows the seed wrote" says so. `school-entry`
+   uses it; `public` stays for genuinely social corpora. The scopes are
+   separate effects — `systemReads` (`reads the platform's <schema>`) never
+   collapses into `publicReads` (`reads everyone's public <schema>`), so the
+   inspector chip still names exactly which corpus a viewer is consenting to.
+   `actionGrammar.test.ts` pins the split, that the scope survives
+   sanitization (a dropped scope would silently widen the query back to the
+   caller's own things), and that both cross-owner scopes require a schema.
+
+5. **`componentTemplate.ts`'s expansion-budget comment cited the pre-PR
+   crystal gates.** It justified `MAX_RESOLVED_VALUES` against
+   `MAX_SCHEMA_RENDER_DEPTH 24 / _NODES 600 / _BYTES 32Ki`, which this branch
+   raised to 48 / 2000 / 48Ki for app screens. The conclusion survives — it
+   gets stronger, since depth now admits 24 nested repeats rather than 11 —
+   but a load-bearing bound argument citing numbers that no longer exist is
+   the kind that quietly stops being checked. Numbers corrected and the
+   dependency stated: the budget, not the crystal gates, holds this line.
+
+Validation (this round): `test:schemas` 148 ✓ (+1), `test:action-packs`
+122 ✓, `actionInspect` + `componentTemplate` + `Kinds` + `webpageRuntime`
+68 ✓. The suite-crystal test validates every materialized app-suite crystal
+in both `system` and `own` mode, so the `school-entry` scope change is
+covered end to end at save time.

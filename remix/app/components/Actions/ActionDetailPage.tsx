@@ -495,7 +495,7 @@ export const ActionDetailPage = () => {
 									</Section>
 								</Flex>
 
-								{effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.invokes.length ? (
+								{effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
 									<Section title="Effects (derived from the steps)">
 										<Flex gap={1.5} wrap="wrap">
 											{effects.creates.map((schema) => (
@@ -511,6 +511,11 @@ export const ActionDetailPage = () => {
 											{effects.publicReads.map((schema) => (
 												<ActionChip key={`pr-${schema}`} size="md" tone="read">
 													reads everyone’s public {displayRef(schema, schemaNames)}
+												</ActionChip>
+											))}
+											{effects.systemReads.map((schema) => (
+												<ActionChip key={`sr-${schema}`} size="md" tone="read">
+													reads the platform’s {displayRef(schema, schemaNames)}
 												</ActionChip>
 											))}
 											{effects.updates ? (
