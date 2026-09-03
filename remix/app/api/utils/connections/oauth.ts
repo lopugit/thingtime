@@ -1,9 +1,9 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
 import { connectionProviderById, oauthCredsFor } from './providers';
-import { fail, type Fail } from './shared';
+import { fail, pkceVerifierFor, type Fail } from './shared';
 
 // SSO account linking: POST /api/v1/connections/oauth/begin hands the client
 // the provider's authorize URL; the provider's own sign-in page collects the
@@ -50,14 +50,17 @@ export const beginOAuth = async (
   if (!creds) {
     return fail(400, `${provider.name} is not configured on this deployment yet (set ${provider.oauth.clientIdEnv} and ${provider.oauth.clientSecretEnv})`);
   }
-  // PKCE (X requires it): the S256 verifier rides the SIGNED state JWT
-  // through the provider round trip — stateless like the rest of the flow,
-  // and an attacker altering it breaks the signature
-  const codeVerifier = provider.oauth.pkce ? randomBytes(32).toString('base64url') : null;
+  // PKCE (X requires it): the S256 verifier is derived from a server secret and
+  // this nonce, so only the nonce rides the state JWT through the provider round
+  // trip. The flow stays stateless and an attacker altering the nonce breaks the
+  // signature, but — unlike carrying the verifier itself — whoever reads the
+  // callback URL cannot recover it. See pkceVerifierFor in ./shared.
+  const nonce = randomUUID();
+  const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : null;
   const codeChallenge = codeVerifier ? createHash('sha256').update(codeVerifier).digest('base64url') : undefined;
   const state = await signJwt({
     sub: user.id,
-    jti: `${STATE_JTI_PREFIX}${provider.id}:${randomUUID()}${codeVerifier ? `:${codeVerifier}` : ''}`,
+    jti: `${STATE_JTI_PREFIX}${provider.id}:${nonce}`,
     expiresIn: STATE_TTL
   });
   return {
@@ -87,11 +90,14 @@ export const completeOAuth = async (
   if (claims.sub !== user.id) return fail(403, 'This sign-in was started from a different Thingtime session');
   const stateParts = claims.jti.slice(STATE_JTI_PREFIX.length).split(':');
   const providerId = stateParts[0];
-  const codeVerifier = stateParts[2] || undefined;
+  const nonce = stateParts[1] || '';
   const provider = connectionProviderById(providerId);
   if (!provider?.oauth) return fail(400, 'The sign-in state names an unknown provider');
   const creds = oauthCredsFor(provider);
   if (!creds) return fail(400, `${provider.name} is not configured on this deployment`);
+  // Recomputed, not read back out of the state — the same derivation beginOAuth
+  // used, keyed by the nonce the signature covers.
+  const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : undefined;
 
   const exchanged = await provider.oauth.exchangeCode({
     code,

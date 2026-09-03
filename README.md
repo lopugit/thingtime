@@ -1670,6 +1670,11 @@ YOUTUBE_API_KEY="<youtube-data-api-key>"
 # Optional: pin the OAuth redirect origin when the app runs behind a proxy or
 # tunnel (must match the redirect URI registered with each provider app)
 CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
+# back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
+# set it only to rotate PKCE independently of the auth signing key. Any
+# in-flight connect started before a rotation just has to be retried.
+CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
 ```
 
 Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
