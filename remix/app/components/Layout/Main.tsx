@@ -7,7 +7,7 @@ import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } fr
 // Full-bleed app surfaces own the whole viewport (fixed-height panes with
 // their own internal scroll), so the footer and its tail spacer stay off —
 // a chat that scrolls the page under the composer is unusable.
-const FULL_BLEED_PATHS = ['/messages'];
+const FULL_BLEED_PATHS = ['/messages', '/lopu'];
 
 export const Main = (props) => {
 	const { loading, open, direction } = useDrawer();

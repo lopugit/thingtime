@@ -34,6 +34,7 @@ targets:
     platform: iOS
     sources:
       - path: Thingtime
+      - path: Shared
     info:
       path: Thingtime/Resources/Info.plist
       properties:
@@ -43,9 +44,13 @@ targets:
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
-        NSMicrophoneUsageDescription: Thingtime uses the microphone when you record a video to share.
+        NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice conversations and when you record a video to share.
+        NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
         NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share.
         UILaunchScreen: {}
+        UIBackgroundModes:
+          - audio
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -60,7 +65,30 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    dependencies: []
+    dependencies:
+      - target: ThingtimeLopuWidget
+
+  ThingtimeLopuWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: LopuVoiceWidget
+      - path: Shared
+    info:
+      path: LopuVoiceWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Lopu Voice
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).lopu-widget
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
 
   ThingtimeTests:
     type: bundle.unit-test

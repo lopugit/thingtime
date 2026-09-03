@@ -3675,6 +3675,68 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+		id: 'lopu-vault',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu Secure Vault',
+		endpoint: '/api/v1/lopu/vault',
+		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
+		detail:
+			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only. Provider tokens and generic secret values are accepted on writes and never returned. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'GET the provider templates, environments, and redacted entry metadata.',
+			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'POST delete with an owner-scoped record id to remove it.'
+		],
+		requestExamples: [
+			{
+				name: 'Save an AI provider',
+				description: 'The token is write-only and omitted from every response.',
+				method: 'POST',
+				body: {
+					action: 'save-provider',
+					name: 'My Claude',
+					provider: 'anthropic',
+					endpoint: 'https://api.anthropic.com',
+					model: 'claude-sonnet-4-6',
+					token: '<provider-token>',
+					groupId: '<environment-id>'
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, groups: [], entries: [{ id: '<id>', kind: 'provider', name: 'My Claude', provider: 'anthropic', hasValue: true }] } },
+			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
+		]
+	}),
+  endpoint({
+		id: 'lopu-voice-reply',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu voice turn',
+		endpoint: '/api/v1/lopu/voice/reply',
+		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
+		detail:
+			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint, and streams NDJSON text deltas. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		methods: ['POST'],
+		steps: [
+			'Choose one provider entry for conversation mode, or enable transcribeMode.',
+			'POST a final speech transcript and stable sessionId.',
+			'Read NDJSON events through done; speak delta text only when the client’s Text response setting is off.'
+		],
+		requestExamples: [
+			{ name: 'Conversation turn', description: 'Use one write-only provider connection.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', transcribeMode: false, history: [] } },
+			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
+			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
+		]
+	}),
+  endpoint({
     id: 'deployment-links',
     group: 'deployments',
     title: 'Linked deployments',

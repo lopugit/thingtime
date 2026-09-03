@@ -417,7 +417,7 @@ export const DevKit = (_props) => {
 	// actions occupy the bottom-right at every breakpoint. The draggable dev
 	// trigger would necessarily cover one of those controls, so keep this
 	// development-only helper off the route rather than obscuring product UI.
-	if (!mounted || !devKit || location.pathname === '/messages' || location.pathname.startsWith('/messages/')) return null;
+	if (!mounted || !devKit || location.pathname === '/messages' || location.pathname.startsWith('/messages/') || location.pathname === '/lopu' || location.pathname === '/settings') return null;
 
   return (
     <>

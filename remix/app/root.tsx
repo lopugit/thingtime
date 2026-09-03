@@ -88,6 +88,8 @@ export default function App() {
             ? `${baseTitle} - Feed`
             : pathname === '/messages'
               ? `${baseTitle} - Messages`
+							: pathname === '/lopu'
+								? `${baseTitle} - Lopu Voice`
               : pathname.startsWith('/profile')
               ? `${baseTitle} - Profile`
               : pathname === '/settings'
