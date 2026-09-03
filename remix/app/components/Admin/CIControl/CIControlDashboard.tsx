@@ -1907,7 +1907,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     }
     setSavingPreviewEnvironment(environment);
     try {
-      await requireThingtimeCapability('api.admin-ci-previews', '1.2.0');
+      await requireThingtimeCapability('api.admin-ci-previews', '2.0.0');
       const result = await apiRef.current.v1.admin.setCiPreviewPolicy({
         prNumber,
         environment,
@@ -1917,10 +1917,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       if (!result?.ok) throw new Error(result?.error || 'Preview policy rejected');
       await load();
       lopu({
-        title: enabled ? `${environment === 'production' ? 'Production' : 'Develop'} preview queued 🙌` : `${environment === 'production' ? 'Production' : 'Develop'} preview disabled`,
+        title: enabled ? `${environment === 'production' ? 'Production' : 'Develop'} preview queued 🙌` : `${environment === 'production' ? 'Production' : 'Develop'} preview cleanup queued`,
         description: enabled
-          ? `PR #${prNumber} is building at its exact current SHA. Signed Vercel progress will update here automatically.`
-          : `Only Thingtime-owned ${environment} preview deployments for PR #${prNumber} were removed.`,
+          ? `The protected GitHub Actions controller is building PR #${prNumber} at its exact current SHA.`
+          : `The protected controller will remove only Thingtime-owned ${environment} preview resources for PR #${prNumber}.`,
         status: 'success',
         duration: 7000
       });

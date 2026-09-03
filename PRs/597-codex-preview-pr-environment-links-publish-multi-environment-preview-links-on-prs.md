@@ -50,3 +50,19 @@ resources.
 The repository-wide typecheck ratchet remains non-blocking at 109 errors versus
 its baseline of 108; none of the reported errors are in the preview publisher
 or route changed by this PR.
+
+## 2026-09-03 protected-controller follow-up
+
+The product-side deployment/comment implementation above has been superseded.
+The admin API now retains only live-PR validation, the durable two-environment
+policy, and a bounded repository dispatch sent by `thingtime-ci-control[bot]`.
+All Vercel calls, aliases, cleanup, and the GitHub Actions-owned marker comment
+live on the protected `github-actions` branch.
+
+Each selected environment is built from the controller-authorized exact SHA in
+an environment-free GitHub job. A symlink-preserving archive is validated by
+protected code before the Vercel token is present, and the publisher uses only
+`--prebuilt --skip-domain`. This prevents PR code from receiving Develop or
+Production environment secrets during compilation while preserving the
+multi-row expected URL, estimated time, immutable snapshot, and persistent
+alias behavior requested by the feature.
