@@ -2071,6 +2071,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
