@@ -543,6 +543,7 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
   const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
   if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  const wantsJsonCompletion = form.value.get('intent') === 'complete';
 
   if (form.value.get('intent') === 'prepare') {
     const user = await getCurrentUser(request);
@@ -649,6 +650,7 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   callback.searchParams.set('code', code);
   callback.searchParams.set('state', oauthRequest.state);
   callback.searchParams.set('iss', requestOrigin(request));
+  if (wantsJsonCompletion) return json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders });
   return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
 };
 

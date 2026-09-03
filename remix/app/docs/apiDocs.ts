@@ -961,7 +961,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Let ChatGPT or Codex open this endpoint with its OAuth parameters and sign in with the existing Thingtime SSO page when prompted.',
       'Review the default read/write-all connection or open Advanced settings to narrow scopes, regenerate the generated credential, or add another approved account.',
-      'The browser redirects to ChatGPT with a short-lived code and original state.'
+      'The page sends an explicit completion request, reports any server-side error in place, then deliberately navigates to the registered callback with a short-lived code and original state.'
     ],
     requestExamples: [
       {
@@ -982,7 +982,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'First-party SSO connection page. It prepares the default encrypted read/write-all account without exposing a token in the client host or chat.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
+      { status: 200, description: 'The explicit completion request returns the exact registered callback URL only after validating and encrypting the selected account; the page then navigates there with code, state, and issuer.' },
+      { status: 302, description: 'Legacy form submission redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
     ]
   }),

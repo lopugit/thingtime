@@ -21,6 +21,9 @@ is fixed, and cite the checklist you ran in the PR description.
       regenerate the generated token (revoking its predecessor), and add a
       manually scoped additional account without exposing a credential to a
       chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
