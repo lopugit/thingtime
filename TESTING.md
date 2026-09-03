@@ -15,13 +15,25 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.
@@ -3058,7 +3070,7 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.2.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3073,10 +3085,17 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub App-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail
