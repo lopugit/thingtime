@@ -84,6 +84,13 @@ before accepting the sign-in. The first-party page signs in through Thingtime
 SSO and prepares the default read/write-all token in the background, so never
 enter a token into a Codex prompt or chat. Advanced settings retain the option
 to use a scoped developer token when that is deliberately required.
+The final Connect Thingtime action reports completion failures in the browser
+before deliberately navigating to the exact registered OAuth callback.
+
+On local desktops, `scripts/desktop-oauth-login.mjs` launches Codex's native
+OAuth listener and opens its exact generated authorization URL in Google
+Chrome. It keeps the callback listener alive and never asks the user to copy
+an access token, authorization code, or browser URL.
 For Codex versions that do not support CIMD, the server instead performs OAuth
 Dynamic Client Registration with the same strict `127.0.0.1` loopback-only
 redirect policy.
