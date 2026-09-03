@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
 	EXPRESSION_CATALOGUE,
+	EXPRESSION_FUNCTION_NAMES,
 	MAX_EXPRESSION_LIST_LENGTH,
 	evaluateExpression,
 	isLambdaArg,
@@ -248,6 +249,22 @@ test('the catalogue is closed and arities are enforced', () => {
 		assert.ok(signature.min <= signature.max, `${name} arity`);
 		assert.ok(signature.doc.length > 0, `${name} doc`);
 	}
+});
+
+// The catalogue and the bound pack table are plain objects, so a name off
+// Object.prototype answers truthily to `TABLE[fn]` while carrying no arity —
+// and `args.length < undefined` / `> undefined` are both false, so an
+// unguarded gate would wave it through. Every lookup must be own-property.
+test('inherited Object.prototype names are not expression functions', () => {
+	const inherited = ['constructor', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__proto__'];
+	for (const name of inherited) {
+		assert.throws(() => run([name, 'x', 'y']), /Unknown expression function/, `${name} must not resolve`);
+		assert.equal(isLambdaArg(name, 0), false, `${name} must not claim a lambda arg`);
+		assert.equal(EXPRESSION_FUNCTION_NAMES.includes(name), false, `${name} must not be a declared name`);
+	}
+	// and the same hazard on the pack side: makeContext's pack table is a plain
+	// object, so `packs.constructor` is a callable the default branch must not reach
+	assert.throws(() => evaluateExpression(['constructor'], makeContext()), /Unknown expression function/);
 });
 
 test('budgets refuse runaway evaluation and oversized lists', () => {

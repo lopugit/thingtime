@@ -165,8 +165,17 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 
 export const EXPRESSION_FUNCTION_NAMES = Object.keys(EXPRESSION_CATALOGUE);
 
+// The ONE way to read the catalogue. `CATALOGUE[fn]` alone is not a closed
+// lookup: the table is an object literal, so it inherits Object.prototype and
+// `constructor` / `valueOf` / `hasOwnProperty` / `__proto__` all answer with a
+// truthy value that is not a signature. Their `.min` / `.max` are undefined,
+// and every arity comparison against undefined is false, so an inherited name
+// clears both the save-time gate and the run-time gate. Own properties only.
+export const catalogueSignature = (fn: string): ExpressionSignature | undefined =>
+	Object.prototype.hasOwnProperty.call(EXPRESSION_CATALOGUE, fn) ? EXPRESSION_CATALOGUE[fn] : undefined;
+
 export const isLambdaArg = (fn: string, index: number): boolean => {
-	const entry = EXPRESSION_CATALOGUE[fn];
+	const entry = catalogueSignature(fn);
 	return !!entry?.lambda?.includes(index);
 };
 
@@ -361,7 +370,7 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 	if (ctx.budget.nodes <= 0) ctx.fail(`Expression budget exhausted (max ${MAX_EXPRESSION_NODES_PER_RUN} evaluations per run)`);
 	ctx.budget.nodes -= 1;
 	const fn = String(expression[0]);
-	const signature = EXPRESSION_CATALOGUE[fn];
+	const signature = catalogueSignature(fn);
 	if (!signature) ctx.fail(`Unknown expression function "${fn.slice(0, 40)}"`);
 	const rawArgs = expression.slice(1);
 	if (rawArgs.length < signature.min || rawArgs.length > signature.max) {
@@ -727,8 +736,10 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return new Intl.DateTimeFormat('en-US', { ...options, timeZone: timeZone || 'UTC' }).format(date);
 		}
 		default: {
-			// domain packs
-			const implementation = ctx.packs[fn];
+			// domain packs — own properties only, for the same reason the
+			// catalogue lookup is: the bound pack table is a plain object, and an
+			// inherited name would hand this branch a callable that is not a pack.
+			const implementation = Object.prototype.hasOwnProperty.call(ctx.packs, fn) ? ctx.packs[fn] : undefined;
 			if (!implementation) ctx.fail(`Expression function ${fn} is not available on this deployment`);
 			ctx.onPackCall?.(fn);
 			return implementation(args);

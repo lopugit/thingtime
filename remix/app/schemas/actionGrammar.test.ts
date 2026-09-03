@@ -380,6 +380,24 @@ test('search accepts scope, where, match, sort and offset within their caps', ()
 	);
 });
 
+// "The catalogue is closed" is a save-time promise, and the closure has to
+// survive the prototype chain: EXPRESSION_CATALOGUE is an object literal, so
+// `CATALOGUE['constructor']` is truthy with min/max undefined — and both arity
+// comparisons against undefined are false. An unguarded gate would store the
+// step, and the executor would then call whatever the name inherited.
+test('ttExpr cannot name a function inherited from Object.prototype', () => {
+	for (const name of ['constructor', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__proto__']) {
+		expectFail(
+			{ name: 'Bad', steps: [{ op: 'compute', value: { ttExpr: [name, 'x', 'y'] } }] },
+			/names an unknown function/,
+			`ttExpr ${name}`
+		);
+	}
+	// the real catalogue entry with the same shape still saves
+	const ok = sanitizeActionCrystal({ name: 'Fine', steps: [{ op: 'compute', value: { ttExpr: ['toString', 7] } }] });
+	assert.equal(ok.ok, true);
+});
+
 test('viewer refs parse and unknown roots are still refused', () => {
 	assert.deepEqual(parseActionRef('$viewer.id'), { kind: 'viewer', field: 'id' });
 	assert.deepEqual(parseActionRef('$item.hp.max'), { kind: 'item', path: ['hp', 'max'] });

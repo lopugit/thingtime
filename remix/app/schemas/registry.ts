@@ -15,7 +15,7 @@
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
-import { EXPRESSION_CATALOGUE, MAX_EXPRESSION_ARGS, isLambdaArg } from './actionExpressions.ts';
+import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -4882,7 +4882,7 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope
 			return fail(400, `Step ${stepIndex} ttExpr needs [fn, ...args] with at most ${MAX_EXPRESSION_ARGS} args`);
 		}
 		const fn = typeof expression[0] === 'string' ? expression[0] : '';
-		const signature = EXPRESSION_CATALOGUE[fn];
+		const signature = catalogueSignature(fn);
 		if (!signature) {
 			return fail(400, `Step ${stepIndex} ttExpr names an unknown function "${String(expression[0]).slice(0, 40)}" (the catalogue is closed)`);
 		}
