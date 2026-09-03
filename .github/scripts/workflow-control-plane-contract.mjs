@@ -1089,8 +1089,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /^    if: github\.event_name != 'pull_request_target'$/mu,
-    "develop preview always schedules its trusted controller outside PR listeners",
+    /^    if: github\.event_name != 'pull_request_target' && !\(github\.event_name == 'repository_dispatch' && github\.event\.client_payload\.admin_preview == '1'\)$/mu,
+    "develop preview schedules its ordinary trusted controller outside PR listeners and keeps admin dispatches separate",
   );
   assert.doesNotMatch(
     developPreview,
@@ -1154,6 +1154,45 @@ export function assertControlPlaneContract() {
     /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
     "develop preview validates the original manual PR input inside the trusted controller",
   );
+  const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
+  const adminPreviewBuildJob = developPreview.match(/\n  admin_build:\n[\s\S]*?\n  admin_controller:\n/u)?.[0] ?? "";
+  const adminPreviewControllerJob = developPreview.match(/\n  admin_controller:\n[\s\S]*$/u)?.[0] ?? "";
+  assert.match(
+    adminPreviewPrepareJob,
+    /github\.event\.client_payload\.admin_preview == '1'[\s\S]*environment: vercel-develop-pr-control/u,
+    "admin preview dispatches are authenticated in the protected controller environment",
+  );
+  assert.doesNotMatch(
+    adminPreviewPrepareJob,
+    /VERCEL_API_TOKEN|secrets\./u,
+    "admin preview preparation comments the expected URLs without a Vercel credential",
+  );
+  assert.match(
+    adminPreviewBuildJob,
+    /fromJSON\(needs\.admin_prepare\.outputs\.environments\)[\s\S]*ref: \$\{\{ needs\.admin_prepare\.outputs\.head_sha \}\}[\s\S]*node scripts\/vercel-build\.mjs/u,
+    "every selected environment is built from the exact authorized SHA",
+  );
+  assert.doesNotMatch(
+    adminPreviewBuildJob,
+    /environment: vercel-develop-pr-control|VERCEL_API_TOKEN|secrets\./u,
+    "admin product builds receive no protected environment or Vercel credential",
+  );
+  assert.match(
+    adminPreviewControllerJob,
+    /environment: vercel-develop-pr-control[\s\S]*ref: github-actions[\s\S]*extract-vercel-prebuilt\.py[\s\S]*VERCEL_API_TOKEN: \$\{\{ secrets\.VERCEL_DEVELOP_DEPLOY_TOKEN \}\}[\s\S]*deploy-admin-pr-previews\.mjs/u,
+    "admin preview publication checks out protected code before receiving the Vercel token",
+  );
+  assert.doesNotMatch(
+    adminPreviewControllerJob,
+    /ref: \$\{\{ (?:github\.event\.client_payload|needs\.)/u,
+    "the admin publisher never checks out a product-controlled ref",
+  );
+  const adminPreviewController = readFileSync(resolve(scripts, "deploy-admin-pr-previews.mjs"), "utf8");
+  assert.match(adminPreviewController, /thingtime-ci-control\[bot\]/u, "admin dispatch requires the exact GitHub App bot identity");
+  assert.match(adminPreviewController, /thingtimeAdminPrPreview/u, "admin deployments carry a marker-scoped ownership fence");
+  assert.match(adminPreviewController, /--prebuilt/u, "admin deployments publish only GitHub-built prebuilt output");
+  assert.match(adminPreviewController, /--skip-domain/u, "admin production deploys never auto-assign production domains");
+  assert.match(adminPreviewController, /Expected-ready times are estimates/u, "admin comments disclose estimated readiness");
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
   assertRoutingProofContract(providerRouter);

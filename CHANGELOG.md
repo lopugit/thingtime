@@ -19,6 +19,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Moved admin-selected Develop and Production/Main PR preview publication into
+  the protected `github-actions` controller. The product backend now sends only
+  a GitHub App-authenticated policy dispatch; the controller immediately
+  comments the expected PR-scoped URLs and ready estimate, adds immutable
+  snapshot URLs when known, and publishes aliases only after an exact-SHA READY
+  verification. Develop previews now also accept every trusted same-repository
+  PR base without requiring a live parent PR. — Codex (AI), 2026-09-03
+
 - Reconciled cancelled or stale Feature Stack wrappers after their exact
   protected target PRs have already merged. Lopu now verifies every published
   branch/base identity and target-contained merge commit, skips duplicate AI

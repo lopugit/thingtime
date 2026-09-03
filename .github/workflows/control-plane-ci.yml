@@ -152,6 +152,8 @@ jobs:
           else
             run_contract 'Develop-preview controller examples' \
               node .github/scripts/deploy-develop-pr-preview.mjs --self-test
+            run_contract 'Admin multi-environment preview controller examples' \
+              node .github/scripts/deploy-admin-pr-previews.mjs --self-test
             run_contract 'Vercel prebuilt archive safety examples' \
               python3 .github/scripts/extract-vercel-prebuilt.py --self-test
             run_contract 'Workflow control-plane examples' \

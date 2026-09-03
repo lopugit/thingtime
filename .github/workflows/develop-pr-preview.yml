@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       pr_number:
-        description: Existing open PR targeting develop
+        description: Existing open same-repository PR to preview in the develop environment
         required: false
         default: 0
         type: number
@@ -25,9 +25,9 @@ concurrency:
 jobs:
   dispatch:
     name: Dispatch trusted default-branch controller
-    # Stacked PRs may target another open PR rather than develop directly. The
-    # protected controller resolves that bounded chain and only grants the
-    # develop environment when its terminal base is develop.
+    # The protected controller revalidates the exact current same-repository PR
+    # and its actor. The PR may target develop, main, or another branch; the
+    # deployment target remains the isolated develop environment.
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -77,7 +77,7 @@ jobs:
 
   prepare:
     name: Authorize exact preview source
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name != 'pull_request_target' && !(github.event_name == 'repository_dispatch' && github.event.client_payload.admin_preview == '1')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # The non-secret Vercel/project settings are scoped to this protected
@@ -102,6 +102,7 @@ jobs:
       VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
       DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
       PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Check out protected authorization controller
@@ -171,7 +172,7 @@ jobs:
   controller:
     name: Publish or reconcile develop S3 preview
     needs: [prepare, build]
-    if: always() && github.event_name != 'pull_request_target' && needs.prepare.result == 'success'
+    if: always() && github.event_name != 'pull_request_target' && !(github.event_name == 'repository_dispatch' && github.event.client_payload.admin_preview == '1') && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: vercel-develop-pr-control
@@ -190,6 +191,7 @@ jobs:
       VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
       DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
       PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Check out protected deployment controller
@@ -242,3 +244,170 @@ jobs:
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
+
+  admin_prepare:
+    name: Authorize admin-selected preview sources
+    if: github.event_name == 'repository_dispatch' && github.event.client_payload.admin_preview == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The product backend stores only the selected policy and sends a bounded
+    # GitHub App dispatch. This protected phase authenticates that sender,
+    # revalidates the exact PR SHA/ref, and comments the expected URLs before
+    # any build begins. It receives no Vercel credential.
+    environment: vercel-develop-pr-control
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    outputs:
+      should_build: ${{ steps.plan.outputs.should_build }}
+      environments: ${{ steps.plan.outputs.environments }}
+      pr_number: ${{ steps.plan.outputs.pr_number }}
+      head_sha: ${{ steps.plan.outputs.head_sha }}
+      head_ref: ${{ steps.plan.outputs.head_ref }}
+    env:
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+      VERCEL_GITHUB_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+      VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
+      PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      PRODUCTION_PREVIEW_ALIAS_SUFFIX: ${{ vars.PRODUCTION_PREVIEW_ALIAS_SUFFIX }}
+      PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
+      ADMIN_PREVIEW_DISPATCHER_LOGIN: ${{ vars.ADMIN_PREVIEW_DISPATCHER_LOGIN }}
+    steps:
+      - name: Check out protected admin preview publisher
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Authenticate dispatch and publish expected URLs
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/deploy-admin-pr-previews.mjs --prepare
+
+  admin_build:
+    name: Build ${{ matrix.environment }} admin preview without secrets
+    needs: admin_prepare
+    if: needs.admin_prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.admin_prepare.outputs.environments) }}
+    steps:
+      - name: Check out the authorized exact PR SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.admin_prepare.outputs.head_sha }}
+          path: product
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install pinned package manager
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+
+      - name: Install exact locked dependencies
+        run: corepack pnpm --dir product/remix install --frozen-lockfile
+
+      - name: Build exact environment output on GitHub
+        working-directory: product
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: preview
+          VERCEL_TARGET_ENV: ${{ matrix.environment }}
+          VERCEL_GIT_COMMIT_REF: ${{ needs.admin_prepare.outputs.head_ref }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.admin_prepare.outputs.head_sha }}
+          VERCEL_GIT_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+          VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
+          VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
+          VERCEL_GIT_PULL_REQUEST_ID: ${{ needs.admin_prepare.outputs.pr_number }}
+        run: node scripts/vercel-build.mjs
+
+      - name: Package symlink-preserving prebuilt output
+        run: tar -C product -czf "$RUNNER_TEMP/admin-preview-${{ matrix.environment }}.tgz" .vercel/output
+
+      - name: Upload prebuilt output for the protected publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: admin-preview-${{ github.run_id }}-${{ needs.admin_prepare.outputs.pr_number }}-${{ matrix.environment }}
+          path: ${{ runner.temp }}/admin-preview-${{ matrix.environment }}.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  admin_controller:
+    name: Publish admin-selected PR previews
+    needs: [admin_prepare, admin_build]
+    if: always() && needs.admin_prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: vercel-develop-pr-control
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+      VERCEL_GITHUB_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+      VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
+      PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      PRODUCTION_PREVIEW_ALIAS_SUFFIX: ${{ vars.PRODUCTION_PREVIEW_ALIAS_SUFFIX }}
+      PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
+      ADMIN_PREVIEW_DISPATCHER_LOGIN: ${{ vars.ADMIN_PREVIEW_DISPATCHER_LOGIN }}
+    steps:
+      - name: Check out protected admin preview publisher
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download every completed GitHub-built preview bundle
+        if: needs.admin_prepare.outputs.should_build == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: admin-preview-${{ github.run_id }}-${{ needs.admin_prepare.outputs.pr_number }}-*
+          path: ${{ runner.temp }}/admin-preview-artifacts
+
+      - name: Validate and extract available untrusted preview bundles
+        if: needs.admin_prepare.outputs.should_build == 'true'
+        env:
+          ADMIN_PREVIEW_ENVIRONMENTS: ${{ needs.admin_prepare.outputs.environments }}
+          ADMIN_PREVIEW_PR_NUMBER: ${{ needs.admin_prepare.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/validated-admin-prebuilt"
+          jq -r '.[]' <<<"$ADMIN_PREVIEW_ENVIRONMENTS" | while IFS= read -r environment; do
+            case "$environment" in develop|production) ;; *) exit 1 ;; esac
+            artifact="$RUNNER_TEMP/admin-preview-artifacts/admin-preview-${GITHUB_RUN_ID}-${ADMIN_PREVIEW_PR_NUMBER}-${environment}/admin-preview-${environment}.tgz"
+            if [ -f "$artifact" ]; then
+              python3 .github/scripts/extract-vercel-prebuilt.py "$artifact" "$RUNNER_TEMP/validated-admin-prebuilt/$environment"
+            fi
+          done
+
+      - name: Install pinned Vercel publisher without deployment credentials
+        if: needs.admin_prepare.outputs.should_build == 'true'
+        run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+
+      - name: Publish or clean up exact-SHA admin previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          VERCEL_PREBUILT_ROOT: ${{ runner.temp }}/validated-admin-prebuilt
+        run: node .github/scripts/deploy-admin-pr-previews.mjs
