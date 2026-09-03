@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   ADMIN_PREVIEW_COMMENT_MARKER,
   adminPreviewCommentBody,
+  adminPreviewExpectedReadyAt,
   adminPreviewPersistentHostname,
   adminPreviewSnapshotUrl,
   isOwnedAdminPreviewComment
@@ -23,6 +24,12 @@ test('snapshot URLs accept only immutable Vercel HTTPS hosts', () => {
   assert.equal(adminPreviewSnapshotUrl('https://user:secret@thingtime-abc.vercel.app'), null);
 });
 
+test('expected deployment time is five minutes after the build starts', () => {
+  assert.equal(adminPreviewExpectedReadyAt('2026-09-03T10:00:00.000Z'), 1788429900);
+  assert.equal(adminPreviewExpectedReadyAt(1788429600), 1788429900);
+  assert.throws(() => adminPreviewExpectedReadyAt('not-a-date'));
+});
+
 test('one PR comment renders snapshot and persistent links for every selected environment', () => {
   const body = adminPreviewCommentBody({
     prNumber: 505,
@@ -32,13 +39,15 @@ test('one PR comment renders snapshot and persistent links for every selected en
         environment: 'production',
         status: 'building',
         snapshotUrl: 'https://thingtime-production.vercel.app/',
-        persistentUrl: 'https://pr-505.previews.thingtime.com/'
+        persistentUrl: 'https://pr-505.previews.thingtime.com/',
+        expectedReadyAt: 1788429900
       },
       {
         environment: 'develop',
         status: 'ready',
         snapshotUrl: 'https://thingtime-develop.vercel.app/',
-        persistentUrl: 'https://pr-505.previews.dev.thingtime.com/'
+        persistentUrl: 'https://pr-505.previews.dev.thingtime.com/',
+        expectedReadyAt: 1788429900
       }
     ]
   });
@@ -47,7 +56,35 @@ test('one PR comment renders snapshot and persistent links for every selected en
   assert.match(body, /Production \/ main \| 🟡 Building \| \[Open snapshot\]\(https:\/\/thingtime-production\.vercel\.app\/\)/);
   assert.match(body, /https:\/\/pr-505\.previews\.dev\.thingtime\.com\//);
   assert.match(body, /https:\/\/pr-505\.previews\.thingtime\.com\//);
+  assert.match(body, /<t:1788429900:R> \(<t:1788429900:t>\)/);
   assert.ok(body.indexOf('| Develop |') < body.indexOf('| Production / main |'));
+});
+
+test('starting comments publish expected URLs and ETA before snapshot assignment', () => {
+  const body = adminPreviewCommentBody({
+    prNumber: 505,
+    sha: 'b'.repeat(40),
+    rows: [
+      {
+        environment: 'develop',
+        status: 'starting',
+        snapshotUrl: null,
+        persistentUrl: 'https://pr-505.previews.dev.thingtime.com/',
+        expectedReadyAt: 1788429900
+      },
+      {
+        environment: 'production',
+        status: 'starting',
+        snapshotUrl: null,
+        persistentUrl: 'https://pr-505.previews.thingtime.com/',
+        expectedReadyAt: 1788429900
+      }
+    ]
+  });
+  assert.match(body, /Assigned when Vercel accepts the build/);
+  assert.match(body, /https:\/\/pr-505\.previews\.dev\.thingtime\.com\//);
+  assert.match(body, /https:\/\/pr-505\.previews\.thingtime\.com\//);
+  assert.equal(body.match(/<t:1788429900:R>/g)?.length, 2);
 });
 
 test('only the configured GitHub App can own the marker comment', () => {

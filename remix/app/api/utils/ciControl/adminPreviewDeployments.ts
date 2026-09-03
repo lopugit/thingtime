@@ -1,6 +1,7 @@
 import { githubRequest, repositoryName } from './githubClient';
 import {
   adminPreviewCommentBody,
+  adminPreviewExpectedReadyAt,
   adminPreviewPersistentHostname,
   adminPreviewRemovedCommentBody,
   adminPreviewSnapshotUrl,
@@ -111,6 +112,7 @@ export type AdminPreviewDeploymentResult = {
   url: string | null;
   snapshotUrl: string | null;
   persistentUrl: string;
+  expectedReadyAt: number;
 };
 
 const deploymentStatus = (deployment: any): string =>
@@ -250,6 +252,7 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
   const snapshotUrl = adminPreviewSnapshotUrl(deployment.url);
   if (!snapshotUrl) throw new Error('Vercel returned an invalid preview deployment URL');
   const persistentUrl = persistentUrlFor(pr.number, environment);
+  const expectedReadyAt = adminPreviewExpectedReadyAt(deploymentCreatedAt(deployment) || Date.now());
   const entity = await upsertCiEntity({
     kind: 'ci-preview',
     provider: 'vercel',
@@ -268,7 +271,8 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
       sha: pr.head!.sha,
       target: environment === 'production' ? 'production' : 'develop',
       snapshotUrl,
-      persistentUrl
+      persistentUrl,
+      expectedReadyAt
     }
   });
   await recordCiEvent({
@@ -292,7 +296,8 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
     status,
     url: snapshotUrl,
     snapshotUrl,
-    persistentUrl
+    persistentUrl,
+    expectedReadyAt
   } satisfies AdminPreviewDeploymentResult;
 };
 
@@ -334,13 +339,38 @@ export const publishAdminPrPreviewComment = async (input: {
     const snapshotUrl =
       knownMatchesNewest || !deployment ? fromKnown?.snapshotUrl ?? adminPreviewSnapshotUrl(deployment?.url) : adminPreviewSnapshotUrl(deployment?.url);
     let persistentUrl = persistentUrlFor(input.pr.number, environment);
+    const expectedReadyAt =
+      (knownMatchesNewest || !deployment ? fromKnown?.expectedReadyAt : undefined) ??
+      adminPreviewExpectedReadyAt(deploymentCreatedAt(deployment) || Date.now());
     if (status === 'ready' && /^dpl_[A-Za-z0-9]+$/.test(deploymentId)) {
       persistentUrl = await assignPersistentAlias(input.pr, environment, deploymentId);
     }
-    rows.push({ environment, status, snapshotUrl, persistentUrl });
+    rows.push({ environment, status, snapshotUrl, persistentUrl, expectedReadyAt });
   }
   const comment = await upsertPreviewComment(
     repository,
+    input.pr.number,
+    adminPreviewCommentBody({ prNumber: input.pr.number, sha: input.pr.head!.sha!, rows }),
+    rows.length > 0
+  );
+  return { ...comment, previews: rows };
+};
+
+export const publishAdminPrPreviewStartingComment = async (input: {
+  pr: PreviewPullRequest;
+  environments: readonly CiPreviewEnvironment[];
+  startedAt?: Date;
+}) => {
+  const startedAt = input.startedAt ?? new Date();
+  const rows = input.environments.map((environment) => ({
+    environment,
+    status: 'starting',
+    snapshotUrl: null,
+    persistentUrl: persistentUrlFor(input.pr.number, environment),
+    expectedReadyAt: adminPreviewExpectedReadyAt(startedAt)
+  }));
+  const comment = await upsertPreviewComment(
+    repositoryName(),
     input.pr.number,
     adminPreviewCommentBody({ prNumber: input.pr.number, sha: input.pr.head!.sha!, rows }),
     rows.length > 0
@@ -375,12 +405,14 @@ export const refreshAdminPrPreviewPublicationForDeployment = async (input: {
   sha: string;
   status: string;
   snapshotUrl: string | null;
+  createdAt?: string | number;
 }) =>
   refreshAdminPrPreviewPublication(input.prNumber, [
     {
       ...input,
       url: input.snapshotUrl,
-      persistentUrl: persistentUrlFor(input.prNumber, input.environment)
+      persistentUrl: persistentUrlFor(input.prNumber, input.environment),
+      expectedReadyAt: adminPreviewExpectedReadyAt(input.createdAt ?? Date.now())
     }
   ]);
 
@@ -404,6 +436,12 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
   if (!PREVIEW_REFRESH_ACTIONS.has(action)) return { attempted: 0, failures: 0 };
 
   const pr = await validatedPreviewPullRequest(prNumber);
+  let failures = 0;
+  try {
+    await publishAdminPrPreviewStartingComment({ pr, environments: enabled });
+  } catch {
+    failures += 1;
+  }
   const results = await Promise.allSettled(
     enabled.map((environment) => buildAdminPrPreview(pr, environment, 'github-webhook'))
   );
@@ -417,10 +455,11 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
           status: 'failed',
           url: null,
           snapshotUrl: null,
-          persistentUrl: persistentUrlFor(prNumber, enabled[index])
+          persistentUrl: persistentUrlFor(prNumber, enabled[index]),
+          expectedReadyAt: adminPreviewExpectedReadyAt(Date.now())
         }
   );
-  let failures = results.filter((result) => result.status === 'rejected').length;
+  failures += results.filter((result) => result.status === 'rejected').length;
   try {
     await publishAdminPrPreviewComment({ pr, policy, knownDeployments });
   } catch {

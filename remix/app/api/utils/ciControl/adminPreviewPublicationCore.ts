@@ -1,6 +1,7 @@
 import type { CiPreviewEnvironment } from './previewPolicyCore';
 
 export const ADMIN_PREVIEW_COMMENT_MARKER = '<!-- thingtime-admin-pr-previews -->';
+export const ADMIN_PREVIEW_EXPECTED_DEPLOYMENT_SECONDS = 5 * 60;
 
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -42,11 +43,19 @@ export const adminPreviewSnapshotUrl = (value: unknown): string | null => {
   }
 };
 
+export const adminPreviewExpectedReadyAt = (startedAt: Date | string | number): number => {
+  const raw = startedAt instanceof Date ? startedAt.getTime() : typeof startedAt === 'number' ? startedAt : Date.parse(startedAt);
+  const startedAtMs = raw > 0 && raw < 10_000_000_000 ? raw * 1000 : raw;
+  if (!Number.isFinite(startedAtMs) || startedAtMs < 1) throw new Error('Preview deployment start time is invalid');
+  return Math.floor(startedAtMs / 1000) + ADMIN_PREVIEW_EXPECTED_DEPLOYMENT_SECONDS;
+};
+
 export type AdminPreviewCommentRow = {
   environment: CiPreviewEnvironment;
   status: string;
   snapshotUrl: string | null;
   persistentUrl: string;
+  expectedReadyAt: number;
 };
 
 const statusPresentation = (value: string): string => {
@@ -60,6 +69,13 @@ const statusPresentation = (value: string): string => {
 const environmentLabel = (environment: CiPreviewEnvironment) =>
   environment === 'develop' ? 'Develop' : 'Production / main';
 
+const expectedReadyPresentation = (row: AdminPreviewCommentRow): string => {
+  const status = row.status.trim().toLowerCase();
+  if (status === 'ready') return '✅ Ready';
+  if (status === 'error' || status === 'failed' || status === 'canceled' || status === 'cancelled') return '—';
+  return `<t:${row.expectedReadyAt}:R> (<t:${row.expectedReadyAt}:t>)`;
+};
+
 export const adminPreviewCommentBody = (input: {
   prNumber: number;
   sha: string;
@@ -70,16 +86,16 @@ export const adminPreviewCommentBody = (input: {
   );
   const content = rows.length
     ? [
-        '| Environment | Status | Snapshot URL | Persistent URL |',
-        '| --- | --- | --- | --- |',
+        '| Environment | Status | Snapshot URL | Persistent URL | Expected ready |',
+        '| --- | --- | --- | --- | --- |',
         ...rows.map(
           (row) =>
             `| ${environmentLabel(row.environment)} | ${statusPresentation(row.status)} | ${
-              row.snapshotUrl ? `[Open snapshot](${row.snapshotUrl})` : 'Waiting for Vercel'
-            } | [Open persistent preview](${row.persistentUrl}) |`
+              row.snapshotUrl ? `[Open snapshot](${row.snapshotUrl})` : 'Assigned when Vercel accepts the build'
+            } | [Open persistent preview](${row.persistentUrl}) | ${expectedReadyPresentation(row)} |`
         ),
         '',
-        'Snapshot URLs are immutable for this commit. Each persistent URL moves only to the newest READY snapshot for that PR and environment.'
+        'Expected PR-scoped URLs are published before the builds start. Snapshot URLs are immutable for this commit and appear after Vercel accepts each build. Each persistent URL moves only to the newest READY snapshot for that PR and environment.'
       ].join('\n')
     : 'No admin-selected preview environments are currently enabled for this PR.';
   return `${ADMIN_PREVIEW_COMMENT_MARKER}\n### 🦄 Thingtime PR previews\n\n- PR: #${input.prNumber}\n- Commit: \`${input.sha}\`\n\n${content}`;

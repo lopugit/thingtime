@@ -56,7 +56,8 @@ export const action = async ({ request }: { request: Request }) => {
       deploymentId,
       sha,
       status,
-      snapshotUrl: adminPreviewSnapshotUrl(deployment?.url ?? data?.url)
+      snapshotUrl: adminPreviewSnapshotUrl(deployment?.url ?? data?.url),
+      createdAt: deployment?.createdAt ?? deployment?.created ?? data?.createdAt ?? data?.created
     });
   }
   return json({ ok: true, ...result }, { status: result.accepted ? 202 : 200 });

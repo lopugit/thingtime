@@ -297,13 +297,15 @@ exact current same-repository PR SHA through Vercel; later `synchronize`,
 reopen, and ready-for-review deliveries rebuild every enabled environment.
 Production access requires an explicit admin acknowledgement and uses the
 project's Production environment values, but `autoAssignCustomDomains` remains
-false. The builder publishes one GitHub App-owned PR comment with the immutable
-`*.vercel.app` snapshot URL and a PR/environment-scoped persistent URL for every
-enabled environment. A READY webhook moves only that persistent alias to the
-verified current snapshot; it never replaces or aliases `thingtime.com` or
-`dev.thingtime.com`. Closing the PR removes only aliases and deployments carrying
-Thingtime's PR/environment ownership markers. Configure these server-only
-deployment values in every origin that hosts CI Control (placeholders only):
+false. Before starting the provider builds, the builder publishes one GitHub
+App-owned PR comment with every enabled environment's expected PR-scoped
+persistent URL and a five-minute expected-ready time. It updates the same
+comment with each immutable `*.vercel.app` snapshot URL as Vercel accepts the
+build. A READY webhook moves only that persistent alias to the verified current
+snapshot; it never replaces or aliases `thingtime.com` or `dev.thingtime.com`.
+Closing the PR removes only aliases and deployments carrying Thingtime's
+PR/environment ownership markers. Configure these server-only deployment values
+in every origin that hosts CI Control (placeholders only):
 
 ```sh
 VERCEL_API_TOKEN="<Vercel-API-token>"

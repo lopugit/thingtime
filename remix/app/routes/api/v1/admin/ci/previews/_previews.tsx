@@ -4,12 +4,13 @@ import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import {
   buildAdminPrPreview,
   publishAdminPrPreviewComment,
+  publishAdminPrPreviewStartingComment,
   removeAdminPrPreviews,
   validatedPreviewPullRequest
 } from '~/api/utils/ciControl/adminPreviewDeployments';
 import { repositoryName } from '~/api/utils/ciControl/githubClient';
 import { isCiPreviewEnvironment } from '~/api/utils/ciControl/previewPolicyCore';
-import { setCiPreviewPolicy } from '~/api/utils/ciControl/store';
+import { listCiPreviewPolicies, setCiPreviewPolicy } from '~/api/utils/ciControl/store';
 
 export const action = ({ request }: { request: Request }) =>
   withAdminPrivateResponse(async () => {
@@ -28,11 +29,23 @@ export const action = ({ request }: { request: Request }) =>
     }
     try {
       const pr = await validatedPreviewPullRequest(prNumber);
+      const repository = repositoryName();
+      const currentPolicy = (await listCiPreviewPolicies(repository)).find((candidate) => candidate.prNumber === prNumber);
+      const selectedEnvironments = (['develop', 'production'] as const).filter((environment) =>
+        environment === body.environment ? body.enabled : currentPolicy?.[environment] === true
+      );
+      const startingPublication = body.enabled
+        ? await publishAdminPrPreviewStartingComment({ pr, environments: selectedEnvironments }).catch(() => ({
+            commented: false,
+            created: false,
+            previews: []
+          }))
+        : null;
       const deployment = body.enabled
         ? await buildAdminPrPreview(pr, body.environment, gate.user.id)
         : await removeAdminPrPreviews(prNumber, body.environment);
       const policy = await setCiPreviewPolicy({
-        repository: repositoryName(),
+        repository,
         prNumber,
         environment: body.environment,
         enabled: body.enabled,
@@ -45,7 +58,7 @@ export const action = ({ request }: { request: Request }) =>
         policy,
         knownDeployments: body.enabled && 'deploymentId' in deployment ? [deployment] : []
       }).catch(() => ({ commented: false, created: false, previews: [] }));
-      return json({ ok: true, policy, deployment, publication });
+      return json({ ok: true, policy, deployment, startingPublication, publication });
     } catch (error) {
       return json(
         { ok: false, error: error instanceof Error ? error.message : 'Preview policy could not be updated' },

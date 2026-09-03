@@ -801,10 +801,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.1.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews and publish their snapshot and persistent URLs to the pull request.',
+    featureVersion: '1.2.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews and immediately publish their expected URL, ETA, and snapshot URL to the pull request.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. One GitHub App-owned marker comment lists both the immutable snapshot URL and the PR/environment-scoped persistent URL for every enabled environment; READY receipts move only that persistent alias to the verified current snapshot. Production enabling requires an explicit acknowledgement. Credential values remain server-only, automatic domain assignment stays disabled, primary domains are never moved, and disabling removes only aliases and deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. Before starting Vercel, one GitHub App-owned marker comment lists every selected environment\'s deterministic PR-scoped persistent URL and an expected five-minute ready time. The server then creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment, and updates the same comment with each assigned snapshot URL. READY receipts move only that persistent alias to the verified current snapshot. Production enabling requires an explicit acknowledgement. Credential values remain server-only, automatic domain assignment stays disabled, primary domains are never moved, and disabling removes only aliases and deployments carrying Thingtime\'s PR-and-environment ownership markers.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
@@ -829,8 +829,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored, the exact-SHA deployment created or reused, and the PR comment created or refreshed.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/' }, publication: { commented: true, previews: [{ environment: 'develop', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/' }] } }
+        description: 'The expected URL and ETA were published first, then the policy, exact-SHA deployment, and assigned snapshot URL were stored.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, startingPublication: { commented: true, previews: [{ environment: 'develop', status: 'starting', snapshotUrl: null, persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: 1788429900 }] }, deployment: { deploymentId: 'dpl_example', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: 1788429900 }, publication: { commented: true, previews: [{ environment: 'develop', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: 1788429900 }] } }
       },
       { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]

@@ -1907,7 +1907,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     }
     setSavingPreviewEnvironment(environment);
     try {
-      await requireThingtimeCapability('api.admin-ci-previews', '1.1.0');
+      await requireThingtimeCapability('api.admin-ci-previews', '1.2.0');
       const result = await apiRef.current.v1.admin.setCiPreviewPolicy({
         prNumber,
         environment,
