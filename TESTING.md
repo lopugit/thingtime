@@ -4257,8 +4257,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       names; clicking a card opens /actions/:id.
 - [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
       steps deep-link to the invoked action) / Can access / Cannot access (no
-      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
-      and the raw definition.
+      network, no secrets, and "no deletes" ONLY while the program does not
+      declare things.delete + scoped-only lines) / Limits / Effects, and the
+      raw definition.
+- [ ] v2 destructive + public-read disclosure: an action with a
+      `things.delete` step shows a red "deletes things" chip on BOTH its
+      /actions card and the inspector's Effects section, and its Cannot-access
+      panel drops "no deletes" without ever printing an affirmative sentence
+      under the 🚫 (a "🚫 Can delete …" line would invert the one capability
+      that destroys data). An action whose only effect is that delete still
+      renders an Effects section. A `things.search` with `scope: 'public'`
+      shows "reads everyone's public <schema>" alongside the ordinary read
+      chip. Covered by app/components/Actions/actionInspect.test.ts.
 - [ ] The Run panel renders one typed input per descriptor, runs the action,
       and shows status + duration + ops/depth/child budget usage + the
       hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>

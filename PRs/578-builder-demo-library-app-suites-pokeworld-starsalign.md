@@ -133,3 +133,39 @@ studio.
   cap (other worktrees resurrect legacy `kind` indexes), which 500s
   registration. The e2e ran on a private single-node replica set
   (`mongod --port 27117 --replSet rsapps`) via `MONGODB_CONNECTION_STRING`.
+
+## Lopu review round — 2026-09-03
+
+Three defects found reading the v2 grammar against its own consent surface.
+All three are repaired in this branch; unit tests pin each one.
+
+1. **`things.update` stamped provenance onto an aliased step result**
+   (`api/utils/actions/execute.ts`). v2 let `values` be a whole-value ref or
+   an expression, and `resolveValue` returns the LIVE object held in
+   `scope.steps` for `"$step.2.crystal"` or `{ ttExpr: ['get', …] }`. The
+   schema/schemaId re-stamp then wrote through that alias, so an earlier
+   step's recorded result silently gained (or lost) the stamps — a later
+   `$step.2.crystal` read, or a returned `$step.2`, saw the mutated object.
+   Fixed by spreading into a fresh patch, matching the `things.create` path.
+2. **`things.delete` was invisible or inverted in the inspector.**
+   `actionCannotAccess` pushed `Can delete your own data things it names`
+   into the list `ActionDetailPage` renders as `🚫 {line}`, so the one
+   destructive capability read as forbidden; meanwhile no `deletes` chip
+   existed and the Effects section's render gate omitted `effects.deletes`,
+   so a delete-only program showed no Effects section at all. Now: a red
+   `deletes things` chip on the card and the inspector, `effects.deletes` and
+   `effects.publicReads` in the gate, a `reads everyone's public <schema>`
+   chip, and the 🚫 list back to negatives only.
+3. **`pattern` in the `HtmlThingRenderer` allowlist handed untrusted markup a
+   regex engine.** Constraint validation compiles and runs `pattern` on the
+   main thread with no timeout as soon as a field has a value, and
+   `fieldProps` turns a template's `value` into `defaultValue` — so a
+   component thing could ship `<input value="aaaa…X" pattern="(a+)+$">` and
+   wedge the tab of anyone who merely rendered it. Nothing in the library
+   used it and run inputs are validated server-side by the action's input
+   descriptors, so it is removed; `ALLOWED_PROPS` is now exported and pinned
+   by `components/Kinds/HtmlThingRenderer.test.ts`.
+
+Validation: `test:schemas` 147 ✓, `test:actions` 52 ✓ (+2), `test:webpages`
+36 ✓, `test:action-packs` 122 ✓, `test:editorjs` 66 ✓ (+3), targeted ESLint
+clean, `tsc --noEmit` unchanged at the branch's pre-existing count.

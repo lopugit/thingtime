@@ -664,7 +664,16 @@ const executeProgram = async (
 				// the thing into a different schema and out of the scope check on
 				// every later step and run (things.create guards this by spreading
 				// its stamps last — this is the update-path equivalent).
-				const patch = values as Record<string, unknown>;
+				//
+				// COPY first. `values` is only a fresh object when the program wrote
+				// an object literal; a whole-value ref (`values: "$step.2.crystal"`)
+				// or an expression that returns a reference (`{ ttExpr: ['get', …] }`)
+				// hands back the LIVE object held in scope.steps, and stamping it in
+				// place would rewrite an earlier step's recorded result — a later
+				// `$step.2.crystal` read, or a returned `$step.2`, would silently
+				// carry (or lose) schema/schemaId. Spreading keeps the stamp local
+				// to this update, exactly like the things.create path above.
+				const patch: Record<string, unknown> = { ...(values as Record<string, unknown>) };
 				const currentCrystal = (currentThing.crystal || {}) as Record<string, unknown>;
 				if (typeof currentCrystal.schema === 'string') patch.schema = currentCrystal.schema;
 				else delete patch.schema;
