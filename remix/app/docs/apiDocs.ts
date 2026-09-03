@@ -3852,6 +3852,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'lopu-chats',
+		contractVersion: '1.1.0',
     group: 'lopu',
     title: 'Lopu conversations',
     endpoint: '/api/v1/lopu/chats',
@@ -3861,7 +3862,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
       'messages page through /api/v1/chats/messages. GET returns the caller’s Lopu chats newest activity first in ' +
       'the same list-entry shape as /api/v1/chats (unread count, lastMessage preview, membership). POST creates ' +
-      'one: title (defaults to "Lopu") plus the model settings the conversation should use — model (a catalog ' +
+      'one: an optional client-generated lopu-chat UUID, title (defaults to "Lopu"), plus the model settings the conversation should use — model (a catalog ' +
       'model id or a composed id such as claude-opus-5:high:fast), effort and speed are validated against the ' +
       'model catalog; omitted or null fields mean "catalog default", which the reply route resolves through the ' +
       'admin defaults and provider availability on every turn. Lopu’s replies are rows owned by the caller that ' +
@@ -3873,7 +3874,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with credentials to list Lopu conversations (limit caps the page, default 100, max 300).',
-      'POST { title?, model?, effort?, speed? } with Content-Type: application/json to start a conversation.',
+      'POST { chatId?, title?, model?, effort?, speed? } with Content-Type: application/json to start a conversation. Reusing the same owned Lopu chatId is idempotent.',
       'Use chat.id from the response as chatId for /api/v1/lopu/chats/reply, /update and /delete.',
       'Read the transcript through /api/v1/chats/messages?chatId= like any other chat.',
       'Handle 400 for an unknown model or an effort/speed the model does not offer, and 415 for a non-JSON body.'
@@ -3889,7 +3890,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Create a titled conversation pinned to a catalog model.',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: { title: 'Landing page ideas', model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', title: 'Landing page ideas', model: 'claude-opus-5', effort: 'high', speed: 'normal' }
       }
     ],
     responseExamples: [
@@ -4107,7 +4108,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
 		id: 'lopu-vault',
-		contractVersion: '1.0.0',
+		contractVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4131,7 +4132,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 					name: 'My Claude',
 					provider: 'anthropic',
 					endpoint: 'https://api.anthropic.com',
-					model: 'claude-sonnet-4-6',
 					token: '<provider-token>',
 					groupId: '<environment-id>'
 				}
@@ -4144,7 +4144,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
 		id: 'lopu-voice-reply',
-		contractVersion: '1.0.0',
+		contractVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
@@ -4159,12 +4159,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Read NDJSON events through done; speak delta text only when the client’s Text response setting is off.'
 		],
 		requestExamples: [
-			{ name: 'Conversation turn', description: 'Use one write-only provider connection.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', transcribeMode: false, history: [] } },
+			{ name: 'Conversation turn', description: 'Use one write-only provider connection and choose the model per chat.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', model: 'claude-sonnet-4-6', effort: 'high', speed: 'normal', transcribeMode: false, history: [] } },
 			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
 		],
 		responseExamples: [
 			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
 			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
+		]
+	}),
+  endpoint({
+		id: 'lopu-voice-session',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu realtime voice session',
+		endpoint: '/api/v1/lopu/voice/session',
+		summary: 'Mints a short-lived provider credential for a direct audio Lopu session.',
+		detail:
+			'The server decrypts the selected owner-scoped xAI token, exchanges it for a five-minute ephemeral client credential, and returns that credential with the fixed realtime WebSocket URL. The long-lived provider token never reaches the browser or native app.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		methods: ['POST'],
+		steps: [
+			'Choose an xAI Secure Vault connection and a seeded Grok Voice model.',
+			'POST the provider id, model, reasoning level, and text-response preference.',
+			'Use the returned ephemeral credential only for the returned realtime WebSocket URL until it expires.'
+		],
+		requestExamples: [
+			{ name: 'Start direct audio', description: 'Long-lived provider credentials remain server-side.', method: 'POST', body: { providerId: '<vault-provider-id>', model: 'grok-voice-latest', effort: 'none', textResponse: false } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'Short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 0, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest' } } },
+			{ status: 400, description: 'Provider or model is not eligible.', body: { ok: false, error: 'Choose a Grok Voice model for provider-audio mode.' } }
 		]
 	}),
   endpoint({

@@ -59,6 +59,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   password/key-value records and write-only BYO provider tokens, with built-in
   OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
   server-allowlisted compatible endpoint path.
+- Provider connections now store access credentials only. Voice chats select
+  a seeded model, reasoning level, and speed per chat from OpenAI, Anthropic,
+  Gemini, xAI, OpenRouter, Mistral, DeepSeek, Groq, or Cohere, with a custom
+  model-id override.
+- Added distinct device-transcription and direct provider-audio modes. Web and
+  iOS can stream PCM microphone and response audio to xAI Grok Voice using a
+  server-minted five-minute ephemeral credential; iOS keeps this path on its
+  background audio session and Live Activity.
+- Signed-in `/lopu` visits now create a persisted chat immediately and replace
+  the route with `/lopu/<chat-id>`, preserving history across refreshes.
 
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 

@@ -7,7 +7,11 @@ import {
 	boundedVaultText,
 	isBlockedLopuProviderHostname,
 	LOPU_PROVIDER_TEMPLATES,
-	LOPU_TRANSCRIPT_SYSTEM_TYPE
+	LOPU_TRANSCRIPT_SYSTEM_TYPE,
+	providerModelFor,
+	providerTemplateFor,
+	type LopuProviderEffort,
+	type LopuProviderSpeed
 } from './userVaultCore';
 import { getUserVaultProvider } from './userVault';
 
@@ -21,6 +25,9 @@ export type LopuVoiceInput = {
 	transcript?: unknown;
 	sessionId?: unknown;
 	providerId?: unknown;
+	model?: unknown;
+	effort?: unknown;
+	speed?: unknown;
 	transcribeMode?: unknown;
 	history?: unknown;
 };
@@ -50,6 +57,21 @@ const normalizeHistory = (value: unknown): LopuVoiceHistoryMessage[] => {
 		return (role === 'user' || role === 'assistant') && content ? [{ role, content }] : [];
 	});
 };
+
+const normalizeModel = (provider: Awaited<ReturnType<typeof getUserVaultProvider>>, value: unknown) => {
+	const requested = boundedVaultText(value, 200);
+	if (requested) return requested;
+	const fallback = providerTemplateFor(provider.provider)?.models[0]?.id;
+	if (!fallback) throw new Error('Choose a model for this Lopu chat.');
+	return fallback;
+};
+
+const normalizeEffort = (value: unknown): LopuProviderEffort | null =>
+	value === 'none' || value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' || value === 'max' || value === 'ultra'
+		? value
+		: null;
+
+const normalizeSpeed = (value: unknown): LopuProviderSpeed => value === 'fast' ? 'fast' : 'normal';
 
 const timestampTitle = (createdAt: Date, pageNumber: number) => {
 	const stamp = createdAt.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
@@ -144,7 +166,12 @@ const readBoundedJson = async (response: Response): Promise<any> => {
 	}
 };
 
-const callProvider = async (provider: Awaited<ReturnType<typeof getUserVaultProvider>>, history: LopuVoiceHistoryMessage[], transcript: string) => {
+const callProvider = async (
+	provider: Awaited<ReturnType<typeof getUserVaultProvider>>,
+	history: LopuVoiceHistoryMessage[],
+	transcript: string,
+	selection: { model: string; effort: LopuProviderEffort | null; speed: LopuProviderSpeed }
+) => {
 	await assertSafeProviderEndpoint(provider.endpoint);
 	const messages = [...history, { role: 'user' as const, content: transcript }];
 	let url: string;
@@ -153,9 +180,15 @@ const callProvider = async (provider: Awaited<ReturnType<typeof getUserVaultProv
 	if (provider.provider === 'anthropic') {
 		url = joinEndpoint(provider.endpoint, 'v1/messages');
 		headers = { 'Content-Type': 'application/json', 'x-api-key': provider.token, 'anthropic-version': '2023-06-01' };
-		body = { model: provider.model, max_tokens: 4096, system: SYSTEM_PROMPT, messages };
+		body = {
+			model: selection.model,
+			max_tokens: 4096,
+			system: SYSTEM_PROMPT,
+			messages,
+			...(selection.effort && selection.effort !== 'none' ? { output_config: { effort: selection.effort } } : {})
+		};
 	} else if (provider.provider === 'google') {
-		url = joinEndpoint(provider.endpoint, `models/${encodeURIComponent(provider.model)}:generateContent`);
+		url = joinEndpoint(provider.endpoint, `models/${encodeURIComponent(selection.model)}:generateContent`);
 		headers = { 'Content-Type': 'application/json', 'x-goog-api-key': provider.token };
 		body = {
 			systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -165,7 +198,15 @@ const callProvider = async (provider: Awaited<ReturnType<typeof getUserVaultProv
 	} else {
 		url = joinEndpoint(provider.endpoint, 'chat/completions');
 		headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.token}` };
-		body = { model: provider.model, max_completion_tokens: 4096, messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] };
+		body = {
+			model: selection.model,
+			...(provider.provider === 'openai' ? { max_completion_tokens: 4096 } : { max_tokens: 4096 }),
+			messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+			...((provider.provider === 'openai' || provider.provider === 'xai') && selection.effort && selection.effort !== 'none'
+				? { reasoning_effort: selection.effort }
+				: {}),
+			...(provider.provider === 'openai' && selection.speed === 'fast' ? { service_tier: 'priority' } : {})
+		};
 	}
 	let response: Response;
 	try {
@@ -206,7 +247,56 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 	}
 	const provider = await getUserVaultProvider(ownerId, input.providerId);
 	yield { type: 'meta', mode: 'conversation', provider: provider.name, sessionId };
-	const reply = await callProvider(provider, normalizeHistory(input.history), transcript);
+	const model = normalizeModel(provider, input.model);
+	const knownModel = providerModelFor(provider.provider, model);
+	const effort = normalizeEffort(input.effort);
+	const speed = normalizeSpeed(input.speed);
+	if (knownModel && effort && !knownModel.efforts.includes(effort)) throw new Error('That reasoning level is not available for the selected model.');
+	if (knownModel && !knownModel.speeds.includes(speed)) throw new Error('That speed is not available for the selected model.');
+	const reply = await callProvider(provider, normalizeHistory(input.history), transcript, { model, effort, speed });
 	for (const chunk of wordChunks(reply)) yield { type: 'delta', text: chunk };
 	yield { type: 'done' };
 }
+
+export const createLopuVoiceRealtimeSession = async (
+	ownerId: string,
+	input: { providerId?: unknown; model?: unknown; effort?: unknown; textResponse?: unknown }
+) => {
+	const provider = await getUserVaultProvider(ownerId, input.providerId);
+	if (provider.provider !== 'xai') throw new Error('Provider-audio mode currently requires an xAI Secure Vault connection.');
+	const model = normalizeModel(provider, input.model);
+	const modelInfo = providerModelFor(provider.provider, model);
+	if (modelInfo?.audioInput !== 'realtime') throw new Error('Choose a Grok Voice model for provider-audio mode.');
+	const effort = normalizeEffort(input.effort);
+	if (effort && !modelInfo.efforts.includes(effort)) throw new Error('That reasoning level is not available for the selected voice model.');
+	await assertSafeProviderEndpoint(provider.endpoint);
+
+	let response: Response;
+	try {
+		response = await fetch(joinEndpoint(provider.endpoint, 'realtime/client_secrets'), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.token}` },
+			body: JSON.stringify({ expires_after: { seconds: 300 } }),
+			redirect: 'error',
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+		});
+	} catch {
+		throw new Error('The selected realtime AI provider could not be reached.');
+	}
+	const result = await readBoundedJson(response);
+	if (!response.ok) throw new Error(`The realtime AI provider rejected the session request (${response.status}).`);
+	const token = typeof result?.value === 'string' ? result.value : '';
+	if (!token || token.length > 8_192) throw new Error('The realtime AI provider returned an invalid session credential.');
+	const websocket = new URL(joinEndpoint(provider.endpoint, 'realtime'));
+	websocket.protocol = 'wss:';
+	websocket.searchParams.set('model', model);
+	return {
+		provider: 'xai' as const,
+		model,
+		token,
+		expiresAt: typeof result?.expires_at === 'number' ? result.expires_at : null,
+		webSocketUrl: websocket.toString(),
+		effort: effort || 'none',
+		textResponse: input.textResponse === true
+	};
+};

@@ -43,12 +43,18 @@ for both workflows and their privacy boundaries.
 
 ## Lopu voice + personal Secure Vault
 
-Signed-in people can open `/lopu` for a continuous voice conversation or use
+Signed-in people can open `/lopu/voice` for a continuous voice conversation or use
 **Transcribe mode** to save each final utterance as its own timestamped,
 numbered, owner-private Thing page. The session gear remains available before,
 during, and after listening; **Text response** suppresses spoken playback. The
-iOS app adds native speech recognition, background audio, and a local Live
-Activity so an active conversation can continue while the phone is locked.
+iOS app adds native speech recognition, direct provider-audio streaming,
+background audio, and a local Live Activity so an active conversation can
+continue while the phone is locked. The voice gear selects either device
+transcription (only text reaches the model) or direct 24 kHz PCM streaming.
+Direct provider audio currently supports xAI Grok Voice through a five-minute
+ephemeral client credential; the long-lived provider token stays server-side.
+Normal `/lopu` chats are created immediately with their id in the URL, so a
+refresh reopens the same persisted conversation.
 
 Each account has a personal Secure Vault in **Settings → Secure Vault** for
 password/key-value records and Lopu provider connections. Values are
@@ -64,8 +70,10 @@ runtime secret store:
 openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
 ```
 
-Built-in connection templates cover OpenAI/Codex, Anthropic/Claude, Google
-Gemini, xAI/Grok, and OpenRouter. Store provider tokens only through the
+Built-in connection templates and per-chat model dropdowns cover OpenAI/Codex,
+Anthropic/Claude, Google Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq,
+and Cohere, with a custom model-id override. Provider connections intentionally
+store no model: model, reasoning, and speed are selected per chat. Store provider tokens only through the
 write-only Secure Vault form—never in source or a public environment file.
 Custom OpenAI-compatible endpoint hostnames must be public HTTPS destinations
 and must also appear in the comma-separated

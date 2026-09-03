@@ -16,6 +16,12 @@ the provider turn and Lopu speech to avoid a self-transcription loop, then
 resumes. ActivityKit exposes listening, thinking, transcribing, speaking, and
 ended states on the Lock Screen and Dynamic Island.
 
+The follow-up adds a second, explicit provider-audio mode on web and iOS. It
+streams PCM microphone frames to xAI Grok Voice and plays streamed PCM replies;
+Thingtime exchanges the write-only vault token server-side for a five-minute
+ephemeral credential. Device-transcription mode remains available for every
+seeded text provider, and Text response suppresses playback in both paths.
+
 ## Personal vault and providers
 
 Settings includes a user Secure Vault beside the existing admin-only CI vault.
@@ -25,8 +31,10 @@ provider tokens are write-only. AES-256-GCM authenticated data binds ciphertext
 to the owner and Thing ID; list queries never load encrypted fields.
 
 The vault uses `THINGTIME_USER_VAULT_KEY`, or a purpose-separated derivative of
-`THINGTIME_ADMIN_VAULT_KEY`. Templates cover OpenAI/Codex, Anthropic/Claude,
-Google Gemini, xAI/Grok, and OpenRouter. Custom compatible hosts require an
+`THINGTIME_ADMIN_VAULT_KEY`. Provider records no longer contain a model; model,
+reasoning, and speed live on the individual voice chat. Templates cover
+OpenAI/Codex, Anthropic/Claude, Google Gemini, xAI/Grok, OpenRouter, Mistral,
+DeepSeek, Groq, and Cohere. Custom compatible hosts require an
 explicit allowlist, public HTTPS, fresh public DNS resolution, bounded
 responses, a fixed timeout, and disabled redirects.
 
@@ -34,12 +42,14 @@ responses, a fixed timeout, and disabled redirects.
 
 - `GET|POST /api/v1/lopu/vault`
 - `POST /api/v1/lopu/voice/reply` as NDJSON
-- capabilities `api.lopu-vault` 1.0.0 and `api.lopu-voice-reply` 1.0.0
+- `POST /api/v1/lopu/voice/session` for an ephemeral direct-audio credential
+- capabilities `api.lopu-vault` 1.1.0, `api.lopu-voice-reply` 1.1.0, and
+  `api.lopu-voice-session` 1.0.0
 - both routes require a current user session and fail-closed rate limits
 
 ## Verification
 
-- `corepack pnpm run test:lopu` — 8/8 passed
+- `corepack pnpm run test:lopu` — 39/39 passed
 - `corepack pnpm run test:api-capabilities` — 5/5 passed
 - focused ESLint — passed
 - `corepack pnpm run build` — passed, including Nitro/Vercel output checks

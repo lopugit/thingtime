@@ -113,6 +113,20 @@ is fixed, and cite the checklist you ran in the PR description.
       the provider responds and while Lopu speaks, then resumes without hearing
       Lopu's own voice. Turn on **Text response** before, during, and after the
       session and verify replies render but no speech plays.
+- [ ] Verify provider connections contain no model field. In voice settings,
+      every seeded provider exposes a model dropdown plus **Custom model id**;
+      reasoning and speed options change with the selected model and persist
+      per chat rather than in Secure Vault.
+- [ ] On `/lopu`, confirm a signed-in visit immediately creates one chat and
+      replaces the URL with `/lopu/<chat-id>`. Refresh and confirm the same
+      server-backed history returns; **New chat** must create and navigate to a
+      different id without a duplicate Strict Mode request.
+- [ ] Exercise both voice input choices. Device transcription sends only the
+      final text to `/voice/reply`; provider audio with an xAI Grok Voice model
+      sends PCM frames over its realtime WebSocket using only an ephemeral
+      credential minted by `/voice/session`. Confirm Text response suppresses
+      realtime playback and the stored long-lived token never reaches either
+      client.
 - [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
       each creates a separately numbered, timestamped, owner-private Thing page
       and streams back into chat as a quote with a working page link. Provider
@@ -128,6 +142,10 @@ is fixed, and cite the checklist you ran in the PR description.
       speaking. Confirm native reply requests carry only unexpired cookies
       matching the active Thingtime origin and API path. Stop the session and
       confirm the microphone, audio session, and Live Activity all end.
+- [ ] In iOS provider-audio mode, deny Speech Recognition but allow Microphone;
+      the session should still start, stream and play realtime audio under the
+      background audio session, update the Live Activity while locked, and
+      close its WebSocket and player cleanly on Stop.
 
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 

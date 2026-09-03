@@ -56,7 +56,7 @@ const normalizePath = (pathname: string): string => {
 // Surfaces that are not site pages (they ARE builder/page surfaces or
 // chrome-less popups) — no blocks, no edit pill.
 const isExcludedPath = (path: string): boolean =>
-	path === '/authorize' || path === '/builder' || path === '/lopu' || path === '/settings' || path.startsWith('/p/') || path.startsWith('/rainbow/');
+	path === '/authorize' || path === '/builder' || path === '/lopu' || path.startsWith('/lopu/') || path === '/settings' || path.startsWith('/p/') || path.startsWith('/rainbow/');
 
 const splitAroundNative = (blocks: WebpageBlock[]): { before: WebpageBlock[]; after: WebpageBlock[] } => {
 	const nativeIndex = blocks.findIndex((block) => block.type === 'native');

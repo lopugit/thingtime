@@ -13,7 +13,8 @@ import {
 	lopuChatShareId,
 	lopuChatStateOf,
 	lopuUserMessageShareId,
-	normalizeLopuChatSettings
+	normalizeLopuChatSettings,
+	normalizeLopuChatShareId
 } from './lopuChats.ts';
 
 test('normalizeLopuChatSettings accepts catalog models, composed ids and null resets', () => {
@@ -81,6 +82,8 @@ test('lopuChatStateOf reads stored settings forgivingly', () => {
 test('share ids are owner-scoped, deterministic and distinct per segment and side', () => {
 	assert.match(lopuChatShareId(), /^lopu-chat-[0-9a-f-]{36}$/);
 	assert.notEqual(lopuChatShareId(), lopuChatShareId());
+	assert.equal(normalizeLopuChatShareId('lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001'), 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001');
+	assert.equal(normalizeLopuChatShareId('lopu-chat-not-a-uuid'), null);
 	assert.equal(lopuUserMessageShareId('user-1', 'req-1'), lopuUserMessageShareId('user-1', 'req-1'));
 	assert.notEqual(lopuUserMessageShareId('user-1', 'req-1'), lopuUserMessageShareId('user-2', 'req-1'));
 	assert.notEqual(lopuUserMessageShareId('user-1', 'req-1'), lopuUserMessageShareId('user-1', 'req-1', 1));

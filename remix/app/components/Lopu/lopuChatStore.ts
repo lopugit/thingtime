@@ -91,7 +91,7 @@ export type LopuApiClient = {
 	models: (options?: { signal?: AbortSignal }) => Promise<any>;
 	chats: {
 		list: (options?: { signal?: AbortSignal }) => Promise<any>;
-		create: (args?: { title?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
+		create: (args?: { chatId?: string; title?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
 		update: (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
 		delete: (args: { chatId: string }) => Promise<any>;
 	};
@@ -468,10 +468,11 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 // ——— conversation CRUD ————————————————————————————————————————————————————
 
-export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
+export const createLopuChat = async (args?: { chatId?: string; title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
 	try {
 		const response = await client.chats.create({
+			...(args?.chatId ? { chatId: args.chatId } : {}),
 			...(args?.title ? { title: args.title } : {}),
 			...(state.settings.model ? { model: state.settings.model } : {}),
 			...(state.settings.effort ? { effort: state.settings.effort } : {}),

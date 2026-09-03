@@ -120,7 +120,7 @@ export type UseLopuChat = {
 	send: (text: string, overrides?: Partial<LopuChatSettings>) => Promise<SendLopuResult>;
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
-	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
+	createChat: (args?: { chatId?: string; title?: string }) => ReturnType<typeof createLopuChat>;
 	deleteChat: (chatId: string) => ReturnType<typeof deleteLopuChat>;
 	renameChat: (chatId: string, title: string) => ReturnType<typeof renameLopuChat>;
 	models: AiModelPublic[];

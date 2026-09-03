@@ -35,7 +35,7 @@ export const loader = async ({ request }: { request: Request }) => {
 	return json(result);
 };
 
-// POST /api/v1/lopu/chats — { title?, model?, effort?, speed? } creates a new
+// POST /api/v1/lopu/chats — { chatId?, title?, model?, effort?, speed? } creates a new
 // conversation with Lopu (a one-member messenger group discriminated by
 // externalSource.access === 'lopu'). Settings are validated against the model
 // catalog; null/omitted fields mean "catalog default".

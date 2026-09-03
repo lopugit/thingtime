@@ -138,7 +138,11 @@ struct WebView: UIViewRepresentable {
                     textResponse: payload["textResponse"] as? Bool ?? false,
                     transcribeMode: payload["transcribeMode"] as? Bool ?? false,
                     providerId: payload["providerId"] as? String ?? "",
-                    sessionId: payload["sessionId"] as? String ?? "voice-\(UUID().uuidString)"
+                    sessionId: payload["sessionId"] as? String ?? "voice-\(UUID().uuidString)",
+                    inputMode: payload["inputMode"] as? String ?? "native-transcript",
+                    model: payload["model"] as? String == "__custom__" ? (payload["customModel"] as? String ?? "") : (payload["model"] as? String ?? ""),
+                    effort: payload["effort"] as? String ?? "",
+                    speed: payload["speed"] as? String ?? "normal"
                 )
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                     let replyURL = URL(string: "/api/v1/lopu/voice/reply", relativeTo: rootURL)?.absoluteURL ?? rootURL

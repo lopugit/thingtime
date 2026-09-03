@@ -186,6 +186,26 @@ export const LopuPage = () => {
 	const isMobile = useIsMobileViewport();
 	const signedIn = !!user && !user.temporary;
 	const chat = useLopuChat({ chatId: routeChatId ?? undefined });
+	const createChat = chat.createChat;
+	const creatingChatRef = React.useRef(false);
+
+	const startNewChat = React.useCallback(async () => {
+		if (creatingChatRef.current) return;
+		creatingChatRef.current = true;
+		const chatId = `lopu-chat-${crypto.randomUUID()}`;
+		navigate(`/lopu/${encodeURIComponent(chatId)}`, { replace: true });
+		try {
+			const result = await createChat({ chatId });
+			if (result.ok && result.chat?.id && result.chat.id !== chatId) navigate(`/lopu/${encodeURIComponent(result.chat.id)}`, { replace: true });
+		} finally {
+			creatingChatRef.current = false;
+		}
+	}, [createChat, navigate]);
+
+	React.useEffect(() => {
+		if (!signedIn || routeChatId !== undefined) return;
+		void startNewChat();
+	}, [routeChatId, signedIn, startNewChat]);
 
 	const onChatChange = React.useCallback(
 		(chatId: string | null) => {
@@ -212,7 +232,7 @@ export const LopuPage = () => {
 				bg="var(--tt-card, #ffffff)"
 				justifyContent="flex-start"
 				fontWeight={600}
-				onClick={() => chat.selectChat(null)}
+				onClick={() => void startNewChat()}
 				flexShrink={0}
 			>
 				＋ New chat
@@ -257,7 +277,7 @@ export const LopuPage = () => {
 						Lopu
 					</Text>
 					<Box flex={1} />
-					<Button size="xs" variant="ghost" onClick={() => chat.selectChat(null)}>
+					<Button size="xs" variant="ghost" onClick={() => void startNewChat()}>
 						＋ New
 					</Button>
 				</Flex>

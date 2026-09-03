@@ -431,7 +431,7 @@ export function useApi() {
       chats: {
         list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
         create: useCallback(
-          async (args?: { title?: string; model?: string; effort?: string; speed?: string }) =>
+          async (args?: { chatId?: string; title?: string; model?: string; effort?: string; speed?: string }) =>
             asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
           [asyncFetcher]
         ),

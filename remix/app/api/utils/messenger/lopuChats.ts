@@ -133,6 +133,9 @@ export const isLopuSource = (source: unknown): boolean =>
 
 export const isLopuChatDoc = (chat: unknown): boolean => isLopuSource((chat as any)?.crystal?.externalSource);
 
+const LOPU_CHAT_SHARE_ID = /^lopu-chat-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const normalizeLopuChatShareId = (value: unknown): string | null =>
+	typeof value === 'string' && LOPU_CHAT_SHARE_ID.test(value.trim()) ? value.trim().toLowerCase() : null;
 export const lopuChatShareId = (): string => `${LOPU_CHAT_SHARE_ID_PREFIX}${randomUUID()}`;
 
 // Row ids are owner-scoped hashes of the client's requestId (same rule as
@@ -366,8 +369,10 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 export const createLopuChat = async (
 	viewerId: string,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
+	input: { chatId?: unknown; title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
 ): Promise<LopuChatResult> => {
+	const requestedChatId = input.chatId === undefined ? null : normalizeLopuChatShareId(input.chatId);
+	if (input.chatId !== undefined && !requestedChatId) return fail(400, 'chatId must be a Lopu chat UUID');
 	const wantsTitle = input.title !== undefined && input.title !== null && input.title !== '';
 	const title = wantsTitle ? boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS) : null;
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
@@ -375,11 +380,20 @@ export const createLopuChat = async (
 	if (normalized.ok === false) return normalized;
 
 	const things = await getThingsCollection();
+	if (requestedChatId) {
+		const existing = await things.findOne({ shareId: requestedChatId, ownerId: viewerId, thingtime: 'chat' } as any);
+		if (existing) {
+			if (!isLopuChatDoc(existing)) return fail(409, 'That chat id is already in use');
+			const entry = await chatListEntryFor(viewerId, requestedChatId);
+			if (entry.ok === false) return entry;
+			return { ok: true, chat: withLopuState(entry.chat, existing.crystal?.lopu) };
+		}
+	}
 	const count = await things.countDocuments({ thingtime: 'chat', ownerId: viewerId, 'crystal.externalSource.provider': 'lopu' } as any);
 	if (count >= MAX_LOPU_CHATS_PER_USER) return fail(400, 'Tidy up some older Lopu conversations first');
 
 	const chat = newThingDoc('chat', {
-		shareId: lopuChatShareId(),
+		shareId: requestedChatId || lopuChatShareId(),
 		ownerId: viewerId,
 		targetId: null,
 		crystal: {
