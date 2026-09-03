@@ -529,8 +529,26 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return typeof value === 'object' ? 'object' : typeof value;
 		}
 		// ── text ──
-		case 'concat':
-			return capText(args.map(toText).join(''), ctx);
+		case 'concat': {
+			// Capped DURING the walk, like `flatten` below rather than like `join`:
+			// `capText` reads `.length` on a FINISHED string, so capping after the
+			// join makes the refusal cost O(would-be output). The arg COUNT is
+			// bounded (24) but an arg's SIZE is not — one `$step` ref to a
+			// things.search result resolves to hundreds of thousands of characters,
+			// so 24 of them built ~8.4M chars (423x this cap) before it ever looked.
+			// Stopping at the first arg that crosses the bound also avoids
+			// serialising the remaining args, which is where the rest of the cost
+			// was: `toText` on a big object is a whole JSON.stringify each.
+			const parts: string[] = [];
+			let projected = 0;
+			for (const value of args) {
+				const part = toText(value);
+				projected += part.length;
+				capProjectedText(projected, ctx);
+				parts.push(part);
+			}
+			return capText(parts.join(''), ctx);
+		}
 		case 'upper':
 			return text(0).toUpperCase();
 		case 'lower':

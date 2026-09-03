@@ -329,6 +329,38 @@ test('replace and join refuse an oversized result without building it first', ()
 	assert.throws(() => run(['join', [big, 'z'], '']), /text caps at/);
 });
 
+test('concat refuses an oversized result without building it first', () => {
+	// The fourth text builder with the same hazard as flatten/replace/join. Its
+	// arg COUNT is bounded (MAX_EXPRESSION_ARGS), which is why it reads safe —
+	// but an arg's SIZE is not. A `$step` ref to a things.search result is one
+	// resolved value worth hundreds of thousands of characters, and `concat`
+	// took `capText(args.map(toText).join(''))`: 24 of those built ~8.4M chars
+	// (423x its own 20k cap, ~25ms of blocking, uninterruptible CPU and ~16MB)
+	// and only THEN refused, so the refusal cost far more than the success.
+	// Capping during the walk refuses on the FIRST arg past the bound and never
+	// serialises the other 23: measured 25.3ms/15.7MB → 1.8ms/0.4MB.
+	const searchResult = Array.from({ length: 100 }, (_value, index) => ({
+		id: `thing-${index}`,
+		ownerId: 'someone',
+		createdAt: '2026-01-01T00:00:00.000Z',
+		crystal: { title: 'x'.repeat(400), body: 'y'.repeat(3000) }
+	}));
+	const args = Array.from({ length: 24 }, () => '$rows');
+	const started = process.hrtime.bigint();
+	assert.throws(() => run(['concat', ...args], { rows: searchResult }), /text caps at/);
+	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+	// stopping at the first oversized arg is low-single-digit ms; building the
+	// whole ~8.4M-char result first is tens of ms and megabytes per refused call
+	assert.ok(elapsedMs < 100, `concat refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+
+	// ordinary semantics and the exact boundary are untouched
+	assert.equal(run(['concat', 'a', 1, null, true]), 'a1true');
+	assert.equal(run(['concat', '']), '');
+	const big = run(['padStart', 'x', MAX_EXPRESSION_STRING_CHARS, 'y']);
+	assert.equal(run(['concat', big.slice(0, MAX_EXPRESSION_STRING_CHARS - 1), 'z']).length, MAX_EXPRESSION_STRING_CHARS);
+	assert.throws(() => run(['concat', big, 'z']), /text caps at/);
+});
+
 test('dateAdd refuses an out-of-range result instead of throwing a raw RangeError', () => {
 	// `toISOString()` on an overflowed Date throws RangeError('Invalid time
 	// value'), which reaches the run record as an opaque message rather than a
