@@ -40,6 +40,10 @@ experiment by itself.
 - [TODO 25](./25-accessibility-and-language-readiness.md) owns the shared
   complete-journey accessibility and locale release gates. Adoption work may
   not replace them with one-off checks or an aggregate score.
+- [TODO 26](./26-community-safety-and-accountable-moderation.md) owns personal
+  block semantics, report/case state, scoped moderation, appeals, remedies, and
+  privacy-safe safety transparency. Sharing or community growth must not create
+  an experiment-specific enforcement path.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

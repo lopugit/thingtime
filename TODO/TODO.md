@@ -382,3 +382,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     save, share, or other established capabilities. If compatibility cannot be
     preserved, block the deployment in CI rather than rejecting live user work.
     Full spec: `claude-todo/24-migration-safe-continuous-availability.md`.
+
+26. **🛡️ Make community safety and moderation accountable.**
+
+    Preserve Thingtime's shipped community roles, invite controls, message
+    requests, chat mute, and automated moderation while adding the missing
+    human loop: quiet account-level boundaries, specific reports, durable case
+    events, scoped moderator jurisdiction, policy reasons, status, appeal,
+    remedy, and privacy-safe transparency. Models may assist or quarantine under
+    an approved policy; report counts and model verdicts must never be the sole
+    basis for durable high-impact sanctions. Start with the evidence note and
+    phased roadmap, then execute
+    `claude-todo/26-community-safety-and-accountable-moderation.md` only after
+    the owner approves scope, evidence retention, staffing, and stop conditions.

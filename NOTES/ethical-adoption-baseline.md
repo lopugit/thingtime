@@ -30,6 +30,7 @@ turns these observations into phases. The executable backlog lives in
 | Delivery automation is active and mostly healthy, but "green" is always run-specific. | At capture time, recent `develop` Web CI and CodeQL runs were successful while newer Lopu manager and CodeQL runs were still in progress. PR #554's visible checks passed. One earlier Feature Stack workflow-dispatch run had failed and another was cancelled. | High for the timestamp only. Always re-query Actions and raw resolver receipts before making a current health claim. |
 | The public backlog is PR-heavy and issue-light. | GitHub returned no open issues and 36 open PRs during the snapshot. Many old feature PRs still target `develop`. | High for the timestamp only. Refresh before prioritization and do not interpret "no issues" as "no user problems." |
 | The original planning snapshot lacked a cross-product accessibility, internationalization, and adoption measurement gate. | The 2026-09-01 search found isolated accessibility requirements and privacy warnings but no shared metric dictionary or release-wide accessibility/i18n plan. The adoption metric gap is now staged here; the implementation gap is now grounded in the [accessibility and language-readiness baseline](./accessibility-and-language-readiness-baseline.md) and its proposed roadmap. | High for planning history, not implementation status. Re-run the dedicated baseline before any release or conformance claim. |
+| Existing community and automated-moderation controls do not yet form a user-report, appeal, or accountable-governance loop. | The dedicated [community safety baseline](./community-safety-and-accountable-moderation-baseline.md) inventories shipped roles, invites, request buckets, mute, and model/admin review alongside the missing personal block, case, scoped moderator, appeal, and transparency contracts. | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before scaling community or sharing work. |
 
 ## What the evidence suggests
 
@@ -114,6 +115,8 @@ Any later measurement design should fail closed unless all of these are true:
    app quotas, creator tooling, or support?
 7. Who owns the go/no-go decision when adoption improves but trust, abuse, cost,
    accessibility, or reliability guardrails regress?
+8. What minimum community-safety capacity and accountable report/appeal path
+   must exist before consentful sharing or public-community growth scales?
 
 ## Refresh checklist
 

@@ -8,6 +8,9 @@
 
 **Execution epic:** [TODO 22 — Trustworthy adoption loop](../TODO/claude-todo/22-trustworthy-adoption-loop.md)
 
+**Safety dependency:**
+[Community safety and accountable moderation](./community-safety-and-accountable-moderation-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -144,7 +147,9 @@ and error budgets stay within approved bounds.
 - Treat open theme, algorithm, Commander, and sharing PRs as dependencies to
   re-verify, not shipped facts.
 - Add abuse, impersonation, spam, report, block, and moderation scenarios before
-  promotion.
+  promotion through the shared
+  [community safety roadmap](./community-safety-and-accountable-moderation-roadmap.md),
+  rather than inventing experiment-specific enforcement.
 
 **Gate:** recipient success improves, every permission/revoke test passes, and
 abuse/support volume remains below the approved stop threshold.
@@ -160,7 +165,8 @@ and credited.
 - Keep foreign content on untrusted render paths; never grant action authority
   because a component is popular.
 - Publish contributor guidance, review expectations, accessibility criteria,
-  and a transparent removal/appeal process.
+  and a transparent removal/appeal process owned by the
+  [community safety roadmap](./community-safety-and-accountable-moderation-roadmap.md).
 - Internationalize discovery metadata and examples through the canonical
   locale contract in the
   [accessibility and language-readiness roadmap](./accessibility-and-language-readiness-roadmap.md)

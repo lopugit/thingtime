@@ -82,3 +82,34 @@ translate copy, or change settings/API behavior.
 
 Validation and exact-head CI/preview receipts for this run are recorded in the
 PR body after publication.
+
+## 2026-09-03 — community safety and accountable moderation
+
+This run connects Thingtime's existing community roles, invite controls,
+message-request buckets, chat mute, and automated content-moderation queue to a
+missing user-centered safety contract. It adds:
+
+- `NOTES/community-safety-and-accountable-moderation-baseline.md`, a dated
+  evidence ledger distinguishing shipped controls from missing account block,
+  user report, case, scoped moderator, appeal, and transparency paths;
+- `PLAN/community-safety-and-accountable-moderation-roadmap.md`, a gated path
+  from immediate quiet control through report integrity, community governance,
+  reasoned decisions, appeals, remedies, operations, and aggregate transparency;
+- `TODO/claude-todo/26-community-safety-and-accountable-moderation.md`, the
+  implementation epic with owner decisions, security/privacy boundaries,
+  capability-manifest requirements, acceptance criteria, and stop conditions.
+
+The proposal keeps personal controls, community governance, platform policy,
+automated assistance, and legal/urgent processes as separate authority layers.
+It explicitly rejects report-count guilt, private-message surveillance,
+indefinite evidence retention, and model-only durable sanctions. External
+safety/regulatory material is used as design input, not a compliance claim.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes,
+plus the ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22.
+The Claude TODO index also clarifies that full filenames are canonical because
+parallel work has produced duplicate numeric prefixes. No product behavior,
+policy, moderation setting, API, or data schema changed.
+
+Validation and exact-head CI/preview receipts for this run are recorded in the
+PR body after publication.

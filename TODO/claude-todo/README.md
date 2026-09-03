@@ -4,6 +4,10 @@ This folder is our shared roadmap. Each file is one feature: what it's for, what
 already exists in the code, what's missing/broken, the plan, and how we'll know
 it's done.
 
+The full filename/link is the canonical reference. Numeric prefixes are rough
+sequence labels and may repeat where parallel work claimed the same number; use
+the descriptive slug in discussion, commits, and cross-links.
+
 Keep these updated as we build — they double as living docs and as context for
 future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 
@@ -40,6 +44,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 24 | Attention agency and calm use — feed continuation, training pause/correction/explanation, stopping points, and notification defaults | 🟣 Proposed · owner decision needed | [24-attention-agency-and-calm-use.md](./24-attention-agency-and-calm-use.md) |
 | 24 | Migration-safe continuous availability (pending storage migrations never block established reads or writes; expand/coexist/migrate/verify/contract) | 🔴 P0 invariant · not started | [24-migration-safe-continuous-availability.md](./24-migration-safe-continuous-availability.md) |
 | 25 | Accessibility and language readiness — complete-journey access matrix, shared interaction foundations, canonical locale semantics, and pilot language | 🟣 Proposed · owner decision needed | [25-accessibility-and-language-readiness.md](./25-accessibility-and-language-readiness.md) |
+| 26 | Community safety and accountable moderation — personal boundaries, reports, scoped governance, decisions, appeals, remedies, and privacy-safe transparency | 🟣 Proposed · owner decision needed | [26-community-safety-and-accountable-moderation.md](./26-community-safety-and-accountable-moderation.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
