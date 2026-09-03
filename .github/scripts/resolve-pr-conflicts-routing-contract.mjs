@@ -189,6 +189,158 @@ function assertRoute(name, input, expected) {
   }
 }
 
+// A shell function whose stdout is captured by command substitution owns that
+// stream. An annotation echoed on stdout is spliced into the caller's document
+// instead of the log, and the next `jq` over that variable dies on it.
+// `gh_read_retry` already documents the rule -- "Keep every notice on stderr so
+// command-substitution JSON stays clean" -- but `complete_large_pr_files` and
+// `read_jobs` each drifted from it independently, so the rule needs a guard
+// rather than a comment. The first drift was not cosmetic: one PR whose diff
+// GitHub refuses to generate (HTTP 422) poisoned the shared open-PR inventory
+// and took the repository-wide conflict scan down for *every* open PR, on every
+// push and every scheduled sweep, for as long as that PR stayed open.
+// The rule has to survive one indirection, because the annotation does not have
+// to be written by the captured function itself. `make_attestation()` -- read as
+// `attestation="$(make_attestation "$final_head")"` -- carried no annotation of
+// its own, but its oversize-payload branch called the one-line `fail()` helper,
+// which echoed `::error::` on stdout. That message went into `$attestation`
+// instead of the log, and `fail`'s `exit 1` only left the substitution's
+// subshell, so the promotion worker aborted under `set -e` with *both* streams
+// empty. So one-line definitions are scanned too: they are exactly where the
+// terse `fail`/`die` helpers live, and a helper that is nothing but a diagnostic
+// branch is the likeliest one to be reached from inside a capture.
+// A helper is "loud" if any line of its definition annotates without `>&2`.
+// That is fine at top level and only becomes a fault under capture, so loudness
+// alone is not asserted on -- only calling a loud helper from a captured body
+// is. The loud set is collected per file rather than per `run:` block, which can
+// only over-approximate: it may flag a clean same-named helper, never miss a
+// loud one, and a guard that fails loudly beats one that misses silently.
+const ANNOTATION = /::(?:warning|notice|error)::/u;
+
+// Where a call to a loud helper can start. A diagnostic helper is one that
+// *returns nonzero*, so the shapes that matter are the conditional ones, and
+// they were the gap: `if`/`elif`/`while`/`until` and a leading `!` are how this
+// control plane actually reads such a helper 28 times over. The most pointed
+// miss was `resolve-pr-conflicts.yml`'s own `if ! gh_read_retry --paginate` --
+// the exact line inside `complete_large_pr_files()` whose stream discipline this
+// guard exists to hold. A detector that cannot see the call site it was written
+// for is the silent miss the note above rules out, so the conditional keywords
+// join `then`/`else`/`do` rather than being left to a future drift.
+// A backtick is deliberately NOT a starter. Legacy `` `cmd` `` substitution
+// appears nowhere in the scanned surfaces -- every backtick here opens a
+// markdown code span in a comment, prompt, or annotation string, 147 lines of
+// them -- so accepting one would buy no real call site and would fail the suite
+// on prose like the `fail()` note in resolve-pr-conflicts.yml. `$(helper` is
+// already covered by the `(` in the class, which is the substitution form this
+// control plane uses.
+const CALLS_HELPER = (helper) =>
+  new RegExp(
+    `(?:^|\\|\\||&&|[;(|!]|\\b(?:then|else|elif|do|if|while|until)\\b)\\s*${helper}\\b`,
+    "u",
+  );
+
+// A heredoc body is data, not shell, so a `}` inside it does not close anything.
+// `classify_output()` is the live proof: it wraps a `node - <<'NODE'` program
+// whose `catch {` block closes on a line that is byte-identical to the function's
+// own closing sentinel, nineteen lines before the real `}`. Matching the sentinel
+// blindly truncated that body and silently dropped every later line from the
+// scan -- the one outcome this guard must not have, since the whole point is to
+// fail loudly rather than miss. Skipping heredoc payloads keeps the sentinel
+// unambiguous; an unterminated one runs to EOF and leaves `end` at -1, which the
+// captured-function assertion below reports rather than swallows.
+// Only a real heredoc opener counts. The three near-misses in this control plane
+// are all `<<` that redirect nothing: `$((1 << attempt))` (arithmetic shift, so
+// the tag may not be separated by space), `<<<<<<< HEAD` (a conflict marker in a
+// fixture, so `<` may neither precede nor follow the pair), and
+// `echo "unresolved_paths<<TT_UNRESOLVED_EOF"` (a GITHUB_OUTPUT delimiter, so a
+// word character may not precede it). Treating any of them as a heredoc would
+// swallow the rest of the enclosing function and reintroduce the silent miss
+// from the other direction.
+const HEREDOC_OPEN =
+  /(?<![\w<])<<-?(?!<)(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\1|([A-Za-z_][A-Za-z0-9_]*))/u;
+
+function shellFunctions(lines) {
+  const found = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const multi = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*$/u.exec(lines[index]);
+    if (multi) {
+      const closing = `${multi[1]}}`;
+      let end = -1;
+      let heredoc = null;
+      for (let scan = index + 1; scan < lines.length; scan += 1) {
+        if (heredoc !== null) {
+          if (lines[scan].trim() === heredoc) heredoc = null;
+          continue;
+        }
+        if (lines[scan] === closing) {
+          end = scan;
+          break;
+        }
+        const opener = HEREDOC_OPEN.exec(lines[scan]);
+        if (opener) heredoc = opener[2] ?? opener[3];
+      }
+      found.push({ name: multi[2], start: index, end, multiLine: true });
+      continue;
+    }
+    const single = /^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*\S.*\}\s*$/u.exec(lines[index]);
+    if (single) {
+      found.push({ name: single[1], start: index, end: index, multiLine: false });
+    }
+  }
+  return found;
+}
+
+function assertCapturedStdoutStaysClean(source, label) {
+  const lines = source.split("\n");
+  const definitions = shellFunctions(lines);
+  const loud = new Set(
+    definitions
+      .filter(
+        ({ start, end }) =>
+          end >= 0 &&
+          lines.slice(start, end + 1).some((line) => ANNOTATION.test(line) && !/>&2/u.test(line)),
+      )
+      .map(({ name }) => name),
+  );
+  for (const { name, start, end, multiLine } of definitions) {
+    if (!new RegExp(`\\$\\(\\s*${name}\\b`, "u").test(source)) {
+      continue;
+    }
+    // A one-line definition is checked under capture too, not merely collected
+    // into `loud`. The indirect case is the one that actually shipped, but the
+    // direct one -- `emit() { echo "::warning::.."; }` read as `v="$(emit)"` --
+    // is the same defect with one less hop, and skipping it would leave the
+    // guard blind to exactly the terse helper shape the note above says is the
+    // likeliest to end up inside a capture.
+    if (multiLine) {
+      assert.notStrictEqual(
+        end,
+        -1,
+        `${label}:${start + 1}: ${name}() must close at its own indentation`,
+      );
+    }
+    for (let line = start; line <= end; line += 1) {
+      if (ANNOTATION.test(lines[line])) {
+        assert.match(
+          lines[line],
+          />&2/u,
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so this annotation must be redirected to stderr`,
+        );
+      }
+      for (const helper of loud) {
+        if (helper === name || new RegExp(`^\\s*${helper}\\(\\)`, "u").test(lines[line])) {
+          continue;
+        }
+        assert.doesNotMatch(
+          lines[line],
+          CALLS_HELPER(helper),
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so it must not call ${helper}(), which annotates on stdout`,
+        );
+      }
+    }
+  }
+}
+
 function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
@@ -196,6 +348,28 @@ function assertWorkflowSource() {
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
   const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
+  // Every shell surface of this control plane, enumerated rather than listed.
+  // The hazard is a helper that becomes captured, or a captured helper added to
+  // a file nobody remembered to add here -- so a hand-kept list is the one shape
+  // guaranteed to miss it. Naming the four sources read above left twelve
+  // captured helpers unscanned, including `hash_index_entries` and
+  // `hash_rebase_state`, which exist in *both* the listed
+  // rebase-conflict-round/action.yml and the unlisted
+  // .github/scripts/rebase-stack/prepare-round.sh. One guarded copy and one
+  // unguarded copy of the same helper is precisely the drift the `fail()` note
+  // in resolve-pr-conflicts.yml warns about, so the walk is the guard, not the
+  // list. Files with no shell function are a no-op, which is why this can safely
+  // cover every workflow, action, and script instead of the resolver's own.
+  for (const shellSurface of [
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "scripts")),
+  ]) {
+    assertCapturedStdoutStaysClean(
+      readFileSync(shellSurface, "utf8"),
+      relative(REPO_ROOT, shellSurface),
+    );
+  }
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),

@@ -1903,6 +1903,20 @@ jobs:
           # GraphQL provides the first 100 changed paths per PR in the shared
           # inventory. Fetch the uncommon larger diffs once, after mergeability
           # polling settles, so overlap labels never silently miss path 101+.
+          # This function's stdout IS the completed inventory document, so its
+          # diagnostics go to stderr like gh_read_retry's: a notice printed on
+          # stdout is captured as the first line of `$all_open`, and every later
+          # `jq` over that variable dies on it. A PR big enough for GitHub to
+          # refuse the file list (HTTP 422, "this diff is taking too long to
+          # generate") is the case that reaches this branch. That 422 is not
+          # always permanent for a given diff: #291's 2896-file list answered in
+          # full, all 29 pages, on a replay of the identical paginated read
+          # minutes after run 33565992797 lost the scan to it. gh_read_retry
+          # classifies it as non-transient all the same -- its retry set is
+          # 408/429/500/502/503/504 and deliberately excludes 422 -- so this
+          # branch is the only handler a 422 ever reaches, and one such PR must
+          # degrade to its first 100 paths instead of taking the whole
+          # repository-wide scan down for every open PR.
           complete_large_pr_files() {
             local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
@@ -1913,7 +1927,7 @@ jobs:
               if ! gh_read_retry --paginate \
                   "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
                 rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number."
+                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels fall back to its first 100 changed paths." >&2
                 continue
               fi
               inventory="$(jq -c \
@@ -2318,7 +2332,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          fail() { echo "::error::$*"; exit 1; }
+          # Same helper, same stream rule as the promotion worker's copy: keep
+          # the two identically-named `fail`s in step so neither drifts into a
+          # captured function and loses its own error message.
+          fail() { echo "::error::$*" >&2; exit 1; }
           encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
@@ -6273,7 +6290,13 @@ jobs:
           live_ref_sha() {
             GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
-          fail() { echo "::error::$*"; exit 1; }
+          # Annotation on stderr, for the same reason as gh_read_retry's: this
+          # helper is reached from inside make_attestation(), whose stdout is
+          # captured by `attestation="$(make_attestation "$final_head")"`. On
+          # stdout the message lands in that variable and the `exit 1` only
+          # leaves the substitution's subshell, so the step aborted under
+          # `set -e` with both streams empty and nothing to diagnose it by.
+          fail() { echo "::error::$*" >&2; exit 1; }
           (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
             || fail "Validated model audit context is oversized or contains control characters."
           case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac
@@ -7093,7 +7116,12 @@ jobs:
               delay="$((attempt * 2))"
               [ "$attempt" -eq 4 ] || sleep "$delay"
             done
-            echo "::warning::Could not read sibling resolver jobs after four attempts."
+            # Same rule as complete_large_pr_files: this runs inside
+            # `jobs="$(read_jobs || true)"`, so stdout belongs to the job
+            # document. The caller's `type == "array"` guard already absorbs a
+            # polluted value, but the annotation itself was being swallowed
+            # into the variable instead of reaching the log.
+            echo "::warning::Could not read sibling resolver jobs after four attempts." >&2
             sed -n '1,12p' "$errors" >&2 || true
             rm -f "$output" "$errors"
             return 1
