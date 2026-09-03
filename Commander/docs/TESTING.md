@@ -37,6 +37,9 @@
       than being presented as matches for the new input. The first exact or nearest-prefix cached batch for the new
       query may paint before the live filesystem batch; it must be query-relevant, and an identical final batch must
       not remount the rows.
+- [ ] Start a search that takes long enough to show progress and verify exactly one loading spinner remains beside
+      the result count. It must rotate smoothly at one fixed speed without wobbling, stacking, accelerating, or
+      restarting as cached and live result batches stream into the list.
 - [ ] With an index above one million records, time cold and repeated two-character filesystem searches such as `ea`.
       Verify the cold path uses the bounded indexed prefix lookup rather than a whole-database contains scan, then
       type a refinement and repeat the query to confirm warmed candidate and exact-result cache frames paint promptly.
