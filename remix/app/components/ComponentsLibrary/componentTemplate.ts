@@ -282,8 +282,16 @@ export const resolveTemplate = (
 		const spec = isPlainObject(template.ttEach) ? template.ttEach : {};
 		const raw = argValue(scope, String(spec.arg));
 		const list: unknown[] = Array.isArray(raw) ? raw : isPlainObject(raw) ? Object.entries(raw).map(([key, value]) => ({ key, value })) : [];
-		const max = Math.min(Number(spec.max) || 0, EACH_HARD_CAP) || EACH_HARD_CAP;
-		const items = list.slice(0, max);
+		// `max` is an optional author hint, and EACH_HARD_CAP is the bound that
+		// has to hold for markup nobody vetted. ttRepeat above floors its count
+		// with Math.max(0, …); this needed the same floor, because `max` lands in
+		// slice() rather than in a loop bound: a NEGATIVE max counts from the END
+		// of the list, so `max: -1` both dropped the last element and iterated
+		// list.length - 1 times — past the cap, with MAX_RESOLVED_VALUES left as
+		// the only guard. Anything that is not a positive integer (absent, 0,
+		// NaN, negative) means "unset" and falls back to the cap.
+		const requested = Math.trunc(Number(spec.max) || 0);
+		const items = list.slice(0, requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP);
 		if (!items.length) return spec.empty === undefined ? undefined : resolveTemplate(spec.empty, scope, budget);
 		const out: unknown[] = [];
 		for (let index = 0; index < items.length; index++) {

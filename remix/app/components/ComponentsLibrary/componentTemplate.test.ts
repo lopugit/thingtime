@@ -3,6 +3,7 @@ import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
+	EACH_HARD_CAP,
 	MAX_RESOLVED_VALUES,
 	REPEAT_HARD_CAP,
 	coerceArgValue,
@@ -242,4 +243,20 @@ test('ttEach binds item/index/count and dotted tokens read nested scope', () => 
 	assert.equal(empty, 'none');
 	const ops = resolveTemplate({ ttIf: { arg: 'hp', op: 'gt', value: 50, then: 'high', else: 'low' } }, { hp: 51 });
 	assert.equal(ops, 'high');
+});
+
+// A component crystal is untrusted markup and nothing validates `max` at save
+// time, so EACH_HARD_CAP is enforced here or nowhere. A negative max used to
+// reach slice() as a count from the END of the list: it dropped the last
+// element AND iterated list.length - 1 times, past the cap.
+test('ttEach caps the element count for any max, including a negative one', () => {
+	const list = Array.from({ length: EACH_HARD_CAP * 3 }, (_value, index) => index);
+	const drawn = (max: unknown): number => (resolveTemplate({ ttEach: { arg: 'rows', max, node: 'x' } }, { rows: list }) as unknown[]).length;
+
+	assert.equal(drawn(undefined), EACH_HARD_CAP, 'an absent max falls back to the cap');
+	assert.equal(drawn(0), EACH_HARD_CAP, 'a zero max falls back to the cap');
+	assert.equal(drawn('nope'), EACH_HARD_CAP, 'a non-numeric max falls back to the cap');
+	assert.equal(drawn(EACH_HARD_CAP * 10), EACH_HARD_CAP, 'an oversized max is clamped to the cap');
+	assert.equal(drawn(-1), EACH_HARD_CAP, 'a negative max never counts from the end of the list');
+	assert.equal(drawn(5), 5, 'a positive max under the cap is honoured');
 });
