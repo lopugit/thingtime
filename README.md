@@ -338,10 +338,15 @@ exact current same-repository PR SHA through Vercel; later `synchronize`,
 reopen, and ready-for-review deliveries rebuild every enabled environment.
 Production access requires an explicit admin acknowledgement and uses the
 project's Production environment values, but `autoAssignCustomDomains` remains
-false: the generated immutable `*.vercel.app` URL never replaces or aliases
-`thingtime.com`. Closing the PR removes only deployments carrying Thingtime's
-PR/environment ownership markers. Configure these server-only deployment
-values in every origin that hosts CI Control (placeholders only):
+false. Before starting the builds, the builder publishes one GitHub App-owned
+PR comment with each selected environment's expected persistent URL and
+estimated ready time. It updates that same comment with the immutable
+`*.vercel.app` snapshot URL as soon as Vercel identifies the deployment. A
+READY webhook moves only that persistent alias to the
+verified current snapshot; it never replaces or aliases `thingtime.com` or
+`dev.thingtime.com`. Closing the PR removes only aliases and deployments carrying
+Thingtime's PR/environment ownership markers. Configure these server-only
+deployment values in every origin that hosts CI Control (placeholders only):
 
 ```sh
 VERCEL_API_TOKEN="<Vercel-API-token>"
@@ -350,10 +355,19 @@ VERCEL_PROJECT_ID="<Vercel-project-id>"
 VERCEL_PROJECT_NAME="<Vercel-project-name>"
 VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
 VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
 ```
 
 Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
-only for the Develop switch; the other five values are required for both.
+only for the Develop switch; the other five provider values are required for
+both. The alias suffixes default to Thingtime's two preview namespaces, so forks
+must set both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
+The GitHub App needs Issues or Pull requests write permission to create and
+update its marker comment.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
@@ -2067,15 +2081,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` remains unassigned. Admin CI Control can now create
-an opt-in production-environment preview for a trusted same-repository PR, but
-it deliberately keeps `autoAssignCustomDomains: false` and exposes only the
-generated immutable `*.vercel.app` deployment URL. Do not point the develop
-controller at that suffix, copy the production S3 role into generic Preview,
-or let ordinary Vercel feature/fork previews assume the production AWS role.
-Any future custom production-preview namespace still needs its own protected
-identity, exact production OIDC trust, cleanup, CORS probe, and bucket CORS
-rule before activation.
+`*.previews.thingtime.com` remains detached from the production branch and
+primary domains. Admin CI Control may assign only the exact
+`pr-<number>.previews.thingtime.com` alias to an owned, marker-verified READY
+production-environment preview. Its immutable `*.vercel.app` snapshot remains
+available beside that persistent URL. Do not point the develop controller at
+the production suffix, copy the production S3 role into generic Preview, or let
+ordinary Vercel feature/fork previews assume the production AWS role. The
+production-preview wildcard, exact production OIDC trust, cleanup, and bucket
+CORS rules must remain independently protected.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as

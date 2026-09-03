@@ -503,14 +503,16 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/email/config',
     expect: expectJson(
-      [200],
-      (body) =>
-        body?.ok === true &&
-        isObject(body?.email) &&
-        ['console', 'ses'].includes(body.email.provider) &&
-        typeof body.email.sesSandbox === 'boolean' &&
-        typeof body.email.testRecipient === 'string',
-      'Email config returned provider, sandbox, and test-recipient metadata.'
+      [200, 403],
+      (body, response) =>
+        response.status === 403
+          ? body?.ok === false && body?.error === 'Email config is available only in local development and Vercel previews.'
+          : body?.ok === true &&
+            isObject(body?.email) &&
+            ['console', 'ses'].includes(body.email.provider) &&
+            typeof body.email.sesSandbox === 'boolean' &&
+            typeof body.email.testRecipient === 'string',
+      'Email config returned safe dev/preview metadata or the exact production environment gate.'
     )
   },
   {
@@ -658,7 +660,15 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'health',
     method: 'GET',
     path: '/api/v1/health/nitro',
-    expect: expectJson([200], (body) => body?.service === 'nitro' && body?.state === 'ready', 'Nitro health returned ready.')
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.service === 'nitro' &&
+        body?.state === 'ready' &&
+        body?.storageAccounting?.state === 'ready' &&
+        Number.isSafeInteger(body?.storageAccounting?.expectedVersion),
+      'Nitro health returned ready with current storage accounting.'
+    )
   },
   {
     id: 'health-vercel',

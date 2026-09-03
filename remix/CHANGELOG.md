@@ -70,6 +70,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Signed-in `/lopu` visits now create a persisted chat immediately and replace
   the route with `/lopu/<chat-id>`, preserving history across refreshes.
 
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview builds now maintain one
+  GitHub App-owned PR comment. It is posted before deployment launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
+
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
 - `@Thingtime login` is now callable before authentication and returns its
