@@ -1407,15 +1407,27 @@ jobs:
           # Match that decode message too: only a body that stopped early
           # produces it, while a genuinely malformed payload (an HTML error
           # page, an auth/permission JSON error) fails with a different message
-          # and still surfaces immediately. Keep every notice on stderr so
+          # and still surfaces immediately. A diff GitHub could not finish
+          # generating is the same class one layer further up: run 33565995120
+          # lost `pulls/291/files` (2896 files) to HTTP 422 "Sorry, this diff
+          # is taking too long to generate", which is a server-side generation
+          # timeout on an idempotent read, not a client validation error — the
+          # identical paginated read replayed cleanly minutes later, all 29
+          # pages. 422 as a status is NOT retryable (an invalid ref, "No
+          # commits between", a failed validation all use it and must still
+          # fail on the first attempt), so the status and that exact message
+          # are matched together. gh prints both on one line but in the
+          # opposite order, which is why this stays two tests, not one regex.
+          # Keep every notice on stderr so
           # command-substitution JSON stays clean, and surface
           # auth/schema/permission failures
           # immediately. Mutating API calls deliberately do not use this helper
           # because a blind retry could duplicate a side effect; every read
           # routed here is idempotent, so replaying a torn-down request is safe.
           gh_read_retry() {
-            local attempt output errors delay transport
+            local attempt output errors delay transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -1427,7 +1439,9 @@ jobs:
                 return 0
               fi
               if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                 || grep -Eq "$transport" "$errors"; then
+                 || grep -Eq "$transport" "$errors" \
+                 || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                      && grep -Fq "$slow_diff" "$errors"; }; then
                 if [ "$attempt" -lt 4 ]; then
                   delay="$((1 << attempt))"
                   echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -1903,6 +1917,20 @@ jobs:
           # GraphQL provides the first 100 changed paths per PR in the shared
           # inventory. Fetch the uncommon larger diffs once, after mergeability
           # polling settles, so overlap labels never silently miss path 101+.
+          # This function's stdout IS the completed inventory document, so its
+          # diagnostics go to stderr like gh_read_retry's: a notice printed on
+          # stdout is captured as the first line of `$all_open`, and every later
+          # `jq` over that variable dies on it. A PR big enough for GitHub to
+          # refuse the file list (HTTP 422, "this diff is taking too long to
+          # generate") is the case that reaches this branch. That 422 is not
+          # always permanent for a given diff: #291's 2896-file list answered in
+          # full, all 29 pages, on a replay of the identical paginated read
+          # minutes after run 33565992797 lost the scan to it. gh_read_retry
+          # classifies it as non-transient all the same -- its retry set is
+          # 408/429/500/502/503/504 and deliberately excludes 422 -- so this
+          # branch is the only handler a 422 ever reaches, and one such PR must
+          # degrade to its first 100 paths instead of taking the whole
+          # repository-wide scan down for every open PR.
           complete_large_pr_files() {
             local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
@@ -1913,7 +1941,7 @@ jobs:
               if ! gh_read_retry --paginate \
                   "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
                 rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number."
+                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels fall back to its first 100 changed paths." >&2
                 continue
               fi
               inventory="$(jq -c \
@@ -2318,7 +2346,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          fail() { echo "::error::$*"; exit 1; }
+          # Same helper, same stream rule as the promotion worker's copy: keep
+          # the two identically-named `fail`s in step so neither drifts into a
+          # captured function and loses its own error message.
+          fail() { echo "::error::$*" >&2; exit 1; }
           encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
@@ -3089,8 +3120,9 @@ jobs:
           # Retry only read-only metadata commands and keep diagnostics off
           # stdout so command-substitution JSON remains parseable.
           gh_read_retry() {
-            local attempt delay output errors transport
+            local attempt delay output errors transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-detect-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -3103,8 +3135,12 @@ jobs:
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
+              # GitHub's diff-generation timeout does carry one, but 422 as a
+              # status is not retryable, so it is paired with its exact message.
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                   || grep -Eq "$transport" "$errors"; } \
+                   || grep -Eq "$transport" "$errors" \
+                   || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                        && grep -Fq "$slow_diff" "$errors"; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -4380,8 +4416,9 @@ jobs:
           set -euo pipefail
 
           gh_read_retry() {
-            local attempt delay output errors transport
+            local attempt delay output errors transport slow_diff
             transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
             output="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.out"
             errors="$RUNNER_TEMP/lopu-review-prepare-gh-${BASHPID:-$$}.err"
             for attempt in 1 2 3 4; do
@@ -4394,8 +4431,12 @@ jobs:
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
+              # GitHub's diff-generation timeout does carry one, but 422 as a
+              # status is not retryable, so it is paired with its exact message.
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
-                   || grep -Eq "$transport" "$errors"; } \
+                   || grep -Eq "$transport" "$errors" \
+                   || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                        && grep -Fq "$slow_diff" "$errors"; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -4489,10 +4530,35 @@ jobs:
             fetch_ref "$head"
             base_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$base^{commit}")"
             head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
-            merge_sha="$(gh api "repos/$REPO/git/ref/pull/$number/merge" --jq '.object.sha' 2>/dev/null || true)"
-            if [ -n "$merge_sha" ] && ! [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::PR #$number returned an invalid merge-ref SHA."
-              exit 1
+            # `gh api` writes GitHub's JSON error body to stdout, so `|| true`
+            # captured that body for a missing synthetic merge ref and the
+            # shape check below then aborted the whole review batch. Candidates
+            # are filtered on a `gh pr list` snapshot, but GitHub drops
+            # `refs/pull/N/merge` while it recomputes after the base advances,
+            # so a normal race legitimately 404s here. `merge_sha` only widens
+            # the CodeQL alert filter below and is optional there: keep the
+            # exit status, leave it empty on a failed read, and reserve the
+            # hard error for a successful response with a malformed SHA.
+            # Because that empty outcome is now soft, the read has to be
+            # retried like the other idempotent metadata reads in this step:
+            # `gh_read_retry` replays a 5xx or transport reset instead of
+            # letting it silently narrow the alert snapshot below, and it
+            # never puts a failing response body on stdout at all. Announce
+            # the narrowed snapshot so a missing merge ref stays visible.
+            merge_sha=""
+            if candidate_merge_sha="$(
+              gh_read_retry api "repos/$REPO/git/ref/pull/$number/merge" \
+                --jq '.object.sha'
+            )"; then
+              if [[ "$candidate_merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
+                merge_sha="$candidate_merge_sha"
+              elif [ -n "$candidate_merge_sha" ]; then
+                echo "::error::PR #$number returned an invalid merge-ref SHA."
+                exit 1
+              fi
+            fi
+            if [ -z "$merge_sha" ]; then
+              echo "::notice::PR #$number has no readable merge ref; Lopu reviews its exact head and only head-ref CodeQL alerts this pass."
             fi
             worktree="$review_root/$number"
             git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
@@ -6273,7 +6339,13 @@ jobs:
           live_ref_sha() {
             GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
-          fail() { echo "::error::$*"; exit 1; }
+          # Annotation on stderr, for the same reason as gh_read_retry's: this
+          # helper is reached from inside make_attestation(), whose stdout is
+          # captured by `attestation="$(make_attestation "$final_head")"`. On
+          # stdout the message lands in that variable and the `exit 1` only
+          # leaves the substitution's subshell, so the step aborted under
+          # `set -e` with both streams empty and nothing to diagnose it by.
+          fail() { echo "::error::$*" >&2; exit 1; }
           (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
             || fail "Validated model audit context is oversized or contains control characters."
           case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac
@@ -7093,7 +7165,12 @@ jobs:
               delay="$((attempt * 2))"
               [ "$attempt" -eq 4 ] || sleep "$delay"
             done
-            echo "::warning::Could not read sibling resolver jobs after four attempts."
+            # Same rule as complete_large_pr_files: this runs inside
+            # `jobs="$(read_jobs || true)"`, so stdout belongs to the job
+            # document. The caller's `type == "array"` guard already absorbs a
+            # polluted value, but the annotation itself was being swallowed
+            # into the variable instead of reaching the log.
+            echo "::warning::Could not read sibling resolver jobs after four attempts." >&2
             sed -n '1,12p' "$errors" >&2 || true
             rm -f "$output" "$errors"
             return 1
