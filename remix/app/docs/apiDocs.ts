@@ -801,16 +801,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.0.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    featureVersion: '1.1.0',
+    summary: 'Enable or disable exact-SHA develop and production-environment previews and publish their snapshot and persistent URLs to the pull request.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. One GitHub App-owned marker comment lists both the immutable snapshot URL and the PR/environment-scoped persistent URL for every enabled environment; READY receipts move only that persistent alias to the verified current snapshot. Production enabling requires an explicit acknowledgement. Credential values remain server-only, automatic domain assignment stays disabled, primary domains are never moved, and disabling removes only aliases and deployments carrying Thingtime\'s PR-and-environment ownership markers.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
       'Select a same-repository open pull request.',
       'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
-      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+      'Follow either URL pair in the single updated PR comment and the signed webhook status in CI Control.'
     ],
     requestExamples: [
       {
@@ -829,8 +829,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored and the exact-SHA deployment created or reused.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+        description: 'Policy stored, the exact-SHA deployment created or reused, and the PR comment created or refreshed.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/' }, publication: { commented: true, previews: [{ environment: 'develop', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/' }] } }
       },
       { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]

@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview builds now maintain one
+  GitHub App-owned PR comment with each environment's immutable snapshot URL
+  and PR-scoped persistent URL. READY receipts move only the matching alias to
+  the verified current deployment, while disable/close cleanup remains bounded
+  to Thingtime-owned preview resources.
+
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 
 - Grouped summary; details in the PR note

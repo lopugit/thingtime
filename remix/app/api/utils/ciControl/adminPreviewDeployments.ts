@@ -1,8 +1,21 @@
 import { githubRequest, repositoryName } from './githubClient';
-import { adminPreviewDeploymentPayload, type CiPreviewEnvironment } from './previewPolicyCore';
+import {
+  adminPreviewCommentBody,
+  adminPreviewPersistentHostname,
+  adminPreviewRemovedCommentBody,
+  adminPreviewSnapshotUrl,
+  isOwnedAdminPreviewComment,
+  type AdminPreviewCommentRow
+} from './adminPreviewPublicationCore';
+import {
+  adminPreviewDeploymentPayload,
+  type CiPreviewEnvironment,
+  type CiPreviewPolicy
+} from './previewPolicyCore';
 import { listCiPreviewPolicies, recordCiEvent, upsertCiEntity } from './store';
 
 const ACTIVE_VERCEL_STATES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING', 'READY']);
+const MAX_GITHUB_COMMENT_PAGES = 10;
 
 type PreviewPullRequest = {
   number: number;
@@ -24,7 +37,11 @@ const previewConfig = (environment: CiPreviewEnvironment) => ({
   projectId: required('VERCEL_PROJECT_ID'),
   projectName: process.env.VERCEL_PROJECT_NAME?.trim() || 'thingtime',
   gitRepoId: Number(required('VERCEL_GITHUB_REPO_ID')),
-  developEnvironmentId: environment === 'develop' ? required('VERCEL_CUSTOM_ENVIRONMENT_ID') : undefined
+  developEnvironmentId: environment === 'develop' ? required('VERCEL_CUSTOM_ENVIRONMENT_ID') : undefined,
+  aliasSuffixes: {
+    develop: process.env.PREVIEW_ALIAS_SUFFIX?.trim() || 'previews.dev.thingtime.com',
+    production: process.env.PRODUCTION_PREVIEW_ALIAS_SUFFIX?.trim() || 'previews.thingtime.com'
+  }
 });
 
 export const ciAdminPreviewReadiness = () => {
@@ -86,6 +103,119 @@ const listOwnedDeployments = async (projectId: string, prNumber: number, environ
   return (payload.deployments ?? []).filter((deployment) => ownedDeployment(deployment, { prNumber, environment }));
 };
 
+export type AdminPreviewDeploymentResult = {
+  environment: CiPreviewEnvironment;
+  deploymentId: string;
+  sha: string;
+  status: string;
+  url: string | null;
+  snapshotUrl: string | null;
+  persistentUrl: string;
+};
+
+const deploymentStatus = (deployment: any): string =>
+  String(deployment?.readyState ?? deployment?.state ?? 'queued').toLowerCase();
+
+const deploymentCreatedAt = (deployment: any): number => {
+  const value = deployment?.createdAt ?? deployment?.created;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const newestOwnedDeployment = (deployments: any[], input: { prNumber: number; environment: CiPreviewEnvironment; sha: string }) =>
+  deployments
+    .filter((deployment) => ownedDeployment(deployment, input))
+    .sort((left, right) => deploymentCreatedAt(right) - deploymentCreatedAt(left))[0] ?? null;
+
+const persistentUrlFor = (prNumber: number, environment: CiPreviewEnvironment): string => {
+  const config = previewConfig(environment);
+  return `https://${adminPreviewPersistentHostname(prNumber, environment, config.aliasSuffixes)}/`;
+};
+
+const getOwnedAlias = async (projectId: string, alias: string) => {
+  const query = new URLSearchParams({ projectId });
+  const found = await vercelRequest<any>(`/v4/aliases/${encodeURIComponent(alias)}?${query}`, { accept: [200, 404] });
+  if (!found?.alias) return null;
+  if (found.alias !== alias || found.projectId !== projectId || !/^dpl_[A-Za-z0-9]+$/.test(found.deploymentId ?? '')) {
+    throw new Error('Persistent preview alias ownership did not match the configured project');
+  }
+  return found;
+};
+
+const assignPersistentAlias = async (
+  pr: PreviewPullRequest,
+  environment: CiPreviewEnvironment,
+  deploymentId: string
+): Promise<string> => {
+  const config = previewConfig(environment);
+  const alias = adminPreviewPersistentHostname(pr.number, environment, config.aliasSuffixes);
+  const deployment = await vercelRequest<any>(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
+  if (
+    !ownedDeployment(deployment, { prNumber: pr.number, environment, sha: pr.head!.sha }) ||
+    deploymentStatus(deployment) !== 'ready'
+  ) {
+    throw new Error('Refusing to publish an unverified or non-ready preview deployment');
+  }
+  const existing = await getOwnedAlias(config.projectId, alias);
+  if (existing?.deploymentId === deploymentId) return `https://${alias}/`;
+  try {
+    const assigned = await vercelRequest<any>(`/v2/deployments/${encodeURIComponent(deploymentId)}/aliases`, {
+      method: 'POST',
+      accept: [200],
+      body: { alias }
+    });
+    if (assigned?.alias !== alias) throw new Error('Vercel assigned an unexpected persistent preview alias');
+  } catch (error) {
+    const reconciled = await getOwnedAlias(config.projectId, alias);
+    if (reconciled?.deploymentId !== deploymentId) throw error;
+  }
+  const verified = await getOwnedAlias(config.projectId, alias);
+  if (verified?.deploymentId !== deploymentId) throw new Error('Persistent preview alias did not resolve to the expected deployment');
+  return `https://${alias}/`;
+};
+
+const removePersistentAlias = async (prNumber: number, environment: CiPreviewEnvironment): Promise<boolean> => {
+  const config = previewConfig(environment);
+  const alias = adminPreviewPersistentHostname(prNumber, environment, config.aliasSuffixes);
+  const found = await getOwnedAlias(config.projectId, alias);
+  if (!found) return false;
+  const deployment = await vercelRequest<any>(`/v13/deployments/${encodeURIComponent(found.deploymentId)}?withGitRepoInfo=true`, {
+    accept: [200, 404]
+  });
+  if (deployment?.id && !ownedDeployment(deployment, { prNumber, environment })) {
+    throw new Error('Refusing to remove a persistent alias owned by another preview');
+  }
+  await vercelRequest(`/v2/aliases/${encodeURIComponent(found.uid)}`, { method: 'DELETE', accept: [200, 204, 404] });
+  return true;
+};
+
+const configuredGithubAppId = (): number => {
+  const value = Number(process.env.THINGTIME_GITHUB_APP_ID);
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('GitHub App id is not configured');
+  return value;
+};
+
+const upsertPreviewComment = async (repository: string, prNumber: number, body: string, createIfMissing: boolean) => {
+  const githubAppId = configuredGithubAppId();
+  let existing: any = null;
+  for (let page = 1; page <= MAX_GITHUB_COMMENT_PAGES; page += 1) {
+    const comments = await githubRequest<any[]>(`/repos/${repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
+    if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
+    existing = comments.find((comment) => isOwnedAdminPreviewComment(comment, githubAppId));
+    if (existing || comments.length < 100) break;
+    if (page === MAX_GITHUB_COMMENT_PAGES) throw new Error('GitHub preview comment scan exceeded its safety bound');
+  }
+  if (existing) {
+    await githubRequest(`/repos/${repository}/issues/comments/${existing.id}`, { method: 'PATCH', body: { body } });
+    return { commented: true, created: false };
+  }
+  if (!createIfMissing) return { commented: false, created: false };
+  await githubRequest(`/repos/${repository}/issues/${prNumber}/comments`, { method: 'POST', body: { body } });
+  return { commented: true, created: true };
+};
+
 export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: CiPreviewEnvironment, actorId: string) => {
   const repository = repositoryName();
   const config = previewConfig(environment);
@@ -117,7 +247,9 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
   if (!/^dpl_[A-Za-z0-9]+$/.test(deploymentId) || !ownedDeployment(deployment, { prNumber: pr.number, environment, sha: pr.head!.sha })) {
     throw new Error('Vercel returned an unverified preview deployment');
   }
-  const url = typeof deployment.url === 'string' ? `https://${deployment.url}` : null;
+  const snapshotUrl = adminPreviewSnapshotUrl(deployment.url);
+  if (!snapshotUrl) throw new Error('Vercel returned an invalid preview deployment URL');
+  const persistentUrl = persistentUrlFor(pr.number, environment);
   const entity = await upsertCiEntity({
     kind: 'ci-preview',
     provider: 'vercel',
@@ -125,7 +257,7 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
     externalId: deploymentId,
     title: `PR #${pr.number} ${environment} preview`,
     status: String(deployment.readyState ?? deployment.state ?? 'queued').toLowerCase(),
-    url,
+    url: snapshotUrl,
     occurredAt: new Date(),
     data: {
       deploymentId,
@@ -134,7 +266,9 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
       previewEnvironment: environment,
       ref: pr.head!.ref,
       sha: pr.head!.sha,
-      target: environment === 'production' ? 'production' : 'develop'
+      target: environment === 'production' ? 'production' : 'develop',
+      snapshotUrl,
+      persistentUrl
     }
   });
   await recordCiEvent({
@@ -150,12 +284,22 @@ export const buildAdminPrPreview = async (pr: PreviewPullRequest, environment: C
     occurredAt: new Date(),
     data: { prNumber: pr.number }
   });
-  return { deploymentId, status: String(deployment.readyState ?? deployment.state ?? 'queued').toLowerCase(), url };
+  const status = deploymentStatus(deployment);
+  return {
+    environment,
+    deploymentId,
+    sha: pr.head!.sha!,
+    status,
+    url: snapshotUrl,
+    snapshotUrl,
+    persistentUrl
+  } satisfies AdminPreviewDeploymentResult;
 };
 
 export const removeAdminPrPreviews = async (prNumber: number, environment: CiPreviewEnvironment) => {
   const config = previewConfig(environment);
   const deployments = await listOwnedDeployments(config.projectId, prNumber, environment);
+  const aliasRemoved = await removePersistentAlias(prNumber, environment);
   let removed = 0;
   for (const deployment of deployments) {
     const id = String(deployment.id ?? deployment.uid ?? '');
@@ -163,8 +307,85 @@ export const removeAdminPrPreviews = async (prNumber: number, environment: CiPre
     await vercelRequest(`/v13/deployments/${encodeURIComponent(id)}`, { method: 'DELETE', accept: [200, 204, 404] });
     removed += 1;
   }
-  return { removed };
+  return { removed, aliasRemoved };
 };
+
+export const publishAdminPrPreviewComment = async (input: {
+  pr: PreviewPullRequest;
+  policy: CiPreviewPolicy;
+  knownDeployments?: AdminPreviewDeploymentResult[];
+}) => {
+  const repository = repositoryName();
+  const enabled = (['develop', 'production'] as const).filter((environment) => input.policy[environment]);
+  const known = new Map((input.knownDeployments ?? []).map((deployment) => [deployment.environment, deployment]));
+  const rows: AdminPreviewCommentRow[] = [];
+  for (const environment of enabled) {
+    const config = previewConfig(environment);
+    const fromKnown = known.get(environment);
+    const deployment = newestOwnedDeployment(await listOwnedDeployments(config.projectId, input.pr.number, environment), {
+      prNumber: input.pr.number,
+      environment,
+      sha: input.pr.head!.sha!
+    });
+    const listedDeploymentId = String(deployment?.id ?? deployment?.uid ?? '');
+    const knownMatchesNewest = Boolean(fromKnown?.deploymentId) && fromKnown?.deploymentId === listedDeploymentId;
+    const deploymentId = listedDeploymentId || fromKnown?.deploymentId || '';
+    const status = knownMatchesNewest || !deployment ? fromKnown?.status ?? deploymentStatus(deployment) : deploymentStatus(deployment);
+    const snapshotUrl =
+      knownMatchesNewest || !deployment ? fromKnown?.snapshotUrl ?? adminPreviewSnapshotUrl(deployment?.url) : adminPreviewSnapshotUrl(deployment?.url);
+    let persistentUrl = persistentUrlFor(input.pr.number, environment);
+    if (status === 'ready' && /^dpl_[A-Za-z0-9]+$/.test(deploymentId)) {
+      persistentUrl = await assignPersistentAlias(input.pr, environment, deploymentId);
+    }
+    rows.push({ environment, status, snapshotUrl, persistentUrl });
+  }
+  const comment = await upsertPreviewComment(
+    repository,
+    input.pr.number,
+    adminPreviewCommentBody({ prNumber: input.pr.number, sha: input.pr.head!.sha!, rows }),
+    rows.length > 0
+  );
+  return { ...comment, previews: rows };
+};
+
+export const refreshAdminPrPreviewPublication = async (
+  prNumber: number,
+  knownDeployments: AdminPreviewDeploymentResult[] = []
+) => {
+  const repository = repositoryName();
+  const policy = (await listCiPreviewPolicies(repository)).find((candidate) => candidate.prNumber === prNumber);
+  if (!policy || (!policy.develop && !policy.production)) return { commented: false, previews: [] as AdminPreviewCommentRow[] };
+  let pr: PreviewPullRequest;
+  try {
+    pr = await validatedPreviewPullRequest(prNumber);
+  } catch {
+    return { commented: false, previews: [] as AdminPreviewCommentRow[] };
+  }
+  return publishAdminPrPreviewComment({
+    pr,
+    policy,
+    knownDeployments: knownDeployments.filter((deployment) => deployment.sha === pr.head!.sha)
+  });
+};
+
+export const refreshAdminPrPreviewPublicationForDeployment = async (input: {
+  prNumber: number;
+  environment: CiPreviewEnvironment;
+  deploymentId: string;
+  sha: string;
+  status: string;
+  snapshotUrl: string | null;
+}) =>
+  refreshAdminPrPreviewPublication(input.prNumber, [
+    {
+      ...input,
+      url: input.snapshotUrl,
+      persistentUrl: persistentUrlFor(input.prNumber, input.environment)
+    }
+  ]);
+
+const markAdminPrPreviewCommentRemoved = async (repository: string, prNumber: number) =>
+  upsertPreviewComment(repository, prNumber, adminPreviewRemovedCommentBody(prNumber), false);
 
 const PREVIEW_REFRESH_ACTIONS = new Set(['opened', 'reopened', 'ready_for_review', 'synchronize']);
 
@@ -176,7 +397,9 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
   const enabled = (['develop', 'production'] as const).filter((environment) => policy[environment]);
   if (action === 'closed') {
     const results = await Promise.allSettled(enabled.map((environment) => removeAdminPrPreviews(prNumber, environment)));
-    return { attempted: enabled.length, failures: results.filter((result) => result.status === 'rejected').length };
+    const failures = results.filter((result) => result.status === 'rejected').length;
+    if (!failures) await markAdminPrPreviewCommentRemoved(repository, prNumber);
+    return { attempted: enabled.length, failures };
   }
   if (!PREVIEW_REFRESH_ACTIONS.has(action)) return { attempted: 0, failures: 0 };
 
@@ -184,7 +407,25 @@ export const syncAdminPrPreviewsForPullRequest = async (prNumber: number, action
   const results = await Promise.allSettled(
     enabled.map((environment) => buildAdminPrPreview(pr, environment, 'github-webhook'))
   );
-  const failures = results.filter((result) => result.status === 'rejected').length;
+  const knownDeployments = results.map((result, index) =>
+    result.status === 'fulfilled'
+      ? result.value
+      : {
+          environment: enabled[index],
+          deploymentId: '',
+          sha: pr.head!.sha!,
+          status: 'failed',
+          url: null,
+          snapshotUrl: null,
+          persistentUrl: persistentUrlFor(prNumber, enabled[index])
+        }
+  );
+  let failures = results.filter((result) => result.status === 'rejected').length;
+  try {
+    await publishAdminPrPreviewComment({ pr, policy, knownDeployments });
+  } catch {
+    failures += 1;
+  }
   if (failures) {
     await recordCiEvent({
       provider: 'thingtime',

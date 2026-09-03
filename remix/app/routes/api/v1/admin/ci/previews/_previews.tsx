@@ -3,6 +3,7 @@ import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import {
   buildAdminPrPreview,
+  publishAdminPrPreviewComment,
   removeAdminPrPreviews,
   validatedPreviewPullRequest
 } from '~/api/utils/ciControl/adminPreviewDeployments';
@@ -39,7 +40,12 @@ export const action = ({ request }: { request: Request }) =>
         headRef: String(pr.head?.ref),
         actorId: gate.user.id
       });
-      return json({ ok: true, policy, deployment });
+      const publication = await publishAdminPrPreviewComment({
+        pr,
+        policy,
+        knownDeployments: body.enabled && 'deploymentId' in deployment ? [deployment] : []
+      }).catch(() => ({ commented: false, created: false, previews: [] }));
+      return json({ ok: true, policy, deployment, publication });
     } catch (error) {
       return json(
         { ok: false, error: error instanceof Error ? error.message : 'Preview policy could not be updated' },
