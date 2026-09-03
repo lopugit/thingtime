@@ -66,6 +66,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'lopu',
+		label: 'Lopu',
+		icon: '🦄',
+		to: '/lopu',
+		authOnly: true,
+		children: [
+			{ id: 'lopu-voice', label: 'Voice chat', icon: '🎙️', to: '/lopu', authOnly: true },
+			{ id: 'lopu-vault', label: 'Secure Vault', icon: '🔐', to: '/settings', authOnly: true }
+		]
+	},
+	{
 		id: 'search',
 		label: 'Search',
 		icon: '🔍',

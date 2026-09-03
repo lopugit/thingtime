@@ -8,6 +8,7 @@ import { NotificationSettingsSection } from './NotificationSettings';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
+import { SecureVault } from './SecureVault';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
@@ -521,6 +522,14 @@ export const SettingsPage = () => {
             <TokenMinter key={user.id} userId={user.id} />
           </SettingsSection>
         )}
+
+		{/* Every account gets the same write-only encrypted key/value store as
+		    the admin integration console, scoped to that account's private Things. */}
+		{user && !user.temporary && (
+			<SettingsSection eyebrow="Secure Vault 🔐" description="Encrypted passwords, keys, environments, and the AI provider connections Lopu can use for this account.">
+				<SecureVault key={user.id} />
+			</SettingsSection>
+		)}
 
         {/* notifications (auth only) — per-type switches for the bell */}
         {user && <NotificationSettingsSection user={user} />}

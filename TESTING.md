@@ -93,6 +93,36 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Lopu voice + personal Secure Vault
+
+- [ ] Open `/lopu` at desktop and 390px mobile widths; scroll the conversation
+      from top to bottom, open and close the gear before and during a session,
+      and confirm the header, settings card, messages, and fixed composer never
+      clip, overlap, or cause horizontal page scrolling.
+- [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
+      test environment. Refresh and verify only metadata returns to the
+      browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
+      without a new token retains the stored token; deleting removes it.
+- [ ] Select that provider per chat. Confirm continuous listening pauses while
+      the provider responds and while Lopu speaks, then resumes without hearing
+      Lopu's own voice. Turn on **Text response** before, during, and after the
+      session and verify replies render but no speech plays.
+- [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
+      each creates a separately numbered, timestamped, owner-private Thing page
+      and streams back into chat as a quote with a working page link. Provider
+      selection stays disabled and no provider request occurs in this mode.
+- [ ] Reject unauthenticated vault/voice requests, oversized bodies, missing
+      provider tokens, non-HTTPS or private/local endpoints, unallowlisted
+      custom hosts, private DNS resolutions, redirects, oversized provider
+      responses, and rate-limit-store failures. Error responses must not echo
+      provider bodies or credentials.
+- [ ] In the iOS app, grant microphone and speech access from the user action,
+      start Lopu, lock the device, and verify recognition/replies continue and
+      the Live Activity moves through listening, thinking/transcribing, and
+      speaking. Confirm native reply requests carry only unexpired cookies
+      matching the active Thingtime origin and API path. Stop the session and
+      confirm the microphone, audio session, and Live Activity all end.
+
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 
 - [ ] As an administrator, open **Dev → Deployment peers**. Verify the first

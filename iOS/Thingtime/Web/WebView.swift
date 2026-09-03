@@ -106,6 +106,14 @@ struct WebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
+        private let lopuVoice = LopuVoiceSessionController()
+
+        override init() {
+            super.init()
+            lopuVoice.sendToWeb = { [weak self] type, payload in
+                self?.sendToWeb(type: type, payload: payload)
+            }
+        }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
@@ -118,13 +126,36 @@ struct WebView: UIViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == WebView.nativeMessageHandlerName else { return }
-
-            sendToWeb(type: "native-ack", payload: [
-                "received": jsonCompatibleValue(message.body)
-            ])
+            guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
+                sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
+                return
+            }
+            switch type {
+            case "lopu-voice-start":
+                guard let webView, let rootURL = loadedRootURL else { return }
+                let payload = body["payload"] as? [String: Any] ?? [:]
+                let settings = LopuVoiceSessionController.Settings(
+                    textResponse: payload["textResponse"] as? Bool ?? false,
+                    transcribeMode: payload["transcribeMode"] as? Bool ?? false,
+                    providerId: payload["providerId"] as? String ?? "",
+                    sessionId: payload["sessionId"] as? String ?? "voice-\(UUID().uuidString)"
+                )
+                webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
+                    let replyURL = URL(string: "/api/v1/lopu/voice/reply", relativeTo: rootURL)?.absoluteURL ?? rootURL
+                    let scopedCookies = self?.cookies(cookies, matching: replyURL) ?? []
+                    let header = HTTPCookie.requestHeaderFields(with: scopedCookies)["Cookie"] ?? ""
+                    Task { @MainActor in
+                        self?.lopuVoice.start(settings: settings, baseURL: rootURL, cookieHeader: header)
+                    }
+                }
+            case "lopu-voice-stop":
+                lopuVoice.stop()
+            default:
+                sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
+            }
         }
 
-        private func sendToWeb(type: String, payload: Any) {
+        fileprivate func sendToWeb(type: String, payload: Any) {
             let envelope: [String: Any] = [
                 "type": type,
                 "payload": jsonCompatibleValue(payload),
@@ -141,6 +172,24 @@ struct WebView: UIViewRepresentable {
             webView?.evaluateJavaScript(
                 "window.thingtimeNativeBridge?.receiveMessageFromNative(\(json));"
             )
+        }
+
+        private func cookies(_ cookies: [HTTPCookie], matching url: URL) -> [HTTPCookie] {
+            guard let host = url.host?.lowercased() else { return [] }
+            let requestPath = url.path.isEmpty ? "/" : url.path
+            let isHTTPS = url.scheme?.lowercased() == "https"
+            let now = Date()
+            return cookies.filter { cookie in
+                let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                let cookiePath = cookie.path.isEmpty ? "/" : cookie.path
+                let domainMatches = host == domain || host.hasSuffix(".\(domain)")
+                let pathMatches = requestPath == cookiePath
+                    || (cookiePath.hasSuffix("/") && requestPath.hasPrefix(cookiePath))
+                    || requestPath.hasPrefix("\(cookiePath)/")
+                let secureMatches = !cookie.isSecure || isHTTPS
+                let unexpired = cookie.expiresDate.map { $0 > now } ?? true
+                return domainMatches && pathMatches && secureMatches && unexpired
+            }
         }
 
         private func jsonCompatibleValue(_ value: Any) -> Any {

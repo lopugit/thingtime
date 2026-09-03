@@ -179,6 +179,7 @@ export const router = createBrowserRouter([
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
+			{ path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page

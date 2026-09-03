@@ -17,6 +17,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Lopu voice, Live Activities + personal Secure Vault — Codex (AI)
+
+- Added continuous Lopu voice chat on web and iOS with persistent in-session
+  settings, optional text-only replies, provider-per-chat selection, and a
+  feedback-loop guard that pauses listening while Lopu answers.
+- Added Transcribe mode: every final utterance becomes a timestamped, numbered,
+  owner-private Thing page and streams back into chat as a linked quote.
+- Added iOS background audio and a Live Activity / Dynamic Island surface for
+  listening, thinking, transcribing, and speaking while the device is locked.
+- Added a user-facing AES-256-GCM Secure Vault for environment-grouped
+  password/key-value records and write-only BYO provider tokens, with built-in
+  OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
+  server-allowlisted compatible endpoint path.
+
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 
 - Grouped summary; details in the PR note
