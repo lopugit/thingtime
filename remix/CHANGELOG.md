@@ -26,6 +26,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `AI_WORKFLOW_BASE_MODELS`): `GET /api/v1/ai/models`, admin toggle/seed at
   `POST /api/v1/admin/ai/models`, stored chat defaults at
   `GET|POST /api/v1/settings/lopu-chat-defaults`.
+- **Verified provider keys** (2026-09-04): `GET /api/v1/ai/models` probes each
+  configured key once per process (`GET /v1/models`, 5 s cap, no retries,
+  cached 10 min / 2 min after a failure — `api/utils/ai/providerProbe.ts`)
+  and reports `providers.<p>.{configured, verified, checkedAt, reason?}` +
+  `models[].verified`; a rejected key (401/403) hides its models instead of
+  routing chats into the canned fallback, an unreachable provider leaves them
+  offered. `POST /api/v1/admin/ai/models { probe: true }` forces a re-check
+  (Admin → Lopu models → Provider keys → "Re-check keys"). README documents
+  the probe beside the key env vars; feature versions `ai-models` 1.2.0,
+  `admin-ai-models` 1.1.0, `settings-lopu-chat-defaults` 1.1.0.
 - **Lopu conversations in Messenger** (`externalSource.access === 'lopu'`
   discriminator, one owner member): `GET|POST /api/v1/lopu/chats`,
   `/update`, `/delete`, and the NDJSON turn `POST /api/v1/lopu/chats/reply`

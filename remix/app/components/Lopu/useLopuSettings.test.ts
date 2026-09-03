@@ -281,7 +281,18 @@ describe('model catalog', () => {
 		assert.equal(catalog.models[0].isDefault, true);
 		assert.equal(catalog.models[1].available, false);
 		assert.deepEqual(catalog.defaults, { model: 'claude-opus-5', effort: 'high', speed: 'normal' });
-		assert.deepEqual(catalog.providers, { anthropic: { configured: true }, openai: { configured: false } });
+		// providers.<p> normalises to presence + the probe's verdict (absent on an older server → unverified)
+		assert.deepEqual(catalog.providers, {
+			anthropic: { configured: true, verified: null, checkedAt: null, reason: null },
+			openai: { configured: false, verified: null, checkedAt: null, reason: null }
+		});
+		assert.equal(catalog.models[0].verified, null);
+		const probed = normalizeLopuCatalog({
+			models: [{ id: 'gpt-5', enabled: true, available: false, verified: false }],
+			providers: { openai: { configured: true, verified: false, checkedAt: '2026-09-04T00:00:00.000Z', reason: ' the provider rejected the key (HTTP 401) ' } }
+		});
+		assert.equal(probed.models[0].verified, false);
+		assert.deepEqual(probed.providers.openai, { configured: true, verified: false, checkedAt: '2026-09-04T00:00:00.000Z', reason: 'the provider rejected the key (HTTP 401)' });
 		// `available` falls back to `enabled` when the projection omits it
 		assert.equal(normalizeLopuCatalog({ models: [{ id: 'x', enabled: true }] }).models[0].available, true);
 		assert.deepEqual(normalizeLopuCatalog(null).models, []);

@@ -228,6 +228,12 @@ const run = async () => {
   check('GET /ai/models is public and 200', models.status === 200 && models.body?.ok === true);
   check('catalog lists models with the public shape', modelRows.length > 0 && modelRows.every((row) => typeof row.id === 'string' && typeof row.label === 'string' && ['anthropic', 'openai'].includes(row.provider) && Array.isArray(row.efforts) && Array.isArray(row.speeds) && typeof row.family === 'string' && typeof row.enabled === 'boolean' && typeof row.available === 'boolean' && typeof row.isDefault === 'boolean'));
   check('catalog carries provider status + defaults', models.body?.providers && typeof models.body.providers.anthropic?.configured === 'boolean' && typeof models.body.providers.openai?.configured === 'boolean' && models.body?.defaults && 'model' in models.body.defaults);
+  // keys are verified, not merely detected: providers.<p> carries the bounded
+  // probe's verdict and every model mirrors its provider (design note §1.1)
+  const providerStatusOk = (entry) => !!entry && typeof entry.configured === 'boolean' && (entry.verified === null || typeof entry.verified === 'boolean') && (entry.checkedAt === null || typeof entry.checkedAt === 'string') && (entry.configured || entry.verified === null) && (entry.reason === undefined || typeof entry.reason === 'string');
+  check('providers carry the key probe verdict (configured / verified / checkedAt)', providerStatusOk(models.body?.providers?.anthropic) && providerStatusOk(models.body?.providers?.openai));
+  check('a configured provider has been probed (checkedAt set), an unconfigured one never is', ['anthropic', 'openai'].every((provider) => (models.body?.providers?.[provider]?.configured ? typeof models.body.providers[provider].checkedAt === 'string' : models.body?.providers?.[provider]?.checkedAt === null)));
+  check('every model mirrors its provider verdict and a rejected key hides its models', modelRows.every((row) => row.verified === (models.body?.providers?.[row.provider]?.verified ?? null) && (!row.available || row.verified !== false)));
   check('the catalog response is not cached', (models.headers.get('cache-control') || '').includes('no-store'));
   // the viewer's Secure Vault providers ride on the same response as metadata
   // only (id/name/kind/model/endpointHost/available/reason — never a key)
@@ -494,6 +500,17 @@ const run = async () => {
     check('admin re-seeds the catalog idempotently', seeded.status === 200 && seeded.body?.seeded === modelRows.length && seeded.body?.report?.created === 0 && Array.isArray(seeded.body?.models));
     const afterSeed = await api('/api/v1/ai/models');
     check('re-seeding keeps every enabled flag', afterSeed.body?.models?.every((row) => row.enabled === modelRows.find((entry) => entry.id === row.id)?.enabled));
+
+    // POST { probe: true } bypasses the probe cache: fresh checkedAt for every
+    // configured provider, the same verdict the public catalog then reports
+    const probeStart = Date.now() - 1000;
+    const probed = await api('/api/v1/admin/ai/models', { cookie: admin.cookie, method: 'POST', body: { probe: true } });
+    check('admin re-checks the provider keys', probed.status === 200 && probed.body?.ok === true && probed.body?.probed === true && providerStatusOk(probed.body?.providers?.anthropic) && providerStatusOk(probed.body?.providers?.openai) && Array.isArray(probed.body?.models) && probed.body.models.length === modelRows.length && probed.body?.defaults && 'model' in probed.body.defaults);
+    check('a forced re-check is fresh (checkedAt after the request) for every configured provider', ['anthropic', 'openai'].every((provider) => !probed.body?.providers?.[provider]?.configured || Date.parse(probed.body.providers[provider].checkedAt) >= probeStart));
+    const afterProbe = await api('/api/v1/ai/models');
+    check('the fresh verdict is what the public catalog now reports', JSON.stringify(afterProbe.body?.providers) === JSON.stringify(probed.body?.providers));
+    const nonAdminProbe = await api('/api/v1/admin/ai/models', { cookie: user.cookie, method: 'POST', body: { probe: true } });
+    check('a plain user cannot re-check the keys', nonAdminProbe.status === 403 || nonAdminProbe.status === 401);
 
     const before = publicDefaults.body?.defaults;
     const anthropicRow = modelRows.find((row) => row.provider === 'anthropic') || modelRows[0];

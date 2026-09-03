@@ -206,8 +206,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
   // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
-  // admin catalog toggles + on-demand re-seed (POST /api/v1/admin/ai/models) —
-  // the seed is a batch write; enforced fail-closed at the route
+  // admin catalog toggles, on-demand re-seed and provider-key re-check
+  // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
+  // the seed is a batch write and the probe dials the providers (5 s cap
+  // each); enforced fail-closed at the route
   'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and

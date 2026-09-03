@@ -73,7 +73,8 @@ export type LopuChatDefaults = { model: string | null; effort: string | null; sp
 // their own Secure Vault providers (providerId, which wins over the model)
 export type LopuChatSettings = LopuChatDefaults & { providerId: string | null };
 
-export type LopuProvidersInfo = Partial<Record<'anthropic' | 'openai', { configured: boolean }>>;
+// providers.<p>: key presence + the server's probe verdict (never a value)
+export type LopuProvidersInfo = Partial<Record<'anthropic' | 'openai', { configured: boolean; verified?: boolean | null; checkedAt?: string | null; reason?: string | null }>>;
 
 export type LopuModelsPayload = {
 	models: AiModelPublic[];

@@ -7,6 +7,8 @@ import {
   AI_MODEL_CATALOG,
   aiModelFamilyOf,
   aiProviderStatusFromEnv,
+  applyAiProviderProbe,
+  isAiProviderUsable,
   clampLopuEffort,
   composeAiWorkflowModelChoice,
   DEFAULT_LOPU_CHAT_DEFAULTS,
@@ -18,13 +20,25 @@ import {
   resolveLopuModelChoice,
   validateLopuChatDefaults,
   type AiModelPublic,
-  type AiProviderStatus
+  type AiProviderStatus,
+  type AiProviderStatusEntry
   // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
 } from './modelsCore.ts';
 
-const BOTH_CONFIGURED: AiProviderStatus = { anthropic: { configured: true }, openai: { configured: true } };
-const ANTHROPIC_ONLY: AiProviderStatus = { anthropic: { configured: true }, openai: { configured: false } };
-const NONE: AiProviderStatus = { anthropic: { configured: false }, openai: { configured: false } };
+const CHECKED_AT = '2026-09-04T00:00:00.000Z';
+const status = (configured: boolean, verified: boolean | null = null, reason?: string): AiProviderStatusEntry => ({
+  configured,
+  verified,
+  checkedAt: verified === null ? null : CHECKED_AT,
+  ...(reason ? { reason } : {})
+});
+
+// configured-but-unverified is exactly what the env alone reports
+const BOTH_CONFIGURED: AiProviderStatus = { anthropic: status(true), openai: status(true) };
+const ANTHROPIC_ONLY: AiProviderStatus = { anthropic: status(true), openai: status(false) };
+const NONE: AiProviderStatus = { anthropic: status(false), openai: status(false) };
+// both keys set, the probe accepted Anthropic's and the provider rejected OpenAI's
+const OPENAI_REJECTED: AiProviderStatus = { anthropic: status(true, true), openai: status(true, false, 'the provider rejected the key (HTTP 401)') };
 
 // A public list the way listAiModels builds it: every catalog entry, optional
 // disabled ids, provider availability applied, isDefault flagged.
@@ -83,13 +97,42 @@ test('provider availability is key presence only, honouring the Anthropic auth-t
   assert.deepEqual(aiProviderStatusFromEnv({ ANTHROPIC_API_KEY: 'sk', OPENAI_API_KEY: 'sk' }), BOTH_CONFIGURED);
 });
 
-test('the public projection gates availability on the admin toggle AND the provider key', () => {
+test('a probe verdict layers onto the env status; a rejected key makes the provider unusable, an unknown verdict does not', () => {
+  const unverified = status(true);
+  assert.deepEqual(applyAiProviderProbe(unverified, { verified: true, checkedAt: CHECKED_AT }), status(true, true));
+  assert.deepEqual(applyAiProviderProbe(unverified, { verified: false, checkedAt: CHECKED_AT, error: 'the provider rejected the key (HTTP 401)' }), OPENAI_REJECTED.openai);
+  assert.deepEqual(applyAiProviderProbe(unverified, { verified: null, checkedAt: CHECKED_AT, error: 'could not reach the provider' }), {
+    configured: true,
+    verified: null,
+    checkedAt: CHECKED_AT,
+    reason: 'could not reach the provider'
+  });
+  // a success never carries a reason, an unconfigured provider ignores any verdict, no verdict = unverified
+  assert.equal('reason' in applyAiProviderProbe(unverified, { verified: true, checkedAt: CHECKED_AT, error: 'stale' }), false);
+  assert.deepEqual(applyAiProviderProbe(status(false), { verified: true, checkedAt: CHECKED_AT }), status(false));
+  assert.deepEqual(applyAiProviderProbe(unverified, null), unverified);
+
+  assert.equal(isAiProviderUsable(status(true, true)), true);
+  assert.equal(isAiProviderUsable(status(true)), true, 'unverifiable keeps the models offered');
+  assert.equal(isAiProviderUsable(status(true, false)), false);
+  assert.equal(isAiProviderUsable(status(false)), false);
+});
+
+test('the public projection gates availability on the admin toggle AND the provider key (configured and not rejected)', () => {
   const opus = getAiModelCatalogEntry('claude-opus-5')!;
+  const sol = getAiModelCatalogEntry('gpt-5.6-sol')!;
   assert.equal(publicAiModel(opus, true, BOTH_CONFIGURED).available, true);
   assert.equal(publicAiModel(opus, false, BOTH_CONFIGURED).available, false);
   assert.equal(publicAiModel(opus, true, NONE).available, false);
+  // the verdict rides on every model of the provider
+  assert.equal(publicAiModel(opus, true, BOTH_CONFIGURED).verified, null);
+  assert.equal(publicAiModel(opus, true, OPENAI_REJECTED).verified, true);
+  assert.equal(publicAiModel(opus, true, OPENAI_REJECTED).available, true);
+  assert.equal(publicAiModel(sol, true, OPENAI_REJECTED).verified, false);
+  assert.equal(publicAiModel(sol, true, OPENAI_REJECTED).available, false, 'a rejected key hides its models even when enabled');
+  assert.equal(publicAiModel(sol, true, NONE).verified, null);
   const projected = publicAiModel(opus, true, ANTHROPIC_ONLY);
-  assert.deepEqual(Object.keys(projected).sort(), ['available', 'efforts', 'enabled', 'family', 'id', 'isDefault', 'label', 'provider', 'speeds']);
+  assert.deepEqual(Object.keys(projected).sort(), ['available', 'efforts', 'enabled', 'family', 'id', 'isDefault', 'label', 'provider', 'speeds', 'verified']);
   assert.equal(projected.isDefault, false);
   // copies, never the catalog's own arrays
   projected.efforts.push('ultra');
@@ -281,6 +324,22 @@ test('lenient mode substitutes and clamps instead of rejecting (stored chat sett
 
   const disabled = resolveLopuModelChoice({ model: 'claude-opus-4-6' }, models, { defaults, lenient: true });
   assert.equal(disabled.ok && disabled.choice.model, 'claude-opus-5');
+});
+
+test('a rejected key behaves like a missing one for defaults and lenient turns, and names itself on a strict pick', () => {
+  const models = publicList(OPENAI_REJECTED, [], { model: 'gpt-5.6-sol', effort: 'high', speed: 'normal' });
+  // the stored OpenAI default yields to the first verified Anthropic model
+  assert.deepEqual(pickLopuChatDefaults(models, { model: 'gpt-5.6-sol', effort: 'high', speed: 'normal' }), { model: 'claude-fable-5', effort: 'high', speed: 'normal' });
+  const strict = resolveLopuModelChoice({ model: 'gpt-5.6-sol' }, models);
+  assert.equal(strict.ok, false);
+  assert.match(strict.ok === false ? strict.error : '', /key invalid/);
+  assert.match(strict.ok === false ? strict.error : '', /OPENAI_API_KEY/);
+  const lenient = resolveLopuModelChoice({ model: 'gpt-5.6-sol' }, models, { lenient: true });
+  assert.equal(lenient.ok && lenient.substituted, true);
+  assert.equal(lenient.ok && lenient.choice.provider, 'anthropic');
+  // an unconfigured key keeps the old wording
+  const missing = resolveLopuModelChoice({ model: 'gpt-5.6-sol' }, publicList(ANTHROPIC_ONLY));
+  assert.match(missing.ok === false ? missing.error : '', /needs OPENAI_API_KEY configured/);
 });
 
 test('with no provider configured the choice still resolves, flagged unavailable, so chat can answer from the canned fallback', () => {

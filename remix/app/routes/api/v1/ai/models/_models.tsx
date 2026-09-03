@@ -10,10 +10,12 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 
 // GET /api/v1/ai/models — the Lopu model catalog: every `ai-model` Thing as a
 // public projection ({ id, label, provider, efforts, speeds, family, enabled,
-// available, isDefault }), the availability-resolved chat defaults, and which
-// providers have a key configured (presence only, never a value). Public by
-// design — the picker renders before login and the list carries no secrets;
-// the session, when present, only keys the rate limit.
+// available, verified, isDefault }), the availability-resolved chat defaults,
+// and per provider whether a key is configured and whether it verified
+// (`providers.<p>` = { configured, verified, checkedAt, reason? } from the
+// bounded, cached key probe — presence and verdicts only, never a value).
+// Public by design — the picker renders before login and the list carries no
+// secrets; the session, when present, only keys the rate limit.
 //
 // A signed-in viewer additionally gets `vaultProviders` — their own Secure
 // Vault AI connections, redacted to { id, name, kind, model, endpointHost,

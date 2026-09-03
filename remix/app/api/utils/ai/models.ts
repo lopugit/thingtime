@@ -4,18 +4,23 @@ import { getStoredLopuChatDefaults } from '../settings/lopuChatDefaults';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
   AI_MODEL_CATALOG,
+  AI_MODEL_PROVIDER_IDS,
   AI_MODEL_THINGTIME,
   AI_MODEL_UNIQUE_KEY_FIELD,
   aiModelShareId,
   aiProviderStatusFromEnv,
+  applyAiProviderProbe,
   pickLopuChatDefaults,
   publicAiModel,
   type AiModelCatalogEntry,
+  type AiModelProviderId,
   type AiModelPublic,
+  type AiProviderProbeOutcome,
   type AiProviderStatus,
   type LopuChatDefaults,
   type StoredLopuChatDefaults
 } from './modelsCore';
+import { probeAiProvider } from './providerProbe';
 
 // The MongoDB-backed half of the Lopu model catalog (design note §1.1).
 //
@@ -31,7 +36,11 @@ import {
 // appears, disappears, or flips availability is this module. Everything else
 // about the catalog — the public projection, provider availability, the
 // defaults grammar, the per-turn choice resolver — is pure and lives in
-// ./modelsCore.ts so the client can import it without Mongo.
+// ./modelsCore.ts so the client can import it without Mongo. Provider keys
+// are VERIFIED, not merely detected: the bounded, cached probe in
+// ./providerProbe.ts asks each provider's /v1/models once, and listAiModels
+// layers its verdict onto `providers` (verified / checkedAt / reason) and
+// `available` (a rejected key hides its models; an unverifiable one does not).
 
 export {
   AI_MODEL_CATALOG,
@@ -53,7 +62,9 @@ export type {
   AiModelFamily,
   AiModelProviderId,
   AiModelPublic,
+  AiProviderProbeOutcome,
   AiProviderStatus,
+  AiProviderStatusEntry,
   LopuChatDefaults,
   LopuModelRequest,
   ResolveLopuModelChoiceOptions,
@@ -79,6 +90,12 @@ export type ListAiModelsResult = {
   models: AiModelPublic[];
   defaults: LopuChatDefaults;
   providers: AiProviderStatus;
+};
+
+export type ListAiModelsOptions = {
+  // force a fresh provider-key probe instead of the cached verdict (the admin
+  // "Re-check keys" action)
+  reprobe?: boolean;
 };
 
 export type SetAiModelEnabledResult = { ok: true; model: AiModelPublic; defaults: LopuChatDefaults };
@@ -107,6 +124,9 @@ export type AiModelsServiceDependencies = {
   getThingsCollection: () => Promise<AiModelThingsCollection>;
   getStoredDefaults: () => Promise<StoredLopuChatDefaults>;
   env: () => Readonly<Record<string, string | undefined>>;
+  // the bounded provider-key probe (./providerProbe.ts); omitted = keys are
+  // reported configured-but-unverified (unit tests, tooling)
+  probeProvider?: (provider: AiModelProviderId, options?: { force?: boolean }) => Promise<AiProviderProbeOutcome | null>;
   now?: () => Date;
   catalog?: readonly AiModelCatalogEntry[];
   log?: (message: string, error?: unknown) => void;
@@ -268,11 +288,28 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
     }
   };
 
-  // The public list. The catalog itself is code, so a Mongo outage degrades
-  // to "every model enabled" (availability still gated by provider keys)
-  // instead of an empty picker — and is logged, never silent.
-  const listAiModels = async (_viewer?: AiModelsViewer): Promise<ListAiModelsResult> => {
+  // Key presence from the env, then the probe's verdict for each configured
+  // provider (in parallel, each bounded by the probe's own timeout). A probe
+  // that fails outright leaves that provider unverified — never unavailable,
+  // never a failed catalog.
+  const resolveProviderStatus = async (options: ListAiModelsOptions): Promise<AiProviderStatus> => {
     const providers = aiProviderStatusFromEnv(dependencies.env());
+    const probe = dependencies.probeProvider;
+    if (!probe) return providers;
+    await Promise.all(
+      AI_MODEL_PROVIDER_IDS.map(async (provider) => {
+        if (!providers[provider].configured) return;
+        try {
+          providers[provider] = applyAiProviderProbe(providers[provider], await probe(provider, { force: options.reprobe === true }));
+        } catch (error) {
+          log(`[ai-models] ${provider} key check failed — leaving the provider unverified`, error);
+        }
+      })
+    );
+    return providers;
+  };
+
+  const readEnabledFlags = async (): Promise<Map<string, boolean>> => {
     const enabledById = new Map<string, boolean>();
     try {
       await ensureAiModelCatalog();
@@ -286,6 +323,15 @@ export const createAiModelsService = (dependencies: AiModelsServiceDependencies)
     } catch (error) {
       log('[ai-models] catalog read unavailable — serving the code catalog with every model enabled', error);
     }
+    return enabledById;
+  };
+
+  // The public list. The catalog itself is code, so a Mongo outage degrades
+  // to "every model enabled" (availability still gated by provider keys)
+  // instead of an empty picker — and is logged, never silent. The provider
+  // probe and the catalog read run side by side.
+  const listAiModels = async (_viewer?: AiModelsViewer, options: ListAiModelsOptions = {}): Promise<ListAiModelsResult> => {
+    const [providers, enabledById] = await Promise.all([resolveProviderStatus(options), readEnabledFlags()]);
     const stored = await readStoredDefaults();
     const models = catalog.map((entry) => publicAiModel(entry, enabledById.get(entry.modelId) ?? true, providers));
     const defaults = pickLopuChatDefaults(models, stored);
@@ -323,7 +369,8 @@ const service = createAiModelsService({
   // land on a request's endpoint-override DB.
   getThingsCollection: async () => (await getHomeThingsCollection()) as unknown as AiModelThingsCollection,
   getStoredDefaults: getStoredLopuChatDefaults,
-  env: () => process.env
+  env: () => process.env,
+  probeProvider: probeAiProvider
 });
 
 export const ensureAiModelCatalog = service.ensureAiModelCatalog;

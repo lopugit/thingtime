@@ -97,6 +97,31 @@ Writer: `remix/app/api/utils/ai/models.ts`
   `providers = { anthropic: { configured: !!process.env.ANTHROPIC_API_KEY }, openai: { configured: !!process.env.OPENAI_API_KEY } }`
   (also honour `ANTHROPIC_AUTH_TOKEN`), and
   `defaults = resolveLopuChatDefaults(models)` = `{ model, effort, speed }`.
+- **Verified keys** (`api/utils/ai/providerProbe.ts`): `configured` is
+  presence, `verified` is a verdict. On the first catalog read per process the
+  server probes each configured provider once —
+  `GET {ANTHROPIC_BASE_URL|https://api.anthropic.com}/v1/models` (`x-api-key`,
+  or `Authorization: Bearer` for `ANTHROPIC_AUTH_TOKEN`, plus
+  `anthropic-version`) and `GET {OPENAI_BASE_URL|https://api.openai.com/v1}/models`
+  (bearer) — 5 s timeout, no retries, `redirect: 'manual'`, in-process cache
+  10 min after a success / 2 min after anything else, in-flight dedupe, never
+  throws, never logs or returns a key, a base URL or a response body. 2xx →
+  `verified: true`; 401/403 → `verified: false` (+ `reason`); everything else
+  (timeout, network error, 3xx, 429, 5xx, malformed base URL) →
+  `verified: null`. `providers.<p>` = `{ configured, verified, checkedAt, reason? }`,
+  `AiModelPublic.verified` mirrors its provider, and
+  `available = enabled && configured && verified !== false` — an unverifiable
+  key never hides a model, a rejected one always does (so a stale key can no
+  longer route every chat into the canned fallback). The service takes the
+  probe as a dependency (`probeProvider`, omitted in unit tests →
+  unverified); `listAiModels(viewer, { reprobe: true })` forces it.
+  `POST /api/v1/admin/ai/models { probe: true }` (bucket `admin.ai.models`,
+  fail-closed) answers `{ ok, probed: true, providers, models, defaults }`;
+  the admin editor shows one row per provider (✓ key verified / ✗ key invalid
+  + reason / ? key unverified / no key, "checked … ago") with a "Re-check
+  keys" button, and the picker's disabled hint reads "<Provider> key invalid"
+  when `verified === false`. Feature versions: `ai-models` 1.2.0,
+  `admin-ai-models` 1.1.0, `settings-lopu-chat-defaults` 1.1.0.
 - `resolveLopuChatDefaults` — settings singleton `Thingtime.LopuChatDefaults`
   (`api/utils/settings/lopuChatDefaults.ts`, same store pattern as the
   waterfall store, admin POST / public GET route
@@ -117,7 +142,8 @@ Routes:
 - `GET /api/v1/ai/models` (optional auth, rate `ai.models` 120/min) → the list above.
 - `POST /api/v1/admin/ai/models` (admin, rate `admin.ai.models` 30/min failClosed)
   body `{ id, enabled }` → `{ ok, model }`; `POST` with `{ seed: true }` re-runs
-  `ensureAiModelCatalog()` and returns `{ ok, seeded, models }`.
+  `ensureAiModelCatalog()` and returns `{ ok, seeded, models }`; `{ probe: true }`
+  re-checks the provider keys → `{ ok, probed, providers, models, defaults }`.
 - `GET|POST /api/v1/settings/lopu-chat-defaults` (public GET, admin POST).
 
 ### 1.2 Lopu conversations in Messenger

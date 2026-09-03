@@ -18,8 +18,15 @@ export type AiModelPublic = {
 	family: string;
 	enabled: boolean;
 	available: boolean;
+	// the provider key's server-side probe verdict: true verified, false
+	// rejected ("key invalid"), null unknown; absent on older servers
+	verified?: boolean | null;
 	isDefault: boolean;
 };
+
+// GET /api/v1/ai/models → providers.<p> — the server key behind a catalog
+// provider: presence plus the bounded probe's verdict (never a value)
+export type LopuProviderKeyInfo = { configured: boolean; verified?: boolean | null; checkedAt?: string | null; reason?: string | null };
 
 // GET /api/v1/ai/models → vaultProviders[] — one of the viewer's own
 // provider connections (name, kind, model, endpoint host; never the key)
@@ -90,10 +97,45 @@ export const providerKeyLabel = (provider: string): string => PROVIDER_KEY_LABEL
 export const vaultKindLabel = (kind: string): string => VAULT_KIND_LABELS[kind] || kind;
 
 /** Why a catalog model cannot be picked right now (null = pickable). */
-export const modelUnavailableReason = (model: Pick<AiModelPublic, 'enabled' | 'available' | 'provider'>): string | null => {
+export const modelUnavailableReason = (model: Pick<AiModelPublic, 'enabled' | 'available' | 'provider' | 'verified'>): string | null => {
 	if (model.enabled === false) return 'disabled by an admin';
-	if (model.available === false) return `needs ${providerKeyLabel(model.provider)} key`;
+	if (model.available === false) return model.verified === false ? `${providerKeyLabel(model.provider)} key invalid` : `needs ${providerKeyLabel(model.provider)} key`;
 	return null;
+};
+
+// ——— provider key status (admin editor) ————————————————————————————————————
+
+export type LopuProviderKeyState = 'verified' | 'invalid' | 'unverified' | 'missing';
+
+/** The server key's state for one catalog provider (from providers.<p>). */
+export const providerKeyState = (info: LopuProviderKeyInfo | null | undefined): LopuProviderKeyState => {
+	if (!info || info.configured !== true) return 'missing';
+	if (info.verified === true) return 'verified';
+	if (info.verified === false) return 'invalid';
+	return 'unverified';
+};
+
+export const PROVIDER_KEY_STATE_LABELS: Record<LopuProviderKeyState, string> = {
+	verified: 'key verified',
+	invalid: 'key invalid',
+	unverified: 'key unverified',
+	missing: 'no key'
+};
+
+/** "checked just now" / "checked 3 min ago" / "checked 2 h ago" / "checked 3 Sep 14:02"; null when unknown. */
+export const describeCheckedAt = (checkedAt: string | null | undefined, now: number = Date.now()): string | null => {
+	if (!checkedAt) return null;
+	const at = Date.parse(checkedAt);
+	if (!Number.isFinite(at)) return null;
+	const seconds = Math.max(0, Math.round((now - at) / 1000));
+	if (seconds < 45) return 'checked just now';
+	const minutes = Math.round(seconds / 60);
+	if (minutes < 60) return `checked ${minutes} min ago`;
+	const hours = Math.round(minutes / 60);
+	if (hours < 24) return `checked ${hours} h ago`;
+	const date = new Date(at);
+	const month = date.toLocaleString('en', { month: 'short' });
+	return `checked ${date.getDate()} ${month} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
 /** Why a vault provider cannot be used right now (null = usable). */

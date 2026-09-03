@@ -184,6 +184,62 @@ test('a foreign doc squatting a catalog shareId is skipped, never edited into a 
   assert.equal(opus.available, true);
 });
 
+test('listAiModels layers the key probe onto providers and availability, forces it on { reprobe }, and survives a probe failure', async () => {
+  const probes: Array<{ provider: string; force: boolean }> = [];
+  const checkedAt = '2026-09-03T00:00:00.000Z';
+  let verdicts: Record<string, unknown> = {
+    anthropic: { verified: true, checkedAt },
+    openai: { verified: false, checkedAt, error: 'the provider rejected the key (HTTP 401)' }
+  };
+  const probeProvider = async (provider: string, options: { force?: boolean } = {}) => {
+    probes.push({ provider, force: options.force === true });
+    const verdict = verdicts[provider];
+    if (verdict instanceof Error) throw verdict;
+    return verdict;
+  };
+  const { service, logs } = createService({ probeProvider });
+
+  const list = await service.listAiModels();
+  assert.deepEqual(list.providers, {
+    anthropic: { configured: true, verified: true, checkedAt },
+    openai: { configured: true, verified: false, checkedAt, reason: 'the provider rejected the key (HTTP 401)' }
+  });
+  assert.deepEqual(probes, [
+    { provider: 'anthropic', force: false },
+    { provider: 'openai', force: false }
+  ]);
+  const sol = list.models.find((model) => model.id === 'gpt-5.6-sol')!;
+  assert.equal(sol.enabled, true);
+  assert.equal(sol.verified, false);
+  assert.equal(sol.available, false, 'a rejected key hides its models');
+  const opus = list.models.find((model) => model.id === 'claude-opus-5')!;
+  assert.equal(opus.verified, true);
+  assert.equal(opus.available, true);
+  assert.equal(list.defaults.model, 'claude-opus-5');
+  assert.equal(JSON.stringify(list).includes('sk-'), false);
+
+  // the admin re-check forces the probe
+  await service.listAiModels(undefined, { reprobe: true });
+  assert.deepEqual(probes.slice(2), [
+    { provider: 'anthropic', force: true },
+    { provider: 'openai', force: true }
+  ]);
+
+  // unconfigured providers are never dialed
+  probes.length = 0;
+  const { service: partial } = createService({ env: () => ({ OPENAI_API_KEY: 'sk-test' }), probeProvider });
+  await partial.listAiModels();
+  assert.deepEqual(probes, [{ provider: 'openai', force: false }]);
+
+  // a probe that throws leaves the key unverified (models offered) and is logged; the catalog is still served
+  verdicts = { anthropic: new Error('boom'), openai: verdicts.openai };
+  const degraded = await service.listAiModels();
+  assert.deepEqual(degraded.providers.anthropic, { configured: true, verified: null, checkedAt: null });
+  assert.equal(degraded.models.find((model) => model.id === 'claude-opus-5')!.available, true);
+  assert.equal(degraded.models.find((model) => model.id === 'gpt-5.6-sol')!.available, false);
+  assert.ok(logs.some((line) => line.includes('anthropic key check failed')));
+});
+
 test('listAiModels projects enabled/available/isDefault from the rows, the env, and the stored defaults', async () => {
   let stored: { model: string; effort: 'ultra' | 'max'; speed: 'fast' | 'normal' } = { model: 'gpt-5.6-sol', effort: 'ultra', speed: 'fast' };
   const { fake, service } = createService({
@@ -195,7 +251,9 @@ test('listAiModels projects enabled/available/isDefault from the rows, the env, 
   assert.equal(list.ok, true);
   assert.equal(list.models.length, AI_MODEL_CATALOG.length);
   assert.deepEqual(list.models.map((model) => model.id), AI_MODEL_CATALOG.map((entry) => entry.modelId));
-  assert.deepEqual(list.providers, { anthropic: { configured: true }, openai: { configured: false } });
+  // without a probe dependency the keys are configured-but-unverified
+  assert.deepEqual(list.providers, { anthropic: { configured: true, verified: null, checkedAt: null }, openai: { configured: false, verified: null, checkedAt: null } });
+  assert.equal(list.models.every((model) => model.verified === null), true);
   // stored model needs OpenAI → first available Anthropic model becomes the default, effort re-clamped
   assert.deepEqual(list.defaults, { model: 'claude-fable-5', effort: 'high', speed: 'normal' });
   assert.deepEqual(list.models.filter((model) => model.isDefault).map((model) => model.id), ['claude-fable-5']);

@@ -2524,18 +2524,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu model catalog',
     endpoint: '/api/v1/ai/models',
-    featureVersion: '1.1.0',
-    summary: 'Lists every AI model Lopu can chat with, its availability, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    featureVersion: '1.2.0',
+    summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
-      'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, and ' +
-      '`available` = enabled AND the provider key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; ' +
-      'OPENAI_API_KEY). `defaults` is the Thingtime.LopuChatDefaults singleton after availability is applied — the stored ' +
-      'model when it is available, else the first available model in catalog order with its effort clamped (preferring high), ' +
-      'else `model: null` when no provider is configured (Lopu then answers from the canned fallback). `providers` reports key ' +
-      'presence only; no value ever leaves the server. Model ids compose into the same `<model>[:effort][:fast]` option ids ' +
+      'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
+      'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
+      'key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; OPENAI_API_KEY) AND that key has not been ' +
+      'rejected. Keys are verified, not merely detected: a bounded server-side probe (GET /v1/models on each configured ' +
+      'provider — ANTHROPIC_BASE_URL / OPENAI_BASE_URL honoured — 5 s cap, no retries, no redirects, cached in-process for ' +
+      '10 minutes, 2 after a failure) answers `providers.<provider>` = { configured, verified, checkedAt, reason? }; 401/403 ' +
+      'marks the key invalid and hides its models, while an unreachable provider, a timeout, or an unexpected status leaves ' +
+      '`verified: null` and the models offered. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
+      'applied — the stored model when it is available, else the first available model in catalog order with its effort ' +
+      'clamped (preferring high), else `model: null` when no provider is usable (Lopu then answers from the canned fallback). ' +
+      '`providers` reports presence and verdicts only; no value ever leaves the server. Model ids compose into the same ' +
+      '`<model>[:effort][:fast]` option ids ' +
       'the AI workflow waterfall stores, and the chat reply endpoint accepts either form. A signed-in viewer additionally ' +
       'receives `vaultProviders` — their own Secure Vault AI connections (Settings → Secure Vault), redacted to ' +
       '{ id, name, kind, model, endpointHost, available, reason? }: never a token and never an endpoint beyond its hostname; ' +
@@ -2550,7 +2556,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: [
       'GET to load the catalog before rendering a model picker (cache it locally; the list carries no secrets).',
-      'Offer only models with available: true; show the rest disabled with a "needs <provider> key" hint.',
+      'Offer only models with available: true; show the rest disabled with a "needs <provider> key" hint — or "<provider> key invalid" when verified is false.',
       'Seed a new conversation from defaults (model, effort, speed); a null model means no provider is configured.',
       'Send the chosen model as { model, effort, speed } or as a composed id such as claude-opus-5:high:fast.',
       'For a session, list vaultProviders ("Your own providers") beside the catalog; send one as providerId to pin it to a chat or run a turn on it, and show reason for an unavailable one.'
@@ -2572,6 +2578,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               family: 'claude',
               enabled: true,
               available: true,
+              verified: true,
               isDefault: true
             },
             {
@@ -2583,11 +2590,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               family: 'gpt',
               enabled: true,
               available: false,
+              verified: null,
               isDefault: false
             }
           ],
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
-          providers: { anthropic: { configured: true }, openai: { configured: false } },
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          },
           vaultProviders: [
             { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'My Claude', kind: 'anthropic', model: 'claude-sonnet-4-6', endpointHost: 'api.anthropic.com', available: true },
             {
@@ -2607,6 +2618,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.',
+      'providers.<provider>.verified is the cached probe verdict (10 minutes after a success, 2 after anything else); administrators force a fresh check with POST /api/v1/admin/ai/models { probe: true }. A probe never blocks the catalog for more than its 5 s cap and never fails it.',
       'vaultProviders is empty for anonymous callers and when the Secure Vault key is not configured; a vault read failure degrades to an empty list, never a failed catalog.'
     ]
   }),
@@ -2615,14 +2627,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Admin Lopu model catalog',
     endpoint: '/api/v1/admin/ai/models',
-    summary: 'Enables or disables one catalog model, or re-seeds the ai-model Things from the code catalog.',
+    featureVersion: '1.1.0',
+    summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
     detail:
       'The only writer of the `ai-model` kind besides the boot-time seed. POST { id, enabled } flips `crystal.enabled` on ' +
       'the genuine system-owned row (a disabled model stays listed but is never selectable and never becomes the default). ' +
       'POST { seed: true } re-runs the idempotent catalog seed: inserts rows for models newly added to the code catalog, ' +
       'heals drifted catalog fields and envelopes, skips (never edits) a foreign doc squatting a catalog shareId, and never ' +
-      'touches `enabled`. GET returns the same list the public catalog serves, for the editor. Responses are private and ' +
-      'uncacheable; the POST rate limit fails closed because the seed is a batch write.',
+      'touches `enabled`. POST { probe: true } forces a fresh provider-key probe — the cached verdict is bypassed and each ' +
+      'configured provider’s GET /v1/models is dialed once more (5 s cap, no retries) — and answers { ok, probed: true, ' +
+      'providers, models, defaults } with the fresh `providers.<provider>` = { configured, verified, checkedAt, reason? } and ' +
+      'the re-projected catalog; sent together with { seed: true } the seed report carries the fresh status too. GET returns ' +
+      'the same list the public catalog serves, for the editor. Responses are private and uncacheable; the POST rate limit ' +
+      '(admin.ai.models) fails closed because the seed is a batch write and the probe dials the providers.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -2632,11 +2649,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET to load the catalog with enabled/available flags and the resolved defaults.',
       'POST { id, enabled } to toggle one model; read model + defaults back from the response.',
       'POST { seed: true } after a catalog code change to insert new rows and heal drift; read report for counts and notes.',
+      'POST { probe: true } after rotating a key, or when the editor shows "key invalid", to re-check every configured provider; read providers back and expect verified: true.',
       'Handle 401/403 for non-admins, 404 for an unknown id, and 429 when the fail-closed limit trips.'
     ],
     requestExamples: [
       { name: 'Disable a model', description: 'Hide GPT-5.6 Sol from every picker.', method: 'POST', body: { id: 'gpt-5.6-sol', enabled: false } },
-      { name: 'Re-seed the catalog', description: 'Insert new catalog models and heal drifted rows.', method: 'POST', body: { seed: true } }
+      { name: 'Re-seed the catalog', description: 'Insert new catalog models and heal drifted rows.', method: 'POST', body: { seed: true } },
+      { name: 'Re-check the provider keys', description: 'Bypass the cached verdict and dial each configured provider once.', method: 'POST', body: { probe: true } }
     ],
     responseExamples: [
       {
@@ -2653,6 +2672,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             family: 'gpt',
             enabled: false,
             available: false,
+            verified: true,
             isDefault: false
           },
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }
@@ -2661,7 +2681,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Catalog re-seeded.',
-        body: { ok: true, seeded: 33, report: { ok: true, total: 33, created: 1, refreshed: 0, unchanged: 32, skipped: 0, notes: [] }, models: [], defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }, providers: { anthropic: { configured: true }, openai: { configured: false } } }
+        body: {
+          ok: true,
+          seeded: 33,
+          report: { ok: true, total: 33, created: 1, refreshed: 0, unchanged: 32, skipped: 0, notes: [] },
+          models: [],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Provider keys re-checked (models omitted here). OpenAI’s key was rejected, so its models are listed unavailable until it is fixed.',
+        body: {
+          ok: true,
+          probed: true,
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: true, verified: false, checkedAt: '2026-09-04T02:10:00.000Z', reason: 'the provider rejected the key (HTTP 401)' }
+          },
+          models: [],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+        }
       },
       { status: 404, description: 'Unknown model id.', body: { ok: false, error: 'Unknown model — id must be a catalog model id' } }
     ]
@@ -2671,6 +2715,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'settings',
     title: 'Lopu chat defaults',
     endpoint: '/api/v1/settings/lopu-chat-defaults',
+    featureVersion: '1.1.0',
     summary: 'Read or administratively set the model, effort, and speed a fresh Lopu conversation starts from.',
     detail:
       'The Thingtime.LopuChatDefaults settings singleton, same store posture as the AI workflow waterfall: GET publicly ' +
@@ -2687,7 +2732,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to read defaults (stored), resolved (effective), the catalog, and provider key presence.',
+      'GET to read defaults (stored), resolved (effective), the catalog, and provider key status (configured + the probe’s verified verdict).',
       'Administrators POST { model, effort?, speed? } to replace the preference.',
       'Pick effort from the model\'s efforts list (null for the provider default) and speed from its speeds list.',
       'Read resolved back to confirm the stored choice is actually reachable with the keys configured.'
@@ -2711,7 +2756,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
           resolved: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
           models: [],
-          providers: { anthropic: { configured: true }, openai: { configured: false } }
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          }
         }
       },
       { status: 400, description: 'Invalid defaults.', body: { ok: false, error: 'effort for Claude Opus 5 must be one of low, medium, high, xhigh, max (or null for the provider default)' } },

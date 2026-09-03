@@ -673,7 +673,8 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'ai-models-catalog',
     name: 'AI model catalog',
-    description: 'GET /api/v1/ai/models returns the Lopu model catalog with per-model availability, the resolved chat defaults, and provider key presence.',
+    description:
+      'GET /api/v1/ai/models returns the Lopu model catalog with per-model availability, the resolved chat defaults, and per-provider key status (configured + the bounded probe’s verified verdict; a rejected key never lists an available model).',
     group: 'lopu',
     method: 'GET',
     path: '/api/v1/ai/models',
@@ -695,17 +696,29 @@ export const apiTests: ApiTestDefinition[] = [
             typeof model?.family === 'string' &&
             typeof model?.enabled === 'boolean' &&
             typeof model?.available === 'boolean' &&
+            (model?.verified === null || typeof model?.verified === 'boolean') &&
             typeof model?.isDefault === 'boolean' &&
-            (!model.available || model.enabled)
+            (!model.available || model.enabled) &&
+            (!model.available || model.verified !== false)
         ) &&
         isObject(body?.defaults) &&
         (body.defaults.model === null || typeof body.defaults.model === 'string') &&
         (body.defaults.speed === 'normal' || body.defaults.speed === 'fast') &&
         isObject(body?.providers) &&
-        typeof body.providers?.anthropic?.configured === 'boolean' &&
-        typeof body.providers?.openai?.configured === 'boolean' &&
+        ['anthropic', 'openai'].every((provider) => {
+          const entry = body.providers?.[provider];
+          return (
+            isObject(entry) &&
+            typeof entry.configured === 'boolean' &&
+            (entry.verified === null || typeof entry.verified === 'boolean') &&
+            (entry.checkedAt === null || typeof entry.checkedAt === 'string') &&
+            (entry.configured || entry.verified === null) &&
+            (entry.reason === undefined || typeof entry.reason === 'string')
+          );
+        }) &&
+        body.models.every((model: any) => model.verified === (body.providers?.[model.provider]?.verified ?? null)) &&
         !JSON.stringify(body).includes('sk-'),
-      'AI model catalog returned with availability, defaults, and provider status.'
+      'AI model catalog returned with availability, defaults, and verified provider status.'
     )
   },
   {
@@ -752,6 +765,17 @@ export const apiTests: ApiTestDefinition[] = [
     anonymous: true,
     body: { id: 'claude-opus-5', enabled: true },
     expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous admin catalog toggle refused.')
+  },
+  {
+    id: 'admin-ai-models-probe-anonymous',
+    name: 'Admin AI provider key re-check requires auth',
+    description: 'POST /api/v1/admin/ai/models { probe: true } refuses anonymous callers before dialing any provider.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/admin/ai/models',
+    anonymous: true,
+    body: { probe: true },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous provider key re-check refused.')
   },
   {
     id: 'settings-lopu-chat-defaults-read',

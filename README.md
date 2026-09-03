@@ -1114,6 +1114,22 @@ LOPU_OPENAI_MODEL="gpt-5.6-sol"     # optional: the OpenAI model used for the `d
 LOPU_TEST_PROVIDER_PACE_MS="12"     # optional: ms between scripted chunks in test mode
 ```
 
+Keys are verified, not merely detected. On the first catalog read per process
+(`GET /api/v1/ai/models`) the server probes each configured provider once —
+`GET https://api.anthropic.com/v1/models` (`ANTHROPIC_BASE_URL` honoured;
+`x-api-key`, or `Authorization: Bearer` for `ANTHROPIC_AUTH_TOKEN`) and
+`GET ${OPENAI_BASE_URL:-https://api.openai.com/v1}/models` — with a 5 s cap, no
+retries and no redirects, and caches the verdict in-process for 10 minutes
+(2 minutes after anything but a success). A 401/403 marks that provider's
+models unavailable (`providers.<p>.verified === false`, picker hint
+"<Provider> key invalid") so a stale or wrong key never routes chats into the
+canned fallback; a timeout, network error or unexpected status leaves them
+offered but unverified (`verified: null`). Admins see the verdict per provider
+at `/admin` → Lopu models → Provider keys and can force a re-check with
+"Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`). Only
+presence and verdicts leave the server — never a value, a response body, or a
+base URL.
+
 Live check against a running stack: `node remix/scripts/verify-lopu.mjs
 http://127.0.0.1:<nitro-port>` (start the stack with `LOPU_CHAT_PROVIDER=test`
 so the reply builds a component and a page deterministically; set

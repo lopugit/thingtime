@@ -4557,14 +4557,31 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
 `test:settings`, `test:schemas`, `test:api-capabilities`; live:
 `node scripts/verify-lopu.mjs <base>` against a stack started with
-`LOPU_CHAT_PROVIDER=test` (99 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`LOPU_CHAT_PROVIDER=test` (121 checks; set `TT_VERIFY_ADMIN_USERNAME` +
 `TT_VERIFY_ADMIN_PASSWORD` for the admin section).
 
 - Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
   every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
-  (`enabled`, `available = enabled && provider key configured`, `isDefault`);
-  the generic `/api/v1/things` paths refuse to create/update/delete
-  `ai-model` rows (protected, control plane).
+  (`enabled`, `available = enabled && provider key configured && not
+  rejected`, `verified`, `isDefault`); `providers.<p>` carries
+  `{ configured, verified, checkedAt, reason? }` from the bounded key probe
+  (`GET /v1/models`, 5 s cap, cached 10 min / 2 min after a failure); the
+  generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
+  rows (protected, control plane).
+- Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
+  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
+  `available: false, verified: false`, the picker shows them disabled with
+  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  and an explicit per-turn pick of one is a 400 naming the rejected key; with
+  the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
+  stay offered with `verified: null` and the admin row reads "? key
+  unverified · could not reach the provider (…)". Admin → Lopu models →
+  Provider keys shows one row per provider (✓ key verified / ✗ key invalid
+  with the reason / ? key unverified / no key, plus "checked … ago");
+  "Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`, bucket
+  `admin.ai.models`) bypasses the cache, toasts the summary and repaints the
+  rows and the model chips; a plain user gets 403. Nothing but presence and
+  verdicts ever reaches the client (`grep sk-` on the response stays empty).
 - Conversations: `/lopu` signed out shows the quiet state + login CTA; signed
   in, the empty state offers four suggestion chips; the composer's model
   picker lists models grouped with "needs <provider> key" for unavailable

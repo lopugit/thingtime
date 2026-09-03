@@ -13,7 +13,13 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // POST { seed: true }  → re-runs ensureAiModelCatalog() on demand (self-heals
 //        drifted catalog fields, inserts models added to the code catalog,
 //        never touches `enabled`) and answers { ok, seeded, report, models }.
-// Admin-only, fail-closed rate limit: the seed is a batch write.
+// POST { probe: true } → forces a fresh provider-key probe (the cached verdict
+//        is bypassed; see api/utils/ai/providerProbe.ts) and answers
+//        { ok, probed, providers, models, defaults } — the editor's "Re-check
+//        keys" action. Sent together with { seed: true } the seed report
+//        carries the freshly probed status too.
+// Admin-only, fail-closed rate limit (admin.ai.models): the seed is a batch
+// write and the probe dials the providers.
 const MAX_BODY_BYTES = 16 * 1024;
 
 type HandlerDependencies = {
@@ -49,16 +55,26 @@ export const createAdminAiModelsHandlers = (dependencies: HandlerDependencies) =
 
       const body: any = await readJsonBody(request, MAX_BODY_BYTES);
 
+      const reprobe = body?.probe === true;
+
       if (body?.seed === true) {
         const report = await dependencies.ensureAiModelCatalog({ force: true });
-        const list = await dependencies.listAiModels(gate.user);
+        const list = await dependencies.listAiModels(gate.user, { reprobe });
         return json({ ok: true, seeded: report.total, report, models: list.models, defaults: list.defaults, providers: list.providers });
+      }
+
+      if (reprobe) {
+        const list = await dependencies.listAiModels(gate.user, { reprobe: true });
+        return json({ ok: true, probed: true, providers: list.providers, models: list.models, defaults: list.defaults });
       }
 
       const id = typeof body?.id === 'string' ? body.id.trim() : '';
       if (!id) {
         return json(
-          { ok: false, error: 'id is required (a catalog model id) — or send { seed: true } to re-seed the catalog' },
+          {
+            ok: false,
+            error: 'id is required (a catalog model id) — or send { seed: true } to re-seed the catalog, { probe: true } to re-check the provider keys'
+          },
           { status: 400 }
         );
       }

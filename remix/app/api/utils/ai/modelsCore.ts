@@ -121,19 +121,53 @@ export const isAiModelCatalogId = (modelId: unknown): modelId is string => getAi
 
 // ── provider availability ───────────────────────────────────────────────────
 
-export type AiProviderStatus = Record<AiModelProviderId, { configured: boolean }>;
+// One provider's server-side key status: `configured` is presence in the
+// env; `verified` is the bounded key probe's verdict (./providerProbe.ts) —
+// true = the provider accepted the key, false = it rejected it (401/403),
+// null = not configured or not (yet) verifiable (unreachable, timeout,
+// unexpected status); `checkedAt` is when the verdict was reached and
+// `reason` explains a non-true verdict. Presence and verdicts only — values
+// never leave the server.
+export type AiProviderStatusEntry = {
+  configured: boolean;
+  verified: boolean | null;
+  checkedAt: string | null;
+  reason?: string;
+};
+export type AiProviderStatus = Record<AiModelProviderId, AiProviderStatusEntry>;
+
+// What the probe reports for one provider (the server's providerProbe.ts
+// result satisfies it) — declared here so the merge below stays pure.
+export type AiProviderProbeOutcome = { verified: boolean | null; checkedAt: string; error?: string };
 
 const hasEnvValue = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 
+const unverified = (configured: boolean): AiProviderStatusEntry => ({ configured, verified: null, checkedAt: null });
+
 // Availability is a server fact about credentials, never a client claim. The
 // Anthropic SDK accepts either an API key or an auth token; only presence is
-// reported, values never leave the server.
+// reported, values never leave the server. The probe's verdict is layered on
+// top by applyAiProviderProbe.
 export const aiProviderStatusFromEnv = (env: Readonly<Record<string, string | undefined>>): AiProviderStatus => ({
-  anthropic: { configured: hasEnvValue(env.ANTHROPIC_API_KEY) || hasEnvValue(env.ANTHROPIC_AUTH_TOKEN) },
-  openai: { configured: hasEnvValue(env.OPENAI_API_KEY) }
+  anthropic: unverified(hasEnvValue(env.ANTHROPIC_API_KEY) || hasEnvValue(env.ANTHROPIC_AUTH_TOKEN)),
+  openai: unverified(hasEnvValue(env.OPENAI_API_KEY))
 });
 
-export const NO_AI_PROVIDER_STATUS: AiProviderStatus = { anthropic: { configured: false }, openai: { configured: false } };
+export const NO_AI_PROVIDER_STATUS: AiProviderStatus = { anthropic: unverified(false), openai: unverified(false) };
+
+// Layer a probe verdict onto a provider entry. An unconfigured provider has
+// nothing to verify (any verdict is ignored); a missing verdict leaves the
+// entry unverified.
+export const applyAiProviderProbe = (entry: AiProviderStatusEntry, probe: AiProviderProbeOutcome | null | undefined): AiProviderStatusEntry => {
+  if (!entry.configured || !probe) return entry;
+  const next: AiProviderStatusEntry = { configured: true, verified: probe.verified, checkedAt: probe.checkedAt };
+  if (probe.verified !== true && probe.error) next.reason = probe.error;
+  return next;
+};
+
+// A provider serves models while its key is configured and not known-bad: an
+// unverifiable key (network trouble, no probe yet) still counts.
+export const isAiProviderUsable = (entry: AiProviderStatusEntry): boolean => entry.configured && entry.verified !== false;
 
 // ── public projection ───────────────────────────────────────────────────────
 
@@ -145,7 +179,10 @@ export type AiModelPublic = {
   speeds: AiModelSpeed[];
   family: AiModelFamily;
   enabled: boolean; // admin toggle
-  available: boolean; // enabled && provider key configured
+  available: boolean; // enabled && provider key configured && not known-invalid
+  // the provider key's probe verdict: true verified, false rejected by the
+  // provider, null unknown (unconfigured, or the check could not conclude)
+  verified: boolean | null;
   isDefault: boolean; // the resolved Lopu default model
 };
 
@@ -157,7 +194,8 @@ export const publicAiModel = (entry: AiModelCatalogEntry, enabled: boolean, prov
   speeds: [...entry.speeds],
   family: entry.family,
   enabled,
-  available: enabled && providers[entry.provider].configured,
+  available: enabled && isAiProviderUsable(providers[entry.provider]),
+  verified: providers[entry.provider].verified,
   isDefault: false
 });
 
@@ -173,7 +211,8 @@ export type StoredLopuChatDefaults = {
 };
 
 // What a chat starts from after availability is applied: `model` is null
-// only when no provider is configured at all (chat answers from the canned
+// only when no provider is usable at all — none configured, or every
+// configured key rejected by its provider (chat answers from the canned
 // fallback in that case).
 export type LopuChatDefaults = {
   model: string | null;
@@ -309,7 +348,8 @@ export type ResolveLopuModelChoiceResult =
       ok: true;
       choice: AiWorkflowModelChoice;
       model: AiModelPublic;
-      // false when the provider behind the choice is not configured — the
+      // false when the provider behind the choice is not configured (or its
+      // key was rejected by the provider) — the
       // caller answers from the canned fallback instead of dialing it
       available: boolean;
       // true when lenient mode replaced something the caller asked for
@@ -352,7 +392,13 @@ export const resolveLopuModelChoice = (
       if (!lenient) return choiceFail(`${candidate.label} is turned off by an admin`);
       substituted = true;
     } else if (!candidate.available) {
-      if (!lenient) return choiceFail(`${candidate.label} needs ${AI_PROVIDER_ENV_HINTS[candidate.provider]} configured on the server`);
+      if (!lenient) {
+        return choiceFail(
+          candidate.verified === false
+            ? `${candidate.label} is unavailable — the provider rejected the server's ${AI_PROVIDER_ENV_HINTS[candidate.provider]} (key invalid)`
+            : `${candidate.label} needs ${AI_PROVIDER_ENV_HINTS[candidate.provider]} configured on the server`
+        );
+      }
       substituted = true;
     } else {
       model = candidate;

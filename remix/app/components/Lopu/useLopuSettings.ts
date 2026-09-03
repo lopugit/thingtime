@@ -473,7 +473,18 @@ export interface LopuCatalogModel {
 	family: string | null;
 	enabled: boolean;
 	available: boolean;
+	// the provider key's probe verdict (true verified, false rejected, null unknown)
+	verified: boolean | null;
 	isDefault: boolean;
+}
+
+// providers.<p> — the server key behind a provider: presence + the bounded
+// probe's verdict (never a value)
+export interface LopuCatalogProvider {
+	configured: boolean;
+	verified: boolean | null;
+	checkedAt: string | null;
+	reason: string | null;
 }
 
 export interface LopuCatalogDefaults {
@@ -485,7 +496,7 @@ export interface LopuCatalogDefaults {
 export interface LopuCatalog {
 	models: LopuCatalogModel[];
 	defaults: LopuCatalogDefaults;
-	providers: Record<string, { configured: boolean }>;
+	providers: Record<string, LopuCatalogProvider>;
 }
 
 // Own key so the host, the settings rows and the admin editor never depend on
@@ -525,7 +536,18 @@ export const normalizeLopuCatalogModel = (raw: unknown): LopuCatalogModel | null
 		family: typeof source.family === 'string' ? source.family : null,
 		enabled,
 		available: typeof source.available === 'boolean' ? source.available : enabled,
+		verified: source.verified === true ? true : source.verified === false ? false : null,
 		isDefault: source.isDefault === true
+	};
+};
+
+export const normalizeLopuCatalogProvider = (raw: unknown): LopuCatalogProvider => {
+	const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+	return {
+		configured: source.configured === true,
+		verified: source.verified === true ? true : source.verified === false ? false : null,
+		checkedAt: typeof source.checkedAt === 'string' && source.checkedAt ? source.checkedAt : null,
+		reason: typeof source.reason === 'string' && source.reason.trim() ? source.reason.trim().slice(0, 200) : null
 	};
 };
 
@@ -536,7 +558,7 @@ export const normalizeLopuCatalog = (raw: unknown): LopuCatalog => {
 	const providersRaw = source.providers && typeof source.providers === 'object' ? (source.providers as Record<string, unknown>) : {};
 	const providers: LopuCatalog['providers'] = {};
 	for (const [name, value] of Object.entries(providersRaw)) {
-		providers[name] = { configured: !!(value as { configured?: unknown } | null)?.configured };
+		providers[name] = normalizeLopuCatalogProvider(value);
 	}
 
 	return {

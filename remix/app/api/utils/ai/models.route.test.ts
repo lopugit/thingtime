@@ -24,11 +24,15 @@ const sampleList = () => ({
       family: 'claude' as const,
       enabled: true,
       available: true,
+      verified: true,
       isDefault: true
     }
   ],
   defaults: { model: 'claude-opus-5', effort: 'high' as const, speed: 'normal' as const },
-  providers: { anthropic: { configured: true }, openai: { configured: false } }
+  providers: {
+    anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T00:00:00.000Z' },
+    openai: { configured: false, verified: null, checkedAt: null }
+  }
 });
 
 const postRequest = (body: unknown) =>
@@ -142,14 +146,17 @@ test('GET /api/v1/ai/models answers 429 with Retry-After when the limiter blocks
 });
 
 const createAdmin = (overrides: Record<string, unknown> = {}) => {
-  const calls: Record<string, unknown[]> = { setAiModelEnabled: [], ensure: [], limits: [] };
+  const calls: Record<string, unknown[]> = { setAiModelEnabled: [], ensure: [], limits: [], list: [] };
   const handlers = createAdminAiModelsHandlers({
     requireAdmin: async () => ({ user: { id: 'admin-1' } }),
     enforceRateLimit: async (_request: Request, name: string, identity: string | null, options: unknown) => {
       calls.limits.push({ name, identity, options });
       return allowed;
     },
-    listAiModels: async () => sampleList(),
+    listAiModels: async (_viewer: unknown, options?: unknown) => {
+      calls.list.push(options ?? null);
+      return sampleList();
+    },
     setAiModelEnabled: async (id: string, enabled: boolean) => {
       calls.setAiModelEnabled.push({ id, enabled });
       const list = sampleList();
@@ -211,6 +218,47 @@ test('admin POST { seed: true } forces a catalog re-run and returns the report w
   assert.equal(body.report.refreshed, 1);
   assert.equal(body.models[0].id, 'claude-opus-5');
   assert.equal(calls.setAiModelEnabled.length, 0);
+});
+
+test('admin POST { probe: true } forces a fresh key probe and answers the verified provider status with the re-projected list', async () => {
+  const { calls, action } = createAdmin();
+  const response = await action({ request: postRequest({ probe: true }) });
+  const body: any = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+  assert.deepEqual(calls.list, [{ reprobe: true }]);
+  assert.deepEqual(calls.limits, [{ name: 'admin.ai.models', identity: 'user:admin-1', options: { failClosed: true } }]);
+  assert.equal(body.ok, true);
+  assert.equal(body.probed, true);
+  assert.deepEqual(body.providers, sampleList().providers);
+  assert.equal(body.models[0].verified, true);
+  assert.deepEqual(body.defaults, sampleList().defaults);
+  assert.equal(calls.setAiModelEnabled.length, 0);
+  assert.equal(calls.ensure.length, 0);
+  assert.doesNotMatch(JSON.stringify(body), /sk-/);
+
+  // seed + probe: one seed, one freshly probed list
+  const both = await action({ request: postRequest({ seed: true, probe: true }) });
+  assert.equal(both.status, 200);
+  assert.deepEqual(calls.ensure, [{ force: true }]);
+  assert.deepEqual(calls.list[1], { reprobe: true });
+  // a plain seed keeps the cached verdict
+  await action({ request: postRequest({ seed: true }) });
+  assert.deepEqual(calls.list[2], { reprobe: false });
+
+  // probe must be exactly true
+  const notAProbe = await action({ request: postRequest({ probe: 'yes' }) });
+  assert.equal(notAProbe.status, 400);
+  assert.match(((await notAProbe.json()) as any).error, /\{ probe: true \}/);
+
+  // gated like every other write
+  const anonymous = createAdmin({ requireAdmin: async () => ({ error: { status: 401, message: 'Unauthorized' } }) });
+  const refused = await anonymous.action({ request: postRequest({ probe: true }) });
+  assert.equal(refused.status, 401);
+  assert.equal(anonymous.calls.list.length, 0);
+  const limited = createAdmin({ enforceRateLimit: async () => blocked });
+  assert.equal((await limited.action({ request: postRequest({ probe: true }) })).status, 429);
+  assert.equal(limited.calls.list.length, 0);
 });
 
 test('admin POST validates the body, passes util failures through, and honours the limiter', async () => {

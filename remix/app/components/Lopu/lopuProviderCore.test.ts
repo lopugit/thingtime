@@ -4,6 +4,7 @@ import test from 'node:test';
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import {
 	buildLopuProviderGroups,
+	describeCheckedAt,
 	describeLopuChoice,
 	findLopuProviderOption,
 	lopuProviderChoiceKey,
@@ -12,6 +13,8 @@ import {
 	normalizeLopuVaultProvider,
 	normalizeLopuVaultProviders,
 	parseLopuProviderChoiceKey,
+	PROVIDER_KEY_STATE_LABELS,
+	providerKeyState,
 	vaultProviderHint,
 	type AiModelPublic,
 	type LopuVaultProvider
@@ -86,6 +89,35 @@ test('groups list Claude first, then OpenAI, then the viewer’s providers, disa
 	// no vault → no "Your providers" group; no models → only the vault group
 	assert.equal(buildLopuProviderGroups(MODELS, []).length, 2);
 	assert.deepEqual(buildLopuProviderGroups([], VAULT).map((group) => group.id), ['vault']);
+});
+
+test('a rejected server key reads "key invalid" and disables the model; the key-state helpers name every provider state', () => {
+	assert.equal(modelUnavailableReason({ enabled: true, available: false, provider: 'openai', verified: false }), 'OpenAI key invalid');
+	assert.equal(modelUnavailableReason({ enabled: true, available: false, provider: 'anthropic', verified: null }), 'needs Anthropic key');
+	assert.equal(modelUnavailableReason({ enabled: true, available: false, provider: 'anthropic' }), 'needs Anthropic key');
+	assert.equal(modelUnavailableReason({ enabled: false, available: false, provider: 'openai', verified: false }), 'disabled by an admin');
+	assert.equal(modelUnavailableReason({ enabled: true, available: true, provider: 'openai', verified: true }), null);
+	const [group] = buildLopuProviderGroups([model('gpt-5', 'openai', { available: false, verified: false })], null);
+	assert.equal(group.options[0].disabled, true);
+	assert.equal(group.options[0].reason, 'OpenAI key invalid');
+
+	assert.equal(providerKeyState(undefined), 'missing');
+	assert.equal(providerKeyState({ configured: false }), 'missing');
+	assert.equal(providerKeyState({ configured: false, verified: true }), 'missing');
+	assert.equal(providerKeyState({ configured: true }), 'unverified');
+	assert.equal(providerKeyState({ configured: true, verified: null }), 'unverified');
+	assert.equal(providerKeyState({ configured: true, verified: true }), 'verified');
+	assert.equal(providerKeyState({ configured: true, verified: false }), 'invalid');
+	assert.deepEqual(PROVIDER_KEY_STATE_LABELS, { verified: 'key verified', invalid: 'key invalid', unverified: 'key unverified', missing: 'no key' });
+
+	const now = Date.parse('2026-09-04T12:00:00.000Z');
+	assert.equal(describeCheckedAt('2026-09-04T11:59:50.000Z', now), 'checked just now');
+	assert.equal(describeCheckedAt('2026-09-04T11:57:00.000Z', now), 'checked 3 min ago');
+	assert.equal(describeCheckedAt('2026-09-04T10:00:00.000Z', now), 'checked 2 h ago');
+	assert.match(describeCheckedAt('2026-09-01T10:00:00.000Z', now) ?? '', /^checked 1 Sep \d\d:\d\d$/);
+	assert.equal(describeCheckedAt('2026-09-04T12:30:00.000Z', now), 'checked just now', 'a clock ahead of the server never reads negative');
+	assert.equal(describeCheckedAt(null), null);
+	assert.equal(describeCheckedAt('garbage'), null);
 });
 
 test('chip copy names the vault provider, else the model with effort and speed', () => {
