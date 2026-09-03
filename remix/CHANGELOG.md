@@ -17,6 +17,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
 ### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
 
 - Grouped summary; the normative design lives in
@@ -46,6 +48,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Env: `LOPU_CHAT_PROVIDER`, `LOPU_OPENAI_TOOLS`, `LOPU_CLAUDE_MODEL`,
   `LOPU_OPENAI_MODEL` (README "Lopu AI assistant"). Live verification:
   `node scripts/verify-lopu.mjs <base>` (99 checks).
+
 ### 2026-09-03 — Lopu voice, Live Activities + personal Secure Vault — Codex (AI)
 
 - Added continuous Lopu voice chat on web and iOS with persistent in-session
@@ -76,12 +79,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
-- Admin-selected Develop and Production/Main preview builds now maintain one
-  GitHub App-owned PR comment. It is posted before deployment launch with every
+- Admin-selected Develop and Production/Main preview settings now dispatch only
+  their bounded full policy to the protected `github-actions` controller; the
+  product backend no longer creates, aliases, deletes, or comments on Vercel
+  deployments. GitHub Actions maintains one PR comment, posted before build
+  launch with every
   selected environment's expected persistent URL and estimated ready time, then
   updated with each immutable snapshot URL and final status. READY receipts move
   only the matching alias to the verified current deployment, while
   disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  Each exact-SHA environment build runs without deployment credentials and only
+  its validated prebuilt artifact reaches the protected publisher.
   See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
 
 ### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)

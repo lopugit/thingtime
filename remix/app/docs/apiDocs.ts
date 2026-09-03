@@ -799,19 +799,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-ci-previews',
+    contractVersion: '2.0.0',
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.2.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews and immediately publish their expected time and URLs to the pull request.',
+    featureVersion: '2.0.0',
+    summary: 'Store exact-SHA Develop and Production/Main preview choices and dispatch the protected github-actions publisher.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. Before deployment launch, one GitHub App-owned marker comment lists every selected environment, its expected persistent URL, and an estimated ready time. The server then creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment and updates the same comment with its snapshot URL and terminal status. READY receipts move only that persistent alias to the verified current snapshot. Production enabling requires an explicit acknowledgement. Credential values remain server-only, automatic domain assignment stays disabled, primary domains are never moved, and disabling removes only aliases and deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only endpoint validates a live, open, non-draft pull request from the configured repository, stores independent Develop and Production/Main switches, then sends the full selected set through the installed GitHub App to the protected github-actions branch. The product server never receives or uses a Vercel deployment credential. Protected controller code authenticates the App sender, revalidates the exact live ref and SHA, immediately writes one GitHub Actions-owned marker comment with every expected persistent URL and estimated ready time, and builds each selected environment on GitHub without environment secrets. Only validated prebuilt output reaches the credentialed publisher. The same comment receives each immutable snapshot URL and terminal status; READY receipts move only that environment\'s PR-scoped alias. Production enabling requires an explicit acknowledgement, automatic domain assignment stays disabled, primary domains never move, and disable/close cleanup is limited to controller-marked resources.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
       'Select a same-repository open pull request.',
       'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
-      'Follow the immediate estimate and then either URL pair in the single updated PR comment and the signed webhook status in CI Control.'
+      'Follow the immediate estimate and then each URL pair in the single updated PR comment and the signed webhook status in CI Control.'
     ],
     requestExamples: [
       {
@@ -830,10 +831,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored, the expected-time comment published before launch, the exact-SHA deployment created or reused, and that comment refreshed.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: '2026-09-03T03:20:00.000Z' }, initialPublication: { commented: true, previews: [{ environment: 'develop', status: 'queued', snapshotUrl: null, persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: '2026-09-03T03:20:00.000Z' }] }, publication: { commented: true, previews: [{ environment: 'develop', status: 'queued', snapshotUrl: 'https://thingtime-example.vercel.app/', persistentUrl: 'https://pr-496.previews.dev.thingtime.com/', expectedReadyAt: '2026-09-03T03:20:00.000Z' }] } }
+        description: 'Policy stored and its complete environment set dispatched to the protected github-actions controller.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, controller: { status: 'dispatched', controllerRef: 'github-actions', environments: ['develop', 'production'] }, expectedEnvironments: ['develop', 'production'] }
       },
-      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the GitHub App could not dispatch the protected controller.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]
   }),
   endpoint({
