@@ -99,6 +99,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Live verification: `node scripts/verify-lopu.mjs <base>` (147 checks incl. the
   vault-unconfigured path; the BYO turn needs `THINGTIME_USER_VAULT_KEY` and
   `THINGTIME_LOPU_PROVIDER_DEV_REWRITES`, README "Lopu AI assistant").
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
 ### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
 
@@ -139,6 +140,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Env: `LOPU_CHAT_PROVIDER`, `LOPU_OPENAI_TOOLS`, `LOPU_CLAUDE_MODEL`,
   `LOPU_OPENAI_MODEL` (README "Lopu AI assistant"). Live verification:
   `node scripts/verify-lopu.mjs <base>` (99 checks).
+
 ### 2026-09-03 — Lopu voice, Live Activities + personal Secure Vault — Codex (AI)
 
 - Added continuous Lopu voice chat on web and iOS with persistent in-session
@@ -153,6 +155,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
   server-allowlisted compatible endpoint path.
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+- Provider connections now store access credentials only. Voice chats select
+  a seeded model, reasoning level, and speed per chat from OpenAI, Anthropic,
+  Gemini, xAI, OpenRouter, Mistral, DeepSeek, Groq, or Cohere, with a custom
+  model-id override.
+- Ordinary `/lopu` text conversations now use those same owner-scoped Secure
+  Vault connections. Provider, model, reasoning, and supported priority/fast
+  mode are selected from dropdowns in the composer per chat or per new
+  message; selecting a custom model reveals a bounded provider-native ID input.
+- Added distinct device-transcription and direct provider-audio modes. Web and
+  iOS can stream PCM microphone and response audio to xAI Grok Voice using a
+  server-minted five-minute ephemeral credential; iOS keeps this path on its
+  background audio session and Live Activity.
+- Signed-in `/lopu` visits now create a persisted chat immediately and replace
+  the route with `/lopu/<chat-id>`, preserving history across refreshes.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 

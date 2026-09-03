@@ -28,7 +28,6 @@ type StoredVaultCrystal = {
 	key?: string;
 	provider?: LopuProviderKind;
 	endpoint?: string;
-	model?: string;
 	encryptedValue?: EncryptedValue;
 	createdAt: string;
 	updatedAt: string;
@@ -43,7 +42,6 @@ export type PublicVaultEntry = {
 	key?: string;
 	provider?: LopuProviderKind;
 	endpoint?: string;
-	model?: string;
 	hasValue: true;
 	createdAt: string;
 	updatedAt: string;
@@ -103,7 +101,6 @@ const publicEntry = (doc: StoredVaultDoc): PublicVaultEntry => ({
 	...(doc.crystal.key ? { key: doc.crystal.key } : {}),
 	...(doc.crystal.provider ? { provider: doc.crystal.provider } : {}),
 	...(doc.crystal.endpoint ? { endpoint: doc.crystal.endpoint } : {}),
-	...(doc.crystal.model ? { model: doc.crystal.model } : {}),
 	hasValue: true,
 	createdAt: doc.crystal.createdAt,
 	updatedAt: doc.crystal.updatedAt
@@ -140,7 +137,6 @@ export const listUserVault = async (ownerId: string) => {
 					'crystal.key': 1,
 					'crystal.provider': 1,
 					'crystal.endpoint': 1,
-					'crystal.model': 1,
 					'crystal.createdAt': 1,
 					'crystal.updatedAt': 1
 				}
@@ -221,14 +217,13 @@ export const saveUserVaultSecret = async (
 
 export const saveUserVaultProvider = async (
 	ownerId: string,
-	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown }
+	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; token?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
 	const name = boundedVaultText(input.name, 120);
 	const provider = normalizeLopuProviderKind(input.provider);
 	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
-	const model = boundedVaultText(input.model, 200);
 	const token = validSecretValue(input.token);
-	if (!name || !provider || !endpoint || !model) throw new Error('Provider name, type, HTTPS endpoint, and model are required.');
+	if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');
@@ -244,7 +239,6 @@ export const saveUserVaultProvider = async (
 		name,
 		provider,
 		endpoint,
-		model,
 		groupId,
 		encryptedValue,
 		createdAt: existing?.crystal.createdAt || now,
@@ -274,7 +268,7 @@ export const deleteUserVaultRecord = async (ownerId: string, id: unknown) => {
 
 export const getUserVaultProvider = async (ownerId: string, id: unknown) => {
 	const doc = await ownVaultDoc(ownerId, id);
-	if (!doc || doc.crystal.recordKind !== 'provider' || !doc.crystal.provider || !doc.crystal.endpoint || !doc.crystal.model) {
+	if (!doc || doc.crystal.recordKind !== 'provider' || !doc.crystal.provider || !doc.crystal.endpoint) {
 		throw new Error('Selected AI provider was not found.');
 	}
 	return {
@@ -282,7 +276,6 @@ export const getUserVaultProvider = async (ownerId: string, id: unknown) => {
 		name: doc.crystal.name,
 		provider: doc.crystal.provider,
 		endpoint: doc.crystal.endpoint,
-		model: doc.crystal.model,
 		token: decryptValue(doc)
 	};
 };

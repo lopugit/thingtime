@@ -12,9 +12,8 @@ type Entry = {
 	key?: string;
 	provider?: string;
 	endpoint?: string;
-	model?: string;
 };
-type Template = { id: string; label: string; endpoint: string; model: string; tokenLabel: string };
+type Template = { id: string; label: string; endpoint: string; tokenLabel: string };
 type VaultPayload = { vaultConfigured: boolean; groups: Group[]; entries: Entry[]; providerTemplates: Template[] };
 
 const fieldStyles = {
@@ -48,7 +47,6 @@ export const SecureVault = () => {
 	const [templateId, setTemplateId] = React.useState('openai');
 	const [providerName, setProviderName] = React.useState('OpenAI');
 	const [providerEndpoint, setProviderEndpoint] = React.useState('https://api.openai.com/v1');
-	const [providerModel, setProviderModel] = React.useState('gpt-5.4');
 	const [providerToken, setProviderToken] = React.useState('');
 
 	const refresh = React.useCallback(async () => {
@@ -91,7 +89,6 @@ export const SecureVault = () => {
 		}
 		setProviderName(selected.label);
 		setProviderEndpoint(selected.endpoint);
-		setProviderModel(selected.model);
 	};
 
 	const deleteEntry = (entry: Entry | Group) => run({ action: 'delete', id: entry.id }, `${entry.name} removed`);
@@ -118,7 +115,7 @@ export const SecureVault = () => {
 
 			<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4}>
 				<Text fontWeight={700} fontSize="sm">AI provider connection</Text>
-				<Text fontSize="xs" color="var(--tt-muted, #777783)" mb={3}>Choose one per Lopu chat. Custom compatible hosts require the server allowlist.</Text>
+				<Text fontSize="xs" color="var(--tt-muted, #777783)" mb={3}>Store access here; choose the model, reasoning, and speed separately for each Lopu chat. Custom compatible hosts require the server allowlist.</Text>
 				<Flex flexDirection="column" gap={2}>
 					<Select {...fieldStyles} value={templateId} onChange={(event) => selectTemplate(event.target.value)} aria-label="AI provider template">
 						{vault.providerTemplates.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -126,13 +123,12 @@ export const SecureVault = () => {
 					</Select>
 					<Input {...fieldStyles} value={providerName} onChange={(event) => setProviderName(event.target.value)} placeholder="Connection name" aria-label="Provider connection name" />
 					<Input {...fieldStyles} value={providerEndpoint} onChange={(event) => setProviderEndpoint(event.target.value)} placeholder="https://api.example.com/v1" aria-label="Provider endpoint" />
-					<Input {...fieldStyles} value={providerModel} onChange={(event) => setProviderModel(event.target.value)} placeholder="Model id" aria-label="Provider model" />
 					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (write-only)" aria-label="Provider token" />
 					<Select {...fieldStyles} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Provider environment">
 						<option value="">No environment</option>
 						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
 					</Select>
-					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-provider', name: providerName, provider: templateId, endpoint: providerEndpoint, model: providerModel, token: providerToken, groupId }, 'AI provider saved', () => setProviderToken(''))}>Save provider</Button>
+					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-provider', name: providerName, provider: templateId, endpoint: providerEndpoint, token: providerToken, groupId }, 'AI provider saved', () => setProviderToken(''))}>Save provider</Button>
 				</Flex>
 			</Box>
 
@@ -154,7 +150,7 @@ export const SecureVault = () => {
 						<Flex key={entry.id} alignItems="center" gap={2} border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} flexWrap="wrap">
 							<Box minWidth={0} flex="1">
 								<Text fontSize="sm" fontWeight={700}>{entry.name}</Text>
-								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? `${entry.provider} · ${entry.model} · ${entry.endpoint}` : entry.key}</Text>
+								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? `${entry.provider} · ${entry.endpoint}` : entry.key}</Text>
 							</Box>
 							<Badge>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'}</Badge>
 							<Button size="xs" variant="ghost" onClick={() => deleteEntry(entry)}>Delete</Button>

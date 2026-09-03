@@ -5,12 +5,16 @@ import {
 	LOPU_PROVIDER_TEMPLATES,
 	isBlockedLopuProviderHostname,
 	normalizeLopuProviderEndpoint,
-	normalizeLopuProviderKind
+	normalizeLopuProviderKind,
+	providerModelFor
 } from './userVaultCore';
 
 test('provider catalog includes the major hosted AI providers without credentials', () => {
-	assert.deepEqual(LOPU_PROVIDER_TEMPLATES.map((item) => item.id), ['openai', 'anthropic', 'google', 'xai', 'openrouter']);
+	assert.deepEqual(LOPU_PROVIDER_TEMPLATES.map((item) => item.id), ['openai', 'anthropic', 'google', 'xai', 'openrouter', 'mistral', 'deepseek', 'groq', 'cohere']);
 	assert.equal(JSON.stringify(LOPU_PROVIDER_TEMPLATES).toLowerCase().includes('api key'), true);
+	assert.equal(LOPU_PROVIDER_TEMPLATES.every((item) => item.models.length > 0), true);
+	assert.equal(Object.prototype.hasOwnProperty.call(LOPU_PROVIDER_TEMPLATES[0], 'model'), false);
+	assert.equal(providerModelFor('xai', 'grok-voice-latest')?.audioInput, 'realtime');
 });
 
 test('provider endpoints are https-only and reject local network targets', () => {

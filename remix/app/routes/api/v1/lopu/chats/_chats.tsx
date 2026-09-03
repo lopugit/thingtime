@@ -4,7 +4,8 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { createLopuChat, listLopuChats } from '~/api/utils/messenger/lopuChats';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-const objectBody = (body: unknown): Record<string, unknown> => (body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {});
+const objectBody = (body: unknown): Record<string, unknown> =>
+	body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
 
 // The JSON-only CSRF fence lives in api/http.ts now (every Lopu POST applies
 // it); re-exported so the sibling routes keep their import.
@@ -36,10 +37,10 @@ export const loader = async ({ request }: { request: Request }) => {
 	return json(result);
 };
 
-// POST /api/v1/lopu/chats — { title?, model?, effort?, speed? } creates a new
+// POST /api/v1/lopu/chats — { chatId?, title?, providerId?, model?, effort?, speed? } creates a new
 // conversation with Lopu (a one-member messenger group discriminated by
 // externalSource.access === 'lopu'). Settings are validated against the model
-// catalog; null/omitted fields mean "catalog default".
+// catalog or the selected owner-only Secure Vault provider template.
 export const action = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user) {
