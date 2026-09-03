@@ -24,9 +24,28 @@ import { useLopuChat, type LopuContextProvider } from './useLopuChat';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 const INK = 'var(--tt-ink, #16161a)';
 
-export const LOPU_SUGGESTIONS = ['Build me a landing page hero', 'Make a pricing table component', 'Create an action that saves a note', 'What can you do?'];
+export const LOPU_SUGGESTIONS = [
+	'Build me a landing page hero',
+	'Make a pricing table component',
+	'Create an action that saves a note',
+	'What can you do?'
+];
 
-const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', openai: 'ChatGPT', test: 'the test script', fallback: "Lopu's little book 📖" };
+const PROVIDER_NAMES: Record<string, string> = {
+	claude: 'Claude',
+	anthropic: 'Claude',
+	openai: 'OpenAI',
+	google: 'Gemini',
+	xai: 'Grok',
+	openrouter: 'OpenRouter',
+	mistral: 'Mistral',
+	deepseek: 'DeepSeek',
+	groq: 'Groq',
+	cohere: 'Cohere',
+	compatible: 'custom provider',
+	test: 'the test script',
+	fallback: "Lopu's little book 📖"
+};
 
 export const LopuAvatar = ({ size = 28 }: { size?: number }) => (
 	<Box
@@ -252,7 +271,14 @@ const SignedOutState = ({ compact }: { compact: boolean }) => (
 		<Text fontSize="sm" color={MUTED} maxW="380px">
 			Lopu builds pages, components and actions as you — sign in and she remembers every conversation.
 		</Text>
-		<Button as={RouterLink} to="/login" size="sm" bg="var(--tt-accent, #7c6cff)" color="var(--tt-accent-contrast, #ffffff)" _hover={{ opacity: 0.92 }}>
+		<Button
+			as={RouterLink}
+			to="/login"
+			size="sm"
+			bg="var(--tt-accent, #7c6cff)"
+			color="var(--tt-accent-contrast, #ffffff)"
+			_hover={{ opacity: 0.92 }}
+		>
 			Sign in to chat with Lopu
 		</Button>
 	</Flex>
@@ -285,7 +311,16 @@ export type LopuChatViewProps = {
 	autoFocus?: boolean;
 };
 
-export const LopuChatView = ({ chatId, onChatChange, compact = false, context, showConversations = false, onOpenFull, applyPatches, autoFocus }: LopuChatViewProps) => {
+export const LopuChatView = ({
+	chatId,
+	onChatChange,
+	compact = false,
+	context,
+	showConversations = false,
+	onOpenFull,
+	applyPatches,
+	autoFocus
+}: LopuChatViewProps) => {
 	const chat = useLopuChat({ chatId, context, applyPatches });
 	const [draft, setDraft] = React.useState('');
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -355,14 +390,34 @@ export const LopuChatView = ({ chatId, onChatChange, compact = false, context, s
 					</Menu>
 					<Box flex={1} />
 					{onOpenFull ? (
-						<Button size="xs" variant="ghost" height="26px" px={2} onClick={onOpenFull} title="Open the full Lopu page" aria-label="Open the full Lopu page">
+						<Button
+							size="xs"
+							variant="ghost"
+							height="26px"
+							px={2}
+							onClick={onOpenFull}
+							title="Open the full Lopu page"
+							aria-label="Open the full Lopu page"
+						>
 							⤢
 						</Button>
 					) : null}
 				</Flex>
 			) : null}
 
-			<Box ref={scrollRef} onScroll={onScroll} flex={1} minH={0} overflowY="auto" overflowX="hidden" px={compact ? 2 : 1} py={3} display="flex" flexDirection="column" rowGap={3}>
+			<Box
+				ref={scrollRef}
+				onScroll={onScroll}
+				flex={1}
+				minH={0}
+				overflowY="auto"
+				overflowX="hidden"
+				px={compact ? 2 : 1}
+				py={3}
+				display="flex"
+				flexDirection="column"
+				rowGap={3}
+			>
 				{!chat.viewer.id ? (
 					<SignedOutState compact={compact} />
 				) : items.length === 0 ? (
@@ -372,9 +427,24 @@ export const LopuChatView = ({ chatId, onChatChange, compact = false, context, s
 						const previous = items[index - 1];
 						const previousIsLopu = !!previous && (previous.kind === 'turn' || previous.role === 'assistant');
 						if (item.kind === 'turn') {
-							return <TurnBubble key={item.turn.requestId} turn={item.turn} showAvatar={!previousIsLopu} canUndo={chat.canUndoPatch} onUndo={chat.undoPatch} />;
+							return (
+								<TurnBubble
+									key={item.turn.requestId}
+									turn={item.turn}
+									showAvatar={!previousIsLopu}
+									canUndo={chat.canUndoPatch}
+									onUndo={chat.undoPatch}
+								/>
+							);
 						}
-						return <MessageBubble key={item.message.id} message={item.message} role={item.role} showAvatar={item.role === 'assistant' && !previousIsLopu} />;
+						return (
+							<MessageBubble
+								key={item.message.id}
+								message={item.message}
+								role={item.role}
+								showAvatar={item.role === 'assistant' && !previousIsLopu}
+							/>
+						);
 					})
 				)}
 			</Box>
@@ -389,6 +459,8 @@ export const LopuChatView = ({ chatId, onChatChange, compact = false, context, s
 					disabled={!chat.viewer.id}
 					enterSends={chat.preferences.enterSends}
 					models={chat.models}
+					vaultProviders={chat.vaultProviders}
+					providerTemplates={chat.providerTemplates}
 					settings={chat.settings}
 					defaults={chat.defaults}
 					onSettingsChange={chat.setSettings}

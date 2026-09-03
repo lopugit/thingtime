@@ -63,6 +63,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   a seeded model, reasoning level, and speed per chat from OpenAI, Anthropic,
   Gemini, xAI, OpenRouter, Mistral, DeepSeek, Groq, or Cohere, with a custom
   model-id override.
+- Ordinary `/lopu` text conversations now use those same owner-scoped Secure
+  Vault connections. Provider, model, reasoning, and supported priority/fast
+  mode are selected from dropdowns in the composer per chat or per new
+  message; selecting a custom model reveals a bounded provider-native ID input.
 - Added distinct device-transcription and direct provider-audio modes. Web and
   iOS can stream PCM microphone and response audio to xAI Grok Voice using a
   server-minted five-minute ephemeral credential; iOS keeps this path on its

@@ -3,7 +3,23 @@ import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { streamLopuChatTurn } from '~/api/utils/lopu/chat';
 import type { LopuChatContext, LopuChatEvent, LopuChatTurnOutcome } from '~/api/utils/lopu/chatEvents';
-import { createLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
+import { streamLopuVaultChatTurn, type DecryptedLopuProvider } from '~/api/utils/lopu/voice';
+import {
+  boundedVaultText,
+  providerModelFor,
+  providerTemplateFor,
+  type LopuProviderEffort,
+  type LopuProviderSpeed
+} from '~/api/utils/lopu/userVaultCore';
+import { getUserVaultProvider } from '~/api/utils/lopu/userVault';
+import {
+  createLopuChat,
+  getLopuChat,
+  loadLopuHistory,
+  persistLopuAssistantTurn,
+  persistLopuUserTurn,
+  updateLopuChat
+} from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -30,9 +46,11 @@ type ReplyBody = {
   chatId: string | null;
   text: string;
   requestId: string;
+  providerId: string | null;
   model: string | null;
   effort: string | null;
   speed: string | null;
+  provided: { providerId: boolean; model: boolean; effort: boolean; speed: boolean };
   context: LopuChatContext | null;
 };
 
@@ -82,7 +100,8 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
       } catch {
         return { ok: false, error: 'context.page.blocks must be JSON-serialisable' };
       }
-      if (serialized.length > MAX_CONTEXT_BLOCKS_BYTES) return { ok: false, error: `context.page.blocks is too large (max ${MAX_CONTEXT_BLOCKS_BYTES} bytes)` };
+      if (serialized.length > MAX_CONTEXT_BLOCKS_BYTES)
+        return { ok: false, error: `context.page.blocks is too large (max ${MAX_CONTEXT_BLOCKS_BYTES} bytes)` };
       page.blocks = raw.page.blocks as NonNullable<LopuChatContext['page']>['blocks'];
     }
     context.page = page;
@@ -101,7 +120,7 @@ const parseBody = (body: unknown): Validation => {
   }
   const chatId = body.chatId === undefined || body.chatId === null || body.chatId === '' ? null : optionalToken(body.chatId, MAX_CONTEXT_ID_CHARS);
   if (body.chatId !== undefined && body.chatId !== null && body.chatId !== '' && !chatId) return { ok: false, error: 'chatId must be a chat id' };
-  for (const key of ['model', 'effort', 'speed'] as const) {
+  for (const key of ['providerId', 'model', 'effort', 'speed'] as const) {
     const value = body[key];
     if (value !== undefined && value !== null && value !== '' && (typeof value !== 'string' || value.length > 128)) {
       return { ok: false, error: `${key} must be a string` };
@@ -115,9 +134,16 @@ const parseBody = (body: unknown): Validation => {
       chatId,
       text,
       requestId,
+      providerId: typeof body.providerId === 'string' && body.providerId.trim() ? body.providerId.trim() : null,
       model: typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null,
       effort: typeof body.effort === 'string' && body.effort.trim() ? body.effort.trim() : null,
       speed: typeof body.speed === 'string' && body.speed.trim() ? body.speed.trim() : null,
+      provided: {
+        providerId: Object.prototype.hasOwnProperty.call(body, 'providerId'),
+        model: Object.prototype.hasOwnProperty.call(body, 'model'),
+        effort: Object.prototype.hasOwnProperty.call(body, 'effort'),
+        speed: Object.prototype.hasOwnProperty.call(body, 'speed')
+      },
       context: context.context
     }
   };
@@ -126,7 +152,10 @@ const parseBody = (body: unknown): Validation => {
 // A conversation title from the first message: first line, tidy, ≤ 60 chars.
 export const titleFromMessage = (text: string): string => {
   const line = text.split(/\r?\n/).find((entry) => entry.trim()) || '';
-  const tidy = line.replace(/\s+/g, ' ').replace(/[`*_#>]+/g, '').trim();
+  const tidy = line
+    .replace(/\s+/g, ' ')
+    .replace(/[`*_#>]+/g, '')
+    .trim();
   if (!tidy) return 'Lopu';
   if (tidy.length <= 60) return tidy.replace(/[.,;:!?]+$/, '') || 'Lopu';
   const cut = tidy.slice(0, 60);
@@ -138,7 +167,8 @@ const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
   if (!outcome) return 'Lopu’s reply was interrupted before it started — ask again in a moment.';
   const text = outcome.text.trim();
   if (outcome.stopReason === 'aborted') return text ? `${text}\n\n_(reply stopped)_` : 'Lopu’s reply was stopped before it started.';
-  if (outcome.stopReason === 'error') return text ? `${text}\n\n_(reply interrupted — try again)_` : 'Lopu lost the thread before replying — try again.';
+  if (outcome.stopReason === 'error')
+    return text ? `${text}\n\n_(reply interrupted — try again)_` : 'Lopu lost the thread before replying — try again.';
   return text || 'Lopu went quiet for a moment — ask again in a little while.';
 };
 
@@ -146,12 +176,18 @@ export const action = async ({ request }: { request: Request }) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   const user = await getCurrentUser(request);
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
-  if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
+  if (user.temporary)
+    return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
 
   const limit = await enforceRateLimit(request, 'lopu.chat', `user:${user.id}`, { failClosed: true });
   if (!limit.allowed) {
     return json(
-      { ok: false, error: limit.unavailable ? 'Lopu cannot check her rate limit right now — try again shortly' : 'Lopu needs a breather — try again in a few minutes 🦄' },
+      {
+        ok: false,
+        error: limit.unavailable
+          ? 'Lopu cannot check her rate limit right now — try again shortly'
+          : 'Lopu needs a breather — try again in a few minutes 🦄'
+      },
       rateLimitedResponseInit(limit)
     );
   }
@@ -164,40 +200,109 @@ export const action = async ({ request }: { request: Request }) => {
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;
-  let settings: { model: string | null; effort: string | null; speed: string | null } = { model: null, effort: null, speed: null };
+  // `/lopu` reserves a client UUID in the URL before its background create
+  // request completes. Treat a first reply that wins that race as the
+  // idempotent creator instead of losing the user's message to a 404.
+  let reservedChatId: string | null = null;
+  let settings: { providerId: string | null; model: string | null; effort: string | null; speed: string | null } = {
+    providerId: null,
+    model: null,
+    effort: null,
+    speed: null
+  };
   if (chatId) {
     const existing = await getLopuChat(user.id, chatId);
-    if (existing.ok === false) return json({ ok: false, error: existing.error }, { status: existing.status });
-    settings = { model: existing.settings.model, effort: existing.settings.effort, speed: existing.settings.speed };
+    if (existing.ok === false) {
+      if (existing.status !== 404) return json({ ok: false, error: existing.error }, { status: existing.status });
+      reservedChatId = chatId;
+      chatId = null;
+    } else {
+      settings = {
+        providerId: existing.settings.providerId,
+        model: existing.settings.model,
+        effort: existing.settings.effort,
+        speed: existing.settings.speed
+      };
+    }
   }
 
   // --- model choice -------------------------------------------------------
-  const catalog = await listAiModels({ id: user.id });
-  const overrides = !!(input.model || input.effort || input.speed);
-  const requested = { model: input.model ?? settings.model, effort: input.effort ?? settings.effort, speed: input.speed ?? settings.speed };
+  const overrides = Object.values(input.provided).some(Boolean);
+  const requested = {
+    providerId: input.provided.providerId ? input.providerId : settings.providerId,
+    model: input.provided.model ? input.model : settings.model,
+    effort: input.provided.effort ? input.effort : settings.effort,
+    speed: input.provided.speed ? input.speed : settings.speed
+  };
   let choice: AiWorkflowModelChoice | null = null;
-  if (catalog.models.length) {
-    // explicit overrides are strict (a bad model is a 400); stored settings
-    // are lenient (an admin may have disabled the chat's model since)
-    const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides });
-    if (resolved.ok === false) {
-      if (overrides) return json({ ok: false, error: resolved.error }, { status: 400 });
-    } else if (catalog.defaults.model || resolved.available) {
-      choice = resolved.choice;
+  let vaultProvider: DecryptedLopuProvider | null = null;
+  let vaultSelection: { model: string; effort: LopuProviderEffort | null; speed: LopuProviderSpeed } | null = null;
+  if (requested.providerId) {
+    try {
+      vaultProvider = await getUserVaultProvider(user.id, requested.providerId);
+    } catch (error) {
+      return json({ ok: false, error: error instanceof Error ? error.message : 'Selected AI provider was not found.' }, { status: 400 });
+    }
+    const model = boundedVaultText(requested.model, 200) || providerTemplateFor(vaultProvider.provider)?.models[0]?.id || null;
+    if (!model || /[\s$]/.test(model)) return json({ ok: false, error: 'Choose a valid model for this provider.' }, { status: 400 });
+    const effort =
+      requested.effort === 'none' ||
+      requested.effort === 'minimal' ||
+      requested.effort === 'low' ||
+      requested.effort === 'medium' ||
+      requested.effort === 'high' ||
+      requested.effort === 'xhigh' ||
+      requested.effort === 'max' ||
+      requested.effort === 'ultra'
+        ? requested.effort
+        : null;
+    const speed: LopuProviderSpeed = requested.speed === 'fast' ? 'fast' : 'normal';
+    const knownModel = providerModelFor(vaultProvider.provider, model);
+    if (knownModel && effort && !knownModel.efforts.includes(effort)) {
+      return json({ ok: false, error: 'That reasoning level is not available for the selected model.' }, { status: 400 });
+    }
+    if (knownModel && !knownModel.speeds.includes(speed)) {
+      return json({ ok: false, error: 'That speed is not available for the selected model.' }, { status: 400 });
+    }
+    vaultSelection = { model, effort, speed };
+  } else {
+    const catalog = await listAiModels({ id: user.id });
+    if (catalog.models.length) {
+      // explicit overrides are strict (a bad model is a 400); stored settings
+      // are lenient (an admin may have disabled the chat's model since)
+      const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides });
+      if (resolved.ok === false) {
+        if (overrides) return json({ ok: false, error: resolved.error }, { status: 400 });
+      } else if (catalog.defaults.model || resolved.available) {
+        choice = resolved.choice;
+      }
     }
   }
 
   if (!chatId) {
     const created = await createLopuChat(user.id, {
+      ...(reservedChatId ? { chatId: reservedChatId } : {}),
       title: titleFromMessage(input.text),
-      ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {})
+      ...(vaultProvider && vaultSelection
+        ? { providerId: vaultProvider.id, model: vaultSelection.model, effort: vaultSelection.effort, speed: vaultSelection.speed }
+        : choice
+        ? { providerId: null, model: choice.model, effort: choice.effort, speed: choice.speed }
+        : {})
     });
     if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
     chatId = created.chat.id;
-  } else if (overrides && choice) {
+  } else if (overrides) {
     // a per-turn override becomes the conversation's setting (best effort —
     // the turn itself already carries the resolved choice)
-    await updateLopuChat(user.id, chatId, { model: choice.model, effort: choice.effort, speed: choice.speed }).catch(() => null);
+    await updateLopuChat(
+      user.id,
+      chatId,
+      vaultProvider && vaultSelection
+        ? { providerId: vaultProvider.id, model: vaultSelection.model, effort: vaultSelection.effort, speed: vaultSelection.speed }
+        : choice
+        ? { providerId: null, model: choice.model, effort: choice.effort, speed: choice.speed }
+        : { providerId: null, model: null, effort: null, speed: null }
+    ).catch(() => null);
   }
 
   // --- history + the user turn ------------------------------------------
@@ -232,17 +337,29 @@ export const action = async ({ request }: { request: Request }) => {
       };
 
       let outcome: LopuChatTurnOutcome | null = null;
-      const generator = streamLopuChatTurn({
-        viewer,
-        chatId: persistedChatId,
-        userMessageId,
-        requestId: input.requestId,
-        text: input.text,
-        history,
-        choice,
-        context: input.context,
-        signal: abort.signal
-      });
+      const generator =
+        vaultProvider && vaultSelection
+          ? streamLopuVaultChatTurn({
+              provider: vaultProvider,
+              chatId: persistedChatId,
+              userMessageId,
+              requestId: input.requestId,
+              text: input.text,
+              history,
+              ...vaultSelection,
+              signal: abort.signal
+            })
+          : streamLopuChatTurn({
+              viewer,
+              chatId: persistedChatId,
+              userMessageId,
+              requestId: input.requestId,
+              text: input.text,
+              history,
+              choice,
+              context: input.context,
+              signal: abort.signal
+            });
       try {
         for (;;) {
           const step = await generator.next();
@@ -257,7 +374,13 @@ export const action = async ({ request }: { request: Request }) => {
         send({ type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept.', retryable: true });
       } finally {
         // persist whatever streamed, even after an error or a disconnect
-        const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
+        const finished =
+          outcome?.stopReason === 'end_turn' ||
+          outcome?.stopReason === 'fallback' ||
+          outcome?.stopReason === 'tool_limit' ||
+          outcome?.stopReason === 'hop_limit' ||
+          outcome?.stopReason === 'time_limit' ||
+          outcome?.stopReason === 'max_tokens';
         const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
         const stopReason = outcome?.stopReason || 'error';
         let assistantMessageId = '';

@@ -44,6 +44,8 @@ import {
 	type AiModelPublic,
 	type LopuChatSettings,
 	type LopuChatSummary,
+	type LopuProviderTemplatePublic,
+	type LopuVaultProviderPublic,
 	type SendLopuResult
 } from './lopuChatStore';
 import type { LopuReplyContext } from './lopuChatStream';
@@ -72,7 +74,10 @@ export const buildLopuContext = (base?: Partial<LopuContext>): LopuContext => {
 };
 
 /** A provider that captures static bits now and reads the live draft on every send. */
-export const createLopuContextProvider = (base?: Partial<LopuContext>): LopuContextProvider => () => buildLopuContext(base);
+export const createLopuContextProvider =
+	(base?: Partial<LopuContext>): LopuContextProvider =>
+	() =>
+		buildLopuContext(base);
 
 /** The default provider: current route + viewport, the active draft read live. */
 export const useLopuContextProvider = (extra?: { selectedBlockId?: string | null }): LopuContextProvider => {
@@ -124,6 +129,8 @@ export type UseLopuChat = {
 	deleteChat: (chatId: string) => ReturnType<typeof deleteLopuChat>;
 	renameChat: (chatId: string, title: string) => ReturnType<typeof renameLopuChat>;
 	models: AiModelPublic[];
+	vaultProviders: LopuVaultProviderPublic[];
+	providerTemplates: LopuProviderTemplatePublic[];
 	modelsLoading: boolean;
 	modelsLoaded: boolean;
 	defaults: LopuChatSettings | null;
@@ -143,7 +150,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice } = useLopuSettings();
+	const { settings: prefs } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const contextLabel = useActiveDraftLabel();
@@ -151,6 +158,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	// the store's client: useApi's Lopu family + the messenger's message page
 	bindLopuApi({
 		models: api.v1.ai.models,
+		vault: api.v1.lopu.vault,
 		chats: api.v1.lopu.chats,
 		messages: messenger.messages,
 		reply: api.v1.lopu.reply
@@ -181,16 +189,6 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		void loadLopuMessages(activeChatId);
 	}, [userId, activeChatId, loadedForChat]);
 
-	// the viewer's preference (settings.lopu.*) feeds the store; a chat's own
-	// settings can still override it while that chat is selected
-	React.useEffect(() => {
-		const patch: Partial<LopuChatSettings> = {};
-		if (prefs.model) patch.model = prefs.model;
-		if (prefs.effort) patch.effort = prefs.effort;
-		if (prefs.speed) patch.speed = prefs.speed;
-		if (Object.keys(patch).length) setLopuSettings(patch);
-	}, [prefs.model, prefs.effort, prefs.speed]);
-
 	// notices → the Lopu toast (the first mounted hook drains them)
 	const noticeCount = snapshot.notices.length;
 	React.useEffect(() => {
@@ -219,14 +217,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		[contextProvider, applyPatches]
 	);
 
-	const setSettings = React.useCallback(
-		(patch: Partial<LopuChatSettings>) => {
-			setLopuSettings(patch);
-			const next = getLopuStoreSnapshot().settings;
-			setModelChoice({ model: next.model, effort: next.effort, speed: next.speed === 'fast' || next.speed === 'normal' ? next.speed : null });
-		},
-		[setModelChoice]
-	);
+	const setSettings = React.useCallback((patch: Partial<LopuChatSettings>) => setLopuSettings(patch), []);
 
 	const selectChat = React.useCallback((chatId: string | null) => selectLopuChat(chatId), []);
 
@@ -255,6 +246,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		deleteChat: deleteLopuChat,
 		renameChat: renameLopuChat,
 		models: snapshot.models,
+		vaultProviders: snapshot.vaultProviders,
+		providerTemplates: snapshot.providerTemplates,
 		modelsLoading: snapshot.modelsLoading,
 		modelsLoaded: snapshot.modelsLoaded,
 		defaults: snapshot.defaults,

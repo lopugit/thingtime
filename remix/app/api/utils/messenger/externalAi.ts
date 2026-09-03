@@ -10,12 +10,12 @@ export type ExternalAiSourceProvider = Exclude<AiSourceProvider, 'lopu'>;
 export type AiMessageRole = 'user' | 'assistant' | 'system' | 'unknown';
 
 type PublicExternalAiSourceBase = {
-  sourceId: string;
-  label: string;
-  role?: AiMessageRole;
-  authorName?: string | null;
-  segmentIndex?: number;
-  segmentCount?: number;
+	sourceId: string;
+	label: string;
+	role?: AiMessageRole;
+	authorName?: string | null;
+	segmentIndex?: number;
+	segmentCount?: number;
 	messageId?: string;
 	revision?: number;
 };
@@ -58,29 +58,29 @@ export type PublicExternalAiSource = PublicImportedExternalAiSource | PublicLive
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
 export const publicExternalAiSource = (value: unknown): PublicExternalAiSource | null => {
-  if (!value || typeof value !== 'object') return null;
-  const raw = value as Record<string, unknown>;
+	if (!value || typeof value !== 'object') return null;
+	const raw = value as Record<string, unknown>;
 	const provider = AI_SOURCE_PROVIDERS.includes(raw.provider as AiSourceProvider) ? (raw.provider as AiSourceProvider) : null;
-  const sourceId = text(raw.sourceId, 64);
-  const label = text(raw.label, 80);
+	const sourceId = text(raw.sourceId, 64);
+	const label = text(raw.label, 80);
 	const deviceId = text(raw.deviceId, 160);
 	const access =
 		raw.access === undefined || raw.access === 'imported' ? 'imported' : raw.access === 'live' ? 'live' : raw.access === 'lopu' ? 'lopu' : null;
 	if (!provider || !sourceId || !label || !access) return null;
 
 	const role = ['user', 'assistant', 'system', 'unknown'].includes(String(raw.role)) ? (raw.role as AiMessageRole) : undefined;
-  const authorName = text(raw.authorName, 80) || null;
+	const authorName = text(raw.authorName, 80) || null;
 	const segmentIndex = Number.isSafeInteger(raw.segmentIndex) && Number(raw.segmentIndex) >= 0 ? Number(raw.segmentIndex) : undefined;
 	const segmentCount = Number.isSafeInteger(raw.segmentCount) && Number(raw.segmentCount) > 0 ? Number(raw.segmentCount) : undefined;
 	const messageId = text(raw.messageId, 512) || undefined;
 	const revision = Number.isSafeInteger(raw.revision) && Number(raw.revision) >= 1 ? Number(raw.revision) : undefined;
 
 	const details = {
-    sourceId,
-    label,
-    ...(role ? { role } : {}),
-    ...(authorName ? { authorName } : {}),
-    ...(segmentIndex !== undefined ? { segmentIndex } : {}),
+		sourceId,
+		label,
+		...(role ? { role } : {}),
+		...(authorName ? { authorName } : {}),
+		...(segmentIndex !== undefined ? { segmentIndex } : {}),
 		...(segmentCount !== undefined ? { segmentCount } : {}),
 		...(messageId ? { messageId } : {}),
 		...(revision !== undefined ? { revision } : {})
@@ -160,7 +160,7 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 		...(projectLabel ? { projectLabel } : {}),
 		...(historyProgress || {}),
 		readOnly: false
-  };
+	};
 };
 
 // ── Lopu turn metadata (crystal.lopu on chat-message rows) ──
@@ -169,7 +169,21 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 // UI can render tool-activity cards for historical turns. The sanitiser is
 // the stored shape too: whatever the reply route hands over is bounded here
 // once, on the way in, and read back verbatim.
-export const LOPU_TURN_PROVIDERS = ['claude', 'openai', 'test', 'fallback'] as const;
+export const LOPU_TURN_PROVIDERS = [
+	'claude',
+	'anthropic',
+	'openai',
+	'google',
+	'xai',
+	'openrouter',
+	'mistral',
+	'deepseek',
+	'groq',
+	'cohere',
+	'compatible',
+	'test',
+	'fallback'
+] as const;
 export type LopuTurnProvider = (typeof LOPU_TURN_PROVIDERS)[number];
 export const LOPU_MAX_TOOL_CALLS = 20;
 export const LOPU_TOOL_SUMMARY_MAX_CHARS = 240;
@@ -191,8 +205,7 @@ export type PublicLopuMessageMeta = {
 	stopReason?: string | null;
 };
 
-const nonNegativeInt = (value: unknown): number | undefined =>
-	Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+const nonNegativeInt = (value: unknown): number | undefined => (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined);
 
 export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | null => {
 	if (!value || typeof value !== 'object') return null;

@@ -19,23 +19,39 @@ import {
 
 test('normalizeLopuChatSettings accepts catalog models, composed ids and null resets', () => {
 	const plain = normalizeLopuChatSettings({ model: 'claude-opus-5', effort: 'high', speed: 'fast' });
-	assert.deepEqual(plain, { ok: true, settings: { model: 'claude-opus-5', effort: 'high', speed: 'fast' }, changed: true });
+	assert.deepEqual(plain, { ok: true, settings: { providerId: null, model: 'claude-opus-5', effort: 'high', speed: 'fast' }, changed: true });
 
 	const composed = normalizeLopuChatSettings({ model: 'claude-opus-5:max:fast' });
-	assert.deepEqual(composed, { ok: true, settings: { model: 'claude-opus-5', effort: 'max', speed: 'fast' }, changed: true });
+	assert.deepEqual(composed, { ok: true, settings: { providerId: null, model: 'claude-opus-5', effort: 'max', speed: 'fast' }, changed: true });
 
 	const explicitWins = normalizeLopuChatSettings({ model: 'claude-opus-5:max', effort: 'low' });
 	assert.equal(explicitWins.ok, true);
 	assert.equal((explicitWins as any).settings.effort, 'low');
 
 	const untouched = normalizeLopuChatSettings({}, { model: 'gpt-5.5', effort: 'high', speed: null });
-	assert.deepEqual(untouched, { ok: true, settings: { model: 'gpt-5.5', effort: 'high', speed: null }, changed: false });
+	assert.deepEqual(untouched, { ok: true, settings: { providerId: null, model: 'gpt-5.5', effort: 'high', speed: null }, changed: false });
 
 	const reset = normalizeLopuChatSettings({ model: null, effort: '', speed: null }, { model: 'gpt-5.5', effort: 'high', speed: 'fast' });
-	assert.deepEqual(reset, { ok: true, settings: { model: null, effort: null, speed: null }, changed: true });
+	assert.deepEqual(reset, { ok: true, settings: { providerId: null, model: null, effort: null, speed: null }, changed: true });
 
 	// the 'default' sentinel is not a pinned model
-	assert.deepEqual(normalizeLopuChatSettings({ model: 'default' }), { ok: true, settings: { model: null, effort: null, speed: null }, changed: false });
+	assert.deepEqual(normalizeLopuChatSettings({ model: 'default' }), {
+		ok: true,
+		settings: { providerId: null, model: null, effort: null, speed: null },
+		changed: false
+	});
+
+	const vault = normalizeLopuChatSettings({
+		providerId: '6b43f11d-4ddd-4bb7-a6ba-7c9ddb387309',
+		model: 'vendor/custom-model',
+		effort: 'ultra',
+		speed: 'fast'
+	});
+	assert.deepEqual(vault, {
+		ok: true,
+		settings: { providerId: '6b43f11d-4ddd-4bb7-a6ba-7c9ddb387309', model: 'vendor/custom-model', effort: 'ultra', speed: 'fast' },
+		changed: true
+	});
 });
 
 test('normalizeLopuChatSettings rejects unknown models and unsupported explicit knobs, clamps inherited ones', () => {
@@ -54,16 +70,17 @@ test('normalizeLopuChatSettings rejects unknown models and unsupported explicit 
 
 	// switching models under inherited settings clamps instead of failing
 	const clamped = normalizeLopuChatSettings({ model: 'claude-haiku-4-5' }, { model: 'claude-opus-5', effort: 'max', speed: 'fast' });
-	assert.deepEqual(clamped, { ok: true, settings: { model: 'claude-haiku-4-5', effort: null, speed: null }, changed: true });
+	assert.deepEqual(clamped, { ok: true, settings: { providerId: null, model: 'claude-haiku-4-5', effort: null, speed: null }, changed: true });
 	const preferHigh = normalizeLopuChatSettings({ model: 'gpt-5' }, { model: 'gpt-5.6-sol', effort: 'ultra', speed: 'fast' });
-	assert.deepEqual(preferHigh, { ok: true, settings: { model: 'gpt-5', effort: 'high', speed: 'fast' }, changed: true });
+	assert.deepEqual(preferHigh, { ok: true, settings: { providerId: null, model: 'gpt-5', effort: 'high', speed: 'fast' }, changed: true });
 	// a null (catalog default) model accepts any known effort token
 	assert.equal(normalizeLopuChatSettings({ effort: 'ultra' }).ok, true);
 });
 
 test('lopuChatStateOf reads stored settings forgivingly', () => {
-	assert.deepEqual(lopuChatStateOf(undefined), { model: null, effort: null, speed: null, turns: 0, lastModel: null });
+	assert.deepEqual(lopuChatStateOf(undefined), { providerId: null, model: null, effort: null, speed: null, turns: 0, lastModel: null });
 	assert.deepEqual(lopuChatStateOf({ model: ' claude-opus-5 ', effort: 'high', speed: 'fast', turns: 3, lastModel: 'claude-opus-4-8' }), {
+		providerId: null,
 		model: 'claude-opus-5',
 		effort: 'high',
 		speed: 'fast',
@@ -71,6 +88,7 @@ test('lopuChatStateOf reads stored settings forgivingly', () => {
 		lastModel: 'claude-opus-4-8'
 	});
 	assert.deepEqual(lopuChatStateOf({ model: 7, effort: 'turbo', speed: 'warp', turns: -1, lastModel: '' }), {
+		providerId: null,
 		model: null,
 		effort: null,
 		speed: null,
@@ -137,12 +155,15 @@ test('the chat and assistant sources project through publicExternalAiSource as t
 test('publicLopuMessageMeta bounds the turn metadata and keeps assistant-only fields off user rows', () => {
 	assert.equal(publicLopuMessageMeta(null), null);
 	assert.equal(publicLopuMessageMeta({ role: 'system' }), null);
-	assert.deepEqual(publicLopuMessageMeta({ role: 'user', requestId: 'req-1', segmentIndex: 1, segmentCount: 2, model: 'x', toolCalls: [{ name: 'a' }] }), {
-		role: 'user',
-		requestId: 'req-1',
-		segmentIndex: 1,
-		segmentCount: 2
-	});
+	assert.deepEqual(
+		publicLopuMessageMeta({ role: 'user', requestId: 'req-1', segmentIndex: 1, segmentCount: 2, model: 'x', toolCalls: [{ name: 'a' }] }),
+		{
+			role: 'user',
+			requestId: 'req-1',
+			segmentIndex: 1,
+			segmentCount: 2
+		}
+	);
 	const meta = publicLopuMessageMeta({
 		role: 'assistant',
 		requestId: 'req-1',
@@ -151,7 +172,12 @@ test('publicLopuMessageMeta bounds the turn metadata and keeps assistant-only fi
 		speed: 'normal',
 		provider: 'claude',
 		usage: { inputTokens: 12, outputTokens: 34 },
-		toolCalls: Array.from({ length: 25 }, (_, index) => ({ name: `tool-${index}`, ok: index % 2 === 0, summary: 'x'.repeat(500), thingId: index ? `thing-${index}` : '' })),
+		toolCalls: Array.from({ length: 25 }, (_, index) => ({
+			name: `tool-${index}`,
+			ok: index % 2 === 0,
+			summary: 'x'.repeat(500),
+			thingId: index ? `thing-${index}` : ''
+		})),
 		stopReason: 'end_turn'
 	});
 	assert.ok(meta);
@@ -167,7 +193,16 @@ test('publicLopuMessageMeta bounds the turn metadata and keeps assistant-only fi
 	assert.equal(meta!.stopReason, 'end_turn');
 	// garbage never becomes structure
 	const sparse = publicLopuMessageMeta({ role: 'assistant', provider: 'gemini', usage: { inputTokens: -1 }, toolCalls: 'nope', stopReason: 5 });
-	assert.deepEqual(sparse, { role: 'assistant', requestId: null, segmentIndex: 0, segmentCount: 1, model: null, effort: null, speed: null, stopReason: null });
+	assert.deepEqual(sparse, {
+		role: 'assistant',
+		requestId: null,
+		segmentIndex: 0,
+		segmentCount: 1,
+		model: null,
+		effort: null,
+		speed: null,
+		stopReason: null
+	});
 });
 
 const userRow = (text: string, requestId: string | null, segmentIndex = 0) => ({
@@ -203,7 +238,10 @@ test('buildLopuHistory folds segments exactly, merges stray same-role rows and s
 		{ role: 'assistant', text: 'Answer to both.' }
 	]);
 	assert.equal(folded.truncated, false);
-	assert.equal(folded.chars, folded.history.reduce((sum, turn) => sum + turn.text.length, 0));
+	assert.equal(
+		folded.chars,
+		folded.history.reduce((sum, turn) => sum + turn.text.length, 0)
+	);
 });
 
 test('buildLopuHistory keeps the newest turns under the turn and char caps', () => {

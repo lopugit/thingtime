@@ -3889,7 +3889,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'lopu-chats',
-		contractVersion: '1.1.0',
+		contractVersion: '1.2.0',
     group: 'lopu',
     title: 'Lopu conversations',
     endpoint: '/api/v1/lopu/chats',
@@ -3899,9 +3899,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
       'messages page through /api/v1/chats/messages. GET returns the caller’s Lopu chats newest activity first in ' +
       'the same list-entry shape as /api/v1/chats (unread count, lastMessage preview, membership). POST creates ' +
-      'one: an optional client-generated lopu-chat UUID, title (defaults to "Lopu"), plus the model settings the conversation should use — model (a catalog ' +
-      'model id or a composed id such as claude-opus-5:high:fast), effort and speed are validated against the ' +
-      'model catalog; omitted or null fields mean "catalog default", which the reply route resolves through the ' +
+      'one: an optional client-generated lopu-chat UUID, title (defaults to "Lopu"), plus providerId, model, effort and speed. ' +
+      'Without providerId, model is a deployment-catalog id or composed id such as claude-opus-5:high:fast. With providerId, it is the owner’s ' +
+      'Secure Vault connection and model may be a seeded provider model or a bounded custom provider-native id. Omitted or null fields mean "provider/catalog default", which the reply route resolves through the ' +
       'admin defaults and provider availability on every turn. Lopu’s replies are rows owned by the caller that ' +
       'carry a read-only assistant externalSource; the user’s own rows stay editable and deletable.',
     auth: {
@@ -3911,7 +3911,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with credentials to list Lopu conversations (limit caps the page, default 100, max 300).',
-      'POST { chatId?, title?, model?, effort?, speed? } with Content-Type: application/json to start a conversation. Reusing the same owned Lopu chatId is idempotent.',
+      'POST { chatId?, title?, providerId?, model?, effort?, speed? } with Content-Type: application/json to start a conversation. Reusing the same owned Lopu chatId is idempotent.',
       'Use chat.id from the response as chatId for /api/v1/lopu/chats/reply, /update and /delete.',
       'Read the transcript through /api/v1/chats/messages?chatId= like any other chat.',
       'Handle 400 for an unknown model or an effort/speed the model does not offer, and 415 for a non-JSON body.'
@@ -3962,12 +3962,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'lopu-chats-update',
+		contractVersion: '1.1.0',
     group: 'lopu',
     title: 'Update Lopu conversation',
     endpoint: '/api/v1/lopu/chats/update',
     summary: 'Renames a Lopu conversation or retunes its model, effort and speed.',
     detail:
-      'POST { chatId, title?, model?, effort?, speed? }. Only the conversation’s member (its owner) may update it. ' +
+      'POST { chatId, title?, providerId?, model?, effort?, speed? }. Only the conversation’s member (its owner) may update it. ' +
       'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
       'segments, null resets a field to the catalog default, and an effort or speed the chosen model does not ' +
       'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). Unlike ' +
@@ -4059,12 +4060,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'lopu-chats-reply',
+		contractVersion: '1.1.0',
     group: 'lopu',
     title: 'Lopu reply stream',
     endpoint: '/api/v1/lopu/chats/reply',
     summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
-      'POST { chatId?, text, requestId, model?, effort?, speed?, context? }. The user turn is persisted first (omit chatId to start a ' +
+      'POST { chatId?, text, requestId, providerId?, model?, effort?, speed?, context? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
       'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
       '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
@@ -4074,17 +4076,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'suites, navigation) so ACL, quotas and crystal validation always apply; delete_thing refuses without an explicit ' +
       'confirmation. context.page carries the open builder draft ({ id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? ≤ 48KB }) ' +
       'so target "active" patches apply to what the user sees; they are saved only when source is "user" (expectedUpdatedAt guards ' +
-      'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings, and ' +
+      'the write). Without providerId the model is chosen from /api/v1/ai/models and retains the full Thingtime tool loop. With providerId the encrypted ' +
+      'token is resolved server-side from the caller’s Secure Vault, the endpoint passes the public-host SSRF/DNS guard, and the selected seeded or custom model runs in conversational mode. Per-turn overrides persist as the chat’s settings, and ' +
       'when no provider is configured the reply is an honest canned line. A provider that fails before emitting anything falls ' +
       'through to the other configured provider; the assistant turn is persisted even when the stream errors or the client ' +
-      'disconnects. Limits per reply: 12 model hops, 24 tool executions, 240 seconds, 96KB per tool input.',
+      'disconnects. A valid client-reserved chatId that has not been persisted yet is created idempotently on its first reply, closing the URL-navigation race. Limits per reply: 12 model hops, 24 tool executions, 240 seconds, 96KB per tool input.',
     auth: {
       mode: 'session',
       description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json and at most 256KB.'
     },
     methods: ['POST'],
     steps: [
-      'POST { text, requestId } (plus chatId to continue a conversation) with Content-Type: application/json.',
+      'POST { text, requestId } (plus chatId to continue and providerId/model/effort/speed to retune the conversation) with Content-Type: application/json.',
       'Read the response line by line; each line is one JSON event and meta always comes first.',
       'Append delta.text values; render tool_use_start/tool_result as activity; apply patch.ops to the open builder draft.',
       'Treat done as the end of the turn — it carries assistantMessageId and the persisted messages.',
@@ -4140,6 +4143,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed.',
+			'Secure Vault provider tokens are write-only and never appear in this request, stream, logs, or persisted message metadata.',
       'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.'
     ]
   }),

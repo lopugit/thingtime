@@ -32,6 +32,7 @@ import {
 	type AiModelSpeed
 } from '../settings/prConflictResolverModelWaterfallCore';
 import { publicLopuMessageMeta, type PublicLopuMessageMeta } from './externalAi';
+import { boundedVaultText, safeVaultId } from '../lopu/userVaultCore';
 import {
 	chatListEntryFor,
 	chatPreviewOf,
@@ -79,12 +80,13 @@ export const LOPU_CHAT_SOURCE = Object.freeze({
 } as const);
 
 export type LopuChatSettings = {
-	model: string | null; // provider-native id from AI_WORKFLOW_BASE_MODELS; null = catalog default
+	providerId: string | null; // user-owned Secure Vault connection; null = deployment catalog
+	model: string | null; // catalog id or provider-native/custom model id; null = selected provider default
 	effort: AiModelEffort | null; // null = the model's provider-default effort
 	speed: AiModelSpeed | null; // null = 'normal'
 };
 export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null };
-export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown };
+export type LopuChatSettingsInput = { providerId?: unknown; model?: unknown; effort?: unknown; speed?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
 	model?: unknown;
@@ -110,7 +112,7 @@ export type LopuUserTurnResult = Fail | { ok: true; message: PublicChatMessage; 
 export type LopuAssistantTurnResult = Fail | { ok: true; messages: PublicChatMessage[]; existing?: boolean };
 export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean };
 
-export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null });
+export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ providerId: null, model: null, effort: null, speed: null });
 
 const EFFORT_VALUES: readonly string[] = Object.keys(AI_MODEL_EFFORT_LABELS);
 const isEffort = (value: unknown): value is AiModelEffort => typeof value === 'string' && EFFORT_VALUES.includes(value);
@@ -163,12 +165,13 @@ export const lopuAssistantSource = (requestId: string, segmentIndex: number, seg
 // forgiving, so a row written by a newer catalog never breaks the read path.
 export const lopuChatStateOf = (value: unknown): LopuChatState => {
 	const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-	const model = typeof raw.model === 'string' && raw.model.trim() ? raw.model.trim().slice(0, 128) : null;
+	const providerId = safeVaultId(raw.providerId);
+	const model = typeof raw.model === 'string' && raw.model.trim() ? raw.model.trim().slice(0, 200) : null;
 	const effort = isEffort(raw.effort) ? raw.effort : null;
 	const speed = raw.speed === 'fast' ? 'fast' : raw.speed === 'normal' ? 'normal' : null;
 	const turns = Number.isSafeInteger(raw.turns) && Number(raw.turns) >= 0 ? Number(raw.turns) : 0;
 	const lastModel = typeof raw.lastModel === 'string' && raw.lastModel.trim() ? raw.lastModel.trim().slice(0, 128) : null;
-	return { model, effort, speed, turns, lastModel };
+	return { providerId, model, effort, speed, turns, lastModel };
 };
 
 const withLopuState = (entry: ChatListEntry, lopu: unknown): LopuChatEntry => ({ ...entry, lopu: lopuChatStateOf(lopu) });
@@ -183,18 +186,41 @@ export type NormalizedLopuChatSettings = { ok: true; settings: LopuChatSettings;
 // (prefer 'high', else the model's last tier; fast → normal) when it was only
 // inherited from the previous settings under a model switch. Availability and
 // admin enable flags are the reply route's concern (api/utils/ai/models.ts).
-export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current: LopuChatSettings = EMPTY_LOPU_SETTINGS): Fail | NormalizedLopuChatSettings => {
-	let model = current.model;
-	let effort = current.effort;
-	let speed = current.speed;
+export const normalizeLopuChatSettings = (
+	input: LopuChatSettingsInput,
+	current: Partial<LopuChatSettings> = EMPTY_LOPU_SETTINGS
+): Fail | NormalizedLopuChatSettings => {
+	const previous: LopuChatSettings = { ...EMPTY_LOPU_SETTINGS, ...current };
+	let providerId = previous.providerId;
+	let model = previous.model;
+	let effort = previous.effort;
+	let speed = previous.speed;
 	let effortExplicit = false;
 	let speedExplicit = false;
+
+	if (input.providerId !== undefined) {
+		if (input.providerId === null || input.providerId === '') {
+			providerId = null;
+		} else {
+			providerId = safeVaultId(input.providerId);
+			if (!providerId) return fail(400, 'providerId must be a Secure Vault provider id');
+		}
+		if (providerId !== previous.providerId && input.model === undefined) {
+			model = null;
+			effort = null;
+			speed = null;
+		}
+	}
 
 	if (input.model !== undefined) {
 		if (input.model === null || input.model === '') {
 			model = null;
 		} else if (typeof input.model !== 'string') {
-			return fail(400, 'model must be a catalog model id');
+			return fail(400, 'model must be a model id');
+		} else if (providerId) {
+			const custom = boundedVaultText(input.model, 200);
+			if (!custom || /[\s$]/.test(custom)) return fail(400, 'model must be a provider model id without spaces');
+			model = custom;
 		} else {
 			const choice = parseAiWorkflowModelOptionId(input.model.trim());
 			if (!choice) return fail(400, `Unknown model "${input.model.trim().slice(0, 64)}"`);
@@ -230,7 +256,7 @@ export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current:
 		speedExplicit = true;
 	}
 
-	const base = baseModelOf(model);
+	const base = providerId ? null : baseModelOf(model);
 	if (base) {
 		if (effort && !base.efforts.includes(effort)) {
 			if (effortExplicit) return fail(400, `${base.label} does not offer ${effort} effort`);
@@ -242,8 +268,12 @@ export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current:
 		}
 	}
 
-	const settings: LopuChatSettings = { model, effort, speed };
-	const changed = settings.model !== current.model || settings.effort !== current.effort || settings.speed !== current.speed;
+	const settings: LopuChatSettings = { providerId, model, effort, speed };
+	const changed =
+		settings.providerId !== previous.providerId ||
+		settings.model !== previous.model ||
+		settings.effort !== previous.effort ||
+		settings.speed !== previous.speed;
 	return { ok: true, settings, changed };
 };
 
@@ -340,14 +370,7 @@ const previewOf = (lastRow: any, fullText: string) => ({
 	...(lastRow.crystal?.externalSource ? { externalSource: lastRow.crystal.externalSource } : {})
 });
 
-const messageRow = (
-	viewerId: string,
-	chatId: string,
-	shareId: string,
-	text: string,
-	createdAt: Date,
-	extra: Record<string, unknown>
-) => {
+const messageRow = (viewerId: string, chatId: string, shareId: string, text: string, createdAt: Date, extra: Record<string, unknown>) => {
 	const doc = newThingDoc('chat-message', {
 		ownerId: viewerId,
 		targetId: chatId,
@@ -369,7 +392,7 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 export const createLopuChat = async (
 	viewerId: string,
-	input: { chatId?: unknown; title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
+	input: { chatId?: unknown; title?: unknown; providerId?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
 ): Promise<LopuChatResult> => {
 	const requestedChatId = input.chatId === undefined ? null : normalizeLopuChatShareId(input.chatId);
 	if (input.chatId !== undefined && !requestedChatId) return fail(400, 'chatId must be a Lopu chat UUID');
@@ -424,7 +447,9 @@ export const listLopuChats = async (viewerId: string, input: { limit?: unknown }
 	const limit = clampInt(input.limit, DEFAULT_LISTED_LOPU_CHATS, 1, MAX_LISTED_LOPU_CHATS);
 	const things = await getThingsCollection();
 	const docs = await things
-		.find({ thingtime: 'chat', ownerId: viewerId, 'crystal.externalSource.provider': 'lopu' } as any, { projection: { shareId: 1, 'crystal.lopu': 1 } })
+		.find({ thingtime: 'chat', ownerId: viewerId, 'crystal.externalSource.provider': 'lopu' } as any, {
+			projection: { shareId: 1, 'crystal.lopu': 1 }
+		})
 		.sort({ updatedAt: -1, shareId: 1 })
 		.limit(limit)
 		.toArray();
@@ -453,7 +478,7 @@ export const getLopuChat = async (viewerId: string, chatId: unknown): Promise<Ge
 export const updateLopuChat = async (
 	viewerId: string,
 	chatId: unknown,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
+	input: { title?: unknown; providerId?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
 ): Promise<LopuChatResult> => {
 	const access = await resolveLopuChat(viewerId, chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -468,6 +493,7 @@ export const updateLopuChat = async (
 	const normalized = normalizeLopuChatSettings(input, current);
 	if (normalized.ok === false) return normalized;
 	if (normalized.changed) {
+		patch['crystal.lopu.providerId'] = normalized.settings.providerId;
 		patch['crystal.lopu.model'] = normalized.settings.model;
 		patch['crystal.lopu.effort'] = normalized.settings.effort;
 		patch['crystal.lopu.speed'] = normalized.settings.speed;
@@ -671,7 +697,13 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 	// the fold long before 8 rows per turn could matter — bounded either way
 	const rows = await things
 		.find(
-			{ thingtime: 'chat-message', targetId: chat.shareId, 'crystal.threadRootId': null, 'crystal.deletedAt': null, 'crystal.systemType': null } as any,
+			{
+				thingtime: 'chat-message',
+				targetId: chat.shareId,
+				'crystal.threadRootId': null,
+				'crystal.deletedAt': null,
+				'crystal.systemType': null
+			} as any,
 			{ projection: { crystal: 1, createdAt: 1, shareId: 1, ownerId: 1 } }
 		)
 		.sort({ createdAt: -1, shareId: 1 })

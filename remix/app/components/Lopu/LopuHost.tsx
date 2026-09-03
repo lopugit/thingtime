@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
+import { Box, Button, Center, Flex, Switch, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronDown, Maximize2, Minus, X } from 'lucide-react';
 
@@ -13,17 +13,11 @@ import {
 	LOPU_WINDOW_MIN_SIZE,
 	clampLopuLauncherPosition,
 	clampLopuWindowGeometry,
-	describeLopuEffort,
-	describeLopuModelChoice,
 	dockedLopuWindowGeometry,
-	findLopuCatalogModel,
 	isLopuHostHiddenOnPath,
-	preferredLopuEffort,
 	readLopuLauncherPosition,
 	readLopuWindowGeometry,
-	resolveLopuModelChoice,
 	resolveLopuWindowGeometry,
-	useLopuModelCatalog,
 	useLopuSettings,
 	writeLopuLauncherPosition,
 	writeLopuWindowGeometry,
@@ -34,7 +28,6 @@ import {
 } from './useLopuSettings';
 import { LOPU_LAUNCHER_Z, LOPU_WINDOW_Z, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { startPointerGesture } from '../Thingtime/EditorSplit';
-import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { RAINBOW } from '~/theme/rainbow';
 import { shouldIgnoreGlobalKeydown } from '~/utils/editableTarget';
 
@@ -125,153 +118,12 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 	</Center>
 );
 
-// The header's model chip: shows the effective choice, opens a small in-window
-// picker (a plain absolutely-positioned list — Chakra's portal menus would
-// layer beneath the window's z rung).
-const ModelChip = (props: { active: boolean }) => {
-	const { settings, setModelChoice } = useLopuSettings();
-	const { catalog, hasCatalog } = useLopuModelCatalog(props.active);
-	const [menuOpen, setMenuOpen] = React.useState(false);
-	const menuRef = useOutsideTapClose<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
-
-	const choice = resolveLopuModelChoice(catalog, settings);
-	const label = describeLopuModelChoice(catalog, settings);
-
-	return (
-		<Box ref={menuRef} position="relative" data-lopu-control minWidth={0}>
-			<Flex
-				as="button"
-				type="button"
-				aria-haspopup="listbox"
-				aria-expanded={menuOpen}
-				title={hasCatalog ? 'Choose the model Lopu thinks with' : 'Model'}
-				alignItems="center"
-				columnGap={1}
-				maxWidth="160px"
-				paddingX={2}
-				height="24px"
-				borderRadius="999px"
-				border="1px solid var(--tt-border, #ececef)"
-				background="var(--tt-surface-alt, #f5f5f7)"
-				color="var(--tt-muted, #5a5a66)"
-				cursor="pointer"
-				_hover={{ color: 'var(--tt-ink, #16161a)', borderColor: 'var(--tt-faint, #b6b6c0)' }}
-				onClick={() => setMenuOpen((prev) => !prev)}
-			>
-				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.04em" noOfLines={1} wordBreak="break-all">
-					{label}
-				</Text>
-				<ChevronDown size={11} strokeWidth={2} />
-			</Flex>
-			{menuOpen && (
-				<Flex
-					role="listbox"
-					aria-label="Lopu model"
-					position="absolute"
-					right={0}
-					top="calc(100% + 6px)"
-					zIndex={2}
-					flexDirection="column"
-					minWidth="240px"
-					maxHeight="280px"
-					overflowY="auto"
-					padding={1}
-					background="var(--tt-card, #ffffff)"
-					border="1px solid var(--tt-border, #ececef)"
-					borderRadius="var(--tt-radius-md, 12px)"
-					boxShadow="var(--tt-shadow-panel, 0 18px 50px rgba(20,20,40,0.18))"
-				>
-					{catalog.models.length === 0 && (
-						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" padding={2}>
-							{hasCatalog ? 'No models in the catalog yet.' : 'Loading models…'}
-						</Text>
-					)}
-					{catalog.models.map((model) => {
-						const selected = choice.model === model.id;
-						const disabled = !model.available;
-						return (
-							<Flex
-								key={model.id}
-								as="button"
-								type="button"
-								role="option"
-								aria-selected={selected}
-								disabled={disabled}
-								alignItems="center"
-								columnGap={2}
-								textAlign="left"
-								paddingX={2}
-								paddingY="6px"
-								borderRadius="var(--tt-radius-sm, 9px)"
-								opacity={disabled ? 0.45 : 1}
-								cursor={disabled ? 'not-allowed' : 'pointer'}
-								background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
-								_hover={disabled ? undefined : { background: 'var(--tt-surface-hover, #ececee)' }}
-								title={disabled ? (model.enabled ? `needs ${model.provider} key` : 'disabled by an admin') : undefined}
-								onClick={() => {
-									if (disabled) {
-										return;
-									}
-									setModelChoice({ model: model.id, effort: preferredLopuEffort(model, catalog.defaults.effort), speed: null });
-									setMenuOpen(false);
-								}}
-							>
-								<Box minWidth={0} flex="1">
-									<Text fontSize="xs" fontWeight={selected ? 700 : 500} noOfLines={1}>
-										{model.label}
-									</Text>
-									<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
-										{model.provider}
-										{disabled ? (model.enabled ? ` · needs ${model.provider} key` : ' · disabled') : ''}
-										{model.isDefault ? ' · default' : ''}
-									</Text>
-								</Box>
-								{selected && (
-									<Text fontSize="xs" flexShrink={0}>
-										✓
-									</Text>
-								)}
-							</Flex>
-						);
-					})}
-					{settings.model && (
-						<Flex
-							as="button"
-							type="button"
-							alignItems="center"
-							paddingX={2}
-							paddingY="6px"
-							marginTop={1}
-							borderTop="1px solid var(--tt-border, #ececef)"
-							cursor="pointer"
-							_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
-							onClick={() => {
-								setModelChoice({ model: null, effort: null, speed: null });
-								setMenuOpen(false);
-							}}
-						>
-							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-								Use the catalog default
-							</Text>
-						</Flex>
-					)}
-				</Flex>
-			)}
-		</Box>
-	);
-};
-
 // Settings rows shared by UserSettingsModal (settingRow closure) and
 // SettingsPage (SettingRow component): each host passes its own row renderer
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed } =
-		useLopuSettings();
-	const { catalog, hasCatalog } = useLopuModelCatalog(true);
-	const choice = resolveLopuModelChoice(catalog, settings);
-	const chosenModel = findLopuCatalogModel(catalog, choice.model);
-	const offersFast = !!chosenModel?.speeds.includes('fast');
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends } = useLopuSettings();
 
 	return (
 		<>
@@ -293,7 +145,11 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			)}
 			{renderRow(
 				'Apply builder changes live',
-				<Switch isChecked={settings.applyPatches} onChange={(event) => setApplyPatches(event.target.checked)} aria-label="Apply builder changes live" />,
+				<Switch
+					isChecked={settings.applyPatches}
+					onChange={(event) => setApplyPatches(event.target.checked)}
+					aria-label="Apply builder changes live"
+				/>,
 				'Lopu’s page and component edits paint into the open draft while she is still typing'
 			)}
 			{renderRow(
@@ -306,46 +162,6 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				<Switch isChecked={settings.enterSends} onChange={(event) => setEnterSends(event.target.checked)} aria-label="Enter sends the message" />,
 				'Enter sends your message and Shift+Enter adds a line'
 			)}
-			{renderRow(
-				'Preferred model',
-				<Select
-					size="xs"
-					maxWidth="220px"
-					value={settings.model ?? ''}
-					aria-label="Preferred model"
-					onChange={(event) => {
-						const model = findLopuCatalogModel(catalog, event.target.value);
-						setModelChoice({ model: model?.id ?? null, effort: preferredLopuEffort(model, catalog.defaults.effort), speed: null });
-					}}
-				>
-					<option value="">Catalog default{catalog.defaults.model ? ` (${findLopuCatalogModel(catalog, catalog.defaults.model)?.label ?? catalog.defaults.model})` : ''}</option>
-					{catalog.models.map((model) => (
-						<option key={model.id} value={model.id} disabled={!model.available}>
-							{model.label}
-							{model.available ? '' : model.enabled ? ` — needs ${model.provider} key` : ' — disabled'}
-						</option>
-					))}
-				</Select>,
-				hasCatalog ? 'Which model Lopu thinks with by default; the composer can still change it per turn' : 'Loading the model catalog…'
-			)}
-			{!!chosenModel?.efforts.length &&
-				renderRow(
-					'Reasoning effort',
-					<Select size="xs" maxWidth="220px" value={choice.effort ?? ''} aria-label="Reasoning effort" onChange={(event) => setEffort(event.target.value || null)}>
-						{chosenModel.efforts.map((effort) => (
-							<option key={effort} value={effort}>
-								{describeLopuEffort(effort)}
-							</option>
-						))}
-					</Select>,
-					'Deeper effort thinks longer before answering'
-				)}
-			{offersFast &&
-				renderRow(
-					'Fast mode ⚡',
-					<Switch isChecked={choice.speed === 'fast'} onChange={(event) => setSpeed(event.target.checked ? 'fast' : 'normal')} aria-label="Fast mode" />,
-					'Trade a little depth for snappier replies'
-				)}
 		</>
 	);
 };
@@ -615,7 +431,10 @@ export const LopuHost = () => {
 				event,
 				(move) => {
 					const view = readViewport();
-					const width = Math.max(LOPU_WINDOW_MIN_SIZE.width, Math.min(originWidth + direction * (move.clientX - startX), view.width - LOPU_WINDOW_MARGIN));
+					const width = Math.max(
+						LOPU_WINDOW_MIN_SIZE.width,
+						Math.min(originWidth + direction * (move.clientX - startX), view.width - LOPU_WINDOW_MARGIN)
+					);
 					latest = clampLopuWindowGeometry({ ...freeGeometry, width }, view);
 					setWindowRaw(latest);
 				},
@@ -659,7 +478,6 @@ export const LopuHost = () => {
 			</Text>
 			<LopuActivityBadge />
 			<Box flex="1" minWidth={0} />
-			{!minimised && <ModelChip active={showWindow} />}
 			{variant === 'frame' && (
 				<HeaderButton title={minimised ? 'Expand' : 'Minimise'} onClick={() => setMinimised((prev) => !prev)}>
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
@@ -815,7 +633,9 @@ export const LopuHost = () => {
 					left={launcherPos ? `${launcherPos.x}px` : undefined}
 					top={launcherPos ? `${launcherPos.y}px` : undefined}
 					right={launcherPos ? undefined : `calc(var(--thingtime-safe-area-right, env(safe-area-inset-right, 0px)) + ${LOPU_LAUNCHER_INSET}px)`}
-					bottom={launcherPos ? undefined : `calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + ${LOPU_LAUNCHER_BOTTOM_INSET}px)`}
+					bottom={
+						launcherPos ? undefined : `calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + ${LOPU_LAUNCHER_BOTTOM_INSET}px)`
+					}
 					width={`${LOPU_LAUNCHER_SIZE}px`}
 					height={`${LOPU_LAUNCHER_SIZE}px`}
 				>

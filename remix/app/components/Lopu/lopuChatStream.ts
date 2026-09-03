@@ -27,9 +27,10 @@ export type LopuReplyBody = {
 	chatId?: string;
 	text: string;
 	requestId: string;
-	model?: string;
-	effort?: string;
-	speed?: string;
+	providerId?: string | null;
+	model?: string | null;
+	effort?: string | null;
+	speed?: string | null;
 	context?: LopuReplyContext;
 };
 
@@ -109,11 +110,7 @@ const errorFromResponse = async (response: Response): Promise<LopuStreamError> =
  * for a non-OK response and with the AbortError when `signal` fires.
  * Malformed lines are skipped (never abort a whole reply over one bad frame).
  */
-export const readNdjson = async (
-	response: Response,
-	onEvent: (event: LopuChatEvent) => void,
-	signal?: AbortSignal
-): Promise<{ events: number }> => {
+export const readNdjson = async (response: Response, onEvent: (event: LopuChatEvent) => void, signal?: AbortSignal): Promise<{ events: number }> => {
 	if (!response.ok) throw await errorFromResponse(response);
 	if (!response.body) throw new LopuStreamError(response.status, 'Lopu sent an empty reply');
 

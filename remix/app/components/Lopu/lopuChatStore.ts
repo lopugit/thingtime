@@ -69,7 +69,23 @@ export type AiModelPublic = {
 	isDefault: boolean;
 };
 
-export type LopuChatSettings = { model: string | null; effort: string | null; speed: string | null };
+export type LopuChatSettings = { providerId: string | null; model: string | null; effort: string | null; speed: string | null };
+
+export type LopuVaultProviderPublic = {
+	id: string;
+	kind: 'provider';
+	name: string;
+	provider: string;
+	endpoint: string;
+	groupId: string | null;
+};
+
+export type LopuProviderTemplatePublic = {
+	id: string;
+	label: string;
+	endpoint: string;
+	models: Array<{ id: string; label: string; efforts: string[]; speeds: string[]; audioInput?: 'realtime' }>;
+};
 
 export type LopuProvidersInfo = Partial<Record<'anthropic' | 'openai', { configured: boolean }>>;
 
@@ -89,10 +105,11 @@ export type LopuNotice = { id: number; title: string; description?: string; stat
 
 export type LopuApiClient = {
 	models: (options?: { signal?: AbortSignal }) => Promise<any>;
+	vault: (options?: { signal?: AbortSignal }) => Promise<any>;
 	chats: {
 		list: (options?: { signal?: AbortSignal }) => Promise<any>;
-		create: (args?: { chatId?: string; title?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
-		update: (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
+		create: (args?: { chatId?: string; title?: string; providerId?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
+		update: (args: { chatId: string; title?: string; providerId?: string; model?: string; effort?: string; speed?: string }) => Promise<any>;
 		delete: (args: { chatId: string }) => Promise<any>;
 	};
 	// the messenger's message page (GET /api/v1/chats/messages, newest first)
@@ -119,6 +136,8 @@ export type LopuStoreState = {
 	modelsLoading: boolean;
 	defaults: LopuChatSettings | null;
 	providers: LopuProvidersInfo | null;
+	vaultProviders: LopuVaultProviderPublic[];
+	providerTemplates: LopuProviderTemplatePublic[];
 	settings: LopuChatSettings;
 	error: string | null;
 	notices: LopuNotice[];
@@ -135,6 +154,7 @@ export const lopuChatsCacheKey = (userId: string) => `tt-lopu-chats-${userId}`;
 export const lopuMessagesCacheKey = (chatId: string) => `tt-lopu-messages-${chatId}`;
 export const lopuSettingsCacheKey = (userId: string) => `tt-lopu-settings-${userId}`;
 export const LOPU_MODELS_CACHE_KEY = 'tt-lopu-models';
+export const lopuVaultCacheKey = (userId: string) => `tt-lopu-vault-catalog-${userId}`;
 export const LOPU_MESSAGES_CACHE_CAP = 50;
 export const LOPU_TURNS_CAP = 40;
 export const LOPU_CONTEXT_BLOCKS_MAX_CHARS = 48_000;
@@ -142,8 +162,9 @@ export const LOPU_CONTEXT_BLOCKS_MAX_CHARS = 48_000;
 type ChatsCache = { at: number; chats: LopuChatSummary[] };
 type MessagesCache = { at: number; messages: ChatMessage[] };
 type ModelsCache = { at: number } & LopuModelsPayload;
+type VaultCache = { at: number; providers: LopuVaultProviderPublic[]; templates: LopuProviderTemplatePublic[] };
 
-const EMPTY_SETTINGS: LopuChatSettings = { model: null, effort: null, speed: null };
+const EMPTY_SETTINGS: LopuChatSettings = { providerId: null, model: null, effort: null, speed: null };
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
 const createInitialState = (): LopuStoreState => ({
@@ -164,6 +185,8 @@ const createInitialState = (): LopuStoreState => ({
 	modelsLoading: false,
 	defaults: null,
 	providers: null,
+	vaultProviders: [],
+	providerTemplates: [],
 	settings: EMPTY_SETTINGS,
 	error: null,
 	notices: [],
@@ -282,8 +305,17 @@ export const reconcileLopuSettings = (
 	models: AiModelPublic[],
 	defaults: LopuChatSettings | null
 ): LopuChatSettings => {
+	if (requested?.providerId) {
+		return {
+			providerId: requested.providerId,
+			model: requested.model ?? null,
+			effort: requested.effort ?? null,
+			speed: requested.speed === 'fast' ? 'fast' : 'normal'
+		};
+	}
 	if (!models.length) {
 		return {
+			providerId: null,
 			model: requested?.model ?? defaults?.model ?? null,
 			effort: requested?.effort ?? defaults?.effort ?? null,
 			speed: requested?.speed ?? defaults?.speed ?? null
@@ -292,14 +324,15 @@ export const reconcileLopuSettings = (
 	const wanted = requested?.model ? models.find((model) => model.id === requested.model) : null;
 	const fallback = defaults?.model ? models.find((model) => model.id === defaults.model) : null;
 	const model = isAvailable(wanted) ? wanted : isAvailable(fallback) ? fallback : models.find(isAvailable) || null;
-	if (!model) return { model: null, effort: null, speed: null };
+	if (!model) return { providerId: null, model: null, effort: null, speed: null };
 	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
 	const speeds = Array.isArray(model.speeds) ? model.speeds : [];
 	const effortCandidates = [requested?.effort, defaults?.effort, 'high'];
-	const effort = effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
+	const effort =
+		effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
 	const speedWanted = requested?.speed ?? defaults?.speed ?? 'normal';
 	const speed = speeds.includes(speedWanted) ? speedWanted : speeds.includes('normal') ? 'normal' : speeds[0] ?? null;
-	return { model: model.id, effort, speed };
+	return { providerId: null, model: model.id, effort, speed };
 };
 
 const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
@@ -309,7 +342,13 @@ const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
 export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
 	const merged = { ...state.settings, ...patch };
 	const settings = state.modelsLoaded || state.models.length ? reconcileLopuSettings(merged, state.models, state.defaults) : merged;
-	if (settings.model === state.settings.model && settings.effort === state.settings.effort && settings.speed === state.settings.speed) return;
+	if (
+		settings.providerId === state.settings.providerId &&
+		settings.model === state.settings.model &&
+		settings.effort === state.settings.effort &&
+		settings.speed === state.settings.speed
+	)
+		return;
 	persistSettings(state.userId, settings);
 	setState({ settings });
 };
@@ -329,6 +368,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	}
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
+	const vaultCache = userId ? readLocalCache<VaultCache>(lopuVaultCacheKey(userId)) : null;
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
 	const models = Array.isArray(modelsCache?.models) ? modelsCache!.models : state.models;
 	const defaults = modelsCache?.defaults && typeof modelsCache.defaults === 'object' ? modelsCache.defaults : state.defaults;
@@ -341,6 +381,8 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 		models,
 		defaults,
 		providers,
+		vaultProviders: Array.isArray(vaultCache?.providers) ? vaultCache!.providers : [],
+		providerTemplates: Array.isArray(vaultCache?.templates) ? vaultCache!.templates : [],
 		settings: reconcileLopuSettings(settingsCache || defaults, models, defaults)
 	};
 	scheduleEmit();
@@ -370,14 +412,24 @@ export const loadLopuModels = async (): Promise<void> => {
 	if (!client || state.modelsLoading) return;
 	setState({ modelsLoading: true });
 	try {
-		const response = await client.models();
+		const [response, vault] = await Promise.all([client.models(), state.userId ? client.vault().catch(() => null) : Promise.resolve(null)]);
 		const models: AiModelPublic[] = Array.isArray(response?.models) ? response.models : [];
 		const defaults: LopuChatSettings | null = response?.defaults && typeof response.defaults === 'object' ? response.defaults : null;
 		const providers: LopuProvidersInfo | null = response?.providers && typeof response.providers === 'object' ? response.providers : null;
+		const vaultProviders: LopuVaultProviderPublic[] = Array.isArray(vault?.entries)
+			? vault.entries.filter((entry: any) => entry?.kind === 'provider' && typeof entry?.id === 'string')
+			: [];
+		const providerTemplates: LopuProviderTemplatePublic[] = Array.isArray(vault?.providerTemplates) ? vault.providerTemplates : [];
 		writeLocalCache(LOPU_MODELS_CACHE_KEY, { at: Date.now(), models, defaults, providers } satisfies ModelsCache);
+		if (state.userId)
+			writeLocalCache(lopuVaultCacheKey(state.userId), {
+				at: Date.now(),
+				providers: vaultProviders,
+				templates: providerTemplates
+			} satisfies VaultCache);
 		const settings = reconcileLopuSettings(state.settings, models, defaults);
 		persistSettings(state.userId, settings);
-		setState({ models, defaults, providers, modelsLoaded: true, modelsLoading: false, settings });
+		setState({ models, defaults, providers, vaultProviders, providerTemplates, modelsLoaded: true, modelsLoading: false, settings });
 	} catch {
 		setState({ modelsLoading: false, modelsLoaded: true });
 	}
@@ -410,7 +462,10 @@ export const loadLopuMessages = async (chatId: string): Promise<void> => {
 		// the API pages newest-first; the timeline reads oldest-first. The
 		// server's rows replace any optimistic Lopu rows (their ids differ).
 		const incoming = rows.slice().reverse();
-		const merged = mergeMessages((state.messages[chatId] || []).filter((message) => !isOptimisticLopuMessage(message)), incoming);
+		const merged = mergeMessages(
+			(state.messages[chatId] || []).filter((message) => !isOptimisticLopuMessage(message)),
+			incoming
+		);
 		writeMessagesCache(chatId, merged);
 		setState((current) => ({
 			messages: { ...current.messages, [chatId]: merged },
@@ -440,9 +495,10 @@ const settingsFromChat = (chat: LopuChatSummary | undefined): Partial<LopuChatSe
 	if (!raw || typeof raw !== 'object') return null;
 	const record = raw as Record<string, unknown>;
 	const out: Partial<LopuChatSettings> = {};
-	if (typeof record.model === 'string') out.model = record.model;
-	if (typeof record.effort === 'string') out.effort = record.effort;
-	if (typeof record.speed === 'string') out.speed = record.speed;
+	if ('providerId' in record) out.providerId = typeof record.providerId === 'string' ? record.providerId : null;
+	if ('model' in record) out.model = typeof record.model === 'string' ? record.model : null;
+	if ('effort' in record) out.effort = typeof record.effort === 'string' ? record.effort : null;
+	if ('speed' in record) out.speed = typeof record.speed === 'string' ? record.speed : null;
 	return Object.keys(out).length ? out : null;
 };
 
@@ -468,12 +524,16 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 // ——— conversation CRUD ————————————————————————————————————————————————————
 
-export const createLopuChat = async (args?: { chatId?: string; title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
+export const createLopuChat = async (args?: {
+	chatId?: string;
+	title?: string;
+}): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
 	try {
 		const response = await client.chats.create({
 			...(args?.chatId ? { chatId: args.chatId } : {}),
 			...(args?.title ? { title: args.title } : {}),
+			...(state.settings.providerId ? { providerId: state.settings.providerId } : {}),
 			...(state.settings.model ? { model: state.settings.model } : {}),
 			...(state.settings.effort ? { effort: state.settings.effort } : {}),
 			...(state.settings.speed ? { speed: state.settings.speed } : {})
@@ -722,7 +782,11 @@ const forgetTurn = (requestId: string) => {
 	setState((current) => {
 		const turns = { ...current.turns };
 		delete turns[requestId];
-		return { turns, turnOrder: current.turnOrder.filter((id) => id !== requestId), streamingId: current.streamingId === requestId ? null : current.streamingId };
+		return {
+			turns,
+			turnOrder: current.turnOrder.filter((id) => id !== requestId),
+			streamingId: current.streamingId === requestId ? null : current.streamingId
+		};
 	});
 };
 
@@ -760,13 +824,24 @@ const upsertChatSummary = (chatId: string, turn: LopuTurnState, assistantRows: C
 			memberCount: 1,
 			unreadCount: 0,
 			lastMessage: null,
-			externalSource: { access: 'lopu', provider: 'lopu', sourceId: 'lopu', label: 'Lopu', connector: 'thingtime', readOnly: false } as unknown as ChatSummary['externalSource']
+			externalSource: {
+				access: 'lopu',
+				provider: 'lopu',
+				sourceId: 'lopu',
+				label: 'Lopu',
+				connector: 'thingtime',
+				readOnly: false
+			} as unknown as ChatSummary['externalSource']
 		};
 		const updated: LopuChatSummary = {
 			...base,
 			updatedAt: now,
 			lastMessage,
-			lopu: { ...(base.lopu || {}), ...(turn.meta ? { model: turn.meta.model, effort: turn.meta.effort, speed: turn.meta.speed, lastModel: turn.meta.model } : {}) }
+			lopu: {
+				...(base.lopu || {}),
+				providerId: current.settings.providerId,
+				...(turn.meta ? { model: turn.meta.model, effort: turn.meta.effort, speed: turn.meta.speed, lastModel: turn.meta.model } : {})
+			}
 		};
 		const chats = [updated, ...current.chats.filter((chat) => chat.id !== chatId)];
 		writeChatsCache(current.userId, chats);
@@ -871,7 +946,14 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				const target = event.target ?? 'active';
 				snapshotForUndo(event.id, target, event.pageId);
 				try {
-					applyLopuPatchEvent({ type: 'patch', id: event.id, target, ops: event.ops, pageId: event.pageId ?? null, persisted: event.persisted === true });
+					applyLopuPatchEvent({
+						type: 'patch',
+						id: event.id,
+						target,
+						ops: event.ops,
+						pageId: event.pageId ?? null,
+						persisted: event.persisted === true
+					});
 				} catch {
 					// never let a bridge throw kill the stream
 				}
@@ -898,9 +980,10 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
 		requestId,
-		...(settings.model ? { model: settings.model } : {}),
-		...(settings.effort ? { effort: settings.effort } : {}),
-		...(settings.speed ? { speed: settings.speed } : {}),
+		providerId: settings.providerId,
+		model: settings.model,
+		effort: settings.effort,
+		speed: settings.speed,
 		...(options.context ? { context: options.context } : {})
 	};
 

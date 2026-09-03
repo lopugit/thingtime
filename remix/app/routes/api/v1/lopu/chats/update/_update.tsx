@@ -5,7 +5,7 @@ import { updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { requireJsonContentType } from '../_chats';
 
-// POST /api/v1/lopu/chats/update — { chatId, title?, model?, effort?, speed? }.
+// POST /api/v1/lopu/chats/update — { chatId, title?, providerId?, model?, effort?, speed? }.
 // Renames the conversation and/or retunes its model settings (validated
 // against the catalog; null resets a field to the catalog default). Unlike
 // /api/v1/chats/update no system message is inserted.

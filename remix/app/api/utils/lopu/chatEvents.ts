@@ -17,19 +17,24 @@ import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import type { PublicChatMessage } from '../messenger/messenger';
 import type { PageOp, PatchTarget } from './pageOps';
 
-export type LopuChatProvider = 'claude' | 'openai' | 'test' | 'fallback';
+export type LopuChatProvider =
+  | 'claude'
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'xai'
+  | 'openrouter'
+  | 'mistral'
+  | 'deepseek'
+  | 'groq'
+  | 'cohere'
+  | 'compatible'
+  | 'test'
+  | 'fallback';
 
 export type LopuChatUsage = { inputTokens: number; outputTokens: number };
 
-export type LopuChatStopReason =
-  | 'end_turn'
-  | 'max_tokens'
-  | 'tool_limit'
-  | 'hop_limit'
-  | 'time_limit'
-  | 'aborted'
-  | 'error'
-  | 'fallback';
+export type LopuChatStopReason = 'end_turn' | 'max_tokens' | 'tool_limit' | 'hop_limit' | 'time_limit' | 'aborted' | 'error' | 'fallback';
 
 // What the client knows about the builder draft it has open (request
 // context.page). `blocks` is the LIVE draft (≤ 48KB), so patch_page can

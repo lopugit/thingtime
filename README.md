@@ -73,7 +73,9 @@ openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
 Built-in connection templates and per-chat model dropdowns cover OpenAI/Codex,
 Anthropic/Claude, Google Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq,
 and Cohere, with a custom model-id override. Provider connections intentionally
-store no model: model, reasoning, and speed are selected per chat. Store provider tokens only through the
+store no model: provider, model, reasoning, and supported fast/priority mode
+are selected in the ordinary `/lopu` composer per chat or per new message.
+Store provider tokens only through the
 write-only Secure Vault form—never in source or a public environment file.
 Custom OpenAI-compatible endpoint hostnames must be public HTTPS destinations
 and must also appear in the comma-separated

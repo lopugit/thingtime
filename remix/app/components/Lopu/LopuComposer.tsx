@@ -3,7 +3,7 @@ import { Box, Button, Flex, Text, Textarea } from '@chakra-ui/react';
 
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { LopuModelPicker } from './LopuModelPicker';
-import type { AiModelPublic, LopuChatSettings } from './lopuChatStore';
+import type { AiModelPublic, LopuChatSettings, LopuProviderTemplatePublic, LopuVaultProviderPublic } from './lopuChatStore';
 
 // The chat composer (design note §3.2): an auto-growing textarea (Enter
 // sends, Shift+Enter breaks the line — on mobile Enter always breaks and the
@@ -24,6 +24,8 @@ export type LopuComposerProps = {
 	enterSends?: boolean;
 	placeholder?: string;
 	models: AiModelPublic[];
+	vaultProviders?: LopuVaultProviderPublic[];
+	providerTemplates?: LopuProviderTemplatePublic[];
 	settings: LopuChatSettings;
 	defaults?: LopuChatSettings | null;
 	onSettingsChange: (patch: Partial<LopuChatSettings>) => void;
@@ -42,6 +44,8 @@ export const LopuComposer = ({
 	enterSends = true,
 	placeholder,
 	models,
+	vaultProviders,
+	providerTemplates,
 	settings,
 	defaults,
 	onSettingsChange,
@@ -141,7 +145,16 @@ export const LopuComposer = ({
 				whiteSpace="pre-wrap"
 			/>
 			<Flex align="center" gap={2} mt={1} wrap="wrap">
-				<LopuModelPicker models={models} value={settings} defaults={defaults} onChange={onSettingsChange} compact={compact} disabled={disabled} />
+				<LopuModelPicker
+					models={models}
+					vaultProviders={vaultProviders}
+					providerTemplates={providerTemplates}
+					value={settings}
+					defaults={defaults}
+					onChange={onSettingsChange}
+					compact={compact}
+					disabled={disabled}
+				/>
 				{hint && !compact ? (
 					<Text fontSize="10px" color={MUTED} display={{ base: 'none', md: 'block' }}>
 						{hint}

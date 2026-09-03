@@ -32,29 +32,42 @@ to the owner and Thing ID; list queries never load encrypted fields.
 
 The vault uses `THINGTIME_USER_VAULT_KEY`, or a purpose-separated derivative of
 `THINGTIME_ADMIN_VAULT_KEY`. Provider records no longer contain a model; model,
-reasoning, and speed live on the individual voice chat. Templates cover
+reasoning, and speed live on each Lopu conversation. Templates cover
 OpenAI/Codex, Anthropic/Claude, Google Gemini, xAI/Grok, OpenRouter, Mistral,
 DeepSeek, Groq, and Cohere. Custom compatible hosts require an
 explicit allowlist, public HTTPS, fresh public DNS resolution, bounded
 responses, a fixed timeout, and disabled redirects.
+
+Ordinary `/lopu` text turns can now select one of the caller’s provider
+connections directly in the composer. Model and reasoning are always managed
+dropdowns, with a custom provider-native model ID input exposed only when the
+user explicitly chooses it. Advertised effort and fast/priority options map to
+the respective Anthropic, Google, OpenAI, OpenRouter, Mistral, DeepSeek, Groq,
+xAI, and Cohere request fields; provider tokens are decrypted only for the
+server-side call and never enter the chat payload, event stream, or message
+metadata. The deployment-managed catalog retains Lopu’s full Thingtime builder
+tool loop, while user-vault providers run as conversational backends.
 
 ## API contract
 
 - `GET|POST /api/v1/lopu/vault`
 - `POST /api/v1/lopu/voice/reply` as NDJSON
 - `POST /api/v1/lopu/voice/session` for an ephemeral direct-audio credential
+- `GET|POST /api/v1/lopu/chats`, `/update`, and `/reply` persist an optional
+  owner-scoped `providerId` plus per-chat model, effort, and speed
 - capabilities `api.lopu-vault` 1.1.0, `api.lopu-voice-reply` 1.1.0, and
-  `api.lopu-voice-session` 1.0.0
+  `api.lopu-voice-session` 1.0.0; chat create/reply contracts are 1.2.0/1.1.0
 - both routes require a current user session and fail-closed rate limits
 
 ## Verification
 
-- `corepack pnpm run test:lopu` — 39/39 passed
-- `corepack pnpm run test:api-capabilities` — 5/5 passed
+- `corepack pnpm run test:lopu` — 49/49 passed
+- `corepack pnpm run test:api-capabilities` — 6/6 passed
 - focused ESLint — passed
 - `corepack pnpm run build` — passed, including Nitro/Vercel output checks
 - `xcodegen generate` and an unsigned generic iOS Simulator build — passed
 - authenticated desktop and 390×844 browser QA — passed
 
 Physical-device microphone permissions, a paid provider request, and actual
-Lock Screen / Dynamic Island behavior remain manual acceptance checks.
+Lock Screen / Dynamic Island behavior remain manual acceptance checks. No
+credential supplied in chat was used for automated testing.

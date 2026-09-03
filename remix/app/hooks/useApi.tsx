@@ -431,12 +431,12 @@ export function useApi() {
       chats: {
         list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
         create: useCallback(
-          async (args?: { chatId?: string; title?: string; model?: string; effort?: string; speed?: string }) =>
+          async (args?: { chatId?: string; title?: string; providerId?: string; model?: string; effort?: string; speed?: string }) =>
             asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string }) =>
+          async (args: { chatId: string; title?: string; providerId?: string; model?: string; effort?: string; speed?: string }) =>
             asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' }),
           [asyncFetcher]
         ),
@@ -446,6 +446,7 @@ export function useApi() {
           [asyncFetcher]
         )
       },
+      vault: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/vault', options), []),
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
       reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), [])

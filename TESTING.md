@@ -117,10 +117,20 @@ is fixed, and cite the checklist you ran in the PR description.
       every seeded provider exposes a model dropdown plus **Custom model id**;
       reasoning and speed options change with the selected model and persist
       per chat rather than in Secure Vault.
+- [ ] In the ordinary `/lopu` composer, open the model control and switch
+      between the deployment catalog and at least two Secure Vault provider
+      connections. Confirm provider, model, and reasoning are dropdowns; a
+      text input appears only after **Custom model ID** is selected; and Fast
+      appears only for models whose provider exposes a supported fast/priority
+      request mode. Send a new message, refresh, and confirm the chat keeps the
+      chosen connection and tuning without ever returning its token.
 - [ ] On `/lopu`, confirm a signed-in visit immediately creates one chat and
       replaces the URL with `/lopu/<chat-id>`. Refresh and confirm the same
       server-backed history returns; **New chat** must create and navigate to a
       different id without a duplicate Strict Mode request.
+- [ ] Throttle the initial `POST /api/v1/lopu/chats` so the first reply wins
+      the race. The reply route must idempotently create the reserved URL chat
+      ID, keep the user’s first message, and never answer **Chat not found**.
 - [ ] Exercise both voice input choices. Device transcription sends only the
       final text to `/voice/reply`; provider audio with an xAI Grok Voice model
       sends PCM frames over its realtime WebSocket using only an ephemeral
