@@ -953,14 +953,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'ChatGPT OAuth authorization',
     endpoint: CHATGPT_AUTHORIZE_PATH,
-    summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
+    summary: 'First-party SSO connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to the approved callback. POST submits that form; credentials are never included in the redirect, OAuth code, or client transcript.',
-    auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The first-party page first uses the existing Thingtime SSO handoff: a signed-in account receives a generated, revocable, non-expiring personal access token with the `things` (read/write all) scope and unrestricted visibility. The generated token is returned only to the same-origin page, then encrypted before the connection bundle is persisted; it never enters ChatGPT, Codex, a redirect, OAuth code, or a chat transcript. Advanced settings can narrow scopes, regenerate the generated token (revoking the prior generated token), edit the primary token, or add a manually supplied scoped token for another approved endpoint. POST `intent=prepare` is the same-origin SSO preparation request; ordinary POST submits the encrypted account bundle and redirects only a five-minute single-use authorization code to the approved callback.',
+    auth: { mode: 'none', description: 'OAuth public-client request. The first-party page authenticates the account with Thingtime SSO and generates the default scoped credential server-side.' },
     methods: ['GET', 'POST'],
     steps: [
-      'Create least-privilege personal access tokens in each Thingtime account.',
-      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the first-party browser page.',
+      'Let ChatGPT or Codex open this endpoint with its OAuth parameters and sign in with the existing Thingtime SSO page when prompted.',
+      'Review the default read/write-all connection or open Advanced settings to narrow scopes, regenerate the generated credential, or add another approved account.',
       'The browser redirects to ChatGPT with a short-lived code and original state.'
     ],
     requestExamples: [
@@ -981,7 +981,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'First-party form requesting named endpoint/token pairs.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      { status: 200, description: 'First-party SSO connection page. It prepares the default encrypted read/write-all account without exposing a token in the client host or chat.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
       { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
     ]

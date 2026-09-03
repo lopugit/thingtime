@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
-import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri } from './pluginCore';
+import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
 
 const connectedContext = {
   session: {},
@@ -23,6 +23,26 @@ const connectedContext = {
     ]
   }
 } as any;
+
+test('the OAuth connection page is SSO-first and defaults to all Things read/write access', () => {
+  const page = renderConnectionPage(
+    'signed-request-token',
+    ['https://thingtime.example'],
+    'https://thingtime.example',
+    [
+      { id: 'things', title: 'Full things access', description: 'Read and write every supported Thing capability.', emoji: '🗝️' },
+      { id: 'things.read', title: 'Read Things', description: 'Read Things only.', emoji: '👁️' }
+    ]
+  );
+
+  assert.match(page, /Connect your account/);
+  assert.match(page, /Continue with Thingtime/);
+  assert.match(page, /Read\/write all Things/);
+  assert.match(page, /data-scope value="things" checked/);
+  assert.match(page, /\/authorize\?self=1/);
+  assert.match(page, /Generate a new token with these rules/);
+  assert.doesNotMatch(page, /Create a least-privilege token/);
+});
 
 test('MCP tools/list publishes OAuth requirements before a user links Thingtime', async () => {
   const response = await handleChatGptMcp({

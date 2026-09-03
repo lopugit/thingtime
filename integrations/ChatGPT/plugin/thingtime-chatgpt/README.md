@@ -4,9 +4,14 @@ This package connects ChatGPT/Codex to the Thingtime MCP endpoint at
 `https://thingtime.com/api/v1/integrations/chatgpt/mcp`.
 
 It supports multiple named Thingtime accounts and approved API endpoints in a
-single ChatGPT connection. During connection, each account supplies a scoped
-Thingtime personal access token. The token is validated, AES-256-GCM encrypted
-at the Thingtime server, and never returned to ChatGPT, Codex, or a chat.
+single ChatGPT connection. The primary connection uses the existing Thingtime
+SSO page: Thingtime automatically generates a revocable, non-expiring personal
+access token with **read/write all Things** access and encrypts it with
+AES-256-GCM at the Thingtime server. The token is never returned to ChatGPT,
+Codex, or a chat. Advanced connection settings can narrow the generated
+token’s scopes, regenerate it (which revokes the previous generated token),
+edit it for developer workflows, or add another approved endpoint with a
+manually supplied scoped token.
 When the client requests `offline_access`, rotating refresh credentials retain
 the non-expiring, MCP-only bridge credential without copying the PAT into
 ChatGPT.
@@ -75,8 +80,10 @@ Install this package as a custom Codex plugin, restart Codex Desktop, then open
 **Settings → MCP servers → Thingtime** and choose **Authenticate**. Codex uses
 a ChatGPT Client ID Metadata Document and a `127.0.0.1` loopback callback; the
 Thingtime authorization server verifies that the callback ID and path match
-before accepting the sign-in. The first-party form validates and encrypts each
-Thingtime PAT server-side, so never enter a token into a Codex prompt or chat.
+before accepting the sign-in. The first-party page signs in through Thingtime
+SSO and prepares the default read/write-all token in the background, so never
+enter a token into a Codex prompt or chat. Advanced settings retain the option
+to use a scoped developer token when that is deliberately required.
 For Codex versions that do not support CIMD, the server instead performs OAuth
 Dynamic Client Registration with the same strict `127.0.0.1` loopback-only
 redirect policy.
