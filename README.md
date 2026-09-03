@@ -49,21 +49,16 @@ utterance is a normal Lopu chat turn, tools included — or use **Transcribe
 mode** to save each final utterance as its own timestamped, numbered,
 owner-private Thing page instead. The session gear remains available before,
 during, and after listening; **Spoken replies** (off by default) reads Lopu's
-replies aloud. The iOS app adds native speech recognition, background audio,
-and a local Live Activity so an active conversation can continue while the
-phone is locked.
-Signed-in people can open `/lopu/voice` for a continuous voice conversation or use
-**Transcribe mode** to save each final utterance as its own timestamped,
-numbered, owner-private Thing page. The session gear remains available before,
-during, and after listening; **Text response** suppresses spoken playback. The
-iOS app adds native speech recognition, direct provider-audio streaming,
-background audio, and a local Live Activity so an active conversation can
-continue while the phone is locked. The voice gear selects either device
-transcription (only text reaches the model) or direct 24 kHz PCM streaming.
-Direct provider audio currently supports xAI Grok Voice through a five-minute
-ephemeral client credential; the long-lived provider token stays server-side.
-Normal `/lopu` chats are created immediately with their id in the URL, so a
-refresh reopens the same persisted conversation.
+replies aloud. **Direct voice** (off by default) streams the microphone
+straight to the chat's own Secure Vault provider when its kind offers realtime
+speech — xAI Grok Voice today, as 24 kHz PCM over the provider's realtime
+WebSocket on a five-minute ephemeral credential minted by
+`POST /api/v1/lopu/voice/session`; the long-lived provider token stays
+server-side, the gear explains in one line when a provider cannot do it, and
+the standard device-transcription path runs instead. The iOS app adds native
+speech recognition, the same direct provider-audio streaming, background
+audio, and a local Live Activity so an active conversation can continue while
+the phone is locked.
 
 Each account has a personal Secure Vault in **Settings → Secure Vault** for
 password/key-value records and Lopu provider connections. Values are
@@ -79,19 +74,21 @@ runtime secret store:
 openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
 ```
 
-Built-in connection templates and per-chat model dropdowns cover OpenAI/Codex,
-Anthropic/Claude, Google Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq,
-and Cohere, with a custom model-id override. Provider connections intentionally
-store no model: provider, model, reasoning, and supported fast/priority mode
-are selected in the ordinary `/lopu` composer per chat or per new message.
-Store provider tokens only through the
-write-only Secure Vault form—never in source or a public environment file.
-Custom OpenAI-compatible endpoint hostnames must be public HTTPS destinations
-and must also appear in the comma-separated
-`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting; built-in provider
-hosts are already allowed. DNS is checked again immediately before each
-server-side provider request, redirects are rejected, and credentials never
-reach the browser after storage.
+Built-in connection templates cover OpenAI/Codex, Anthropic/Claude, Google
+Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq, and Cohere, each with
+its catalog of models (reasoning tiers, fast/priority modes, and which models
+speak the realtime direct-voice transport). A connection's model is optional:
+pick one from the kind's catalog or type a custom id, or leave it blank to run
+on the kind's first catalog model; a custom OpenAI-compatible host must name
+its model. Reasoning effort and speed are chosen per Lopu chat in the ordinary
+`/lopu` composer and travel to the provider's own request fields. Store
+provider tokens only through the write-only Secure Vault form — never in
+source or a public environment file. Custom OpenAI-compatible endpoint
+hostnames must be public HTTPS destinations and must also appear in the
+comma-separated `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting;
+built-in provider hosts are already allowed. DNS is checked again immediately
+before each server-side provider request, redirects are rejected, and
+credentials never reach the browser after storage.
 
 ## Conflict-free Graphify snapshots
 

@@ -101,61 +101,64 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
-- [ ] Open `/lopu` at desktop and 390px mobile widths; scroll the conversation
-      from top to bottom, open and close the gear before and during a session,
-      and confirm the header, settings card, messages, and fixed composer never
-      clip, overlap, or cause horizontal page scrolling.
+- [ ] Open `/lopu/voice` at desktop and 390px mobile widths; scroll the
+      conversation from top to bottom, open and close the gear before and
+      during a session, and confirm the header, the gear popover, messages
+      and the voice deck never clip, overlap, or cause horizontal page
+      scrolling.
 - [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
       test environment. Refresh and verify only metadata returns to the
       browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
       without a new token retains the stored token; deleting removes it.
-- [ ] Select that provider per chat. Confirm continuous listening pauses while
-      the provider responds and while Lopu speaks, then resumes without hearing
-      Lopu's own voice. Turn on **Text response** before, during, and after the
-      session and verify replies render but no speech plays.
-- [ ] Verify provider connections contain no model field. In voice settings,
-      every seeded provider exposes a model dropdown plus **Custom model id**;
-      reasoning and speed options change with the selected model and persist
-      per chat rather than in Secure Vault.
-- [ ] In the ordinary `/lopu` composer, open the model control and switch
-      between the deployment catalog and at least two Secure Vault provider
-      connections. Confirm provider, model, and reasoning are dropdowns; a
-      text input appears only after **Custom model ID** is selected; and Fast
-      appears only for models whose provider exposes a supported fast/priority
-      request mode. Send a new message, refresh, and confirm the chat keeps the
-      chosen connection and tuning without ever returning its token.
-- [ ] On `/lopu`, confirm a signed-in visit immediately creates one chat and
-      replaces the URL with `/lopu/<chat-id>`. Refresh and confirm the same
-      server-backed history returns; **New chat** must create and navigate to a
-      different id without a duplicate Strict Mode request.
-- [ ] Throttle the initial `POST /api/v1/lopu/chats` so the first reply wins
-      the race. The reply route must idempotently create the reserved URL chat
-      ID, keep the user’s first message, and never answer **Chat not found**.
-- [ ] Exercise both voice input choices. Device transcription sends only the
-      final text to `/voice/reply`; provider audio with an xAI Grok Voice model
-      sends PCM frames over its realtime WebSocket using only an ephemeral
-      credential minted by `/voice/session`. Confirm Text response suppresses
-      realtime playback and the stored long-lived token never reaches either
-      client.
+- [ ] Select that provider for the chat (the gear's provider select or the
+      composer's picker). Confirm continuous listening pauses while the
+      provider responds and while Lopu speaks, then resumes without hearing
+      Lopu's own voice. Toggle **Spoken replies** before, during, and after
+      the session and verify replies render, and speak only while it is on.
+- [ ] Verify a provider connection's model is optional. The Secure Vault form
+      offers the kind's catalog models (realtime voice models marked) plus a
+      **Custom model id…** entry and shows the chosen model in the stored
+      metadata line; a custom compatible host requires a model id. A
+      connection saved without a model runs on its kind's first catalog model
+      (`GET /api/v1/ai/models` → `vaultProviders[].model`), and a turn's meta
+      names that model. Reasoning and speed are chosen per chat in the
+      composer, never stored in Secure Vault.
+- [ ] Exercise **Direct voice**. With no provider chosen, a catalog model, a
+      provider whose kind has no realtime model (any non-xAI connection), or
+      Transcribe mode on, the gear's switch is disabled and its hint reads the
+      reason in one line; Settings → Lopu 🦄 mirrors the switch. With an xAI
+      connection the switch enables, a realtime-model select appears
+      (Grok Voice / Grok Voice Think Fast 2.0), and starting the mic mints a
+      credential through `/voice/session` — the network log shows only the
+      ephemeral token and `wss://api.x.ai/v1/realtime?model=…`, never the
+      stored key — then streams PCM both ways; the provider's transcripts and
+      reply text land in the conversation list, Spoken replies off suppresses
+      playback, and Stop closes the socket. When the mint is refused (vault
+      key missing, connection not yours) a Lopu toast says why and device
+      transcription runs.
 - [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
       each creates a separately numbered, timestamped, owner-private Thing page
       and streams back into chat as a quote with a working page link. Provider
-      selection stays disabled and no provider request occurs in this mode.
-- [ ] Reject unauthenticated vault/voice requests, oversized bodies, missing
-      provider tokens, non-HTTPS or private/local endpoints, unallowlisted
-      custom hosts, private DNS resolutions, redirects, oversized provider
-      responses, and rate-limit-store failures. Error responses must not echo
-      provider bodies or credentials.
+      selection and Direct voice stay disabled and no provider request occurs
+      in this mode.
+- [ ] Reject unauthenticated vault/voice/session requests, non-JSON bodies
+      (415), guest sessions (403), oversized bodies, missing provider tokens,
+      non-HTTPS or private/local endpoints, unallowlisted custom hosts,
+      private DNS resolutions, redirects, oversized provider responses, and
+      rate-limit-store failures. Error responses must not echo provider
+      bodies or credentials; `/voice/session` refusals carry no `session`.
 - [ ] In the iOS app, grant microphone and speech access from the user action,
       start Lopu, lock the device, and verify recognition/replies continue and
       the Live Activity moves through listening, thinking/transcribing, and
       speaking. Confirm native reply requests carry only unexpired cookies
       matching the active Thingtime origin and API path. Stop the session and
       confirm the microphone, audio session, and Live Activity all end.
-- [ ] In iOS provider-audio mode, deny Speech Recognition but allow Microphone;
-      the session should still start, stream and play realtime audio under the
-      background audio session, update the Live Activity while locked, and
-      close its WebSocket and player cleanly on Stop.
+- [ ] In iOS direct voice (`inputMode: provider-audio`), deny Speech
+      Recognition but allow Microphone; the session should still start,
+      stream and play realtime audio under the background audio session,
+      update the Live Activity while locked, post the provider's transcripts
+      into the conversation, and close its WebSocket and player cleanly on
+      Stop.
 
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 
@@ -4676,20 +4679,25 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   click toasts "No microphone here" and the typed path still works; with a
   mic, listening pauses for the whole turn and for Lopu's speech (never her
   own voice back), then resumes. The gear popover (never a full-width card)
-  holds Spoken replies, Transcribe mode and the provider select (Thingtime
-  default · Secure Vault providers · catalog models; disabled while
-  transcribing). Transcribe mode posts each utterance to
+  holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
+  vault provider whose kind lists a realtime model — the hint reads the
+  reason otherwise; a realtime-model select when it lists several) and the
+  provider select (Thingtime default · Secure Vault providers · catalog
+  models; disabled while transcribing). Transcribe mode posts each utterance to
   `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble (with
   the private page link) inside the conversation list after the timeline —
   the same bubbles as the chat, never a separate strip. Leaving voice mode
-  ends the session (mic, speech, native audio). Settings → Lopu 🦄 and the
-  user settings modal mirror "Spoken replies" and "Transcribe mode".
+  ends the session (mic, speech, native audio, the realtime socket).
+  Settings → Lopu 🦄 and the user settings modal mirror "Spoken replies",
+  "Transcribe mode" and "Direct voice".
 - Own providers (Secure Vault → Lopu): signed in, `GET /api/v1/ai/models`
   carries `vault.configured` and the viewer's `vaultProviders` as metadata
-  only (id/name/kind/model/endpointHost/available/reason — `grep token` on the
-  response stays empty; another account never sees them); the picker lists
-  them under "Your providers" with the reason when one is unusable (vault
-  key missing, host outside the allowlist, no model) and ends with "Manage
+  only (id/name/kind/model/endpointHost/available/reason/realtimeModels —
+  `model` is the row's own or its kind's first catalog model; `grep token`
+  on the response stays empty; another account never sees them); the picker
+  lists them under "Your providers" with the reason when one is unusable
+  (vault key missing, host outside the allowlist, a custom host without a
+  model) and ends with "Manage
   your providers →" (`/settings#secure-vault`), plus "Vault not configured"
   when the server has no key. Picking one pins the chat (`providerId` on
   create / update / reply; the status line and the chip show the

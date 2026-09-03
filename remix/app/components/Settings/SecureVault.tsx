@@ -12,8 +12,12 @@ type Entry = {
 	key?: string;
 	provider?: string;
 	endpoint?: string;
+	model?: string;
 };
-type Template = { id: string; label: string; endpoint: string; tokenLabel: string };
+type TemplateModel = { id: string; label: string; audioInput?: string };
+type Template = { id: string; label: string; endpoint: string; tokenLabel: string; models?: TemplateModel[] };
+// the model select's "type your own id" entry
+const CUSTOM_MODEL = '__custom__';
 type VaultPayload = { vaultConfigured: boolean; groups: Group[]; entries: Entry[]; providerTemplates: Template[] };
 
 const fieldStyles = {
@@ -47,6 +51,9 @@ export const SecureVault = () => {
 	const [templateId, setTemplateId] = React.useState('openai');
 	const [providerName, setProviderName] = React.useState('OpenAI');
 	const [providerEndpoint, setProviderEndpoint] = React.useState('https://api.openai.com/v1');
+	// '' = the kind's first catalog model; CUSTOM_MODEL = the typed id below
+	const [providerModel, setProviderModel] = React.useState('');
+	const [customModel, setCustomModel] = React.useState('');
 	const [providerToken, setProviderToken] = React.useState('');
 
 	const refresh = React.useCallback(async () => {
@@ -81,15 +88,23 @@ export const SecureVault = () => {
 		if (!selected) {
 			// the custom endpoint has no template: clear the previous vendor's
 			// name/endpoint/model so a "compatible" row never points at a vendor
-			// host under a vendor's name by accident
+			// host under a vendor's name by accident (a custom host must name
+			// its model — there is no catalog to fall back on)
 			setProviderName('Custom endpoint');
 			setProviderEndpoint('');
-			setProviderModel('');
+			setProviderModel(CUSTOM_MODEL);
+			setCustomModel('');
 			return;
 		}
 		setProviderName(selected.label);
 		setProviderEndpoint(selected.endpoint);
+		setProviderModel('');
+		setCustomModel('');
 	};
+
+	const selectedTemplate = vault.providerTemplates.find((item) => item.id === templateId) ?? null;
+	const templateModels = selectedTemplate?.models ?? [];
+	const modelToSave = providerModel === CUSTOM_MODEL ? customModel.trim() : providerModel;
 
 	const deleteEntry = (entry: Entry | Group) => run({ action: 'delete', id: entry.id }, `${entry.name} removed`);
 
@@ -115,7 +130,7 @@ export const SecureVault = () => {
 
 			<Box borderTop="1px solid var(--tt-border, #ececef)" pt={4}>
 				<Text fontWeight={700} fontSize="sm">AI provider connection</Text>
-				<Text fontSize="xs" color="var(--tt-muted, #777783)" mb={3}>Store access here; choose the model, reasoning, and speed separately for each Lopu chat. Custom compatible hosts require the server allowlist.</Text>
+				<Text fontSize="xs" color="var(--tt-muted, #777783)" mb={3}>Store access here. The model is optional for a listed provider (its first catalog model when blank); reasoning and speed are chosen per Lopu chat. Custom compatible hosts must name their model and require the server allowlist.</Text>
 				<Flex flexDirection="column" gap={2}>
 					<Select {...fieldStyles} value={templateId} onChange={(event) => selectTemplate(event.target.value)} aria-label="AI provider template">
 						{vault.providerTemplates.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -123,12 +138,27 @@ export const SecureVault = () => {
 					</Select>
 					<Input {...fieldStyles} value={providerName} onChange={(event) => setProviderName(event.target.value)} placeholder="Connection name" aria-label="Provider connection name" />
 					<Input {...fieldStyles} value={providerEndpoint} onChange={(event) => setProviderEndpoint(event.target.value)} placeholder="https://api.example.com/v1" aria-label="Provider endpoint" />
+					{templateModels.length ? (
+						<Select {...fieldStyles} value={providerModel} onChange={(event) => setProviderModel(event.target.value)} aria-label="Provider model">
+							<option value="">Provider default ({templateModels[0]?.label})</option>
+							{templateModels.map((item) => (
+								<option key={item.id} value={item.id}>
+									{item.label}
+									{item.audioInput === 'realtime' ? ' · realtime voice' : ''}
+								</option>
+							))}
+							<option value={CUSTOM_MODEL}>Custom model id…</option>
+						</Select>
+					) : null}
+					{providerModel === CUSTOM_MODEL || !templateModels.length ? (
+						<Input {...fieldStyles} value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder="Provider model id" aria-label="Provider model id" />
+					) : null}
 					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (write-only)" aria-label="Provider token" />
 					<Select {...fieldStyles} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Provider environment">
 						<option value="">No environment</option>
 						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
 					</Select>
-					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-provider', name: providerName, provider: templateId, endpoint: providerEndpoint, token: providerToken, groupId }, 'AI provider saved', () => setProviderToken(''))}>Save provider</Button>
+					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-provider', name: providerName, provider: templateId, endpoint: providerEndpoint, model: modelToSave, token: providerToken, groupId }, 'AI provider saved', () => setProviderToken(''))}>Save provider</Button>
 				</Flex>
 			</Box>
 
@@ -150,7 +180,7 @@ export const SecureVault = () => {
 						<Flex key={entry.id} alignItems="center" gap={2} border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} flexWrap="wrap">
 							<Box minWidth={0} flex="1">
 								<Text fontSize="sm" fontWeight={700}>{entry.name}</Text>
-								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? `${entry.provider} · ${entry.endpoint}` : entry.key}</Text>
+								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? [entry.provider, entry.model, entry.endpoint].filter(Boolean).join(' · ') : entry.key}</Text>
 							</Box>
 							<Badge>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'}</Badge>
 							<Button size="xs" variant="ghost" onClick={() => deleteEntry(entry)}>Delete</Button>

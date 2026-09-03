@@ -733,9 +733,12 @@ lints, runs every suite, and fixes cross-module mismatches.
 ## 6. Voice, Live Activities and Secure Vault
 
 Folded in from the Codex voice delivery note (formerly
-`PRs/592-claude-lopu-ai-chatbot.md`); wave 2 unified that voice surface into
-the Lopu page (§3.2 `LopuPage`, `/lopu/voice`) and its chat brain (§1.3), so
-the facts below describe the shipped behaviour after both passes.
+`PRs/592-claude-lopu-ai-chatbot.md`, including its later "per-chat models"
+and "direct voice" follow-ups); wave 2 unified that voice surface into the
+Lopu page (§3.2 `LopuPage`, `/lopu/voice`) and its chat brain (§1.3), and the
+reconciliation pass kept that architecture while porting the follow-ups'
+capability, so the facts below describe the shipped behaviour after all
+three passes.
 
 ### 6.1 Voice delivery
 
@@ -753,18 +756,50 @@ the facts below describe the shipped behaviour after both passes.
   `POST /api/v1/lopu/voice/reply { transcribeMode: true }` and comes back as
   a linked `quote` event rendered as a Lopu bubble inside the conversation
   list (`LopuVoiceTranscript`, slotted through `LopuChatView`'s `trailing`).
+- **Direct voice** (opt-in; `settings.lopu.directVoice`, default off, plus
+  `directVoiceModel`, null = the provider's first realtime model): when the
+  chat's pinned Secure Vault provider's kind lists a realtime model
+  (`LOPU_PROVIDER_TEMPLATES[].models[].audioInput === 'realtime'` — xAI Grok
+  Voice: `grok-voice-latest`, `grok-voice-think-fast-2.0`; every other kind
+  stays on device transcription), the microphone streams straight to that
+  provider as 24 kHz PCM16 over its realtime WebSocket
+  (`components/Lopu/lopuVoiceRealtime.ts`: `session.update` with server VAD,
+  `grok-transcribe` input transcription and binary audio both ways) on a
+  five-minute credential minted by `POST /api/v1/lopu/voice/session`
+  (§6.3). The provider's user transcripts, its reply text
+  (`response.*delta`) and `response.done` land in the same conversation list
+  as local rows; Spoken replies off sends `textResponse: true` (the reply
+  text shows, nothing plays). The gear's **Direct voice** switch is enabled
+  only for a provider that supports it and otherwise reads why in one line
+  (transcribing / no provider chosen / the provider's own unavailable
+  reason / "<name> needs a provider with realtime voice (xAI Grok Voice)");
+  a realtime-model select appears when the kind lists more than one.
+  Settings → Lopu 🦄 mirrors the switch. Anything unsupported or
+  unconfigured at start (the server's 400 — vault key missing, connection
+  not yours, kind without realtime — or a browser without `getUserMedia`)
+  toasts one line and the standard path runs.
 - The native bridge (`~/utils/nativeBridge`) owns the microphone and speech
   recognition while a native session is active, carries only cookies scoped
   to the current Thingtime origin and API path, and posts voice turns
-  directly (`/api/v1/lopu/voice/reply` with the session's `providerId`) when
-  the WebView is backgrounded. Listening pauses for the whole provider turn
-  and for Lopu's speech so she never transcribes her own voice (the
-  feedback-loop guard, `pausedRef` in `useLopuVoice`), then resumes.
+  directly (`/api/v1/lopu/voice/reply` with the session's `providerId`,
+  `model`, `effort`, `speed`) when the WebView is backgrounded. Listening
+  pauses for the whole provider turn and for Lopu's speech so she never
+  transcribes her own voice (the feedback-loop guard, `pausedRef` in
+  `useLopuVoice`), then resumes. `lopu-voice-start` carries `inputMode:
+  'provider-audio' | 'native-transcript'` (direct voice when the chat's
+  provider supports it, else the web toasts the reason and asks for
+  transcription); in provider-audio mode the iOS controller
+  (`LopuVoiceSessionController.swift`) mints through the same
+  `/voice/session` endpoint, streams PCM at the device's sample rate, needs
+  no Speech Recognition permission, and posts `lopu-voice-realtime-user` /
+  `lopu-voice-realtime-assistant-start` (deltas ride the usual
+  `lopu-voice-event`).
 - ActivityKit exposes the listening, thinking, transcribing, speaking and
   ended states on the Lock Screen and in the Dynamic Island (the iOS app's
   Live Activity; the web sends `lopu-voice-start` / `lopu-voice-stop` and
   receives `lopu-voice-transcript` / `lopu-voice-event` / `lopu-voice-interim`
-  / `lopu-voice-error` / `lopu-voice-state` bridge messages).
+  / `lopu-voice-error` / `lopu-voice-state` plus the two realtime messages
+  above).
 
 ### 6.2 Personal vault and providers
 
@@ -780,34 +815,78 @@ the facts below describe the shipped behaviour after both passes.
   admin key is set. Unset both and the vault reports
   `vault.configured === false`: Settings shows its "Encryption not
   configured" state, `GET /api/v1/ai/models` lists no `vaultProviders`, and
-  an explicit `providerId` is a 400.
-- Templates cover OpenAI/Codex, Anthropic/Claude, Google Gemini, xAI/Grok and
-  OpenRouter. Custom OpenAI-compatible hosts require an explicit server
-  allowlist (`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`, built-in vendor hosts
-  are pre-allowed), public HTTPS, fresh public DNS resolution before every
-  call, bounded responses (`LOPU_PROVIDER_MAX_RESPONSE_BYTES`), a fixed
-  timeout (`LOPU_PROVIDER_TIMEOUT_MS`) and disabled redirects — all in
-  `api/utils/lopu/vaultProviderClient.ts`, which chat turns (§1.3) and voice
-  turns now share.
+  an explicit `providerId` is a 400 (a direct-voice session too).
+- Templates (`LOPU_PROVIDER_TEMPLATES`) cover OpenAI/Codex, Anthropic/Claude,
+  Google Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq and Cohere;
+  each lists its catalog `models[]` (efforts, speeds, `audioInput:
+  'realtime'` for direct-voice models) and the vault's GET publishes them as
+  `providerTemplates`. A connection's `model` is optional: the Secure Vault
+  form offers the kind's catalog (or a custom id; a custom compatible host
+  must name one), and a row saved without one runs on its kind's first
+  catalog model. The one model rule (`vaultProviders.ts`
+  `resolveVaultTurnModel`, used by the chat client config and the voice
+  turn): the connection's own model → the kind's first catalog model → the
+  model the request asked for (custom hosts only). Effort and speed live on
+  each conversation (§1.2) and travel to the provider — the chat brain
+  through its SDK clients, the voice turn through
+  `callVaultProviderPlainCompletion`, which maps them onto the vendor's own
+  fields (Anthropic `output_config.effort` + the fast-mode beta, Gemini
+  `thinkingLevel`, the OpenAI-style `reasoning_effort` family with
+  DeepSeek's `thinking` switch, OpenRouter's `reasoning`, OpenAI's priority
+  tier) and reads text out of content arrays (Mistral's thinking chunks are
+  skipped). Codex's follow-up had removed the model from the row and chosen
+  model / effort / speed per chat in the composer with a custom-id input;
+  the reconciled design keeps the row's optional model with catalog
+  defaults and per-chat effort / speed, and a per-chat *provider-native*
+  model for vault turns stays the open follow-up (§1.2 validates `model`
+  against the Thingtime catalog).
+- Custom OpenAI-compatible hosts require an explicit server allowlist
+  (`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`, built-in vendor hosts are
+  pre-allowed), public HTTPS, fresh public DNS resolution before every call,
+  bounded responses (`LOPU_PROVIDER_MAX_RESPONSE_BYTES`), a fixed timeout
+  (`LOPU_PROVIDER_TIMEOUT_MS`) and disabled redirects — all in
+  `api/utils/lopu/vaultProviderClient.ts`, which chat turns (§1.3), voice
+  turns and the direct-voice credential exchange
+  (`mintVaultProviderRealtimeSession`: `POST <endpoint>/realtime/client_secrets`
+  with the decrypted key, five-minute `expires_after`, the returned secret
+  refused when it is or contains the key) share.
+- `GET /api/v1/ai/models` → `vaultProviders[]` carries `model` (the row's own
+  or its kind's default) and `realtimeModels` (the kind's direct-voice
+  models, empty elsewhere) beside id / name / kind / endpointHost /
+  available / reason — still never a token or an endpoint beyond its host.
 
 ### 6.3 API contract
 
-- `GET|POST /api/v1/lopu/vault` (`api.lopu-vault` 1.0.0) — templates,
-  environments and redacted entry metadata; `create-group`, `save-secret`,
-  `save-provider`, `delete`.
-- `POST /api/v1/lopu/voice/reply` (`api.lopu-voice-reply` 1.0.0) — NDJSON;
-  conversation mode dials the selected provider through the shared client,
-  transcribe mode makes no provider call.
-- Both routes require a current full user session and use fail-closed rate
-  limits (`lopu.vault` 60/min, `lopu.voiceReply` 30/min).
+- `GET|POST /api/v1/lopu/vault` (`api.lopu-vault` 1.1.0) — templates with
+  catalog models, environments and redacted entry metadata; `create-group`,
+  `save-secret`, `save-provider` (optional `model`), `delete`.
+- `POST /api/v1/lopu/voice/reply` (`api.lopu-voice-reply` 1.1.0) — NDJSON;
+  conversation mode dials the selected provider through the shared client
+  with optional per-turn `model` / `effort` / `speed`, transcribe mode makes
+  no provider call.
+- `POST /api/v1/lopu/voice/session` (`api.lopu-voice-session` 1.0.0) —
+  `{ providerId, model?, effort?, textResponse? }` → `{ ok, session: {
+  provider, model, token, expiresAt, webSocketUrl, effort, textResponse } }`;
+  the ephemeral direct-voice credential, 400 with the reason otherwise
+  (never a key).
+- `GET /api/v1/ai/models` (`api.ai-models` 1.3.0) — `vaultProviders[]` gains
+  `realtimeModels` and the kind-default `model`.
+- All three Lopu voice/vault routes require a current full user session (403
+  for a guest session), JSON bodies (415) and use fail-closed rate limits
+  (`lopu.vault` 60/min; `lopu.voiceReply` 30/min, shared by the voice turn
+  and the session mint).
 
 ### 6.4 Verification (voice delivery)
 
-- `corepack pnpm run test:lopu` (8/8 at delivery; the suite has since grown),
-  `test:api-capabilities` 5/5, focused ESLint, `corepack pnpm run build`
-  including the Nitro/Vercel output checks, `xcodegen generate` plus an
-  unsigned generic iOS Simulator build, and authenticated desktop + 390×844
-  browser QA all passed.
-- Physical-device microphone permissions, a paid provider request and the
-  actual Lock Screen / Dynamic Island behaviour remain manual acceptance
-  checks.
+- `corepack pnpm run test:lopu` (8/8 at delivery; 72/72 after the
+  reconciliation, `voice.test.ts` covering the per-kind request bodies, the
+  model rule, the credential exchange and the session), `test:lopu-ui`
+  87/87, `test:api-capabilities` 8/8, focused ESLint, `corepack pnpm run
+  build:client`, `xcodegen generate` plus an unsigned generic iOS Simulator
+  build (Codex pass), and authenticated desktop + 390×844 browser QA passed.
+  `node scripts/verify-lopu.mjs <base>` adds the session endpoint's walls
+  (401 / 415 / clean 400 without a credential) to §A and §K.
+- Physical-device microphone permissions, a paid provider request (a real
+  Grok Voice session), and the actual Lock Screen / Dynamic Island behaviour
+  remain manual acceptance checks; the reconciliation pass did not compile
+  the iOS project.

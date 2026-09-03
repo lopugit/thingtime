@@ -1,19 +1,40 @@
+// 🎙️ Direct voice on the web (design note §6.1): the microphone streams as
+// 24 kHz PCM16 over the provider's realtime WebSocket (xAI Grok Voice's
+// client-secret + binary transport) and the reply's PCM plays back through
+// the same AudioContext. The session descriptor comes from
+// POST /api/v1/lopu/voice/session — a provider-minted five-minute credential,
+// never the stored key. `useLopuVoice` (LopuVoiceControls.tsx) drives this
+// and lands transcripts in the conversation list; the iOS app implements the
+// same protocol natively (LopuVoiceSessionController.swift).
+
 const SAMPLE_RATE = 24_000;
 
-type RealtimeSession = {
+export type LopuVoiceRealtimeSessionDescriptor = {
 	token: string;
 	webSocketUrl: string;
 	effort: string;
 	textResponse: boolean;
 };
 
-type RealtimeCallbacks = {
+export type LopuVoiceRealtimeCallbacks = {
 	onActive(active: boolean): void;
 	onUserTranscript(text: string, final: boolean): void;
 	onAssistantStart(id: string): void;
 	onAssistantDelta(id: string, text: string): void;
+	// the provider finished one reply (response.done)
+	onAssistantDone?(id: string): void;
 	onError(message: string): void;
 };
+
+export const LOPU_REALTIME_UNSUPPORTED_MESSAGE = 'This browser cannot stream microphone audio (no getUserMedia / AudioContext) — using device transcription instead.';
+
+// Direct voice needs a microphone stream, an AudioContext and WebSockets.
+export const browserSupportsLopuRealtime = (): boolean =>
+	typeof window !== 'undefined' &&
+	typeof WebSocket !== 'undefined' &&
+	typeof navigator !== 'undefined' &&
+	!!navigator.mediaDevices?.getUserMedia &&
+	typeof (window.AudioContext || (window as any).webkitAudioContext) === 'function';
 
 const pcm16 = (samples: Float32Array) => {
 	const output = new Int16Array(samples.length);
@@ -32,7 +53,7 @@ const float32 = (buffer: ArrayBuffer) => {
 };
 
 export class LopuVoiceRealtime {
-	private callbacks: RealtimeCallbacks;
+	private callbacks: LopuVoiceRealtimeCallbacks;
 	private socket: WebSocket | null = null;
 	private context: AudioContext | null = null;
 	private stream: MediaStream | null = null;
@@ -42,14 +63,16 @@ export class LopuVoiceRealtime {
 	private responseId = '';
 	private stopped = false;
 
-	constructor(callbacks: RealtimeCallbacks) {
+	constructor(callbacks: LopuVoiceRealtimeCallbacks) {
 		this.callbacks = callbacks;
 	}
 
-	async start(session: RealtimeSession) {
+	async start(session: LopuVoiceRealtimeSessionDescriptor) {
+		if (!browserSupportsLopuRealtime()) throw new Error(LOPU_REALTIME_UNSUPPORTED_MESSAGE);
 		this.stopped = false;
 		this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
-		this.context = new AudioContext({ sampleRate: SAMPLE_RATE });
+		const Context = window.AudioContext || (window as any).webkitAudioContext;
+		this.context = new Context({ sampleRate: SAMPLE_RATE }) as AudioContext;
 		await this.context.resume();
 		this.source = this.context.createMediaStreamSource(this.stream);
 		this.processor = this.context.createScriptProcessor(2048, 1, 1);
@@ -112,8 +135,12 @@ export class LopuVoiceRealtime {
 				this.callbacks.onAssistantStart(this.responseId);
 			}
 			this.callbacks.onAssistantDelta(this.responseId, event.delta);
+		} else if (event.type === 'response.done') {
+			const id = this.responseId;
+			this.responseId = '';
+			if (id) this.callbacks.onAssistantDone?.(id);
 		} else if (event.type === 'error') {
-			this.callbacks.onError(event.error?.message || event.message || 'The realtime provider reported an error.');
+			this.callbacks.onError(typeof event.error?.message === 'string' ? event.error.message : typeof event.message === 'string' ? event.message : 'The realtime provider reported an error.');
 		}
 	}
 

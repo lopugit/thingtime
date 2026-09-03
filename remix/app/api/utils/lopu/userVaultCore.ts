@@ -251,3 +251,28 @@ export const providerModelFor = (provider: LopuProviderKind, modelId: unknown): 
 	if (typeof modelId !== 'string') return null;
 	return providerTemplateFor(provider)?.models.find((model) => model.id === modelId.trim()) ?? null;
 };
+
+// A provider-native model id as the vault or a voice request may carry it
+// (`gpt-5.4`, `openai/gpt-oss-120b`, `grok-voice-latest`): bounded, no
+// whitespace or shell-ish characters, else null.
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,199}$/;
+export const safeVaultModelId = (value: unknown): string | null => {
+	const text = boundedVaultText(value, 200);
+	return text && MODEL_ID.test(text) ? text : null;
+};
+
+// The kind's first catalog model — what a connection saved without a model of
+// its own runs on. A custom compatible host has no catalog (null): it must
+// name its model in Settings → Secure Vault.
+export const defaultVaultProviderModel = (provider: LopuProviderKind): string | null => providerTemplateFor(provider)?.models[0]?.id ?? null;
+
+export type LopuRealtimeModelPublic = { id: string; label: string };
+
+// The kind's models that speak the realtime speech-to-speech transport
+// (`audioInput: 'realtime'` — the ephemeral client-secret + binary PCM
+// WebSocket protocol xAI Grok Voice documents). Direct voice (design note
+// §6.1) needs one; every other kind stays on device transcription.
+export const realtimeVaultProviderModels = (provider: LopuProviderKind): LopuRealtimeModelPublic[] =>
+	(providerTemplateFor(provider)?.models ?? []).filter((model) => model.audioInput === 'realtime').map((model) => ({ id: model.id, label: model.label }));
+
+export const vaultProviderSupportsRealtime = (provider: LopuProviderKind): boolean => realtimeVaultProviderModels(provider).length > 0;

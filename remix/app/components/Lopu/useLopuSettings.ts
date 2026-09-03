@@ -47,6 +47,14 @@ export interface LopuSettings {
 	// the brain a voice/chat turn thinks with: a Secure Vault provider id (or
 	// a catalog model id); null = whatever the model picker says
 	providerId: string | null;
+	// voice: direct voice — stream the microphone straight to the chat's own
+	// Secure Vault provider when its kind offers realtime speech (xAI Grok
+	// Voice, design note §6.1); off = device transcription + a normal turn.
+	// The switch only takes effect for a provider that supports it
+	directVoice: boolean;
+	// voice: the realtime model direct voice runs on; null = the provider's
+	// first realtime model
+	directVoiceModel: string | null;
 	// the floating window is open in this viewport (tab-local)
 	open: boolean;
 }
@@ -66,6 +74,8 @@ export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	spokenReplies: false,
 	transcribe: false,
 	providerId: null,
+	directVoice: false,
+	directVoiceModel: null,
 	open: false
 };
 
@@ -111,6 +121,8 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 		spokenReplies: boolOr(source.spokenReplies, LOPU_SETTINGS_DEFAULTS.spokenReplies),
 		transcribe: boolOr(source.transcribe, LOPU_SETTINGS_DEFAULTS.transcribe),
 		providerId: idOrNull(source.providerId),
+		directVoice: boolOr(source.directVoice, LOPU_SETTINGS_DEFAULTS.directVoice),
+		directVoiceModel: idOrNull(source.directVoiceModel),
 		open: boolOr(source.open, LOPU_SETTINGS_DEFAULTS.open)
 	};
 };
@@ -440,6 +452,20 @@ export const useLopuSettings = () => {
 		[setLopuSetting]
 	);
 
+	const setDirectVoice = React.useCallback(
+		(value: boolean) => {
+			setLopuSetting('directVoice', !!value);
+		},
+		[setLopuSetting]
+	);
+
+	const setDirectVoiceModel = React.useCallback(
+		(value: string | null) => {
+			setLopuSetting('directVoiceModel', idOrNull(value));
+		},
+		[setLopuSetting]
+	);
+
 	return {
 		loading,
 		settings,
@@ -456,7 +482,9 @@ export const useLopuSettings = () => {
 		setSpeed,
 		setSpokenReplies,
 		setTranscribe,
-		setProviderId
+		setProviderId,
+		setDirectVoice,
+		setDirectVoiceModel
 	};
 };
 

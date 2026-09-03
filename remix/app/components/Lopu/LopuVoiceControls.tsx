@@ -1,16 +1,19 @@
 import React from 'react';
-import { Box, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Switch, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { ArrowUp, AudioLines, Loader2, Mic, Settings2, Square } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
+import { useApi } from '~/hooks/useApi';
 import { getNativeBridge, nativeBridgeMessageEvent } from '~/utils/nativeBridge';
 import { LopuRingAvatar } from './LopuActivityBadge';
 import { LopuAssistantRow, LopuChatView, LopuUserRow } from './LopuChatView';
 import { LopuProviderSelect, type LopuProviderSelectChange } from './LopuModelPicker';
 import { readNdjson } from './lopuChatStream';
 import { abortLopuTurn, getLopuStoreSnapshot } from './lopuChatStore';
+import { directVoiceUnavailableReason, findLopuVaultProvider, resolveDirectVoiceModel, type LopuVaultProvider } from './lopuProviderCore';
 import { LOPU_UI } from './lopuTheme';
+import { browserSupportsLopuRealtime, LOPU_REALTIME_UNSUPPORTED_MESSAGE, LopuVoiceRealtime } from './lopuVoiceRealtime';
 import { useLopu } from './useLopu';
 import { useLopuChat } from './useLopuChat';
 import { useLopuSettings } from './useLopuSettings';
@@ -32,6 +35,14 @@ import { useLopuSettings } from './useLopuSettings';
 // /api/v1/lopu/voice/reply path — each utterance becomes a private
 // transcript page whose quote renders as a Lopu bubble in the transcript
 // strip (no AI turn, nothing spoken).
+//
+// Direct voice (design note §6.1, opt-in): when the chat's own Secure Vault
+// provider offers realtime speech (xAI Grok Voice), the mic streams straight
+// to it over the provider's WebSocket (lopuVoiceRealtime.ts) on a five-minute
+// credential minted by POST /api/v1/lopu/voice/session; the provider's
+// transcripts and reply text land in the same conversation list. Unsupported
+// or unconfigured → one line says why and the standard path runs. On iOS the
+// native controller speaks the same protocol (`inputMode: 'provider-audio'`).
 
 declare global {
 	interface Window {
@@ -69,6 +80,12 @@ export type UseLopuVoiceOptions = {
 	transcribe: boolean;
 	// the Secure Vault provider a native (iOS) session posts its turns with
 	providerId: string | null;
+	// direct voice (§6.1): the preference, the realtime model it should run
+	// (null = the provider's first) and the chat's pinned vault provider (the
+	// catalog row tells whether its kind offers realtime speech)
+	directVoice?: boolean;
+	directVoiceModel?: string | null;
+	provider?: LopuVaultProvider | null;
 };
 
 export type UseLopuVoice = {
@@ -77,6 +94,8 @@ export type UseLopuVoice = {
 	nativeReady: boolean;
 	// the listening session is on
 	active: boolean;
+	// the session streams the microphone straight to the user's provider
+	direct: boolean;
 	phase: LopuVoicePhase;
 	interim: string;
 	// local-only rows: native turns, transcribe quotes, microphone errors
@@ -111,10 +130,14 @@ const speakable = (reply: unknown): string | null => (typeof reply === 'string' 
 
 export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const lopu = useLopu();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
 	const optionsRef = React.useRef(options);
 	optionsRef.current = options;
 
 	const [active, setActive] = React.useState(false);
+	const [direct, setDirect] = React.useState(false);
 	const [busy, setBusy] = React.useState<'thinking' | 'speaking' | null>(null);
 	const [interim, setInterim] = React.useState('');
 	const [items, setItems] = React.useState<LopuVoiceItem[]>([]);
@@ -124,6 +147,9 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const sessionIdRef = React.useRef(newId('voice'));
 	const activeRef = React.useRef(false);
 	const nativeSessionRef = React.useRef(false);
+	// the web realtime session (direct voice) — null on the standard path
+	const realtimeRef = React.useRef<LopuVoiceRealtime | null>(null);
+	const directSessionRef = React.useRef(false);
 	// recognition is paused for a turn / Lopu's speech (the feedback-loop guard)
 	const pausedRef = React.useRef(false);
 	const recognitionRef = React.useRef<any>(null);
@@ -145,6 +171,12 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 
 	const patchItem = React.useCallback((id: string, patch: (item: LopuVoiceItem) => LopuVoiceItem) => {
 		setItems((current) => current.map((item) => (item.id === id ? patch(item) : item)));
+	}, []);
+
+	// a realtime reply row keyed by the provider's response id (created once,
+	// then patched by its deltas)
+	const ensureAssistantItem = React.useCallback((id: string) => {
+		setItems((current) => (current.some((item) => item.id === id) ? current : [...current, { id, role: 'assistant' as const, text: '', at: Date.now() }].slice(-MAX_LOCAL_ITEMS)));
 	}, []);
 
 	const applyVoiceEvent = React.useCallback(
@@ -317,7 +349,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				} finally {
 					setBusy(null);
 					pausedRef.current = false;
-					if (activeRef.current && !nativeSessionRef.current) startRecognitionRef.current();
+					if (activeRef.current && !nativeSessionRef.current && !directSessionRef.current) startRecognitionRef.current();
 				}
 			};
 			queueRef.current = queueRef.current.then(run, run);
@@ -345,6 +377,14 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				const event = message.payload?.event as LopuVoiceEvent | undefined;
 				if (typeof assistantId === 'string') applyVoiceEvent(assistantId, event);
 				if (event?.type === 'done' || event?.type === 'error') setBusy(null);
+			} else if (type === 'lopu-voice-realtime-user' && typeof message.payload?.text === 'string') {
+				// direct voice on iOS: the provider's transcript of what was said
+				const text = message.payload.text.trim();
+				setInterim('');
+				if (text) pushItem({ role: 'user', text });
+			} else if (type === 'lopu-voice-realtime-assistant-start' && typeof message.payload?.assistantId === 'string') {
+				// … and the start of its reply (deltas follow as lopu-voice-event)
+				ensureAssistantItem(message.payload.assistantId);
 			} else if (type === 'lopu-voice-interim') {
 				setInterim(typeof message.payload?.text === 'string' ? message.payload.text : '');
 			} else if (type === 'lopu-voice-error') {
@@ -356,7 +396,11 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			} else if (type === 'lopu-voice-state') {
 				const on = message.payload?.active === true;
 				activeRef.current = on;
-				if (!on) nativeSessionRef.current = false;
+				if (!on) {
+					nativeSessionRef.current = false;
+					directSessionRef.current = false;
+					setDirect(false);
+				}
 				setActive(on);
 				if (!on) setBusy(null);
 			}
@@ -364,24 +408,107 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		const listener = ((event: CustomEvent) => onMessage(event.detail)) as EventListener;
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		return () => window.removeEventListener(nativeBridgeMessageEvent, listener);
-	}, [applyVoiceEvent, pushItem]);
+	}, [applyVoiceEvent, ensureAssistantItem, pushItem]);
+
+	// ——— direct voice (web) ————————————————————————————————————————————————
+
+	const stopRealtime = React.useCallback(() => {
+		const realtime = realtimeRef.current;
+		realtimeRef.current = null;
+		directSessionRef.current = false;
+		setDirect(false);
+		if (realtime) void realtime.stop();
+	}, []);
+
+	// Mint the session and open the provider's WebSocket. Resolves true when
+	// the direct session owns the microphone (or failed after taking it),
+	// false when the caller should run the standard path instead — a
+	// pre-flight refusal (unsupported provider, browser, or the server's 400)
+	// explains itself in one line first.
+	const startDirectVoice = React.useCallback(async (): Promise<boolean> => {
+		const current = optionsRef.current;
+		const provider = current.provider ?? null;
+		const reason = directVoiceUnavailableReason(provider, current.transcribe);
+		if (reason || !provider) {
+			lopu({ title: 'Direct voice is off', description: `${reason ?? 'No provider selected'} — using device transcription.`, status: 'info', duration: 6000 });
+			return false;
+		}
+		if (!browserSupportsLopuRealtime()) {
+			lopu({ title: 'Direct voice is off', description: LOPU_REALTIME_UNSUPPORTED_MESSAGE, status: 'info', duration: 8000 });
+			return false;
+		}
+		const model = resolveDirectVoiceModel(provider, current.directVoiceModel ?? null);
+		setBusy('thinking');
+		let session: { token?: unknown; webSocketUrl?: unknown; effort?: unknown; textResponse?: unknown } | null = null;
+		try {
+			const payload = await apiRef.current.v1.lopu.voiceSession({ providerId: provider.id, model: model?.id ?? null, textResponse: !current.speak });
+			session = payload && typeof payload === 'object' ? ((payload as { session?: typeof session }).session ?? null) : null;
+			if (typeof session?.token !== 'string' || !session.token || typeof session.webSocketUrl !== 'string') throw new Error('Lopu could not start direct voice.');
+		} catch (error) {
+			setBusy(null);
+			const message = error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.';
+			lopu({ title: 'Direct voice is off', description: `${message} — using device transcription.`, status: 'info', duration: 8000 });
+			return false;
+		}
+		const realtime = new LopuVoiceRealtime({
+			onActive: (on) => {
+				if (on || realtimeRef.current !== realtime) return;
+				// the socket closed (provider hang-up, the 5-minute credential
+				// expiring, a network drop): the session is over
+				realtimeRef.current = null;
+				directSessionRef.current = false;
+				activeRef.current = false;
+				setDirect(false);
+				setActive(false);
+				setBusy(null);
+				setInterim('');
+			},
+			onUserTranscript: (text, final) => {
+				if (!final) {
+					setInterim(text);
+					return;
+				}
+				setInterim('');
+				if (text.trim()) pushItem({ role: 'user', text: text.trim() });
+			},
+			onAssistantStart: (id) => {
+				ensureAssistantItem(id);
+				setBusy('speaking');
+			},
+			onAssistantDelta: (id, text) => {
+				ensureAssistantItem(id);
+				patchItem(id, (item) => ({ ...item, text: item.text + text }));
+			},
+			onAssistantDone: () => setBusy(null),
+			onError: (message) => pushItem({ role: 'assistant', text: message, error: true })
+		});
+		realtimeRef.current = realtime;
+		directSessionRef.current = true;
+		activeRef.current = true;
+		setDirect(true);
+		setActive(true);
+		try {
+			await realtime.start({
+				token: session.token as string,
+				webSocketUrl: session.webSocketUrl as string,
+				effort: typeof session.effort === 'string' ? session.effort : 'none',
+				textResponse: session.textResponse === true
+			});
+		} catch (error) {
+			stopRealtime();
+			activeRef.current = false;
+			setActive(false);
+			pushItem({ role: 'assistant', text: error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.', error: true });
+		} finally {
+			setBusy(null);
+		}
+		return true;
+	}, [ensureAssistantItem, lopu, patchItem, pushItem, stopRealtime]);
 
 	// ——— session ————————————————————————————————————————————————————————————
 
-	const start = React.useCallback(() => {
-		if (activeRef.current) return;
-		const current = optionsRef.current;
-		const bridge = getNativeBridge();
-		if (nativeReady && bridge) {
-			nativeSessionRef.current = true;
-			activeRef.current = true;
-			setActive(true);
-			bridge.postMessage({
-				type: 'lopu-voice-start',
-				payload: { textResponse: !current.speak, transcribeMode: current.transcribe, providerId: current.providerId ?? '', sessionId: sessionIdRef.current }
-			});
-			return;
-		}
+	// the standard web path: continuous SpeechRecognition
+	const startStandard = React.useCallback(() => {
 		nativeSessionRef.current = false;
 		pausedRef.current = false;
 		if (!startRecognition()) {
@@ -395,7 +522,48 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		}
 		activeRef.current = true;
 		setActive(true);
-	}, [lopu, nativeReady, startRecognition]);
+	}, [lopu, startRecognition]);
+
+	const start = React.useCallback(() => {
+		if (activeRef.current) return;
+		const current = optionsRef.current;
+		const wantsDirect = current.directVoice === true && !current.transcribe;
+		const bridge = getNativeBridge();
+		if (nativeReady && bridge) {
+			// the iOS controller runs either path; provider-audio only when the
+			// chat's provider supports it (else it is told, and transcribes)
+			const directReason = wantsDirect ? directVoiceUnavailableReason(current.provider ?? null, current.transcribe) : null;
+			if (wantsDirect && directReason) lopu({ title: 'Direct voice is off', description: `${directReason} — using device transcription.`, status: 'info', duration: 6000 });
+			const nativeDirect = wantsDirect && !directReason;
+			const model = nativeDirect ? (resolveDirectVoiceModel(current.provider ?? null, current.directVoiceModel ?? null)?.id ?? '') : '';
+			nativeSessionRef.current = true;
+			directSessionRef.current = nativeDirect;
+			activeRef.current = true;
+			setDirect(nativeDirect);
+			setActive(true);
+			bridge.postMessage({
+				type: 'lopu-voice-start',
+				payload: {
+					textResponse: !current.speak,
+					transcribeMode: current.transcribe,
+					providerId: current.providerId ?? '',
+					sessionId: sessionIdRef.current,
+					inputMode: nativeDirect ? 'provider-audio' : 'native-transcript',
+					model,
+					effort: '',
+					speed: 'normal'
+				}
+			});
+			return;
+		}
+		if (wantsDirect) {
+			void startDirectVoice().then((handled) => {
+				if (!handled && !activeRef.current) startStandard();
+			});
+			return;
+		}
+		startStandard();
+	}, [lopu, nativeReady, startDirectVoice, startStandard]);
 
 	const stop = React.useCallback(() => {
 		activeRef.current = false;
@@ -404,11 +572,12 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			nativeSessionRef.current = false;
 			getNativeBridge()?.postMessage({ type: 'lopu-voice-stop' });
 		}
+		stopRealtime();
 		stopRecognition();
 		cancelSpeech();
 		setInterim('');
 		setBusy(null);
-	}, [cancelSpeech, stopRecognition]);
+	}, [cancelSpeech, stopRealtime, stopRecognition]);
 
 	const toggle = React.useCallback(() => {
 		if (activeRef.current) stop();
@@ -422,7 +591,8 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 
 	const clearItems = React.useCallback(() => setItems([]), []);
 
-	// leaving the surface ends the session: microphone, speech, native audio
+	// leaving the surface ends the session: microphone, speech, native audio,
+	// the realtime socket
 	React.useEffect(() => {
 		return () => {
 			activeRef.current = false;
@@ -430,15 +600,17 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				nativeSessionRef.current = false;
 				getNativeBridge()?.postMessage({ type: 'lopu-voice-stop' });
 			}
+			stopRealtime();
 			stopRecognition();
 			cancelSpeech();
 		};
-	}, [cancelSpeech, stopRecognition]);
+	}, [cancelSpeech, stopRealtime, stopRecognition]);
 
 	return {
 		supported: webSupported || nativeReady,
 		nativeReady,
 		active,
+		direct,
 		phase: busy ?? (active ? 'listening' : 'idle'),
 		interim,
 		items,
@@ -471,9 +643,9 @@ const spin = keyframes`
 	to { transform: rotate(360deg); }
 `;
 
-export const lopuVoicePhaseLabel = (phase: LopuVoicePhase, supported = true): string => {
-	if (phase === 'listening') return 'Listening…';
-	if (phase === 'thinking') return 'Thinking…';
+export const lopuVoicePhaseLabel = (phase: LopuVoicePhase, supported = true, direct = false): string => {
+	if (phase === 'listening') return direct ? 'Listening · direct' : 'Listening…';
+	if (phase === 'thinking') return direct ? 'Connecting…' : 'Thinking…';
 	if (phase === 'speaking') return 'Speaking…';
 	return supported ? 'Tap to talk' : 'Type to Lopu';
 };
@@ -602,10 +774,23 @@ const PopoverRow = (props: { label: string; hint: string; children: React.ReactN
 export type LopuVoiceProviderValue = { model: string | null; providerId: string | null };
 
 // The session gear: a compact popover (never a full-width card pushing the
-// conversation down) with Spoken replies, Transcribe mode and the provider
-// (the same picker the composer exposes, as a single select).
-export const LopuVoiceSettingsPopover = (props: { compact?: boolean; providerValue: LopuVoiceProviderValue; onProviderChange: (choice: LopuProviderSelectChange) => void }) => {
-	const { settings, setSpokenReplies, setTranscribe } = useLopuSettings();
+// conversation down) with Spoken replies, Transcribe mode, Direct voice (only
+// enabled when the chat's vault provider offers realtime speech — the hint
+// says why otherwise) and the provider (the same picker the composer
+// exposes, as a single select).
+export const LopuVoiceSettingsPopover = (props: {
+	compact?: boolean;
+	providerValue: LopuVoiceProviderValue;
+	onProviderChange: (choice: LopuProviderSelectChange) => void;
+	// the chat's pinned Secure Vault provider (catalog row), if any
+	provider?: LopuVaultProvider | null;
+}) => {
+	const { settings, setSpokenReplies, setTranscribe, setDirectVoice, setDirectVoiceModel } = useLopuSettings();
+	const provider = props.provider ?? null;
+	const directReason = directVoiceUnavailableReason(provider, settings.transcribe);
+	const directOn = settings.directVoice && !directReason;
+	const realtimeModels = provider?.realtimeModels ?? [];
+	const directModel = resolveDirectVoiceModel(provider, settings.directVoiceModel);
 
 	return (
 		<Popover placement="top-start" isLazy gutter={10}>
@@ -651,6 +836,39 @@ export const LopuVoiceSettingsPopover = (props: { compact?: boolean; providerVal
 					<PopoverRow label="Transcribe mode" hint="Save each utterance as a private page instead of asking Lopu">
 						<Switch size="sm" isChecked={settings.transcribe} onChange={(event) => setTranscribe(event.target.checked)} aria-label="Transcribe mode" />
 					</PopoverRow>
+					<PopoverRow label="Direct voice" hint={directReason ? `Off here: ${directReason}` : 'Realtime speech with your own provider'}>
+						<Switch
+							size="sm"
+							isChecked={directOn}
+							isDisabled={!!directReason}
+							onChange={(event) => setDirectVoice(event.target.checked)}
+							aria-label="Direct voice"
+							title={directReason ?? 'Realtime speech with your own provider'}
+						/>
+					</PopoverRow>
+					{directOn && realtimeModels.length > 1 ? (
+						<Box pb={1.5}>
+							<Select
+								size="xs"
+								value={directModel?.id ?? ''}
+								aria-label="Direct voice model"
+								bg={LOPU_UI.card}
+								color={LOPU_UI.ink}
+								borderColor={LOPU_UI.borderColor}
+								borderRadius={LOPU_UI.radiusSm}
+								fontSize={LOPU_UI.fontSmall}
+								_hover={{ borderColor: LOPU_UI.faint }}
+								_focusVisible={{ borderColor: LOPU_UI.ink, boxShadow: 'none' }}
+								onChange={(event) => setDirectVoiceModel(event.target.value || null)}
+							>
+								{realtimeModels.map((model) => (
+									<option key={model.id} value={model.id}>
+										{model.label}
+									</option>
+								))}
+							</Select>
+						</Box>
+					) : null}
 					<Box pt={1.5}>
 						<Text fontSize="13px" fontWeight={600} color={LOPU_UI.ink} mb={1}>
 							Provider
@@ -747,6 +965,7 @@ export const LopuVoiceDeck = (props: {
 	disabled?: boolean;
 	providerValue: LopuVoiceProviderValue;
 	onProviderChange: (choice: LopuProviderSelectChange) => void;
+	provider?: LopuVaultProvider | null;
 }) => {
 	const { voice, compact = false, disabled = false } = props;
 	const [draft, setDraft] = React.useState('');
@@ -766,12 +985,12 @@ export const LopuVoiceDeck = (props: {
 				{voice.interim}
 			</Text>
 			<Flex align="center" justify="center" gap={compact ? 3 : 5} py={compact ? 1 : 2}>
-				<LopuVoiceSettingsPopover compact={compact} providerValue={props.providerValue} onProviderChange={props.onProviderChange} />
+				<LopuVoiceSettingsPopover compact={compact} providerValue={props.providerValue} onProviderChange={props.onProviderChange} provider={props.provider} />
 				<Flex direction="column" align="center" gap={compact ? 0 : 1.5}>
 					<LopuMicButton phase={voice.phase} size={compact ? 48 : 64} onClick={voice.toggle} disabled={disabled} />
 					{compact ? null : (
 						<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} lineHeight="1">
-							{lopuVoicePhaseLabel(voice.phase, voice.supported)}
+							{lopuVoicePhaseLabel(voice.phase, voice.supported, voice.direct)}
 						</Text>
 					)}
 				</Flex>
@@ -879,11 +1098,18 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 		[setProviderId]
 	);
 
+	// the chat's pinned vault provider as the catalog lists it (kind, realtime
+	// models) — what direct voice needs to know
+	const provider = React.useMemo(() => findLopuVaultProvider(chat.vaultProviders, chat.settings.providerId), [chat.vaultProviders, chat.settings.providerId]);
+
 	const voice = useLopuVoice({
 		onFinalTranscript,
 		speak: settings.spokenReplies,
 		transcribe: settings.transcribe,
-		providerId: chat.settings.providerId ?? settings.providerId
+		providerId: chat.settings.providerId ?? settings.providerId,
+		directVoice: settings.directVoice,
+		directVoiceModel: settings.directVoiceModel,
+		provider
 	});
 
 	React.useEffect(() => {
@@ -901,7 +1127,7 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 				autoFocus={false}
 				trailing={voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
 			/>
-			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id} providerValue={providerValue} onProviderChange={onProviderChange} />
+			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} />
 		</Flex>
 	);
 };

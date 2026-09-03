@@ -38,8 +38,8 @@ const model = (id: string, provider: 'anthropic' | 'openai', available = true): 
 });
 const MODELS = [model('gpt-5', 'openai'), model('claude-opus-5', 'anthropic', false)];
 const VAULT: LopuVaultProvider[] = [
-	{ id: 'vp-1', name: 'Acme proxy', kind: 'compatible', model: 'gpt-4o', endpointHost: 'llm.acme.test', available: true, reason: null },
-	{ id: 'vp-off', name: 'Broken', kind: 'openai', model: null, endpointHost: null, available: false, reason: 'blocked host' }
+	{ id: 'vp-1', name: 'Acme proxy', kind: 'compatible', model: 'gpt-4o', endpointHost: 'llm.acme.test', available: true, reason: null, realtimeModels: [] },
+	{ id: 'vp-off', name: 'Broken', kind: 'openai', model: null, endpointHost: null, available: false, reason: 'blocked host', realtimeModels: [] }
 ];
 const DEFAULTS = { model: 'gpt-5', effort: 'high', speed: 'normal' };
 

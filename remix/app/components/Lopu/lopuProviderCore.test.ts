@@ -3,6 +3,11 @@ import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import {
+	DIRECT_VOICE_NO_PROVIDER_REASON,
+	DIRECT_VOICE_TRANSCRIBE_REASON,
+	directVoiceUnavailableReason,
+	resolveDirectVoiceModel,
+	vaultProviderSupportsDirectVoice,
 	buildLopuProviderGroups,
 	describeCheckedAt,
 	describeLopuChoice,
@@ -35,15 +40,21 @@ const model = (id: string, provider: 'anthropic' | 'openai', extra: Partial<AiMo
 
 const MODELS = [model('gpt-5', 'openai', { isDefault: true }), model('claude-opus-5', 'anthropic', { available: false }), model('claude-sonnet-5', 'anthropic', { enabled: false, available: false })];
 const VAULT: LopuVaultProvider[] = [
-	{ id: 'vp-1', name: 'Acme proxy', kind: 'compatible', model: 'gpt-4o', endpointHost: 'llm.acme.test', available: true, reason: null },
-	{ id: 'vp-2', name: 'Old key', kind: 'anthropic', model: null, endpointHost: null, available: false, reason: 'vault key not configured' }
+	{ id: 'vp-1', name: 'Acme proxy', kind: 'compatible', model: 'gpt-4o', endpointHost: 'llm.acme.test', available: true, reason: null, realtimeModels: [] },
+	{ id: 'vp-2', name: 'Old key', kind: 'anthropic', model: null, endpointHost: null, available: false, reason: 'vault key not configured', realtimeModels: [] }
 ];
 
 test('vault providers normalise defensively and never carry a credential', () => {
 	assert.equal(normalizeLopuVaultProvider(null), null);
 	assert.equal(normalizeLopuVaultProvider({ name: 'no id' }), null);
 	const normalized = normalizeLopuVaultProvider({ id: ' vp-9 ', name: '', kind: 'openrouter', model: 'x', endpointHost: 'h', available: 'yes', secret: 'sk-live' });
-	assert.deepEqual(normalized, { id: 'vp-9', name: 'vp-9', kind: 'openrouter', model: 'x', endpointHost: 'h', available: true, reason: null });
+	assert.deepEqual(normalized, { id: 'vp-9', name: 'vp-9', kind: 'openrouter', model: 'x', endpointHost: 'h', available: true, reason: null, realtimeModels: [] });
+	// the kind's realtime models ride along (id + label, junk dropped)
+	const voice = normalizeLopuVaultProvider({ id: 'vp-x', kind: 'xai', realtimeModels: [{ id: 'grok-voice-latest', label: 'Grok Voice' }, { id: '' }, 'nope', { id: 'grok-voice-think-fast-2.0' }] })!;
+	assert.deepEqual(voice.realtimeModels, [
+		{ id: 'grok-voice-latest', label: 'Grok Voice' },
+		{ id: 'grok-voice-think-fast-2.0', label: 'grok-voice-think-fast-2.0' }
+	]);
 	assert.ok(!('secret' in (normalized as object)));
 	assert.equal(normalizeLopuVaultProviders('nope').length, 0);
 	assert.equal(normalizeLopuVaultProviders([{ id: 'a' }, 7, { id: 'b', available: false, reason: 'blocked host' }]).length, 2);
@@ -128,4 +139,22 @@ test('chip copy names the vault provider, else the model with effort and speed',
 	assert.equal(describeLopuChoice([], null, { model: null }), 'Auto');
 	assert.equal(modelUnavailableReason({ enabled: true, available: true, provider: 'openai' }), null);
 	assert.equal(vaultProviderHint({ model: null, endpointHost: null, kind: 'anthropic' }), 'Anthropic');
+});
+
+test('direct voice needs a usable provider whose kind lists a realtime model; the reason reads in one line', () => {
+	const grok: LopuVaultProvider = { id: 'vp-x', name: 'My Grok', kind: 'xai', model: null, endpointHost: 'api.x.ai', available: true, reason: null, realtimeModels: [{ id: 'grok-voice-latest', label: 'Grok Voice' }, { id: 'grok-voice-think-fast-2.0', label: 'Think Fast' }] };
+	assert.equal(vaultProviderSupportsDirectVoice(grok), true);
+	assert.equal(vaultProviderSupportsDirectVoice(VAULT[0]), false);
+	assert.equal(vaultProviderSupportsDirectVoice({ ...grok, available: false }), false);
+	assert.equal(vaultProviderSupportsDirectVoice(null), false);
+	assert.equal(directVoiceUnavailableReason(grok, false), null);
+	assert.equal(directVoiceUnavailableReason(grok, true), DIRECT_VOICE_TRANSCRIBE_REASON);
+	assert.equal(directVoiceUnavailableReason(null, false), DIRECT_VOICE_NO_PROVIDER_REASON);
+	assert.equal(directVoiceUnavailableReason(VAULT[0], false), 'Acme proxy needs a provider with realtime voice (xAI Grok Voice)');
+	assert.equal(directVoiceUnavailableReason(VAULT[1], false), 'vault key not configured');
+	// the chosen realtime model when the provider still lists it, else the first
+	assert.equal(resolveDirectVoiceModel(grok, 'grok-voice-think-fast-2.0')?.id, 'grok-voice-think-fast-2.0');
+	assert.equal(resolveDirectVoiceModel(grok, 'retired-model')?.id, 'grok-voice-latest');
+	assert.equal(resolveDirectVoiceModel(grok, null)?.id, 'grok-voice-latest');
+	assert.equal(resolveDirectVoiceModel(VAULT[0], 'grok-voice-latest'), null);
 });

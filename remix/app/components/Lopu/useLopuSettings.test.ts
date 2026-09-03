@@ -61,6 +61,9 @@ describe('normalizeLopuSettings', () => {
 		assert.equal(LOPU_SETTINGS_DEFAULTS.spokenReplies, false);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.transcribe, false);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.providerId, null);
+		// direct voice (realtime speech with the chat's own provider) is opt-in
+		assert.equal(LOPU_SETTINGS_DEFAULTS.directVoice, false);
+		assert.equal(LOPU_SETTINGS_DEFAULTS.directVoiceModel, null);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.open, false);
 	});
 
@@ -77,6 +80,8 @@ describe('normalizeLopuSettings', () => {
 			spokenReplies: true,
 			transcribe: true,
 			providerId: ' vault-provider-1 ',
+			directVoice: true,
+			directVoiceModel: ' grok-voice-latest ',
 			open: true
 		});
 		assert.deepEqual(settings, {
@@ -91,6 +96,8 @@ describe('normalizeLopuSettings', () => {
 			spokenReplies: true,
 			transcribe: true,
 			providerId: 'vault-provider-1',
+			directVoice: true,
+			directVoiceModel: 'grok-voice-latest',
 			open: true
 		});
 		assert.equal(normalizeLopuSettings({ model: 'x'.repeat(500) }).model?.length, 80);
@@ -104,6 +111,10 @@ describe('normalizeLopuSettings', () => {
 		assert.equal(junk.providerId, null);
 		assert.equal(normalizeLopuSettings({ providerId: 'p'.repeat(200) }).providerId?.length, 80);
 		assert.equal(normalizeLopuSettings({ providerId: '   ' }).providerId, null);
+		const direct = normalizeLopuSettings({ directVoice: 'on', directVoiceModel: 7 });
+		assert.equal(direct.directVoice, false);
+		assert.equal(direct.directVoiceModel, null);
+		assert.equal(normalizeLopuSettings({ directVoice: true, directVoiceModel: 'm'.repeat(200) }).directVoiceModel?.length, 80);
 	});
 });
 

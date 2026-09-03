@@ -17,6 +17,40 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Lopu direct voice + reconciled provider models (PR #592) — Claude (AI)
+
+- Reconciles the concurrent Codex "per-chat models" / "direct voice" commits
+  with the wave-2 assistant: the unified architecture stays, their
+  capability is ported. Details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` §6) and
+  `TESTING.md` ("Lopu voice + personal Secure Vault").
+- **Direct voice** (opt-in, `settings.lopu.directVoice` + `directVoiceModel`,
+  mirrored in Settings → Lopu 🦄): when the chat's Secure Vault provider's
+  kind lists a realtime model (xAI Grok Voice), the mic streams 24 kHz PCM
+  straight to the provider's realtime WebSocket (`lopuVoiceRealtime.ts`) on
+  a five-minute credential from the new `POST /api/v1/lopu/voice/session`
+  (`api.lopu-voice-session` 1.0.0: session-only, 403 for guests, JSON-only,
+  the `lopu.voiceReply` bucket; the stored key never leaves the server, a
+  minted secret that echoes it is refused); the gear's switch explains in one
+  line when a provider cannot do it and the standard path runs. The iOS
+  controller's provider-audio mode (`inputMode`, `model`, `effort`, `speed`
+  on `lopu-voice-start`; `lopu-voice-realtime-user` /
+  `lopu-voice-realtime-assistant-start` back) is wired into `useLopuVoice`.
+- **Provider models**: templates gain per-kind catalogs (`models[]` with
+  efforts, speeds, `audioInput: 'realtime'`) and four more kinds (Mistral,
+  DeepSeek, Groq, Cohere); a connection's `model` is optional again (the
+  Secure Vault form offers the catalog or a custom id) and a row without one
+  runs on its kind's first catalog model — one rule (`resolveVaultTurnModel`:
+  own → kind default → requested) for the chat client config, the voice turn
+  and `GET /api/v1/ai/models` (`vaultProviders[].model`, plus
+  `realtimeModels`; `api.ai-models` 1.3.0). The voice turn accepts optional
+  `model` / `effort` / `speed` mapped onto each vendor's fields
+  (`api.lopu-voice-reply` 1.1.0, `api.lopu-vault` 1.1.0).
+- Coverage: `voice.test.ts` rewritten against the shared client (per-kind
+  request bodies, the model rule, the credential exchange, the session),
+  `vaultProviders` / `lopuProviderCore` / `useLopuSettings` unit tests, three
+  `apiTests` session entries, `verify-lopu.mjs` §A + §K session walls.
+
 ### 2026-09-04 — Lopu wave 2 hardening: server-verified confirmations, JSON fences, deterministic provider choice (PR #592) — Claude (AI)
 
 - Adversarial-review fixes; details in the PR note
@@ -155,20 +189,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
   server-allowlisted compatible endpoint path.
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
-- Provider connections now store access credentials only. Voice chats select
-  a seeded model, reasoning level, and speed per chat from OpenAI, Anthropic,
-  Gemini, xAI, OpenRouter, Mistral, DeepSeek, Groq, or Cohere, with a custom
-  model-id override.
-- Ordinary `/lopu` text conversations now use those same owner-scoped Secure
-  Vault connections. Provider, model, reasoning, and supported priority/fast
-  mode are selected from dropdowns in the composer per chat or per new
-  message; selecting a custom model reveals a bounded provider-native ID input.
-- Added distinct device-transcription and direct provider-audio modes. Web and
-  iOS can stream PCM microphone and response audio to xAI Grok Voice using a
-  server-minted five-minute ephemeral credential; iOS keeps this path on its
-  background audio session and Live Activity.
-- Signed-in `/lopu` visits now create a persisted chat immediately and replace
-  the route with `/lopu/<chat-id>`, preserving history across refreshes.
+- Follow-ups (reconciled into the wave-2 assistant above — see the
+  2026-09-04 "direct voice + reconciled provider models" entry): provider
+  templates gained per-kind model catalogs with reasoning / speed options
+  and Mistral, DeepSeek, Groq and Cohere kinds; ordinary `/lopu` text
+  conversations use the same owner-scoped Secure Vault connections; and a
+  direct provider-audio mode streams PCM microphone and response audio to
+  xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
+  web and on iOS (background audio session + Live Activity).
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 

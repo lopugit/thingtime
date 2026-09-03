@@ -11,6 +11,7 @@ import {
 	normalizeLopuProviderEndpoint,
 	normalizeLopuProviderKind,
 	safeVaultId,
+	safeVaultModelId,
 	type LopuProviderKind
 } from './userVaultCore';
 
@@ -28,6 +29,9 @@ type StoredVaultCrystal = {
 	key?: string;
 	provider?: LopuProviderKind;
 	endpoint?: string;
+	// the connection's own provider-native model (optional — a row without one
+	// runs on its kind's first catalog model, design note §1.3 / §6.2)
+	model?: string;
 	encryptedValue?: EncryptedValue;
 	createdAt: string;
 	updatedAt: string;
@@ -42,6 +46,7 @@ export type PublicVaultEntry = {
 	key?: string;
 	provider?: LopuProviderKind;
 	endpoint?: string;
+	model?: string;
 	hasValue: true;
 	createdAt: string;
 	updatedAt: string;
@@ -101,6 +106,7 @@ const publicEntry = (doc: StoredVaultDoc): PublicVaultEntry => ({
 	...(doc.crystal.key ? { key: doc.crystal.key } : {}),
 	...(doc.crystal.provider ? { provider: doc.crystal.provider } : {}),
 	...(doc.crystal.endpoint ? { endpoint: doc.crystal.endpoint } : {}),
+	...(doc.crystal.model ? { model: doc.crystal.model } : {}),
 	hasValue: true,
 	createdAt: doc.crystal.createdAt,
 	updatedAt: doc.crystal.updatedAt
@@ -137,6 +143,7 @@ export const listUserVault = async (ownerId: string) => {
 					'crystal.key': 1,
 					'crystal.provider': 1,
 					'crystal.endpoint': 1,
+					'crystal.model': 1,
 					'crystal.createdAt': 1,
 					'crystal.updatedAt': 1
 				}
@@ -217,13 +224,18 @@ export const saveUserVaultSecret = async (
 
 export const saveUserVaultProvider = async (
 	ownerId: string,
-	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; token?: unknown; groupId?: unknown }
+	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
 	const name = boundedVaultText(input.name, 120);
 	const provider = normalizeLopuProviderKind(input.provider);
 	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
 	const token = validSecretValue(input.token);
 	if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
+	// the model is optional (a template kind falls back to its first catalog
+	// model), but when given it must be a sane provider-native id
+	const modelGiven = typeof input.model === 'string' && input.model.trim() !== '';
+	const model = modelGiven ? safeVaultModelId(input.model) : null;
+	if (modelGiven && !model) throw new Error('Model id must be at most 200 characters of letters, digits, . _ : / @ or -.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');
@@ -239,6 +251,7 @@ export const saveUserVaultProvider = async (
 		name,
 		provider,
 		endpoint,
+		...(model ? { model } : {}),
 		groupId,
 		encryptedValue,
 		createdAt: existing?.crystal.createdAt || now,
@@ -276,6 +289,7 @@ export const getUserVaultProvider = async (ownerId: string, id: unknown) => {
 		name: doc.crystal.name,
 		provider: doc.crystal.provider,
 		endpoint: doc.crystal.endpoint,
+		model: doc.crystal.model || null,
 		token: decryptValue(doc)
 	};
 };

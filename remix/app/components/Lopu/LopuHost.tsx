@@ -337,7 +337,7 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerI
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe } =
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice } =
 		useLopuSettings();
 	const { catalog, hasCatalog } = useLopuModelCatalog(true);
 	const choice = resolveLopuModelChoice(catalog, settings);
@@ -386,6 +386,11 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				'Transcribe mode',
 				<Switch isChecked={settings.transcribe} onChange={(event) => setTranscribe(event.target.checked)} aria-label="Transcribe mode" />,
 				'Voice mode saves each utterance as a private transcript page and quotes it back instead of asking Lopu'
+			)}
+			{renderRow(
+				'Direct voice',
+				<Switch isChecked={settings.directVoice} onChange={(event) => setDirectVoice(event.target.checked)} aria-label="Direct voice" />,
+				'Voice mode streams your microphone straight to the chat’s own Secure Vault provider when it offers realtime speech (xAI Grok Voice); otherwise the standard path runs'
 			)}
 			{renderRow(
 				'Preferred model',

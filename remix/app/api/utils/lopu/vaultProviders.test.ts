@@ -42,7 +42,7 @@ const entry = {
 
 test('publicVaultProvider publishes only the contract keys — never a token, an endpoint, or a group', () => {
 	const projected = publicVaultProvider(entry, openAll)!;
-	assert.deepEqual(projected, { id: 'prov-0123456789', name: 'My Claude', kind: 'anthropic', model: 'claude-sonnet-4-6', endpointHost: 'api.anthropic.com', available: true });
+	assert.deepEqual(projected, { id: 'prov-0123456789', name: 'My Claude', kind: 'anthropic', model: 'claude-sonnet-4-6', endpointHost: 'api.anthropic.com', available: true, realtimeModels: [] });
 	for (const key of Object.keys(projected)) assert.ok((LOPU_VAULT_PROVIDER_PUBLIC_KEYS as readonly string[]).includes(key), `unexpected key ${key}`);
 	const wire = JSON.stringify(projected);
 	assert.doesNotMatch(wire, /sk-ant|encryptedValue|cipherText|groupId|\/v1\/extra|x=1|hasValue/);
@@ -92,11 +92,44 @@ test('kind → transport / tool protocol / base URL', () => {
 	assert.equal(vaultProviderBaseUrl('anthropic', 'https://api.anthropic.com'), 'https://api.anthropic.com');
 });
 
-test('resolveVaultTurnModel prefers the connection, borrows the request only when the connection has none', () => {
+test('a row without a model runs on its kind’s first catalog model when the catalog is known, and lists the kind’s realtime models', () => {
+	const catalog = {
+		...openAll,
+		defaultModel: (kind: string) => (kind === 'anthropic' ? 'claude-fable-5' : kind === 'xai' ? 'grok-4.3' : null),
+		realtimeModels: (kind: string) => (kind === 'xai' ? [{ id: 'grok-voice-latest', label: 'Grok Voice' }] : [])
+	};
+	const defaulted = publicVaultProvider({ ...entry, model: '' }, catalog)!;
+	assert.equal(defaulted.available, true);
+	assert.equal(defaulted.model, 'claude-fable-5');
+	assert.deepEqual(defaulted.realtimeModels, []);
+	// the row's own model still wins over the catalog default
+	assert.equal(publicVaultProvider(entry, catalog)!.model, 'claude-sonnet-4-6');
+	const xai = publicVaultProvider({ ...entry, provider: 'xai', endpoint: 'https://api.x.ai/v1', model: '' }, catalog)!;
+	assert.equal(xai.model, 'grok-4.3');
+	assert.deepEqual(xai.realtimeModels, [{ id: 'grok-voice-latest', label: 'Grok Voice' }]);
+	// a custom host has no catalog: without a model it stays unavailable
+	const custom = publicVaultProvider({ ...entry, provider: 'compatible', endpoint: 'https://llm.acme.test/v1', model: '' }, catalog)!;
+	assert.equal(custom.available, false);
+	assert.equal(custom.reason, LOPU_VAULT_NO_MODEL_REASON);
+	assert.deepEqual(custom.realtimeModels, []);
+	// every template kind projects (the four newer vendors included)
+	for (const kind of ['mistral', 'deepseek', 'groq', 'cohere']) {
+		const row = publicVaultProvider({ ...entry, provider: kind, endpoint: `https://api.${kind}.example/v1`, model: 'm' }, catalog)!;
+		assert.equal(row.kind, kind);
+		assert.equal(row.available, true);
+	}
+	for (const key of Object.keys(xai)) assert.ok((LOPU_VAULT_PROVIDER_PUBLIC_KEYS as readonly string[]).includes(key), `unexpected key ${key}`);
+});
+
+test('resolveVaultTurnModel prefers the connection, then the kind default, and borrows the request only with neither', () => {
 	assert.equal(resolveVaultTurnModel('gpt-5.4', 'claude-opus-5'), 'gpt-5.4');
 	assert.equal(resolveVaultTurnModel('', 'claude-opus-5'), 'claude-opus-5');
 	assert.equal(resolveVaultTurnModel(undefined, 'default'), null);
 	assert.equal(resolveVaultTurnModel(null, null), null);
+	assert.equal(resolveVaultTurnModel('gpt-5.4', 'claude-opus-5', 'gpt-5.6-sol'), 'gpt-5.4');
+	assert.equal(resolveVaultTurnModel('', 'claude-opus-5', 'grok-4.3'), 'grok-4.3');
+	assert.equal(resolveVaultTurnModel(null, 'my-model', null), 'my-model');
+	assert.equal(resolveVaultTurnModel(null, null, ''), null);
 });
 
 test('friendlyVaultProviderError names the connection, never the URL or the key', () => {

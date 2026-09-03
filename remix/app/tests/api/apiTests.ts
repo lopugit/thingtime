@@ -1053,6 +1053,44 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON voice body was refused with an error shape.')
   },
   {
+    id: 'lopu-voice-session-guarded',
+    name: 'Lopu direct voice session requires a session',
+    description: 'POST /api/v1/lopu/voice/session without a session is rejected with a 401 error shape before any provider key is touched.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string' && !('session' in (body || {})), 'Anonymous direct voice session was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-voice-session-json-only',
+    name: 'Lopu direct voice session requires JSON',
+    description: 'POST /api/v1/lopu/voice/session with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON direct voice body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-voice-session-unknown-provider',
+    name: 'Lopu direct voice session validates the connection',
+    description:
+      'POST /api/v1/lopu/voice/session with a providerId that is not one of the caller’s Secure Vault connections (or with the vault unconfigured) is a 400 error shape that carries no session or token (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    timeoutMs: 20000,
+    body: { providerId: 'tt-api-test-missing-provider' },
+    expect: expectJson(
+      [400, 401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string' && !('session' in (body || {})) && !JSON.stringify(body).includes('"token"'),
+      'The unknown connection was refused with an error shape and no credential.'
+    )
+  },
+  {
     id: 'mongodb-status',
     name: 'MongoDB status',
     description: 'MongoDB status route returns connection status.',

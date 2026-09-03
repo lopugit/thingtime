@@ -4,6 +4,7 @@ import { listAiModels } from '~/api/utils/ai/models';
 import type { AiModelsResponseExtras } from '~/api/utils/ai/modelsCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { listUserVaultProviders, userVaultConfigured } from '~/api/utils/lopu/userVault';
+import { defaultVaultProviderModel, realtimeVaultProviderModels } from '~/api/utils/lopu/userVaultCore';
 import { isVaultProviderHostAllowed } from '~/api/utils/lopu/vaultProviderClient';
 import { publicVaultProviders, type LopuVaultProviderPublic } from '~/api/utils/lopu/vaultProviders';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -19,8 +20,10 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 //
 // A signed-in viewer additionally gets `vaultProviders` — their own Secure
 // Vault AI connections, redacted to { id, name, kind, model, endpointHost,
-// available, reason? } (design note §1.3; never a token, never an endpoint
-// beyond its hostname) — and `vault: { configured }`. Anonymous viewers get an
+// available, reason?, realtimeModels } (design note §1.3; never a token,
+// never an endpoint beyond its hostname; `model` is the row's own or its
+// kind's first catalog model, `realtimeModels` the kind's direct-voice
+// models, §6.1) — and `vault: { configured }`. Anonymous viewers get an
 // empty list; a vault read failure degrades to an empty list too (logged),
 // never to a failed catalog.
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
@@ -75,7 +78,12 @@ const handlers = createAiModelsHandlers({
   enforceRateLimit,
   listAiModels,
   listVaultProviders: async (viewerId) =>
-    publicVaultProviders(await listUserVaultProviders(viewerId), { vaultConfigured: userVaultConfigured(), hostAllowed: isVaultProviderHostAllowed }),
+    publicVaultProviders(await listUserVaultProviders(viewerId), {
+      vaultConfigured: userVaultConfigured(),
+      hostAllowed: isVaultProviderHostAllowed,
+      defaultModel: defaultVaultProviderModel,
+      realtimeModels: realtimeVaultProviderModels
+    }),
   vaultConfigured: userVaultConfigured
 });
 

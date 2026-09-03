@@ -453,7 +453,16 @@ export function useApi() {
       },
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
-      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), [])
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      // direct voice (design note §6.1): the provider-minted five-minute
+      // realtime credential for one of the viewer's own Secure Vault
+      // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
+      // refusal throws the route's error shape (400 with the reason)
+      voiceSession: useCallback(
+        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
+        [asyncFetcher]
+      )
     },
     mongodb: {
       capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),

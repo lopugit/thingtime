@@ -28,8 +28,12 @@ export type AiModelPublic = {
 // provider: presence plus the bounded probe's verdict (never a value)
 export type LopuProviderKeyInfo = { configured: boolean; verified?: boolean | null; checkedAt?: string | null; reason?: string | null };
 
+// a realtime speech-to-speech model the kind offers (direct voice, §6.1)
+export type LopuRealtimeModel = { id: string; label: string };
+
 // GET /api/v1/ai/models → vaultProviders[] — one of the viewer's own
-// provider connections (name, kind, model, endpoint host; never the key)
+// provider connections (name, kind, model, endpoint host, the kind's direct-
+// voice models; never the key)
 export type LopuVaultProvider = {
 	id: string;
 	name: string;
@@ -38,6 +42,7 @@ export type LopuVaultProvider = {
 	endpointHost: string | null;
 	available: boolean;
 	reason: string | null;
+	realtimeModels: LopuRealtimeModel[];
 };
 
 // GET /api/v1/ai/models → vault
@@ -47,6 +52,18 @@ const textOrNull = (value: unknown, max = 200): string | null => {
 	if (typeof value !== 'string') return null;
 	const trimmed = value.trim();
 	return trimmed ? trimmed.slice(0, max) : null;
+};
+
+const normalizeRealtimeModels = (raw: unknown): LopuRealtimeModel[] => {
+	if (!Array.isArray(raw)) return [];
+	const out: LopuRealtimeModel[] = [];
+	for (const entry of raw.slice(0, 20)) {
+		if (!entry || typeof entry !== 'object') continue;
+		const id = textOrNull((entry as { id?: unknown }).id, 160);
+		if (!id) continue;
+		out.push({ id, label: textOrNull((entry as { label?: unknown }).label, 80) ?? id });
+	}
+	return out;
 };
 
 export const normalizeLopuVaultProvider = (raw: unknown): LopuVaultProvider | null => {
@@ -61,7 +78,8 @@ export const normalizeLopuVaultProvider = (raw: unknown): LopuVaultProvider | nu
 		model: textOrNull(source.model, 160),
 		endpointHost: textOrNull(source.endpointHost, 253),
 		available: source.available !== false,
-		reason: textOrNull(source.reason, 200)
+		reason: textOrNull(source.reason, 200),
+		realtimeModels: normalizeRealtimeModels(source.realtimeModels)
 	};
 };
 
@@ -86,6 +104,10 @@ export const VAULT_KIND_LABELS: Record<string, string> = {
 	google: 'Google',
 	xai: 'xAI',
 	openrouter: 'OpenRouter',
+	mistral: 'Mistral',
+	deepseek: 'DeepSeek',
+	groq: 'Groq',
+	cohere: 'Cohere',
 	compatible: 'OpenAI-compatible'
 };
 export const YOUR_PROVIDERS_LABEL = 'Your providers';
@@ -141,6 +163,34 @@ export const describeCheckedAt = (checkedAt: string | null | undefined, now: num
 /** Why a vault provider cannot be used right now (null = usable). */
 export const vaultProviderUnavailableReason = (provider: Pick<LopuVaultProvider, 'available' | 'reason'>): string | null =>
 	provider.available === false ? provider.reason || 'unavailable' : null;
+
+// ——— direct voice (§6.1) ——————————————————————————————————————————————————
+
+/** A vault provider can run direct voice when it is usable and its kind lists a realtime model. */
+export const vaultProviderSupportsDirectVoice = (provider: LopuVaultProvider | null | undefined): boolean =>
+	!!provider && provider.available !== false && provider.realtimeModels.length > 0;
+
+export const DIRECT_VOICE_TRANSCRIBE_REASON = 'Off while transcribing — utterances become private pages';
+export const DIRECT_VOICE_NO_PROVIDER_REASON = 'Choose one of your Secure Vault providers first';
+export const DIRECT_VOICE_NO_REALTIME_REASON = 'needs a provider with realtime voice (xAI Grok Voice)';
+
+/**
+ * Why direct voice cannot run for this session (null = it can): the one-line
+ * explanation the voice gear shows beside the disabled switch.
+ */
+export const directVoiceUnavailableReason = (provider: LopuVaultProvider | null | undefined, transcribe: boolean): string | null => {
+	if (transcribe) return DIRECT_VOICE_TRANSCRIBE_REASON;
+	if (!provider) return DIRECT_VOICE_NO_PROVIDER_REASON;
+	if (provider.available === false) return provider.reason || 'This provider is unavailable right now';
+	if (!provider.realtimeModels.length) return `${provider.name} ${DIRECT_VOICE_NO_REALTIME_REASON}`;
+	return null;
+};
+
+/** The realtime model a session runs: the chosen one when the provider still lists it, else its first. */
+export const resolveDirectVoiceModel = (provider: LopuVaultProvider | null | undefined, chosen: string | null | undefined): LopuRealtimeModel | null => {
+	if (!provider?.realtimeModels.length) return null;
+	return (chosen ? provider.realtimeModels.find((model) => model.id === chosen) : null) ?? provider.realtimeModels[0] ?? null;
+};
 
 /** "gpt-4o · api.openai.com" — the small hint under a vault option. */
 export const vaultProviderHint = (provider: Pick<LopuVaultProvider, 'model' | 'endpointHost' | 'kind'>): string => {

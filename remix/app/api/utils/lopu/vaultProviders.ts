@@ -10,7 +10,7 @@
 // node-bound half (allowlist + DNS guard, guarded fetch, the plain
 // completion voice uses) lives in ./vaultProviderClient.ts.
 
-import type { LopuProviderKind } from './userVaultCore';
+import type { LopuProviderKind, LopuRealtimeModelPublic } from './userVaultCore';
 
 // The SDK surface a vault kind speaks: Anthropic's Messages API, or an
 // OpenAI-compatible chat.completions endpoint (OpenAI, OpenRouter, xAI,
@@ -29,15 +29,20 @@ export type LopuVaultProviderPublic = {
 	id: string;
 	name: string;
 	kind: LopuProviderKind;
+	// the model a turn on this connection runs: the row's own, else the kind's
+	// first catalog model; null only for a custom host saved without one
 	model: string | null;
 	endpointHost: string | null;
 	available: boolean;
 	reason?: string;
+	// the kind's realtime speech-to-speech models (direct voice, §6.1) — empty
+	// for every kind that has none
+	realtimeModels: LopuRealtimeModelPublic[];
 };
 
 // Every key the projection may carry — pinned so a test can prove nothing
 // else (a token, an endpoint, a group id) ever rides along.
-export const LOPU_VAULT_PROVIDER_PUBLIC_KEYS: readonly (keyof LopuVaultProviderPublic)[] = ['id', 'name', 'kind', 'model', 'endpointHost', 'available', 'reason'];
+export const LOPU_VAULT_PROVIDER_PUBLIC_KEYS: readonly (keyof LopuVaultProviderPublic)[] = ['id', 'name', 'kind', 'model', 'endpointHost', 'available', 'reason', 'realtimeModels'];
 
 // The vault entry shape the projection reads: the redacted PublicVaultEntry
 // from userVault.ts (no encrypted fields are ever loaded for a list).
@@ -55,9 +60,14 @@ export type LopuVaultProviderAvailability = {
 	// the server allowlist (built-in template hosts + THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS,
 	// plus any dev rewrite origin) — resolved by vaultProviderClient.ts
 	hostAllowed: (hostname: string) => boolean;
+	// the kind's catalog (userVaultCore templates): the model a row without one
+	// runs on, and the realtime models direct voice may pick — both optional so
+	// the pure tests can run without the catalog
+	defaultModel?: (kind: LopuProviderKind) => string | null;
+	realtimeModels?: (kind: LopuProviderKind) => LopuRealtimeModelPublic[];
 };
 
-export const LOPU_VAULT_PROVIDER_KINDS: readonly LopuProviderKind[] = ['anthropic', 'openai', 'google', 'xai', 'openrouter', 'compatible'];
+export const LOPU_VAULT_PROVIDER_KINDS: readonly LopuProviderKind[] = ['anthropic', 'openai', 'google', 'xai', 'openrouter', 'mistral', 'deepseek', 'groq', 'cohere', 'compatible'];
 
 export const isLopuVaultProviderKind = (value: unknown): value is LopuProviderKind =>
 	typeof value === 'string' && (LOPU_VAULT_PROVIDER_KINDS as readonly string[]).includes(value);
@@ -95,13 +105,19 @@ export const LOPU_VAULT_HOST_NOT_ALLOWED_REASON = 'This endpoint host is not ena
 export const LOPU_VAULT_NO_MODEL_REASON = 'Add a model to this connection in Settings → Secure Vault.';
 export const LOPU_VAULT_NO_ENDPOINT_REASON = 'This connection has no usable HTTPS endpoint.';
 export const LOPU_VAULT_UNSUPPORTED_KIND_REASON = 'This connection type is not supported for chat.';
+// direct voice (§6.1) — the connection's kind offers no realtime model, or
+// the model asked for is not one of them
+export const LOPU_VAULT_REALTIME_UNSUPPORTED_REASON = 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.';
+export const LOPU_VAULT_REALTIME_MODEL_REASON = 'Choose a realtime voice model (Grok Voice) for direct voice.';
 
 // One vault entry → its public projection (null for non-provider records).
 export const publicVaultProvider = (entry: LopuVaultProviderEntryLike, availability: LopuVaultProviderAvailability): LopuVaultProviderPublic | null => {
 	if (!entry || typeof entry !== 'object' || entry.kind !== 'provider' || typeof entry.id !== 'string' || !entry.id) return null;
 	const kind = isLopuVaultProviderKind(entry.provider) ? entry.provider : null;
 	const endpointHost = endpointHostOf(entry.endpoint);
-	const model = typeof entry.model === 'string' && entry.model.trim() ? entry.model.trim().slice(0, 200) : null;
+	const own = typeof entry.model === 'string' && entry.model.trim() ? entry.model.trim().slice(0, 200) : null;
+	const model = own ?? (kind ? availability.defaultModel?.(kind) ?? null : null);
+	const realtimeModels = kind ? availability.realtimeModels?.(kind) ?? [] : [];
 	const name = typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim().slice(0, 120) : 'Untitled provider';
 	let reason: string | undefined;
 	if (!availability.vaultConfigured) reason = LOPU_VAULT_UNCONFIGURED_REASON;
@@ -116,7 +132,8 @@ export const publicVaultProvider = (entry: LopuVaultProviderEntryLike, availabil
 		model,
 		endpointHost,
 		available: !reason,
-		...(reason ? { reason } : {})
+		...(reason ? { reason } : {}),
+		realtimeModels
 	};
 };
 
@@ -125,11 +142,15 @@ export const publicVaultProviders = (entries: readonly LopuVaultProviderEntryLik
 
 // ── the model a BYO turn runs ────────────────────────────────────────────────
 
-// The connection's own model wins; a connection saved without one (older
-// rows) borrows the model the request asked for.
-export const resolveVaultTurnModel = (entryModel: unknown, requestedModel: unknown): string | null => {
+// The connection's own model wins; a connection saved without one runs on
+// its kind's first catalog model (`fallbackModel`, userVaultCore's
+// defaultVaultProviderModel); only a custom host with neither borrows the
+// model the request asked for (older rows).
+export const resolveVaultTurnModel = (entryModel: unknown, requestedModel: unknown, fallbackModel?: string | null): string | null => {
 	const own = typeof entryModel === 'string' ? entryModel.trim() : '';
 	if (own) return own.slice(0, 200);
+	const fallback = typeof fallbackModel === 'string' ? fallbackModel.trim() : '';
+	if (fallback) return fallback.slice(0, 200);
 	const requested = typeof requestedModel === 'string' ? requestedModel.trim() : '';
 	return requested && requested !== 'default' ? requested.slice(0, 200) : null;
 };

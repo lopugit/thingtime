@@ -233,6 +233,13 @@ const run = async () => {
   check('POST /lopu/voice/reply without auth is 401', voiceAnon.status === 401);
   const voiceForm = await api('/api/v1/lopu/voice/reply', { cookie: user.cookie, method: 'POST', raw: true, body: 'transcript=hi', headers: { 'Content-Type': 'text/plain' } });
   check('a non-JSON voice body is refused (415)', voiceForm.status === 415);
+  // direct voice (design note §6.1): the credential mint sits behind the same walls
+  const sessionAnon = await api('/api/v1/lopu/voice/session', { method: 'POST', body: { providerId: 'prov-does-not-exist-000' } });
+  check('POST /lopu/voice/session without auth is 401', sessionAnon.status === 401 && sessionAnon.body?.ok === false && !('session' in (sessionAnon.body || {})));
+  const sessionForm = await api('/api/v1/lopu/voice/session', { cookie: user.cookie, method: 'POST', raw: true, body: 'providerId=x', headers: { 'Content-Type': 'text/plain' } });
+  check('a non-JSON voice session body is refused (415)', sessionForm.status === 415);
+  const sessionDocs = await api('/api/v1/lopu/voice/session-docs');
+  check('voice session docs endpoint is public and shaped', sessionDocs.status === 200 && sessionDocs.body?.docs?.endpoint === '/api/v1/lopu/voice/session');
 
   console.log('\nB. model catalog');
   const models = await api('/api/v1/ai/models');
@@ -612,6 +619,13 @@ const run = async () => {
   check('a malformed providerId is a 400', malformedProvider.status === 400);
   const unknownProviderChat = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: { providerId: 'prov-does-not-exist-000' } });
   check('a chat cannot pin a provider that is not in your vault', unknownProviderChat.status === 400);
+  // direct voice: a connection that is not yours (or a vault with no key) is a
+  // clean 400 error shape — never a session, never a token
+  const unknownSession = await api('/api/v1/lopu/voice/session', { cookie: user.cookie, method: 'POST', body: { providerId: 'prov-does-not-exist-000', model: 'grok-voice-latest' } });
+  check('a voice session for a providerId that is not yours fails cleanly (400, no credential)', unknownSession.status === 400 && unknownSession.body?.ok === false && typeof unknownSession.body?.error === 'string' && !('session' in unknownSession.body) && !JSON.stringify(unknownSession.body).includes('"token"'), JSON.stringify(unknownSession.body));
+  const malformedSession = await api('/api/v1/lopu/voice/session', { cookie: user.cookie, method: 'POST', body: { providerId: 'bad id!' } });
+  check('a malformed providerId on the voice session is a 400', malformedSession.status === 400 && malformedSession.body?.ok === false);
+  check('the voice session response is not cached', (unknownSession.headers.get('cache-control') || '').includes('no-store'));
   const swept2 = await api('/api/v1/lopu/chats', { cookie: user.cookie });
   check('a refused reply persisted nothing', swept2.status === 200 && swept2.body?.chats?.length === 0);
 
@@ -634,6 +648,9 @@ const run = async () => {
       const listedCatalog = await api('/api/v1/ai/models', { cookie: user.cookie });
       const listed = listedCatalog.body?.vaultProviders?.find((entry) => entry.id === providerId) || null;
       check('the catalog lists the connection redacted (hostname only — no token, no endpoint)', !!listed && listed.name === providerName && listed.kind === 'compatible' && listed.model === 'fake-model' && listed.endpointHost === 'lopu-fake-provider.invalid' && typeof listed.available === 'boolean' && !('token' in listed) && !('endpoint' in listed) && !JSON.stringify(listedCatalog.body).includes(token));
+      check('a custom host lists no realtime models (direct voice needs xAI Grok Voice)', Array.isArray(listed?.realtimeModels) && listed.realtimeModels.length === 0);
+      const noRealtime = await api('/api/v1/lopu/voice/session', { cookie: user.cookie, method: 'POST', body: { providerId } });
+      check('a voice session on a provider without realtime speech is a 400 that names the rule and mints nothing', noRealtime.status === 400 && noRealtime.body?.ok === false && /realtime/i.test(String(noRealtime.body?.error)) && !JSON.stringify(noRealtime.body).includes(token) && !fake.requests.some((entry) => String(entry.path).includes('realtime')), JSON.stringify(noRealtime.body));
       const otherSees = (await api('/api/v1/ai/models', { cookie: other.cookie })).body?.vaultProviders?.some((entry) => entry.id === providerId);
       check('another user does not see it', otherSees === false);
       const otherPins = await api('/api/v1/lopu/chats', { cookie: other.cookie, method: 'POST', body: { providerId } });

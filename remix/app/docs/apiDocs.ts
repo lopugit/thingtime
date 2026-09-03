@@ -2528,9 +2528,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/ai/models',
     // 1.1.0: a session also gets `vaultProviders` + `vault` (additive, design note §1.3);
     // 1.2.0: `models[].verified` + `providers.<p>.{verified, checkedAt, reason}` from the key
-    // probe (additive). contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    // probe (additive); 1.3.0: `vaultProviders[].realtimeModels` (the kind’s direct-voice models, design
+    // note §6.1) and a row without a model reports its kind’s first catalog model (additive).
+    // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
@@ -4298,14 +4300,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		id: 'lopu-vault',
 		// 1.0.1: writes are JSON-only (415, the CSRF fence, before the rate limit) and
 		// refuse a temporary (guest) session with 403 — compatible corrections.
-		contractVersion: '1.0.1',
-		featureVersion: '1.0.1',
+		// 1.1.0: `model` is optional on save-provider (a template kind runs on its
+		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
+		// audioInput 'realtime' for direct-voice models), four more kinds
+		// (mistral, deepseek, groq, cohere) — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
 		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
 		detail:
-			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only. Provider tokens and generic secret values are accepted on writes and never returned. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
 		methods: ['GET', 'POST'],
 		steps: [
@@ -4316,7 +4322,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		requestExamples: [
 			{
 				name: 'Save an AI provider',
-				description: 'The token is write-only and omitted from every response.',
+				description: 'The token is write-only and omitted from every response; `model` is optional (omit it to run on the kind’s first catalog model).',
 				method: 'POST',
 				body: {
 					action: 'save-provider',
@@ -4330,7 +4336,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			}
 		],
 		responseExamples: [
-			{ status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, groups: [], entries: [{ id: '<id>', kind: 'provider', name: 'My Claude', provider: 'anthropic', hasValue: true }] } },
+			{ status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, groups: [], entries: [{ id: '<id>', kind: 'provider', name: 'My Claude', provider: 'anthropic', model: 'claude-sonnet-4-6', hasValue: true }] } },
 			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
 		]
 	}),
@@ -4338,14 +4344,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		id: 'lopu-voice-reply',
 		// 1.0.1: JSON-only bodies (415, the CSRF fence, before the rate limit) and 403 for a
 		// temporary (guest) session — compatible corrections.
-		contractVersion: '1.0.1',
-		featureVersion: '1.0.1',
+		// 1.1.0: optional per-turn `model`, `effort`, `speed` (validated against the
+		// provider’s catalog when it lists the model) — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
 		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
 		detail:
-			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint, and streams NDJSON text deltas. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
+			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` map onto the vendor’s own request fields and must be ones the catalog lists for that model. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
 		methods: ['POST'],
 		steps: [
@@ -4354,13 +4362,39 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Read NDJSON events through done; speak delta text only when the client’s Text response setting is off.'
 		],
 		requestExamples: [
-			{ name: 'Conversation turn', description: 'Use one write-only provider connection.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', transcribeMode: false, history: [] } },
+			{ name: 'Conversation turn', description: 'Use one write-only provider connection; effort and speed are optional.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', effort: 'high', speed: 'normal', transcribeMode: false, history: [] } },
 			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
 		],
 		responseExamples: [
 			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
 			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
 		]
+	}),
+  endpoint({
+		id: 'lopu-voice-session',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu direct voice session',
+		endpoint: '/api/v1/lopu/voice/session',
+		summary: 'Mints a short-lived provider credential for a direct (realtime speech-to-speech) Lopu voice session.',
+		detail:
+			'Direct voice streams the microphone straight to one of the caller’s own Secure Vault providers that offers realtime speech (xAI Grok Voice today: the kind’s catalog lists the model with audioInput "realtime"). The server decrypts the selected owner-scoped token in memory, exchanges it through the shared SSRF fence (allowlist, fresh public DNS, redirects refused, bounded timeout and response) for a five-minute ephemeral client secret, and returns that secret with the fixed realtime WebSocket URL. The long-lived token never reaches the browser or the native app; a credential that echoes it is refused. `model` is optional (the kind’s first realtime model, or the connection’s own when that is one); `effort` must be one the model lists; `textResponse` asks the client to show the reply without playing audio.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
+		methods: ['POST'],
+		steps: [
+			'Pick a Secure Vault connection whose kind lists a realtime model (GET /api/v1/ai/models → vaultProviders[].realtimeModels).',
+			'POST its providerId with an optional model, effort and textResponse.',
+			'Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
+		],
+		requestExamples: [
+			{ name: 'Start direct voice', description: 'The stored provider token stays server-side.', method: 'POST', body: { providerId: '<vault-provider-id>', model: 'grok-voice-latest', effort: 'none', textResponse: false } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false } } },
+			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
+			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
+		],
+		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.']
 	}),
   endpoint({
     id: 'deployment-links',
