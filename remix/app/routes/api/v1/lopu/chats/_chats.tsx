@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { createLopuChat, listLopuChats } from '~/api/utils/messenger/lopuChats';
@@ -6,13 +6,14 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 
 const objectBody = (body: unknown): Record<string, unknown> => (body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {});
 
-// Cookie-authenticated mutations only accept JSON bodies: a cross-origin form
-// cannot send application/json without a preflight, so the header doubles as
-// the CSRF fence (the messenger attachment path applies the same rule).
-export const requireJsonContentType = (request: Request): Response | null => {
-	const mediaType = request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase();
-	return mediaType === 'application/json' ? null : json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
-};
+// The JSON-only CSRF fence lives in api/http.ts now (every Lopu POST applies
+// it); re-exported so the sibling routes keep their import.
+export { requireJsonContentType };
+
+// Chat writes fail CLOSED on a limiter outage: an unthrottled client could
+// otherwise create MAX_LOPU_CHATS_PER_USER conversations in one go.
+export const chatWriteLimitError = (limit: { unavailable?: boolean }): string =>
+	limit.unavailable ? 'Lopu cannot check her rate limit right now — try again shortly' : 'Slow down a little 🌸';
 
 // GET /api/v1/lopu/chats?limit= — the caller's Lopu conversations, newest
 // activity first, in the same list-entry shape as /api/v1/chats (unread count,
@@ -44,9 +45,9 @@ export const action = async ({ request }: { request: Request }) => {
 	if (!user) {
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	}
-	const limit = await enforceRateLimit(request, 'lopu.chats.write', `user:${user.id}`);
+	const limit = await enforceRateLimit(request, 'lopu.chats.write', `user:${user.id}`, { failClosed: true });
 	if (!limit.allowed) {
-		return json({ ok: false, error: 'Slow down a little 🌸' }, rateLimitedResponseInit(limit));
+		return json({ ok: false, error: chatWriteLimitError(limit) }, rateLimitedResponseInit(limit));
 	}
 	const unsupported = requireJsonContentType(request);
 	if (unsupported) return unsupported;

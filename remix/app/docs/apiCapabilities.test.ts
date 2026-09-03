@@ -51,3 +51,20 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.admin-migrations'], '1.1.0');
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
+
+test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.ai-models'], '1.2.0');
+	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
+	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
+	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage
+	assert.equal(manifest.features['api.lopu-chats'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-update'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-delete'], '1.0.1');
+	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
+	// tool_result.needsConfirmation out) and the JSON-only fence (415)
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.2.0');
+	// 1.0.1: JSON-only fence (415) + full accounts only (403 for a guest session)
+	assert.equal(manifest.features['api.lopu-vault'], '1.0.1');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.0.1');
+});

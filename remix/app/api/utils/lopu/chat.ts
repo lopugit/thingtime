@@ -33,12 +33,16 @@ import {
   createLopuToolContext,
   openAiToolDefinitions,
   runLopuTool,
+  type LopuApprovedAction,
+  type LopuConfirmationAction,
+  type LopuConfirmationGrant,
   type LopuToolCall,
   type LopuToolContext,
   type LopuToolEvent,
   type LopuToolResult,
   type LopuToolViewer
 } from './chatTools';
+import { mintLopuConfirmation } from './confirmations';
 import {
   createGuardedProviderFetch,
   LOPU_PROVIDER_TIMEOUT_MS,
@@ -132,6 +136,8 @@ export type LopuChatDependencies = {
   createOpenAi: (options?: OpenAiClientOptions) => OpenAI;
   // the SSRF fence + kind → transport mapping for a vault turn
   resolveVaultProviderClient: typeof resolveVaultProviderClientConfig;
+  // the server-signed grant behind a destructive tool's Confirm card
+  mintConfirmation: (input: { userId: string; chatId: string; action: LopuConfirmationAction }) => Promise<LopuConfirmationGrant>;
   now: () => number;
   // ms between canned-fallback word chunks (0 in tests)
   fallbackPaceMs: number;
@@ -152,6 +158,9 @@ export type LopuChatTurnInput = {
   // never used as a fallback
   vaultProvider?: LopuVaultTurnProvider | null;
   context?: LopuChatContext | null;
+  // destructive actions the user approved for this reply — the route
+  // verified their grants (confirmations.ts) before handing them over
+  approvedConfirmations?: LopuApprovedAction[] | null;
   signal?: AbortSignal;
   deps?: Partial<LopuChatDependencies>;
 };
@@ -162,6 +171,7 @@ const defaultDependencies = (): LopuChatDependencies => ({
   createAnthropic: (options) => (options ? new Anthropic(options) : new Anthropic()),
   createOpenAi: (options) => (options ? new OpenAI(options) : new OpenAI()),
   resolveVaultProviderClient: resolveVaultProviderClientConfig,
+  mintConfirmation: mintLopuConfirmation,
   now: () => Date.now(),
   fallbackPaceMs: 30
 });
@@ -987,7 +997,15 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               ? { id: call.id, name: call.name, ok: true, summary: result.summary, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) }
               : { id: call.id, name: call.name, ok: false, summary: result.error, error: result.error };
             results.push(entry);
-            channel.push({ type: 'tool_result', id: call.id, name: call.name, ok: entry.ok, summary: entry.summary, ...(entry.ok && entry.data !== undefined ? { data: entry.data } : {}) });
+            channel.push({
+              type: 'tool_result',
+              id: call.id,
+              name: call.name,
+              ok: entry.ok,
+              summary: entry.summary,
+              ...(entry.ok && entry.data !== undefined ? { data: entry.data } : {}),
+              ...(result.ok === false && result.needsConfirmation ? { needsConfirmation: true } : {})
+            });
           })
         );
         runs.then(
@@ -1095,19 +1113,25 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     ...(providerLabel ? { providerLabel } : {})
   });
 
-  const outcome = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, state: TurnState, model?: string): LopuChatTurnOutcome => ({
+  const outcome = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, state: TurnState, model?: string, providerLabel?: string): LopuChatTurnOutcome => ({
     text: state.text,
     provider,
     model: model ?? choice?.model ?? null,
     effort: choice?.effort ?? null,
     speed: choice?.speed ?? 'normal',
+    ...(providerLabel ? { providerLabel } : {}),
     usage: state.usage,
     toolCalls: state.toolCalls,
     stopReason: state.stopReason,
     ...(state.error ? { error: state.error } : {})
   });
 
-  const makeContext = (): LopuToolContext => createLopuToolContext(input.viewer, input.context, () => {});
+  const approved = input.approvedConfirmations || [];
+  const makeContext = (): LopuToolContext =>
+    createLopuToolContext(input.viewer, input.context, () => {}, {
+      approved,
+      mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
+    });
 
   // --- the viewer's own provider (Secure Vault, design note §1.3) --------
   // Takes precedence over every mode, LOPU_CHAT_PROVIDER=test included: the
@@ -1150,7 +1174,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
 
     const ctx = makeContext();
     const toolProtocol: LopuToolProtocol = config.transport === 'anthropic' ? 'native' : config.toolProtocol;
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
@@ -1164,7 +1188,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     } catch (error) {
       if (isAbortError(error)) {
         state.stopReason = 'aborted';
-        return outcome('vault', choice, state);
+        return outcome('vault', choice, state, undefined, entry.name);
       }
       return yield* vaultFailure(config.model, error);
     }
@@ -1185,7 +1209,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         yield { type: 'error', message: `${friendlyVaultProviderError(entry.name, config.model, error)} What streamed so far is kept.`, retryable: true };
       }
     }
-    return outcome('vault', choice, state);
+    return outcome('vault', choice, state, undefined, entry.name);
   }
 
   // --- deterministic scripted provider ---------------------------------
@@ -1229,7 +1253,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const state = newTurnState();
     const toolMode = lopuOpenAiToolMode();
     const toolProtocol: LopuToolProtocol = attempt.provider === 'openai' && toolMode === 'text' ? 'text' : 'native';
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
     const provider =
       attempt.provider === 'claude'
         ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })

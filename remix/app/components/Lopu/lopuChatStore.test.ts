@@ -4,6 +4,8 @@ import test from 'node:test';
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import {
 	bindLopuApi,
+	confirmLopuTool,
+	declineLopuTool,
 	getLopuStoreSnapshot,
 	hydrateLopuStore,
 	loadLopuChats,
@@ -203,11 +205,119 @@ test('send carries providerId in the reply body and a vault meta names the provi
 	const kept = calls.find((call) => call.name === 'reply')?.args as { providerId?: string };
 	assert.equal(kept.providerId, 'vp-1');
 	assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
-	// clearing it explicitly drops it from the body
+	// clearing it is stated on the wire (the chat carries its own settings now,
+	// so a null must reach the server — it clears the pin the server holds)
 	calls.length = 0;
 	await sendLopuMessage('and back', { settings: { providerId: null } });
-	const cleared = calls.find((call) => call.name === 'reply')?.args as { providerId?: string };
-	assert.equal(cleared.providerId, undefined);
+	const cleared = calls.find((call) => call.name === 'reply')?.args as { providerId?: string | null };
+	assert.equal(cleared.providerId, null);
+	assert.equal('providerId' in cleared, true);
 	assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+	resetLopuStoreForTests();
+});
+
+test('the provider choice is stated on the wire whenever the chat carries its own settings, and omitted for a chat the store does not know', async () => {
+	resetLopuStoreForTests();
+	const now = new Date().toISOString();
+	const { client, calls } = fakeClient({
+		chats: [
+			{ id: 'chat-with', name: 'with provider', updatedAt: now, lopu: { model: 'gpt-5', providerId: 'vp-1' } },
+			{ id: 'chat-legacy', name: 'legacy', updatedAt: now }
+		]
+	});
+	bindLopuApi(client);
+	hydrateLopuStore('u1');
+	await loadLopuModels();
+	await loadLopuChats();
+	selectLopuChat('chat-with');
+	assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+	// the picker moved back to a Thingtime model: the server's pin must not
+	// route the turn behind its back, so null travels explicitly
+	setLopuSettings({ providerId: null });
+	await flush();
+	calls.length = 0;
+	await sendLopuMessage('hello');
+	const explicit = calls.find((call) => call.name === 'reply')?.args as { providerId?: string | null };
+	assert.equal('providerId' in explicit, true);
+	assert.equal(explicit.providerId, null);
+	// a summary without a lopu block: the client does not know the chat's
+	// setting, so the key is omitted and the server keeps what it has
+	selectLopuChat('chat-legacy');
+	calls.length = 0;
+	await sendLopuMessage('hello again');
+	const omitted = calls.find((call) => call.name === 'reply')?.args as { providerId?: string | null };
+	assert.equal('providerId' in omitted, false);
+	resetLopuStoreForTests();
+});
+
+test('a Confirm card sends its grant back once as a "Confirmed:" turn; Cancel retires it locally; a stale grant never leaves the client', async () => {
+	resetLopuStoreForTests();
+	const future = new Date(Date.now() + 60_000).toISOString();
+	const meta = (body: any) => ({ type: 'meta', chatId: body.chatId || 'chat-1', userMessageId: `u-${body.requestId}`, requestId: body.requestId, model: 'gpt-5', effort: 'high', speed: 'normal', provider: 'openai', label: 'GPT-5' });
+	const done = { type: 'done', assistantMessageId: 'a-1', messages: [], stopReason: 'end_turn' };
+	const { client, calls } = fakeClient({
+		reply: (body) =>
+			body.confirmations
+				? ndjson([
+						meta(body),
+						{ type: 'tool_use', id: 't2', name: 'delete_thing', input: { id: 'thing-1' } },
+						{ type: 'tool_result', id: 't2', name: 'delete_thing', ok: true, summary: 'Deleted thing-1' },
+						{ type: 'delta', text: 'Gone.' },
+						done
+				  ])
+				: ndjson([
+						meta(body),
+						{ type: 'tool_use', id: 't1', name: 'delete_thing', input: { id: 'thing-1' } },
+						{ type: 'confirm', id: 't1', name: 'delete_thing', key: 'delete_thing:thing-1', token: body.text.includes('stale') ? '' : 'grant', expiresAt: future, summary: 'Delete thing thing-1', subject: { id: 'thing-1' } },
+						{ type: 'tool_result', id: 't1', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation', needsConfirmation: true },
+						{ type: 'delta', text: 'Please confirm.' },
+						done
+				  ])
+	});
+	bindLopuApi(client);
+	hydrateLopuStore('u1');
+	await loadLopuModels();
+
+	const asked = await sendLopuMessage('delete thing-1');
+	assert.equal(asked.ok, true);
+	const requestId = asked.ok ? asked.requestId : '';
+	const card = getLopuStoreSnapshot().turns[requestId]?.tools.find((tool) => tool.id === 't1');
+	assert.equal(card?.status, 'confirm');
+	assert.equal(card?.confirm?.resolved, null);
+
+	calls.length = 0;
+	const confirmed = await confirmLopuTool(requestId, 't1');
+	assert.equal(confirmed.ok, true);
+	const body = calls.find((call) => call.name === 'reply')?.args as any;
+	assert.equal(body.chatId, 'chat-1');
+	assert.equal(body.text, 'Confirmed: Delete thing thing-1');
+	assert.deepEqual(body.confirmations, [{ key: 'delete_thing:thing-1', token: 'grant' }]);
+	assert.equal(getLopuStoreSnapshot().turns[requestId].tools[0].confirm?.resolved, 'confirmed');
+	// the approved turn ran the delete
+	const ran = confirmed.ok ? getLopuStoreSnapshot().turns[confirmed.requestId].tools[0] : null;
+	assert.equal(ran?.status, 'ok');
+	// a second press never re-sends the grant
+	calls.length = 0;
+	const again = await confirmLopuTool(requestId, 't1');
+	assert.equal(again.ok, false);
+	assert.equal(calls.filter((call) => call.name === 'reply').length, 0);
+
+	// Cancel: local only
+	const asked2 = await sendLopuMessage('delete thing-1 again');
+	const requestId2 = asked2.ok ? asked2.requestId : '';
+	calls.length = 0;
+	declineLopuTool(requestId2, 't1');
+	assert.equal(getLopuStoreSnapshot().turns[requestId2].tools[0].confirm?.resolved, 'declined');
+	assert.equal(calls.length, 0);
+	assert.equal((await confirmLopuTool(requestId2, 't1')).ok, false, 'a declined card cannot be confirmed later');
+
+	// a card whose grant never arrived (empty token) cannot be sent
+	const asked3 = await sendLopuMessage('delete stale thing-1');
+	const requestId3 = asked3.ok ? asked3.requestId : '';
+	calls.length = 0;
+	const stale = await confirmLopuTool(requestId3, 't1');
+	assert.equal(stale.ok, false);
+	assert.equal(calls.filter((call) => call.name === 'reply').length, 0);
+	assert.equal(getLopuStoreSnapshot().turns[requestId3].tools[0].confirm?.resolved, null);
 	resetLopuStoreForTests();
 });

@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
 	createUserVaultGroup,
@@ -17,9 +17,14 @@ export const loader = async ({ request }: { request: Request }) => {
 	return json({ ok: true, ...(await listUserVault(user.id)) }, { headers: NO_STORE });
 };
 
+// Writes: full account only (a guest session must not create vault rows),
+// JSON-only (the CSRF fence, before the body is read), fail-closed limit.
 export const action = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: NO_STORE });
+	if (user.temporary) return json({ ok: false, error: 'Create an account to use the Secure Vault' }, { status: 403, headers: NO_STORE });
+	const unsupported = requireJsonContentType(request);
+	if (unsupported) return unsupported;
 	const limit = await enforceRateLimit(request, 'lopu.vault', `user:${user.id}`, { failClosed: true });
 	if (!limit.allowed) {
 		const responseInit = rateLimitedResponseInit(limit);

@@ -43,12 +43,15 @@ for both workflows and their privacy boundaries.
 
 ## Lopu voice + personal Secure Vault
 
-Signed-in people can open `/lopu` for a continuous voice conversation or use
-**Transcribe mode** to save each final utterance as its own timestamped,
-numbered, owner-private Thing page. The session gear remains available before,
-during, and after listening; **Text response** suppresses spoken playback. The
-iOS app adds native speech recognition, background audio, and a local Live
-Activity so an active conversation can continue while the phone is locked.
+Signed-in people can open `/lopu/voice` (the Lopu page's Voice mode, also the
+mic in the floating window) for a continuous voice conversation — every final
+utterance is a normal Lopu chat turn, tools included — or use **Transcribe
+mode** to save each final utterance as its own timestamped, numbered,
+owner-private Thing page instead. The session gear remains available before,
+during, and after listening; **Spoken replies** (off by default) reads Lopu's
+replies aloud. The iOS app adds native speech recognition, background audio,
+and a local Live Activity so an active conversation can continue while the
+phone is locked.
 
 Each account has a personal Secure Vault in **Settings → Secure Vault** for
 password/key-value records and Lopu provider connections. Values are
@@ -1090,13 +1093,25 @@ revocation checks outside Thingtime.
 
 ### Lopu AI assistant (chat, tools, live builder patches)
 
-Lopu (`/lopu`, the 🦄 launcher on every page, and Lopu conversations in
+Lopu (`/lopu` with a route-driven Chat | Voice mode switch — `/lopu`,
+`/lopu/:chatId`, `/lopu/voice` — the navbar 🦄 beside ⌘K and the draggable
+floating window it toggles, the 🦄 launcher bubble, and Lopu conversations in
 Messenger) streams replies over NDJSON from `POST /api/v1/lopu/chats/reply`
 and runs tools as the signed-in viewer (pages, sections, components, actions,
 schemas, data). Models come from the `ai-model` catalog (`GET /api/v1/ai/models`,
 seeded from `AI_WORKFLOW_BASE_MODELS`; admins toggle rows at `/admin` → Lopu
 models and set the chat defaults at `/api/v1/settings/lopu-chat-defaults`).
-Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`.
+A signed-in viewer can also run a chat on one of their own Secure Vault AI
+connections: the catalog response lists them as redacted `vaultProviders`
+(never a token, never an endpoint beyond its hostname), the composer's picker
+shows them under "Your providers" with the reason when one is unusable, and a
+chat pins the choice as `providerId` (`POST /api/v1/lopu/chats`, `/update`,
+`/reply`); the turn then dials the user's provider through the same SSRF
+fence voice uses (`api/utils/lopu/vaultProviderClient.ts`) and the server keys
+are never a fallback for it. See "Lopu voice + personal Secure Vault" above
+for the vault key and allowlist. Design note:
+`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` (§1.3 own
+providers, §6 voice + vault).
 
 ```sh
 # at least one provider key makes Lopu think; with neither she answers with an
@@ -1112,6 +1127,10 @@ LOPU_OPENAI_TOOLS="native"       # native | text — `text` speaks a fenced ```t
 LOPU_CLAUDE_MODEL="claude-opus-5"   # optional: the Anthropic model used for the `default` waterfall slot
 LOPU_OPENAI_MODEL="gpt-5.6-sol"     # optional: the OpenAI model used for the `default` waterfall slot
 LOPU_TEST_PROVIDER_PACE_MS="12"     # optional: ms between scripted chunks in test mode
+# local development only (ignored in production and on Vercel): reach a fake
+# OpenAI-compatible endpoint saved in a Secure Vault connection under a public
+# HTTPS origin — the rewritten origin skips the allowlist/DNS checks
+THINGTIME_LOPU_PROVIDER_DEV_REWRITES="https://lopu-fake-provider.invalid=http://127.0.0.1:18170"
 ```
 
 Keys are verified, not merely detected. On the first catalog read per process
@@ -1134,7 +1153,9 @@ Live check against a running stack: `node remix/scripts/verify-lopu.mjs
 http://127.0.0.1:<nitro-port>` (start the stack with `LOPU_CHAT_PROVIDER=test`
 so the reply builds a component and a page deterministically; set
 `TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD` to cover the admin
-routes).
+routes, and `THINGTIME_USER_VAULT_KEY` + the dev rewrite above on the server
+to exercise a BYO-provider turn end to end — otherwise that one check is
+skipped and the unconfigured-vault path is asserted instead).
 
 ### Password reset + email 2FA
 

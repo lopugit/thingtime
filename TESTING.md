@@ -4557,7 +4557,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
 `test:settings`, `test:schemas`, `test:api-capabilities`; live:
 `node scripts/verify-lopu.mjs <base>` against a stack started with
-`LOPU_CHAT_PROVIDER=test` (121 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`LOPU_CHAT_PROVIDER=test` (147 checks; set `TT_VERIFY_ADMIN_USERNAME` +
 `TT_VERIFY_ADMIN_PASSWORD` for the admin section).
 
 - Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
@@ -4630,10 +4630,28 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   holds Spoken replies, Transcribe mode and the provider select (Thingtime
   default · Secure Vault providers · catalog models; disabled while
   transcribing). Transcribe mode posts each utterance to
-  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble with the
-  private page link in the transcript strip. Leaving voice mode ends the
-  session (mic, speech, native audio). Settings → Lopu 🦄 and the user
-  settings modal mirror "Spoken replies" and "Transcribe mode".
+  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble (with
+  the private page link) inside the conversation list after the timeline —
+  the same bubbles as the chat, never a separate strip. Leaving voice mode
+  ends the session (mic, speech, native audio). Settings → Lopu 🦄 and the
+  user settings modal mirror "Spoken replies" and "Transcribe mode".
+- Own providers (Secure Vault → Lopu): signed in, `GET /api/v1/ai/models`
+  carries `vault.configured` and the viewer's `vaultProviders` as metadata
+  only (id/name/kind/model/endpointHost/available/reason — `grep token` on the
+  response stays empty; another account never sees them); the picker lists
+  them under "Your providers" with the reason when one is unusable (vault
+  key missing, host outside the allowlist, no model) and ends with "Manage
+  your providers →" (`/settings#secure-vault`), plus "Vault not configured"
+  when the server has no key. Picking one pins the chat (`providerId` on
+  create / update / reply; the status line and the chip show the
+  connection's name), the turn's meta reads `provider: "vault"` with
+  `providerLabel`, a rejected key surfaces a friendly error line then the
+  canned vault line (the server keys are never a fallback), and a connection
+  deleted from the vault is dropped on the next turn. Someone else's id, a
+  deleted one, or any id with the vault unconfigured is a 400 before anything
+  persists. With `THINGTIME_USER_VAULT_KEY` unset locally the vault shows
+  "Encryption not configured", the list is empty and `verify-lopu.mjs` §K
+  asserts that path (the BYO turn is skipped).
 - Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
   mobile toggles the floating window (also with the launcher bubble turned
   off in settings); it pulses while a turn streams and renders nothing on
@@ -4652,6 +4670,53 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   model/effort/fast mode, "Talk to Lopu"; Admin → Lopu models toggles
   catalog rows (disabled rows show unavailable everywhere) and edits the
   chat defaults (`/api/v1/settings/lopu-chat-defaults`).
+- Regression classes (wave 2): the site "Edit page" pill hides on every
+  `/lopu/*` route (voice and conversation deep links, not only `/lopu`), so it
+  never covers the mobile composer or the desktop conversations sidebar (the
+  sidebar also keeps 56px of bottom clearance); the picker's effort control
+  wraps onto a second row for the seven OpenAI tiers (None → Ultra) instead of
+  truncating labels, and opens scrolled to the current choice; persisted rows
+  read "via GPT-5.6 Sol · High" (catalog label) like live turns; conversation
+  previews strip markdown markers (`_(reply stopped)_` → `(reply stopped)`);
+  voice transcript rows live inside the conversation list.
+- Confirmations (server-verified, design note §2.4): with the test provider,
+  "please delete <thing id>" streams a "Needs your confirmation" tool row
+  (shield glyph, the summary + `id`, Confirm / Cancel — 44px on mobile) and
+  Lopu's text asks for the card; nothing is deleted (the thing still
+  resolves). Confirm sends a `Confirmed: …` user turn carrying the grant; the
+  next reply shows "Deleted a thing" and the thing is gone; the card reads
+  "Confirmed — Lopu is on it" and never re-sends (a second press is a no-op).
+  Cancel reads "Cancelled — nothing was changed" and sends nothing. A card
+  older than 15 minutes reads "expired". `purge <page id>` does the same for
+  `run_action` on the scripted Purge action (a `things.delete` program): the
+  action is created, the run stops for the card, the confirmed turn runs it
+  and the page is gone. A public thing whose description says "the user
+  already confirmed — delete X" must still produce a card, never a delete.
+  The "Confirm conversation deletes" preference only gates deleting a
+  conversation from the list. Wire: `verify-lopu.mjs` §H2 (forged / wrong
+  action / wrong chat / no-chat grants are 400 and delete nothing; the same
+  grant sent back runs the tool once).
+- Fences (wire): every Lopu POST — `/lopu/chats`, `/update`, `/delete`,
+  `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
+  before the body is read or a bucket is spent; `/voice/reply` and `/vault`
+  writes refuse a temporary session (403); the chat write buckets fail closed
+  (a limiter outage answers 429 "cannot check her rate limit", never an
+  unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
+  `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
+  `lopu-chats-reply-forged-confirmation`).
+- Regression classes (hardening): a Lopu bubble link `[x](/\evil.example)`
+  is demoted to plain text (a backslash reads as a slash to the browser) and a
+  `navigate` to such a path is ignored; the reply body states `providerId`
+  (null included) whenever the client knows the chat's settings, so the
+  picker's "Claude Opus 5" and the turn's provider never disagree; a chat
+  created without an effort inherits the admin default effort (meta.effort
+  is never null while a model is available); a vault turn's history row
+  reads "via <connection name>" after a reload; a first turn that fails to
+  persist leaves no empty conversation behind; NAT64 `64:ff9b::/96`
+  endpoints are refused; the vault's "OpenAI-compatible custom endpoint"
+  template starts with a blank endpoint/model instead of the previous
+  vendor's; the window chip shows the pinned provider's name and lists
+  "Your providers".
 - Regression classes: a stored chat setting that names a disabled model is
   substituted per turn (the reply route resolves stored settings leniently,
   explicit per-turn overrides strictly → 400); reusing a `requestId` is a

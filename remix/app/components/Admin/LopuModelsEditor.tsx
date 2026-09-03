@@ -413,7 +413,12 @@ export const LopuModelsEditor = () => {
 			<Text sx={eyebrow}>Chat defaults</Text>
 			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
 				What every Lopu conversation starts from. Resolved right now: <strong>{resolvedLabel}</strong>
-				{stored.model && stored.model !== catalog.defaults.model ? ` (stored ${stored.model} is unavailable, so the first available model stands in)` : ''}.
+				{stored.model && stored.model !== catalog.defaults.model
+					? catalog.defaults.model
+						? ` (stored ${stored.model} is unavailable, so the first available model stands in)`
+						: ` (stored ${stored.model} is unavailable and no other model is usable — Lopu answers from the canned fallback until a provider key verifies)`
+					: ''}
+				.
 			</Text>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
 				<Select size="xs" maxWidth="240px" value={current.model ?? ''} aria-label="Default model" sx={selectSx} onChange={(event) => pickDefaultModel(event.target.value)}>

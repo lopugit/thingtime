@@ -6,6 +6,8 @@ import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
+import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
+import { vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
 import {
@@ -134,18 +136,33 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 	</Center>
 );
 
-// The header's model chip: shows the effective model, opens a small in-window
-// picker (a plain absolutely-positioned list — Chakra's portal menus would
-// layer beneath the window's z rung).
-const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean }) => {
-	const { catalog, hasCatalog } = props;
+// The header's model chip: shows what the CURRENT CHAT thinks with — the
+// viewer's own Secure Vault provider when one is pinned (the shared store's
+// per-chat settings), else the effective catalog model — and opens a small
+// in-window picker (a plain absolutely-positioned list — Chakra's portal
+// menus would layer beneath the window's z rung) listing the viewer's
+// providers above the catalog.
+const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerId: string | null; providerName: string | null; vaultProviders: LopuVaultProvider[] }) => {
+	const { catalog, hasCatalog, providerId, providerName, vaultProviders } = props;
 	const { settings, setModelChoice } = useLopuSettings();
 	const [menuOpen, setMenuOpen] = React.useState(false);
 	const menuRef = useOutsideTapClose<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
 
 	const choice = resolveLopuModelChoice(catalog, settings);
 	const model = findLopuCatalogModel(catalog, choice.model);
-	const label = model?.label ?? (choice.model ? choice.model : catalog.models.length ? 'No model' : 'Auto');
+	const label = providerName ?? model?.label ?? (choice.model ? choice.model : catalog.models.length ? 'No model' : 'Auto');
+	const optionSx = (selected: boolean, disabled: boolean) => ({
+		alignItems: 'center',
+		columnGap: 2,
+		textAlign: 'left' as const,
+		paddingX: 2,
+		paddingY: '6px',
+		borderRadius: LOPU_UI.radiusSm,
+		opacity: disabled ? 0.45 : 1,
+		cursor: disabled ? 'not-allowed' : 'pointer',
+		background: selected ? LOPU_UI.surfaceAlt : 'transparent',
+		_hover: disabled ? undefined : { background: LOPU_UI.surfaceHover }
+	});
 
 	return (
 		<Box ref={menuRef} position="relative" data-lopu-control minWidth={0}>
@@ -198,8 +215,57 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean }) => {
 							{hasCatalog ? 'No models in the catalog yet.' : 'Loading models…'}
 						</Text>
 					)}
+					{vaultProviders.length > 0 && (
+						<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={LOPU_UI.muted} paddingX={2} paddingTop={1} paddingBottom="2px">
+							Your providers
+						</Text>
+					)}
+					{vaultProviders.map((entry) => {
+						const selected = providerId === entry.id;
+						const reason = vaultProviderUnavailableReason(entry);
+						const disabled = !!reason;
+						return (
+							<Flex
+								key={entry.id}
+								as="button"
+								type="button"
+								role="option"
+								aria-selected={selected}
+								disabled={disabled}
+								title={reason || `Think with ${entry.name}`}
+								{...optionSx(selected, disabled)}
+								onClick={() => {
+									if (disabled) {
+										return;
+									}
+									setLopuSettings({ providerId: entry.id });
+									setMenuOpen(false);
+								}}
+							>
+								<Box minWidth={0} flex="1">
+									<Text fontSize="xs" fontWeight={selected ? 700 : 500} noOfLines={1} color={LOPU_UI.ink}>
+										{entry.name}
+									</Text>
+									<Text fontSize="10px" color={LOPU_UI.muted} noOfLines={1}>
+										{entry.model || entry.endpointHost || entry.kind}
+										{reason ? ` · ${reason}` : ''}
+									</Text>
+								</Box>
+								{selected && (
+									<Text fontSize="xs" flexShrink={0} color={LOPU_UI.ink}>
+										✓
+									</Text>
+								)}
+							</Flex>
+						);
+					})}
+					{vaultProviders.length > 0 && catalog.models.length > 0 && (
+						<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={LOPU_UI.muted} paddingX={2} paddingTop={2} paddingBottom="2px">
+							Thingtime models
+						</Text>
+					)}
 					{catalog.models.map((entry) => {
-						const selected = choice.model === entry.id;
+						const selected = !providerId && choice.model === entry.id;
 						const disabled = !entry.available;
 						return (
 							<Flex
@@ -209,21 +275,14 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean }) => {
 								role="option"
 								aria-selected={selected}
 								disabled={disabled}
-								alignItems="center"
-								columnGap={2}
-								textAlign="left"
-								paddingX={2}
-								paddingY="6px"
-								borderRadius={LOPU_UI.radiusSm}
-								opacity={disabled ? 0.45 : 1}
-								cursor={disabled ? 'not-allowed' : 'pointer'}
-								background={selected ? LOPU_UI.surfaceAlt : 'transparent'}
-								_hover={disabled ? undefined : { background: LOPU_UI.surfaceHover }}
+								{...optionSx(selected, disabled)}
 								title={disabled ? (entry.enabled ? `needs ${entry.provider} key` : 'disabled by an admin') : undefined}
 								onClick={() => {
 									if (disabled) {
 										return;
 									}
+									// a catalog pick also leaves the chat's own provider
+									if (providerId) setLopuSettings({ providerId: null });
 									setModelChoice({ model: entry.id, effort: preferredLopuEffort(entry, catalog.defaults.effort), speed: null });
 									setMenuOpen(false);
 								}}
@@ -309,9 +368,9 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				'Lopu’s page and component edits paint into the open draft while she is still typing'
 			)}
 			{renderRow(
-				'Confirm deletes',
-				<Switch isChecked={settings.confirmDeletes} onChange={(event) => setConfirmDeletes(event.target.checked)} aria-label="Confirm deletes" />,
-				'Ask before Lopu deletes one of your things'
+				'Confirm conversation deletes',
+				<Switch isChecked={settings.confirmDeletes} onChange={(event) => setConfirmDeletes(event.target.checked)} aria-label="Confirm conversation deletes" />,
+				'Ask before deleting a conversation from the list (Lopu’s own deletes always wait for your Confirm card)'
 			)}
 			{renderRow(
 				'Enter sends',
@@ -404,6 +463,11 @@ export const LopuHost = () => {
 	const docked = settings.dock !== 'free';
 
 	const { catalog, hasCatalog } = useLopuModelCatalog(showWindow);
+	// the shared chat store: the current chat's pinned provider + the viewer's
+	// vault list (no loads are triggered here — the window's chat view hydrates it)
+	const chatStore = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
+	const chatProviderId = chatStore.settings.providerId;
+	const chatProviderName = chatProviderId ? selectLopuProviderNames(chatStore)[chatProviderId] || 'Your provider' : null;
 
 	// keep both surfaces on screen when the viewport changes
 	React.useEffect(() => {
@@ -706,15 +770,21 @@ export const LopuHost = () => {
 	const choice = resolveLopuModelChoice(catalog, settings);
 	const chipVisible = !minimised && !voiceMode && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
 	const detail = [describeLopuEffort(choice.effort), choice.speed === 'fast' ? 'Fast ⚡' : null].filter(Boolean).join(' · ');
+	// the chat's own provider (per-chat store settings) wins over the
+	// catalog choice in the header, exactly as it does for the turn
 	const status = streaming
 		? 'Replying…'
 		: voiceMode
 			? voicePhase === 'idle'
 				? 'Voice · tap the mic'
 				: lopuVoicePhaseLabel(voicePhase)
-			: chipVisible
-				? detail || 'Ready'
-				: describeLopuModelChoice(catalog, settings);
+			: chatProviderName
+				? chipVisible
+					? 'Your provider'
+					: chatProviderName
+				: chipVisible
+					? detail || 'Ready'
+					: describeLopuModelChoice(catalog, settings);
 
 	const header = (variant: 'frame' | 'sheet') => (
 		<Flex
@@ -749,7 +819,7 @@ export const LopuHost = () => {
 			<HeaderButton title={voiceMode ? 'Back to typing' : 'Talk to Lopu'} onClick={toggleVoice} active={voiceMode}>
 				<Mic size={14} strokeWidth={2} />
 			</HeaderButton>
-			{chipVisible && <ModelChip catalog={catalog} hasCatalog={hasCatalog} />}
+			{chipVisible && <ModelChip catalog={catalog} hasCatalog={hasCatalog} providerId={chatProviderId} providerName={chatProviderName} vaultProviders={chatStore.vaultProviders} />}
 			{variant === 'frame' && (
 				<HeaderButton title={minimised ? 'Expand' : 'Minimise'} onClick={() => setMinimised((prev) => !prev)}>
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}

@@ -196,6 +196,12 @@ test('publicLopuMessageMeta bounds the turn metadata and keeps assistant-only fi
 	// garbage never becomes structure
 	const sparse = publicLopuMessageMeta({ role: 'assistant', provider: 'gemini', usage: { inputTokens: -1 }, toolCalls: 'nope', stopReason: 5 });
 	assert.deepEqual(sparse, { role: 'assistant', requestId: null, segmentIndex: 0, segmentCount: 1, model: null, effort: null, speed: null, stopReason: null });
+	// the vault connection's display name survives on 'vault' rows only (bounded, never an endpoint or a key)
+	const vault = publicLopuMessageMeta({ role: 'assistant', provider: 'vault', model: 'fake-model', providerLabel: 'Acme proxy' });
+	assert.equal(vault!.providerLabel, 'Acme proxy');
+	assert.equal(publicLopuMessageMeta({ role: 'assistant', provider: 'vault', providerLabel: 'x'.repeat(200) })!.providerLabel!.length, 80);
+	assert.equal('providerLabel' in publicLopuMessageMeta({ role: 'assistant', provider: 'claude', providerLabel: 'Acme proxy' })!, false);
+	assert.equal('providerLabel' in publicLopuMessageMeta({ role: 'assistant', provider: 'vault', providerLabel: 42 })!, false);
 });
 
 const userRow = (text: string, requestId: string | null, segmentIndex = 0) => ({

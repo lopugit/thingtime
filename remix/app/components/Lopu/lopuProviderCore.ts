@@ -257,7 +257,7 @@ export const findLopuProviderOption = (groups: LopuProviderGroup[], key: string)
 
 // ——— chip / status copy ————————————————————————————————————————————————————
 
-const EFFORT_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+const EFFORT_LABELS: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' };
 export const effortLabel = (effort: string | null | undefined): string => (effort ? EFFORT_LABELS[effort] || effort : '');
 
 /**

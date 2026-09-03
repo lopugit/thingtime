@@ -35,6 +35,8 @@ export type LopuThingLike = {
 
 export type LopuUsage = { inputTokens?: number; outputTokens?: number };
 
+export type LopuConfirmSubject = { id?: string; kind?: string; name?: string };
+
 export type LopuTurnMeta = {
 	chatId: string;
 	userMessageId: string;
@@ -56,10 +58,14 @@ export type LopuChatEvent =
 	| { type: 'tool_use_start'; id: string; name: string }
 	| { type: 'tool_input_delta'; id: string; name: string; partial: string }
 	| { type: 'tool_use'; id: string; name: string; input: unknown }
-	| { type: 'tool_result'; id: string; name: string; ok: boolean; summary: string; data?: unknown }
+	| { type: 'tool_result'; id: string; name: string; ok: boolean; summary: string; data?: unknown; needsConfirmation?: boolean }
 	| { type: 'patch'; id: string; target: LopuPatchTarget; ops: LopuPageOp[]; pageId?: string; persisted: boolean }
 	| { type: 'thing'; id: string; kind: string; thing: LopuThingLike }
 	| { type: 'navigate'; path: string }
+	// a destructive tool stopped for the viewer's approval: the server-signed
+	// grant for exactly this action (design note §2.4) — sent back as
+	// confirmations: [{ key, token }] on the next reply when they press Confirm
+	| { type: 'confirm'; id: string; name: string; key: string; token: string; expiresAt: string; summary: string; subject?: LopuConfirmSubject }
 	| { type: 'error'; message: string; retryable: boolean }
 	| {
 			type: 'done';
@@ -80,6 +86,7 @@ export const LOPU_EVENT_TYPES: ReadonlyArray<LopuChatEvent['type']> = [
 	'patch',
 	'thing',
 	'navigate',
+	'confirm',
 	'error',
 	'done'
 ];
@@ -92,9 +99,22 @@ export const isLopuChatEvent = (value: unknown): value is LopuChatEvent =>
 
 // ——— turn state ————————————————————————————————————————————————————————————
 
-export type LopuToolStatus = 'streaming' | 'running' | 'ok' | 'error';
+// 'confirm' = stopped for the viewer's approval (a Confirm card, terminal
+// for the turn — the approval arrives as a new turn)
+export type LopuToolStatus = 'streaming' | 'running' | 'ok' | 'error' | 'confirm';
 
-export type LopuToolResult = { ok: boolean; summary: string; data?: unknown };
+export type LopuToolResult = { ok: boolean; summary: string; data?: unknown; needsConfirmation?: boolean };
+
+// The Confirm card's state: the grant the server minted for this exact
+// action, and what the viewer did with it (null while it waits).
+export type LopuToolConfirm = {
+	key: string;
+	token: string;
+	expiresAt: string;
+	summary: string;
+	subject: LopuConfirmSubject | null;
+	resolved: 'confirmed' | 'declined' | null;
+};
 
 export type LopuPatchRecord = {
 	id: string;
@@ -117,6 +137,7 @@ export type LopuToolActivity = {
 	result: LopuToolResult | null;
 	patch: LopuPatchRecord | null;
 	thing: LopuThingRecord | null;
+	confirm: LopuToolConfirm | null;
 	order: number;
 };
 
@@ -213,6 +234,7 @@ const upsertTool = (
 			result: null,
 			patch: null,
 			thing: null,
+			confirm: null,
 			order: tools.length
 		};
 		return [...tools, patch(fresh)];
@@ -308,15 +330,34 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 			const result: LopuToolResult = {
 				ok: event.ok === true,
 				summary: typeof event.summary === 'string' ? event.summary : '',
-				...(event.data !== undefined ? { data: event.data } : {})
+				...(event.data !== undefined ? { data: event.data } : {}),
+				...(event.needsConfirmation === true ? { needsConfirmation: true } : {})
 			};
 			return bump(state, {
 				tools: upsertTool(state.tools, event.id, event.name, (tool) => ({
 					...tool,
 					name: event.name || tool.name,
-					status: result.ok ? 'ok' : 'error',
+					// a stop for approval keeps its card only when the grant arrived
+					// (a `confirm` event precedes it); without one it is a plain failure
+					status: result.ok ? 'ok' : result.needsConfirmation && tool.confirm ? 'confirm' : 'error',
 					result
 				})),
+				segments: known ? state.segments : [...state.segments, { kind: 'tool', id: event.id }]
+			});
+		}
+		case 'confirm': {
+			if (typeof event.key !== 'string' || !event.key || typeof event.token !== 'string') return state;
+			const known = state.tools.some((tool) => tool.id === event.id);
+			const confirm: LopuToolConfirm = {
+				key: event.key,
+				token: event.token,
+				expiresAt: typeof event.expiresAt === 'string' ? event.expiresAt : new Date(0).toISOString(),
+				summary: typeof event.summary === 'string' ? event.summary : '',
+				subject: event.subject && typeof event.subject === 'object' ? event.subject : null,
+				resolved: null
+			};
+			return bump(state, {
+				tools: upsertTool(state.tools, event.id, event.name, (tool) => ({ ...tool, name: event.name || tool.name, status: 'confirm', confirm })),
 				segments: known ? state.segments : [...state.segments, { kind: 'tool', id: event.id }]
 			});
 		}
@@ -394,12 +435,36 @@ export const markLopuTurnAborted = (state: LopuTurnState): LopuTurnState => {
 
 export const isLopuTurnActive = (state: LopuTurnState | null | undefined): boolean => !!state && state.status === 'streaming';
 
+// ——— confirmations ————————————————————————————————————————————————————————
+
+/** Mark a tool's Confirm card confirmed/declined (a resolved card never re-sends its grant). */
+export const resolveLopuToolConfirm = (state: LopuTurnState, toolId: string, resolution: 'confirmed' | 'declined'): LopuTurnState => {
+	const index = state.tools.findIndex((tool) => tool.id === toolId);
+	const tool = index === -1 ? null : state.tools[index];
+	if (!tool?.confirm || tool.confirm.resolved) return state;
+	const tools = state.tools.slice();
+	tools[index] = { ...tool, confirm: { ...tool.confirm, resolved: resolution } };
+	return bump(state, { tools });
+};
+
+/** A grant past its expiry (or one the server could not mint) cannot be sent. */
+export const isLopuConfirmUsable = (confirm: Pick<LopuToolConfirm, 'token' | 'expiresAt' | 'resolved'> | null | undefined, now: number = Date.now()): boolean => {
+	if (!confirm || confirm.resolved || !confirm.token) return false;
+	const expiresAt = Date.parse(confirm.expiresAt);
+	return Number.isFinite(expiresAt) && expiresAt > now;
+};
+
+/** The viewer's message a pressed Confirm card sends (persisted like any user turn). */
+export const confirmationMessageText = (confirm: Pick<LopuToolConfirm, 'summary'>): string => `Confirmed: ${confirm.summary || 'go ahead'}`;
+
 // ——— navigation safety ——————————————————————————————————————————————————
 
 // Only site-relative paths ever navigate (no protocol, no `//host`, no
-// javascript:) — the server enforces the same rule on the `navigate` tool.
-export const isSiteRelativePath = (path: string): boolean =>
-	typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !/[\s<>]/.test(path) && path.length <= 2048;
+// `/\host` — browsers read a backslash as a slash, so `/\evil.com` resolves
+// off-site — no javascript:, no whitespace or markup characters). Mirrors the
+// server's rule on the `navigate` tool (chatTools.ts SITE_PATH_PATTERN).
+const SITE_PATH_PATTERN = /^\/(?![/\\])[^\s<>"'`\\]*$/;
+export const isSiteRelativePath = (path: string): boolean => typeof path === 'string' && path.length <= 2048 && SITE_PATH_PATTERN.test(path);
 
 // ——— tool presentation ————————————————————————————————————————————————————
 
@@ -440,6 +505,7 @@ export const toolLabel = (name: string, status: LopuToolStatus = 'running'): str
 	const past = pair ? pair[1] : humanizeToolName(name);
 	if (status === 'ok') return past;
 	if (status === 'error') return `Couldn't finish: ${present.replace(/^\w/, (char) => char.toLowerCase())}`;
+	if (status === 'confirm') return 'Needs your confirmation';
 	return present;
 };
 
@@ -879,7 +945,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	vault: 'your provider'
 };
 
-const EFFORT_DISPLAY: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+const EFFORT_DISPLAY: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' };
 export const describeLopuEffortLabel = (effort: string | null | undefined): string => (effort ? EFFORT_DISPLAY[effort] || effort : '');
 
 /** "via Claude Opus 5 · High · Fast" — the meta line under a turn (null when unknown). */
@@ -924,14 +990,28 @@ export const describeLopuStatusLine = (input: LopuStatusInput): string => {
 	return bits.join(' · ');
 };
 
+/**
+ * The plain text of a markdown-ish message (conversation previews): inline
+ * markers dropped, blocks joined by spaces, code kept verbatim.
+ */
+export const lopuPlainText = (text: string): string => {
+	const inlineText = (inlines: LopuInline[]) => inlines.map((inline) => inline.text).join('');
+	return parseLopuMarkdown(text || '')
+		.map((block) => (block.kind === 'code' ? block.text : block.kind === 'list' ? block.items.map(inlineText).join(' · ') : inlineText(block.inlines)))
+		.join(' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+};
+
 // ——— tool rows ————————————————————————————————————————————————————————————
 
 export const LOPU_TOOL_SUMMARY_MAX = 140;
 export const LOPU_TOOL_DETAILS_MAX_CHARS = 16_000;
 
 /** The one-line summary a compact tool row shows (first line, capped). */
-export const toolRowSummary = (activity: Pick<LopuToolActivity, 'status' | 'result' | 'name'>): string => {
-	const raw = activity.result?.summary || '';
+export const toolRowSummary = (activity: Pick<LopuToolActivity, 'status' | 'result' | 'name'> & { confirm?: LopuToolConfirm | null }): string => {
+	// a Confirm card names the action it waits for, not the model-facing refusal
+	const raw = activity.status === 'confirm' && activity.confirm?.summary ? activity.confirm.summary : activity.result?.summary || '';
 	const line = raw
 		.split('\n')
 		.map((entry) => entry.trim())

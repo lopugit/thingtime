@@ -11,6 +11,7 @@ import type { LopuActivePage, LopuToolName } from './chatTools';
 
 export const LOPU_TEST_COMPONENT_KEY = 'lopu-test-card';
 export const LOPU_TEST_ACTION_KEY = 'lopu-pong';
+export const LOPU_TEST_PURGE_ACTION_KEY = 'lopu-purge';
 export const LOPU_TEST_MIN_INPUT_CHUNKS = 6;
 
 export type LopuTestProviderInput = {
@@ -93,6 +94,22 @@ export const testPongAction = (): Record<string, unknown> => ({
   limits: { timeoutMs: 2000, maxOperations: 4 }
 });
 
+// The smallest destructive action: deletes one thing by id. Exercises the
+// confirmation gate on run_action (a program whose effects delete).
+export const testPurgeAction = (): Record<string, unknown> => ({
+  name: 'Purge',
+  actionKey: LOPU_TEST_PURGE_ACTION_KEY,
+  description: 'Deletes one of your things by id — Lopu asks you to confirm before running it.',
+  category: 'utilities',
+  inputs: [{ name: 'id', type: 'string', label: 'Thing id', required: true, maxLength: 128 }],
+  steps: [
+    { op: 'things.delete', id: '$input.id' },
+    { op: 'return', value: 'purged' }
+  ],
+  capabilities: [{ capability: 'things.delete' }],
+  limits: { timeoutMs: 2000, maxOperations: 4 }
+});
+
 const idIn = (text: string): string | null => {
   // a thing id mentioned in the message (uuid-ish or a lowercase-dashed slug
   // with at least two dashes), else null
@@ -113,13 +130,45 @@ const buildScript = (userText: string, activePage: LopuActivePage | null): HopBu
   const wantsPage = text.includes('page') || text.includes('section') || text.includes('hero');
   const wantsAction = text.includes('action');
   const wantsDelete = text.includes('delete');
+  const wantsPurge = text.includes('purge');
+  // the client's Confirm card sends "Confirmed: <summary>" — the script then
+  // calls the same tool again, exactly like a real model reading the
+  // approved list in the live context
+  const confirmedTurn = text.includes('confirmed');
+  const needsConfirmation = (result: LopuProviderToolResult | undefined) => !!result && !result.ok && /confirmation/i.test(result.error || result.summary || '');
+
+  if (wantsPurge) {
+    const id = idIn(userText) || 'the-thing-you-mentioned';
+    const run = (): Hop => ({ text: 'Running the purge… ', tools: [{ name: 'run_action', input: { action: LOPU_TEST_PURGE_ACTION_KEY, inputs: { id } } }] });
+    const report = (results: LopuProviderToolResult[]): Hop => {
+      const ran = results[0];
+      return {
+        text: ran?.ok
+          ? `Purge ran — ${dataOf(ran).status === 'ok' ? `${id} is gone` : `it reported ${dataOf(ran).error || 'an error'}`} 🧹`
+          : needsConfirmation(ran)
+            ? `Purging ${id} would delete it for good — press Confirm on the card and I will run it 🧹`
+            : `${failureLine(ran)}`,
+        tools: []
+      };
+    };
+    if (confirmedTurn) return [run, report];
+    return [
+      () => ({ text: 'Making a tiny purge action first… ', tools: [{ name: 'create_action', input: { crystal: testPurgeAction() } }] }),
+      (results) => (results[0]?.ok ? run() : { text: `${failureLine(results[0])} I will leave it there.`, tools: [] }),
+      report
+    ];
+  }
 
   if (wantsDelete) {
     const id = idIn(userText) || 'the-thing-you-mentioned';
     return [
-      () => ({ text: 'Let me check that delete for you… ', tools: [{ name: 'delete_thing', input: { id, confirmed: false } }] }),
+      () => ({ text: 'Let me check that delete for you… ', tools: [{ name: 'delete_thing', input: { id, name: 'the thing you mentioned' } }] }),
       (results) => ({
-        text: `I did not delete anything yet — ${results[0]?.ok ? 'that went through' : 'deleting needs your say-so'}. Reply "yes, delete ${id}" and I will remove it for good 🗑️`,
+        text: results[0]?.ok
+          ? `Done — ${id} is gone for good 🗑️`
+          : needsConfirmation(results[0])
+            ? `I have not deleted anything yet — press Confirm on the card (or tell me no) and I will remove ${id} for good 🗑️`
+            : `${failureLine(results[0])}`,
         tools: []
       })
     ];

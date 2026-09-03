@@ -173,6 +173,7 @@ export const LOPU_TURN_PROVIDERS = ['claude', 'openai', 'vault', 'test', 'fallba
 export type LopuTurnProvider = (typeof LOPU_TURN_PROVIDERS)[number];
 export const LOPU_MAX_TOOL_CALLS = 20;
 export const LOPU_TOOL_SUMMARY_MAX_CHARS = 240;
+export const LOPU_PROVIDER_LABEL_MAX_CHARS = 80;
 
 export type PublicLopuToolCall = { name: string; ok: boolean; summary: string; thingId?: string };
 
@@ -186,6 +187,9 @@ export type PublicLopuMessageMeta = {
 	effort?: string | null;
 	speed?: string | null;
 	provider?: LopuTurnProvider;
+	// the vault connection's display name — 'vault' rows only, so history
+	// reads "via <name>" after a reload (never the endpoint or a credential)
+	providerLabel?: string;
 	usage?: { inputTokens: number; outputTokens: number };
 	toolCalls?: PublicLopuToolCall[];
 	stopReason?: string | null;
@@ -207,6 +211,10 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 	meta.effort = text(raw.effort, 32) || null;
 	meta.speed = text(raw.speed, 32) || null;
 	if (LOPU_TURN_PROVIDERS.includes(raw.provider as LopuTurnProvider)) meta.provider = raw.provider as LopuTurnProvider;
+	if (meta.provider === 'vault') {
+		const providerLabel = text(raw.providerLabel, LOPU_PROVIDER_LABEL_MAX_CHARS);
+		if (providerLabel) meta.providerLabel = providerLabel;
+	}
 	const usage = raw.usage && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : null;
 	const inputTokens = nonNegativeInt(usage?.inputTokens);
 	const outputTokens = nonNegativeInt(usage?.outputTokens);

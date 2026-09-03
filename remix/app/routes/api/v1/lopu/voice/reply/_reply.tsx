@@ -1,4 +1,4 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { streamLopuVoiceReply, type LopuVoiceEvent } from '~/api/utils/lopu/voice';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -8,10 +8,16 @@ const STREAM_HEADERS = {
 	'Cache-Control': 'no-store',
 	'X-Accel-Buffering': 'no'
 };
+// POST /api/v1/lopu/voice/reply — session → full account only (a guest
+// session has no vault and must not mint transcript pages) → the JSON-only
+// CSRF fence → fail-closed rate limit → the stream.
 export const action = async ({ request }: { request: Request }) => {
 	if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'POST' } });
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+	if (user.temporary) return json({ ok: false, error: 'Create an account to talk to Lopu — voice turns are saved to your account' }, { status: 403 });
+	const unsupported = requireJsonContentType(request);
+	if (unsupported) return unsupported;
 	const limit = await enforceRateLimit(request, 'lopu.voiceReply', `user:${user.id}`, { failClosed: true });
 	if (!limit.allowed) return json({ ok: false, error: 'Lopu voice replies are rate limited.' }, rateLimitedResponseInit(limit));
 	const body = await readJsonBody(request, 96 * 1024);

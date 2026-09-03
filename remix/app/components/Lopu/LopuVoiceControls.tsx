@@ -6,7 +6,7 @@ import { Link as RouterLink } from 'react-router';
 
 import { getNativeBridge, nativeBridgeMessageEvent } from '~/utils/nativeBridge';
 import { LopuRingAvatar } from './LopuActivityBadge';
-import { LopuChatView } from './LopuChatView';
+import { LopuAssistantRow, LopuChatView, LopuUserRow } from './LopuChatView';
 import { LopuProviderSelect, type LopuProviderSelectChange } from './LopuModelPicker';
 import { readNdjson } from './lopuChatStream';
 import { abortLopuTurn, getLopuStoreSnapshot } from './lopuChatStore';
@@ -676,60 +676,66 @@ export const LopuVoiceSettingsPopover = (props: { compact?: boolean; providerVal
 	);
 };
 
-// Local-only rows (native turns, transcribe quotes, microphone errors) as
-// the same bubbles the conversation uses: viewer right on ink, Lopu left on
-// the card with the 28px ring avatar.
-// TODO(lopu-integration): interleave these into LopuChatView's list once it
-// exposes a local-items slot; until then they sit directly under it.
+// Local-only rows (native turns, transcribe quotes, microphone errors) drawn
+// as the conversation's own bubbles (LopuChatView's row primitives) and
+// slotted into its list through `trailing`, so they scroll with the
+// timeline instead of sitting in a strip under it.
 export const LopuVoiceTranscript = (props: { items: LopuVoiceItem[]; compact?: boolean }) => {
-	const { items, compact } = props;
-	const scrollRef = React.useRef<HTMLDivElement | null>(null);
+	const { items, compact = false } = props;
+	const anchorRef = React.useRef<HTMLDivElement | null>(null);
 
+	// a new item scrolls the conversation log (the list this sits in) down
 	React.useLayoutEffect(() => {
-		const element = scrollRef.current;
-		if (element) element.scrollTop = element.scrollHeight;
+		const log = anchorRef.current?.closest('[role="log"]');
+		if (log instanceof HTMLElement) log.scrollTop = log.scrollHeight;
 	}, [items]);
 
 	if (!items.length) return null;
 
 	return (
-		<Box ref={scrollRef} className="lopuVoiceTranscript" flexShrink={0} maxH="38%" overflowY="auto" overflowX="hidden" px={compact ? 2 : 1} py={2}>
-			<Flex direction="column" gap={2} maxW={LOPU_UI.conversationMaxWidth} mx="auto">
-				{items.map((item, index) => {
-					if (item.role === 'user') {
-						return (
-							<Box key={item.id} alignSelf="flex-end" maxW="78%" px={3.5} py={2} fontSize={LOPU_UI.fontBody} lineHeight="1.5" sx={LOPU_UI.userBubble} whiteSpace="pre-wrap" wordBreak="break-word">
-								{item.text}
-							</Box>
-						);
-					}
-					const previous = items[index - 1];
-					const showAvatar = !previous || previous.role !== 'assistant';
+		<Flex ref={anchorRef} className="lopuVoiceTranscript" direction="column" mt={compact ? 3 : 4} minW={0}>
+			{items.map((item, index) => {
+				const previous = items[index - 1];
+				const next = items[index + 1];
+				const first = !previous || previous.role !== item.role;
+				const last = !next || next.role !== item.role;
+				const spacing = index === 0 ? 0 : first ? (compact ? 3 : 4) : compact ? 0.5 : 1;
+				if (item.role === 'user') {
 					return (
-						<Flex key={item.id} align="flex-start" gap={2} maxW="100%">
-							<Box width="28px" flexShrink={0} pt="1px">
-								{showAvatar ? <LopuRingAvatar size={28} /> : null}
-							</Box>
-							<Box maxW="min(100%, 720px)" minW={0} px={3.5} py={2} fontSize={LOPU_UI.fontBody} lineHeight="1.5" color={item.error ? LOPU_UI.muted : LOPU_UI.ink} sx={LOPU_UI.lopuBubble} whiteSpace="pre-wrap" wordBreak="break-word">
-								{item.quote ? (
-									<Text sx={LOPU_UI.eyebrow} mb={1}>
-										Transcript
-									</Text>
-								) : null}
-								{item.text || '…'}
-								{item.pageId ? (
-									<Text mt={1.5} fontSize={LOPU_UI.fontSmall}>
-										<RouterLink to={`/thing/${encodeURIComponent(item.pageId)}`} style={{ textDecoration: 'underline' }}>
-											{item.pageTitle || 'Open the private transcript page'} ↗
-										</RouterLink>
-									</Text>
-								) : null}
-							</Box>
-						</Flex>
+						<Box key={item.id} mt={spacing} minW={0}>
+							<LopuUserRow text={item.text} compact={compact} />
+						</Box>
 					);
-				})}
-			</Flex>
-		</Box>
+				}
+				return (
+					<Box key={item.id} mt={spacing} minW={0}>
+						<LopuAssistantRow first={first} last={last} compact={compact} meta={item.quote ? 'Saved as a private page' : null}>
+							{item.quote ? (
+								<Text as="span" display="block" sx={LOPU_UI.eyebrow}>
+									Transcript
+								</Text>
+							) : null}
+							{item.error ? (
+								<Text role="alert" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.danger} lineHeight="1.5" overflowWrap="anywhere">
+									{item.text}
+								</Text>
+							) : (
+								<Text fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} lineHeight="1.5" color={LOPU_UI.ink} whiteSpace="pre-wrap" overflowWrap="anywhere">
+									{item.text || '…'}
+								</Text>
+							)}
+							{item.pageId ? (
+								<Text fontSize={LOPU_UI.fontSmall}>
+									<RouterLink to={`/thing/${encodeURIComponent(item.pageId)}`} style={{ textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+										{item.pageTitle || 'Open the private transcript page'} ↗
+									</RouterLink>
+								</Text>
+							) : null}
+						</LopuAssistantRow>
+					</Box>
+				);
+			})}
+		</Flex>
 	);
 };
 
@@ -842,8 +848,8 @@ export type LopuVoiceSurfaceProps = {
 };
 
 // The conversation column in voice mode: the shared LopuChatView (its text
-// composer dock folded away — the deck carries the typed path), the local
-// transcript strip, and the deck. Each final utterance is a normal chat turn
+// composer dock folded away — the deck carries the typed path) with the
+// local transcript rows slotted into its list, and the deck. Each final utterance is a normal chat turn
 // with the chat's own model/provider settings.
 export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange }: LopuVoiceSurfaceProps) => {
 	const chat = useLopuChat({ chatId });
@@ -886,8 +892,15 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 
 	return (
 		<Flex className="lopuVoiceSurface" direction="column" flex={1} minH={0} minW={0} width="100%" sx={{ '& .lopuComposerDock, & .lopuComposer': { display: 'none' } }}>
-			<LopuChatView chatId={chatId} onChatChange={onChatChange} compact={compact} showConversations={false} onOpenFull={onOpenFull} autoFocus={false} />
-			<LopuVoiceTranscript items={voice.items} compact={compact} />
+			<LopuChatView
+				chatId={chatId}
+				onChatChange={onChatChange}
+				compact={compact}
+				showConversations={false}
+				onOpenFull={onOpenFull}
+				autoFocus={false}
+				trailing={voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
+			/>
 			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id} providerValue={providerValue} onProviderChange={onProviderChange} />
 		</Flex>
 	);

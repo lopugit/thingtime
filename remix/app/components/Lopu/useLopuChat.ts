@@ -20,7 +20,9 @@ import {
 	activeDraftLabel,
 	bindLopuApi,
 	canUndoLopuPatch,
+	confirmLopuTool,
 	createLopuChat,
+	declineLopuTool,
 	deleteLopuChat,
 	describeActiveDraft,
 	getLopuStoreServerSnapshot,
@@ -146,6 +148,10 @@ export type UseLopuChat = {
 	contextLabel: string | null;
 	undoPatch: (toolId: string) => boolean;
 	canUndoPatch: (toolId: string) => boolean;
+	// a tool card's Confirm / Cancel (design note §2.4): confirm sends the
+	// grant back as a new turn, decline retires the card locally
+	confirmTool: (requestId: string, toolId: string) => Promise<SendLopuResult>;
+	declineTool: (requestId: string, toolId: string) => void;
 	error: string | null;
 };
 
@@ -232,6 +238,11 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		[contextProvider, applyPatches]
 	);
 
+	const confirmTool = React.useCallback(
+		(requestId: string, toolId: string) => confirmLopuTool(requestId, toolId, { context: contextProvider(), applyPatches }),
+		[contextProvider, applyPatches]
+	);
+
 	const setSettings = React.useCallback(
 		(patch: Partial<LopuChatSettings>) => {
 			setLopuSettings(patch);
@@ -296,6 +307,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		contextLabel,
 		undoPatch: undoLopuPatch,
 		canUndoPatch: canUndoLopuPatch,
+		confirmTool,
+		declineTool: declineLopuTool,
 		error: snapshot.error
 	};
 };

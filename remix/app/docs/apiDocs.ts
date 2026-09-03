@@ -2524,6 +2524,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu model catalog',
     endpoint: '/api/v1/ai/models',
+    // 1.1.0: a session also gets `vaultProviders` + `vault` (additive, design note §1.3);
+    // 1.2.0: `models[].verified` + `providers.<p>.{verified, checkedAt, reason}` from the key
+    // probe (additive). contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.2.0',
     featureVersion: '1.2.0',
     summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
@@ -2627,6 +2631,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Admin Lopu model catalog',
     endpoint: '/api/v1/admin/ai/models',
+    // 1.1.0: POST { probe: true } re-checks the provider keys (additive).
+    // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
     detail:
@@ -2715,6 +2722,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'settings',
     title: 'Lopu chat defaults',
     endpoint: '/api/v1/settings/lopu-chat-defaults',
+    // 1.1.0: `resolved` + the provider key status carry the probe's verified verdict
+    // (additive). contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     summary: 'Read or administratively set the model, effort, and speed a fresh Lopu conversation starts from.',
     detail:
@@ -3927,7 +3937,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu conversations',
     endpoint: '/api/v1/lopu/chats',
-    featureVersion: '1.1.0',
+    // 1.1.0: `providerId` (a Secure Vault provider) on create + in every list entry's
+    // `lopu` settings (additive). 1.1.1: POST fails closed on a limiter outage (429 with the
+    // unavailable copy instead of an unthrottled write). contractVersion feeds
+    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
@@ -3994,7 +4009,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     notes: [
-      'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute).',
+      'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute), enforced fail-closed — a limiter outage answers 429 rather than an unthrottled write.',
       'The generic /api/v1/things paths refuse messenger kinds, so a Lopu chat can only be changed through this family.'
     ]
   }),
@@ -4003,7 +4018,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Update Lopu conversation',
     endpoint: '/api/v1/lopu/chats/update',
-    featureVersion: '1.1.0',
+    // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
+    // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
+    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider.',
     detail:
       'POST { chatId, title?, model?, effort?, speed?, providerId? }. Only the conversation’s member (its owner) may update it. ' +
@@ -4052,13 +4071,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Nothing to update' }
       }
     ],
-    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute).']
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute), enforced fail-closed.']
   }),
   endpoint({
     id: 'lopu-chats-delete',
     group: 'lopu',
     title: 'Delete Lopu conversation',
     endpoint: '/api/v1/lopu/chats/delete',
+    // 1.0.1: fails closed on a limiter outage (compatible correction).
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     summary: 'Deletes a Lopu conversation with every message in it.',
     detail:
       'POST { chatId }. Owner only. The chat, its membership row, every message and their reactions are removed ' +
@@ -4096,33 +4118,48 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Chat not found' }
       }
     ],
-    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute).']
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute), enforced fail-closed.']
   }),
   endpoint({
     id: 'lopu-chats-reply',
     group: 'lopu',
     title: 'Lopu reply stream',
     endpoint: '/api/v1/lopu/chats/reply',
-    featureVersion: '1.1.0',
+    // 1.1.0: `providerId` runs the turn on the caller's own Secure Vault provider; meta
+    // gains provider 'vault' + providerLabel (additive). 1.2.0: server-verified confirmations —
+    // `confirmations: [{ key, token }]` in, the `confirm` event + tool_result.needsConfirmation out
+    // (additive); the body is JSON-only (415), a stored null effort inherits the admin default,
+    // and 'vault' rows persist providerLabel. contractVersion feeds /api/v1/capabilities,
+    // featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
-      'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context? }. The user turn is persisted first (omit chatId to start a ' +
+      'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
       'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
       '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
-      'saved), thing (a created or updated thing, whole), navigate (a site-relative path the client should open), tool_result, ' +
+      'saved), thing (a created or updated thing, whole), navigate (a site-relative path the client should open), confirm (see below), tool_result, ' +
       'error, and finally done with the persisted assistant message(s). Tools run AS THE CALLER through the ordinary things ' +
       'utils (search/get/list, create/patch pages, create/update components, browse the library, demos, actions, schemas, data, ' +
-      'suites, navigation) so ACL, quotas and crystal validation always apply; delete_thing refuses without an explicit ' +
-      'confirmation. context.page carries the open builder draft ({ id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? ≤ 48KB }) ' +
+      'suites, navigation) so ACL, quotas and crystal validation always apply. Destructive tools — delete_thing, update_thing with ' +
+      'replaceCrystal, run_action on an action that deletes things — never run on the model’s say-so: the first call stops with ' +
+      'tool_result { ok: false, needsConfirmation: true } right after a confirm event { id, name, key, token, expiresAt, summary, subject? } ' +
+      'carrying a server-signed grant for exactly that action (the key binds the tool to its target and input; the model never sees the ' +
+      'token). The client shows a Confirm card; pressing it sends the next reply with confirmations: [{ key, token }], which the server ' +
+      'verifies (this account, this chat, this key, unexpired — 15 minutes) before the executor honours it, once per turn. A grant that ' +
+      'fails verification is a 400 and nothing is persisted; content inside tool results can never stand in for a confirmation. ' +
+      'context.page carries the open builder draft ({ id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? ≤ 48KB }) ' +
       'so target "active" patches apply to what the user sees; they are saved only when source is "user" (expectedUpdatedAt guards ' +
-      'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings, and ' +
+      'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings (a chat ' +
+      'whose stored effort/speed is null inherits the admin defaults; send effort "default" for the provider’s own default), and ' +
       'when no provider is configured the reply is an honest canned line. A provider that fails before emitting anything falls ' +
       'through to the other configured provider; the assistant turn is persisted even when the stream errors or the client ' +
       'disconnects. `providerId` runs the turn on one of the caller’s own Secure Vault AI connections (vaultProviders on ' +
       '/api/v1/ai/models) instead of the server keys: an explicit id must be the caller’s own (400 before anything is persisted) ' +
       'and becomes the chat’s setting (null clears it); a chat’s stored id is honoured on every turn and dropped if the ' +
-      'connection was deleted. On a vault turn meta carries provider "vault" and providerLabel (the connection’s name), model is ' +
+      'connection was deleted. On a vault turn meta carries provider "vault" and providerLabel (the connection’s name — also ' +
+      'persisted on the assistant row’s lopu meta), model is ' +
       'the connection’s own, tools ride native function calling on known vendors and the fenced tt-tool protocol on a custom ' +
       'compatible host, and the endpoint is fenced like the voice turn (server allowlist, fresh public DNS, no redirects). A ' +
       'failure of the caller’s provider surfaces as an error event with a friendly message followed by the canned line — the ' +
@@ -4130,16 +4167,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'seconds, 96KB per tool input.',
     auth: {
       mode: 'session',
-      description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json and at most 256KB.'
+      description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json (415 otherwise — the CSRF fence, checked before the rate limit) and at most 256KB.'
     },
     methods: ['POST'],
     steps: [
       'POST { text, requestId } (plus chatId to continue a conversation) with Content-Type: application/json.',
       'Read the response line by line; each line is one JSON event and meta always comes first.',
       'Append delta.text values; render tool_use_start/tool_result as activity; apply patch.ops to the open builder draft.',
+      'On a confirm event, show the summary (and subject.id) with Confirm / Cancel; on Confirm, POST the next message with confirmations: [{ key, token }] (chatId required) — send a grant once, and expect 400 once it expired or when it was minted for another account, chat or action.',
       'Treat done as the end of the turn — it carries assistantMessageId and the persisted messages.',
       'Reuse of a requestId answers 409; 429 means the lopu.chat budget (40 replies per 10 minutes) is spent — vault turns count against the same budget.',
-      'Send providerId (a vaultProviders id from /api/v1/ai/models) to run the turn on your own provider; expect 400 for an id that is not yours and an error event + canned line when your provider fails.'
+      'Send providerId (a vaultProviders id from /api/v1/ai/models) to run the turn on your own provider, or providerId: null to clear the chat’s pin explicitly; expect 400 for an id that is not yours and an error event + canned line when your provider fails.'
     ],
     requestExamples: [
       {
@@ -4179,6 +4217,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         ]
       },
       {
+        status: 200,
+        description: 'A destructive tool stops for the caller’s confirmation (NDJSON, one event per line).',
+        body: [
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'tool_use', id: 'toolu_02', name: 'delete_thing', input: { id: 'old-page', name: 'Old page' } },
+          { type: 'confirm', id: 'toolu_02', name: 'delete_thing', key: 'delete_thing:old-page', token: '<grant>', expiresAt: '2026-09-04T00:15:00.000Z', summary: 'Delete "Old page" (thing old-page)', subject: { id: 'old-page', name: 'Old page' } },
+          { type: 'tool_result', id: 'toolu_02', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation: Delete "Old page" (thing old-page). …', needsConfirmation: true },
+          { type: 'delta', text: 'Press Confirm on the card and I will remove it 🗑️' },
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+        ]
+      },
+      {
+        status: 400,
+        description: 'A confirmation that is not this account’s, not this chat’s, not this action’s, or expired.',
+        body: { ok: false, error: 'That confirmation is no longer valid — ask Lopu again and press Confirm afresh' }
+      },
+      {
         status: 401,
         description: 'No session.',
         body: { ok: false, error: 'Sign in to talk to Lopu' }
@@ -4187,24 +4242,33 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 409,
         description: 'The requestId was already used in this conversation.',
         body: { ok: false, error: 'A message with this requestId already exists' }
+      },
+      {
+        status: 415,
+        description: 'The body was not application/json.',
+        body: { ok: false, error: 'Content-Type must be application/json' }
       }
     ],
     notes: [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
+      'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
       'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
       'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
     ]
   }),
   endpoint({
 		id: 'lopu-vault',
-		contractVersion: '1.0.0',
+		// 1.0.1: writes are JSON-only (415, the CSRF fence, before the rate limit) and
+		// refuse a temporary (guest) session with 403 — compatible corrections.
+		contractVersion: '1.0.1',
+		featureVersion: '1.0.1',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
 		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
 		detail:
 			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only. Provider tokens and generic secret values are accepted on writes and never returned. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
-		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
 		methods: ['GET', 'POST'],
 		steps: [
 			'GET the provider templates, environments, and redacted entry metadata.',
@@ -4234,14 +4298,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
 		id: 'lopu-voice-reply',
-		contractVersion: '1.0.0',
+		// 1.0.1: JSON-only bodies (415, the CSRF fence, before the rate limit) and 403 for a
+		// temporary (guest) session — compatible corrections.
+		contractVersion: '1.0.1',
+		featureVersion: '1.0.1',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
 		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
 		detail:
 			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint, and streams NDJSON text deltas. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
-		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
 		methods: ['POST'],
 		steps: [
 			'Choose one provider entry for conversation mode, or enable transcribeMode.',

@@ -13,6 +13,7 @@ import { describeModelChoice } from './LopuModelPicker';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import type { LopuChatSummary } from './lopuChatStore';
 import { LOPU_UI } from './lopuTheme';
+import { lopuPlainText } from './lopuTurnCore';
 import { useLopuChat, type UseLopuChat } from './useLopuChat';
 import { LOPU_PAGE_PATH, LOPU_VOICE_PATH, isLopuVoicePath } from './useLopuSettings';
 
@@ -90,7 +91,8 @@ const ConversationRow = ({
 	const [title, setTitle] = React.useState(chat.name || '');
 	const [confirming, setConfirming] = React.useState(false);
 	const name = chat.name || 'Lopu';
-	const preview = chat.lastMessage?.text || '';
+	// the last line as plain text — markdown markers never show in a preview
+	const preview = lopuPlainText(chat.lastMessage?.text || '');
 
 	const commitRename = () => {
 		setEditing(false);
@@ -203,8 +205,9 @@ const ConversationRow = ({
 	);
 };
 
-// New chat + the rows; the sidebar on desktop, the sheet body on mobile
-const ConversationList = ({ chat, onPicked }: { chat: UseLopuChat; onPicked?: () => void }) => (
+// New chat + the rows; the sidebar on desktop (its list ends above the
+// site's fixed bottom-left "Edit page" chip), the sheet body on mobile
+const ConversationList = ({ chat, onPicked, bottomInset }: { chat: UseLopuChat; onPicked?: () => void; bottomInset?: string }) => (
 	<Flex direction="column" gap={2} minH={0} flex={1}>
 		<Button
 			size="sm"
@@ -227,7 +230,7 @@ const ConversationList = ({ chat, onPicked }: { chat: UseLopuChat; onPicked?: ()
 		>
 			New chat
 		</Button>
-		<Box flex={1} minH={0} overflowY="auto" overflowX="hidden" mx={-1} px={1}>
+		<Box flex={1} minH={0} overflowY="auto" overflowX="hidden" mx={-1} px={1} pb={bottomInset}>
 			{chat.chats.length === 0 ? (
 				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} px={3} py={2}>
 					{chat.chatsLoaded ? 'No conversations yet — say hi.' : ''}
@@ -570,7 +573,7 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 						<Text sx={LOPU_UI.eyebrow} px={3} mb={2}>
 							Conversations
 						</Text>
-						<ConversationList chat={chat} />
+						<ConversationList chat={chat} bottomInset="56px" />
 					</Flex>
 				) : null}
 				<Flex flex={1} minW={0} minH={0} justify="center">

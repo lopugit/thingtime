@@ -23,6 +23,13 @@ test('provider endpoints are https-only and reject local network targets', () =>
 	assert.equal(normalizeLopuProviderEndpoint('https://user:pass@example.com/v1'), null);
 	assert.equal(isBlockedLopuProviderHostname('10.0.0.1'), true);
 	assert.equal(isBlockedLopuProviderHostname('api.anthropic.com'), false);
+	// NAT64: the well-known prefix (RFC 6052) and the local-use one (RFC 8215)
+	// both hand an IPv6 literal to a translator that dials IPv4 for it
+	assert.equal(isBlockedLopuProviderHostname('64:ff9b::a00:1'), true);
+	assert.equal(isBlockedLopuProviderHostname('64:ff9b::808:808'), true);
+	assert.equal(isBlockedLopuProviderHostname('64:ff9b:1::1'), true);
+	assert.equal(normalizeLopuProviderEndpoint('https://[64:ff9b::a00:1]/v1'), null);
+	assert.equal(isBlockedLopuProviderHostname('2606:4700::1111'), false);
 });
 
 test('only supported provider adapters are accepted', () => {

@@ -57,6 +57,9 @@ for (const [network, prefix] of [
 	['::', 128],
 	['::1', 128],
 	['::ffff:0:0', 96],
+	// NAT64 (RFC 6052 well-known prefix + RFC 8215 local-use): an IPv6 literal
+	// that a translator would hand to a private IPv4 host
+	['64:ff9b::', 96],
 	['64:ff9b:1::', 48],
 	['100::', 64],
 	['2001:db8::', 32],

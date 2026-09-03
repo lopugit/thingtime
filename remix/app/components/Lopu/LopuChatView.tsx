@@ -76,7 +76,8 @@ const Separator = ({ label, compact }: { label: string; compact: boolean }) => (
 	</Flex>
 );
 
-const LopuRow = ({
+// Lopu's bubble row (exported so voice mode's local rows are the same bubbles)
+export const LopuAssistantRow = ({
 	children,
 	first,
 	last,
@@ -128,7 +129,8 @@ const LopuRow = ({
 	);
 };
 
-const UserRow = ({ text, compact }: { text: string; compact: boolean }) => (
+// The viewer's bubble row (exported for the same reason)
+export const LopuUserRow = ({ text, compact }: { text: string; compact: boolean }) => (
 	<Flex className="lopuRow" data-role="user" justify="flex-end" maxW="100%" minW={0}>
 		<Box
 			className="lopuBubble"
@@ -184,7 +186,10 @@ const TurnBubble = ({
 	last,
 	compact,
 	canUndo,
-	onUndo
+	onUndo,
+	onConfirm,
+	onDecline,
+	confirmBusy
 }: {
 	turn: LopuTurnState;
 	first: boolean;
@@ -192,14 +197,18 @@ const TurnBubble = ({
 	compact: boolean;
 	canUndo: (toolId: string) => boolean;
 	onUndo: (toolId: string) => void;
+	onConfirm: (requestId: string, toolId: string) => void;
+	onDecline: (requestId: string, toolId: string) => void;
+	// another reply is in flight — a Confirm card waits its turn
+	confirmBusy: boolean;
 }) => {
 	const streaming = turn.status === 'streaming';
 	const componentsByRef = React.useMemo(() => componentsFromTurn(turn), [turn]);
 	const segments = turn.segments;
 	const lastSegment = segments[segments.length - 1];
-	const waitingAfterTool = streaming && !!lastSegment && lastSegment.kind === 'tool' && turn.tools.every((tool) => tool.status === 'ok' || tool.status === 'error');
+	const waitingAfterTool = streaming && !!lastSegment && lastSegment.kind === 'tool' && turn.tools.every((tool) => tool.status === 'ok' || tool.status === 'error' || tool.status === 'confirm');
 	return (
-		<LopuRow first={first} last={last} meta={describeLopuTurnMeta(turn.meta)} compact={compact} live busy={streaming}>
+		<LopuAssistantRow first={first} last={last} meta={describeLopuTurnMeta(turn.meta)} compact={compact} live busy={streaming}>
 			{segments.length === 0 && streaming ? <Thinking compact={compact} /> : null}
 			{segments.map((segment, index) => {
 				if (segment.kind === 'text') {
@@ -209,7 +218,15 @@ const TurnBubble = ({
 				if (!activity) return null;
 				return (
 					<Box key={activity.id} minW={0} display="flex" flexDirection="column" rowGap={2}>
-						<LopuToolCard activity={activity} canUndo={activity.name === 'patch_page' && canUndo(activity.id)} onUndo={onUndo} compact={compact} />
+						<LopuToolCard
+							activity={activity}
+							canUndo={activity.name === 'patch_page' && canUndo(activity.id)}
+							onUndo={onUndo}
+							compact={compact}
+							onConfirm={() => onConfirm(turn.requestId, activity.id)}
+							onDecline={() => onDecline(turn.requestId, activity.id)}
+							confirmDisabled={confirmBusy}
+						/>
 						{LIVE_PREVIEW_TOOLS.has(activity.name) ? <LopuLivePreview activity={activity} componentsByRef={componentsByRef} compact={compact} /> : null}
 					</Box>
 				);
@@ -225,17 +242,44 @@ const TurnBubble = ({
 				</Text>
 			) : null}
 			{turn.status === 'error' && turn.error ? <ErrorLine message={turn.error.message} /> : null}
-		</LopuRow>
+		</LopuAssistantRow>
 	);
 };
 
-const MessageBubble = ({ message, role, first, last, compact }: { message: ChatMessage; role: 'user' | 'assistant'; first: boolean; last: boolean; compact: boolean }) => {
+// Persisted rows never change while a reply streams, so they are memoised:
+// each network chunk re-renders the live turn bubble, not the whole history.
+const MessageBubble = React.memo(function MessageBubble({
+	message,
+	role,
+	first,
+	last,
+	compact,
+	modelLabels
+}: {
+	message: ChatMessage;
+	role: 'user' | 'assistant';
+	first: boolean;
+	last: boolean;
+	compact: boolean;
+	// catalog id → label, so a persisted row reads "via GPT-5.6 Sol" like a live turn
+	modelLabels: Record<string, string>;
+}) {
 	const meta = React.useMemo(() => lopuMessageMeta(message), [message]);
 	if (message.deleted) return null;
-	if (role === 'user') return <UserRow text={message.text} compact={compact} />;
-	const metaLine = meta && meta.provider ? describeLopuTurnMeta({ provider: meta.provider, label: null, model: meta.model, effort: meta.effort, speed: meta.speed, providerLabel: meta.providerLabel }) : null;
+	if (role === 'user') return <LopuUserRow text={message.text} compact={compact} />;
+	const metaLine =
+		meta && meta.provider
+			? describeLopuTurnMeta({
+					provider: meta.provider,
+					label: meta.model ? (modelLabels[meta.model] ?? null) : null,
+					model: meta.model,
+					effort: meta.effort,
+					speed: meta.speed,
+					providerLabel: meta.providerLabel
+				})
+			: null;
 	return (
-		<LopuRow first={first} last={last} meta={metaLine} compact={compact}>
+		<LopuAssistantRow first={first} last={last} meta={metaLine} compact={compact}>
 			{meta?.toolCalls.length ? (
 				<Box display="flex" flexDirection="column" rowGap={1.5} minW={0}>
 					{meta.toolCalls.map((call, index) => (
@@ -244,9 +288,9 @@ const MessageBubble = ({ message, role, first, last, compact }: { message: ChatM
 				</Box>
 			) : null}
 			<LopuMarkdown text={message.text} compact={compact} />
-		</LopuRow>
+		</LopuAssistantRow>
 	);
-};
+});
 
 // ——— states ————————————————————————————————————————————————————————————————
 
@@ -337,6 +381,9 @@ export type LopuChatViewProps = {
 	composerLeading?: React.ReactNode;
 	settingsContent?: React.ReactNode;
 	listening?: boolean;
+	// rows drawn after the timeline, inside the same scrolling list (voice
+	// mode's local transcript: native turns, transcribe quotes, mic errors)
+	trailing?: React.ReactNode;
 };
 
 export const LopuChatView = ({
@@ -353,7 +400,8 @@ export const LopuChatView = ({
 	headerAfter,
 	composerLeading,
 	settingsContent,
-	listening = false
+	listening = false,
+	trailing
 }: LopuChatViewProps) => {
 	const compact = compactProp ?? variant === 'window';
 	const resolvedVariant: LopuChatViewVariant = variant ?? (compact ? 'window' : 'page');
@@ -417,6 +465,14 @@ export const LopuChatView = ({
 
 	const rows = React.useMemo(() => decorateLopuTimeline(chat.timeline), [chat.timeline]);
 	const streamingHere = !!chat.streaming;
+	const confirmBusy = chat.sending || streamingHere;
+	const onConfirm = React.useCallback(
+		(requestId: string, toolId: string) => {
+			stickRef.current = true;
+			void chat.confirmTool(requestId, toolId);
+		},
+		[chat]
+	);
 	const activeName = chat.chat?.name || (chat.chatId ? 'Conversation' : 'New chat');
 	const status = describeLopuStatusLine({
 		model: chat.settings.model,
@@ -440,9 +496,19 @@ export const LopuChatView = ({
 				{row.separator ? <Separator label={row.separator} compact={compact} /> : null}
 				<Box mt={spacing} minW={0}>
 					{row.item.kind === 'turn' ? (
-						<TurnBubble turn={row.item.turn} first={row.first} last={row.last} compact={compact} canUndo={chat.canUndoPatch} onUndo={chat.undoPatch} />
+						<TurnBubble
+							turn={row.item.turn}
+							first={row.first}
+							last={row.last}
+							compact={compact}
+							canUndo={chat.canUndoPatch}
+							onUndo={chat.undoPatch}
+							onConfirm={onConfirm}
+							onDecline={chat.declineTool}
+							confirmBusy={confirmBusy}
+						/>
 					) : (
-						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} />
+						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} />
 					)}
 				</Box>
 			</React.Fragment>
@@ -514,7 +580,16 @@ export const LopuChatView = ({
 
 			<Box ref={scrollRef} onScroll={onScroll} role="log" aria-label="Conversation with Lopu" flex={1} minH={0} overflowY="auto" overflowX="hidden" px={gutter} py={compact ? 3 : 4} sx={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
 				<Flex direction="column" maxW={columnMaxW} mx="auto" width="100%" minH="100%" minW={0}>
-					{!chat.viewer.id ? <SignedOutState compact={compact} /> : rows.length === 0 ? <EmptyState onPick={send} compact={compact} mobile={isMobile} /> : rows.map(renderRow)}
+					{!chat.viewer.id ? (
+						<SignedOutState compact={compact} />
+					) : rows.length === 0 && !trailing ? (
+						<EmptyState onPick={send} compact={compact} mobile={isMobile} />
+					) : (
+						<>
+							{rows.map(renderRow)}
+							{trailing}
+						</>
+					)}
 				</Flex>
 			</Box>
 

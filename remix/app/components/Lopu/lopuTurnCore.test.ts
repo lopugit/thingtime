@@ -31,7 +31,11 @@ import {
 	toolRowDetails,
 	toolRowSummary,
 	type LopuChatEvent,
-	type LopuTurnState
+	type LopuTurnState,
+	lopuPlainText,
+	confirmationMessageText,
+	isLopuConfirmUsable,
+	resolveLopuToolConfirm
 } from './lopuTurnCore.ts';
 
 const fold = (events: LopuChatEvent[], start?: LopuTurnState): LopuTurnState =>
@@ -160,9 +164,54 @@ test('navigate only accepts site-relative paths', () => {
 	assert.equal(fold([META, { type: 'navigate', path: 'https://evil.example' }]).navigate, null);
 	assert.equal(fold([META, { type: 'navigate', path: '//evil.example' }]).navigate, null);
 	assert.equal(isSiteRelativePath('/ok'), true);
+	assert.equal(isSiteRelativePath('/builder?page=p1&x=(1)'), true);
 	// eslint-disable-next-line no-script-url -- the literal IS the thing under test
 	assert.equal(isSiteRelativePath('javascript:alert(1)'), false);
 	assert.equal(isSiteRelativePath('/has space'), false);
+	// a backslash reads as a slash to the browser: "/\evil.com" resolves to
+	// https://evil.com/ — the server's navigate guard and this one agree
+	assert.equal(isSiteRelativePath('/\\evil.example'), false);
+	assert.equal(isSiteRelativePath('/ok/\\evil.example'), false);
+	assert.equal(isSiteRelativePath('/ok"x'), false);
+	assert.equal(isSiteRelativePath("/ok'x"), false);
+	assert.equal(isSiteRelativePath('/ok<x'), false);
+	assert.equal(fold([META, { type: 'navigate', path: '/\\evil.example' }]).navigate, null);
+	assert.deepEqual(parseLopuInlines('[Open your page](/\\evil.example)'), [{ kind: 'text', text: 'Open your page (/\\evil.example)' }]);
+});
+
+test('a confirm event turns the tool into a Confirm card; the card resolves once and knows when its grant is stale', () => {
+	const future = new Date(Date.now() + 60_000).toISOString();
+	const turn = fold([
+		META,
+		{ type: 'tool_use_start', id: 't1', name: 'delete_thing' },
+		{ type: 'tool_use', id: 't1', name: 'delete_thing', input: { id: 'thing-1' } },
+		{ type: 'confirm', id: 't1', name: 'delete_thing', key: 'delete_thing:thing-1', token: 'grant', expiresAt: future, summary: 'Delete "Landing" (thing thing-1)', subject: { id: 'thing-1', name: 'Landing' } },
+		{ type: 'tool_result', id: 't1', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation', needsConfirmation: true },
+		{ type: 'delta', text: 'Please confirm.' },
+		{ type: 'done', assistantMessageId: 'a1', messages: [], stopReason: 'end_turn' }
+	]);
+	const [tool] = turn.tools;
+	assert.equal(tool.status, 'confirm', 'done never downgrades a card to error');
+	assert.deepEqual(tool.confirm, { key: 'delete_thing:thing-1', token: 'grant', expiresAt: future, summary: 'Delete "Landing" (thing thing-1)', subject: { id: 'thing-1', name: 'Landing' }, resolved: null });
+	assert.equal(tool.result?.needsConfirmation, true);
+	assert.equal(toolLabel('delete_thing', 'confirm'), 'Needs your confirmation');
+	assert.equal(toolRowSummary(tool), 'Delete "Landing" (thing thing-1)');
+	assert.equal(isLopuConfirmUsable(tool.confirm), true);
+	assert.equal(confirmationMessageText(tool.confirm!), 'Confirmed: Delete "Landing" (thing thing-1)');
+
+	const confirmed = resolveLopuToolConfirm(turn, 't1', 'confirmed');
+	assert.equal(confirmed.tools[0].confirm?.resolved, 'confirmed');
+	assert.equal(isLopuConfirmUsable(confirmed.tools[0].confirm), false, 'a spent grant is never re-sent');
+	assert.equal(resolveLopuToolConfirm(confirmed, 't1', 'declined'), confirmed, 'resolving twice is a no-op');
+	assert.equal(resolveLopuToolConfirm(turn, 'missing', 'declined'), turn);
+	assert.equal(isLopuConfirmUsable({ token: 'grant', expiresAt: new Date(Date.now() - 1000).toISOString(), resolved: null }), false, 'expired');
+	assert.equal(isLopuConfirmUsable({ token: '', expiresAt: future, resolved: null }), false, 'no grant was minted');
+
+	// needsConfirmation without a preceding confirm event is a plain failure
+	const bare = fold([META, { type: 'tool_use', id: 't2', name: 'delete_thing', input: { id: 'x' } }, { type: 'tool_result', id: 't2', name: 'delete_thing', ok: false, summary: 'Waiting', needsConfirmation: true }]);
+	assert.equal(bare.tools[0].status, 'error');
+	// a malformed confirm event is ignored
+	assert.equal(fold([META, { type: 'confirm', id: 't3', name: 'delete_thing', key: '', token: 'x', expiresAt: future, summary: '' } as LopuChatEvent]).tools.length, 0);
 });
 
 test('error events record the error and fail in-flight tools; done closes the turn', () => {
@@ -470,4 +519,10 @@ test('mergeMessages dedupes by id, re-keys pending rows and orders oldest first'
 		['msg-user', 'later']
 	);
 	assert.equal(merged[0].text, 'hi (server)');
+});
+
+test('lopuPlainText drops markdown markers for conversation previews', () => {
+	assert.equal(lopuPlainText('Hello! I can build **pages**, `sections`.\n\n_(reply stopped)_'), 'Hello! I can build pages, sections. (reply stopped)');
+	assert.equal(lopuPlainText('# Title\n- one\n- *two*\n[Open](/p/x)'), 'Title one · two Open');
+	assert.equal(lopuPlainText(''), '');
 });

@@ -1,16 +1,20 @@
 import React from 'react';
 import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
-import { Check, ChevronDown, X } from 'lucide-react';
+import { Check, ChevronDown, ShieldAlert, X } from 'lucide-react';
 
+import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { LOPU_UI, lopuEyebrowSx, lopuFocusRingSx } from './lopuTheme';
-import { toolGlyph, toolLabel, toolLinks, toolRowDetails, toolRowSummary, type LopuMessageToolCall, type LopuToolActivity, type LopuToolStatus } from './lopuTurnCore';
+import { isLopuConfirmUsable, toolGlyph, toolLabel, toolLinks, toolRowDetails, toolRowSummary, type LopuMessageToolCall, type LopuToolActivity, type LopuToolStatus } from './lopuTurnCore';
 
 // One tool activity inside Lopu's bubble, drawn as a compact row (design
 // brief): glyph · label · one-line summary · status · links · Undo, with a
 // chevron that opens a details drawer showing the tool's input and result
-// JSON. `LopuToolCallRow` is the same row for a persisted turn (history rows
-// remember only name / ok / summary / thingId).
+// JSON. A destructive tool that stopped for approval (status 'confirm')
+// grows a Confirm / Cancel pair under the row — the only way its grant ever
+// leaves the client (design note §2.4). `LopuToolCallRow` is the same row
+// for a persisted turn (history rows remember only name / ok / summary /
+// thingId).
 
 const StatusGlyph = ({ status }: { status: LopuToolStatus }) => {
 	if (status === 'streaming' || status === 'running') {
@@ -20,6 +24,13 @@ const StatusGlyph = ({ status }: { status: LopuToolStatus }) => {
 		return (
 			<Box as="span" display="inline-flex" color={LOPU_UI.positive} flexShrink={0} role="img" aria-label="done">
 				<Check size={14} strokeWidth={2.4} aria-hidden />
+			</Box>
+		);
+	}
+	if (status === 'confirm') {
+		return (
+			<Box as="span" display="inline-flex" color={LOPU_UI.ink} flexShrink={0} role="img" aria-label="needs your confirmation">
+				<ShieldAlert size={14} strokeWidth={2.2} aria-hidden />
 			</Box>
 		);
 	}
@@ -78,6 +89,101 @@ const RowButton = ({ onClick, title, children }: { onClick: () => void; title: s
 	</Box>
 );
 
+// Confirm (ink, the primary) / Cancel (hairline) — 44px targets on touch
+// viewports, the 32px control height elsewhere; visible focus rings.
+const ConfirmButton = ({ onClick, primary, disabled, mobile, children }: { onClick: () => void; primary?: boolean; disabled?: boolean; mobile: boolean; children: React.ReactNode }) => (
+	<Box
+		as="button"
+		type="button"
+		onClick={onClick}
+		disabled={disabled}
+		display="inline-flex"
+		alignItems="center"
+		justifyContent="center"
+		minH={`${mobile ? LOPU_UI.touchTarget : LOPU_UI.control}px`}
+		minW={mobile ? '96px' : '84px'}
+		px={3}
+		borderRadius={LOPU_UI.pill}
+		border={primary ? `1px solid ${LOPU_UI.ink}` : LOPU_UI.border}
+		bg={primary ? LOPU_UI.ink : LOPU_UI.card}
+		color={primary ? LOPU_UI.card : LOPU_UI.ink}
+		fontSize={LOPU_UI.fontSmall}
+		fontWeight={600}
+		cursor={disabled ? 'not-allowed' : 'pointer'}
+		opacity={disabled ? 0.55 : 1}
+		transition={`background ${LOPU_UI.transitionFast}, opacity ${LOPU_UI.transitionFast}`}
+		_hover={disabled ? undefined : primary ? { opacity: 0.9 } : { bg: LOPU_UI.surfaceHover }}
+		sx={lopuFocusRingSx}
+	>
+		{children}
+	</Box>
+);
+
+// The Confirm card body: what would happen (+ the target's id, which the
+// server derived — never only a label), then Confirm / Cancel, or the
+// outcome once the viewer chose (a grant is sent at most once).
+const ConfirmBlock = ({
+	activity,
+	onConfirm,
+	onDecline,
+	disabled,
+	mobile
+}: {
+	activity: LopuToolActivity;
+	onConfirm?: () => void;
+	onDecline?: () => void;
+	disabled: boolean;
+	mobile: boolean;
+}) => {
+	const confirm = activity.confirm;
+	if (!confirm) return null;
+	const usable = isLopuConfirmUsable(confirm);
+	const subjectId = confirm.subject?.id;
+	return (
+		<Flex direction="column" gap={2} px={2.5} pb={2.5} pt={0.5} minW={0}>
+			<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.ink} lineHeight="1.5" overflowWrap="anywhere">
+				{confirm.summary || 'Lopu needs your go-ahead for this step.'}
+				{subjectId ? (
+					<Text as="span" display="block" fontFamily={LOPU_UI.fontMono} fontSize="11px" color={LOPU_UI.muted} mt={0.5} overflowWrap="anywhere">
+						id {subjectId}
+					</Text>
+				) : null}
+			</Text>
+			{confirm.resolved === 'confirmed' ? (
+				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted}>
+					Confirmed — Lopu is on it.
+				</Text>
+			) : confirm.resolved === 'declined' ? (
+				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted}>
+					Cancelled — nothing was changed.
+				</Text>
+			) : !usable ? (
+				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted}>
+					This confirmation has expired — ask Lopu again and confirm afresh.
+				</Text>
+			) : (
+				<Flex gap={2} wrap="wrap" align="center">
+					{onConfirm ? (
+						<ConfirmButton onClick={onConfirm} primary disabled={disabled} mobile={mobile}>
+							Confirm
+						</ConfirmButton>
+					) : null}
+					{onDecline ? (
+						<ConfirmButton onClick={onDecline} mobile={mobile}>
+							Cancel
+						</ConfirmButton>
+					) : null}
+					{disabled ? (
+						<Text fontSize="11px" color={LOPU_UI.faint}>
+							Wait for Lopu to finish replying
+						</Text>
+					) : null}
+				</Flex>
+			)}
+		</Flex>
+	);
+};
+
 const DetailsBlock = ({ title, text }: { title: string; text: string }) => (
 	<Box minW={0}>
 		<Text as="span" sx={lopuEyebrowSx} display="block" mb={1}>
@@ -118,20 +224,29 @@ export const LopuToolCard = ({
 	activity,
 	canUndo = false,
 	onUndo,
-	compact = false
+	compact = false,
+	onConfirm,
+	onDecline,
+	confirmDisabled = false
 }: {
 	activity: LopuToolActivity;
 	canUndo?: boolean;
 	onUndo?: (toolId: string) => void;
 	compact?: boolean;
+	// the Confirm card's buttons (status 'confirm'); disabled while a reply streams
+	onConfirm?: () => void;
+	onDecline?: () => void;
+	confirmDisabled?: boolean;
 }) => {
 	const [open, setOpen] = React.useState(false);
+	const isMobile = useIsMobileViewport();
 	const links = React.useMemo(() => toolLinks(activity), [activity]);
 	const details = React.useMemo(() => toolRowDetails(activity), [activity]);
-	const summary = toolRowSummary(activity);
+	const summary = activity.status === 'confirm' ? '' : toolRowSummary(activity);
 	const caption = patchCaption(activity);
 	const label = toolLabel(activity.name, activity.status);
 	const failed = activity.status === 'error';
+	const awaiting = activity.status === 'confirm' && !!activity.confirm;
 	const detailsId = `lopu-tool-${activity.id}-details`;
 
 	return (
@@ -183,6 +298,7 @@ export const LopuToolCard = ({
 					</Box>
 				) : null}
 			</Flex>
+			{awaiting ? <ConfirmBlock activity={activity} onConfirm={onConfirm} onDecline={onDecline} disabled={confirmDisabled} mobile={isMobile} /> : null}
 			{links.length || (canUndo && onUndo) ? (
 				<Flex gap={3} px={2.5} pb={1.5} mt="-2px" wrap="wrap" align="center">
 					{links.map((link) => (

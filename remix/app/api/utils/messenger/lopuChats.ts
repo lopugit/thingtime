@@ -85,8 +85,8 @@ export const LOPU_CHAT_SOURCE = Object.freeze({
 
 export type LopuChatSettings = {
 	model: string | null; // provider-native id from AI_WORKFLOW_BASE_MODELS; null = catalog default
-	effort: AiModelEffort | null; // null = the model's provider-default effort
-	speed: AiModelSpeed | null; // null = 'normal'
+	effort: AiModelEffort | null; // null = catalog default (the reply route inherits the admin default effort); 'default' on the wire means the provider's own default
+	speed: AiModelSpeed | null; // null = catalog default (the admin default speed, else 'normal')
 	providerId?: string | null; // one of the owner's Secure Vault provider connections; null/absent = Thingtime's models
 };
 export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null };
@@ -97,6 +97,8 @@ export type LopuAssistantTurnMeta = {
 	effort?: unknown;
 	speed?: unknown;
 	provider?: unknown;
+	// the vault connection's name on a 'vault' turn (design note §1.3)
+	providerLabel?: unknown;
 	usage?: unknown;
 	toolCalls?: unknown;
 	stopReason?: unknown;

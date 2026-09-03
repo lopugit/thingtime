@@ -285,9 +285,9 @@ export const LopuComposer = ({
 												control={<LopuToggle checked={preferences.applyPatches} onChange={(next) => onPreferencesChange?.({ applyPatches: next })} label="Apply builder changes live" />}
 											/>
 											<SettingsRow
-												label="Confirm deletes"
-												hint="Ask before Lopu deletes one of your things"
-												control={<LopuToggle checked={preferences.confirmDeletes} onChange={(next) => onPreferencesChange?.({ confirmDeletes: next })} label="Confirm deletes" />}
+												label="Confirm conversation deletes"
+												hint="Ask before deleting a conversation from the list"
+												control={<LopuToggle checked={preferences.confirmDeletes} onChange={(next) => onPreferencesChange?.({ confirmDeletes: next })} label="Confirm conversation deletes" />}
 											/>
 										</>
 									) : null}

@@ -6,7 +6,7 @@ import { sanitizeActionCrystal, validateThingtimeCrystal } from '../../../schema
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
 import type { LopuProviderEvent, LopuProviderHopInput, LopuProviderToolResult } from './chatEvents.ts';
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
-import { chunkJson, createLopuTestProvider, LOPU_TEST_ACTION_KEY, LOPU_TEST_COMPONENT_KEY, LOPU_TEST_MIN_INPUT_CHUNKS, testCardComponent, testPongAction, testSectionBlocks } from './chatTestProvider.ts';
+import { chunkJson, createLopuTestProvider, LOPU_TEST_ACTION_KEY, LOPU_TEST_COMPONENT_KEY, LOPU_TEST_MIN_INPUT_CHUNKS, LOPU_TEST_PURGE_ACTION_KEY, testCardComponent, testPongAction, testPurgeAction, testSectionBlocks } from './chatTestProvider.ts';
 // @ts-ignore Node executes TypeScript through the repo's tsx test loader.
 import type { LopuActivePage } from './chatTools.ts';
 
@@ -136,13 +136,37 @@ test('"action" creates the pong action, runs it, and reports the answer', async 
   assert.match(text(hops[2]), /action-1/);
 });
 
-test('"delete" calls delete_thing without confirmation and then asks for it', async () => {
-  const hops = await drive('please delete thing abc-def-123', null, (call) => ({ id: call.id, name: call.name, ok: false, summary: 'Refused', error: 'Refused: needs confirmation' }));
+test('"delete" calls delete_thing, and a needsConfirmation refusal points the user at the Confirm card', async () => {
+  const hops = await drive('please delete thing abc-def-123', null, (call) => ({ id: call.id, name: call.name, ok: false, summary: 'Refused', error: 'Waiting for the user’s confirmation: Delete thing abc-def-123' }));
   assert.equal(hops.length, 2);
   const call = toolUses(hops[0])[0];
   assert.equal(call.name, 'delete_thing');
-  assert.deepEqual(call.input, { id: 'abc-def-123', confirmed: false });
-  assert.match(text(hops[1]), /yes, delete abc-def-123/);
+  assert.deepEqual(call.input, { id: 'abc-def-123', name: 'the thing you mentioned' });
+  assert.match(text(hops[1]), /press Confirm on the card/);
+  // the client's Confirm sends "Confirmed: <summary>" — the script calls the tool again and reports the outcome
+  const confirmed = await drive('Confirmed: Delete "x" (thing abc-def-123)', null, (call) => ({ id: call.id, name: call.name, ok: true, summary: 'Deleted abc-def-123', data: { id: 'abc-def-123' } }));
+  assert.equal(toolUses(confirmed[0])[0].name, 'delete_thing');
+  assert.match(text(confirmed[1]), /abc-def-123 is gone for good/);
+});
+
+test('"purge" creates a deleting action and runs it; the confirmed turn only runs it', async () => {
+  // the scripted program passes the real action grammar and declares its delete
+  const purge = sanitizeActionCrystal(testPurgeAction());
+  assert.equal(purge.ok, true, JSON.stringify(purge));
+  const first = await drive('purge abc-def-123', null, (call) =>
+    call.name === 'run_action'
+      ? { id: call.id, name: call.name, ok: false, summary: 'Refused', error: 'Waiting for the user’s confirmation: Run the action "Purge"' }
+      : { id: call.id, name: call.name, ok: true, summary: 'created', data: { thing: { id: 'action-1' } } }
+  );
+  assert.equal(first.length, 3);
+  assert.equal(toolUses(first[0])[0].name, 'create_action');
+  assert.equal((toolUses(first[0])[0].input as any).crystal.actionKey, LOPU_TEST_PURGE_ACTION_KEY);
+  assert.deepEqual(toolUses(first[1])[0].input, { action: LOPU_TEST_PURGE_ACTION_KEY, inputs: { id: 'abc-def-123' } });
+  assert.match(text(first[2]), /press Confirm on the card/);
+  const confirmed = await drive('Confirmed: Run the action "Purge" (lopu-purge) with inputs {"id":"abc-def-123"} — it deletes things', null, (call) => ({ id: call.id, name: call.name, ok: true, summary: 'ran', data: { status: 'ok', result: 'purged' } }));
+  assert.equal(confirmed.length, 2);
+  assert.deepEqual(toolUses(confirmed[0])[0].input, { action: LOPU_TEST_PURGE_ACTION_KEY, inputs: { id: 'abc-def-123' } });
+  assert.match(text(confirmed[1]), /abc-def-123 is gone/);
 });
 
 test('a failed tool result is reported honestly instead of claimed', async () => {

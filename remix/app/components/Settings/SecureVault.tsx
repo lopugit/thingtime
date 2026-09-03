@@ -80,7 +80,15 @@ export const SecureVault = () => {
 	const selectTemplate = (id: string) => {
 		setTemplateId(id);
 		const selected = vault.providerTemplates.find((item) => item.id === id);
-		if (!selected) return;
+		if (!selected) {
+			// the custom endpoint has no template: clear the previous vendor's
+			// name/endpoint/model so a "compatible" row never points at a vendor
+			// host under a vendor's name by accident
+			setProviderName('Custom endpoint');
+			setProviderEndpoint('');
+			setProviderModel('');
+			return;
+		}
 		setProviderName(selected.label);
 		setProviderEndpoint(selected.endpoint);
 		setProviderModel(selected.model);

@@ -28,7 +28,10 @@ export interface LopuSettings {
 	dock: LopuDock;
 	// paint Lopu's builder patches into the open draft while she streams
 	applyPatches: boolean;
-	// ask before a delete_thing tool call is confirmed
+	// ask before deleting a CONVERSATION from the list (the sidebar's delete
+	// button). Lopu's own destructive tools (delete_thing, a whole-crystal
+	// replace, a deleting action) always need the server-verified Confirm card
+	// on the tool row — that is not a preference, so nothing here can turn it off
 	confirmDeletes: boolean;
 	// Enter sends, Shift+Enter adds a newline (false: Enter is a newline)
 	enterSends: boolean;
@@ -611,11 +614,14 @@ export const resolveLopuModelChoice = (catalog: LopuCatalog, settings: Pick<Lopu
 };
 
 const EFFORT_LABELS: Record<string, string> = {
+	none: 'None',
+	minimal: 'Minimal',
 	low: 'Low',
 	medium: 'Medium',
 	high: 'High',
 	xhigh: 'Extra high',
-	max: 'Max'
+	max: 'Max',
+	ultra: 'Ultra'
 };
 
 export const describeLopuEffort = (effort: string | null | undefined): string | null => {

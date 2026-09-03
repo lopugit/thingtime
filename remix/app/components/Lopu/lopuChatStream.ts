@@ -23,6 +23,10 @@ export type LopuReplyContext = {
 	viewport?: 'mobile' | 'desktop';
 };
 
+// A grant from a Confirm card (the `confirm` event): sent back verbatim so the
+// server can verify the viewer approved exactly that action.
+export type LopuReplyConfirmation = { key: string; token: string };
+
 export type LopuReplyBody = {
 	chatId?: string;
 	text: string;
@@ -31,9 +35,12 @@ export type LopuReplyBody = {
 	effort?: string;
 	speed?: string;
 	// one of the viewer's Secure Vault providers (GET /ai/models → vaultProviders[].id);
-	// the server resolves the credential, the client only ever names it
-	providerId?: string;
+	// the server resolves the credential, the client only ever names it. null
+	// says "Thingtime's models" explicitly (and clears the chat's pin); the key
+	// is omitted only when the client does not know the chat's setting
+	providerId?: string | null;
 	context?: LopuReplyContext;
+	confirmations?: LopuReplyConfirmation[];
 };
 
 // A non-OK reply response (401/409/429/5xx) — carries the API's `{ ok:false,

@@ -69,7 +69,9 @@ export const LopuToggle = ({ checked, onChange, label, disabled = false }: { che
 	/>
 );
 
-// A hairline segmented control (effort tiers).
+// A hairline segmented control (effort tiers). Wraps onto a second row when
+// a model offers more tiers than one row fits (OpenAI's seven) — every label
+// stays whole, nothing truncates.
 export const LopuSegmented = ({
 	options,
 	value,
@@ -81,7 +83,7 @@ export const LopuSegmented = ({
 	onChange: (value: string) => void;
 	label: string;
 }) => (
-	<Flex role="radiogroup" aria-label={label} bg={LOPU_UI.surfaceAlt} border={LOPU_UI.border} borderRadius={LOPU_UI.pill} p="2px" gap="2px">
+	<Flex role="radiogroup" aria-label={label} bg={LOPU_UI.surfaceAlt} border={LOPU_UI.border} borderRadius="15px" p="2px" gap="2px" flexWrap="wrap">
 		{options.map((option) => {
 			const selected = option.value === value;
 			return (
@@ -91,10 +93,10 @@ export const LopuSegmented = ({
 					key={option.value}
 					role="radio"
 					aria-checked={selected}
-					flex={1}
-					minW={0}
+					flex="1 1 auto"
+					minW="fit-content"
 					height="26px"
-					px={2}
+					px={2.5}
 					borderRadius={LOPU_UI.pill}
 					border={selected ? LOPU_UI.border : '1px solid transparent'}
 					bg={selected ? LOPU_UI.card : 'transparent'}
@@ -103,8 +105,6 @@ export const LopuSegmented = ({
 					fontWeight={600}
 					lineHeight={1}
 					whiteSpace="nowrap"
-					overflow="hidden"
-					textOverflow="ellipsis"
 					cursor="pointer"
 					transition={`background ${LOPU_UI.transitionFast}, color ${LOPU_UI.transitionFast}`}
 					_hover={selected ? undefined : { color: LOPU_UI.ink }}
@@ -118,8 +118,15 @@ export const LopuSegmented = ({
 	</Flex>
 );
 
-const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProviderOption; selected: boolean; compact: boolean; onPick: (option: LopuProviderOption) => void }) => (
+const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProviderOption; selected: boolean; compact: boolean; onPick: (option: LopuProviderOption) => void }) => {
+	const rowRef = React.useRef<HTMLButtonElement | null>(null);
+	// the list is long (two families + the vault): open on the current choice
+	React.useEffect(() => {
+		if (selected) rowRef.current?.scrollIntoView({ block: 'nearest' });
+	}, [selected]);
+	return (
 	<Box
+		ref={rowRef}
 		as="button"
 		type="button"
 		role="option"
@@ -169,7 +176,8 @@ const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProvider
 			</Box>
 		) : null}
 	</Box>
-);
+	);
+};
 
 export type LopuModelPickerProps = {
 	models: AiModelPublic[];

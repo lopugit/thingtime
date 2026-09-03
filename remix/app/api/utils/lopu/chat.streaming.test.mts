@@ -187,9 +187,20 @@ const fakeRunTool = async (call: ToolCallRecord, ctx: any) => {
     ctx.emit({ type: 'thing', id: call.id, kind: 'webpage', thing: { id: 'page-new', thingtime: ['webpage'], crystal: call.input } });
     return { ok: true, summary: `Created page "${call.input?.name}"`, data: { pageId: 'page-new', thing: { id: 'page-new' } } };
   }
-  if (call.name === 'delete_thing') return { ok: false, error: 'Refused: deleting needs confirmation' };
+  if (call.name === 'delete_thing') {
+    // the real executor's contract: an approved key runs, anything else
+    // mints a grant, hands the client a confirm event and tells the model to wait
+    const id = String(call.input?.id ?? '');
+    const key = `delete_thing:${id}`;
+    if (ctx.confirmations.consume(key)) return { ok: true, summary: `Deleted ${id}`, data: { id } };
+    const grant = await ctx.confirmations.mint({ key, tool: 'delete_thing', summary: `Delete thing ${id}`, subject: { id } });
+    ctx.emit({ type: 'confirm', id: call.id, name: 'delete_thing', key, token: grant.token, expiresAt: grant.expiresAt, summary: `Delete thing ${id}`, subject: { id } });
+    return { ok: false, needsConfirmation: true, error: 'Refused: deleting needs the user’s confirmation' };
+  }
   return { ok: true, summary: `${call.name} ok`, data: { echo: call.input } };
 };
+
+const fakeMint = async ({ action }: { action: { key: string } }) => ({ token: `grant-for-${action.key}`, expiresAt: '2099-01-01T00:00:00.000Z' });
 
 const turn = (text: string, choiceId: string | null, extra: Record<string, unknown> = {}) =>
   streamLopuChatTurn({
@@ -201,7 +212,7 @@ const turn = (text: string, choiceId: string | null, extra: Record<string, unkno
     history: [{ role: 'user', text: 'earlier question' }, { role: 'assistant', text: 'earlier answer' }],
     choice: choiceId ? parseAiWorkflowModelOptionId(choiceId) : null,
     context: { route: '/builder', page: { id: 'page-1', source: 'user', blocks: [{ id: 'title', type: 'text', text: 'Hi' }] } },
-    deps: { runTool: fakeRunTool as any, fallbackPaceMs: 0, testPaceMs: 0 },
+    deps: { runTool: fakeRunTool as any, mintConfirmation: fakeMint as any, fallbackPaceMs: 0, testPaceMs: 0 },
     ...extra
   });
 
@@ -495,6 +506,55 @@ test('a plain completion that is a bare tool-call object still runs the tool (te
   assert.equal(outcome.stopReason, 'end_turn');
   assert.equal(openAiRequests.length, 3);
   assert.equal(openAiRequests[2].body.stream, false);
+});
+
+test('a destructive tool stops for the user (confirm → tool_result needsConfirmation → the model is told to wait); a verified grant lets it run and is listed in the live context', async () => {
+  anthropicPlans.push(
+    { blocks: [{ type: 'tool_use', id: 'toolu_del', name: 'delete_thing', inputChunks: ['{"id":"thing-9","confirmed":true}'] }], stopReason: 'tool_use' },
+    { blocks: [{ type: 'text', text: 'Please confirm on the card.' }], stopReason: 'end_turn' }
+  );
+  const first = await collect(turn('delete thing-9', 'claude-opus-5:high'));
+  assert.deepEqual(types(first.events), ['meta', 'tool_use_start', 'tool_input_delta', 'tool_use', 'confirm', 'tool_result', 'delta']);
+  const confirm = first.events.find((event) => event.type === 'confirm');
+  assert.deepEqual(confirm, {
+    type: 'confirm',
+    id: 'toolu_del',
+    name: 'delete_thing',
+    key: 'delete_thing:thing-9',
+    token: 'grant-for-delete_thing:thing-9',
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    summary: 'Delete thing thing-9',
+    subject: { id: 'thing-9' }
+  });
+  const refused = first.events.find((event) => event.type === 'tool_result');
+  assert.equal(refused.ok, false);
+  assert.equal(refused.needsConfirmation, true);
+  assert.equal(first.outcome.toolCalls[0].ok, false);
+  // the model reads a refusal (is_error) — never the token
+  const fed = anthropicRequests[1].body.messages.at(-1).content[0];
+  assert.equal(fed.is_error, true);
+  assert.match(fed.content, /confirmation/i);
+  assert.doesNotMatch(JSON.stringify(anthropicRequests[1].body), /grant-for-/);
+  assert.doesNotMatch(anthropicRequests[0].body.system[1].text, /Approved by the user/);
+  assert.match(anthropicRequests[0].body.system[0].text, /## Untrusted content/);
+
+  // the user pressed Confirm: the route verified the grant and hands the
+  // approved key over — the executor runs, the live context names the approval
+  anthropicPlans.push(
+    { blocks: [{ type: 'tool_use', id: 'toolu_del2', name: 'delete_thing', inputChunks: ['{"id":"thing-9"}'] }], stopReason: 'tool_use' },
+    { blocks: [{ type: 'text', text: 'Gone.' }], stopReason: 'end_turn' }
+  );
+  const approved = await collect(
+    turn('Confirmed: Delete thing thing-9', 'claude-opus-5:high', {
+      approvedConfirmations: [{ key: 'delete_thing:thing-9', tool: 'delete_thing', summary: 'Delete thing thing-9' }]
+    })
+  );
+  assert.deepEqual(types(approved.events), ['meta', 'tool_use_start', 'tool_input_delta', 'tool_use', 'tool_result', 'delta']);
+  const ran = approved.events.find((event) => event.type === 'tool_result');
+  assert.equal(ran.ok, true);
+  assert.equal(ran.needsConfirmation, undefined);
+  assert.match(anthropicRequests[2].body.system[1].text, /Approved by the user for THIS reply[\s\S]*- delete_thing: Delete thing thing-9 \(key delete_thing:thing-9\)/);
+  assert.equal(text(approved.events), 'Gone.');
 });
 
 test('the tool budget refuses the overflow, emits an error, and forces a final text hop with tool_choice none', async () => {

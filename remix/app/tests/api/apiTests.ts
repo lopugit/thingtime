@@ -977,6 +977,72 @@ export const apiTests: ApiTestDefinition[] = [
     }
   },
   {
+    id: 'lopu-chats-reply-json-only',
+    name: 'Lopu reply requires JSON',
+    description:
+      'POST /api/v1/lopu/chats/reply with a safelisted text/plain body is refused with 415 for a session before any turn is persisted or the reply budget is spent (401 anonymously, 403 for a temporary account) — the simple-request CSRF path stays closed.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: { text: 'hello', requestId: 'tt-api-test-json-only' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON Lopu reply body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-forged-confirmation',
+    name: 'Lopu reply verifies confirmations',
+    description:
+      'POST /api/v1/lopu/chats/reply carrying a confirmation grant that cannot be verified (here: one without the conversation it was minted for) is a 400 error shape for a session before anything is persisted (401 anonymously, 403 for a temporary account) — a destructive tool never runs on an unverified grant.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: () => ({ text: 'Confirmed: delete', requestId: `tt-api-test-${uniqueSuffix()}`, confirmations: [{ key: 'delete_thing:tt-api-test-thing', token: 'forged.grant.value' }] }),
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'The unverifiable confirmation was refused with an error shape and nothing streamed.')
+  },
+  {
+    id: 'lopu-vault-guarded',
+    name: 'Lopu Secure Vault requires a session',
+    description: 'GET /api/v1/lopu/vault without a session is rejected with a 401 error shape and never lists vault metadata.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/vault',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous vault read was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-vault-json-only',
+    name: 'Lopu Secure Vault writes require JSON',
+    description: 'POST /api/v1/lopu/vault with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/vault',
+    body: { action: 'delete', id: 'tt-api-test-missing' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON vault write was refused with an error shape.')
+  },
+  {
+    id: 'lopu-voice-reply-guarded',
+    name: 'Lopu voice turn requires a session',
+    description: 'POST /api/v1/lopu/voice/reply without a session is rejected with a 401 error shape before any transcript page or provider call.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/reply',
+    body: { transcript: 'hello', sessionId: 'tt-api-test', transcribeMode: true },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous voice turn was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-voice-reply-json-only',
+    name: 'Lopu voice turn requires JSON',
+    description: 'POST /api/v1/lopu/voice/reply with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/reply',
+    body: { transcript: 'hello', sessionId: 'tt-api-test', transcribeMode: true },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON voice body was refused with an error shape.')
+  },
+  {
     id: 'mongodb-status',
     name: 'MongoDB status',
     description: 'MongoDB status route returns connection status.',

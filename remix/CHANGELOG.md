@@ -17,6 +17,89 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Lopu wave 2 hardening: server-verified confirmations, JSON fences, deterministic provider choice (PR #592) — Claude (AI)
+
+- Adversarial-review fixes; details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` §0, §1.3,
+  §2.3, §2.4 "Confirmations", §2.6) and `TESTING.md` ("Lopu AI assistant").
+- **Destructive tools wait for the user** (was: gated by a model-asserted
+  `confirmed` flag that prompt injection through tool results / page blocks
+  could set): `delete_thing`, `update_thing` with `replaceCrystal`, and
+  `run_action` on a program that deletes things now stop with a `confirm`
+  event carrying a server-signed grant (purpose JWT bound to user + chat +
+  action key, 15 min) and `tool_result.needsConfirmation`; the tool card's
+  Confirm sends the grant back once as `confirmations: [{ key, token }]`,
+  the route verifies it (400 otherwise) and the executor spends it once per
+  turn. The stable prompt gains the "Untrusted content" rule and the page
+  blocks arrive fenced. The "Confirm deletes" preference is renamed to what it
+  gates (deleting a conversation from the list).
+- `/api/v1/lopu/chats/reply` (1.2.0), `/voice/reply` and `/vault` (1.0.1)
+  apply the JSON-only CSRF fence (415) before reading the body or spending a
+  bucket; voice/vault refuse a temporary session (403); the chat write buckets
+  (create/update 1.1.1, delete 1.0.1) fail closed. Capability pins updated.
+- The client states `providerId` explicitly (`null` included) whenever it
+  knows the chat's settings, so a refused `/update` or a de-listed provider can
+  never route a turn behind the picker's back; the window's header chip reads
+  the per-chat store settings and lists "Your providers".
+- A chat whose stored effort/speed is `null` inherits the admin defaults
+  (was: the provider's own default); `'vault'` rows persist `providerLabel`;
+  a first turn that fails to persist discards the chat it just created; the
+  bubble link guard rejects `/\host` (browsers read `\` as `/`), NAT64
+  `64:ff9b::/96` is blocked, the vault's "custom endpoint" template starts
+  blank, persisted message bubbles are memoised.
+- Coverage: `chatTools`/`confirmations`/`chatPrompt`/`chat.streaming`/
+  `lopuTurnCore`/`lopuChatStore`/`userVaultCore`/`lopuChats` unit tests,
+  6 new `apiTests` lopu entries, `verify-lopu.mjs` §A fences + §H2
+  confirmations (delete_thing + a deleting `run_action` through the scripted
+  provider's new `purge` script).
+
+### 2026-09-04 — Lopu wave 2: voice in the chat page, your own providers, design pass, navbar 🦄 (PR #592) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`, §1.3 own
+  providers, §3.2 surfaces, §6 voice + Secure Vault — the Codex voice note is
+  folded in there) and the checklist in `TESTING.md` ("Lopu AI assistant").
+- **Voice unified into the Lopu page**: `/lopu` | `/lopu/voice` is a
+  route-driven Chat | Voice switch on one `LopuPage`; `useLopuVoice`
+  (`LopuVoiceControls.tsx`) owns SpeechRecognition / the iOS bridge /
+  speechSynthesis and the feedback-loop guard, every final utterance is a
+  normal chat turn (tools included, the chat's model or provider), Transcribe
+  mode keeps `/api/v1/lopu/voice/reply` and its quotes render inside the
+  conversation list; settings `spokenReplies` / `transcribe` / `providerId`
+  are mirrored in Settings → Lopu 🦄 and the user-settings modal.
+- **Your own providers**: `GET /api/v1/ai/models` returns redacted
+  `vaultProviders` + `vault.configured` for a session; chats carry
+  `lopu.providerId` (create / update / list) and `POST /api/v1/lopu/chats/reply`
+  runs a pinned turn on the caller's Secure Vault connection (Anthropic path
+  or the OpenAI-compatible path with native tools / the fenced `tt-tool`
+  protocol) through the shared SSRF fence in `lopu/vaultProviderClient.ts`,
+  which `voice.ts` now delegates to; meta `provider: "vault"` +
+  `providerLabel`; the server keys are never a fallback. Capability bumps
+  `ai-models` 1.2.0, `admin-ai-models` / `settings-lopu-chat-defaults` /
+  `lopu-chats` / `lopu-chats-update` / `lopu-chats-reply` 1.1.0 are now
+  published through `contractVersion` (what `/api/v1/capabilities` reads)
+  as well as `featureVersion`, pinned in both manifest tests.
+- **Design pass** (`lopuTheme.ts` tokens only, light + dark): one calm
+  neutral surface with a single restrained rainbow (ring, caret, send/mic),
+  18px bubbles, 760px centred column, 272px conversations sidebar, mobile
+  full-screen with the composer above the safe area, compact floating window,
+  markdown code copy button, aria-live streaming bubble, model picker grouped
+  Claude / OpenAI / Your providers with unavailable reasons and a "Manage your
+  providers" footer.
+- **Navbar 🦄** (`LopuNavButton`, beside ⌘K, hidden on `/lopu*`) toggles the
+  restyled floating window (avatar/status header, mic, model chip, open-full,
+  minimise, close; launcher ring; mobile sheet); Drawer → Lopu gains Voice and
+  Secure Vault (`/settings#secure-vault`) children.
+- Integration pass fixes: the site "Edit page" pill hides on `/lopu/*`
+  (`SiteBlocksHost`), the conversations sidebar clears it, the effort control
+  wraps for OpenAI's seven tiers (labels for `none` / `minimal` / `ultra`),
+  the picker opens on the current choice, persisted rows show the catalog
+  label, previews strip markdown, and voice transcript rows sit inside the
+  conversation list (`LopuChatView` `trailing`).
+- Live verification: `node scripts/verify-lopu.mjs <base>` (147 checks incl. the
+  vault-unconfigured path; the BYO turn needs `THINGTIME_USER_VAULT_KEY` and
+  `THINGTIME_LOPU_PROVIDER_DEV_REWRITES`, README "Lopu AI assistant").
+
 ### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
 
 - Grouped summary; the normative design lives in

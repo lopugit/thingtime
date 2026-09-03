@@ -35,7 +35,7 @@ import {
 	resolveLopuDraft,
 	type LopuDraftHandle
 } from './lopuBuildBridge';
-import { isAbortError, readNdjson, type LopuReplyBody, type LopuReplyContext } from './lopuChatStream';
+import { isAbortError, readNdjson, type LopuReplyBody, type LopuReplyConfirmation, type LopuReplyContext } from './lopuChatStream';
 import {
 	findLopuVaultProvider,
 	normalizeLopuVaultInfo,
@@ -48,13 +48,16 @@ import {
 	buildAssistantMessages,
 	buildUserMessage,
 	chatTitleFromText,
+	confirmationMessageText,
 	initialLopuTurn,
+	isLopuConfirmUsable,
 	isLopuTurnActive,
 	isOptimisticLopuMessage,
 	markLopuTurnAborted,
 	markLopuTurnFailed,
 	mergeMessages,
 	reduceLopuTurn,
+	resolveLopuToolConfirm,
 	type LopuChatEvent,
 	type LopuPatchTarget,
 	type LopuThingLike,
@@ -861,9 +864,13 @@ export type SendLopuOptions = {
 	context?: LopuReplyContext;
 	// apply Lopu's builder patches to the mounted draft live (settings.lopu.applyPatches)
 	applyPatches?: boolean;
+	// grants from Confirm cards the viewer pressed (confirmLopuTool sets them)
+	confirmations?: LopuReplyConfirmation[];
 };
 
-export type SendLopuResult = { ok: true; requestId: string; chatId: string | null } | { ok: false; error: string; text: string };
+// chatIdKnown: the failed send DID reach the server (meta arrived) — a Confirm
+// card must then stay retired, since its grant may have been spent
+export type SendLopuResult = { ok: true; requestId: string; chatId: string | null } | { ok: false; error: string; text: string; chatIdKnown?: boolean };
 
 /**
  * Send one turn: stream the reply, fold every event into the turn state,
@@ -968,7 +975,13 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	};
 
 	// the catalog choice always rides along (the server persists it as the
-	// chat's settings); a providerId on top says "think with my provider"
+	// chat's settings); a providerId on top says "think with my provider".
+	// Whenever the client knows the chat's own settings (its summary carries a
+	// `lopu` block) the provider choice is stated on the wire even when it is
+	// null — a pin the server still holds (a refused update, a provider the
+	// vault no longer lists) must never route the turn behind the picker's back
+	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
+	const statesProvider = !!settings.providerId || !!activeChat?.lopu;
 	const body: LopuReplyBody = {
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
@@ -976,8 +989,9 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		...(settings.model ? { model: settings.model } : {}),
 		...(settings.effort ? { effort: settings.effort } : {}),
 		...(settings.speed ? { speed: settings.speed } : {}),
-		...(settings.providerId ? { providerId: settings.providerId } : {}),
-		...(options.context ? { context: options.context } : {})
+		...(statesProvider ? { providerId: settings.providerId ?? null } : {}),
+		...(options.context ? { context: options.context } : {}),
+		...(options.confirmations?.length ? { confirmations: options.confirmations } : {})
 	};
 
 	let failure: string | null = null;
@@ -999,7 +1013,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	// paints from tool calls that never finished go back to how the page was
 	for (const tool of turn.tools) if (tool.status === 'error' && !tool.result) discardToolPaint(tool.id);
 
-	if (state.userId !== userId) return { ok: false, error: 'The account changed while Lopu was replying', text: trimmed };
+	if (state.userId !== userId) return { ok: false, error: 'The account changed while Lopu was replying', text: trimmed, chatIdKnown: !!turn.meta };
 
 	const finalChatId = turn.chatId;
 	if (!turn.meta || !finalChatId) {
@@ -1027,6 +1041,51 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
 	if (controller) controller.abort();
+};
+
+// ——— confirmations (design note §2.4) ——————————————————————————————————————
+
+const setConfirmResolution = (requestId: string, toolId: string, resolution: 'confirmed' | 'declined' | null) => {
+	setState((current) => {
+		const turn = current.turns[requestId];
+		if (!turn) return {};
+		const tools = turn.tools.map((tool) => (tool.id === toolId && tool.confirm ? { ...tool, confirm: { ...tool.confirm, resolved: resolution } } : tool));
+		return { turns: { ...current.turns, [requestId]: { ...turn, tools, sequence: turn.sequence + 1 } } };
+	});
+};
+
+export type ConfirmLopuOptions = Pick<SendLopuOptions, 'context' | 'applyPatches'>;
+
+/**
+ * The viewer pressed Confirm on a tool card: send the grant back as a normal
+ * turn ("Confirmed: …" + confirmations) so the server verifies it and Lopu
+ * runs the action. The card is retired first (a grant is never re-sent); a
+ * send that never left the client puts it back so they can try again.
+ */
+export const confirmLopuTool = async (requestId: string, toolId: string, options: ConfirmLopuOptions = {}): Promise<SendLopuResult> => {
+	const turn = state.turns[requestId];
+	const tool = turn?.tools.find((entry) => entry.id === toolId);
+	const confirm = tool?.confirm;
+	if (!turn || !confirm) return { ok: false, error: 'That confirmation is gone — ask Lopu again', text: '' };
+	if (!isLopuConfirmUsable(confirm)) {
+		notice('That confirmation expired — ask Lopu again and confirm afresh', { status: 'info' });
+		return { ok: false, error: 'That confirmation expired', text: '' };
+	}
+	if (!turn.chatId) return { ok: false, error: 'That conversation is gone', text: '' };
+	if (state.activeChatId !== turn.chatId) selectLopuChat(turn.chatId);
+	setState((current) => (current.turns[requestId] ? { turns: { ...current.turns, [requestId]: resolveLopuToolConfirm(current.turns[requestId], toolId, 'confirmed') } } : {}));
+	const result = await sendLopuMessage(confirmationMessageText(confirm), {
+		...(options.context ? { context: options.context } : {}),
+		...(options.applyPatches !== undefined ? { applyPatches: options.applyPatches } : {}),
+		confirmations: [{ key: confirm.key, token: confirm.token }]
+	});
+	if (result.ok === false && !result.chatIdKnown) setConfirmResolution(requestId, toolId, null);
+	return result;
+};
+
+/** The viewer pressed Cancel: the card is retired locally; nothing is sent. */
+export const declineLopuTool = (requestId: string, toolId: string): void => {
+	setConfirmResolution(requestId, toolId, 'declined');
 };
 
 // ——— selectors ———————————————————————————————————————————————————————————

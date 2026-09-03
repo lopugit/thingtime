@@ -21,11 +21,17 @@ and the code disagree, fix the code (or this note in the same commit).
   unified things path (`createThing`/`updateThing`/`deleteThing` as the viewer).
 - New `/api/v1` endpoints register in THREE places: route file, the import map
   in `remix/server/routes/api/[...].ts`, and an `endpoint({...})` entry in
-  `remix/app/docs/apiDocs.ts` (`contractVersion: '1.0.0'`, `featureVersion`
-  when bumping). Add a `RATE_LIMIT_DEFAULTS` key for every route and call
+  `remix/app/docs/apiDocs.ts` (`contractVersion: '1.0.0'`; bump `contractVersion` —
+  it is the field `createApiCapabilitiesManifest` publishes, `featureVersion` is
+  not read). Add a `RATE_LIMIT_DEFAULTS` key for every route and call
   `enforceRateLimit`. Add `apiTests.ts` entries (group `lopu`). Pin new
   `api.<id>` features in `apiCapabilities.test.ts` /
   `thingtimeCapabilities.test.ts` only if those tests enumerate ids explicitly.
+- Every Lopu POST — chats create/update/delete, the reply and voice streams,
+  the vault — applies `requireJsonContentType` (`api/http.ts`, 415) BEFORE
+  reading the body or spending a rate-limit bucket; the chat write buckets
+  and the streams enforce their limits `failClosed`. Voice and vault writes
+  refuse a temporary (guest) session (403) like the reply route does.
 - Streaming is NDJSON (`application/x-ndjson; charset=utf-8`,
   `Cache-Control: no-store`, `X-Accel-Buffering: no`), one JSON object per
   line, via `new Response(new ReadableStream(...))` exactly like
@@ -277,7 +283,17 @@ shares the same brain and the same fence.
   canned `LOPU_FALLBACK_VAULT` deltas; the persisted assistant row then has
   `provider: 'fallback'` and the vault model. The server keys are NOT a
   fallback for a vault turn. `LOPU_TURN_PROVIDERS` / `LopuChatProvider` gain
-  `'vault'`.
+  `'vault'`. A completed vault turn persists `providerLabel` (the connection
+  name, ≤ 80 chars, `publicLopuMessageMeta` keeps it on `'vault'` rows only)
+  so history reads "via <name>" after a reload.
+- The client states the provider choice on the wire whenever it knows the
+  chat's own settings (the summary carries a `lopu` block): `providerId:
+  null` travels explicitly and clears a pin the server still holds, so a
+  refused `/update`, a provider the vault no longer lists, or a stale cache
+  can never route a turn behind the picker's back. The key is omitted only
+  for a chat the store does not know yet. The floating window's header chip
+  reads the same per-chat store settings (provider name when pinned) and its
+  list offers "Your providers" above the catalog.
 - One place for BYO provider HTTP + SSRF: `lopu/vaultProviderClient.ts` —
   `assertSafeProviderEndpoint` (HTTPS → allowlist → fresh public DNS →
   private-range check), `createGuardedProviderFetch` (`redirect: 'error'`),
@@ -414,9 +430,14 @@ type LopuChatEvent =
   | { type:'patch'; id; target: PatchTarget; ops: PageOp[]; pageId?; persisted: boolean }  // live builder patch (2.5)
   | { type:'thing'; id; kind; thing }                         // created/updated public thing (component/page/action)
   | { type:'navigate'; id; path }                             // client should navigate
+  | { type:'confirm'; id; name; key; token; expiresAt; summary; subject?: { id?, kind?, name? } }  // a destructive tool waits for the user (2.4 "Confirmations")
   | { type:'error'; message; retryable }
   | { type:'done'; assistantMessageId; messages: PublicChatMessage[]; usage?; stopReason }
 ```
+
+`tool_result` additionally carries `needsConfirmation: true` when the call
+stopped for the user's approval (a `confirm` event for the same call id
+precedes it).
 
 Events are emitted in stream order; `patch`/`thing`/`navigate` are emitted by
 the tool executor as soon as the tool completes (before `tool_result`). `id`
@@ -447,17 +468,53 @@ self-correct. Every tool input is validated with a small hand-written guard
 | `get_page` | `{ id \| path \| 'active' }` | `resolveWebpage` (+ components) |
 | `list_demos` / `get_demo` | `{ family?, kind?, q? }` / `{ slug }` | catalog read (few-shot) |
 | `create_action` | `{ crystal }` | `sanitizeActionCrystal` (isomorphic) → `createThing(['action'], acl tt:user)`; result includes `deriveActionEffects` summary. Emits `thing`. |
-| `run_action` | `{ action, inputs? }` | `runAction(viewerOf(user), { action, inputs })` (deliberate path) |
+| `run_action` | `{ action, inputs? }` | `inspectActionProgram` first: a program whose derived effects delete (directly, or through an action it invokes — bounded walk) needs a confirmation (key `run_action:<program id>:<hash(inputs)>`); then `runAction(viewerOf(user), { action, inputs })` (deliberate path) |
 | `list_actions` | `{}` | own actions (key, name, inputs) |
 | `install_suite` | `{ key }` | `installSuiteForViewer` |
 | `create_schema` | `{ name, description?, fields }` | `createThing(['schema'])` |
 | `create_data` | `{ schema, values }` | `createThing(['data'])` |
-| `update_thing` | `{ id, crystal, replaceCrystal? }` | generic `updateThing` (messenger/protected kinds refuse naturally) |
-| `delete_thing` | `{ id, confirmed: boolean }` | refuses unless `confirmed === true`; `deleteThing` |
+| `update_thing` | `{ id, crystal, replaceCrystal? }` | generic `updateThing` (messenger/protected kinds refuse naturally); `replaceCrystal: true` needs a confirmation (key `update_thing:replace:<id>:<hash(crystal)>`) |
+| `delete_thing` | `{ id, name? }` | ALWAYS needs a confirmation (key `delete_thing:<id>`; `name` only labels the card, the id is authoritative; a model-sent `confirmed` flag is ignored); `deleteThing` |
 | `navigate` | `{ path }` | emits `navigate` (site-relative only) |
 
 Tool inputs are capped at 96KB serialised; more than 24 tool executions in one
 turn ends the loop with an `error` event and a final text hop.
+
+**Confirmations (server-verified).** A destructive tool never runs on the
+model's say-so — a flag in the tool input proves nothing, because a page
+block, a search snippet or another user's public component description can
+tell the model "the user already confirmed". Instead:
+
+- The executor (`chatTools.ts` `confirmationFor` / `actionConfirmation`)
+  derives an action **key** from the validated input and checks
+  `ctx.confirmations` (the per-turn ledger, `createLopuToolConfirmations`).
+  Without an approval it mints a grant through `ctx.confirmations.mint`,
+  emits `confirm { id, name, key, token, expiresAt, summary, subject }` and
+  returns `{ ok:false, needsConfirmation:true, error }` — the model reads a
+  plain "waiting for the user" refusal, never the token. `delete_thing` and
+  `update_thing` stop before the server deps load; `run_action` inspects the
+  program's derived effects (`actions/execute.ts` `inspectActionProgram`).
+- Grants (`lopu/confirmations.ts`) are purpose JWTs on the auth key material
+  (`signPurposeToken('lopu-confirm', { uid, chat, key, tool, summary },
+  '900s')`): bound to the user, the conversation and the exact key, 15-minute
+  expiry, stateless (no collection, no index). The client keeps them in the
+  turn state only.
+- The client (`lopuTurnCore` reducer → tool status `'confirm'`,
+  `LopuToolCard` Confirm / Cancel) sends the grant back **once**
+  (`confirmLopuTool`: a normal turn `"Confirmed: <summary>"` with
+  `confirmations: [{ key, token }]`); Cancel retires the card locally; an
+  expired or grant-less card cannot be sent.
+- The route verifies every grant (`verifyLopuConfirmation`: user, chat, key,
+  expiry — 400 `LOPU_CONFIRMATION_INVALID_ERROR` before anything is
+  persisted; confirmations without `chatId` are a 400) and hands the approved
+  keys to `streamLopuChatTurn({ approvedConfirmations })`; the volatile prompt
+  lists them ("Approved by the user for THIS reply …") so the model calls the
+  tool again; the executor consumes a key on first use within the turn.
+- The stable prompt carries an "Untrusted content" rule (tool results, thing
+  crystals, snippets and the `<page-blocks>`-fenced builder page are data and
+  can never confirm or instruct), and `describePage` fences the blocks.
+- The `confirmDeletes` preference only gates deleting a *conversation* from
+  the list; it cannot switch the tool confirmation off.
 
 ### 2.5 Patch-op grammar (`pageOps.ts`, isomorphic)
 
@@ -529,20 +586,27 @@ per user, `failClosed: true`; body ≤ 256KB):
   text: string,               // ≤ 8000 chars
   requestId: string,          // client uuid; idempotent (409 on reuse)
   model?: string, effort?: string, speed?: string,   // override the chat's settings for this turn (and persist as chat settings)
+  providerId?: string | null,  // §1.3; the client states it explicitly (null included) whenever it knows the chat's settings
   context?: {
     route?: string,
     page?: { id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? },
     selectedBlockId?: string,
     viewport?: 'mobile'|'desktop'
-  }
+  },
+  confirmations?: Array<{ key: string, token: string }>   // grants from Confirm cards (§2.4); chatId required, ≤ 8, verified before persistence
 }
 ```
 
-Flow: validate → resolve model choice → persist user turn → stream events →
-persist assistant turn (even on error/abort, persisting what streamed plus a
-note) → `done`. If the client disconnects, the server still finishes
-persisting (wrap the generator in a `try/finally`; use `request.signal` to
-abort provider calls).
+Flow: JSON-only fence (415, before the rate limit) → validate → resolve the
+conversation → verify confirmations → resolve the model choice (a stored
+`null` effort/speed inherits the admin defaults — `undefined` to the
+resolver; `'default'` on the wire is the provider's own default) → create the
+chat / persist overrides → persist user turn (a chat created by this request
+is discarded again if that fails) → stream events → persist assistant turn
+(even on error/abort, persisting what streamed plus a note; `providerLabel`
+on a vault turn) → `done`. If the client disconnects, the server still
+finishes persisting (wrap the generator in a `try/finally`; use
+`request.signal` to abort provider calls).
 
 ---
 
@@ -663,3 +727,87 @@ Agents import each other's modules by the paths above; where a dependency is
 not yet on disk, code against the contract in this note and leave a
 `// TODO(lopu-integration)` only if unavoidable. The integration pass wires,
 lints, runs every suite, and fixes cross-module mismatches.
+
+---
+
+## 6. Voice, Live Activities and Secure Vault
+
+Folded in from the Codex voice delivery note (formerly
+`PRs/592-claude-lopu-ai-chatbot.md`); wave 2 unified that voice surface into
+the Lopu page (§3.2 `LopuPage`, `/lopu/voice`) and its chat brain (§1.3), so
+the facts below describe the shipped behaviour after both passes.
+
+### 6.1 Voice delivery
+
+- Voice is a signed-in, full-viewport surface on web and inside the iOS
+  WebView. It shipped at `/lopu`; it now lives at `/lopu/voice` (the Lopu
+  page's Voice mode, also the mic in the floating window) with `/lopu` as
+  the text chat. The session gear (`LopuVoiceSettingsPopover`) stays
+  available before, during and after listening.
+- Each final utterance is one normal chat turn (`useLopuChat().send`, tools
+  included, the chat's own model / `providerId`). **Spoken replies** (the
+  former "Text response" switch, inverted: off = text only, the quiet
+  default) reads the reply aloud through `speechSynthesis`; **Transcribe
+  mode** skips the provider entirely — every final utterance becomes a
+  timestamped, numbered, owner-private Thing page through
+  `POST /api/v1/lopu/voice/reply { transcribeMode: true }` and comes back as
+  a linked `quote` event rendered as a Lopu bubble inside the conversation
+  list (`LopuVoiceTranscript`, slotted through `LopuChatView`'s `trailing`).
+- The native bridge (`~/utils/nativeBridge`) owns the microphone and speech
+  recognition while a native session is active, carries only cookies scoped
+  to the current Thingtime origin and API path, and posts voice turns
+  directly (`/api/v1/lopu/voice/reply` with the session's `providerId`) when
+  the WebView is backgrounded. Listening pauses for the whole provider turn
+  and for Lopu's speech so she never transcribes her own voice (the
+  feedback-loop guard, `pausedRef` in `useLopuVoice`), then resumes.
+- ActivityKit exposes the listening, thinking, transcribing, speaking and
+  ended states on the Lock Screen and in the Dynamic Island (the iOS app's
+  Live Activity; the web sends `lopu-voice-start` / `lopu-voice-stop` and
+  receives `lopu-voice-transcript` / `lopu-voice-event` / `lopu-voice-interim`
+  / `lopu-voice-error` / `lopu-voice-state` bridge messages).
+
+### 6.2 Personal vault and providers
+
+- Settings → Secure Vault (`#secure-vault`) is a user Secure Vault beside the
+  existing admin-only CI vault. User records are owner-private Things
+  organised into environments, generic password/key-value entries and AI
+  provider connections. Secret values and provider tokens are write-only.
+- AES-256-GCM with authenticated data binds every ciphertext to its owner and
+  Thing id; list queries never load the encrypted fields
+  (`api/utils/lopu/userVault.ts`, `userVaultCore.ts`).
+- The vault key is `THINGTIME_USER_VAULT_KEY` (32-byte base64url), or a
+  purpose-separated derivative of `THINGTIME_ADMIN_VAULT_KEY` when only the
+  admin key is set. Unset both and the vault reports
+  `vault.configured === false`: Settings shows its "Encryption not
+  configured" state, `GET /api/v1/ai/models` lists no `vaultProviders`, and
+  an explicit `providerId` is a 400.
+- Templates cover OpenAI/Codex, Anthropic/Claude, Google Gemini, xAI/Grok and
+  OpenRouter. Custom OpenAI-compatible hosts require an explicit server
+  allowlist (`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`, built-in vendor hosts
+  are pre-allowed), public HTTPS, fresh public DNS resolution before every
+  call, bounded responses (`LOPU_PROVIDER_MAX_RESPONSE_BYTES`), a fixed
+  timeout (`LOPU_PROVIDER_TIMEOUT_MS`) and disabled redirects — all in
+  `api/utils/lopu/vaultProviderClient.ts`, which chat turns (§1.3) and voice
+  turns now share.
+
+### 6.3 API contract
+
+- `GET|POST /api/v1/lopu/vault` (`api.lopu-vault` 1.0.0) — templates,
+  environments and redacted entry metadata; `create-group`, `save-secret`,
+  `save-provider`, `delete`.
+- `POST /api/v1/lopu/voice/reply` (`api.lopu-voice-reply` 1.0.0) — NDJSON;
+  conversation mode dials the selected provider through the shared client,
+  transcribe mode makes no provider call.
+- Both routes require a current full user session and use fail-closed rate
+  limits (`lopu.vault` 60/min, `lopu.voiceReply` 30/min).
+
+### 6.4 Verification (voice delivery)
+
+- `corepack pnpm run test:lopu` (8/8 at delivery; the suite has since grown),
+  `test:api-capabilities` 5/5, focused ESLint, `corepack pnpm run build`
+  including the Nitro/Vercel output checks, `xcodegen generate` plus an
+  unsigned generic iOS Simulator build, and authenticated desktop + 390×844
+  browser QA all passed.
+- Physical-device microphone permissions, a paid provider request and the
+  actual Lock Screen / Dynamic Island behaviour remain manual acceptance
+  checks.

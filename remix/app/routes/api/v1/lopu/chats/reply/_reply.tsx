@@ -1,12 +1,14 @@
-import { json, readJsonBody } from '~/api/http';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
 import type { LopuChatContext, LopuChatEvent, LopuChatTurnOutcome } from '~/api/utils/lopu/chatEvents';
+import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
+import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
 import { getUserVaultProvider, userVaultConfigured } from '~/api/utils/lopu/userVault';
 import { safeVaultId } from '~/api/utils/lopu/userVaultCore';
-import { createLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
+import { createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -27,6 +29,12 @@ import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResol
 // the chat's setting (null clears it); a stored id that no longer resolves is
 // dropped and the turn runs on Thingtime's models. Vault turns count against
 // the same lopu.chat bucket.
+//
+// confirmations: [{ key, token }] — the grants from Lopu's Confirm cards
+// (design note §2.4). Each token is verified here (this user, this chat, this
+// action key, unexpired) before the executor may run the destructive action
+// it names; an invalid one is a 400 and nothing is persisted. The body is
+// JSON-only (415 otherwise — the CSRF fence, before the rate limit is spent).
 
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_TEXT_CHARS = 8000;
@@ -48,6 +56,8 @@ type ReplyBody = {
   // models and clear the chat's pinned provider; string = a vault provider id
   providerId: string | null | undefined;
   context: LopuChatContext | null;
+  // grants from Confirm cards, verified against the user + chat before use
+  confirmations: LopuConfirmationInput[];
 };
 
 type Validation = { ok: true; value: ReplyBody } | { ok: false; error: string };
@@ -131,6 +141,9 @@ const parseBody = (body: unknown): Validation => {
   }
   const context = parseContext(body.context);
   if (context.ok === false) return context;
+  const confirmations = parseLopuConfirmations(body.confirmations);
+  if (confirmations.ok === false) return confirmations;
+  if (confirmations.confirmations.length && !chatId) return { ok: false, error: 'Confirmations belong to an existing conversation — send its chatId' };
   return {
     ok: true,
     value: {
@@ -141,10 +154,13 @@ const parseBody = (body: unknown): Validation => {
       effort: typeof body.effort === 'string' && body.effort.trim() ? body.effort.trim() : null,
       speed: typeof body.speed === 'string' && body.speed.trim() ? body.speed.trim() : null,
       providerId,
-      context: context.context
+      context: context.context,
+      confirmations: confirmations.confirmations
     }
   };
 };
+
+export const LOPU_CONFIRMATION_INVALID_ERROR = 'That confirmation is no longer valid — ask Lopu again and press Confirm afresh';
 
 // A conversation title from the first message: first line, tidy, ≤ 60 chars.
 export const titleFromMessage = (text: string): string => {
@@ -170,6 +186,8 @@ export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
+  const unsupported = requireJsonContentType(request);
+  if (unsupported) return unsupported;
 
   const limit = await enforceRateLimit(request, 'lopu.chat', `user:${user.id}`, { failClosed: true });
   if (!limit.allowed) {
@@ -192,6 +210,16 @@ export const action = async ({ request }: { request: Request }) => {
     const existing = await getLopuChat(user.id, chatId);
     if (existing.ok === false) return json({ ok: false, error: existing.error }, { status: existing.status });
     settings = { model: existing.settings.model, effort: existing.settings.effort, speed: existing.settings.speed, providerId: existing.settings.providerId ?? null };
+  }
+
+  // --- confirmations (design note §2.4) --------------------------------------
+  // every grant must be this user's, for this chat, for exactly the key the
+  // client names, and unexpired — anything else is a 400 before persistence
+  const approved: LopuApprovedAction[] = [];
+  for (const entry of input.confirmations) {
+    const action = chatId ? await verifyLopuConfirmation(entry.token, { userId: user.id, chatId, key: entry.key }) : null;
+    if (!action) return json({ ok: false, error: LOPU_CONFIRMATION_INVALID_ERROR }, { status: 400 });
+    approved.push(action);
   }
 
   // --- the viewer's own provider (design note §1.3) -------------------------
@@ -222,7 +250,10 @@ export const action = async ({ request }: { request: Request }) => {
   // --- model choice -------------------------------------------------------
   const catalog = await listAiModels({ id: user.id });
   const overrides = !!(input.model || input.effort || input.speed);
-  const requested = { model: input.model ?? settings.model, effort: input.effort ?? settings.effort, speed: input.speed ?? settings.speed };
+  // a chat with no stored effort/speed inherits the admin defaults (the
+  // resolver's `undefined` branch); a stored null must not read as "the
+  // provider's own default", which is spelled 'default' on the wire
+  const requested = { model: input.model ?? settings.model, effort: input.effort ?? settings.effort ?? undefined, speed: input.speed ?? settings.speed ?? undefined };
   let choice: AiWorkflowModelChoice | null = null;
   if (catalog.models.length) {
     // explicit overrides are strict (a bad model is a 400); stored settings
@@ -243,6 +274,7 @@ export const action = async ({ request }: { request: Request }) => {
     vaultProvider.requestedModel = requested.model;
   }
 
+  let createdHere = false;
   if (!chatId) {
     const created = await createLopuChat(user.id, {
       title: titleFromMessage(input.text),
@@ -251,6 +283,7 @@ export const action = async ({ request }: { request: Request }) => {
     });
     if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
     chatId = created.chat.id;
+    createdHere = true;
   } else {
     // a per-turn override becomes the conversation's setting (best effort —
     // the turn itself already carries the resolved choice); an explicit
@@ -267,8 +300,22 @@ export const action = async ({ request }: { request: Request }) => {
   const loaded = await loadLopuHistory(user.id, chatId, { limit: HISTORY_TURNS });
   const history = loaded.ok === false ? [] : loaded.history;
 
-  const userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: input.text });
-  if (userTurn.ok === false) return json({ ok: false, error: userTurn.error }, { status: userTurn.status });
+  // a conversation created by THIS request must not outlive a first turn
+  // that failed to persist (an empty, titled chat would surface on reload)
+  const discardCreated = async () => {
+    if (createdHere && chatId) await deleteLopuChat(user.id, chatId).catch(() => null);
+  };
+  let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
+  try {
+    userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: input.text });
+  } catch (error) {
+    await discardCreated();
+    throw error;
+  }
+  if (userTurn.ok === false) {
+    await discardCreated();
+    return json({ ok: false, error: userTurn.error }, { status: userTurn.status });
+  }
   if (userTurn.existing) return json({ ok: false, error: 'A message with this requestId already exists — send a fresh message' }, { status: 409 });
   const userMessageId = userTurn.message.id;
 
@@ -305,6 +352,7 @@ export const action = async ({ request }: { request: Request }) => {
         choice,
         vaultProvider,
         context: input.context,
+        approvedConfirmations: approved,
         signal: abort.signal
       });
       try {
@@ -336,6 +384,7 @@ export const action = async ({ request }: { request: Request }) => {
               effort: outcome?.effort ?? choice?.effort ?? null,
               speed: outcome?.speed ?? choice?.speed ?? 'normal',
               provider: outcome?.provider ?? 'fallback',
+              ...(outcome?.providerLabel ? { providerLabel: outcome.providerLabel } : {}),
               usage: outcome?.usage,
               toolCalls: outcome?.toolCalls ?? [],
               stopReason

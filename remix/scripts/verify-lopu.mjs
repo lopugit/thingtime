@@ -221,6 +221,18 @@ const run = async () => {
   check('reply docs endpoint is public and shaped', replyDocs.status === 200 && replyDocs.body?.docs?.endpoint === '/api/v1/lopu/chats/reply');
   const formPost = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', raw: true, body: 'title=forged', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
   check('form-encoded POST is refused (415 CSRF fence)', formPost.status === 415);
+  // every Lopu POST applies the JSON-only fence before the body is read or a
+  // rate-limit bucket is spent — the reply and voice streams and the vault too
+  const formReply = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', raw: true, body: 'text=hi', headers: { 'Content-Type': 'text/plain' } });
+  check('a non-JSON reply body is refused (415)', formReply.status === 415);
+  const vaultAnon = await api('/api/v1/lopu/vault');
+  check('GET /lopu/vault without auth is 401', vaultAnon.status === 401);
+  const vaultForm = await api('/api/v1/lopu/vault', { cookie: user.cookie, method: 'POST', raw: true, body: 'action=delete', headers: { 'Content-Type': 'text/plain' } });
+  check('a non-JSON vault write is refused (415)', vaultForm.status === 415);
+  const voiceAnon = await api('/api/v1/lopu/voice/reply', { method: 'POST', body: { transcript: 'hi', transcribeMode: true } });
+  check('POST /lopu/voice/reply without auth is 401', voiceAnon.status === 401);
+  const voiceForm = await api('/api/v1/lopu/voice/reply', { cookie: user.cookie, method: 'POST', raw: true, body: 'transcript=hi', headers: { 'Content-Type': 'text/plain' } });
+  check('a non-JSON voice body is refused (415)', voiceForm.status === 415);
 
   console.log('\nB. model catalog');
   const models = await api('/api/v1/ai/models');
@@ -291,7 +303,7 @@ const run = async () => {
   check('assistant text streams as delta events', eventsOf(built.events, 'delta').length >= 3 && eventsOf(built.events, 'delta').every((event) => typeof event.text === 'string'));
   const done = built.events[built.events.length - 1];
   check('done is the last event with the persisted rows', done?.type === 'done' && typeof done.assistantMessageId === 'string' && done.assistantMessageId && Array.isArray(done.messages) && done.messages.length >= 1 && typeof done.stopReason === 'string');
-  check('events are well-formed (every type is known)', built.events.every((event) => ['meta', 'delta', 'thinking', 'tool_use_start', 'tool_input_delta', 'tool_use', 'tool_result', 'patch', 'thing', 'navigate', 'error', 'done'].includes(event?.type)));
+  check('events are well-formed (every type is known)', built.events.every((event) => ['meta', 'delta', 'thinking', 'tool_use_start', 'tool_input_delta', 'tool_use', 'tool_result', 'patch', 'thing', 'navigate', 'confirm', 'error', 'done'].includes(event?.type)));
 
   let pageId = null;
   let componentId = null;
@@ -347,6 +359,11 @@ const run = async () => {
   check('the conversation preview is the assistant text', typeof lazyEntry?.lastMessage?.text === 'string' && lazyEntry.lastMessage.text.length > 0 && lazyEntry?.lastMessage?.externalSource?.access === 'lopu');
   check('the owner has nothing unread in their own conversation', lazyEntry?.unreadCount === 0);
   const lazyChatId = lazyMeta?.chatId || null;
+  // a chat created without an effort inherits the admin default effort
+  // (a stored null is "catalog default", never "the provider's own default")
+  const defaultEffort = models.body?.defaults?.effort ?? null;
+  if (!availableModel) skip('a chat without a stored effort inherits the admin default effort', 'no available model');
+  else check('a chat without a stored effort inherits the admin default effort', typeof lazyMeta?.effort === 'string' && (!defaultEffort || !defaultModel || lazyMeta.model !== defaultModel || lazyMeta.effort === defaultEffort), JSON.stringify({ effort: lazyMeta?.effort, defaultEffort, model: lazyMeta?.model, defaultModel }));
 
   console.log('\nE. the built things');
   if (testProvider && pageId) {
@@ -437,6 +454,60 @@ const run = async () => {
     check('generic delete of an ai-model is refused', genericModelDelete.status !== 200);
     const afterForgery = await api('/api/v1/ai/models');
     check('the catalog row is untouched', afterForgery.body?.models?.find((row) => row.id === catalogRow.id)?.enabled === catalogRow.enabled);
+  }
+
+  console.log('\nH2. destructive tools wait for a server-verified confirmation');
+  if (testProvider && componentId && pageId) {
+    const ask = await reply(user.cookie, { chatId, text: `Please delete ${componentId}`, requestId: requestId('ask-delete') });
+    const confirmEvent = eventsOf(ask.events, 'confirm')[0];
+    const refused = eventsOf(ask.events, 'tool_result').find((event) => event.name === 'delete_thing');
+    check('an unconfirmed delete_thing stops with a confirm event + tool_result needsConfirmation', ask.status === 200 && confirmEvent?.key === `delete_thing:${componentId}` && typeof confirmEvent.token === 'string' && confirmEvent.token.split('.').length === 3 && refused?.ok === false && refused.needsConfirmation === true, JSON.stringify({ confirmEvent, refused }));
+    check('the confirm event names the target and the tool, never a credential', confirmEvent?.name === 'delete_thing' && confirmEvent?.subject?.id === componentId && typeof confirmEvent?.summary === 'string' && confirmEvent.summary.includes(componentId) && typeof confirmEvent?.expiresAt === 'string' && Date.parse(confirmEvent.expiresAt) > Date.now());
+    check('confirm precedes its tool_result and the reply still ends with text + done', ask.events.findIndex((event) => event.type === 'confirm') < ask.events.findIndex((event) => event.type === 'tool_result' && event.name === 'delete_thing') && ask.events[ask.events.length - 1]?.type === 'done' && deltaText(ask.events).length > 0);
+    const untouched = await api(`/api/v1/things?id=${componentId}`, { cookie: user.cookie });
+    check('nothing was deleted', untouched.status === 200 && untouched.body?.thing?.id === componentId);
+    const forged = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { chatId, text: 'Confirmed: delete', requestId: requestId('forged'), confirmations: [{ key: confirmEvent?.key || 'delete_thing:x', token: 'forged.grant.value' }] } });
+    check('a forged grant is a 400 and nothing streams', forged.status === 400 && forged.body?.ok === false);
+    const wrongKey = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { chatId, text: 'Confirmed: delete', requestId: requestId('wrongkey'), confirmations: [{ key: `delete_thing:${pageId}`, token: confirmEvent?.token || '' }] } });
+    check('a grant sent for a different action is a 400', wrongKey.status === 400);
+    const wrongChat = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { chatId: titledId, text: 'Confirmed: delete', requestId: requestId('wrongchat'), confirmations: [{ key: confirmEvent?.key || '', token: confirmEvent?.token || '' }] } });
+    check('a grant minted for another conversation is a 400', wrongChat.status === 400);
+    const noChat = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { text: 'Confirmed: delete', requestId: requestId('nochat'), confirmations: [{ key: confirmEvent?.key || '', token: confirmEvent?.token || '' }] } });
+    check('a grant without its conversation is a 400', noChat.status === 400);
+    const stillUntouched = await api(`/api/v1/things?id=${componentId}`, { cookie: user.cookie });
+    check('the refused grants deleted nothing', stillUntouched.status === 200);
+    const confirmed = await reply(user.cookie, { chatId, text: `Confirmed: ${confirmEvent?.summary}`, requestId: requestId('confirmed'), confirmations: [{ key: confirmEvent?.key || '', token: confirmEvent?.token || '' }] });
+    const deleted = eventsOf(confirmed.events, 'tool_result').find((event) => event.name === 'delete_thing');
+    check('the same grant sent back runs the delete (no second card)', confirmed.status === 200 && deleted?.ok === true && eventsOf(confirmed.events, 'confirm').length === 0, JSON.stringify(deleted));
+    const gone = await api(`/api/v1/things?id=${componentId}`, { cookie: user.cookie });
+    check('the component is gone', gone.status === 404 || gone.status === 403 || gone.body?.ok === false);
+    check('the persisted turn records the refused and the run calls', confirmed.events[confirmed.events.length - 1]?.messages?.[0]?.lopu?.toolCalls?.some((call) => call.name === 'delete_thing' && call.ok === true) && ask.events[ask.events.length - 1]?.messages?.[0]?.lopu?.toolCalls?.some((call) => call.name === 'delete_thing' && call.ok === false));
+
+    // run_action on a program that deletes things: the purge script creates a
+    // Purge action (things.delete — actions touch Data Things only) and tries
+    // to run it on a data thing made through the ordinary things path
+    const target = await api('/api/v1/things', { cookie: user.cookie, method: 'POST', body: { thingtime: ['data'], crystal: { schema: 'note', name: 'Purge me', text: 'a note Lopu is asked to purge' } } });
+    const targetId = target.body?.thing?.id || null;
+    check('a data thing to purge exists', target.status === 200 && !!targetId, JSON.stringify(target.body));
+    const purge = await reply(user.cookie, { chatId, text: `purge ${targetId}`, requestId: requestId('purge') });
+    const purgeConfirm = eventsOf(purge.events, 'confirm')[0];
+    const purgeCreated = eventsOf(purge.events, 'tool_result').find((event) => event.name === 'create_action');
+    const purgeRun = eventsOf(purge.events, 'tool_result').find((event) => event.name === 'run_action');
+    check('run_action on an action that deletes things stops for confirmation (create_action itself ran)', purge.status === 200 && purgeCreated?.ok === true && typeof purgeConfirm?.key === 'string' && purgeConfirm.key.startsWith('run_action:') && purgeRun?.ok === false && purgeRun.needsConfirmation === true, JSON.stringify({ purgeCreated, purgeConfirm, purgeRun }));
+    check('the run card names the action and its inputs', purgeConfirm?.name === 'run_action' && purgeConfirm?.subject?.kind === 'action' && typeof purgeConfirm?.summary === 'string' && purgeConfirm.summary.includes(targetId) && /deletes things/.test(purgeConfirm.summary));
+    const targetStill = await api(`/api/v1/things?id=${targetId}`, { cookie: user.cookie });
+    check('the data thing survives the unconfirmed run', targetStill.status === 200 && targetStill.body?.thing?.id === targetId);
+    const purged = await reply(user.cookie, { chatId, text: `Confirmed: ${purgeConfirm?.summary}`, requestId: requestId('purged'), confirmations: [{ key: purgeConfirm?.key || '', token: purgeConfirm?.token || '' }] });
+    const ran = eventsOf(purged.events, 'tool_result').find((event) => event.name === 'run_action');
+    check('the approved run executes the deleting action', purged.status === 200 && ran?.ok === true && ran.data?.status === 'ok' && eventsOf(purged.events, 'confirm').length === 0, JSON.stringify(ran));
+    const targetGone = await api(`/api/v1/things?id=${targetId}`, { cookie: user.cookie });
+    check('the data thing is gone', targetGone.status === 404 || targetGone.status === 403 || targetGone.body?.ok === false);
+    // the same grant again: spent keys never re-run (the program id + inputs
+    // still match, but the thing is gone — the run reports, nothing breaks)
+    const replayed = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { chatId, text: `Confirmed: ${purgeConfirm?.summary}`, requestId: requestId('replay'), confirmations: [{ key: purgeConfirm?.key || '', token: purgeConfirm?.token || '' }] } });
+    check('replaying a fresh grant is accepted by the route (it only re-approves the identical, already-done action)', replayed.status === 200);
+  } else {
+    skip('server-verified confirmations (delete_thing / run_action)', 'needs the test provider and the section-D build');
   }
 
   console.log('\nI. delete');
@@ -582,7 +653,7 @@ const run = async () => {
         check('the fake endpoint received the decrypted token and the connection model', fake.requests.some((entry) => entry.authorization === `Bearer ${token}` && entry.body?.model === 'fake-model'));
         check('the reply text came from the fake endpoint', deltaText(byo.events).includes(FAKE_PROVIDER_REPLY));
         const byoDone = byo.events[byo.events.length - 1];
-        check('the persisted assistant row records provider vault + the model', byoDone?.type === 'done' && byoDone.messages?.[0]?.lopu?.provider === 'vault' && byoDone.messages[0].lopu.model === 'fake-model');
+        check('the persisted assistant row records provider vault + the model + the connection name', byoDone?.type === 'done' && byoDone.messages?.[0]?.lopu?.provider === 'vault' && byoDone.messages[0].lopu.model === 'fake-model' && byoDone.messages[0].lopu.providerLabel === providerName);
         if (brokenId) {
           const broken = await reply(user.cookie, { chatId: byoChatId, text: 'hi', requestId: requestId('broken'), providerId: brokenId });
           const brokenMeta = broken.events[0];
