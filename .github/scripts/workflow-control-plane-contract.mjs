@@ -890,7 +890,26 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /base_has_pr_listener/u);
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
   assert.match(codeql, /git\/commits\/\$merge_sha/u);
-  assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  // The property is that the freshness check still compares the merge commit's
+  // first parent against a base and its second against the live head. Pin those
+  // two comparisons separately rather than as one adjacent phrase: the jq
+  // program is legitimately rewritten across more than one line the moment a
+  // second accepted base is added (PR #579 widens `.[0]` to also accept the
+  // live base branch tip, because `pulls/N.base.sha` and `refs/pull/N/merge`
+  // are refreshed independently and skew whenever the base advances). Pinning
+  // the single-line spelling made this contract fail on that rewrite while the
+  // property it exists to protect was fully intact — and both PRs land on this
+  // same base, so the union of the two is exactly the tree CI would run.
+  assert.match(
+    codeql,
+    /\.\[0\] == \$base/u,
+    "the merge-ref freshness check still compares the first parent against the PR base",
+  );
+  assert.match(
+    codeql,
+    /\.\[1\] == \$head/u,
+    "the merge-ref freshness check still requires the second parent to be the live head",
+  );
   // A stale merge ref and an absent one are different facts and must stay
   // separately recorded. The freshness check clears `merge_sha`; only a PR
   // GitHub cannot merge clears `mergeable_pr`, and only that PR has no
