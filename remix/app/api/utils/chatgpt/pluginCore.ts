@@ -16,9 +16,9 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.3.0',
-  'chatgpt.oauth': '1.8.0',
-  'chatgpt.connections': '1.2.0',
+  'chatgpt.mcp': '1.4.0',
+  'chatgpt.oauth': '1.9.0',
+  'chatgpt.connections': '1.3.0',
   'chatgpt.things.read': '1.3.0',
   'chatgpt.things.write': '1.1.0',
   'chatgpt.schemas': '1.0.0',
