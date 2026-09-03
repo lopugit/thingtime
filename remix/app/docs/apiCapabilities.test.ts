@@ -52,6 +52,11 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
 
+test('admin preview dispatch publishes its protected-controller contract version', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.admin-ci-previews'], '2.0.0');
+});
+
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.health-nitro'], '1.1.0');

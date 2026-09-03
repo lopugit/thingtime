@@ -799,6 +799,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-ci-previews',
+    contractVersion: '2.0.0',
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',

@@ -17,6 +17,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
 - Admin-selected Develop and Production/Main preview settings now dispatch only
