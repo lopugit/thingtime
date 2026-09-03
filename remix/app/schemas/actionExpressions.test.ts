@@ -273,3 +273,22 @@ test('budgets refuse runaway evaluation and oversized lists', () => {
 	assert.throws(() => evaluateExpression(['map', [1, 2, 3, 4, 5], { ttExpr: ['add', '$item', 1] }], ctx), /budget exhausted/);
 	assert.throws(() => run(['range', MAX_EXPRESSION_LIST_LENGTH + 1]), /caps at/);
 });
+
+test('flatten refuses an oversized result without building it first', () => {
+	// `map(range(1000), range(1000))` is a million elements for ~2k of the
+	// 20k-node budget, and NOTHING checks the run deadline inside an
+	// expression. So flatten's cap has to bite during the walk: a cap that
+	// only reads the finished array makes the refusal cost as much as the
+	// success, and reduce+concat made that cost quadratic (~2.2s of blocking
+	// CPU, measured). Every sibling on the same input stays under ~80ms.
+	const nested = Array.from({ length: 400 }, () => Array.from({ length: 400 }, (_value, index) => index));
+	const started = process.hrtime.bigint();
+	assert.throws(() => run(['flatten', nested]), /lists cap at/);
+	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+	// 160,000 elements: linear is single-digit ms, quadratic is ~hundreds
+	assert.ok(elapsedMs < 250, `flatten refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	// and the ordinary semantics are untouched, including the exact boundary
+	assert.deepEqual(run(['flatten', [[1], [2, 3], 4]]), [1, 2, 3, 4]);
+	assert.equal(run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH }, (_value, index) => index)]]).length, MAX_EXPRESSION_LIST_LENGTH);
+	assert.throws(() => run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH + 1 }, (_value, index) => index)]]), /lists cap at/);
+});

@@ -633,11 +633,26 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return list(0).findIndex((value) => looseEquals(value, args[1]));
 		case 'pluck':
 			return list(0).map((value) => ownGet(value, args[1]) ?? null);
-		case 'flatten':
-			return capList(
-				list(0).reduce<unknown[]>((out, value) => (Array.isArray(value) ? out.concat(value) : out.concat([value])), []),
-				ctx
-			);
+		case 'flatten': {
+			// The one list function whose OUTPUT can dwarf its input, so it caps
+			// DURING the walk instead of after. `reduce` + `concat` copied the
+			// whole accumulator per element, and the post-hoc cap only looked at
+			// the finished array — so the refusal cost the same as the success:
+			// `flatten(map(range(1000), range(1000)))` spent ~2.2s of blocking,
+			// uninterruptible CPU (no deadline check runs inside an expression)
+			// for ~2k of the 20k node budget, then refused. Push into one array
+			// and stop at the cap: the same refusal now costs O(cap).
+			const out: unknown[] = [];
+			const push = (entry: unknown): void => {
+				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				out.push(entry);
+			};
+			for (const value of list(0)) {
+				if (Array.isArray(value)) for (const entry of value) push(entry);
+				else push(value);
+			}
+			return out;
+		}
 		case 'append':
 			return capList([...list(0), ...args.slice(1)], ctx);
 		// ── object ──
