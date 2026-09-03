@@ -297,6 +297,8 @@ VERCEL_CUSTOM_ENVIRONMENT_ID="env_<custom-environment-id>"
 STABLE_DEVELOP_DOMAIN="dev.example.com"
 PREVIEW_ALIAS_SUFFIX="preview.example.com"
 PRODUCTION_PREVIEW_ALIAS_SUFFIX="production-preview.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
 DEVELOP_PREVIEW_TRUSTED_ACTORS="<comma-separated-github-logins>"
 THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<bucket>.s3.<region>.amazonaws.com/<unsigned-probe-path>"
 ```
@@ -321,9 +323,23 @@ The controller checks both Vercel bindings, DNS, and a live `/api/root-data`
 fallback probe before it can publish, so a detached production wildcard is only
 accepted when it actually resolves to `main`.
 
-Stacked PRs are supported only when each parent is an open same-repository PR
-from an allowlisted author and the bounded chain terminates at `develop`.
-The chain is resolved from the protected controller; a missing, ambiguous,
-untrusted, cyclic, draft, or overlong parent chain receives no credentialed
-preview. Use domains and environment ids from your own Vercel project; never
-copy another project's account-specific identifiers or verification records.
+Every open, ready, same-repository PR from an allowlisted author is eligible,
+regardless of whether its base is `develop`, `main`, or another feature branch.
+The controller revalidates the exact live ref and SHA before publishing, while
+the deployment itself always remains in the isolated Vercel `develop` Custom
+Environment. A closed former parent PR therefore cannot strand a child PR, and
+forks, drafts, stale dispatches, or users without current write access still
+receive no credentialed preview.
+
+The admin CI page can additionally store a bounded Develop/Production preview
+policy and send it through the `thingtime-ci-control[bot]` GitHub App. The
+product backend has no Vercel publishing path: `.github/scripts/deploy-admin-pr-previews.mjs`
+owns deployment creation, marker-scoped cleanup, exact-SHA READY aliasing, and
+the single PR comment. It writes the expected persistent URLs and estimated
+ready time before contacting Vercel, then adds each immutable snapshot URL as
+soon as Vercel returns it. Production selection targets the Vercel production
+runtime but never auto-assigns a production domain; it uses only the separate
+PR-scoped production-preview wildcard. Set `ADMIN_PREVIEW_DISPATCHER_LOGIN` to
+the exact installed GitHub App bot login. Use domains and environment ids from
+your own Vercel project; never copy another project's account-specific
+identifiers or verification records.

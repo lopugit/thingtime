@@ -24,12 +24,12 @@ const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
 const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
-const MAX_PR_STACK_DEPTH = 12;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
 const STABLE_DEVELOP_POLL_MS = 5_000;
 const MAX_STABLE_DEPLOYMENTS = 50;
+const DEFAULT_EXPECTED_BUILD_MINUTES = 5;
 const execFileAsync = promisify(execFile);
 
 class HttpError extends Error {
@@ -58,6 +58,14 @@ const requiredEnv = (name) => {
 const optionalEnv = (name, fallback) => {
 	const value = process.env[name]?.trim();
 	return value || fallback;
+};
+
+const expectedReadyAt = (startedAt = Date.now()) => {
+	const minutes = Number(optionalEnv('PREVIEW_EXPECTED_BUILD_MINUTES', String(DEFAULT_EXPECTED_BUILD_MINUTES)));
+	if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
+		throw new Error('PREVIEW_EXPECTED_BUILD_MINUTES must be a whole number from 1 to 60');
+	}
+	return new Date(Math.ceil((startedAt + minutes * 60_000) / 60_000) * 60_000).toISOString();
 };
 
 const boundedInteger = (value, name) => {
@@ -250,6 +258,7 @@ const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	if (Number(pullRequest.base?.repo?.id) !== repositoryId || pullRequest.base?.repo?.full_name !== repository) {
 		return 'wrong-base-repository';
 	}
+	if (!isSafeHeadRef(pullRequest.base?.ref)) return 'invalid-base-ref';
 	if (Number(pullRequest.head?.repo?.id) !== repositoryId || pullRequest.head?.repo?.full_name !== repository) {
 		return 'fork';
 	}
@@ -271,10 +280,9 @@ const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	return null;
 };
 
-const classifyPullRequest = (pullRequest, repository, repositoryId, { terminalBranch = 'develop' } = {}) => {
+const classifyPullRequest = (pullRequest, repository, repositoryId) => {
 	const shapeIssue = pullRequestShapeIssue(pullRequest, repository, repositoryId);
 	if (shapeIssue) return { allowed: false, reason: shapeIssue };
-	if (pullRequest.base?.ref !== terminalBranch) return { allowed: false, reason: 'wrong-base' };
 	return { allowed: true };
 };
 
@@ -480,7 +488,10 @@ const runSelfTest = async () => {
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
 	equal(classifyPullRequest({ ...base, state: 'closed' }, config.repository, config.repositoryId).reason, 'not-open');
-	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId).reason, 'wrong-base');
+	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId), { allowed: true });
+	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'release/example' } }, config.repository, config.repositoryId), {
+		allowed: true
+	});
 	equal(pullRequestShapeIssue({ ...base, base: { ...base.base, ref: 'codex/parent' } }, config.repository, config.repositoryId), null);
 	equal(
 		classifyPullRequest({ ...base, head: { ...base.head, repo: { id: 99, full_name: 'lopugit/thingtime' } } }, config.repository, config.repositoryId)
@@ -790,37 +801,23 @@ const runSelfTest = async () => {
 			client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'closed', head_sha: base.head.sha, head_ref: '' }
 		})
 	);
-	const stacked = {
-		...base,
-		number: 202,
-		base: { ref: 'codex/parent', repo: { id: 42, full_name: 'lopugit/thingtime' } },
-		head: { ...base.head, ref: 'codex/child', sha: 'c'.repeat(40) }
-	};
-	const parent = {
-		...base,
-		number: 203,
-		base: { ref: 'develop', repo: { id: 42, full_name: 'lopugit/thingtime' } },
-		head: { ...base.head, ref: 'codex/parent', sha: 'b'.repeat(40) }
-	};
-	const resolvedStack = await resolvePullRequestStack(config, stacked, {
-		findParent: async (_config, ref) => {
-			equal(ref, 'codex/parent');
-			return parent;
-		}
-	});
-	equal(
-		resolvedStack.chain.map((candidate) => candidate.number),
-		[202, 203]
-	);
-	await assert.rejects(
-		resolvePullRequestStack(config, stacked, {
-			findParent: async () => {
-				throw new EligibilityError('stack-parent-missing');
+	const acceptedBases = ['main', 'release/example', 'codex/former-parent'];
+	for (const baseRef of acceptedBases) {
+		const direct = { ...base, base: { ...base.base, ref: baseRef } };
+		const checked = await assertTrustedPullRequestStack(config, direct, {
+			actor: 'lopu',
+			assertPrincipal: async (_config, login, label) => {
+				equal(login, 'lopu');
+				truthy(label === 'author' || label === 'actor');
 			}
-		}),
-		(error) => error instanceof EligibilityError && error.reason === 'stack-parent-missing'
+		});
+		equal(checked.stack.chain.map((candidate) => candidate.number), [201]);
+		equal(checked.stack.terminalBranch, baseRef);
+	}
+	equal(
+		pullRequestShapeIssue({ ...base, base: { ...base.base, ref: '' } }, config.repository, config.repositoryId),
+		'invalid-base-ref'
 	);
-	checks += 1;
 
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
@@ -899,41 +896,6 @@ const vercelRequest = (path, options = {}) => {
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
 
-const findOpenStackParent = async (config, headRef) => {
-	if (!isSafeHeadRef(headRef)) throw new EligibilityError('invalid-stack-base-ref');
-	const [owner] = config.repository.split('/');
-	const query = new URLSearchParams({ state: 'open', head: `${owner}:${headRef}`, per_page: '100' });
-	const candidates = await githubRequest(`/repos/${config.repository}/pulls?${query}`);
-	if (!Array.isArray(candidates)) throw new Error('GitHub stack-parent response was invalid');
-	const matching = candidates.filter(
-		(candidate) =>
-			candidate.head?.ref === headRef &&
-			Number(candidate.head?.repo?.id) === config.repositoryId &&
-			candidate.head?.repo?.full_name === config.repository
-	);
-	if (matching.length === 0) throw new EligibilityError('stack-parent-missing');
-	if (matching.length !== 1) throw new EligibilityError('stack-parent-ambiguous');
-	return matching[0];
-};
-
-const resolvePullRequestStack = async (config, pullRequest, { terminalBranch = 'develop', findParent = findOpenStackParent } = {}) => {
-	if (!['develop', 'main'].includes(terminalBranch)) throw new Error('Preview stack terminal branch is invalid');
-	const chain = [];
-	const seenNumbers = new Set();
-	let current = pullRequest;
-	for (let depth = 0; depth < MAX_PR_STACK_DEPTH; depth += 1) {
-		const shapeIssue = pullRequestShapeIssue(current, config.repository, config.repositoryId);
-		if (shapeIssue) throw new EligibilityError(depth === 0 ? shapeIssue : `stack-parent-${shapeIssue}`);
-		const number = boundedInteger(current.number, 'Pull request number');
-		if (seenNumbers.has(number)) throw new EligibilityError('stack-cycle');
-		seenNumbers.add(number);
-		chain.push(current);
-		if (current.base.ref === terminalBranch) return { chain, terminalBranch };
-		current = await findParent(config, current.base.ref);
-	}
-	throw new EligibilityError('stack-depth-exceeded');
-};
-
 const developRefSha = (reference) => {
 	if (reference?.ref !== 'refs/heads/develop' || reference?.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object.sha ?? '')) {
 		throw new Error('GitHub develop ref was invalid');
@@ -994,21 +956,21 @@ const assertTrustedPrincipal = async (config, login, label) => {
 	}
 };
 
-const assertTrustedPullRequest = async (config, pullRequest, { actor = null } = {}) => {
+const assertTrustedPullRequest = async (config, pullRequest, { actor = null, assertPrincipal = assertTrustedPrincipal } = {}) => {
 	const shapeIssue = pullRequestShapeIssue(pullRequest, config.repository, config.repositoryId);
 	if (shapeIssue) throw new EligibilityError(shapeIssue);
-	await assertTrustedPrincipal(config, pullRequest.user.login, 'author');
-	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
+	await assertPrincipal(config, pullRequest.user.login, 'author');
+	if (actor) await assertPrincipal(config, actor, 'actor');
 	return pullRequest;
 };
 
-const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null } = {}) => {
-	const stack = await resolvePullRequestStack(config, pullRequest);
-	for (const candidate of stack.chain) {
-		await assertTrustedPullRequest(config, candidate);
-	}
-	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
-	return { pullRequest, stack };
+const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null, assertPrincipal = assertTrustedPrincipal } = {}) => {
+	// Preview eligibility belongs to the exact PR being built. Its base may be
+	// develop, main, another feature branch, or a branch whose former parent PR
+	// has already closed; none of those shapes changes the trust of this PR's
+	// same-repository author, ref, or immutable head SHA.
+	await assertTrustedPullRequest(config, pullRequest, { actor, assertPrincipal });
+	return { pullRequest, stack: { chain: [pullRequest], terminalBranch: pullRequest.base.ref } };
 };
 
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
@@ -1122,12 +1084,14 @@ const markGithubEnvironmentInactive = async (repository, prNumber, keepId = null
 
 const dashboardUrl = (deploymentId, config) => `https://vercel.com/${config.teamSlug}/${config.projectName}/${deploymentId}`;
 
-const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note }) => {
+const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note, expectedReady = null }) => {
 	const sha = pullRequest.head.sha.slice(0, 8);
 	const title =
 		state === 'ready' ? '✅ Develop S3 preview ready' : state === 'failed' ? '❌ Develop S3 preview failed' : '🧪 Develop S3 preview deploying';
-	const previewLine = state === 'ready' ? `- Preview: [https://${alias}](https://${alias})` : '';
-	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${
+	const previewLabel = state === 'ready' ? 'Preview' : 'Expected preview';
+	const previewLine = `- ${previewLabel}: [https://${alias}](https://${alias})`;
+	const expectedLine = state === 'deploying' && expectedReady ? `\n- Expected ready: ${expectedReady.replace('T', ' ').replace(':00.000Z', ' UTC')} (estimate)` : '';
+	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${expectedLine}${
 		deploymentUrl ? `\n- Immutable deployment: [${deploymentUrl}](${deploymentUrl})` : ''
 	}${dashboard ? `\n- Vercel status: [open deployment](${dashboard})` : ''}${
 		note ? `\n\n${note}` : ''
@@ -1844,6 +1808,7 @@ const deploy = async (config, pullRequest) => {
 	let githubDeployment = null;
 	let vercelDeployment = null;
 	let published = false;
+	const estimatedReady = expectedReadyAt();
 	try {
 		githubDeployment = await createGithubDeployment(config.repository, pullRequest);
 		await upsertComment(
@@ -1852,7 +1817,8 @@ const deploy = async (config, pullRequest) => {
 			deploymentComment({
 				state: 'deploying',
 				pullRequest,
-				alias: previewAlias(pullRequest.number, config.previewAliasSuffix)
+				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+				expectedReady: estimatedReady
 			})
 		);
 		vercelDeployment = await createVercelDeployment(config, pullRequest, reusable);
@@ -1871,7 +1837,8 @@ const deploy = async (config, pullRequest) => {
 				pullRequest,
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
-				dashboard
+				dashboard,
+				expectedReady: estimatedReady
 			})
 		);
 
