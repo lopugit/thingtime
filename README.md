@@ -292,23 +292,27 @@ is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
 
 The selected-PR detail panel also has independent, durable **Develop** and
-**Production / main** preview switches. Enabling either switch deploys the
-exact current same-repository PR SHA through Vercel; later `synchronize`,
-reopen, and ready-for-review deliveries rebuild every enabled environment.
-Production access requires an explicit admin acknowledgement and uses the
-project's Production environment values, but `autoAssignCustomDomains` remains
-false. Before starting the builds, the builder publishes one GitHub App-owned
-PR comment with each selected environment's expected persistent URL and
-estimated ready time. It updates that same comment with the immutable
-`*.vercel.app` snapshot URL as soon as Vercel identifies the deployment. A
-READY webhook moves only that persistent alias to the
-verified current snapshot; it never replaces or aliases `thingtime.com` or
-`dev.thingtime.com`. Closing the PR removes only aliases and deployments carrying
-Thingtime's PR/environment ownership markers. Configure these server-only
-deployment values in every origin that hosts CI Control (placeholders only):
+**Production / main** preview switches. The product backend validates the live
+same-repository PR, stores the full policy, and sends only that bounded policy
+through the installed `thingtime-ci-control[bot]` GitHub App. It does not build,
+publish, alias, clean up, or hold a Vercel deployment credential. The protected
+`github-actions` controller revalidates the exact ref/SHA and writes one PR
+comment immediately with every selected environment's expected persistent URL
+and estimated ready time. Each selected environment is compiled on GitHub
+without environment secrets; only the validated prebuilt output enters the
+credentialed publisher. The same comment gains each immutable `*.vercel.app`
+snapshot URL and terminal status. A READY deployment moves only its PR-scoped
+alias and never replaces `thingtime.com` or `dev.thingtime.com`.
+
+Production access still requires an explicit admin acknowledgement. Later
+`synchronize`, reopen, and ready-for-review webhooks redispatch every enabled
+environment; disable and close dispatch marker-scoped cleanup. The backend
+therefore needs only the existing GitHub App credentials. Configure the
+following non-secret values and dedicated deployment token on the protected
+`vercel-develop-pr-control` GitHub Environment (placeholders only):
 
 ```sh
-VERCEL_API_TOKEN="<Vercel-API-token>"
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
 VERCEL_TEAM_ID="<Vercel-team-id>"
 VERCEL_PROJECT_ID="<Vercel-project-id>"
 VERCEL_PROJECT_NAME="<Vercel-project-name>"
@@ -317,16 +321,17 @@ VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
 PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
 PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
 PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
 ```
 
-Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
-only for the Develop switch; the other five provider values are required for
-both. The alias suffixes default to Thingtime's two preview namespaces, so forks
-must set both to verified wildcard domains owned by their own Vercel project.
+Never expose these as `PUBLIC_*` or copy them into the product deployment.
+`VERCEL_CUSTOM_ENVIRONMENT_ID` is required only for the Develop switch. The
+alias suffixes default to Thingtime's two preview namespaces, so forks must set
+both to verified wildcard domains owned by their own Vercel project.
 `PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
 number from 1 through 60 for the PR comment's clearly labelled estimate.
-The GitHub App needs Issues or Pull requests write permission to create and
-update its marker comment.
+The GitHub App needs Contents write permission to create the repository
+dispatch. GitHub Actions owns and updates the marker comment.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
