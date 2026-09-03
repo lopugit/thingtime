@@ -120,7 +120,12 @@ export const ALLOWED_PROPS = new Set([
 	'selected',
 	'autoComplete',
 	'inputMode',
-	// NOT `pattern`. Every other constraint-validation prop here is a cheap
+	// accessibility labelling: inert strings the browser only ever exposes to
+	// assistive tech — no URL, no JS sink, no validation engine
+	'role',
+	'aria-label',
+	'aria-hidden',
+	// NOT `pattern`. Every other constraint-validation prop above is a cheap
 	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
 	// and runs from untrusted markup, on the main thread, with no timeout.
 	// Constraint validation runs as soon as a field has a non-empty value —
@@ -132,9 +137,6 @@ export const ALLOWED_PROPS = new Set([
 	// input descriptors (type/min/max/maxLength/enum) rather than by the
 	// field's own validity, and a client-side hint is not worth an
 	// author-supplied regex engine.
-	'role',
-	'aria-label',
-	'aria-hidden',
 	'rows',
 	'cols',
 	'controls',

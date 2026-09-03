@@ -79,7 +79,10 @@ export const useThingSource = ({
 	const active = !!source && interactive;
 	const [state, setState] = React.useState<{ status: ThingSourceState; result: unknown; error: string | null }>(() => ({
 		status: !source ? 'inert' : !runtime.viewer.signedIn ? 'signed-out' : !interactive ? 'inert' : 'loading',
-		result: source ? readSourceCache(runtime.pageId, cacheId) : undefined,
+		// keyed by the viewer too, so this optimistic seed can only ever be the
+		// CURRENT viewer's own last result — never the previous account's, and
+		// nothing at all when signed out (see writeSourceCache)
+		result: source ? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId) : undefined,
 		error: null
 	}));
 	// inputs interpolate {arg} tokens against the args and {query.x} against
@@ -108,6 +111,7 @@ export const useThingSource = ({
 	const [local, setLocal] = React.useState(0);
 	const runVersion = manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
 	const signedIn = runtime.viewer.signedIn;
+	const viewerId = runtime.viewer.id;
 	const pageId = runtime.pageId;
 
 	React.useEffect(() => {
@@ -130,7 +134,7 @@ export const useThingSource = ({
 				const response: any = await runtime.load(shareKey, () => apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
 				if (cancelled) return;
 				if (response?.status === 'ok') {
-					writeSourceCache(pageId, cacheId, response.result ?? null);
+					writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
 					setState({ status: 'ok', result: response.result ?? null, error: null });
 				} else {
 					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
@@ -146,7 +150,7 @@ export const useThingSource = ({
 			cancelled = true;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal, the interval tick and manual refetches; runtime.load is version-keyed
-	}, [active, signedIn, sourceKey, inputsKey, runVersion, pageId, cacheId]);
+	}, [active, signedIn, viewerId, sourceKey, inputsKey, runVersion, pageId, cacheId]);
 
 	const scope = React.useMemo<ThingSourceScope>(
 		() => ({

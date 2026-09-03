@@ -219,25 +219,45 @@ export const WebpageRuntimeProvider = ({
 
 // The localStorage tier for source results — optimistic paint on the next
 // visit (house rule: never flash a loading state when a last-known value
-// exists). Keys are per page + block so two apps never share a cache line.
-const CACHE_PREFIX = 'tt-page-source:';
+// exists). Keys are per VIEWER + page + block, so two apps never share a
+// cache line AND two people never do.
+//
+// The viewer segment is the privacy bar, not a nicety. A source result is the
+// signed-in viewer's OWN private data — their orders, their expense rows,
+// their trainer, a natal chart derived from their birth details — and /p/ is
+// a shared public URL. `useThingSource` seeds its state from this cache in a
+// lazy initializer, BEFORE it knows whether the viewer is signed in and
+// before any fetch can replace it, so a page-scoped key would paint the last
+// signed-in viewer's data to whoever opens that page next on the same
+// browser: the signed-out visitor, or the next account on a shared machine.
+// Keyed by viewer, a cache line is only ever readable by the person who
+// filled it; no viewer means no cache line at all (the builder canvas and
+// gallery thumbnails render outside a provider and simply fetch).
+// Sign-out additionally drops these keys (hooks/useApi logout), the same
+// shared-browser rule the tt-activity-/tt-saved- caches follow.
+export const SOURCE_CACHE_PREFIX = 'tt-page-source:';
 
-export const readSourceCache = (pageId: string | null, blockId: string): unknown => {
-	if (!pageId || typeof window === 'undefined') return undefined;
+export const sourceCacheKey = (viewerId: string | null, pageId: string | null, blockId: string): string | null =>
+	viewerId && pageId && blockId ? `${SOURCE_CACHE_PREFIX}${viewerId}:${pageId}:${blockId}` : null;
+
+export const readSourceCache = (viewerId: string | null, pageId: string | null, blockId: string): unknown => {
+	const key = sourceCacheKey(viewerId, pageId, blockId);
+	if (!key || typeof window === 'undefined') return undefined;
 	try {
-		const raw = window.localStorage.getItem(`${CACHE_PREFIX}${pageId}:${blockId}`);
+		const raw = window.localStorage.getItem(key);
 		return raw ? JSON.parse(raw) : undefined;
 	} catch {
 		return undefined;
 	}
 };
 
-export const writeSourceCache = (pageId: string | null, blockId: string, value: unknown): void => {
-	if (!pageId || typeof window === 'undefined') return;
+export const writeSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, value: unknown): void => {
+	const key = sourceCacheKey(viewerId, pageId, blockId);
+	if (!key || typeof window === 'undefined') return;
 	try {
 		const encoded = JSON.stringify(value);
 		if (encoded.length > 256 * 1024) return;
-		window.localStorage.setItem(`${CACHE_PREFIX}${pageId}:${blockId}`, encoded);
+		window.localStorage.setItem(key, encoded);
 	} catch {
 		// storage full or unavailable — the live fetch still paints
 	}
