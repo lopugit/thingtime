@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router';
 
+import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
@@ -85,6 +86,27 @@ const MAX_QUERY_KEYS = 32;
 const MAX_QUERY_VALUE_CHARS = 200;
 const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 
+// A shared-load entry only earns its keep for the SIBLING blocks that ask for
+// the same key in the same beat, and one page draws at most
+// MAX_WEBPAGE_BLOCKS of them. The version reset below is not on its own a
+// bound: an `interval` source varies its key every tick (and a manual refetch
+// on every press) WITHOUT moving the runtime version, so on a page that never
+// runs a control — a clock, a live tally — the map would keep one entry, and
+// the whole action result it retains, for every tick of the session. Evict
+// oldest-first past a full page's worth of live blocks: the burst of loads for
+// one version is a single render pass, so no sibling can lose an entry it is
+// still waiting on, and the worst case past the cap is one duplicate request.
+export const MAX_SHARED_SOURCE_LOADS = MAX_WEBPAGE_BLOCKS;
+
+export const evictSharedLoads = <T,>(promises: Map<string, T>, max: number = MAX_SHARED_SOURCE_LOADS): void => {
+	// Map iterates in insertion order, so the first key is always the oldest
+	while (promises.size > max) {
+		const oldest = promises.keys().next();
+		if (oldest.done) return;
+		promises.delete(oldest.value);
+	}
+};
+
 // URL search params as a bounded string map: templates read `{query.id}`,
 // source inputs interpolate `{query.<name>}`. Values are plain strings —
 // they only ever become action INPUTS, which the executor validates.
@@ -158,6 +180,7 @@ export const WebpageRuntimeProvider = ({
 			if (existing) return existing;
 			const promise = fetcher();
 			store.promises.set(key, promise);
+			evictSharedLoads(store.promises);
 			return promise;
 		},
 		[version]
