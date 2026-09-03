@@ -415,6 +415,7 @@ export const refreshAdminPrPreviewPublicationForDeployment = async (input: {
   sha: string;
   status: string;
   snapshotUrl: string | null;
+  createdAt?: string | number;
 }) =>
   refreshAdminPrPreviewPublication(input.prNumber, [
     {
