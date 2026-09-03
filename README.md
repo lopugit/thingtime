@@ -1614,8 +1614,8 @@ deployment end to end with:
 pnpm --dir remix run verify:connections
 ```
 
-(64 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
-live Hacker News pull.)
+(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull, for 96.)
 
 ### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
 
