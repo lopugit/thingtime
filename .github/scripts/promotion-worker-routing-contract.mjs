@@ -104,11 +104,40 @@ assert.match(
 	"Feature Stack admission validates the run id inside the decoded immutable plan",
 );
 assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
-assert.match(
-	workflow,
-	/feature_stack_merge:[\s\S]*?if: >-\s*!cancelled\(\)\s*&& needs\.feature_stack_plan\.result == 'success'\s*&& needs\.model_config\.result == 'success'/,
-	"Feature Stack workers still run when skipped indirect dependencies are expected",
-);
+// The rule is that this job leads with `!cancelled()` and then states an
+// explicit success check for each of its two `needs`, so a skipped job
+// elsewhere in the graph cannot silently skip it. Assert those three
+// requirements inside the job's own `if:` block instead of pinning them as
+// adjacent text: an extra orthogonal guard is legitimate -- d5e984a0 added
+// `recovery != 'true'` between them -- and demanding adjacency did not make
+// the rule stricter, it just made it permanently red, so it stopped checking
+// anything at all. Scoping to the block is what keeps this strict.
+//
+// Take the job's own block first, and only then look inside it for the guard.
+// The body is every following line that is blank or indented past the job
+// header, so the scan stops at the next job instead of running on through the
+// file. That bound is what makes this strict rather than merely non-adjacent:
+// scanning forward from the header for the first `if: >-` will happily cross
+// into a later job, so a `feature_stack_merge` that lost its `if:` altogether
+// would be checked against some other job's guard and this contract would
+// report OK on exactly the regression it exists to catch. The decoy is
+// structural, not bad luck -- `feature_stack_progress` gates on the same two
+// `needs` and today its block is byte-identical to this one.
+const featureStackMergeJob = /\n {2}feature_stack_merge:\n((?: {4,}.*\n|\n)*)/u.exec(workflow);
+assert.ok(featureStackMergeJob, "feature_stack_merge declares a job block");
+const featureStackMergeIf = /^ {4}if: >-\n((?: {6}.*\n)+)/mu.exec(featureStackMergeJob[1]);
+assert.ok(featureStackMergeIf, "feature_stack_merge declares a multi-line if: guard");
+for (const clause of [
+	/^ *!cancelled\(\)\s*\n/u,
+	/\n *&& needs\.feature_stack_plan\.result == 'success'\s*\n/u,
+	/\n *&& needs\.model_config\.result == 'success'\s*\n/u,
+]) {
+	assert.match(
+		featureStackMergeIf[1],
+		clause,
+		"Feature Stack workers still run when skipped indirect dependencies are expected",
+	);
+}
 assert.match(workflow, /feature-stack-plan\.mjs verify/);
 assert.match(workflow, /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"/);
 assert.match(workflow, /git -C "\$integration" update-ref "refs\/remotes\/origin\/\$head" "\$sha"/);

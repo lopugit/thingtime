@@ -1304,6 +1304,67 @@ function assertWorkflowSource() {
   );
 }
 
+// Blank lines and `#` comments are not structure. YAML allows both anywhere,
+// at any column, and neither one ends a step -- but a boundary scan that reads
+// indentation alone treats them as the end, and the window then answers for
+// the wrong lines in both directions: backwards it opens below the step's own
+// `id:`, forwards it closes above keys the step still owns.
+const isStructuralYamlLine = (line) => line.trim() !== "" && !/^\s*#/u.test(line);
+const yamlIndent = (line) => /^ */u.exec(line)[0].length;
+
+// Ordinary YAML quoting and spacing are not semantic here, so match the scalar
+// rather than one exact spelling of it. `id: 'live_probe'` is the same step as
+// `id: live_probe`, and reading it as a different one is not a harmless miss:
+// it costs the credential probe its exemption and reports the generic
+// slot message against it instead, which is the misdirection
+// `assertAdminModelRouting` goes to some length elsewhere to head off.
+const yamlScalarPattern = (key, value) =>
+  new RegExp(`^[ \\t]*(?:- )?${key}:[ \\t]*(['"]?)${value}\\1[ \\t]*$`, "mu");
+
+// The whole step that owns `lines[index]`: the `- ` marker that opens it,
+// every key under that marker, and nothing of the step or job that follows.
+// Both bounds come from the step's own indentation, so this does not assume
+// the six-space step depth of a workflow job over a composite action's.
+//
+// The end is keyed to the marker rather than to the matched line, because
+// those differ for a step written `- uses:` first: there the matched line *is*
+// the marker, every sibling step starts at that same column, and a strictly
+// less-indented bound would run the window past them to the end of the job.
+export function yamlStepAt(lines, index) {
+  const lineIndent = yamlIndent(lines[index]);
+  // Not every `- ` line opens a step. One opens *this* step only if it sits
+  // shallower than the matched line -- or is that line itself, for a step
+  // written `- uses:` first. A sequence nested inside the step is deeper: an
+  // `env:` list, an `allowedTools` list, a `- ` bullet inside one of the
+  // prompt block scalars these calls all carry. Reading one of those as the
+  // marker collapses the window onto that single item, which drops the step's
+  // own `id:` out of view -- so the probe falls through to the generic rule
+  // and the suite reports "every Lopu call receives the secondary API-key
+  // slot" against it. That is exactly the misdirection this window exists to
+  // prevent, and a maintainer who applies that message literally hands the
+  // vault probe the static slot the exemption is there to keep off it.
+  // Verified: adding an `env:` list above the probe's `uses:` reproduces that
+  // message on the probe line; the fixtures pin it.
+  const opensStep = (cursor) =>
+    /^ *- /u.test(lines[cursor]) && (cursor === index || yamlIndent(lines[cursor]) < lineIndent);
+  let start = index;
+  while (
+    start > 0 &&
+    !opensStep(start) &&
+    (!isStructuralYamlLine(lines[start - 1]) || yamlIndent(lines[start - 1]) >= lineIndent)
+  ) {
+    start -= 1;
+  }
+  if (start > 0 && opensStep(start - 1)) start -= 1;
+  // Without a marker the step's extent is unknown, so fall back to the matched
+  // line's own indentation instead of guessing a wider one.
+  const bound = opensStep(start) ? yamlIndent(lines[start]) : lineIndent - 1;
+  const offset = lines
+    .slice(start + 1)
+    .findIndex((line) => isStructuralYamlLine(line) && yamlIndent(line) <= bound);
+  return lines.slice(start, offset === -1 ? lines.length : start + 1 + offset).join("\n");
+}
+
 function aiRuntimeSourceFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -1516,8 +1577,17 @@ function assertAdminModelRouting(
     "repository review keeps complete ancestry while lazily materializing selected PR blobs",
   );
 
-  const aiRuntimePattern =
-    /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
+  // One definition of a Lopu call, used both to select the files this contract
+  // scans and to pick the calls it enforces credential slots on below. Those
+  // were two copies, and they drifted: selection accepted `control-plane/` and
+  // enforcement did not, so `all-branch.yml` was pulled into the scanned set by
+  // its three lopu-agent calls and then every one of them was skipped. Deriving
+  // the wide pattern from the narrow one makes "enforce on every call you
+  // selected" a property of the code instead of a comment asking for it.
+  const lopuAgentCallPattern = /uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u;
+  const aiRuntimePattern = new RegExp(
+    `(?:anthropics/claude-code-action|openai/codex-action)@|${lopuAgentCallPattern.source}|\\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\\b`,
+  );
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -1572,11 +1642,127 @@ function assertAdminModelRouting(
     );
 
     const lines = runtime.split("\n");
+    // Nearest enclosing job for a step line. Inside `jobs:` the only
+    // two-space-indented bare key is a job name (a job's own `env:`/`steps:`
+    // sit at four, its steps at six), so walking back to the first one names
+    // the job that owns this call. Outside `jobs:` it returns whatever
+    // two-space key happens to precede -- `steps` in a composite `action.yml`,
+    // whose `runs:` sits at zero -- so treat the result as a name to compare,
+    // never as proof that a job was found. Only the exact string below is
+    // exempt, so every other answer, right or meaningless, denies the
+    // exemption and applies the generic rule.
+    const enclosingJob = (line) => {
+      for (let cursor = line; cursor >= 0; cursor -= 1) {
+        const header = /^ {2}([A-Za-z0-9_-]+):\s*$/u.exec(lines[cursor]);
+        if (header) return header[1];
+      }
+      return null;
+    };
+    // The probe exemption below keys on this job name, so losing the name
+    // retires the exemption without retiring the probe. That direction is
+    // fail-closed, but its message is not: the probe falls through to the
+    // generic rule and reports "every Lopu call receives the secondary
+    // API-key slot", and a maintainer who acts on that message literally
+    // hands the vault probe a static slot -- the masking regression the
+    // exemption exists to prevent -- whereupon the contract goes green on it.
+    // Verified: rename the job and the suite reports exactly that line, and
+    // adding the two slots it asks for turns the suite green. Name the real
+    // cause here so that misdirecting message is never the one that gets read.
+    if (path === ".github/workflows/resolve-pr-conflicts.yml") {
+      assert.ok(
+        lines.some((line) => /^ {2}verify_credential_vault:\s*$/u.test(line)),
+        `${path}: the credential-probe exemption keys on the verify_credential_vault job, which is missing`,
+      );
+    }
     for (let index = 0; index < lines.length; index += 1) {
-      if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+      // The same pattern `aiRuntimePattern` is built from, so this rule cannot
+      // cover fewer call sites than the scan that selected the file. Widening
+      // it to `control-plane/` is what brings `all-branch.yml`'s three calls
+      // under the slot assertions below; they all pass both slots today, so
+      // this closed a latent hole rather than a live one.
+      if (!lopuAgentCallPattern.test(lines[index])) {
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
+      // The live credential-vault probe is the one deliberate exception. Its
+      // whole job is to prove Thingtime's ordered waterfall still authenticates
+      // on its own, so it passes only `thingtime-ci-router-secret` and none of
+      // the legacy static slots. Handing it a fallback would let it pass on the
+      // fallback while the vault is down -- masking exactly the outage the probe
+      // exists to catch. Exempt it, but require it to still be vault-driven, so
+      // this stays a checked exception rather than an unconditional skip.
+      //
+      // The exemption is keyed on the JOB as well as the step id, because a
+      // bare `id: live_probe` is not an identity: any step in any job may
+      // adopt that id, and a real secret-bearing worker that did would
+      // silently shed both fallback-slot assertions below while this contract
+      // stayed green. A job boundary cannot be adopted that way. Rename or
+      // drop `verify_credential_vault` and the probe simply stops being
+      // exempt -- it then fails the generic rule, which is the fail-closed
+      // direction for a credential contract.
+      const inVaultProbeJob = enclosingJob(index) === "verify_credential_vault";
+      // This call's whole step, used both to find its `id:` and to scope the
+      // probe assertions below: the `- ` marker that opens the step, every key
+      // under it, and nothing of the step or job that follows. `call` is a
+      // fixed 32-line window that here runs past this step and into the next
+      // job, so a negative assertion over it would answer for lines the step
+      // does not own. Both bounds come from the `uses:` line's own
+      // indentation, so this does not assume the six-space step depth of a
+      // workflow job over a composite action's.
+      //
+      // The id is taken from the step rather than from a fixed count of lines
+      // above the `uses:`, because that window is what decides whether the
+      // exemption applies and a fixed one ties it to the probe's current
+      // shape. Give the probe a `continue-on-error:` and a small `env:` and
+      // the `id:` slides out of view: the probe falls through to the generic
+      // rule, and the suite reports "every Lopu call receives the secondary
+      // API-key slot" against the probe line. A maintainer who applies that
+      // message literally hands the vault probe a static slot -- the masking
+      // regression this exemption exists to prevent -- and the suite goes
+      // green on it. That is the same misdirection the missing-job assertion
+      // above is there to head off, reached by ordinary step maintenance
+      // instead of a rename, so bound it by the step and it cannot happen.
+      // `yamlStepAt` is what makes that bound hold for ordinary YAML: a blank
+      // line or a `#` note inside the probe, or an `id:` someone quoted, each
+      // used to drop the step's `id:` out of the window and produce exactly
+      // that message. Its fixtures pin all three.
+      const step = yamlStepAt(lines, index);
+      if (inVaultProbeJob && yamlScalarPattern("id", "live_probe").test(step)) {
+        // Assert both halves of the exemption, not just the positive one.
+        // Requiring the router secret proves the probe can reach the
+        // waterfall; it does not stop the probe from *also* being handed a
+        // static slot, and a probe carrying one authenticates on that slot and
+        // reports green while the vault is down -- the exact outage it exists
+        // to catch, and the exact reason the paragraph above gives for
+        // exempting it. Left unasserted, the exemption rests on a property
+        // nothing checks, which is how it silently becomes an unconditional
+        // skip for the one call site allowed to carry no slots.
+        // Carrying the router secret is not the same as using it. The action
+        // fetches the ordered bundle in a step gated on
+        // `inputs.backend == 'claude'` (lopu-agent/action.yml), so on any other
+        // backend the secret is inert and the waterfall is never touched.
+        // Verified: flip this step to `backend: codex` and every one of the
+        // eleven advisory contracts stays green while the live vault check the
+        // job is named for silently stops running -- the exemption would go on
+        // paying out for a probe that no longer probes anything, which is the
+        // unconditional skip the paragraph above refuses to grant.
+        assert.match(
+          step,
+          yamlScalarPattern("backend", "claude"),
+          `${path}:${index + 1}: the credential probe must run the Claude backend that fetches the Thingtime waterfall`,
+        );
+        assert.match(
+          step,
+          /^\s+thingtime-ci-router-secret:/mu,
+          `${path}:${index + 1}: the credential probe must authenticate through the Thingtime waterfall`,
+        );
+        assert.doesNotMatch(
+          step,
+          /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
+          `${path}:${index + 1}: the credential probe must exercise only the Thingtime waterfall, never a static slot`,
+        );
+        continue;
+      }
       assert.match(
         call,
         /anthropic-api-key-fallback:/u,

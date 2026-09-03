@@ -1182,6 +1182,11 @@ export function assertControlPlaneContract() {
     /node --test \.github\/scripts\/lopu-pr-status\.test\.mjs/u,
     "control-plane CI executes the Lopu PR status renderer and classifier fixtures",
   );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/resolve-pr-conflicts-routing-contract\.test\.mjs/u,
+    "control-plane CI executes the conflict-resolver routing step-window fixtures",
+  );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /^name: Lopu internal develop promotion$/m);
