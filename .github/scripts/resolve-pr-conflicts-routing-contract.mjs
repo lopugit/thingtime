@@ -1368,6 +1368,46 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
   assert.match(
     reviewBlock,
+    /gh pr list --repo "\$REPO" --state open --base github-actions --limit 500[\s\S]*headRefName,headRefOid,isCrossRepository,title,body,author/u,
+    "controller repair publication inventories every open managed repair before creating a run-id branch",
+  );
+  assert.match(
+    reviewBlock,
+    /\.author\.login == \$owner or \.author\.login == "github-actions\[bot\]"/u,
+    "only the repository owner or GitHub Actions bot can supply a reusable same-repository repair head",
+  );
+  assert.match(
+    reviewBlock,
+    /Could not verify existing Lopu controller-repair PRs; refusing to create a potentially duplicate PR/u,
+    "a failed deduplication read fails closed instead of opening another repair PR",
+  );
+  assert.match(
+    reviewBlock,
+    /pulls\/\$number\/files\?per_page=100[\s\S]*comm -12 "\$current_paths" "\$candidate_paths"/u,
+    "controller repairs compare complete changed-file inventories and prefer an overlapping open PR",
+  );
+  assert.match(
+    reviewBlock,
+    /git -C "\$trusted" apply --index --3way "\$patch"/u,
+    "an overlapping repair is combined only when its patch applies cleanly",
+  );
+  assert.match(
+    reviewBlock,
+    /--force-with-lease="refs\/heads\/\$branch:\$candidate_sha"/u,
+    "updates to an existing controller repair are fenced to its inspected head",
+  );
+  assert.match(
+    reviewBlock,
+    /outcome=updated-existing/u,
+    "a successfully reused controller repair is reported separately from a newly opened PR",
+  );
+  assert.match(
+    reviewBlock,
+    /report_title=.*sed -n 's\/\^# \/\/p'[\s\S]*title="fix\(actions\):/u,
+    "new controller repairs use the diagnosis heading instead of one indistinguishable generic title",
+  );
+  assert.match(
+    reviewBlock,
     /gh api repos\/\$REPO\/actions\/runs\/<WORKFLOW_RUN_ID>/u,
     "Lopu retrieves the exact first-party workflow run before diagnosing it",
   );

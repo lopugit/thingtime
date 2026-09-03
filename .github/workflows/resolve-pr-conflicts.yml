@@ -5237,26 +5237,75 @@ jobs:
           }
 
           git -C "$trusted" diff --check
-          branch="lopu/workflow-check-fix-${GITHUB_RUN_ID}"
-          git check-ref-format "refs/heads/$branch" >/dev/null
-          git -C "$trusted" switch --quiet -c "$branch" "$source_sha"
           git -C "$trusted" config user.name 'Lopu'
           git -C "$trusted" config user.email 'lopu[bot]@users.noreply.github.com'
           git -C "$trusted" add -- "${changed[@]}"
           git -C "$trusted" diff --cached --check
-          git -C "$trusted" commit -m 'fix(actions): Lopu repairs failed PR checks'
+
+          patch="$RUNNER_TEMP/lopu-workflow-fix.patch"
+          current_paths="$RUNNER_TEMP/lopu-workflow-fix-paths.txt"
+          git -C "$trusted" diff --cached --binary --full-index >"$patch"
+          [ -s "$patch" ] || {
+            echo '::error::Lopu staged no protected-controller change to publish.'
+            exit 1
+          }
+          printf '%s\n' "${changed[@]}" | LC_ALL=C sort -u >"$current_paths"
+
+          # A run-id branch is unique by construction, so looking up only that
+          # branch (the previous behaviour) could never find a repair PR opened
+          # by another run. Inventory every open, same-repository Lopu repair
+          # first and prefer one touching any of the same protected files. The
+          # repository-review fleet is serialized, and the exact head lease
+          # below still protects against a human or external update racing us.
+          repairs="$RUNNER_TEMP/lopu-open-controller-repairs.json"
+          if ! gh pr list --repo "$REPO" --state open --base github-actions --limit 500 \
+              --json number,url,headRefName,headRefOid,isCrossRepository,title,body,author \
+              >"$repairs"; then
+            echo '::warning::Could not verify existing Lopu controller-repair PRs; refusing to create a potentially duplicate PR.'
+            printf 'outcome=dedupe-check-failed\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          repo_owner="${REPO%%/*}"
+          jq -c --arg owner "$repo_owner" '
+            [ .[]
+              | select(.isCrossRepository == false)
+              | select(.author.login == $owner or .author.login == "github-actions[bot]")
+              | select(.headRefName | test("^lopu/workflow-check-fix-[0-9]+$"))
+              | select(
+                  .title == "fix(actions): Lopu repairs failed PR checks"
+                  or .title == "fix(actions): Lopu controller repair queue"
+                  or ((.body // "") | contains("<!-- thingtime-lopu-controller-repair:v1"))
+                )
+            ]
+            | sort_by(.number)
+          ' "$repairs" >"$repairs.filtered"
+
+          existing=''
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            candidate="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$candidate")"
+            candidate_paths="$RUNNER_TEMP/lopu-controller-repair-$number-paths.txt"
+            candidate_pages="$RUNNER_TEMP/lopu-controller-repair-$number-files.json"
+            if ! gh api --paginate "repos/$REPO/pulls/$number/files?per_page=100" --slurp \
+                >"$candidate_pages"; then
+              echo "::warning::Could not compare existing controller-repair PR #$number; refusing to create a potentially duplicate PR."
+              printf 'outcome=dedupe-check-failed\n' >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            jq -r 'add | .[].filename' "$candidate_pages" | LC_ALL=C sort -u >"$candidate_paths"
+            if comm -12 "$current_paths" "$candidate_paths" | grep -q .; then
+              existing="$candidate"
+              break
+            fi
+          done < <(jq -r '.[] | @base64' "$repairs.filtered")
 
           basic="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
-          GIT_CONFIG_COUNT=3 \
-          GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
-          GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
-          GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
-          GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
-            git -C "$trusted" push "https://github.com/$REPO.git" "HEAD:refs/heads/$branch"
-          unset basic PUSH_TOKEN
 
           pr_body="$RUNNER_TEMP/lopu-workflow-fix-pr.md"
           {
+            printf '<!-- thingtime-lopu-controller-repair:v1 run=%s -->\n' "$GITHUB_RUN_ID"
+            echo
             echo '## Lopu controller check repair'
             echo
             echo 'Lopu identified a failed PR check whose root cause is in the protected controller/workflow code.'
@@ -5265,11 +5314,97 @@ jobs:
             echo
             printf '[Source Lopu workflow run](%s)\n' "$RUN_URL"
           } >"$pr_body"
-          url="$(gh pr list --repo "$REPO" --state open --head "$branch" --base github-actions --json url --jq '.[0].url // empty')"
-          if [ -z "$url" ]; then
-            url="$(gh pr create --repo "$REPO" --base github-actions --head "$branch" \
-              --title 'fix(actions): Lopu repairs failed PR checks' --body-file "$pr_body")"
+
+          if [ -n "$existing" ]; then
+            number="$(jq -r '.number' <<<"$existing")"
+            url="$(jq -r '.url' <<<"$existing")"
+            branch="$(jq -r '.headRefName' <<<"$existing")"
+            candidate_sha="$(jq -r '.headRefOid' <<<"$existing")"
+            [[ "$number" =~ ^[1-9][0-9]*$ ]]
+            [[ "$branch" =~ ^lopu/workflow-check-fix-[0-9]+$ ]]
+            [[ "$candidate_sha" =~ ^[0-9a-f]{40,64}$ ]]
+            git check-ref-format "refs/heads/$branch" >/dev/null
+
+            candidate_ref="refs/lopu-controller-repairs/$number"
+            GIT_CONFIG_COUNT=3 \
+            GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+            GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+            GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+              git -C "$trusted" fetch --quiet --no-tags --force \
+                "https://github.com/$REPO.git" "refs/heads/$branch:$candidate_ref"
+            [ "$(git -C "$trusted" rev-parse "$candidate_ref")" = "$candidate_sha" ] || {
+              echo "::warning::Controller-repair PR #$number moved during deduplication; preserving its newer head and creating no duplicate."
+              printf 'outcome=existing-head-moved\n' >>"$GITHUB_OUTPUT"
+              exit 0
+            }
+
+            git -C "$trusted" reset --hard --quiet "$source_sha"
+            git -C "$trusted" clean -qffdx
+            git -C "$trusted" switch --quiet --detach "$candidate_sha"
+            if ! git -C "$trusted" merge-base --is-ancestor "$source_sha" HEAD; then
+              if ! git -C "$trusted" merge --no-edit "$source_sha"; then
+                git -C "$trusted" merge --abort >/dev/null 2>&1 || true
+                echo "::warning::Existing controller-repair PR #$number cannot absorb the current controller cleanly; it is not a safe deduplication target."
+                existing=''
+              fi
+            fi
+            if [ -n "$existing" ]; then
+              if git -C "$trusted" apply --reverse --check "$patch" >/dev/null 2>&1; then
+                echo "Lopu's proposed controller change is already present in PR #$number."
+              elif ! git -C "$trusted" apply --index --3way "$patch"; then
+                echo "::warning::Existing controller-repair PR #$number overlaps but cannot absorb this patch cleanly; a separate repair PR is required."
+                existing=''
+              else
+                git -C "$trusted" diff --cached --check
+                git -C "$trusted" commit -m 'fix(actions): Lopu repairs failed PR checks'
+              fi
+            fi
+            if [ -n "$existing" ] && [ "$(git -C "$trusted" rev-parse HEAD)" != "$candidate_sha" ]; then
+              GIT_CONFIG_COUNT=3 \
+              GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+              GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+              GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+                git -C "$trusted" push \
+                  --force-with-lease="refs/heads/$branch:$candidate_sha" \
+                  "https://github.com/$REPO.git" "HEAD:refs/heads/$branch"
+            fi
+            if [ -n "$existing" ]; then
+              gh pr edit "$number" --repo "$REPO" \
+                --title 'fix(actions): Lopu controller repair queue' >/dev/null
+              gh pr comment "$number" --repo "$REPO" --body-file "$pr_body" >/dev/null
+              echo "Lopu updated existing controller repair PR: $url"
+              printf 'url=%s\n' "$url" >>"$GITHUB_OUTPUT"
+              printf 'outcome=updated-existing\n' >>"$GITHUB_OUTPUT"
+              unset basic PUSH_TOKEN
+              exit 0
+            fi
           fi
+
+          # No overlapping repair could be safely reused. Restore the reviewed
+          # controller snapshot and create one new run-scoped repair PR.
+          git -C "$trusted" reset --hard --quiet "$source_sha"
+          git -C "$trusted" clean -qffdx
+          branch="lopu/workflow-check-fix-${GITHUB_RUN_ID}"
+          git check-ref-format "refs/heads/$branch" >/dev/null
+          git -C "$trusted" switch --quiet -c "$branch" "$source_sha"
+          git -C "$trusted" apply --index "$patch"
+          git -C "$trusted" commit -m 'fix(actions): Lopu repairs failed PR checks'
+          GIT_CONFIG_COUNT=3 \
+          GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+          GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+          GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+            git -C "$trusted" push "https://github.com/$REPO.git" "HEAD:refs/heads/$branch"
+          unset basic PUSH_TOKEN
+
+          report_title="$(sed -n 's/^# //p' "$report" | head -n 1 | tr -d '\r')"
+          [ -n "$report_title" ] || report_title='Lopu repairs failed PR checks'
+          title="fix(actions): ${report_title#Lopu controller fix — }"
+          title="${title:0:240}"
+          url="$(gh pr create --repo "$REPO" --base github-actions --head "$branch" \
+            --title "$title" --body-file "$pr_body")"
           echo "Lopu opened controller repair PR: $url"
           printf 'url=%s\n' "$url" >>"$GITHUB_OUTPUT"
           printf 'outcome=opened\n' >>"$GITHUB_OUTPUT"
