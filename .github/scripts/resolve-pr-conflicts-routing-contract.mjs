@@ -1403,8 +1403,13 @@ function assertWorkflowSource() {
   );
   assert.match(
     reviewBlock,
-    /report_title=.*sed -n 's\/\^# \/\/p'[\s\S]*title="fix\(actions\):/u,
+    /report_title=.*sed -n '\/\^# \/\{s\/\^# \/\/;s\/\\r\/\/g;p;q;\}'[\s\S]*title="fix\(actions\):/u,
     "new controller repairs use the diagnosis heading instead of one indistinguishable generic title",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /report_title=[^\n]*\|[^\n]*head -n 1/u,
+    "the diagnosis heading is read without a pipeline — a SIGPIPE there aborts the step under pipefail, after the repair branch is pushed and before its PR is created",
   );
   assert.match(
     reviewBlock,

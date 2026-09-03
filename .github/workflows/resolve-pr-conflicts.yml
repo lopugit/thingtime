@@ -5399,7 +5399,15 @@ jobs:
             git -C "$trusted" push "https://github.com/$REPO.git" "HEAD:refs/heads/$branch"
           unset basic PUSH_TOKEN
 
-          report_title="$(sed -n 's/^# //p' "$report" | head -n 1 | tr -d '\r')"
+          # One sed, no pipeline. `sed … | head -n 1` makes head exit after the
+          # first line, and once the report carries more level-1 headings than
+          # the pipe buffer holds, sed dies of SIGPIPE — which `pipefail` turns
+          # into a 141 exit and `set -e` turns into an aborted step. That abort
+          # lands AFTER the branch push above and BEFORE `gh pr create`, so the
+          # failure mode is an orphaned lopu/workflow-check-fix-* branch holding
+          # the repair with no PR to publish it. `q` on the first match is also
+          # what `head -n 1` was there for.
+          report_title="$(sed -n '/^# /{s/^# //;s/\r//g;p;q;}' "$report")"
           [ -n "$report_title" ] || report_title='Lopu repairs failed PR checks'
           title="fix(actions): ${report_title#Lopu controller fix — }"
           title="${title:0:240}"
