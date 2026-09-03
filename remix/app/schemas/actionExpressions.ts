@@ -573,8 +573,38 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return capText(parts.join(separator), ctx);
 		}
 		case 'split': {
+			// The fifth builder whose OUTPUT can dwarf its input, so it caps
+			// DURING the walk like `flatten` / `concat` above rather than after.
+			// `capList` reads `.length` on a FINISHED array, and split's input is
+			// not bounded the way its siblings' are: `text(0)` is `toText` of ANY
+			// resolved value, and a `$step` ref to a things.search result
+			// (MAX_ACTION_SEARCH_LIMIT = 100 docs, each crystal as large as the
+			// things write route accepts) serialises to tens of millions of
+			// characters. `.split('')` on that materialises one element per
+			// character before the cap ever looks: measured 280ms of blocking,
+			// uninterruptible CPU and +172MB heap for a refusal, so the refusal
+			// cost far more than the success. Pushing under the cap makes it
+			// O(cap) — and `actions.run` allows 240/min.
 			const separator = text(1);
-			return capList(separator ? text(0).split(separator) : [...text(0)], ctx);
+			const source = text(0);
+			const out: string[] = [];
+			const push = (piece: string): void => {
+				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				out.push(piece);
+			};
+			// no separator = one element per CODE POINT, exactly like the [...text]
+			// spread this replaces (not String#split(''), which yields code units)
+			if (!separator) {
+				for (const character of source) push(character);
+				return out;
+			}
+			let from = 0;
+			for (let at = source.indexOf(separator); at !== -1; at = source.indexOf(separator, from)) {
+				push(source.slice(from, at));
+				from = at + separator.length;
+			}
+			push(source.slice(from));
+			return out;
 		}
 		case 'includes':
 			return Array.isArray(args[0]) ? (args[0] as unknown[]).some((entry) => looseEquals(entry, args[1])) : text(0).includes(text(1));

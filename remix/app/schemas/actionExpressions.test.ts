@@ -361,6 +361,42 @@ test('concat refuses an oversized result without building it first', () => {
 	assert.throws(() => run(['concat', big, 'z']), /text caps at/);
 });
 
+test('split refuses an oversized result without building it first', () => {
+	// The fifth builder with the flatten/replace/join/concat hazard, and the
+	// one whose input is LEAST bounded. Every other text function takes its
+	// input from a capped builder, but `text(0)` is `toText` of ANY resolved
+	// value: a `$step` ref straight to one long crystal text field is a plain
+	// string (toText is a no-op on strings), and the things write route accepts
+	// a 768KB body — a things.search result of 100 of those serialises to tens
+	// of millions of characters. `capList` read `.length` on a FINISHED array,
+	// so `.split('')` materialised one element per character first: measured
+	// 280ms of blocking, uninterruptible CPU and +172MB heap for a REFUSAL, at
+	// 240 actions.run/min. Refusing at the cap makes it O(cap) — flat in the
+	// input size — so the refusal costs less than the success, not more.
+	const body = 'y'.repeat(4_000_000);
+	for (const separator of ['', 'y']) {
+		const started = process.hrtime.bigint();
+		assert.throws(() => run(['split', '$body', separator], { body }), /lists cap at/, `split on ${JSON.stringify(separator)} must refuse`);
+		const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+		// stopping at the 1000th element is sub-millisecond and does not grow
+		// with the input; building all 4,000,000 first is 40-60ms and ~100MB
+		assert.ok(elapsedMs < 10, `split refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	}
+
+	// ordinary semantics and the exact boundary are untouched, including
+	// String#split's empty leading/trailing pieces and the code-POINT walk the
+	// no-separator form has always used (not String#split('')'s code units)
+	assert.deepEqual(run(['split', 'a,b', ',']), ['a', 'b']);
+	assert.deepEqual(run(['split', ',a,', ',']), ['', 'a', '']);
+	assert.deepEqual(run(['split', 'aa', 'a']), ['', '', '']);
+	assert.deepEqual(run(['split', 'abc', ',']), ['abc']);
+	assert.deepEqual(run(['split', '', ',']), ['']);
+	assert.deepEqual(run(['split', '', '']), []);
+	assert.deepEqual(run(['split', 'a🌱b', '']), ['a', '🌱', 'b']);
+	assert.equal(run(['split', 'x'.repeat(MAX_EXPRESSION_LIST_LENGTH), '']).length, MAX_EXPRESSION_LIST_LENGTH);
+	assert.throws(() => run(['split', 'x'.repeat(MAX_EXPRESSION_LIST_LENGTH + 1), '']), /lists cap at/);
+});
+
 test('dateAdd refuses an out-of-range result instead of throwing a raw RangeError', () => {
 	// `toISOString()` on an overflowed Date throws RangeError('Invalid time
 	// value'), which reaches the run record as an opaque message rather than a
