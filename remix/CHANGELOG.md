@@ -17,6 +17,36 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
+
+- Grouped summary; the normative design lives in
+  `PRs/lopu-ai-assistant-design.md` and the checklist in `TESTING.md`
+  ("Lopu AI assistant").
+- **`ai-model` catalog** (protected, control-plane Things seeded from
+  `AI_WORKFLOW_BASE_MODELS`): `GET /api/v1/ai/models`, admin toggle/seed at
+  `POST /api/v1/admin/ai/models`, stored chat defaults at
+  `GET|POST /api/v1/settings/lopu-chat-defaults`.
+- **Lopu conversations in Messenger** (`externalSource.access === 'lopu'`
+  discriminator, one owner member): `GET|POST /api/v1/lopu/chats`,
+  `/update`, `/delete`, and the NDJSON turn `POST /api/v1/lopu/chats/reply`
+  (fail-closed `lopu.chat` 40/10 min); list entries carry the chat's own
+  `lopu` model settings.
+- **Provider loop** (`api/utils/lopu/chat.ts`): Claude tool loop with
+  cache-controlled system prompt + eager input streaming, OpenAI native
+  tools or the fenced `tt-tool` text protocol (`LOPU_OPENAI_TOOLS=text`) for
+  endpoints without function calling, a plain-completion rung for endpoints
+  that refuse `stream: true` (replayed as chunks; envelopes and bare
+  tool-call JSON normalised), a deterministic scripted provider
+  (`LOPU_CHAT_PROVIDER=test`), and honest canned fallbacks; 20 viewer-scoped
+  tools; isomorphic patch-op grammar (`pageOps.ts`) + tolerant partial JSON.
+- **Client**: `/lopu` page, floating launcher + draggable/dockable window
+  (mobile bottom sheet), Messenger pane, Drawer entry with a streaming badge,
+  Settings/admin surfaces; live builder patches paint block by block while
+  the reply streams (`lopuBuildBridge.ts`), with Undo.
+- Env: `LOPU_CHAT_PROVIDER`, `LOPU_OPENAI_TOOLS`, `LOPU_CLAUDE_MODEL`,
+  `LOPU_OPENAI_MODEL` (README "Lopu AI assistant"). Live verification:
+  `node scripts/verify-lopu.mjs <base>` (99 checks).
+
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 
 - Grouped summary; details in the PR note

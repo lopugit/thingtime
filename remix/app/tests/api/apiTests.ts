@@ -671,6 +671,88 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200], (body) => isObject(body) && typeof body?.state === 'string', 'Vercel health returned a status shape.')
   },
   {
+    id: 'ai-models-catalog',
+    name: 'AI model catalog',
+    description: 'GET /api/v1/ai/models returns the Lopu model catalog with per-model availability, the resolved chat defaults, and provider key presence.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/ai/models',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.models) &&
+        body.models.length > 0 &&
+        body.models.every(
+          (model: any) =>
+            typeof model?.id === 'string' &&
+            model.id !== 'default' &&
+            typeof model?.label === 'string' &&
+            (model?.provider === 'anthropic' || model?.provider === 'openai') &&
+            Array.isArray(model?.efforts) &&
+            Array.isArray(model?.speeds) &&
+            typeof model?.family === 'string' &&
+            typeof model?.enabled === 'boolean' &&
+            typeof model?.available === 'boolean' &&
+            typeof model?.isDefault === 'boolean' &&
+            (!model.available || model.enabled)
+        ) &&
+        isObject(body?.defaults) &&
+        (body.defaults.model === null || typeof body.defaults.model === 'string') &&
+        (body.defaults.speed === 'normal' || body.defaults.speed === 'fast') &&
+        isObject(body?.providers) &&
+        typeof body.providers?.anthropic?.configured === 'boolean' &&
+        typeof body.providers?.openai?.configured === 'boolean' &&
+        !JSON.stringify(body).includes('sk-'),
+      'AI model catalog returned with availability, defaults, and provider status.'
+    )
+  },
+  {
+    id: 'admin-ai-models-anonymous',
+    name: 'Admin AI model toggle requires auth',
+    description: 'POST /api/v1/admin/ai/models refuses anonymous callers before touching the catalog.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/admin/ai/models',
+    anonymous: true,
+    body: { id: 'claude-opus-5', enabled: true },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous admin catalog toggle refused.')
+  },
+  {
+    id: 'settings-lopu-chat-defaults-read',
+    name: 'Lopu chat defaults',
+    description: 'GET /api/v1/settings/lopu-chat-defaults publicly returns the stored Lopu default model plus its availability-resolved form.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/settings/lopu-chat-defaults',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.key === 'Thingtime.LopuChatDefaults' &&
+        isObject(body?.defaults) &&
+        typeof body.defaults.model === 'string' &&
+        isObject(body?.resolved) &&
+        (body.resolved.model === null || typeof body.resolved.model === 'string') &&
+        Array.isArray(body?.models) &&
+        !JSON.stringify(body).includes('updatedBy'),
+      'Lopu chat defaults returned without storage audit fields.'
+    )
+  },
+  {
+    id: 'settings-lopu-chat-defaults-anonymous',
+    name: 'Lopu chat defaults save requires auth',
+    description: 'POST /api/v1/settings/lopu-chat-defaults refuses anonymous callers before writing.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/settings/lopu-chat-defaults',
+    anonymous: true,
+    body: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu defaults save refused.')
+  },
+  {
     id: 'lopu-musing-stream',
     name: 'Lopu musing stream',
     description: 'Lopu musing streams NDJSON fallback or provider events.',
@@ -679,6 +761,140 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/lopu/musing',
     timeoutMs: 20000,
     expect: expectNdjson()
+  },
+  {
+    id: 'lopu-chats-list-guarded',
+    name: 'Lopu chats list requires auth',
+    description: 'GET /api/v1/lopu/chats without a session is rejected with a 401 error shape.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/chats',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu chats list was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-chats-list',
+    name: 'Lopu chats list',
+    description: 'GET /api/v1/lopu/chats lists the caller’s Lopu conversations for a session (every entry carries the lopu externalSource discriminator).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/chats',
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        (body?.ok === true &&
+          Array.isArray(body?.chats) &&
+          body.chats.every((chat: any) => chat?.externalSource?.access === 'lopu' && chat?.externalSource?.provider === 'lopu')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu chats listed for the session (or rejected with a 401 error shape anonymously).'
+    )
+  },
+  {
+    id: 'lopu-chats-create',
+    name: 'Lopu chat create',
+    description: 'POST /api/v1/lopu/chats creates a one-member Lopu conversation for a session (or answers 401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    mutates: true,
+    body: { title: 'API test chat with Lopu', model: 'claude-opus-5', effort: 'high' },
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        (body?.ok === true &&
+          typeof body?.chat?.id === 'string' &&
+          body.chat.id.startsWith('lopu-chat-') &&
+          body?.chat?.externalSource?.access === 'lopu' &&
+          body?.chat?.externalSource?.readOnly === false &&
+          body?.chat?.myMember?.role === 'owner' &&
+          body?.chat?.memberCount === 1) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu chat was created as a one-member owner conversation (or rejected with a 401 error shape anonymously).'
+    )
+  },
+  {
+    id: 'lopu-chats-create-unknown-model',
+    name: 'Lopu chat create validates the model',
+    description: 'POST /api/v1/lopu/chats with a model outside the catalog is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    body: { model: 'definitely-not-a-catalog-model' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown model was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-update-validation',
+    name: 'Lopu chat update validates its chat id',
+    description: 'POST /api/v1/lopu/chats/update without a chatId is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/update',
+    body: { title: 'Renamed' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Update without a chat id was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-delete-unknown',
+    name: 'Lopu chat delete rejects unknown chats',
+    description: 'POST /api/v1/lopu/chats/delete for a chat that does not exist is a 404 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/delete',
+    body: { chatId: 'lopu-chat-definitely-missing' },
+    expect: expectJson([404, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Delete of an unknown Lopu chat was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-guarded',
+    name: 'Lopu reply requires a session',
+    description: 'POST /api/v1/lopu/chats/reply without a session is rejected with a 401 error shape before anything is persisted.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: { text: 'hello', requestId: 'tt-api-test-anonymous' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu reply was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-stream',
+    name: 'Lopu reply stream',
+    description:
+      'POST /api/v1/lopu/chats/reply with a session starts a conversation and streams NDJSON events (meta first, done last) — from the scripted test provider, a real provider, or the canned fallback when no key is configured.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    mutates: true,
+    timeoutMs: 60000,
+    body: () => ({ text: 'hello Lopu', requestId: `tt-api-test-${uniqueSuffix()}`, context: { route: '/tests' } }),
+    expect: ({ response, textBody }) => {
+      const contentType = response.headers.get('Content-Type') || '';
+      if (response.status === 401 || response.status === 403 || response.status === 429) {
+        let body: any = null;
+        try {
+          body = JSON.parse(textBody);
+        } catch {
+          body = null;
+        }
+        const pass = body?.ok === false && typeof body?.error === 'string';
+        return { pass, details: pass ? 'Lopu reply was refused with an error shape (no session / temporary account / rate limited).' : 'Expected a JSON error shape.' };
+      }
+      const lines = textBody
+        .trim()
+        .split('\n')
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        });
+      const pass =
+        response.status === 200 &&
+        contentType.includes('application/x-ndjson') &&
+        lines[0]?.type === 'meta' &&
+        typeof lines[0]?.chatId === 'string' &&
+        lines.some((line) => line?.type === 'delta') &&
+        lines[lines.length - 1]?.type === 'done';
+      return { pass, details: pass ? 'Lopu streamed meta → delta → done as NDJSON.' : 'Expected a 200 NDJSON stream starting with meta and ending with done.' };
+    }
   },
   {
     id: 'mongodb-status',

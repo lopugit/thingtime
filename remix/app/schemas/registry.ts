@@ -2742,6 +2742,55 @@ const chatMessageSchema: ThingtimeSchema = {
   example: { text: 'hello from the messenger 👋' }
 };
 
+// The Lopu model catalog: one protected, system-owned control-plane Thing per
+// base model in AI_WORKFLOW_BASE_MODELS (the `default` sentinel is routing,
+// not a model, so it never becomes a doc). Seeded idempotently by
+// api/utils/ai/models.ts — the catalog fields are code and get re-stamped on
+// every seed, `enabled` is the single admin-owned toggle — so the kind rides
+// PROTECTED_THINGTIME and CONTROL_PLANE_STORAGE_THINGTIMES with no crystal
+// sanitizer: generic Thing CRUD can neither mint a fake model nor flip
+// availability, and the catalog never bills anyone.
+const aiModelSchema: ThingtimeSchema = {
+  id: 'ai-model',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'AI model',
+  summary: 'One catalog model Lopu can chat with — provider, effort tiers, speeds, and the admin enabled toggle.',
+  detail:
+    'Written only by the catalog seed (api/utils/ai/models.ts): ownerId "system", storageClass "control", ' +
+    'acl ["tt:all"], deterministic shareId ai-model-<modelId>, root uniqueKeys aiModel:<modelId>. The seed ' +
+    'runs once per process on the first catalog read and on demand through POST /api/v1/admin/ai/models ' +
+    '{ seed: true }; it inserts missing rows and heals drifted catalog fields but never touches enabled. ' +
+    'GET /api/v1/ai/models projects every row publicly with available = enabled && provider key configured; ' +
+    'POST /api/v1/admin/ai/models { id, enabled } is the only writer of the toggle. Direct create/update/' +
+    'delete through the generic things routes is refused and the rows never appear in generic listings.',
+  createdVia: 'Seeded by api/utils/ai/models.ts (first catalog read, or POST /api/v1/admin/ai/models { seed: true })',
+  fields: [
+    { name: 'modelId', type: 'string', required: true, max: 128, description: 'Provider-native model id; equals the catalog id and the shareId suffix.' },
+    { name: 'label', type: 'string', required: true, max: 80, description: 'Display label from the catalog.' },
+    { name: 'provider', type: 'enum', required: true, values: ['anthropic', 'openai'], description: 'Which API serves the model.' },
+    { name: 'efforts', type: 'string[]', required: true, max: 8, description: 'Selectable reasoning-effort tiers; empty means provider-default effort only.' },
+    { name: 'speeds', type: 'string[]', required: true, max: 2, description: 'Offered lanes: normal, plus fast where the provider sells one.' },
+    { name: 'family', type: 'enum', required: true, values: ['claude', 'gpt', 'o-series'], description: 'Derived model family for grouping in pickers.' },
+    { name: 'enabled', type: 'boolean', required: true, description: 'Admin toggle; a disabled model is listed but never selectable.' },
+    { name: 'sortOrder', type: 'number', required: true, min: 0, description: 'Position in the base-model catalog.' },
+    { name: 'contextWindow', type: 'number', required: false, min: 1, description: 'Context window in tokens when the catalog knows it.' },
+    { name: 'notes', type: 'string', required: false, max: 500, description: 'Optional admin note.' }
+  ],
+  example: {
+    modelId: 'claude-opus-5',
+    label: 'Claude Opus 5',
+    provider: 'anthropic',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    speeds: ['normal', 'fast'],
+    family: 'claude',
+    enabled: true,
+    sortOrder: 2,
+    contextWindow: 1000000
+  }
+};
+
 const aiConnectionSchema: ThingtimeSchema = {
   id: 'ai-connection',
   version: 1,
@@ -3212,7 +3261,11 @@ export const PROTECTED_THINGTIME = [
 	...DEVICE_THINGTIME,
   // executor-minted run records — a forged action-run would falsify the
   // audit trail the /actions inspector shows (api/utils/actions/)
-  'action-run'
+  'action-run',
+  // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
+  // and `enabled` is admin-only, so nothing may mint a model or flip
+  // availability through generic Thing CRUD
+  'ai-model'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -3380,6 +3433,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
+  aiModelSchema,
   ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the

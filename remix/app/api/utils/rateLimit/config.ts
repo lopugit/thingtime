@@ -203,6 +203,16 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
   // each mint writes a session doc, so bound accumulation beyond the per-user
   // token cap
+  // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
+  // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
+  'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
+  // admin catalog toggles + on-demand re-seed (POST /api/v1/admin/ai/models) —
+  // the seed is a batch write; enforced fail-closed at the route
+  'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
+  // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
+  // interactive read/save; the public GET keys anonymous callers by IP and
+  // the admin POST is enforced fail-closed at the route
+  'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
   'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
   // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
   'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
@@ -257,6 +267,16 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // read receipts fire on every focused chat scroll — cheap single-doc updates,
   // but still bounded so a stuck client can't hammer the collection
   'chats.read': { limit: 240, windowMs: 60_000, enabled: true },
+  // Lopu conversations (/api/v1/lopu/chats family): the list is polled by the
+  // chat window and the /lopu page like the messenger sidebar; create,
+  // rename/retune and delete are interactive one-offs.
+  'lopu.chats': { limit: 120, windowMs: 60_000, enabled: true },
+  'lopu.chats.write': { limit: 30, windowMs: 60_000, enabled: true },
+  // One Lopu reply (POST /api/v1/lopu/chats/reply) is a streamed model turn
+  // with up to 24 tool executions behind it — provider spend plus real writes
+  // as the viewer — so the budget is per user over ten minutes and the route
+  // enforces it fail-closed: a limiter outage must not become free AI calls.
+  'lopu.chat': { limit: 40, windowMs: 600_000, enabled: true },
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },

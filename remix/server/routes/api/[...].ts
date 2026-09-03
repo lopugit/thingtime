@@ -11,6 +11,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/admin/ai/models': () => import('../../../app/routes/api/v1/admin/ai/models/_models'),
   'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
   'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
@@ -56,6 +57,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
+  'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
   'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
@@ -159,6 +161,10 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/health/vercel': () => import('../../../app/routes/api/v1/health/vercel/_vercel'),
   'v1/login': () => import('../../../app/routes/api/v1/login/_login'),
   'v1/lopu/musing': () => import('../../../app/routes/api/v1/lopu/musing/_musing'),
+  'v1/lopu/chats': () => import('../../../app/routes/api/v1/lopu/chats/_chats'),
+  'v1/lopu/chats/update': () => import('../../../app/routes/api/v1/lopu/chats/update/_update'),
+  'v1/lopu/chats/delete': () => import('../../../app/routes/api/v1/lopu/chats/delete/_delete'),
+  'v1/lopu/chats/reply': () => import('../../../app/routes/api/v1/lopu/chats/reply/_reply'),
   'v1/mongodb/endpoint': () => import('../../../app/routes/api/v1/mongodb/endpoint/_endpoint'),
   'v1/mongodb/endpoints': () => import('../../../app/routes/api/v1/mongodb/endpoints/_endpoints'),
   'v1/mongodb/get-connection': () => import('../../../app/routes/api/v1/mongodb/get-connection/_get-connection'),
@@ -191,6 +197,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
 		import('../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'),
   'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),

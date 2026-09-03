@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
@@ -140,6 +141,10 @@ export function useApi() {
           // READ by the next account; dropping them here also stops it
           // outliving the session that authorized it on disk.
           clearLocalCachePrefix('tt-page-source:');
+          // Lopu's caches (conversations, messages, model catalog, the
+          // floating window's last state) are the viewer's private chat
+          // with the assistant — same shared-browser privacy bar.
+          clearLocalCachePrefix('tt-lopu-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -246,9 +251,29 @@ export function useApi() {
     settings: {
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [])
+    },
+    // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers })
+    ai: {
+      models: useCallback(async () => getJson('/api/v1/ai/models'), [])
     },
     admin: {
+      // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert
+      setAiModel: useCallback(
+        async (args: { id?: string; enabled?: boolean; seed?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' }),
+        [asyncFetcher]
+      ),
+      setLopuChatDefaults: useCallback(
+        async (args: { model?: string | null; effort?: string | null; speed?: string | null }) =>
+          asyncFetcher.submit(
+            { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
+            { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
+          ),
+        [asyncFetcher]
+      ),
       integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
       integrationAction: useCallback(
         async (args: Record<string, unknown>) =>
@@ -399,6 +424,31 @@ export function useApi() {
           asyncFetcher.submit(args, { action: '/api/v1/admin/links' }),
         [asyncFetcher]
       )
+    },
+    // Lopu 🦄 conversations (session only) — see /docs/api lopu. The model
+    // catalog is v1.ai.models() above.
+    lopu: {
+      chats: {
+        list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
+        create: useCallback(
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string }) =>
+            asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
+          [asyncFetcher]
+        ),
+        update: useCallback(
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string }) =>
+            asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' }),
+          [asyncFetcher]
+        ),
+        delete: useCallback(
+          async (args: { chatId: string }) =>
+            asyncFetcher.submit({ chatId: args?.chatId }, { action: '/api/v1/lopu/chats/delete', errorContext: 'delete a Lopu chat' }),
+          [asyncFetcher]
+        )
+      },
+      // the streamed turn — returns the RAW Response (NDJSON body); read it
+      // with readNdjson from components/Lopu/lopuChatStream
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), [])
     },
     mongodb: {
       capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),

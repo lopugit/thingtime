@@ -12,6 +12,7 @@ import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -657,6 +658,28 @@ export const SettingsPage = () => {
             <SettingRow label="Menu ordering" hint="Restore the default drag-reordered menu layout">
               <Button size="xs" variant="outline" onClick={handleResetOrdering}>
                 Reset
+              </Button>
+            </SettingRow>
+          </Flex>
+        </SettingsSection>
+
+        {/* 6 · Lopu — mirrors UserSettingsModal's Lopu section; local-first,
+            so it works logged out too */}
+        <SettingsSection
+          eyebrow="Lopu 🦄"
+          description="Your Thingtime assistant: the floating bubble, how her chat window sits, whether her builder edits paint live, and the model she thinks with."
+        >
+          <Flex flexDirection="column">
+            <LopuSettingsRows
+              renderRow={(label, control, hint) => (
+                <SettingRow key={label} label={label} hint={hint}>
+                  {control}
+                </SettingRow>
+              )}
+            />
+            <SettingRow label="Talk to Lopu" hint="The full chat page with every conversation">
+              <Button size="xs" variant="outline" onClick={() => navigate('/lopu')}>
+                Open 🦄
               </Button>
             </SettingRow>
           </Flex>

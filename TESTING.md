@@ -4513,3 +4513,60 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
   refused them as unknown inputs); a profile whose place was cleared
   (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
   refusal; nested `ttEach` must flatten (the tile grid rendered empty).
+
+## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+Design note: `PRs/lopu-ai-assistant-design.md`. Automated coverage:
+`npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
+`test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
+`test:settings`, `test:schemas`, `test:api-capabilities`; live:
+`node scripts/verify-lopu.mjs <base>` against a stack started with
+`LOPU_CHAT_PROVIDER=test` (99 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`TT_VERIFY_ADMIN_PASSWORD` for the admin section).
+
+- Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
+  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  (`enabled`, `available = enabled && provider key configured`, `isDefault`);
+  the generic `/api/v1/things` paths refuse to create/update/delete
+  `ai-model` rows (protected, control plane).
+- Conversations: `/lopu` signed out shows the quiet state + login CTA; signed
+  in, the empty state offers four suggestion chips; the composer's model
+  picker lists models grouped with "needs <provider> key" for unavailable
+  ones; Enter sends, Shift+Enter breaks a line (mobile: the Send button);
+  "New chat" starts a fresh conversation that is created lazily on the first
+  reply and titled from that message; rename/delete from the left column
+  (delete confirms when `confirmDeletes` is on).
+- Streaming (`LOPU_CHAT_PROVIDER=test`): "Build me a page with a card
+  component" → the bubble streams text, then a "Built a component" card with
+  a live preview of the card, then "Created a page" and a `navigate` to
+  `/builder?page=<id>`; the builder canvas shows the streamed section
+  (heading, copy, the card component) and the Page builder panel names it.
+  With that page open, "add a hero section to this page" patches the LIVE
+  draft (blocks appear while the reply streams), the tool card reads
+  "Edited the page · 1 change · Saved" with Undo; Undo restores the draft.
+  "hello" answers with the context-aware greeting naming the open page.
+- Floating host: every page but `/lopu*` shows the 🦄 launcher above
+  DevKit's corner; click opens the 400×560 window resting above it (same
+  conversation as `/lopu`); drag the header, resize from the bottom-right
+  grip, double-click the header to dock right (the column stops above DevKit
+  and the launcher hides), double-click again to float; the model chip opens
+  the picker (Escape closes the menu only — a second Escape closes the
+  window); ⤢ opens `/lopu`; − collapses to the header; ✕ / Escape hides.
+  Mobile (375): an 88dvh bottom sheet with scrim; DevKit's trigger steps
+  aside while it is open (`html[data-lopu-sheet="open"]`).
+- Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
+  opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
+  rows cannot be edited (409) but can be deleted; the Lopu chat never
+  bolds/unreads for its owner; MessengerNotifications skip it.
+- Settings: `Settings → Lopu 🦄` and the user-settings modal expose launcher,
+  docking, apply-patches-live, confirm deletes, Enter-sends, preferred
+  model/effort/fast mode, "Talk to Lopu"; Admin → Lopu models toggles
+  catalog rows (disabled rows show unavailable everywhere) and edits the
+  chat defaults (`/api/v1/settings/lopu-chat-defaults`).
+- Regression classes: a stored chat setting that names a disabled model is
+  substituted per turn (the reply route resolves stored settings leniently,
+  explicit per-turn overrides strictly → 400); reusing a `requestId` is a
+  409 and never duplicates rows; the assistant turn is persisted even when
+  the client disconnects mid-stream; `LopuActivityBadge` renders a `<span>`
+  (it sits inside the drawer row's `<p>`); the `done` event is always last
+  and only the route emits it.

@@ -1,10 +1,15 @@
-export const AI_SOURCE_PROVIDERS = ['chatgpt', 'claude'] as const;
+// 'lopu' is the first-party assistant (api/utils/messenger/lopuChats.ts): a
+// discriminator on Lopu chats and their assistant rows, never an importable
+// or live-device provider — publicExternalAiSource ties it to
+// access === 'lopu' in both directions.
+export const AI_SOURCE_PROVIDERS = ['chatgpt', 'claude', 'lopu'] as const;
 
 export type AiSourceProvider = (typeof AI_SOURCE_PROVIDERS)[number];
+// the providers a desktop import or a live device session may claim
+export type ExternalAiSourceProvider = Exclude<AiSourceProvider, 'lopu'>;
 export type AiMessageRole = 'user' | 'assistant' | 'system' | 'unknown';
 
 type PublicExternalAiSourceBase = {
-  provider: AiSourceProvider;
   sourceId: string;
   label: string;
   role?: AiMessageRole;
@@ -16,6 +21,7 @@ type PublicExternalAiSourceBase = {
 };
 
 export type PublicImportedExternalAiSource = PublicExternalAiSourceBase & {
+	provider: ExternalAiSourceProvider;
 	access: 'imported';
 	connector: string;
 	deviceId?: string;
@@ -23,6 +29,7 @@ export type PublicImportedExternalAiSource = PublicExternalAiSourceBase & {
 };
 
 export type PublicLiveExternalAiSource = PublicExternalAiSourceBase & {
+	provider: ExternalAiSourceProvider;
 	access: 'live';
 	connector: string;
 	deviceId: string;
@@ -37,7 +44,16 @@ export type PublicLiveExternalAiSource = PublicExternalAiSourceBase & {
 	readOnly: false;
 };
 
-export type PublicExternalAiSource = PublicImportedExternalAiSource | PublicLiveExternalAiSource;
+// Lopu conversations: readOnly is false on the chat (the user keeps talking)
+// and true on Lopu's own reply rows (never editable; deletable by the owner).
+export type PublicLopuExternalAiSource = PublicExternalAiSourceBase & {
+	provider: 'lopu';
+	access: 'lopu';
+	connector: string;
+	readOnly: boolean;
+};
+
+export type PublicExternalAiSource = PublicImportedExternalAiSource | PublicLiveExternalAiSource | PublicLopuExternalAiSource;
 
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
@@ -48,7 +64,8 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
   const sourceId = text(raw.sourceId, 64);
   const label = text(raw.label, 80);
 	const deviceId = text(raw.deviceId, 160);
-	const access = raw.access === undefined || raw.access === 'imported' ? 'imported' : raw.access === 'live' ? 'live' : null;
+	const access =
+		raw.access === undefined || raw.access === 'imported' ? 'imported' : raw.access === 'live' ? 'live' : raw.access === 'lopu' ? 'lopu' : null;
 	if (!provider || !sourceId || !label || !access) return null;
 
 	const role = ['user', 'assistant', 'system', 'unknown'].includes(String(raw.role)) ? (raw.role as AiMessageRole) : undefined;
@@ -58,8 +75,7 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 	const messageId = text(raw.messageId, 512) || undefined;
 	const revision = Number.isSafeInteger(raw.revision) && Number(raw.revision) >= 1 ? Number(raw.revision) : undefined;
 
-	const shared = {
-    provider,
+	const details = {
     sourceId,
     label,
     ...(role ? { role } : {}),
@@ -69,6 +85,18 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 		...(messageId ? { messageId } : {}),
 		...(revision !== undefined ? { revision } : {})
 	};
+
+	// The first-party assistant is neither importable nor a live device
+	// session, and nothing else may wear its provider.
+	if (provider === 'lopu') {
+		if (access !== 'lopu') return null;
+		const connector = text(raw.connector, 80);
+		if (!connector) return null;
+		return { ...details, provider, access, connector, readOnly: raw.readOnly === true };
+	}
+	if (access === 'lopu') return null;
+
+	const shared = { provider, ...details };
 
 	if (access === 'imported') {
 		const connector = text(raw.connector, 80);
@@ -133,4 +161,73 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 		...(historyProgress || {}),
 		readOnly: false
   };
+};
+
+// ── Lopu turn metadata (crystal.lopu on chat-message rows) ──
+//
+// Written by lopuChats.ts, projected onto PublicChatMessage.lopu so the chat
+// UI can render tool-activity cards for historical turns. The sanitiser is
+// the stored shape too: whatever the reply route hands over is bounded here
+// once, on the way in, and read back verbatim.
+export const LOPU_TURN_PROVIDERS = ['claude', 'openai', 'test', 'fallback'] as const;
+export type LopuTurnProvider = (typeof LOPU_TURN_PROVIDERS)[number];
+export const LOPU_MAX_TOOL_CALLS = 20;
+export const LOPU_TOOL_SUMMARY_MAX_CHARS = 240;
+
+export type PublicLopuToolCall = { name: string; ok: boolean; summary: string; thingId?: string };
+
+export type PublicLopuMessageMeta = {
+	role: 'user' | 'assistant';
+	requestId: string | null;
+	segmentIndex: number;
+	segmentCount: number;
+	// assistant rows only
+	model?: string | null;
+	effort?: string | null;
+	speed?: string | null;
+	provider?: LopuTurnProvider;
+	usage?: { inputTokens: number; outputTokens: number };
+	toolCalls?: PublicLopuToolCall[];
+	stopReason?: string | null;
+};
+
+const nonNegativeInt = (value: unknown): number | undefined =>
+	Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+
+export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | null => {
+	if (!value || typeof value !== 'object') return null;
+	const raw = value as Record<string, unknown>;
+	const role = raw.role === 'assistant' ? 'assistant' : raw.role === 'user' ? 'user' : null;
+	if (!role) return null;
+	const segmentIndex = nonNegativeInt(raw.segmentIndex) ?? 0;
+	const segmentCount = Math.max(1, nonNegativeInt(raw.segmentCount) ?? 1);
+	const meta: PublicLopuMessageMeta = { role, requestId: text(raw.requestId, 128) || null, segmentIndex, segmentCount };
+	if (role !== 'assistant') return meta;
+	meta.model = text(raw.model, 128) || null;
+	meta.effort = text(raw.effort, 32) || null;
+	meta.speed = text(raw.speed, 32) || null;
+	if (LOPU_TURN_PROVIDERS.includes(raw.provider as LopuTurnProvider)) meta.provider = raw.provider as LopuTurnProvider;
+	const usage = raw.usage && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : null;
+	const inputTokens = nonNegativeInt(usage?.inputTokens);
+	const outputTokens = nonNegativeInt(usage?.outputTokens);
+	if (inputTokens !== undefined && outputTokens !== undefined) meta.usage = { inputTokens, outputTokens };
+	if (Array.isArray(raw.toolCalls)) {
+		const toolCalls: PublicLopuToolCall[] = [];
+		for (const entry of raw.toolCalls.slice(0, LOPU_MAX_TOOL_CALLS)) {
+			if (!entry || typeof entry !== 'object') continue;
+			const call = entry as Record<string, unknown>;
+			const name = text(call.name, 80);
+			if (!name) continue;
+			const thingId = text(call.thingId, 128);
+			toolCalls.push({
+				name,
+				ok: call.ok === true,
+				summary: text(call.summary, LOPU_TOOL_SUMMARY_MAX_CHARS),
+				...(thingId ? { thingId } : {})
+			});
+		}
+		if (toolCalls.length) meta.toolCalls = toolCalls;
+	}
+	meta.stopReason = text(raw.stopReason, 40) || null;
+	return meta;
 };

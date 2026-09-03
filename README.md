@@ -1055,6 +1055,38 @@ It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
 
+### Lopu AI assistant (chat, tools, live builder patches)
+
+Lopu (`/lopu`, the 🦄 launcher on every page, and Lopu conversations in
+Messenger) streams replies over NDJSON from `POST /api/v1/lopu/chats/reply`
+and runs tools as the signed-in viewer (pages, sections, components, actions,
+schemas, data). Models come from the `ai-model` catalog (`GET /api/v1/ai/models`,
+seeded from `AI_WORKFLOW_BASE_MODELS`; admins toggle rows at `/admin` → Lopu
+models and set the chat defaults at `/api/v1/settings/lopu-chat-defaults`).
+Design note: `PRs/lopu-ai-assistant-design.md`.
+
+```sh
+# at least one provider key makes Lopu think; with neither she answers with an
+# honest canned line instead of failing
+ANTHROPIC_API_KEY="<anthropic-api-key>"          # or ANTHROPIC_AUTH_TOKEN
+OPENAI_API_KEY="<openai-api-key>"
+OPENAI_BASE_URL="https://api.openai.com/v1"      # optional: any OpenAI-compatible endpoint
+
+LOPU_CHAT_PROVIDER="auto"        # auto | claude | openai | test (deterministic scripted provider, no keys)
+LOPU_OPENAI_TOOLS="native"       # native | text — `text` speaks a fenced ```tt-tool protocol for
+                                 # OpenAI-compatible endpoints without function calling; endpoints
+                                 # that refuse `stream: true` fall back to a plain completion automatically
+LOPU_CLAUDE_MODEL="claude-opus-5"   # optional: the Anthropic model used for the `default` waterfall slot
+LOPU_OPENAI_MODEL="gpt-5.6-sol"     # optional: the OpenAI model used for the `default` waterfall slot
+LOPU_TEST_PROVIDER_PACE_MS="12"     # optional: ms between scripted chunks in test mode
+```
+
+Live check against a running stack: `node remix/scripts/verify-lopu.mjs
+http://127.0.0.1:<nitro-port>` (start the stack with `LOPU_CHAT_PROVIDER=test`
+so the reply builds a component and a page deterministically; set
+`TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD` to cover the admin
+routes).
+
 ### Password reset + email 2FA
 
 `POST /api/v1/auth/password-reset` ({ email }) always answers `{ ok: true }` so

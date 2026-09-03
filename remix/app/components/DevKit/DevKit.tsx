@@ -417,7 +417,9 @@ export const DevKit = (_props) => {
 	// actions occupy the bottom-right at every breakpoint. The draggable dev
 	// trigger would necessarily cover one of those controls, so keep this
 	// development-only helper off the route rather than obscuring product UI.
-	if (!mounted || !devKit || location.pathname === '/messages' || location.pathname.startsWith('/messages/')) return null;
+	// The Lopu page is the same shape (a chat whose composer sits bottom-right).
+	const chatRoute = ['/messages', '/lopu'].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+	if (!mounted || !devKit || chatRoute) return null;
 
   return (
     <>
@@ -614,6 +616,9 @@ export const DevKit = (_props) => {
         className="tt.devKit"
         position="fixed"
         zIndex={99999}
+        // the mobile Lopu sheet spans the viewport (LopuHost flags it on <html>);
+        // the trigger would sit on its composer, so step aside while it is open
+        sx={{ 'html[data-lopu-sheet="open"] &': { display: 'none' } }}
         left={triggerPos ? `${triggerPos.left}px` : undefined}
         top={triggerPos ? `${triggerPos.top}px` : undefined}
         bottom={

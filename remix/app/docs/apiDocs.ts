@@ -2520,6 +2520,182 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
   }),
   endpoint({
+    id: 'ai-models',
+    group: 'lopu',
+    title: 'Lopu model catalog',
+    endpoint: '/api/v1/ai/models',
+    summary: 'Lists every AI model Lopu can chat with, its availability, and the resolved chat defaults.',
+    detail:
+      'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
+      'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
+      'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
+      'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, and ' +
+      '`available` = enabled AND the provider key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; ' +
+      'OPENAI_API_KEY). `defaults` is the Thingtime.LopuChatDefaults singleton after availability is applied — the stored ' +
+      'model when it is available, else the first available model in catalog order with its effort clamped (preferring high), ' +
+      'else `model: null` when no provider is configured (Lopu then answers from the canned fallback). `providers` reports key ' +
+      'presence only; no value ever leaves the server. Model ids compose into the same `<model>[:effort][:fast]` option ids ' +
+      'the AI workflow waterfall stores, and the chat reply endpoint accepts either form.',
+    auth: {
+      mode: 'optional',
+      description: 'Public. A session, when present, only keys the ai.models rate limit by user instead of by IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to load the catalog before rendering a model picker (cache it locally; the list carries no secrets).',
+      'Offer only models with available: true; show the rest disabled with a "needs <provider> key" hint.',
+      'Seed a new conversation from defaults (model, effort, speed); a null model means no provider is configured.',
+      'Send the chosen model as { model, effort, speed } or as a composed id such as claude-opus-5:high:fast.'
+    ],
+    requestExamples: [{ name: 'Load the catalog', description: 'Read every model with availability and defaults.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Catalog projection (truncated to two models).',
+        body: {
+          ok: true,
+          models: [
+            {
+              id: 'claude-opus-5',
+              label: 'Claude Opus 5',
+              provider: 'anthropic',
+              efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+              speeds: ['normal', 'fast'],
+              family: 'claude',
+              enabled: true,
+              available: true,
+              isDefault: true
+            },
+            {
+              id: 'gpt-5.6-sol',
+              label: 'GPT-5.6 Sol',
+              provider: 'openai',
+              efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+              speeds: ['normal', 'fast'],
+              family: 'gpt',
+              enabled: true,
+              available: false,
+              isDefault: false
+            }
+          ],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+          providers: { anthropic: { configured: true }, openai: { configured: false } }
+        }
+      },
+      { status: 429, description: 'Rate limited (ai.models).', body: { ok: false, error: 'The model catalog is being read too quickly — try again in a moment 🦄' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.']
+  }),
+  endpoint({
+    id: 'admin-ai-models',
+    group: 'admin',
+    title: 'Admin Lopu model catalog',
+    endpoint: '/api/v1/admin/ai/models',
+    summary: 'Enables or disables one catalog model, or re-seeds the ai-model Things from the code catalog.',
+    detail:
+      'The only writer of the `ai-model` kind besides the boot-time seed. POST { id, enabled } flips `crystal.enabled` on ' +
+      'the genuine system-owned row (a disabled model stays listed but is never selectable and never becomes the default). ' +
+      'POST { seed: true } re-runs the idempotent catalog seed: inserts rows for models newly added to the code catalog, ' +
+      'heals drifted catalog fields and envelopes, skips (never edits) a foreign doc squatting a catalog shareId, and never ' +
+      'touches `enabled`. GET returns the same list the public catalog serves, for the editor. Responses are private and ' +
+      'uncacheable; the POST rate limit fails closed because the seed is a batch write.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the catalog with enabled/available flags and the resolved defaults.',
+      'POST { id, enabled } to toggle one model; read model + defaults back from the response.',
+      'POST { seed: true } after a catalog code change to insert new rows and heal drift; read report for counts and notes.',
+      'Handle 401/403 for non-admins, 404 for an unknown id, and 429 when the fail-closed limit trips.'
+    ],
+    requestExamples: [
+      { name: 'Disable a model', description: 'Hide GPT-5.6 Sol from every picker.', method: 'POST', body: { id: 'gpt-5.6-sol', enabled: false } },
+      { name: 'Re-seed the catalog', description: 'Insert new catalog models and heal drifted rows.', method: 'POST', body: { seed: true } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Toggle applied.',
+        body: {
+          ok: true,
+          model: {
+            id: 'gpt-5.6-sol',
+            label: 'GPT-5.6 Sol',
+            provider: 'openai',
+            efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+            speeds: ['normal', 'fast'],
+            family: 'gpt',
+            enabled: false,
+            available: false,
+            isDefault: false
+          },
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+        }
+      },
+      {
+        status: 200,
+        description: 'Catalog re-seeded.',
+        body: { ok: true, seeded: 33, report: { ok: true, total: 33, created: 1, refreshed: 0, unchanged: 32, skipped: 0, notes: [] }, models: [], defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }, providers: { anthropic: { configured: true }, openai: { configured: false } } }
+      },
+      { status: 404, description: 'Unknown model id.', body: { ok: false, error: 'Unknown model — id must be a catalog model id' } }
+    ]
+  }),
+  endpoint({
+    id: 'settings-lopu-chat-defaults',
+    group: 'settings',
+    title: 'Lopu chat defaults',
+    endpoint: '/api/v1/settings/lopu-chat-defaults',
+    summary: 'Read or administratively set the model, effort, and speed a fresh Lopu conversation starts from.',
+    detail:
+      'The Thingtime.LopuChatDefaults settings singleton, same store posture as the AI workflow waterfall: GET publicly ' +
+      'returns the stored non-secret preference plus `resolved`, the same availability-applied defaults ' +
+      '/api/v1/ai/models reports (so an editor can show "you chose X, users get Y because X needs a key"). POST replaces ' +
+      'the preference for administrators only and validates strictly: `model` must be a catalog model id (never the ' +
+      'default sentinel), `effort` must be a tier that model offers (null, an empty string, or "default" selects the ' +
+      'provider-default effort; omitting it selects the model\'s high tier), and `speed` may be fast only where the model ' +
+      'sells a fast lane. Missing or corrupt stored settings read forgivingly — unknown models collapse to claude-opus-5, ' +
+      'unoffered efforts are clamped, unsold fast lanes drop to normal.',
+    auth: {
+      mode: 'optional',
+      description: 'GET is public. POST requires an authenticated administrator session.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read defaults (stored), resolved (effective), the catalog, and provider key presence.',
+      'Administrators POST { model, effort?, speed? } to replace the preference.',
+      'Pick effort from the model\'s efforts list (null for the provider default) and speed from its speeds list.',
+      'Read resolved back to confirm the stored choice is actually reachable with the keys configured.'
+    ],
+    requestExamples: [
+      { name: 'Read the Lopu defaults', description: 'Load the stored and resolved defaults.', method: 'GET' },
+      {
+        name: 'Prefer fast high-effort Opus 5',
+        description: 'Replace the defaults as an administrator.',
+        method: 'POST',
+        body: { model: 'claude-opus-5', effort: 'high', speed: 'fast' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Current defaults. models is the full catalog projection (omitted here).',
+        body: {
+          ok: true,
+          key: 'Thingtime.LopuChatDefaults',
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
+          resolved: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
+          models: [],
+          providers: { anthropic: { configured: true }, openai: { configured: false } }
+        }
+      },
+      { status: 400, description: 'Invalid defaults.', body: { ok: false, error: 'effort for Claude Opus 5 must be one of low, medium, high, xhigh, max (or null for the provider default)' } },
+      { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store. Storage audit fields (updatedAt/updatedBy) are never exposed by this endpoint.']
+  }),
+  endpoint({
     id: 'root-data',
     group: 'root',
     title: 'Root data',
@@ -3672,6 +3848,261 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'NDJSON stream events.',
         body: [{ type: 'meta', source: 'fallback', mode: 'weather' }, { type: 'delta', text: 'Lopu is thinking...' }, { type: 'done' }]
       }
+    ]
+  }),
+  endpoint({
+    id: 'lopu-chats',
+    group: 'lopu',
+    title: 'Lopu conversations',
+    endpoint: '/api/v1/lopu/chats',
+    summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
+    detail:
+      'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
+      'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
+      'messages page through /api/v1/chats/messages. GET returns the caller’s Lopu chats newest activity first in ' +
+      'the same list-entry shape as /api/v1/chats (unread count, lastMessage preview, membership). POST creates ' +
+      'one: title (defaults to "Lopu") plus the model settings the conversation should use — model (a catalog ' +
+      'model id or a composed id such as claude-opus-5:high:fast), effort and speed are validated against the ' +
+      'model catalog; omitted or null fields mean "catalog default", which the reply route resolves through the ' +
+      'admin defaults and provider availability on every turn. Lopu’s replies are rows owned by the caller that ' +
+      'carry a read-only assistant externalSource; the user’s own rows stay editable and deletable.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. POST bodies must be application/json.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list Lopu conversations (limit caps the page, default 100, max 300).',
+      'POST { title?, model?, effort?, speed? } with Content-Type: application/json to start a conversation.',
+      'Use chat.id from the response as chatId for /api/v1/lopu/chats/reply, /update and /delete.',
+      'Read the transcript through /api/v1/chats/messages?chatId= like any other chat.',
+      'Handle 400 for an unknown model or an effort/speed the model does not offer, and 415 for a non-JSON body.'
+    ],
+    requestExamples: [
+      {
+        name: 'List conversations',
+        description: 'Read every Lopu conversation for the current account.',
+        method: 'GET'
+      },
+      {
+        name: 'Start a conversation',
+        description: 'Create a titled conversation pinned to a catalog model.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { title: 'Landing page ideas', model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation created.',
+        body: {
+          ok: true,
+          chat: {
+            id: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+            chatType: 'group',
+            name: 'Landing page ideas',
+            topic: 'Lopu, the Thingtime assistant',
+            externalSource: { access: 'lopu', provider: 'lopu', sourceId: 'lopu', label: 'Lopu', connector: 'thingtime', readOnly: false },
+            myMember: { role: 'owner', state: 'active', muted: false },
+            memberCount: 1,
+            unreadCount: 0,
+            lastMessage: null
+          }
+        }
+      },
+      {
+        status: 400,
+        description: 'The requested model is not in the catalog.',
+        body: { ok: false, error: 'Unknown model "gpt-9"' }
+      }
+    ],
+    notes: [
+      'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute).',
+      'The generic /api/v1/things paths refuse messenger kinds, so a Lopu chat can only be changed through this family.'
+    ]
+  }),
+  endpoint({
+    id: 'lopu-chats-update',
+    group: 'lopu',
+    title: 'Update Lopu conversation',
+    endpoint: '/api/v1/lopu/chats/update',
+    summary: 'Renames a Lopu conversation or retunes its model, effort and speed.',
+    detail:
+      'POST { chatId, title?, model?, effort?, speed? }. Only the conversation’s member (its owner) may update it. ' +
+      'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
+      'segments, null resets a field to the catalog default, and an effort or speed the chosen model does not ' +
+      'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). Unlike ' +
+      '/api/v1/chats/update no system message is inserted — the conversation is a private notebook, not a room.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Bodies must be application/json.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chatId with any of title, model, effort, or speed.',
+      'Send null to reset model, effort, or speed to the catalog default.',
+      'Expect 400 when nothing changes, the title is empty, or the model rejects the effort/speed.',
+      'Read the updated settings back from the returned chat entry or GET /api/v1/lopu/chats.'
+    ],
+    requestExamples: [
+      {
+        name: 'Rename',
+        description: 'Give the conversation a title.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', title: 'Pricing table' }
+      },
+      {
+        name: 'Switch model',
+        description: 'Move the conversation to a fast Opus 5 with max effort.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', model: 'claude-opus-5:max:fast' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation updated.',
+        body: { ok: true, chat: { id: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', name: 'Pricing table' } }
+      },
+      {
+        status: 400,
+        description: 'The chat is not a Lopu conversation, or nothing changed.',
+        body: { ok: false, error: 'Nothing to update' }
+      }
+    ],
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute).']
+  }),
+  endpoint({
+    id: 'lopu-chats-delete',
+    group: 'lopu',
+    title: 'Delete Lopu conversation',
+    endpoint: '/api/v1/lopu/chats/delete',
+    summary: 'Deletes a Lopu conversation with every message in it.',
+    detail:
+      'POST { chatId }. Owner only. The chat, its membership row, every message and their reactions are removed ' +
+      'in one accounted transaction, so storage quota is refunded together with the rows; attachments bound to ' +
+      'the caller’s own rows release their objects first. This is a hard delete — unlike ' +
+      '/api/v1/chats/messages/delete nothing stays behind as a placeholder.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Bodies must be application/json.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chatId to delete.',
+      'Expect 404 for an unknown chat, 403 when the caller is not the owner, and 400 for a chat that is not a Lopu conversation.',
+      'Drop the conversation from local caches on ok: true — it is gone from /api/v1/chats too.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete a conversation',
+        description: 'Remove one Lopu conversation and its transcript.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation deleted.',
+        body: { ok: true }
+      },
+      {
+        status: 404,
+        description: 'No such chat.',
+        body: { ok: false, error: 'Chat not found' }
+      }
+    ],
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute).']
+  }),
+  endpoint({
+    id: 'lopu-chats-reply',
+    group: 'lopu',
+    title: 'Lopu reply stream',
+    endpoint: '/api/v1/lopu/chats/reply',
+    summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
+    detail:
+      'POST { chatId?, text, requestId, model?, effort?, speed?, context? }. The user turn is persisted first (omit chatId to start a ' +
+      'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
+      'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
+      '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
+      'saved), thing (a created or updated thing, whole), navigate (a site-relative path the client should open), tool_result, ' +
+      'error, and finally done with the persisted assistant message(s). Tools run AS THE CALLER through the ordinary things ' +
+      'utils (search/get/list, create/patch pages, create/update components, browse the library, demos, actions, schemas, data, ' +
+      'suites, navigation) so ACL, quotas and crystal validation always apply; delete_thing refuses without an explicit ' +
+      'confirmation. context.page carries the open builder draft ({ id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? ≤ 48KB }) ' +
+      'so target "active" patches apply to what the user sees; they are saved only when source is "user" (expectedUpdatedAt guards ' +
+      'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings, and ' +
+      'when no provider is configured the reply is an honest canned line. A provider that fails before emitting anything falls ' +
+      'through to the other configured provider; the assistant turn is persisted even when the stream errors or the client ' +
+      'disconnects. Limits per reply: 12 model hops, 24 tool executions, 240 seconds, 96KB per tool input.',
+    auth: {
+      mode: 'session',
+      description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json and at most 256KB.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { text, requestId } (plus chatId to continue a conversation) with Content-Type: application/json.',
+      'Read the response line by line; each line is one JSON event and meta always comes first.',
+      'Append delta.text values; render tool_use_start/tool_result as activity; apply patch.ops to the open builder draft.',
+      'Treat done as the end of the turn — it carries assistantMessageId and the persisted messages.',
+      'Reuse of a requestId answers 409; 429 means the lopu.chat budget (40 replies per 10 minutes) is spent.'
+    ],
+    requestExamples: [
+      {
+        name: 'Ask Lopu to build a section',
+        description: 'Continue a conversation with the builder draft attached as context.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+          text: 'Add a hero section with a headline and a call-to-action button',
+          requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
+          model: 'claude-opus-5',
+          effort: 'high',
+          speed: 'normal',
+          context: {
+            route: '/builder',
+            page: { id: 'my-landing-page', source: 'user', updatedAt: '2026-09-03T00:00:00.000Z', blocks: [{ id: 'title', type: 'text', text: 'Hello', style: 'heading' }] },
+            viewport: 'desktop'
+          }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'NDJSON stream events (one per line).',
+        body: [
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'delta', text: 'Adding a hero now ✨' },
+          { type: 'tool_use_start', id: 'toolu_01', name: 'patch_page' },
+          { type: 'tool_input_delta', id: 'toolu_01', name: 'patch_page', partial: '{"target":"active","ops":[{"op":"insert"' },
+          { type: 'tool_use', id: 'toolu_01', name: 'patch_page', input: { target: 'active', ops: [{ op: 'insert', containerId: null, index: 'end', block: { id: 'hero', type: 'container', direction: 'column', children: [] } }] } },
+          { type: 'patch', id: 'toolu_01', target: 'active', ops: [{ op: 'insert', containerId: null, index: 1, block: { id: 'hero', type: 'container', direction: 'column', children: [] } }], pageId: 'my-landing-page', persisted: true },
+          { type: 'tool_result', id: 'toolu_01', name: 'patch_page', ok: true, summary: 'Applied 1/1 op(s) to "Landing" and saved it' },
+          { type: 'delta', text: 'Done — your hero is on the page 🦄' },
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+        ]
+      },
+      {
+        status: 401,
+        description: 'No session.',
+        body: { ok: false, error: 'Sign in to talk to Lopu' }
+      },
+      {
+        status: 409,
+        description: 'The requestId was already used in this conversation.',
+        body: { ok: false, error: 'A message with this requestId already exists' }
+      }
+    ],
+    notes: [
+      'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed.',
+      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.'
     ]
   }),
   endpoint({

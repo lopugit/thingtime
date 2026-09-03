@@ -133,6 +133,9 @@ Reuse the messenger family with a discriminator (no new chat kind):
     communityId: null, sectionId: null, channelVisibility: null, dmKey: null,
     externalSource: { access: 'lopu', provider: 'lopu', sourceId: 'lopu', label: 'Lopu', connector: 'thingtime', readOnly: false },
     lopu: { model: 'claude-opus-5', effort: 'high', speed: 'normal', turns: 0, lastModel: null }
+    // model/effort/speed are validated against AI_WORKFLOW_BASE_MODELS at write
+    // time; null (the create default) means "catalog default" — the reply route
+    // resolves it through resolveLopuChatDefaults + availability every turn
   }
   ```
 - **chat-member**: exactly one, the user (`role: 'owner'`, `state: 'active'`).
@@ -155,7 +158,12 @@ Server changes in the messenger family:
 
 - `externalAi.ts`: add `'lopu'` to `AI_SOURCE_PROVIDERS` and an
   `access === 'lopu'` branch in `publicExternalAiSource` returning
-  `PublicLopuExternalAiSource = { access:'lopu', provider:'lopu', sourceId, label, connector, readOnly:false, role?, authorName?, messageId?, revision? }`.
+  `PublicLopuExternalAiSource = { access:'lopu', provider:'lopu', sourceId, label, connector, readOnly: boolean, role?, authorName?, messageId?, revision?, segmentIndex?, segmentCount? }`
+  (`readOnly` is false on the chat and true on assistant rows, mirroring the
+  stored flag). `crystal.lopu` on message rows projects onto
+  `PublicChatMessage.lopu` (`publicLopuMessageMeta`: role, requestId,
+  segment info, and for assistant rows model/effort/speed/provider/usage/
+  toolCalls/stopReason) so the chat UI can render tool cards for history.
 - `messenger.ts`: export `resolveChatAccess`, `chatListEntryFor` (or a
   `listChatsById`), `projectMessages`, `touchChat`, `chatPreviewOf`,
   `insertChatMember`/`newChatMemberDoc`; narrow the 409 guards so
@@ -163,10 +171,16 @@ Server changes in the messenger family:
   Lopu rows may be deleted via `deleteMessage` (assistant rows stay
   non-editable).
 - New util `remix/app/api/utils/messenger/lopuChats.ts`:
-  - `createLopuChat(viewerId, { title?, model?, effort?, speed? })` → `{ ok, chat: ChatListEntry }`
-  - `listLopuChats(viewerId, { limit? })` → `{ ok, chats: ChatListEntry[] }` (filter `crystal.externalSource.provider === 'lopu'` from the viewer's memberships; reuse `listChats` internals)
+  - `createLopuChat(viewerId, { title?, model?, effort?, speed? })` → `{ ok, chat: LopuChatEntry }`
+    where `LopuChatEntry = ChatListEntry & { lopu: { model, effort, speed, turns, lastModel } }`
+    (the chat's own settings ride on every list/create/update/get entry so the
+    client adopts them when the conversation is selected — no second round trip)
+  - `listLopuChats(viewerId, { limit? })` → `{ ok, chats: LopuChatEntry[] }` (owner query on `crystal.externalSource.provider === 'lopu'`; rows take the `listChats` summary path)
   - `getLopuChat(viewerId, chatId)` → `{ ok, chat, myMember, settings: crystal.lopu }`
-  - `updateLopuChat(viewerId, chatId, { title?, model?, effort?, speed? })`
+  - `updateLopuChat(viewerId, chatId, { title?, model?, effort?, speed? })` → `{ ok, chat: LopuChatEntry }`
+    (model/effort/speed validate statically against `AI_WORKFLOW_BASE_MODELS`;
+    enablement/availability is resolved per turn by the reply route — stored
+    settings leniently, explicit per-turn overrides strictly → 400)
   - `deleteLopuChat(viewerId, chatId)` — owner only; deletes chat + member + messages (+ reactions on them) in one `withMessengerStorageTransaction`
   - `persistLopuUserTurn(viewerId, { chatId, requestId, text })` → `{ ok, message: PublicChatMessage }` (409 on requestId reuse, same rule as sendMessage)
   - `persistLopuAssistantTurn(viewerId, { chatId, requestId, text, lopu })` → `{ ok, messages: PublicChatMessage[] }` (segments), also touches chat + member
@@ -263,14 +277,30 @@ OpenAI: `chat.completions.create({ model, stream:true, max_completion_tokens, me
 accumulate `choices[0].delta.tool_calls[i].function.arguments` per index,
 emitting `tool_input_delta`; `finish_reason === 'tool_calls'` → execute →
 append `{ role:'assistant', tool_calls }` + `{ role:'tool', tool_call_id, content }` and loop.
+The attempt ladder is decorated stream → bare stream → **plain completion**
+(`stream: false`, no `stream_options`): OpenAI-compatible endpoints that
+refuse streaming (the local Codex proxy answers 400 "Streaming is not
+implemented") are served by the last rung, whose answer is replayed as chunks
+(word-ish deltas, indexed tool_calls, a finish chunk with usage); once that
+rung wins, later hops go straight to it. Plain answers are normalised before
+parsing: an envelope the bridge's model wrapped around the reply
+(`{"choices":[{"message":{"content":…}}]}`, `{"content":…}`,
+`{"message":…}`, or the whole reply as one JSON string literal) is unwrapped
+(`unwrapEnvelopeContent`), and in text mode a reply that is nothing but a
+tool-call object/array naming known tools is re-fenced as tt-tool blocks
+(`wrapBareToolCalls`). The text parser also accepts `tool`/`arguments`
+spellings and a JSON-escaped fence body.
 
 Test provider: given the latest user text, a script keyed by keywords:
 - contains "hello"/default → text only.
 - contains "component" → `create_component` (a small card component with an
   arg `title`), then text.
 - contains "page" or "section" or "hero" → `create_page` (if no active page)
-  or `patch_page` inserting a container with heading + text + the component,
-  streamed in ≥ 6 `tool_input_delta` chunks so live rendering is exercised.
+  or `patch_page` inserting a container with heading + text + the component
+  (always Lopu's own `lopu-test-card` — built this turn when asked for,
+  otherwise the one an earlier turn made; the script never depends on a
+  seeded catalog), streamed in ≥ 6 `tool_input_delta` chunks so live
+  rendering is exercised.
 - contains "action" → `create_action` (pong) then `run_action`.
 - contains "delete" → `delete_thing` without `confirmed` → tool refuses →
   text asks for confirmation.
@@ -289,13 +319,19 @@ type LopuChatEvent =
   | { type:'tool_result'; id; name; ok; summary; data? }      // data bounded ≤ 16KB, e.g. { thing } or { ops, pageId }
   | { type:'patch'; id; target: PatchTarget; ops: PageOp[]; pageId?; persisted: boolean }  // live builder patch (2.5)
   | { type:'thing'; id; kind; thing }                         // created/updated public thing (component/page/action)
-  | { type:'navigate'; path }                                 // client should navigate
+  | { type:'navigate'; id; path }                             // client should navigate
   | { type:'error'; message; retryable }
   | { type:'done'; assistantMessageId; messages: PublicChatMessage[]; usage?; stopReason }
 ```
 
 Events are emitted in stream order; `patch`/`thing`/`navigate` are emitted by
-the tool executor as soon as the tool completes (before `tool_result`).
+the tool executor as soon as the tool completes (before `tool_result`). `id`
+on every tool-scoped event (`tool_use_start` … `tool_result`, `patch`,
+`thing`, `navigate`) is the TOOL CALL id, so the client attaches patches and
+created things to the tool card that made them; a created thing's own id is
+`thing.thing.id`. `meta` is always first; `done` is always last and is emitted
+by the route after the assistant turn is persisted (the generator returns the
+turn outcome instead of yielding `done`).
 
 ### 2.4 Tools (server-executed as the viewer)
 
@@ -465,10 +501,16 @@ in `components/Lopu/lopuChatStream.ts` (copy the useLopuStream loop, `credential
   in `tt-lopu-launcher`, default bottom-right stacked 72px above DevKit's
   corner) + window (`tt-lopu-window` `{x,y,width,height}`, default 400×560
   bottom-right, min 320×360, max viewport−24, drag by header, resize grip
-  bottom-right + edges optional, double-click header → dock to right edge,
-  Escape closes, header buttons: model chip, "open in /lopu" ⤢, minimise −,
-  close ✕); on mobile (`useIsMobileViewport`) render as an 88dvh bottom sheet
-  instead. z rungs exported from `useDrawer.tsx`: `LOPU_WINDOW_Z = DRAWER_Z + 60`,
+  bottom-right + edges optional, double-click header → dock to right edge
+  (a right-docked column stops `LOPU_DEVKIT_CLEARANCE` = 72px above DevKit's
+  corner so the composer stays reachable, and the launcher hides while a
+  column is docked; double-click again to float), Escape closes (an open
+  menu/picker inside the window takes the Escape first), header buttons:
+  model chip, "open in /lopu" ⤢, minimise −, close ✕); on mobile
+  (`useIsMobileViewport`) render as an 88dvh bottom sheet instead, flagging
+  `<html data-lopu-sheet="open">` so DevKit's trigger steps aside. DevKit also
+  hides itself on `/lopu*` exactly as on `/messages*`. z rungs exported from
+  `useDrawer.tsx`: `LOPU_WINDOW_Z = DRAWER_Z + 60`,
   `LOPU_LAUNCHER_Z = DRAWER_Z + 200` (documented in the ladder comment). Not
   `role="dialog"` while non-modal. Hidden on `/lopu` (the page IS the chat) and
   when `settings.lopu.launcher === false`. Open state `settings.lopu.open`

@@ -8,6 +8,7 @@ import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } fro
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
 import { useLopu } from '../../Lopu/useLopu';
+import { LopuSettingsRows } from '../../Lopu/LopuHost';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
@@ -698,6 +699,22 @@ export const UserSettingsModal = () => {
 						))}
 					</Flex>
 				</Flex>
+			</Flex>
+
+			{/* 🦄 Lopu — the assistant's launcher, window and defaults (mirrors
+			    SettingsPage's Lopu section; the rows come from LopuSettingsRows) */}
+			<Flex flexDirection="column" rowGap={0}>
+				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
+					Lopu 🦄
+				</Text>
+				<LopuSettingsRows renderRow={settingRow} />
+				{settingRow(
+					'Talk to Lopu',
+					<Button size="xs" variant="outline" onClick={() => handleGoTo('/lopu')}>
+						Open 🦄
+					</Button>,
+					'The full chat page with every conversation'
+				)}
 			</Flex>
 
 			{/* theming */}
