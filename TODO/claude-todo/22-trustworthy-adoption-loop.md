@@ -48,6 +48,10 @@ experiment by itself.
   immutable releases, review receipts, app permission/update clarity,
   ecosystem incidents, abandonment, and fair discovery. Creator growth must
   not invent a popularity-based trust badge or parallel app review contract.
+- [TODO 28](./28-service-continuity-and-recovery.md) owns journey service
+  objectives, safe degradation, truthful write outcomes, restore proof,
+  incident operations, and dependency resilience. Adoption experiments must
+  not hide reliability failures behind aggregate conversion or engagement.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

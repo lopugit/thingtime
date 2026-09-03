@@ -75,6 +75,7 @@ These are definitions to debate before instrumentation, not measured claims.
 | Consentful share | A recipient opens a deliberately shared public artifact or invite and takes an explicit next action. | Never infer contacts, scrape address books, or expose the recipient to the sender without consent. |
 | Durable creation | A Thing remains readable, editable, exportable, and attributable after a defined period. | Deletion and retention controls remain authoritative; deleted content never survives as analytics payload. |
 | Trustworthy session | The useful outcome completes without security denial, crash, severe accessibility blocker, or unexplained data loss. | Operational telemetry must be bounded, redacted, access-controlled, and separate from customer content. |
+| Recoverable journey | A critical create, find, edit, share, or safe-run journey survives an approved dependency failure or reaches a clear, recoverable state. | Never count a health endpoint or successful deployment as recovery proof; exercise the journey and verify durable state. |
 
 Raw signups, page views, time-on-site, notification opens, and content volume are
 diagnostics at best. They are not north-star outcomes and must never reward
@@ -121,6 +122,9 @@ Any later measurement design should fail closed unless all of these are true:
 9. What publisher, release, review, consent-update, incident, and data-control
    gates must be proven before apps or reusable artifacts enter public
    discovery?
+10. Which critical journeys need service objectives, degraded-mode contracts,
+    recovery targets, restore drills, and incident ownership before Thingtime
+    can responsibly widen adoption?
 
 ## Refresh checklist
 

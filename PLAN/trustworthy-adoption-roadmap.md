@@ -14,6 +14,9 @@
 **Ecosystem dependency:**
 [Trusted developer ecosystem](./trusted-developer-ecosystem-roadmap.md)
 
+**Continuity dependency:**
+[Service continuity and recovery](./service-continuity-and-recovery-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -34,6 +37,8 @@ owner approves the exact journey and denominator.
   storage accounting, accessibility, or rate limits.
 - Treating an open PR, successful deployment, or green controller job as proof
   that a user outcome works.
+- Treating a point-in-time health response as proof of availability,
+  durability, or recoverability.
 - Building a second data path solely for analytics.
 
 ## Operating principles
@@ -91,6 +96,9 @@ quality guardrail. A dashboard without that contract is not decision evidence.
   until a product question cannot be answered more privately.
 - Assign owners for product, privacy/security, accessibility, reliability, and
   cost guardrails.
+- Approve the critical-journey service objectives, degraded-mode behavior,
+  recovery targets, and incident ownership through the
+  [service continuity roadmap](./service-continuity-and-recovery-roadmap.md).
 - Record any new storage or retention decision in `DECISIONS.md` before code.
 
 **Gate:** no telemetry implementation begins until the product owner approves
@@ -226,6 +234,7 @@ Every experiment copied into `TODO/` should contain:
 | PR volume outruns review capacity | Long-lived open PRs, stale bases, repeated conflict automation | Pause new experiments; reconcile statuses and land or close prerequisites first. |
 | Sharing drives abuse faster than value | Spam, impersonation, report backlog, revoked-link access | Disable the experiment flag, preserve evidence, and fix controls before resuming. |
 | Accessibility or language quality lags | Journey fails keyboard, screen reader, reduced motion, touch, or target locales | Do not broaden acquisition; fix the blocker and rerun the same journey. |
+| Availability hides unrecoverable state | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming. |
 | Costs grow faster than usefulness | Storage, compute, email, moderation, or support cost per useful return rises | Narrow the experiment, improve efficiency, or test an aligned paid tier. |
 | Metrics optimize the proxy | Page views/time rise while useful outcomes or trust fall | Retire the proxy and return to outcome-based evaluation. |
 

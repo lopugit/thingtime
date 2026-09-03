@@ -410,3 +410,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     `claude-todo/27-trusted-developer-ecosystem.md` only after the owner approves
     the first artifact family, review capacity, consent rules, incident states,
     funding boundaries, and stop conditions.
+
+28. **🛟 Make service continuity and recovery a user-facing contract.**
+
+    Preserve Thingtime's existing frontend, Nitro, MongoDB, and deployment
+    health signals while replacing point-in-time readiness with journey-level
+    service objectives, safe degraded modes, truthful write outcomes, verified
+    backups and restore drills, incident ownership, and dependency-failure
+    exercises. Health checks and successful deployments are evidence inputs,
+    not proof that user work is durable or recoverable. Start with the evidence
+    note and phased roadmap, then execute
+    `claude-todo/28-service-continuity-and-recovery.md` only after the owner
+    approves critical journeys, objectives, recovery targets, communication
+    ownership, drill environments, and stop conditions.

@@ -142,3 +142,33 @@ policy, moderation setting, API, or data schema changed.
 
 Validation and exact-head CI/preview receipts for this run are recorded in the
 PR body after publication.
+
+## 2026-09-04 — service continuity and recovery
+
+This run separates Thingtime's useful point-in-time health signals from proof
+that critical user journeys remain available, durable, and recoverable through
+dependency failure. It adds:
+
+- `NOTES/service-continuity-and-recovery-baseline.md`, a dated evidence ledger
+  covering frontend, Nitro, MongoDB, migration-readiness, deployment, timeout,
+  backup/restore, incident, dependency, and recovery-objective boundaries;
+- `PLAN/service-continuity-and-recovery-roadmap.md`, a gated path from critical
+  journey definitions and service objectives through truthful degraded modes,
+  restore drills, incident operations, dependency exercises, and sustainable
+  release gates;
+- `TODO/claude-todo/28-service-continuity-and-recovery.md`, an implementation
+  epic with owner decisions, dependencies, security/privacy/accessibility
+  safeguards, acceptance criteria, stop conditions, and a first decision
+  packet.
+
+The proposal treats health checks, CI, and deployments as evidence inputs, not
+availability claims. It requires acknowledged writes to have a durable and
+observable outcome, keeps migration compatibility under TODO 24, makes backup
+existence insufficient without restore proof, and keeps incident communication
+factual, privacy-safe, accessible, and owned. No runtime, API, schema,
+deployment, alert, backup, or production behavior changed.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
+TODO 22 dependency list. Validation and exact-head CI/preview receipts for this
+run are recorded in the PR body after publication.
