@@ -51,7 +51,7 @@
     "test:components": "node --import tsx --test app/components/ComponentsLibrary/*.test.ts",
     "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/hooks/thingsRequestPayload.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",
     "test:ci-control": "node --import tsx --test app/api/utils/ciControl/*.test.ts app/components/Admin/CIControl/*.test.ts",
-    "test:connections": "node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/*.test.ts app/api/utils/connections/*.test.mts",
+    "test:connections": "node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/*.test.ts app/api/utils/connections/*.test.mts app/components/Connections/*.test.ts",
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js",
     "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts",
     "test:deployments": "node --import tsx --test app/api/utils/deployments/*.test.ts",

@@ -8,7 +8,7 @@ import type { FeedFilterMatch, PostChange, PublicPost } from '~/components/Feed/
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { cardStyle, type Connection } from './shared';
+import { appendFeedPage, cardStyle, type Connection } from './shared';
 
 // /connections/feed — browse connected third-party feeds as native Thingtime
 // posts. PostCard renders each external post, so comments and reactions work
@@ -72,7 +72,10 @@ export const ConnectionsFeedPage = () => {
         });
         if (seq !== requestSeq.current) return;
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
-        setPosts((current) => (cursor ? [...current, ...merged] : merged));
+        // appended pages can overlap what is already rendered (see
+        // appendFeedPage) — a plain concat would repeat a post and duplicate
+        // its React key
+        setPosts((current) => (cursor ? appendFeedPage(current, merged) : merged));
         if (!cursor) writeLocalCache(feedCacheKey(connection), merged.slice(0, PAGE_SIZE));
         setNextCursor(resp.nextCursor || null);
         // a narrowed read returns only the selected connection — never let it
@@ -160,8 +163,16 @@ export const ConnectionsFeedPage = () => {
     }
     const last = posts[posts.length - 1];
     const lastMs = last ? new Date(last.createdAt).getTime() : NaN;
-    // never send a cursor the server would reject — an ignored cursor returns
-    // page 1, which would APPEND already-rendered posts (duplicate keys)
+    // Never send a cursor the server would reject — an ignored cursor returns
+    // page 1, i.e. content the reader has already scrolled past.
+    //
+    // This cursor is deliberately APPROXIMATE in the safe direction. The server
+    // pages membership rows and mints cursors from their `ext-source-…`
+    // shareIds; all the client has is the post's `ext-post-…` id. Since the
+    // chrono tiebreak is `shareId > cursorId` at an equal createdAt, and
+    // `ext-source-…` sorts after `ext-post-…`, the boundary timestamp is
+    // re-read rather than skipped — nothing is ever lost, and appendFeedPage
+    // absorbs the resulting overlap.
     const syntheticCursor = Number.isFinite(lastMs) && lastMs > 0 && last ? `${lastMs}_${last.id}` : null;
     if (!syntheticCursor) return;
     await load(activeConnection, syntheticCursor);
