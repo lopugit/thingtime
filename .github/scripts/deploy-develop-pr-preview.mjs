@@ -68,6 +68,15 @@ const expectedReadyAt = (startedAt = Date.now()) => {
 	return new Date(Math.ceil((startedAt + minutes * 60_000) / 60_000) * 60_000).toISOString();
 };
 
+const expectedReadyForRun = () => {
+	const value = process.env.PREVIEW_EXPECTED_READY_AT?.trim();
+	if (!value) return expectedReadyAt();
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
+		throw new Error('PREVIEW_EXPECTED_READY_AT was invalid');
+	}
+	return value;
+};
+
 const boundedInteger = (value, name) => {
 	const parsed = Number(value);
 	if (!Number.isSafeInteger(parsed) || parsed < 1) {
@@ -485,6 +494,13 @@ const runSelfTest = async () => {
 		previewAliasSuffix: 'previews.dev.thingtime.com',
 		productionPreviewAliasSuffix: 'previews.thingtime.com'
 	};
+	const previousExpectedReady = process.env.PREVIEW_EXPECTED_READY_AT;
+	process.env.PREVIEW_EXPECTED_READY_AT = '2026-09-03T12:30:00.000Z';
+	equal(expectedReadyForRun(), '2026-09-03T12:30:00.000Z');
+	process.env.PREVIEW_EXPECTED_READY_AT = 'not-a-time';
+	throws(() => expectedReadyForRun());
+	if (previousExpectedReady === undefined) delete process.env.PREVIEW_EXPECTED_READY_AT;
+	else process.env.PREVIEW_EXPECTED_READY_AT = previousExpectedReady;
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
 	equal(classifyPullRequest({ ...base, state: 'closed' }, config.repository, config.repositoryId).reason, 'not-open');
@@ -1808,7 +1824,7 @@ const deploy = async (config, pullRequest) => {
 	let githubDeployment = null;
 	let vercelDeployment = null;
 	let published = false;
-	const estimatedReady = expectedReadyAt();
+	const estimatedReady = expectedReadyForRun();
 	try {
 		githubDeployment = await createGithubDeployment(config.repository, pullRequest);
 		await upsertComment(
@@ -1883,13 +1899,14 @@ const deploy = async (config, pullRequest) => {
 	}
 };
 
-const writePrepareOutputs = async ({ shouldBuild, pullRequest = null }) => {
+const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null }) => {
 	const outputPath = requiredEnv('GITHUB_OUTPUT');
 	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`];
 	if (pullRequest) {
 		lines.push(`pr_number=${boundedInteger(pullRequest.number, 'PR number')}`);
 		lines.push(`head_sha=${pullRequest.head.sha}`);
 		lines.push(`head_ref=${pullRequest.head.ref}`);
+		if (expectedReady) lines.push(`expected_ready_at=${expectedReady}`);
 	}
 	await appendFile(outputPath, `${lines.join('\n')}\n`, { mode: 0o600 });
 };
@@ -1936,7 +1953,18 @@ const prepareBuildPlan = async () => {
 		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
 		return;
 	}
-	await writePrepareOutputs({ shouldBuild: true, pullRequest });
+	const expectedReady = expectedReadyAt();
+	await upsertComment(
+		config.repository,
+		pullRequest.number,
+		deploymentComment({
+			state: 'deploying',
+			pullRequest,
+			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+			expectedReady
+		})
+	);
+	await writePrepareOutputs({ shouldBuild: true, pullRequest, expectedReady });
 	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
 };
 

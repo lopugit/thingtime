@@ -329,7 +329,12 @@ The controller revalidates the exact live ref and SHA before publishing, while
 the deployment itself always remains in the isolated Vercel `develop` Custom
 Environment. A closed former parent PR therefore cannot strand a child PR, and
 forks, drafts, stale dispatches, or users without current write access still
-receive no credentialed preview.
+receive no credentialed preview. As soon as authorization succeeds, the
+controller posts the expected persistent URL and a clearly labelled UTC ready
+estimate before product checkout, dependency installation, or build. The
+publisher preserves that original estimate when it adds the immutable URL and
+terminal status. Both secretless build paths retry only the pinned pnpm
+bootstrap after transient package-registry transport failures.
 
 The admin CI page can additionally store a bounded Develop/Production preview
 policy and send it through the `thingtime-ci-control[bot]` GitHub App. The

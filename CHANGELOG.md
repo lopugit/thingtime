@@ -19,6 +19,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Moved the ordinary Develop preview's expected URL and ready estimate into the
+  protected authorization phase so the PR comment exists before checkout,
+  dependency installation, or build. The same timestamp is preserved through
+  publisher updates, and both secretless build paths now retry the pinned pnpm
+  bootstrap after the observed transient Corepack transport assertion. — Codex
+  (AI), 2026-09-03
+
 - Moved admin-selected Develop and Production/Main PR preview publication into
   the protected `github-actions` controller. The product backend now sends only
   a GitHub App-authenticated policy dispatch; the controller immediately
