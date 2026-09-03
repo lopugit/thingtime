@@ -15,13 +15,25 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.

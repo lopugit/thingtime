@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
-import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri } from './pluginCore';
+import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
 
 const connectedContext = {
   session: {},
@@ -24,7 +24,30 @@ const connectedContext = {
   }
 } as any;
 
-test('MCP tools/list publishes OAuth requirements before a user links Thingtime', async () => {
+test('the OAuth connection page is SSO-first and defaults to all Things read/write access', () => {
+  const page = renderConnectionPage(
+    'signed-request-token',
+    ['https://thingtime.example'],
+    'https://thingtime.example',
+    [
+      { id: 'things', title: 'Full things access', description: 'Read and write every supported Thing capability.', emoji: '🗝️' },
+      { id: 'things.read', title: 'Read Things', description: 'Read Things only.', emoji: '👁️' }
+    ]
+  );
+
+  assert.match(page, /Connect your account/);
+  assert.match(page, /Continue with Thingtime/);
+  assert.match(page, /Read\/write all Things/);
+  assert.match(page, /data-scope value="things" checked/);
+  assert.match(page, /\/authorize\?self=1/);
+  assert.match(page, /Generate a new token with these rules/);
+  assert.match(page, /Completing your secure Thingtime connection/);
+  assert.match(page, /data\.set\('intent','complete'\)/);
+  assert.match(page, /window\.location\.assign\(body\.redirectUri\)/);
+  assert.doesNotMatch(page, /Create a least-privilege token/);
+});
+
+test('MCP tools/list publishes a host-native login bootstrap before a user links Thingtime', async () => {
   const response = await handleChatGptMcp({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
       method: 'POST',
@@ -35,8 +58,8 @@ test('MCP tools/list publishes OAuth requirements before a user links Thingtime'
   const payload: any = await response.json();
   assert.equal(response.status, 200);
   assert.equal(payload.result.tools.length, 32);
-  assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
-  assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
+  assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]);
+  assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]);
   const annotations = Object.fromEntries(payload.result.tools.map((tool: any) => [tool.name, tool.annotations]));
   assert.deepEqual(annotations.get_thingtime_thing, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   assert.deepEqual(annotations.list_thingtime_comments, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
@@ -100,8 +123,11 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
   for (const tool of tools) {
     assert.equal(tool.inputSchema.type, 'object');
     assert.equal(tool.inputSchema.additionalProperties, false);
-    assert.deepEqual(tool.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
-    assert.deepEqual(tool._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
+    const expectedSecuritySchemes = tool.name === 'login_thingtime'
+      ? [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]
+      : [{ type: 'oauth2', scopes: ['thingtime'] }];
+    assert.deepEqual(tool.securitySchemes, expectedSecuritySchemes);
+    assert.deepEqual(tool._meta.securitySchemes, expectedSecuritySchemes);
     assert.deepEqual(tool.outputSchema, { type: 'object', additionalProperties: true });
     assert.equal(tool._meta['openai/outputTemplate'], 'ui://thingtime/review.html');
     assert.equal(CHATGPT_MCP_TOOL_FEATURES[tool.name as keyof typeof CHATGPT_MCP_TOOL_FEATURES] !== undefined, true);
@@ -237,12 +263,29 @@ test('targeted comment reads bind the exact target id and comment kind upstream'
   assert.equal(result.result.things[0].id, 'comment-1');
 });
 
-test('an unauthenticated protected tool call returns the OAuth challenge ChatGPT needs', async () => {
+test('an unauthenticated login returns a host-native OAuth challenge without failing the transport', async () => {
   const response = await handleChatGptMcp({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'login_thingtime', arguments: {} } })
+    })
+  });
+  const payload: any = await response.json();
+  const challenge = 'Bearer resource_metadata="https://thingtime.example/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"';
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('www-authenticate'), null);
+  assert.equal(payload.result.isError, true);
+  assert.deepEqual(payload.result._meta['mcp/www_authenticate'], [challenge]);
+});
+
+test('an unauthenticated account tool remains protected at the HTTP transport boundary', async () => {
+  const response = await handleChatGptMcp({
+    request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_thingtime_accounts', arguments: {} } })
     })
   });
   const payload: any = await response.json();
