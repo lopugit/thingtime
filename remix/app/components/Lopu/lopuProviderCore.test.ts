@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+// @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
+import {
+	buildLopuProviderGroups,
+	describeLopuChoice,
+	findLopuProviderOption,
+	lopuProviderChoiceKey,
+	modelUnavailableReason,
+	normalizeLopuVaultInfo,
+	normalizeLopuVaultProvider,
+	normalizeLopuVaultProviders,
+	parseLopuProviderChoiceKey,
+	vaultProviderHint,
+	type AiModelPublic,
+	type LopuVaultProvider
+} from './lopuProviderCore.ts';
+
+const model = (id: string, provider: 'anthropic' | 'openai', extra: Partial<AiModelPublic> = {}): AiModelPublic => ({
+	id,
+	label: id.toUpperCase(),
+	provider,
+	efforts: ['low', 'high'],
+	speeds: ['normal'],
+	family: 'x',
+	enabled: true,
+	available: true,
+	isDefault: false,
+	...extra
+});
+
+const MODELS = [model('gpt-5', 'openai', { isDefault: true }), model('claude-opus-5', 'anthropic', { available: false }), model('claude-sonnet-5', 'anthropic', { enabled: false, available: false })];
+const VAULT: LopuVaultProvider[] = [
+	{ id: 'vp-1', name: 'Acme proxy', kind: 'compatible', model: 'gpt-4o', endpointHost: 'llm.acme.test', available: true, reason: null },
+	{ id: 'vp-2', name: 'Old key', kind: 'anthropic', model: null, endpointHost: null, available: false, reason: 'vault key not configured' }
+];
+
+test('vault providers normalise defensively and never carry a credential', () => {
+	assert.equal(normalizeLopuVaultProvider(null), null);
+	assert.equal(normalizeLopuVaultProvider({ name: 'no id' }), null);
+	const normalized = normalizeLopuVaultProvider({ id: ' vp-9 ', name: '', kind: 'openrouter', model: 'x', endpointHost: 'h', available: 'yes', secret: 'sk-live' });
+	assert.deepEqual(normalized, { id: 'vp-9', name: 'vp-9', kind: 'openrouter', model: 'x', endpointHost: 'h', available: true, reason: null });
+	assert.ok(!('secret' in (normalized as object)));
+	assert.equal(normalizeLopuVaultProviders('nope').length, 0);
+	assert.equal(normalizeLopuVaultProviders([{ id: 'a' }, 7, { id: 'b', available: false, reason: 'blocked host' }]).length, 2);
+	assert.deepEqual(normalizeLopuVaultInfo({ configured: true }), { configured: true });
+	assert.deepEqual(normalizeLopuVaultInfo({ configured: 'yes' }), { configured: false });
+	assert.equal(normalizeLopuVaultInfo(undefined), null);
+});
+
+test('composite keys round-trip a model or a vault provider', () => {
+	assert.equal(lopuProviderChoiceKey({ model: 'gpt-5', providerId: null }), 'model:gpt-5');
+	assert.equal(lopuProviderChoiceKey({ model: 'gpt-5', providerId: 'vp-1' }), 'vault:vp-1');
+	assert.equal(lopuProviderChoiceKey(null), '');
+	assert.deepEqual(parseLopuProviderChoiceKey('vault:vp-1'), { model: null, providerId: 'vp-1' });
+	assert.deepEqual(parseLopuProviderChoiceKey('model:gpt-5'), { model: 'gpt-5', providerId: null });
+	assert.deepEqual(parseLopuProviderChoiceKey('gpt-5'), { model: 'gpt-5', providerId: null });
+	assert.equal(parseLopuProviderChoiceKey(''), null);
+	assert.equal(parseLopuProviderChoiceKey('vault:'), null);
+});
+
+test('groups list Claude first, then OpenAI, then the viewer’s providers, disabling what cannot be used', () => {
+	const groups = buildLopuProviderGroups(MODELS, VAULT);
+	assert.deepEqual(
+		groups.map((group) => group.label),
+		['Claude', 'OpenAI', 'Your providers']
+	);
+	const claude = groups[0].options;
+	assert.equal(claude[0].disabled, true);
+	assert.equal(claude[0].reason, 'needs Anthropic key');
+	assert.equal(claude[1].reason, 'disabled by an admin');
+	const openai = groups[1].options[0];
+	assert.equal(openai.disabled, false);
+	assert.equal(openai.isDefault, true);
+	assert.equal(openai.key, 'model:gpt-5');
+	assert.equal(openai.catalog?.id, 'gpt-5');
+	const vault = groups[2].options;
+	assert.deepEqual(vault.map((option) => option.key), ['vault:vp-1', 'vault:vp-2']);
+	assert.equal(vault[0].hint, 'gpt-4o · llm.acme.test');
+	assert.equal(vault[0].model, 'gpt-4o');
+	assert.equal(vault[1].disabled, true);
+	assert.equal(vault[1].reason, 'vault key not configured');
+	assert.equal(findLopuProviderOption(groups, 'vault:vp-2')?.label, 'Old key');
+	assert.equal(findLopuProviderOption(groups, 'nope'), null);
+	// no vault → no "Your providers" group; no models → only the vault group
+	assert.equal(buildLopuProviderGroups(MODELS, []).length, 2);
+	assert.deepEqual(buildLopuProviderGroups([], VAULT).map((group) => group.id), ['vault']);
+});
+
+test('chip copy names the vault provider, else the model with effort and speed', () => {
+	assert.equal(describeLopuChoice(MODELS, VAULT, { model: 'gpt-5', effort: 'high', speed: 'fast', providerId: null }), 'GPT-5 · High · Fast');
+	assert.equal(describeLopuChoice(MODELS, VAULT, { model: 'gpt-5', effort: 'high', speed: 'normal', providerId: 'vp-1' }), 'Acme proxy');
+	assert.equal(describeLopuChoice(MODELS, VAULT, { model: null, providerId: 'missing' }), 'Your provider');
+	assert.equal(describeLopuChoice(MODELS, null, { model: null }), 'No model');
+	assert.equal(describeLopuChoice([], null, { model: null }), 'Auto');
+	assert.equal(modelUnavailableReason({ enabled: true, available: true, provider: 'openai' }), null);
+	assert.equal(vaultProviderHint({ model: null, endpointHost: null, kind: 'anthropic' }), 'Anthropic');
+});

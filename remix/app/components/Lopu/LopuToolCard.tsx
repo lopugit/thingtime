@@ -1,29 +1,32 @@
 import React from 'react';
-import { Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
+import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
+import { Check, ChevronDown, X } from 'lucide-react';
 
-import { toolGlyph, toolLabel, toolLinks, type LopuToolActivity } from './lopuTurnCore';
+import { LOPU_UI, lopuEyebrowSx, lopuFocusRingSx } from './lopuTheme';
+import { toolGlyph, toolLabel, toolLinks, toolRowDetails, toolRowSummary, type LopuMessageToolCall, type LopuToolActivity, type LopuToolStatus } from './lopuTurnCore';
 
-// One tool activity inside Lopu's bubble (design note §3.2): a friendly label
-// for the tool, a spinner while it streams/runs, ✓ / 🌧️ when it lands, the
-// executor's summary, and links to what it made (/builder?page=, /components/,
-// /actions/) plus "Undo" for a page patch whose draft is still mounted.
+// One tool activity inside Lopu's bubble, drawn as a compact row (design
+// brief): glyph · label · one-line summary · status · links · Undo, with a
+// chevron that opens a details drawer showing the tool's input and result
+// JSON. `LopuToolCallRow` is the same row for a persisted turn (history rows
+// remember only name / ok / summary / thingId).
 
-const MUTED = 'var(--tt-muted, #9a9aa6)';
-
-const StatusGlyph = ({ status }: { status: LopuToolActivity['status'] }) => {
-	if (status === 'streaming' || status === 'running') return <Spinner size="xs" speed="0.8s" color="var(--tt-accent, #7c6cff)" thickness="2px" />;
+const StatusGlyph = ({ status }: { status: LopuToolStatus }) => {
+	if (status === 'streaming' || status === 'running') {
+		return <Spinner size="xs" speed="0.8s" color={LOPU_UI.muted} thickness="2px" label={status === 'streaming' ? 'streaming' : 'running'} flexShrink={0} />;
+	}
 	if (status === 'ok') {
 		return (
-			<Text as="span" fontSize="xs" fontWeight={700} color="var(--tt-success, #2f9e6b)" aria-label="done">
-				✓
-			</Text>
+			<Box as="span" display="inline-flex" color={LOPU_UI.positive} flexShrink={0} role="img" aria-label="done">
+				<Check size={14} strokeWidth={2.4} aria-hidden />
+			</Box>
 		);
 	}
 	return (
-		<Text as="span" fontSize="xs" aria-label="failed">
-			🌧️
-		</Text>
+		<Box as="span" display="inline-flex" color={LOPU_UI.danger} flexShrink={0} role="img" aria-label="failed">
+			<X size={14} strokeWidth={2.4} aria-hidden />
+		</Box>
 	);
 };
 
@@ -33,74 +36,203 @@ const patchCaption = (activity: LopuToolActivity): string | null => {
 	return `${count} change${count === 1 ? '' : 's'} · ${activity.patch.persisted ? 'saved' : 'draft'}`;
 };
 
+const RowLink = ({ to, children }: { to: string; children: React.ReactNode }) => (
+	<Box
+		as={RouterLink}
+		to={to}
+		fontSize={LOPU_UI.fontSmall}
+		fontWeight={600}
+		color={LOPU_UI.link}
+		textDecoration="underline"
+		textUnderlineOffset="2px"
+		textDecorationColor={LOPU_UI.faint}
+		overflowWrap="anywhere"
+		_hover={{ textDecorationColor: LOPU_UI.ink }}
+		sx={lopuFocusRingSx}
+	>
+		{children}
+	</Box>
+);
+
+const RowButton = ({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) => (
+	<Box
+		as="button"
+		type="button"
+		onClick={onClick}
+		title={title}
+		fontSize={LOPU_UI.fontSmall}
+		fontWeight={600}
+		color={LOPU_UI.ink}
+		height="24px"
+		px={2}
+		borderRadius={LOPU_UI.radiusXs}
+		border={LOPU_UI.border}
+		bg={LOPU_UI.card}
+		cursor="pointer"
+		lineHeight={1}
+		transition={`background ${LOPU_UI.transitionFast}`}
+		_hover={{ bg: LOPU_UI.surfaceHover }}
+		sx={lopuFocusRingSx}
+	>
+		{children}
+	</Box>
+);
+
+const DetailsBlock = ({ title, text }: { title: string; text: string }) => (
+	<Box minW={0}>
+		<Text as="span" sx={lopuEyebrowSx} display="block" mb={1}>
+			{title}
+		</Text>
+		<Box
+			as="pre"
+			m={0}
+			px={2.5}
+			py={2}
+			maxH="240px"
+			overflow="auto"
+			fontFamily={LOPU_UI.fontMono}
+			fontSize="11px"
+			lineHeight="1.5"
+			color={LOPU_UI.ink}
+			bg={LOPU_UI.card}
+			border={LOPU_UI.border}
+			borderRadius={LOPU_UI.radiusSm}
+			whiteSpace="pre-wrap"
+			overflowWrap="anywhere"
+		>
+			{text}
+		</Box>
+	</Box>
+);
+
+const rowFrame = {
+	className: 'lopuToolRow',
+	border: LOPU_UI.border,
+	borderRadius: LOPU_UI.radiusSm,
+	bg: LOPU_UI.surfaceAlt,
+	minW: 0,
+	overflow: 'hidden'
+} as const;
+
 export const LopuToolCard = ({
 	activity,
 	canUndo = false,
-	onUndo
+	onUndo,
+	compact = false
 }: {
 	activity: LopuToolActivity;
 	canUndo?: boolean;
 	onUndo?: (toolId: string) => void;
+	compact?: boolean;
 }) => {
+	const [open, setOpen] = React.useState(false);
 	const links = React.useMemo(() => toolLinks(activity), [activity]);
-	const busy = activity.status === 'streaming' || activity.status === 'running';
-	const summary = activity.result?.summary || (activity.status === 'error' && !activity.result ? 'This step did not finish.' : '');
+	const details = React.useMemo(() => toolRowDetails(activity), [activity]);
+	const summary = toolRowSummary(activity);
 	const caption = patchCaption(activity);
+	const label = toolLabel(activity.name, activity.status);
+	const failed = activity.status === 'error';
+	const detailsId = `lopu-tool-${activity.id}-details`;
 
 	return (
-		<Box
-			className="lopuToolCard"
-			data-tool={activity.name}
-			data-status={activity.status}
-			border="1px solid var(--tt-border, #ececef)"
-			borderRadius="12px"
-			bg="var(--tt-surface-alt, #f5f5f7)"
-			px={3}
-			py={2}
-			minW={0}
-		>
-			<Flex align="center" gap={2} minW={0}>
-				<Text as="span" fontSize="sm" lineHeight={1} aria-hidden="true">
+		<Box {...rowFrame} role="group" aria-label={label} data-tool={activity.name} data-status={activity.status}>
+			<Flex align="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} minW={0}>
+				<Box as="span" fontSize="13px" lineHeight={1} flexShrink={0} aria-hidden="true">
 					{toolGlyph(activity.name)}
+				</Box>
+				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={failed ? LOPU_UI.danger : LOPU_UI.ink} whiteSpace="nowrap" flexShrink={0}>
+					{label}
 				</Text>
-				<Text fontSize="xs" fontWeight={600} color="var(--tt-ink, #16161a)" isTruncated>
-					{toolLabel(activity.name, activity.status)}
-				</Text>
+				{summary ? (
+					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} isTruncated flex={1} minW={0} title={summary}>
+						{summary}
+					</Text>
+				) : (
+					<Box flex={1} />
+				)}
 				{caption ? (
-					<Text fontSize="10px" color={MUTED} fontFamily="var(--tt-font-mono, monospace)" letterSpacing="0.04em" flexShrink={0}>
+					<Text as="span" fontSize="10px" fontFamily={LOPU_UI.fontMono} letterSpacing="0.04em" color={LOPU_UI.muted} flexShrink={0} display={{ base: 'none', sm: 'inline' }}>
 						{caption}
 					</Text>
 				) : null}
-				<Box flex={1} />
 				<StatusGlyph status={activity.status} />
+				{details.hasDetails ? (
+					<Box
+						as="button"
+						type="button"
+						aria-expanded={open}
+						aria-controls={detailsId}
+						aria-label={open ? 'Hide details' : 'Show details'}
+						title={open ? 'Hide details' : 'Show details'}
+						display="inline-flex"
+						alignItems="center"
+						justifyContent="center"
+						width="24px"
+						height="24px"
+						mr="-6px"
+						borderRadius={LOPU_UI.radiusXs}
+						color={LOPU_UI.muted}
+						cursor="pointer"
+						flexShrink={0}
+						transition={`background ${LOPU_UI.transitionFast}, color ${LOPU_UI.transitionFast}`}
+						_hover={{ bg: LOPU_UI.surfaceHover, color: LOPU_UI.ink }}
+						sx={lopuFocusRingSx}
+						onClick={() => setOpen((prev) => !prev)}
+					>
+						<ChevronDown size={14} strokeWidth={2} aria-hidden style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms ease-out' }} />
+					</Box>
+				) : null}
 			</Flex>
-			{summary ? (
-				<Text fontSize="xs" color={activity.status === 'error' ? 'var(--tt-danger, #d64545)' : MUTED} mt={1} noOfLines={busy ? 2 : 4} whiteSpace="pre-wrap" overflowWrap="anywhere">
-					{summary}
-				</Text>
-			) : null}
-			{links.length || canUndo ? (
-				<Flex gap={3} mt={1.5} wrap="wrap" align="center">
+			{links.length || (canUndo && onUndo) ? (
+				<Flex gap={3} px={2.5} pb={1.5} mt="-2px" wrap="wrap" align="center">
 					{links.map((link) => (
-						<Box
-							as={RouterLink}
-							key={link.href}
-							to={link.href}
-							fontSize="xs"
-							fontWeight={700}
-							color="var(--tt-accent, #7c6cff)"
-							textDecoration="underline"
-							textUnderlineOffset="2px"
-							overflowWrap="anywhere"
-						>
+						<RowLink key={link.href} to={link.href}>
 							{link.label} →
-						</Box>
+						</RowLink>
 					))}
 					{canUndo && onUndo ? (
-						<Button size="xs" variant="ghost" height="22px" px={2} onClick={() => onUndo(activity.id)} title="Put the page back the way it was">
-							↩︎ Undo
-						</Button>
+						<RowButton onClick={() => onUndo(activity.id)} title="Put the page back the way it was">
+							Undo
+						</RowButton>
 					) : null}
+				</Flex>
+			) : null}
+			{open && details.hasDetails ? (
+				<Flex id={detailsId} direction="column" gap={2} px={2.5} py={2} borderTop={LOPU_UI.border}>
+					{details.input ? <DetailsBlock title="Input" text={details.input} /> : null}
+					{details.result ? <DetailsBlock title="Result" text={details.result} /> : null}
+				</Flex>
+			) : null}
+		</Box>
+	);
+};
+
+/** A persisted turn's tool call (history rows keep name · ok · summary · thingId only). */
+export const LopuToolCallRow = ({ call, compact = false }: { call: LopuMessageToolCall; compact?: boolean }) => {
+	const status: LopuToolStatus = call.ok ? 'ok' : 'error';
+	const label = toolLabel(call.name, status);
+	const summary = toolRowSummary({ name: call.name, status, result: { ok: call.ok, summary: call.summary } });
+	return (
+		<Box {...rowFrame} role="group" aria-label={label} data-tool={call.name} data-status={status}>
+			<Flex align="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} minW={0}>
+				<Box as="span" fontSize="13px" lineHeight={1} flexShrink={0} aria-hidden="true">
+					{toolGlyph(call.name)}
+				</Box>
+				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={call.ok ? LOPU_UI.ink : LOPU_UI.danger} whiteSpace="nowrap" flexShrink={0}>
+					{label}
+				</Text>
+				{summary ? (
+					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} isTruncated flex={1} minW={0} title={summary}>
+						{summary}
+					</Text>
+				) : (
+					<Box flex={1} />
+				)}
+				<StatusGlyph status={status} />
+			</Flex>
+			{call.thingId ? (
+				<Flex px={2.5} pb={1.5} mt="-2px">
+					<RowLink to={`/thing/${encodeURIComponent(call.thingId)}`}>Open →</RowLink>
 				</Flex>
 			) : null}
 		</Box>

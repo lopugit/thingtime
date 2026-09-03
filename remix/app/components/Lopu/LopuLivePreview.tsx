@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { parsePartialJson } from '~/utils/partialJson';
 import { WebpageBlocksRenderer, type ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
@@ -8,6 +8,7 @@ import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../Componen
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { isPageBlockLike } from './lopuBuildBridge';
+import { LOPU_UI, lopuEyebrowSx, lopuReducedMotionSx } from './lopuTheme';
 import { LIVE_PREVIEW_TOOLS, type LopuToolActivity } from './lopuTurnCore';
 
 // The streaming preview inside Lopu's bubble (design note §2.5 "Live
@@ -15,13 +16,15 @@ import { LIVE_PREVIEW_TOOLS, type LopuToolActivity } from './lopuTurnCore';
 // create_page / patch_page inputs stream in, the accumulated partial JSON is
 // parsed tolerantly and, as soon as it yields a plausible `render`
 // (component) or `blocks` / `ops` (page), drawn through the SAME sanitising
-// allowlist renderers the builder uses — clipped, inert (no click wrapper,
-// pointer events off), re-parsed at most once per animation frame. Once the
-// tool completes, the saved thing (or the complete input) replaces the
-// partial, so the card keeps a faithful thumbnail of what was built.
+// allowlist renderers the builder uses — inside a hairline frame, clipped,
+// inert (no click wrapper, pointer events off), re-parsed at most once per
+// animation frame, with a "streaming" pill while the input is still
+// arriving. Once the tool completes, the saved thing (or the complete input)
+// replaces the partial, so the frame keeps a faithful thumbnail of what was
+// built.
 
-const MUTED = 'var(--tt-muted, #9a9aa6)';
-const PREVIEW_MAX_HEIGHT = 360;
+const PREVIEW_MAX_HEIGHT = 320;
+const PREVIEW_MAX_HEIGHT_COMPACT = 220;
 
 // Coalesce a fast-changing value to one state update per animation frame.
 const useFrameThrottled = <T,>(value: T): T => {
@@ -98,14 +101,34 @@ const blocksFromOps = (ops: unknown): WebpageBlock[] => {
 	return out;
 };
 
+// "● streaming" — a hairline pill with a dot on the rainbow.
+const StreamingPill = () => (
+	<Flex as="span" className="lopuStreamingPill" align="center" gap="6px" height="20px" px={2} borderRadius={LOPU_UI.pill} border={LOPU_UI.border} bg={LOPU_UI.surfaceAlt} flexShrink={0}>
+		<Box
+			as="span"
+			width="6px"
+			height="6px"
+			borderRadius="999px"
+			background={LOPU_UI.rainbow}
+			backgroundSize="calc(100px + 200%)"
+			sx={{ animation: `tt-blink 1s steps(1) infinite, ${LOPU_UI.rainbowAnim}`, ...lopuReducedMotionSx }}
+			aria-hidden="true"
+		/>
+		<Text as="span" sx={lopuEyebrowSx}>
+			streaming
+		</Text>
+	</Flex>
+);
+
 export type LopuLivePreviewProps = {
 	activity: LopuToolActivity;
 	// components created earlier in the same turn, so page previews can draw
 	// their component blocks before the page resolves
 	componentsByRef?: ComponentsByRef;
+	compact?: boolean;
 };
 
-export const LopuLivePreview = ({ activity, componentsByRef }: LopuLivePreviewProps) => {
+export const LopuLivePreview = ({ activity, componentsByRef, compact = false }: LopuLivePreviewProps) => {
 	const streaming = activity.status === 'streaming';
 	const partial = useFrameThrottled(streaming ? activity.partialInput : '');
 	const parsedInput = React.useMemo<Record<string, unknown> | null>(() => {
@@ -151,36 +174,30 @@ export const LopuLivePreview = ({ activity, componentsByRef }: LopuLivePreviewPr
 	if (!body) return null;
 
 	return (
-		<Box className="lopuLivePreview" data-tool={activity.name} mt={2} minW={0}>
-			<Box display="flex" alignItems="center" gap={2} mb={1}>
-				<Text fontSize="10px" fontFamily="var(--tt-font-mono, monospace)" letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
+		<Box className="lopuLivePreview" data-tool={activity.name} data-streaming={streaming ? 'true' : 'false'} border={LOPU_UI.border} borderRadius={LOPU_UI.radiusMd} bg={LOPU_UI.card} overflow="hidden" minW={0}>
+			<Flex align="center" gap={2} px={2.5} py={1} minH="30px" borderBottom={LOPU_UI.border}>
+				<Text as="span" sx={lopuEyebrowSx}>
 					{streaming ? 'Live preview' : 'Preview'}
 				</Text>
-				<Text fontSize="10px" color={MUTED} isTruncated>
+				<Text as="span" fontSize="11px" color={LOPU_UI.muted} isTruncated minW={0}>
 					{caption}
 				</Text>
-				{streaming ? (
-					<Box as="span" fontSize="10px" color="var(--tt-faint, #b6b6c0)" sx={{ animation: 'tt-blink 1s steps(1) infinite' }} aria-hidden="true">
-						▍
-					</Box>
-				) : null}
-			</Box>
+				<Box flex={1} />
+				{streaming ? <StreamingPill /> : null}
+			</Flex>
 			<Box
 				position="relative"
-				border="1px dashed var(--tt-border, #ececef)"
-				borderRadius="12px"
-				bg="var(--tt-card, #ffffff)"
 				overflow="hidden"
-				maxH={`${PREVIEW_MAX_HEIGHT}px`}
+				maxH={`${compact ? PREVIEW_MAX_HEIGHT_COMPACT : PREVIEW_MAX_HEIGHT}px`}
 				// inert: a preview is never a control surface
 				pointerEvents="none"
 				userSelect="none"
 				aria-hidden="true"
 			>
-				<Box p={3} minW={0} whiteSpace="normal">
+				<Box p={compact ? 2.5 : 3} minW={0} whiteSpace="normal">
 					<PreviewBoundary resetKey={partial.length + (activity.input ? 1 : 0) + (savedCrystal ? 2 : 0)}>{body}</PreviewBoundary>
 				</Box>
-				<Box position="absolute" left={0} right={0} bottom={0} height="28px" background="linear-gradient(to bottom, rgba(255,255,255,0), var(--tt-card, #ffffff))" />
+				<Box position="absolute" left={0} right={0} bottom={0} height="28px" background={`linear-gradient(to bottom, transparent, ${LOPU_UI.card})`} />
 			</Box>
 		</Box>
 	);

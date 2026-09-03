@@ -16,13 +16,18 @@
 // preference, validated here against the static base catalog
 // (AI_WORKFLOW_BASE_MODELS). null means "catalog default", which the reply
 // route resolves through the admin defaults + provider availability
-// (api/utils/ai/models.ts) on every turn. `turns` counts persisted assistant
-// replies and `lastModel` remembers the provider-native id that answered last.
+// (api/utils/ai/models.ts) on every turn. `providerId` pins one of the owner's
+// own Secure Vault AI connections (design note §1.3) — null means Thingtime's
+// models; the id is validated for shape here and for ownership on write.
+// `turns` counts persisted assistant replies and `lastModel` remembers the
+// provider-native id that answered last.
 import { randomUUID } from 'node:crypto';
 
 import { MAX_CHAT_NAME_CHARS, MAX_MESSAGE_CHARS } from '~/schemas/registry';
 import { prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { splitLiveMessageText } from '../devices/deviceLiveAiCore';
+import { hasUserVaultProvider } from '../lopu/userVault';
+import { safeVaultId } from '../lopu/userVaultCore';
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	AI_MODEL_EFFORT_LABELS,
@@ -82,9 +87,10 @@ export type LopuChatSettings = {
 	model: string | null; // provider-native id from AI_WORKFLOW_BASE_MODELS; null = catalog default
 	effort: AiModelEffort | null; // null = the model's provider-default effort
 	speed: AiModelSpeed | null; // null = 'normal'
+	providerId?: string | null; // one of the owner's Secure Vault provider connections; null/absent = Thingtime's models
 };
 export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null };
-export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown };
+export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
 	model?: unknown;
@@ -110,7 +116,7 @@ export type LopuUserTurnResult = Fail | { ok: true; message: PublicChatMessage; 
 export type LopuAssistantTurnResult = Fail | { ok: true; messages: PublicChatMessage[]; existing?: boolean };
 export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean };
 
-export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null });
+export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null, providerId: null });
 
 const EFFORT_VALUES: readonly string[] = Object.keys(AI_MODEL_EFFORT_LABELS);
 const isEffort = (value: unknown): value is AiModelEffort => typeof value === 'string' && EFFORT_VALUES.includes(value);
@@ -165,7 +171,8 @@ export const lopuChatStateOf = (value: unknown): LopuChatState => {
 	const speed = raw.speed === 'fast' ? 'fast' : raw.speed === 'normal' ? 'normal' : null;
 	const turns = Number.isSafeInteger(raw.turns) && Number(raw.turns) >= 0 ? Number(raw.turns) : 0;
 	const lastModel = typeof raw.lastModel === 'string' && raw.lastModel.trim() ? raw.lastModel.trim().slice(0, 128) : null;
-	return { model, effort, speed, turns, lastModel };
+	const providerId = safeVaultId(raw.providerId);
+	return { model, effort, speed, providerId, turns, lastModel };
 };
 
 const withLopuState = (entry: ChatListEntry, lopu: unknown): LopuChatEntry => ({ ...entry, lopu: lopuChatStateOf(lopu) });
@@ -180,12 +187,25 @@ export type NormalizedLopuChatSettings = { ok: true; settings: LopuChatSettings;
 // (prefer 'high', else the model's last tier; fast → normal) when it was only
 // inherited from the previous settings under a model switch. Availability and
 // admin enable flags are the reply route's concern (api/utils/ai/models.ts).
+// `providerId` is shape-checked here (a Secure Vault record id); ownership is
+// verified by the Mongo-backed writers below.
 export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current: LopuChatSettings = EMPTY_LOPU_SETTINGS): Fail | NormalizedLopuChatSettings => {
 	let model = current.model;
 	let effort = current.effort;
 	let speed = current.speed;
+	let providerId = current.providerId ?? null;
 	let effortExplicit = false;
 	let speedExplicit = false;
+
+	if (input.providerId !== undefined) {
+		if (input.providerId === null || input.providerId === '') {
+			providerId = null;
+		} else {
+			const id = safeVaultId(input.providerId);
+			if (!id) return fail(400, 'providerId must be one of your Secure Vault provider ids');
+			providerId = id;
+		}
+	}
 
 	if (input.model !== undefined) {
 		if (input.model === null || input.model === '') {
@@ -239,10 +259,21 @@ export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current:
 		}
 	}
 
-	const settings: LopuChatSettings = { model, effort, speed };
-	const changed = settings.model !== current.model || settings.effort !== current.effort || settings.speed !== current.speed;
+	const settings: LopuChatSettings = { model, effort, speed, providerId };
+	const changed =
+		settings.model !== current.model ||
+		settings.effort !== current.effort ||
+		settings.speed !== current.speed ||
+		settings.providerId !== (current.providerId ?? null);
 	return { ok: true, settings, changed };
 };
+
+export const LOPU_PROVIDER_NOT_IN_VAULT_ERROR = 'That AI provider is not in your Secure Vault';
+
+// A pinned providerId must name one of the viewer's own provider connections
+// (never someone else's, never a deleted one) before it is stored.
+const assertOwnVaultProvider = async (viewerId: string, providerId: string | null): Promise<Fail | null> =>
+	!providerId || (await hasUserVaultProvider(viewerId, providerId)) ? null : fail(400, LOPU_PROVIDER_NOT_IN_VAULT_ERROR);
 
 export type LopuHistoryRow = {
 	crystal?: {
@@ -366,13 +397,15 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 export const createLopuChat = async (
 	viewerId: string,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
+	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {}
 ): Promise<LopuChatResult> => {
 	const wantsTitle = input.title !== undefined && input.title !== null && input.title !== '';
 	const title = wantsTitle ? boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS) : null;
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
 	const normalized = normalizeLopuChatSettings(input);
 	if (normalized.ok === false) return normalized;
+	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
+	if (foreignProvider) return foreignProvider;
 
 	const things = await getThingsCollection();
 	const count = await things.countDocuments({ thingtime: 'chat', ownerId: viewerId, 'crystal.externalSource.provider': 'lopu' } as any);
@@ -439,7 +472,7 @@ export const getLopuChat = async (viewerId: string, chatId: unknown): Promise<Ge
 export const updateLopuChat = async (
 	viewerId: string,
 	chatId: unknown,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown } = {}
+	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {}
 ): Promise<LopuChatResult> => {
 	const access = await resolveLopuChat(viewerId, chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -454,9 +487,14 @@ export const updateLopuChat = async (
 	const normalized = normalizeLopuChatSettings(input, current);
 	if (normalized.ok === false) return normalized;
 	if (normalized.changed) {
+		if (normalized.settings.providerId !== current.providerId) {
+			const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
+			if (foreignProvider) return foreignProvider;
+		}
 		patch['crystal.lopu.model'] = normalized.settings.model;
 		patch['crystal.lopu.effort'] = normalized.settings.effort;
 		patch['crystal.lopu.speed'] = normalized.settings.speed;
+		patch['crystal.lopu.providerId'] = normalized.settings.providerId;
 	}
 	if (!Object.keys(patch).length) return fail(400, 'Nothing to update');
 	const things = await getThingsCollection();

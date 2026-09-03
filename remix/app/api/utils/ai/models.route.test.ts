@@ -38,6 +38,15 @@ const postRequest = (body: unknown) =>
     body: typeof body === 'string' ? body : JSON.stringify(body)
   });
 
+const sampleVaultProvider = () => ({
+  id: 'prov-0123456789',
+  name: 'My Claude',
+  kind: 'anthropic' as const,
+  model: 'claude-sonnet-4-6',
+  endpointHost: 'api.anthropic.com',
+  available: true
+});
+
 test('GET /api/v1/ai/models is public, no-store, and keys the rate limit by the session when present', async () => {
   const limits: Array<{ name: string; identity: string | null }> = [];
   let viewer: any = null;
@@ -47,14 +56,16 @@ test('GET /api/v1/ai/models is public, no-store, and keys the rate limit by the 
       limits.push({ name, identity });
       return allowed;
     },
-    listAiModels: async () => sampleList()
+    listAiModels: async () => sampleList(),
+    listVaultProviders: async () => [],
+    vaultConfigured: () => false
   } as any);
 
   const anonymous = await loader({ request: new Request(publicEndpoint) });
   const body: any = await anonymous.json();
   assert.equal(anonymous.status, 200);
   assert.equal(anonymous.headers.get('Cache-Control'), 'no-store');
-  assert.deepEqual(Object.keys(body).sort(), ['defaults', 'models', 'ok', 'providers']);
+  assert.deepEqual(Object.keys(body).sort(), ['defaults', 'models', 'ok', 'providers', 'vault', 'vaultProviders']);
   assert.equal(body.models[0].id, 'claude-opus-5');
   assert.deepEqual(limits, [{ name: 'ai.models', identity: null }]);
 
@@ -66,6 +77,50 @@ test('GET /api/v1/ai/models is public, no-store, and keys the rate limit by the 
   assert.equal(wrongMethod.status, 405);
 });
 
+test('GET /api/v1/ai/models lists the viewer’s own Secure Vault providers (redacted) only for a session, and degrades to none', async () => {
+  const listed: string[] = [];
+  const logged: string[] = [];
+  let viewer: any = null;
+  let providers: () => Promise<any[]> = async () => [sampleVaultProvider()];
+  const { loader } = createAiModelsHandlers({
+    getCurrentUser: async () => viewer,
+    enforceRateLimit: async () => allowed,
+    listAiModels: async () => sampleList(),
+    listVaultProviders: async (viewerId: string) => {
+      listed.push(viewerId);
+      return providers();
+    },
+    vaultConfigured: () => true,
+    log: (message: string) => logged.push(message)
+  } as any);
+
+  // anonymous: the vault status is reported, the list stays empty and is never read
+  const anonymous: any = await (await loader({ request: new Request(publicEndpoint) })).json();
+  assert.deepEqual(anonymous.vault, { configured: true });
+  assert.deepEqual(anonymous.vaultProviders, []);
+  assert.deepEqual(listed, []);
+
+  // a session: the redacted list — id, name, kind, model, endpoint hostname, availability — nothing else
+  viewer = { id: 'user-1' };
+  const signedIn: any = await (await loader({ request: new Request(publicEndpoint) })).json();
+  assert.deepEqual(listed, ['user-1']);
+  assert.deepEqual(signedIn.vaultProviders, [sampleVaultProvider()]);
+  assert.equal(signedIn.ok, true);
+  assert.equal(signedIn.models[0].id, 'claude-opus-5');
+  assert.doesNotMatch(JSON.stringify(signedIn), /token|endpoint"|sk-/);
+
+  // a vault read failure never fails the catalog
+  providers = async () => {
+    throw new Error('mongo down');
+  };
+  const degraded: any = await (await loader({ request: new Request(publicEndpoint) })).json();
+  assert.equal(degraded.ok, true);
+  assert.deepEqual(degraded.vaultProviders, []);
+  assert.deepEqual(degraded.vault, { configured: true });
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /Secure Vault providers unavailable/);
+});
+
 test('GET /api/v1/ai/models answers 429 with Retry-After when the limiter blocks', async () => {
   let listed = false;
   const { loader } = createAiModelsHandlers({
@@ -74,7 +129,9 @@ test('GET /api/v1/ai/models answers 429 with Retry-After when the limiter blocks
     listAiModels: async () => {
       listed = true;
       return sampleList();
-    }
+    },
+    listVaultProviders: async () => [],
+    vaultConfigured: () => false
   } as any);
 
   const response = await loader({ request: new Request(publicEndpoint) });

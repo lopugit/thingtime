@@ -4552,7 +4552,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
-Design note: `PRs/lopu-ai-assistant-design.md`. Automated coverage:
+Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
 `test:settings`, `test:schemas`, `test:api-capabilities`; live:
@@ -4590,6 +4590,42 @@ Design note: `PRs/lopu-ai-assistant-design.md`. Automated coverage:
   window); ⤢ opens `/lopu`; − collapses to the header; ✕ / Escape hides.
   Mobile (375): an 88dvh bottom sheet with scrim; DevKit's trigger steps
   aside while it is open (`html[data-lopu-sheet="open"]`).
+- Page frame (`/lopu`, `/lopu/:chatId`, `/lopu/voice`): header eyebrow
+  "Thingtime · your AI", ink title "Lopu" beside the ring avatar, one status
+  line (`model · effort`, or the voice phase); the `Chat | Voice` segmented
+  control is route-driven (a chat deep link stays on Chat, Voice keeps the
+  store's current conversation). Desktop: the 272px conversations sidebar
+  (new chat, rename, delete — confirms when `confirmDeletes` is on —
+  "Messenger ↗") collapses from the header toggle and remembers the choice
+  (`tt-lopu-sidebar`); the conversation column is 760px centred. Mobile
+  (375): full-screen chat with no card chrome, the conversations button opens
+  a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
+  the safe area, nothing scrolls horizontally or hides under the nav.
+- Voice mode (`/lopu/voice`, or the floating window's mic): the same column
+  with the text composer folded away and the voice deck below it — gear ·
+  64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
+  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
+  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
+  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  click toasts "No microphone here" and the typed path still works; with a
+  mic, listening pauses for the whole turn and for Lopu's speech (never her
+  own voice back), then resumes. The gear popover (never a full-width card)
+  holds Spoken replies, Transcribe mode and the provider select (Thingtime
+  default · Secure Vault providers · catalog models; disabled while
+  transcribing). Transcribe mode posts each utterance to
+  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble with the
+  private page link in the transcript strip. Leaving voice mode ends the
+  session (mic, speech, native audio). Settings → Lopu 🦄 and the user
+  settings modal mirror "Spoken replies" and "Transcribe mode".
+- Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
+  mobile toggles the floating window (also with the launcher bubble turned
+  off in settings); it pulses while a turn streams and renders nothing on
+  `/lopu*`. Drawer → Lopu: Chat, Voice, Conversations, Secure Vault
+  (`/settings#secure-vault`) and Settings (`/settings#lopu`) scroll to their
+  anchored sections. Floating window header: ring avatar · "Lopu" · status
+  line, mic (voice mode inside the window, ⤢ then opens `/lopu/voice`), model
+  chip (hidden below 380px wide), −, ⤢, ✕; the launcher is a 48px ring with a
+  hover lift and a soft pulse while streaming; both themes use tokens only.
 - Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
   opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
   rows cannot be edited (409) but can be deleted; the Lopu chat never

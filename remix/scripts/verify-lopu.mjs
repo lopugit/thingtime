@@ -19,12 +19,65 @@
 // failed, when they are absent. The reply section expects the server to run
 // with LOPU_CHAT_PROVIDER=test (deterministic tool script); against any other
 // provider the tool-specific checks are reported as skipped.
+//
+// Section K ("your own providers", design note §1.3) always checks the vault
+// status + redacted vaultProviders on GET /api/v1/ai/models and that a
+// providerId that is not yours fails cleanly. When the server reports the
+// vault as configured (THINGTIME_USER_VAULT_KEY set on the server) it also
+// saves a compatible provider pointing at a local fake endpoint and runs a
+// turn through it. Because vault endpoints must be public HTTPS hosts, the
+// fake is reached through the dev-only rewrite table — start the server with
+//
+//   THINGTIME_USER_VAULT_KEY=<32-byte base64url>
+//   THINGTIME_LOPU_PROVIDER_DEV_REWRITES=https://lopu-fake-provider.invalid=http://127.0.0.1:18170
+//
+// (TT_VERIFY_FAKE_PROVIDER_PORT overrides 18170 on both sides). Without the
+// rewrite the connection is listed as unavailable and the turn must still
+// fail cleanly (error event + canned line), which is checked instead.
 
 import { randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
 
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:18162';
 const ADMIN_USERNAME = process.env.TT_VERIFY_ADMIN_USERNAME || '';
 const ADMIN_PASSWORD = process.env.TT_VERIFY_ADMIN_PASSWORD || '';
+const FAKE_PROVIDER_ORIGIN = 'https://lopu-fake-provider.invalid';
+const FAKE_PROVIDER_PORT = Number(process.env.TT_VERIFY_FAKE_PROVIDER_PORT || 18170);
+const FAKE_PROVIDER_REPLY = 'Hello from your own provider 🦄';
+
+// A stand-in for the user's OpenAI-compatible endpoint: refuses streaming
+// (like the local Codex proxy, so the plain-completion rung serves it),
+// answers 401 for the "broken-model" connection, and otherwise returns one
+// canned completion. Records every request's bearer token + model.
+const startFakeProvider = () =>
+  new Promise((resolve) => {
+    const requests = [];
+    const server = createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      let body = null;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      } catch {
+        body = null;
+      }
+      requests.push({ path: request.url, authorization: request.headers.authorization || null, body });
+      const send = (status, payload) => response.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(payload));
+      if (request.method !== 'POST' || !String(request.url).endsWith('/chat/completions')) return send(404, { error: { message: 'unexpected route' } });
+      if (body?.stream === true) return send(400, { error: true, statusCode: 400, message: 'Streaming is not implemented by this fake provider' });
+      if (body?.model === 'broken-model') return send(401, { error: { message: 'invalid api key', type: 'invalid_request_error' } });
+      return send(200, {
+        id: 'chatcmpl_verify',
+        object: 'chat.completion',
+        created: 1,
+        model: body?.model || 'fake-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: FAKE_PROVIDER_REPLY }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 3, completion_tokens: 6 }
+      });
+    });
+    server.on('error', (error) => resolve({ ok: false, error: error?.message || String(error), requests, close: () => {} }));
+    server.listen(FAKE_PROVIDER_PORT, '127.0.0.1', () => resolve({ ok: true, port: FAKE_PROVIDER_PORT, requests, close: () => server.close() }));
+  });
 
 let passed = 0;
 let skipped = 0;
@@ -148,6 +201,7 @@ const reply = async (cookie, body) => {
 };
 
 const eventsOf = (events, type) => events.filter((event) => event?.type === type);
+const deltaText = (events) => eventsOf(events, 'delta').map((event) => event.text).join('');
 const requestId = (label) => `verify-${label}-${suffix}-${randomBytes(3).toString('hex')}`;
 
 const run = async () => {
@@ -175,12 +229,25 @@ const run = async () => {
   check('catalog lists models with the public shape', modelRows.length > 0 && modelRows.every((row) => typeof row.id === 'string' && typeof row.label === 'string' && ['anthropic', 'openai'].includes(row.provider) && Array.isArray(row.efforts) && Array.isArray(row.speeds) && typeof row.family === 'string' && typeof row.enabled === 'boolean' && typeof row.available === 'boolean' && typeof row.isDefault === 'boolean'));
   check('catalog carries provider status + defaults', models.body?.providers && typeof models.body.providers.anthropic?.configured === 'boolean' && typeof models.body.providers.openai?.configured === 'boolean' && models.body?.defaults && 'model' in models.body.defaults);
   check('the catalog response is not cached', (models.headers.get('cache-control') || '').includes('no-store'));
+  // the viewer's Secure Vault providers ride on the same response as metadata
+  // only (id/name/kind/model/endpointHost/available/reason — never a key)
+  const vaultOnServer = 'vaultProviders' in (models.body || {});
+  if (!vaultOnServer) skip('anonymous catalog lists no vault providers', 'server predates vaultProviders on GET /ai/models');
+  else {
+    check('anonymous catalog lists no vault providers', Array.isArray(models.body.vaultProviders) && models.body.vaultProviders.length === 0 && typeof models.body.vault?.configured === 'boolean');
+  }
   const availableModel = modelRows.find((row) => row.available) || null;
   const defaultModel = models.body?.defaults?.model || null;
   check('defaults.model is null or an available catalog model', defaultModel === null || modelRows.some((row) => row.id === defaultModel && row.available));
   check('isDefault marks exactly the defaults.model row', modelRows.filter((row) => row.isDefault).map((row) => row.id).join(',') === (defaultModel || ''));
   const noStore = await api('/api/v1/ai/models', { cookie: user.cookie });
   check('the same list serves a signed-in viewer', noStore.status === 200 && noStore.body?.models?.length === modelRows.length);
+  if (vaultOnServer) {
+    const vaultRows = Array.isArray(noStore.body?.vaultProviders) ? noStore.body.vaultProviders : null;
+    check('a signed-in viewer gets their vault providers as metadata only', !!vaultRows && vaultRows.every((row) => typeof row.id === 'string' && typeof row.name === 'string' && typeof row.available === 'boolean' && !('key' in row) && !('value' in row) && !('secret' in row) && !('apiKey' in row)));
+    const otherVault = await api('/api/v1/ai/models', { cookie: other.cookie });
+    check('vault providers are per viewer', Array.isArray(otherVault.body?.vaultProviders) && !otherVault.body.vaultProviders.some((row) => vaultRows?.some((mine) => mine.id === row.id)));
+  }
 
   console.log('\nC. conversations');
   const created = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: {} });
@@ -317,6 +384,22 @@ const run = async () => {
   check('another user cannot rename it', otherRename.status === 403 || otherRename.status === 404);
   const badSettings = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, model: 'not-a-model' } });
   check('an unknown model setting is a 400', badSettings.status === 400);
+  // providerId (a Secure Vault provider) is a per-chat setting on create,
+  // update and reply; an id the viewer does not own is refused
+  if (vaultOnServer) {
+    const badProvider = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, providerId: 'not-a-provider' } });
+    check('an unknown providerId on update is a 400', badProvider.status === 400);
+    const badProviderCreate = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: { providerId: 'not-a-provider' } });
+    check('an unknown providerId on create is a 400', badProviderCreate.status === 400);
+    const badProviderReply = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { chatId, text: 'hi', requestId: requestId('prov'), providerId: 'not-a-provider' } });
+    check('an unknown providerId on reply is a 400', badProviderReply.status === 400);
+    const clearProvider = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, providerId: null } });
+    check('providerId: null clears the chat provider (or is a no-op 400 when already clear)', clearProvider.status === 200 || clearProvider.status === 400);
+    const afterClear = (await api('/api/v1/lopu/chats', { cookie: user.cookie })).body?.chats?.find((entry) => entry.id === chatId);
+    check('the chat entry projects lopu.providerId', !!afterClear?.lopu && 'providerId' in afterClear.lopu && (afterClear.lopu.providerId === null || typeof afterClear.lopu.providerId === 'string'));
+  } else {
+    skip('providerId validation on create/update/reply', 'server predates vault providers');
+  }
   if (availableModel) {
     const retuned = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, model: availableModel.id, effort: availableModel.efforts?.[0] ?? null } });
     check('the chat adopts a catalog model', retuned.status === 200 && retuned.body?.chat?.lopu?.model === availableModel.id);
@@ -426,6 +509,88 @@ const run = async () => {
     if (before && typeof before.model === 'string') {
       const restored = await api('/api/v1/settings/lopu-chat-defaults', { cookie: admin.cookie, method: 'POST', body: { model: before.model, effort: before.effort ?? null, speed: before.speed ?? 'normal' } });
       check('the previous defaults are restored', restored.status === 200 && restored.body?.defaults?.model === before.model);
+    }
+  }
+
+  console.log('\nK. your own providers (Secure Vault → Lopu)');
+  const catalogForUser = await api('/api/v1/ai/models', { cookie: user.cookie });
+  check('GET /ai/models carries vault.configured + vaultProviders for a session', catalogForUser.status === 200 && typeof catalogForUser.body?.vault?.configured === 'boolean' && Array.isArray(catalogForUser.body?.vaultProviders));
+  const anonCatalog = await api('/api/v1/ai/models');
+  check('the anonymous catalog has an empty vaultProviders list and the vault status', Array.isArray(anonCatalog.body?.vaultProviders) && anonCatalog.body.vaultProviders.length === 0 && typeof anonCatalog.body?.vault?.configured === 'boolean');
+  const vaultConfigured = catalogForUser.body?.vault?.configured === true;
+  const unknownProviderReply = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { text: 'hi', requestId: requestId('noprov'), providerId: 'prov-does-not-exist-000' } });
+  check('a reply with a providerId that is not yours fails cleanly (400, nothing streamed)', unknownProviderReply.status === 400 && unknownProviderReply.body?.ok === false && typeof unknownProviderReply.body?.error === 'string');
+  const malformedProvider = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { text: 'hi', requestId: requestId('badprov'), providerId: 'bad id!' } });
+  check('a malformed providerId is a 400', malformedProvider.status === 400);
+  const unknownProviderChat = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: { providerId: 'prov-does-not-exist-000' } });
+  check('a chat cannot pin a provider that is not in your vault', unknownProviderChat.status === 400);
+  const swept2 = await api('/api/v1/lopu/chats', { cookie: user.cookie });
+  check('a refused reply persisted nothing', swept2.status === 200 && swept2.body?.chats?.length === 0);
+
+  if (!vaultConfigured) {
+    check('with the vault unconfigured the catalog lists no providers', catalogForUser.body.vaultProviders.length === 0);
+    skip('BYO provider turn through a local fake endpoint', 'the server reports vault.configured=false — set THINGTIME_USER_VAULT_KEY (and THINGTIME_LOPU_PROVIDER_DEV_REWRITES, see the header) on the server');
+  } else {
+    const fake = await startFakeProvider();
+    if (!fake.ok) {
+      skip('BYO provider turn through a local fake endpoint', `fake provider could not listen on 127.0.0.1:${FAKE_PROVIDER_PORT} (${fake.error})`);
+    } else {
+      const providerName = `Verify fake ${suffix}`;
+      const token = `verify-token-${suffix}`;
+      const saved = await api('/api/v1/lopu/vault', { cookie: user.cookie, method: 'POST', body: { action: 'save-provider', name: providerName, provider: 'compatible', endpoint: `${FAKE_PROVIDER_ORIGIN}/v1`, model: 'fake-model', token } });
+      const providerId = saved.body?.entry?.id || null;
+      check('a compatible provider pointing at the fake origin saves', saved.status === 200 && !!providerId, JSON.stringify(saved.body));
+      check('the vault never returns the token', !JSON.stringify(saved.body || {}).includes(token));
+      const brokenSaved = await api('/api/v1/lopu/vault', { cookie: user.cookie, method: 'POST', body: { action: 'save-provider', name: `${providerName} broken`, provider: 'compatible', endpoint: `${FAKE_PROVIDER_ORIGIN}/v1`, model: 'broken-model', token: `${token}-broken` } });
+      const brokenId = brokenSaved.body?.entry?.id || null;
+      const listedCatalog = await api('/api/v1/ai/models', { cookie: user.cookie });
+      const listed = listedCatalog.body?.vaultProviders?.find((entry) => entry.id === providerId) || null;
+      check('the catalog lists the connection redacted (hostname only — no token, no endpoint)', !!listed && listed.name === providerName && listed.kind === 'compatible' && listed.model === 'fake-model' && listed.endpointHost === 'lopu-fake-provider.invalid' && typeof listed.available === 'boolean' && !('token' in listed) && !('endpoint' in listed) && !JSON.stringify(listedCatalog.body).includes(token));
+      const otherSees = (await api('/api/v1/ai/models', { cookie: other.cookie })).body?.vaultProviders?.some((entry) => entry.id === providerId);
+      check('another user does not see it', otherSees === false);
+      const otherPins = await api('/api/v1/lopu/chats', { cookie: other.cookie, method: 'POST', body: { providerId } });
+      check('another user cannot pin it to a chat', otherPins.status === 400);
+      const otherReply = await api('/api/v1/lopu/chats/reply', { cookie: other.cookie, method: 'POST', body: { text: 'hi', requestId: requestId('otherprov'), providerId } });
+      check('another user cannot run a turn on it', otherReply.status === 400);
+      const pinned = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: { title: 'BYO chat', providerId } });
+      const byoChatId = pinned.body?.chat?.id || null;
+      check('a chat pins the provider (settings round-trip)', pinned.status === 200 && pinned.body?.chat?.lopu?.providerId === providerId);
+      const listedChat = (await api('/api/v1/lopu/chats', { cookie: user.cookie })).body?.chats?.find((entry) => entry.id === byoChatId);
+      check('the list entry carries lopu.providerId', listedChat?.lopu?.providerId === providerId);
+
+      if (listed?.available) {
+        const byo = await reply(user.cookie, { chatId: byoChatId, text: 'Say hello from my own key', requestId: requestId('byo') });
+        const byoMeta = byo.events[0];
+        check('the turn runs on the vault provider (meta provider=vault, providerLabel, its model)', byo.status === 200 && byoMeta?.type === 'meta' && byoMeta.provider === 'vault' && byoMeta.providerLabel === providerName && byoMeta.model === 'fake-model', JSON.stringify(byoMeta));
+        check('the fake endpoint received the decrypted token and the connection model', fake.requests.some((entry) => entry.authorization === `Bearer ${token}` && entry.body?.model === 'fake-model'));
+        check('the reply text came from the fake endpoint', deltaText(byo.events).includes(FAKE_PROVIDER_REPLY));
+        const byoDone = byo.events[byo.events.length - 1];
+        check('the persisted assistant row records provider vault + the model', byoDone?.type === 'done' && byoDone.messages?.[0]?.lopu?.provider === 'vault' && byoDone.messages[0].lopu.model === 'fake-model');
+        if (brokenId) {
+          const broken = await reply(user.cookie, { chatId: byoChatId, text: 'hi', requestId: requestId('broken'), providerId: brokenId });
+          const brokenMeta = broken.events[0];
+          const errorEvent = eventsOf(broken.events, 'error')[0];
+          check('a rejecting provider surfaces a friendly error event then the canned vault line', broken.status === 200 && brokenMeta?.provider === 'vault' && !!errorEvent && /rejected the saved key \(HTTP 401\)/.test(errorEvent.message) && deltaText(broken.events).includes('your own provider'), JSON.stringify(errorEvent));
+          check('the failed turn never leaks the token', !JSON.stringify(broken.events).includes(token));
+          const brokenDone = broken.events[broken.events.length - 1];
+          check('the failed turn is persisted as a fallback reply', brokenDone?.type === 'done' && brokenDone.stopReason === 'fallback');
+          const repinned = (await api('/api/v1/lopu/chats', { cookie: user.cookie })).body?.chats?.find((entry) => entry.id === byoChatId);
+          check('an explicit per-turn providerId becomes the chat setting', repinned?.lopu?.providerId === brokenId);
+        }
+      } else {
+        skip('BYO turn through the fake endpoint', `the connection is unavailable (${listed?.reason}) — start the server with THINGTIME_LOPU_PROVIDER_DEV_REWRITES=${FAKE_PROVIDER_ORIGIN}=http://127.0.0.1:${fake.port}`);
+        const byo = await reply(user.cookie, { chatId: byoChatId, text: 'hi', requestId: requestId('byo-unavailable') });
+        check('an unavailable provider still fails cleanly (meta vault → error event → canned line → done)', byo.status === 200 && byo.events[0]?.provider === 'vault' && eventsOf(byo.events, 'error').length >= 1 && byo.events[byo.events.length - 1]?.type === 'done' && deltaText(byo.events).length > 0);
+      }
+      const cleared = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId: byoChatId, providerId: null } });
+      check('providerId: null clears the pin', cleared.status === 200 && (cleared.body?.chat?.lopu?.providerId ?? null) === null);
+      if (byoChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: byoChatId } });
+      for (const id of [providerId, brokenId]) {
+        if (id) await api('/api/v1/lopu/vault', { cookie: user.cookie, method: 'POST', body: { action: 'delete', id } });
+      }
+      const afterVault = await api('/api/v1/ai/models', { cookie: user.cookie });
+      check('the fixture providers are cleaned up', !afterVault.body?.vaultProviders?.some((entry) => entry.id === providerId || entry.id === brokenId));
+      fake.close();
     }
   }
 

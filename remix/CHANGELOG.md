@@ -20,7 +20,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
 
 - Grouped summary; the normative design lives in
-  `PRs/lopu-ai-assistant-design.md` and the checklist in `TESTING.md`
+  `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` and the checklist in `TESTING.md`
   ("Lopu AI assistant").
 - **`ai-model` catalog** (protected, control-plane Things seeded from
   `AI_WORKFLOW_BASE_MODELS`): `GET /api/v1/ai/models`, admin toggle/seed at

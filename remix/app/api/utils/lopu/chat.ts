@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { parsePartialJson } from '~/utils/partialJson';
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import {
+  type AiModelEffort,
   type AiWorkflowModelChoice,
   resolveAiPreferredAnthropicChoice,
   resolveAiPreferredOpenAiChoice,
@@ -38,8 +39,26 @@ import {
   type LopuToolResult,
   type LopuToolViewer
 } from './chatTools';
+import {
+  createGuardedProviderFetch,
+  LOPU_PROVIDER_TIMEOUT_MS,
+  resolveVaultProviderClientConfig,
+  type LopuVaultProviderClientConfig,
+  type LopuVaultProviderRecord
+} from './vaultProviderClient';
+import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTransport } from './vaultProviders';
 
 // 🦄 Lopu's chat brain — one streamed assistant turn with tool use.
+//
+// The viewer's own provider (design note §1.3): when the turn carries a
+// Secure Vault connection (`vaultProvider`), it runs THERE — the Anthropic
+// path with the vault key/base URL for the anthropic kind, the
+// OpenAI-compatible path (native function tools for OpenAI / OpenRouter /
+// xAI / Gemini's /openai surface, the fenced tt-tool text protocol for a
+// custom compatible host) for every other kind — behind the same SSRF fence
+// the voice turn uses (vaultProviderClient.ts). The server keys are never a
+// fallback for a vault turn: a failure surfaces as a friendly error event
+// followed by the canned vault line.
 //
 // Providers (set either or both env keys):
 //   - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) → Claude with native tools
@@ -93,11 +112,26 @@ export const hasLopuChatProviderConfigured = (): boolean => {
 
 export type LopuChatHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
+type AnthropicClientOptions = NonNullable<ConstructorParameters<typeof Anthropic>[0]>;
+type OpenAiClientOptions = NonNullable<ConstructorParameters<typeof OpenAI>[0]>;
+
+// A decrypted Secure Vault connection for one turn (route-resolved through
+// getUserVaultProvider) plus the effort the chat asked for. `requestedModel`
+// only matters for a connection saved without a model of its own.
+export type LopuVaultTurnProvider = LopuVaultProviderRecord & {
+  effort: AiModelEffort | null;
+  requestedModel?: string | null;
+};
+
 export type LopuChatDependencies = {
   runTool: (call: LopuToolCall, ctx: LopuToolContext) => Promise<LopuToolResult>;
   getPreferredModelWaterfall: typeof getAiPreferredModelWaterfall;
-  createAnthropic: () => Anthropic;
-  createOpenAi: () => OpenAI;
+  // options are passed only for a vault turn (the viewer's own key + base URL
+  // + the redirect-refusing fetch); the server-key clients take none
+  createAnthropic: (options?: AnthropicClientOptions) => Anthropic;
+  createOpenAi: (options?: OpenAiClientOptions) => OpenAI;
+  // the SSRF fence + kind → transport mapping for a vault turn
+  resolveVaultProviderClient: typeof resolveVaultProviderClientConfig;
   now: () => number;
   // ms between canned-fallback word chunks (0 in tests)
   fallbackPaceMs: number;
@@ -113,6 +147,10 @@ export type LopuChatTurnInput = {
   history?: LopuChatHistoryTurn[];
   // the resolved model choice for this turn (null = no provider configured)
   choice?: AiWorkflowModelChoice | null;
+  // the viewer's own Secure Vault provider for this turn (design note §1.3):
+  // when set the turn runs there instead of on the server keys, which are
+  // never used as a fallback
+  vaultProvider?: LopuVaultTurnProvider | null;
   context?: LopuChatContext | null;
   signal?: AbortSignal;
   deps?: Partial<LopuChatDependencies>;
@@ -121,8 +159,9 @@ export type LopuChatTurnInput = {
 const defaultDependencies = (): LopuChatDependencies => ({
   runTool: runLopuTool,
   getPreferredModelWaterfall: getAiPreferredModelWaterfall,
-  createAnthropic: () => new Anthropic(),
-  createOpenAi: () => new OpenAI(),
+  createAnthropic: (options) => (options ? new Anthropic(options) : new Anthropic()),
+  createOpenAi: (options) => (options ? new OpenAI(options) : new OpenAI()),
+  resolveVaultProviderClient: resolveVaultProviderClientConfig,
   now: () => Date.now(),
   fallbackPaceMs: 30
 });
@@ -997,9 +1036,12 @@ const chunkWords = (text: string): string[] => text.match(/\S+\s*/g) || [text];
 export const LOPU_FALLBACK_UNCONFIGURED =
   'Lopu is resting her horn — no AI provider is configured yet. Ask an admin to add ANTHROPIC_API_KEY (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
 export const LOPU_FALLBACK_FAILED = 'Lopu is daydreaming… every AI provider stumbled just now. Give it a moment and try again 🔮';
+// A vault turn never falls back to the server keys — the user chose their own
+// provider — so its canned line points at the connection instead.
+export const LOPU_FALLBACK_VAULT = 'Lopu could not get a reply from your own provider just now. Check the connection in Settings → Secure Vault, or pick a Thingtime model to keep going 🔮';
 
-async function* streamFallbackReply(kind: 'unconfigured' | 'failed', paceMs: number): AsyncGenerator<LopuChatStreamEvent, string> {
-  const line = kind === 'unconfigured' ? LOPU_FALLBACK_UNCONFIGURED : LOPU_FALLBACK_FAILED;
+async function* streamFallbackReply(kind: 'unconfigured' | 'failed' | 'vault', paceMs: number): AsyncGenerator<LopuChatStreamEvent, string> {
+  const line = kind === 'unconfigured' ? LOPU_FALLBACK_UNCONFIGURED : kind === 'vault' ? LOPU_FALLBACK_VAULT : LOPU_FALLBACK_FAILED;
   for (const chunk of chunkWords(line)) {
     yield { type: 'delta', text: chunk };
     if (paceMs > 0) await new Promise((resolve) => setTimeout(resolve, paceMs));
@@ -1011,7 +1053,28 @@ async function* streamFallbackReply(kind: 'unconfigured' | 'failed', paceMs: num
 // the turn
 
 const labelFor = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null): string =>
-  provider === 'fallback' ? 'Lopu (offline)' : provider === 'test' ? 'Lopu (test provider)' : choice?.label || choice?.model || provider;
+  provider === 'fallback'
+    ? 'Lopu (offline)'
+    : provider === 'test'
+      ? 'Lopu (test provider)'
+      : provider === 'vault'
+        ? choice?.label || 'Your provider'
+        : choice?.label || choice?.model || provider;
+
+const vaultClientOptions = (config: LopuVaultProviderClientConfig): AnthropicClientOptions & OpenAiClientOptions => ({
+  apiKey: config.apiKey,
+  baseURL: config.baseURL,
+  // never let the server's own credentials ride along on a user's endpoint:
+  // the SDKs read ANTHROPIC_AUTH_TOKEN / OPENAI_ORG_ID / OPENAI_PROJECT_ID /
+  // OPENAI_ADMIN_KEY from the env unless told not to
+  authToken: null,
+  organization: null,
+  project: null,
+  adminAPIKey: null,
+  fetch: createGuardedProviderFetch(),
+  maxRetries: 1,
+  timeout: LOPU_PROVIDER_TIMEOUT_MS
+});
 
 export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenerator<LopuChatStreamEvent, LopuChatTurnOutcome> {
   const deps: LopuChatDependencies = { ...defaultDependencies(), ...(input.deps || {}) };
@@ -1019,7 +1082,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   const history = normaliseHistory(input.history);
   const explicit = input.choice ?? null;
 
-  const meta = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, model?: string): LopuChatStreamEvent => ({
+  const meta = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, model?: string, providerLabel?: string): LopuChatStreamEvent => ({
     type: 'meta',
     chatId: input.chatId,
     userMessageId: input.userMessageId,
@@ -1028,7 +1091,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     effort: choice?.effort ?? null,
     speed: choice?.speed ?? 'normal',
     provider,
-    label: labelFor(provider, choice)
+    label: labelFor(provider, choice),
+    ...(providerLabel ? { providerLabel } : {})
   });
 
   const outcome = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, state: TurnState, model?: string): LopuChatTurnOutcome => ({
@@ -1044,6 +1108,85 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   });
 
   const makeContext = (): LopuToolContext => createLopuToolContext(input.viewer, input.context, () => {});
+
+  // --- the viewer's own provider (Secure Vault, design note §1.3) --------
+  // Takes precedence over every mode, LOPU_CHAT_PROVIDER=test included: the
+  // user chose this connection for the turn. meta is emitted before dialing
+  // (provider 'vault' + the connection's name) so the client can show "via
+  // <name>" at once; a failure then surfaces as an error event and the
+  // canned vault line — the server keys are never used as a fallback here.
+  if (input.vaultProvider) {
+    const entry = input.vaultProvider;
+    const requestedModel = entry.requestedModel ?? explicit?.model ?? null;
+    const vaultChoice = (model: string): AiWorkflowModelChoice => ({
+      id: model,
+      model,
+      label: `${entry.name} · ${model}`,
+      provider: vaultProviderTransport(entry.provider),
+      effort: entry.effort ?? null,
+      speed: 'normal'
+    });
+    const state = newTurnState();
+    const vaultFailure = async function* (model: string | null, error: unknown): AsyncGenerator<LopuChatStreamEvent, LopuChatTurnOutcome> {
+      const message = friendlyVaultProviderError(entry.name, model, error);
+      console.error(`[lopu] vault provider "${entry.name}" failed before replying:`, (error as any)?.message || error);
+      yield { type: 'error', message, retryable: true };
+      state.text = yield* streamFallbackReply('vault', deps.fallbackPaceMs);
+      state.stopReason = 'fallback';
+      state.error = message.slice(0, 300);
+      return outcome('fallback', model ? vaultChoice(model) : null, state, model ?? undefined);
+    };
+
+    let config: LopuVaultProviderClientConfig;
+    try {
+      config = await deps.resolveVaultProviderClient(entry, { model: requestedModel });
+    } catch (error) {
+      const model = resolveVaultTurnModel(entry.model, requestedModel);
+      yield meta('vault', model ? vaultChoice(model) : null, undefined, entry.name);
+      return yield* vaultFailure(model, error);
+    }
+    const choice = vaultChoice(config.model);
+    yield meta('vault', choice, undefined, entry.name);
+
+    const ctx = makeContext();
+    const toolProtocol: LopuToolProtocol = config.transport === 'anthropic' ? 'native' : config.toolProtocol;
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol });
+    const options = vaultClientOptions(config);
+    const provider =
+      config.transport === 'anthropic'
+        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, toolMode: config.toolProtocol, signal: input.signal });
+    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+
+    let first: IteratorResult<LopuChatStreamEvent, void>;
+    try {
+      first = await loop.next();
+    } catch (error) {
+      if (isAbortError(error)) {
+        state.stopReason = 'aborted';
+        return outcome('vault', choice, state);
+      }
+      return yield* vaultFailure(config.model, error);
+    }
+    if (first.done === true) return yield* vaultFailure(config.model, new Error('The provider returned an empty reply.'));
+    yield first.value;
+    try {
+      for (;;) {
+        const step = await loop.next();
+        if (step.done === true) break;
+        yield step.value;
+      }
+    } catch (error) {
+      if (isAbortError(error)) state.stopReason = 'aborted';
+      else {
+        console.error(`[lopu] vault provider "${entry.name}" failed mid-reply:`, (error as any)?.message || error);
+        state.stopReason = 'error';
+        state.error = friendlyVaultProviderError(entry.name, config.model, error).slice(0, 300);
+        yield { type: 'error', message: `${friendlyVaultProviderError(entry.name, config.model, error)} What streamed so far is kept.`, retryable: true };
+      }
+    }
+    return outcome('vault', choice, state);
+  }
 
   // --- deterministic scripted provider ---------------------------------
   if (lopuChatProviderMode() === 'test') {

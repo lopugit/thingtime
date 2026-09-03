@@ -36,6 +36,14 @@ export interface LopuSettings {
 	model: string | null;
 	effort: string | null;
 	speed: LopuSpeed | null;
+	// voice: read Lopu's replies aloud (off = text only, the quiet default)
+	spokenReplies: boolean;
+	// voice: transcribe mode — every final utterance becomes a private
+	// transcript page + a quote instead of an AI turn
+	transcribe: boolean;
+	// the brain a voice/chat turn thinks with: a Secure Vault provider id (or
+	// a catalog model id); null = whatever the model picker says
+	providerId: string | null;
 	// the floating window is open in this viewport (tab-local)
 	open: boolean;
 }
@@ -52,6 +60,9 @@ export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	model: null,
 	effort: null,
 	speed: null,
+	spokenReplies: false,
+	transcribe: false,
+	providerId: null,
 	open: false
 };
 
@@ -94,6 +105,9 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 		model: idOrNull(source.model),
 		effort: idOrNull(source.effort),
 		speed: normalizeLopuSpeed(source.speed),
+		spokenReplies: boolOr(source.spokenReplies, LOPU_SETTINGS_DEFAULTS.spokenReplies),
+		transcribe: boolOr(source.transcribe, LOPU_SETTINGS_DEFAULTS.transcribe),
+		providerId: idOrNull(source.providerId),
 		open: boolOr(source.open, LOPU_SETTINGS_DEFAULTS.open)
 	};
 };
@@ -402,6 +416,27 @@ export const useLopuSettings = () => {
 		[setLopuSetting]
 	);
 
+	const setSpokenReplies = React.useCallback(
+		(value: boolean) => {
+			setLopuSetting('spokenReplies', !!value);
+		},
+		[setLopuSetting]
+	);
+
+	const setTranscribe = React.useCallback(
+		(value: boolean) => {
+			setLopuSetting('transcribe', !!value);
+		},
+		[setLopuSetting]
+	);
+
+	const setProviderId = React.useCallback(
+		(value: string | null) => {
+			setLopuSetting('providerId', idOrNull(value));
+		},
+		[setLopuSetting]
+	);
+
 	return {
 		loading,
 		settings,
@@ -415,7 +450,10 @@ export const useLopuSettings = () => {
 		setEnterSends,
 		setModelChoice,
 		setEffort,
-		setSpeed
+		setSpeed,
+		setSpokenReplies,
+		setTranscribe,
+		setProviderId
 	};
 };
 
@@ -636,12 +674,18 @@ export const useLopuModelCatalog = (active = true) => {
 	};
 };
 
-// The /lopu page IS the chat — the floating host stays out of its way.
+// The /lopu page IS the chat — the floating host (and the navbar opener)
+// stay out of its way. /lopu/voice is the same page in voice mode.
 export const LOPU_PAGE_PATH = '/lopu';
+export const LOPU_VOICE_PATH = '/lopu/voice';
 
 export const isLopuHostHiddenOnPath = (pathname: string | null | undefined): boolean => {
 	if (typeof pathname !== 'string') {
 		return false;
 	}
 	return pathname === LOPU_PAGE_PATH || pathname.startsWith(`${LOPU_PAGE_PATH}/`);
+};
+
+export const isLopuVoicePath = (pathname: string | null | undefined): boolean => {
+	return typeof pathname === 'string' && (pathname === LOPU_VOICE_PATH || pathname.startsWith(`${LOPU_VOICE_PATH}/`));
 };

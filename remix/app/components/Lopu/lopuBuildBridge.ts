@@ -1,4 +1,4 @@
-// Lopu ⇄ builder live bridge (design note PRs/lopu-ai-assistant-design.md §2.5,
+// Lopu ⇄ builder live bridge (design note PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md §2.5,
 // client half). A module registry of the editable webpage drafts currently
 // mounted (BuilderCanvas, SiteBlocksEditor's page + global drafts — never the
 // /p/ viewer) so a streamed Lopu turn can paint straight into the page the

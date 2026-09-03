@@ -709,6 +709,40 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'ai-models-vault-providers',
+    name: 'AI model catalog lists your own providers',
+    description:
+      'GET /api/v1/ai/models carries vault.configured and vaultProviders — the caller’s own Secure Vault AI connections redacted to id/name/kind/model/endpointHost/availability (empty anonymously); no token or endpoint ever appears.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/ai/models',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.vault) &&
+        typeof body.vault.configured === 'boolean' &&
+        Array.isArray(body?.vaultProviders) &&
+        body.vaultProviders.every(
+          (provider: any) =>
+            isObject(provider) &&
+            typeof provider.id === 'string' &&
+            typeof provider.name === 'string' &&
+            ['anthropic', 'openai', 'google', 'xai', 'openrouter', 'compatible'].includes(provider.kind) &&
+            (provider.model === null || typeof provider.model === 'string') &&
+            (provider.endpointHost === null || typeof provider.endpointHost === 'string') &&
+            typeof provider.available === 'boolean' &&
+            (provider.available || typeof provider.reason === 'string') &&
+            !('token' in provider) &&
+            !('endpoint' in provider) &&
+            !('encryptedValue' in provider)
+        ) &&
+        !/token|cipherText|encryptedValue/.test(JSON.stringify(body.vaultProviders)),
+      'AI model catalog carried the redacted Secure Vault provider list and vault status.'
+    )
+  },
+  {
     id: 'admin-ai-models-anonymous',
     name: 'Admin AI model toggle requires auth',
     description: 'POST /api/v1/admin/ai/models refuses anonymous callers before touching the catalog.',
@@ -821,6 +855,28 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/lopu/chats',
     body: { model: 'definitely-not-a-catalog-model' },
     expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown model was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-create-unknown-provider',
+    name: 'Lopu chat create validates the pinned provider',
+    description: 'POST /api/v1/lopu/chats with a providerId that is not one of the caller’s Secure Vault connections is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'A foreign providerId was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-unknown-provider',
+    name: 'Lopu reply validates the provider before persisting',
+    description:
+      'POST /api/v1/lopu/chats/reply with a providerId that is not one of the caller’s Secure Vault connections (or with the vault unconfigured) fails cleanly with a 400 error shape before any turn is persisted (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    timeoutMs: 20000,
+    body: () => ({ text: 'hello Lopu', requestId: `tt-api-test-${uniqueSuffix()}`, providerId: 'tt-api-test-missing-provider' }),
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'The unknown providerId was refused with an error shape and nothing streamed.')
   },
   {
     id: 'lopu-chats-update-validation',

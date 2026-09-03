@@ -1,8 +1,11 @@
 import { json, readJsonBody } from '~/api/http';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
+import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { streamLopuChatTurn } from '~/api/utils/lopu/chat';
+import { streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
 import type { LopuChatContext, LopuChatEvent, LopuChatTurnOutcome } from '~/api/utils/lopu/chatEvents';
+import { getUserVaultProvider, userVaultConfigured } from '~/api/utils/lopu/userVault';
+import { safeVaultId } from '~/api/utils/lopu/userVaultCore';
 import { createLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -10,12 +13,20 @@ import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResol
 
 // POST /api/v1/lopu/chats/reply — one streamed Lopu turn.
 //
-// Flow: session → fail-closed rate limit → validate the body → resolve the
-// model choice against the catalog → find/create the conversation → load the
-// history → persist the user turn → stream events as NDJSON → persist the
-// assistant turn (ALWAYS, in a finally — a client that disconnects mid-reply
-// still gets the transcript) → `done`. Tools run as the viewer inside
-// streamLopuChatTurn; request/stream cancellation aborts the provider call.
+// Flow: session → fail-closed rate limit → validate the body → find the
+// conversation → resolve the viewer's own provider (providerId, design note
+// §1.3) → resolve the model choice against the catalog → create the
+// conversation / persist overrides → load the history → persist the user turn
+// → stream events as NDJSON → persist the assistant turn (ALWAYS, in a
+// finally — a client that disconnects mid-reply still gets the transcript) →
+// `done`. Tools run as the viewer inside streamLopuChatTurn; request/stream
+// cancellation aborts the provider call.
+//
+// providerId: an explicit id must be one of the caller's Secure Vault
+// provider connections (else 400, before anything is persisted) and becomes
+// the chat's setting (null clears it); a stored id that no longer resolves is
+// dropped and the turn runs on Thingtime's models. Vault turns count against
+// the same lopu.chat bucket.
 
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_TEXT_CHARS = 8000;
@@ -33,6 +44,9 @@ type ReplyBody = {
   model: string | null;
   effort: string | null;
   speed: string | null;
+  // undefined = not sent (keep the chat's setting); null = run on Thingtime's
+  // models and clear the chat's pinned provider; string = a vault provider id
+  providerId: string | null | undefined;
   context: LopuChatContext | null;
 };
 
@@ -107,6 +121,14 @@ const parseBody = (body: unknown): Validation => {
       return { ok: false, error: `${key} must be a string` };
     }
   }
+  let providerId: string | null | undefined;
+  if (body.providerId === undefined) providerId = undefined;
+  else if (body.providerId === null || body.providerId === '') providerId = null;
+  else {
+    const id = typeof body.providerId === 'string' ? safeVaultId(body.providerId) : null;
+    if (!id) return { ok: false, error: 'providerId must be one of your Secure Vault provider ids' };
+    providerId = id;
+  }
   const context = parseContext(body.context);
   if (context.ok === false) return context;
   return {
@@ -118,6 +140,7 @@ const parseBody = (body: unknown): Validation => {
       model: typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null,
       effort: typeof body.effort === 'string' && body.effort.trim() ? body.effort.trim() : null,
       speed: typeof body.speed === 'string' && body.speed.trim() ? body.speed.trim() : null,
+      providerId,
       context: context.context
     }
   };
@@ -164,11 +187,36 @@ export const action = async ({ request }: { request: Request }) => {
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;
-  let settings: { model: string | null; effort: string | null; speed: string | null } = { model: null, effort: null, speed: null };
+  let settings: { model: string | null; effort: string | null; speed: string | null; providerId: string | null } = { model: null, effort: null, speed: null, providerId: null };
   if (chatId) {
     const existing = await getLopuChat(user.id, chatId);
     if (existing.ok === false) return json({ ok: false, error: existing.error }, { status: existing.status });
-    settings = { model: existing.settings.model, effort: existing.settings.effort, speed: existing.settings.speed };
+    settings = { model: existing.settings.model, effort: existing.settings.effort, speed: existing.settings.speed, providerId: existing.settings.providerId ?? null };
+  }
+
+  // --- the viewer's own provider (design note §1.3) -------------------------
+  // An explicit providerId is strict: it must resolve to one of the caller's
+  // own vault connections (else 400, nothing persisted yet) and it becomes
+  // the chat's setting; null clears it. A stored providerId is lenient — a
+  // connection deleted from the vault since (or a vault that is no longer
+  // configured) is dropped and the turn runs on Thingtime's models.
+  const providerExplicit = input.providerId !== undefined;
+  const wantedProviderId = providerExplicit ? input.providerId : settings.providerId;
+  let vaultProvider: LopuVaultTurnProvider | null = null;
+  let clearStoredProvider = false;
+  if (wantedProviderId) {
+    if (!userVaultConfigured()) {
+      if (providerExplicit) return json({ ok: false, error: 'Secure Vault is not configured on this server — pick a Thingtime model instead' }, { status: 400 });
+      clearStoredProvider = true;
+    } else {
+      try {
+        const resolved = await getUserVaultProvider(user.id, wantedProviderId);
+        vaultProvider = { ...resolved, effort: null, requestedModel: null };
+      } catch (error: any) {
+        if (providerExplicit) return json({ ok: false, error: String(error?.message || 'Selected AI provider was not found.') }, { status: 400 });
+        clearStoredProvider = true;
+      }
+    }
   }
 
   // --- model choice -------------------------------------------------------
@@ -178,26 +226,41 @@ export const action = async ({ request }: { request: Request }) => {
   let choice: AiWorkflowModelChoice | null = null;
   if (catalog.models.length) {
     // explicit overrides are strict (a bad model is a 400); stored settings
-    // are lenient (an admin may have disabled the chat's model since)
-    const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides });
+    // are lenient (an admin may have disabled the chat's model since), and so
+    // is everything on a vault turn — the connection's own model runs it
+    const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides || !!vaultProvider });
     if (resolved.ok === false) {
       if (overrides) return json({ ok: false, error: resolved.error }, { status: 400 });
     } else if (catalog.defaults.model || resolved.available) {
       choice = resolved.choice;
     }
   }
+  if (vaultProvider) {
+    // the chat's effort travels to the user's provider (the decorated → bare
+    // retry ladder covers an endpoint that rejects it); the model is the
+    // connection's own, or the requested one for a connection saved without
+    vaultProvider.effort = isAiModelEffort(requested.effort) ? requested.effort : (choice?.effort ?? null);
+    vaultProvider.requestedModel = requested.model;
+  }
 
   if (!chatId) {
     const created = await createLopuChat(user.id, {
       title: titleFromMessage(input.text),
-      ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {})
+      ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
+      ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
     });
     if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
     chatId = created.chat.id;
-  } else if (overrides && choice) {
+  } else {
     // a per-turn override becomes the conversation's setting (best effort —
-    // the turn itself already carries the resolved choice)
-    await updateLopuChat(user.id, chatId, { model: choice.model, effort: choice.effort, speed: choice.speed }).catch(() => null);
+    // the turn itself already carries the resolved choice); an explicit
+    // providerId (or null) does too, and a stored connection that no longer
+    // resolves is cleared so the picker stops showing it
+    const patch: { model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+    if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
+    if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
+    else if (clearStoredProvider) patch.providerId = null;
+    if (Object.keys(patch).length) await updateLopuChat(user.id, chatId, patch).catch(() => null);
   }
 
   // --- history + the user turn ------------------------------------------
@@ -240,6 +303,7 @@ export const action = async ({ request }: { request: Request }) => {
         text: input.text,
         history,
         choice,
+        vaultProvider,
         context: input.context,
         signal: abort.signal
       });

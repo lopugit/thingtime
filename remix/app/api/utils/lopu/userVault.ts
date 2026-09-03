@@ -286,3 +286,47 @@ export const getUserVaultProvider = async (ownerId: string, id: unknown) => {
 		token: decryptValue(doc)
 	};
 };
+
+export type ResolvedUserVaultProvider = Awaited<ReturnType<typeof getUserVaultProvider>>;
+
+// ── read-only helpers (never load encrypted fields) ──
+
+const VAULT_PROVIDER_LIST_PROJECTION = {
+	shareId: 1,
+	ownerId: 1,
+	'crystal.recordKind': 1,
+	'crystal.name': 1,
+	'crystal.groupId': 1,
+	'crystal.provider': 1,
+	'crystal.endpoint': 1,
+	'crystal.model': 1,
+	'crystal.createdAt': 1,
+	'crystal.updatedAt': 1
+} as const;
+
+// The viewer's AI provider connections as redacted metadata (the shape
+// GET /api/v1/lopu/vault lists) — what the model catalog projects into
+// `vaultProviders` for the chat picker.
+export const listUserVaultProviders = async (ownerId: string): Promise<PublicVaultEntry[]> => {
+	const docs = (await (
+		await getThingsCollection()
+	)
+		.find({ ownerId, thingtime: 'data', 'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE, 'crystal.recordKind': 'provider' } as any, { projection: VAULT_PROVIDER_LIST_PROJECTION })
+		.sort({ 'crystal.name': 1 })
+		.limit(200)
+		.toArray()) as unknown as StoredVaultDoc[];
+	return docs.map(publicEntry);
+};
+
+// True when `id` names one of the viewer's own provider connections — the
+// existence check a Lopu chat's stored providerId setting runs through.
+export const hasUserVaultProvider = async (ownerId: string, id: unknown): Promise<boolean> => {
+	const shareId = safeVaultId(id);
+	if (!shareId) return false;
+	const doc = await (
+		await getThingsCollection()
+	).findOne({ shareId, ownerId, thingtime: 'data', 'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE, 'crystal.recordKind': 'provider' } as any, {
+		projection: { shareId: 1 }
+	});
+	return !!doc;
+};

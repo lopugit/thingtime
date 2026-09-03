@@ -7,6 +7,7 @@
 // (model picker, admin editor) and the Lopu chat brain import this module for
 // the shared types and rules; `./models.ts` adds the MongoDB-backed catalog on
 // top. Keep this file free of node/mongo imports.
+import type { LopuVaultProviderPublic } from '../lopu/vaultProviders';
 import {
   AI_WORKFLOW_BASE_MODELS,
   parseAiWorkflowModelOptionId,
@@ -17,6 +18,14 @@ import {
 } from '../settings/prConflictResolverModelWaterfallCore';
 
 export type { AiModelEffort, AiModelSpeed, AiWorkflowModelChoice } from '../settings/prConflictResolverModelWaterfallCore';
+
+// The wire shape of GET /api/v1/ai/models: the catalog list plus, for a
+// signed-in viewer, their own Secure Vault provider connections (design note
+// §1.3 — redacted: id, name, kind, model, endpoint hostname, availability) and
+// whether the vault is configured at all. Anonymous viewers get an empty
+// list. Shared with the client picker, so it lives in the pure module.
+export type AiModelsVaultStatus = { configured: boolean };
+export type AiModelsResponseExtras = { vaultProviders: LopuVaultProviderPublic[]; vault: AiModelsVaultStatus };
 
 // ── the `ai-model` Thing kind ───────────────────────────────────────────────
 

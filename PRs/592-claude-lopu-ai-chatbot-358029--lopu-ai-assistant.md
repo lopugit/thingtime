@@ -199,6 +199,74 @@ Routes (group `lopu`, all session-only, `Content-Type: application/json` for POS
 Client types (`components/Messenger/messengerTypes.ts`): `LopuAiSource`,
 `ExternalAiSource` union extended, `isLopuAiSource(source)`.
 
+### 1.3 Your own providers (Secure Vault → Lopu)
+
+A signed-in user can run a Lopu turn on one of their own Secure Vault AI
+connections (Settings → Secure Vault, `api/utils/lopu/userVault.ts`) instead
+of the server keys. Voice mode already dialed those connections; chat now
+shares the same brain and the same fence.
+
+- `GET /api/v1/ai/models` (feature `1.1.0`) additionally returns, for a
+  signed-in viewer, `vaultProviders: Array<{ id, name, kind: LopuProviderKind,
+  model: string | null, endpointHost: string | null, available: boolean,
+  reason?: string }>` plus `vault: { configured: boolean }`. Anonymous viewers
+  and an unconfigured vault get `[]`. The projection (`lopu/vaultProviders.ts`
+  `publicVaultProvider`, pinned by `LOPU_VAULT_PROVIDER_PUBLIC_KEYS`) never
+  carries a token or an endpoint beyond its hostname; `available` is false
+  with a `reason` when the vault key is missing, the host is outside the
+  server allowlist (built-in vendor hosts +
+  `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`), or the connection has no model.
+- Chat settings gain `providerId?: string | null` (`crystal.lopu.providerId`)
+  through `POST /api/v1/lopu/chats` and `/update` (both `1.1.0`); every
+  list/get entry carries it under `lopu`. The id is shape-checked in
+  `normalizeLopuChatSettings` and ownership-checked on write
+  (`hasUserVaultProvider`) — someone else's id, or a deleted one, is a 400
+  (`LOPU_PROVIDER_NOT_IN_VAULT_ERROR`). `null` returns the chat to
+  Thingtime's models.
+- `POST /api/v1/lopu/chats/reply` (`1.1.0`) accepts `providerId?: string |
+  null`. An explicit id is strict — it must resolve through
+  `getUserVaultProvider` (else 400, before anything is persisted) — and
+  persists as the chat's setting (`null` clears it); a chat's stored id is
+  honoured on every turn and dropped (cleared best-effort) when the connection
+  no longer resolves or the vault is unconfigured. Vault turns count against
+  the same `lopu.chat` bucket.
+- The turn (`chat.ts`, `input.vaultProvider`): `anthropic` kind → the existing
+  Anthropic path with the vault key/base URL; `openai` / `openrouter` / `xai`
+  / `google` (its `/openai` compatibility surface) / `compatible` → the
+  OpenAI-compatible path — native function tools on the named vendors, the
+  fenced `tt-tool` text protocol on a custom `compatible` host
+  (`vaultProviderToolProtocol`; `LOPU_OPENAI_TOOLS` does not apply). Model =
+  the connection's own model (or the request's when the connection has none);
+  effort = the chat's effort (the decorated → bare retry ladder absorbs an
+  endpoint that rejects it); speed always `normal`. The SDK clients are built
+  with the vault key + base URL only (`authToken`/`organization`/`project`/
+  `adminAPIKey` pinned to null so no server credential rides along) and a
+  redirect-refusing fetch. A vault turn takes precedence over every
+  `LOPU_CHAT_PROVIDER` mode, `test` included.
+- `meta` is emitted before dialing with `provider: 'vault'`,
+  `providerLabel: <connection name>`, `label: '<name> · <model>'`. Errors
+  from the user's provider surface as an `error` event with a friendly line
+  (`friendlyVaultProviderError`: rejected key / unknown model / rate limited /
+  unreachable / guard refusal — never the URL or the token) followed by the
+  canned `LOPU_FALLBACK_VAULT` deltas; the persisted assistant row then has
+  `provider: 'fallback'` and the vault model. The server keys are NOT a
+  fallback for a vault turn. `LOPU_TURN_PROVIDERS` / `LopuChatProvider` gain
+  `'vault'`.
+- One place for BYO provider HTTP + SSRF: `lopu/vaultProviderClient.ts` —
+  `assertSafeProviderEndpoint` (HTTPS → allowlist → fresh public DNS →
+  private-range check), `createGuardedProviderFetch` (`redirect: 'error'`),
+  `resolveVaultProviderClientConfig` (what chat.ts builds its SDK client
+  from), and `callVaultProviderPlainCompletion` (the bounded non-streaming
+  call `voice.ts` `streamLopuVoiceReply` now delegates to; the
+  `/api/v1/lopu/voice/reply` wire contract is unchanged and
+  `createTranscriptPage` stays exported).
+- Dev only: vault endpoints must be public HTTPS hosts, so a local fake is
+  reached through `THINGTIME_LOPU_PROVIDER_DEV_REWRITES=https://<saved
+  origin>=http://127.0.0.1:<port>[,…]` — parsed only when `NODE_ENV !==
+  'production'` and no `VERCEL*` env is set (`parseProviderDevRewrites`); a
+  rewritten origin skips the allowlist/DNS checks. `scripts/verify-lopu.mjs`
+  §K uses it (`https://lopu-fake-provider.invalid` → port 18170).
+
 ---
 
 ## 2. Provider layer and tools

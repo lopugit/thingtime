@@ -17,7 +17,9 @@ import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import type { PublicChatMessage } from '../messenger/messenger';
 import type { PageOp, PatchTarget } from './pageOps';
 
-export type LopuChatProvider = 'claude' | 'openai' | 'test' | 'fallback';
+// 'vault' = the viewer's own Secure Vault provider connection ran the turn
+// (design note §1.3); the meta event then also names it in `providerLabel`.
+export type LopuChatProvider = 'claude' | 'openai' | 'vault' | 'test' | 'fallback';
 
 export type LopuChatUsage = { inputTokens: number; outputTokens: number };
 
@@ -67,6 +69,8 @@ export type LopuChatEvent =
       speed: string;
       provider: LopuChatProvider;
       label: string;
+      // the vault connection's name when provider === 'vault'
+      providerLabel?: string;
     }
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }

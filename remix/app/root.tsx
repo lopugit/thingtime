@@ -97,6 +97,8 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
+                    : pathname === '/lopu/voice'
+                      ? `${baseTitle} - Lopu voice`
                     : pathname.startsWith('/lopu')
                       ? `${baseTitle} - Lopu`
                     : pathname.startsWith('/builder')

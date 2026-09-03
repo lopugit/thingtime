@@ -24,6 +24,7 @@ import {
 	describeLopuModelChoice,
 	dockedLopuWindowGeometry,
 	isLopuHostHiddenOnPath,
+	isLopuVoicePath,
 	normalizeLopuCatalog,
 	normalizeLopuSettings,
 	preferredLopuEffort,
@@ -49,13 +50,17 @@ describe('normalizeLopuSettings', () => {
 		assert.deepEqual(normalizeLopuSettings({ launcher: 'yes', dock: 'up', speed: 'warp', model: 42 }), LOPU_SETTINGS_DEFAULTS);
 	});
 
-	test('defaults are the safe product choices: launcher on, free dock, live patches, confirm deletes, enter sends', () => {
+	test('defaults are the safe product choices: launcher on, free dock, live patches, confirm deletes, enter sends, quiet voice', () => {
 		assert.equal(LOPU_SETTINGS_DEFAULTS.launcher, true);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.dock, 'free');
 		assert.equal(LOPU_SETTINGS_DEFAULTS.applyPatches, true);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.confirmDeletes, true);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.enterSends, true);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.model, null);
+		// voice: text-only replies, no transcribe, the model picker's brain
+		assert.equal(LOPU_SETTINGS_DEFAULTS.spokenReplies, false);
+		assert.equal(LOPU_SETTINGS_DEFAULTS.transcribe, false);
+		assert.equal(LOPU_SETTINGS_DEFAULTS.providerId, null);
 		assert.equal(LOPU_SETTINGS_DEFAULTS.open, false);
 	});
 
@@ -69,6 +74,9 @@ describe('normalizeLopuSettings', () => {
 			model: '  claude-opus-5  ',
 			effort: 'xhigh',
 			speed: 'fast',
+			spokenReplies: true,
+			transcribe: true,
+			providerId: ' vault-provider-1 ',
 			open: true
 		});
 		assert.deepEqual(settings, {
@@ -80,10 +88,22 @@ describe('normalizeLopuSettings', () => {
 			model: 'claude-opus-5',
 			effort: 'xhigh',
 			speed: 'fast',
+			spokenReplies: true,
+			transcribe: true,
+			providerId: 'vault-provider-1',
 			open: true
 		});
 		assert.equal(normalizeLopuSettings({ model: 'x'.repeat(500) }).model?.length, 80);
 		assert.equal(normalizeLopuSettings({ model: '   ' }).model, null);
+	});
+
+	test('voice keys normalise like the rest: junk falls back, ids are bounded', () => {
+		const junk = normalizeLopuSettings({ spokenReplies: 'yes', transcribe: 1, providerId: 42 });
+		assert.equal(junk.spokenReplies, false);
+		assert.equal(junk.transcribe, false);
+		assert.equal(junk.providerId, null);
+		assert.equal(normalizeLopuSettings({ providerId: 'p'.repeat(200) }).providerId?.length, 80);
+		assert.equal(normalizeLopuSettings({ providerId: '   ' }).providerId, null);
 	});
 });
 
@@ -306,8 +326,17 @@ describe('model catalog', () => {
 test('the floating host hides on the /lopu page and its chat routes only', () => {
 	assert.equal(isLopuHostHiddenOnPath('/lopu'), true);
 	assert.equal(isLopuHostHiddenOnPath('/lopu/abc123'), true);
+	assert.equal(isLopuHostHiddenOnPath('/lopu/voice'), true);
 	assert.equal(isLopuHostHiddenOnPath('/lopusaurus'), false);
 	assert.equal(isLopuHostHiddenOnPath('/messages'), false);
 	assert.equal(isLopuHostHiddenOnPath('/'), false);
 	assert.equal(isLopuHostHiddenOnPath(undefined), false);
+});
+
+test('/lopu/voice is the page in voice mode; a chat deep link is not', () => {
+	assert.equal(isLopuVoicePath('/lopu/voice'), true);
+	assert.equal(isLopuVoicePath('/lopu/voice/'), true);
+	assert.equal(isLopuVoicePath('/lopu'), false);
+	assert.equal(isLopuVoicePath('/lopu/voiceover-chat'), false);
+	assert.equal(isLopuVoicePath(null), false);
 });

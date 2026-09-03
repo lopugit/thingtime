@@ -1,4 +1,4 @@
-// Pure, DOM-free core for the Lopu chat client (PRs/lopu-ai-assistant-design.md
+// Pure, DOM-free core for the Lopu chat client (PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md
 // §2.3 event protocol, §3.1 streaming reducer): the client mirror of the
 // NDJSON event union, the streaming-turn reducer, tool labels + links, the
 // tiny markdown-ish parser the bubbles draw with, and the optimistic message
@@ -10,7 +10,9 @@ import type { ChatMessage } from '~/components/Messenger/messengerTypes';
 
 // ——— the wire protocol (client mirror of api/utils/lopu/chatEvents.ts) ——————
 
-export type LopuProvider = 'claude' | 'openai' | 'test' | 'fallback';
+// 'vault' = one of the viewer's own Secure Vault providers (meta carries its
+// providerLabel; the server never reveals the credential).
+export type LopuProvider = 'claude' | 'openai' | 'test' | 'fallback' | 'vault';
 
 export type LopuPatchTarget = 'active' | { id: string };
 
@@ -42,6 +44,9 @@ export type LopuTurnMeta = {
 	speed: string | null;
 	provider: LopuProvider;
 	label?: string | null;
+	// a 'vault' turn names the viewer's provider (its display name + id)
+	providerLabel?: string | null;
+	providerId?: string | null;
 };
 
 export type LopuChatEvent =
@@ -540,10 +545,18 @@ export const chatTitleFromText = (text: string): string => {
 
 // ——— markdown-ish rendering model ——————————————————————————————————————————
 
-// Deliberately tiny: paragraphs, bullet lists, fenced code, inline code, bold
-// and italic. NO raw HTML ever — the renderer draws text nodes only, so a
-// model that emits `<script>` shows the literal characters.
-export type LopuInline = { kind: 'text'; text: string } | { kind: 'code'; text: string } | { kind: 'strong'; text: string } | { kind: 'em'; text: string };
+// Deliberately tiny: paragraphs, bullet lists, fenced code, inline code, bold,
+// italic and `[label](/site-relative)` links. NO raw HTML ever — the renderer
+// draws text nodes only, so a model that emits `<script>` shows the literal
+// characters. A link that is not site-relative (another host, a scheme) is
+// demoted to plain text "label (url)" — nothing ever leaves the site through
+// a Lopu bubble.
+export type LopuInline =
+	| { kind: 'text'; text: string }
+	| { kind: 'code'; text: string }
+	| { kind: 'strong'; text: string }
+	| { kind: 'em'; text: string }
+	| { kind: 'link'; text: string; href: string };
 
 export type LopuMdBlock =
 	| { kind: 'paragraph'; inlines: LopuInline[] }
@@ -551,7 +564,9 @@ export type LopuMdBlock =
 	| { kind: 'list'; ordered: boolean; items: LopuInline[][] }
 	| { kind: 'code'; lang: string | null; text: string; open: boolean };
 
-const INLINE_PATTERN = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(__[^_\n]+__)|(_[^_\n]+_)/g;
+// a link href may carry one level of parentheses ("/p?x=(1)", "javascript:alert(1)")
+const INLINE_PATTERN = /(`[^`\n]+`)|(\[[^\]\n]+\]\((?:[^()\s]|\([^()\s]*\))+\))|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(__[^_\n]+__)|(_[^_\n]+_)/g;
+const LINK_TOKEN = /^\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)$/;
 
 export const parseLopuInlines = (text: string): LopuInline[] => {
 	const out: LopuInline[] = [];
@@ -562,12 +577,41 @@ export const parseLopuInlines = (text: string): LopuInline[] => {
 		if (index > last) out.push({ kind: 'text', text: source.slice(last, index) });
 		const token = match[0];
 		if (token.startsWith('`')) out.push({ kind: 'code', text: token.slice(1, -1) });
-		else if (token.startsWith('**') || token.startsWith('__')) out.push({ kind: 'strong', text: token.slice(2, -2) });
+		else if (token.startsWith('[')) {
+			const link = LINK_TOKEN.exec(token);
+			const label = link?.[1] ?? token;
+			const href = link?.[2] ?? '';
+			if (isSiteRelativePath(href)) out.push({ kind: 'link', text: label, href });
+			else out.push({ kind: 'text', text: `${label} (${href})` });
+		} else if (token.startsWith('**') || token.startsWith('__')) out.push({ kind: 'strong', text: token.slice(2, -2) });
 		else out.push({ kind: 'em', text: token.slice(1, -1) });
 		last = index + token.length;
 	}
 	if (last < source.length) out.push({ kind: 'text', text: source.slice(last) });
 	return out;
+};
+
+// ——— code blocks: what the copy button copies and how the block is labelled ———
+
+export type LopuCodeBlockInfo = {
+	// the header label ("TS", "JSON", "CODE")
+	label: string;
+	// the exact text the copy button puts on the clipboard (no trailing newline)
+	clipboardText: string;
+	// copying makes sense only for a finished, non-empty block
+	copyable: boolean;
+	lines: number;
+};
+
+export const describeLopuCodeBlock = (block: Extract<LopuMdBlock, { kind: 'code' }>): LopuCodeBlockInfo => {
+	const text = (block.text || '').replace(/\s+$/, '');
+	const lang = (block.lang || '').trim();
+	return {
+		label: (lang || 'code').slice(0, 12).toUpperCase(),
+		clipboardText: text,
+		copyable: !block.open && text.length > 0,
+		lines: text ? text.split('\n').length : 0
+	};
 };
 
 const flushParagraph = (lines: string[], blocks: LopuMdBlock[]) => {
@@ -769,6 +813,226 @@ export const isLopuAssistantMessage = (message: Pick<ChatMessage, 'externalSourc
 	const source = message?.externalSource as { provider?: unknown; access?: unknown; role?: unknown } | null | undefined;
 	if (!source || typeof source !== 'object') return false;
 	return (source.provider === 'lopu' || source.access === 'lopu') && source.role === 'assistant';
+};
+
+// ——— persisted assistant meta (PublicChatMessage.lopu) ————————————————————
+
+// What an assistant row remembers about the turn that produced it (design
+// note §1.2: crystal.lopu projects onto the public message as `lopu`). Read
+// defensively — older rows and user rows carry nothing.
+export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null };
+
+export type LopuMessageMeta = {
+	role: 'user' | 'assistant' | null;
+	model: string | null;
+	effort: string | null;
+	speed: string | null;
+	provider: LopuProvider | null;
+	providerLabel: string | null;
+	toolCalls: LopuMessageToolCall[];
+	stopReason: string | null;
+	usage: LopuUsage | null;
+};
+
+const LOPU_PROVIDERS: ReadonlyArray<LopuProvider> = ['claude', 'openai', 'test', 'fallback', 'vault'];
+const stringOrNull = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
+
+export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
+	const raw = (message as { lopu?: unknown } | null | undefined)?.lopu;
+	if (!raw || typeof raw !== 'object') return null;
+	const record = raw as Record<string, unknown>;
+	const calls = Array.isArray(record.toolCalls) ? record.toolCalls : [];
+	const toolCalls: LopuMessageToolCall[] = [];
+	for (const call of calls) {
+		if (!call || typeof call !== 'object') continue;
+		const entry = call as Record<string, unknown>;
+		if (typeof entry.name !== 'string' || !entry.name) continue;
+		toolCalls.push({ name: entry.name, ok: entry.ok === true, summary: stringOrNull(entry.summary) ?? '', thingId: stringOrNull(entry.thingId) });
+	}
+	const provider = LOPU_PROVIDERS.includes(record.provider as LopuProvider) ? (record.provider as LopuProvider) : null;
+	const usageRaw = record.usage && typeof record.usage === 'object' ? (record.usage as Record<string, unknown>) : null;
+	return {
+		role: record.role === 'assistant' || record.role === 'user' ? record.role : null,
+		model: stringOrNull(record.model),
+		effort: stringOrNull(record.effort),
+		speed: stringOrNull(record.speed),
+		provider,
+		providerLabel: stringOrNull(record.providerLabel),
+		toolCalls,
+		stopReason: stringOrNull(record.stopReason),
+		usage: usageRaw
+			? {
+					...(typeof usageRaw.inputTokens === 'number' ? { inputTokens: usageRaw.inputTokens } : {}),
+					...(typeof usageRaw.outputTokens === 'number' ? { outputTokens: usageRaw.outputTokens } : {})
+			  }
+			: null
+	};
+};
+
+// ——— provider / status copy ————————————————————————————————————————————————
+
+export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+	claude: 'Claude',
+	openai: 'ChatGPT',
+	test: 'the test script',
+	fallback: "Lopu's little book",
+	vault: 'your provider'
+};
+
+const EFFORT_DISPLAY: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+export const describeLopuEffortLabel = (effort: string | null | undefined): string => (effort ? EFFORT_DISPLAY[effort] || effort : '');
+
+/** "via Claude Opus 5 · High · Fast" — the meta line under a turn (null when unknown). */
+export const describeLopuTurnMeta = (meta: Pick<LopuTurnMeta, 'provider' | 'label' | 'model' | 'effort' | 'speed' | 'providerLabel'> | null | undefined): string | null => {
+	if (!meta) return null;
+	if (meta.provider === 'fallback') return `from ${PROVIDER_DISPLAY_NAMES.fallback}`;
+	if (meta.provider === 'vault') {
+		const bits = [meta.providerLabel || PROVIDER_DISPLAY_NAMES.vault];
+		if (meta.model) bits.push(meta.model);
+		return `via ${bits.join(' · ')}`;
+	}
+	const bits = [meta.label || meta.model || PROVIDER_DISPLAY_NAMES[meta.provider] || meta.provider];
+	const effort = describeLopuEffortLabel(meta.effort);
+	if (effort) bits.push(effort);
+	if (meta.speed === 'fast') bits.push('Fast');
+	return `via ${bits.join(' · ')}`;
+};
+
+export type LopuStatusInput = {
+	// the composer's current choice
+	model: string | null;
+	effort: string | null;
+	speed: string | null;
+	providerId: string | null;
+	// catalog rows (id → label) and the viewer's own providers (id → name)
+	modelLabels: Record<string, string>;
+	providerNames: Record<string, string>;
+	streaming?: boolean;
+	listening?: boolean;
+};
+
+/** The header's one-line status: "Listening…" / "Replying…" / "Claude Opus 5 · High · Fast" / "Acme proxy". */
+export const describeLopuStatusLine = (input: LopuStatusInput): string => {
+	if (input.listening) return 'Listening…';
+	if (input.streaming) return 'Replying…';
+	if (input.providerId) return input.providerNames[input.providerId] || 'Your provider';
+	if (!input.model) return Object.keys(input.modelLabels).length ? 'Choosing a model' : 'Ready';
+	const bits = [input.modelLabels[input.model] || input.model];
+	const effort = describeLopuEffortLabel(input.effort);
+	if (effort) bits.push(effort);
+	if (input.speed === 'fast') bits.push('Fast');
+	return bits.join(' · ');
+};
+
+// ——— tool rows ————————————————————————————————————————————————————————————
+
+export const LOPU_TOOL_SUMMARY_MAX = 140;
+export const LOPU_TOOL_DETAILS_MAX_CHARS = 16_000;
+
+/** The one-line summary a compact tool row shows (first line, capped). */
+export const toolRowSummary = (activity: Pick<LopuToolActivity, 'status' | 'result' | 'name'>): string => {
+	const raw = activity.result?.summary || '';
+	const line = raw
+		.split('\n')
+		.map((entry) => entry.trim())
+		.find(Boolean);
+	if (line) return line.length > LOPU_TOOL_SUMMARY_MAX ? `${line.slice(0, LOPU_TOOL_SUMMARY_MAX - 1).trimEnd()}…` : line;
+	if (activity.status === 'error') return 'This step did not finish.';
+	return '';
+};
+
+const prettyJson = (value: unknown): string | null => {
+	if (value === undefined || value === null) return null;
+	let text: string;
+	try {
+		text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+	} catch {
+		return null;
+	}
+	if (!text) return null;
+	return text.length > LOPU_TOOL_DETAILS_MAX_CHARS ? `${text.slice(0, LOPU_TOOL_DETAILS_MAX_CHARS)}\n… (truncated)` : text;
+};
+
+export type LopuToolDetails = { input: string | null; result: string | null; hasDetails: boolean };
+
+/** What the expandable details drawer shows: the tool input (complete, else the partial fragment) and the result. */
+export const toolRowDetails = (activity: Pick<LopuToolActivity, 'input' | 'partialInput' | 'result'>): LopuToolDetails => {
+	const input = activity.input !== null && activity.input !== undefined ? prettyJson(activity.input) : prettyJson(activity.partialInput || null);
+	const result = activity.result ? prettyJson({ ok: activity.result.ok, summary: activity.result.summary, ...(activity.result.data !== undefined ? { data: activity.result.data } : {}) }) : null;
+	return { input, result, hasDetails: !!(input || result) };
+};
+
+// ——— timeline decoration (grouping + time separators) ———————————————————————
+
+export type LopuTimelineRow = {
+	item: LopuTimelineItem;
+	role: 'user' | 'assistant';
+	// the row's timestamp (ms) when known
+	at: number | null;
+	// first row of a same-author run (draws the avatar / the flattened corner)
+	first: boolean;
+	// last row of a same-author run (draws the meta line)
+	last: boolean;
+	// a time separator label to draw above this row, when the gap is large
+	separator: string | null;
+};
+
+export const LOPU_GROUP_GAP_MS = 5 * 60_000;
+export const LOPU_SEPARATOR_GAP_MS = 20 * 60_000;
+
+export const timelineItemTime = (item: LopuTimelineItem): number | null => {
+	if (item.kind === 'turn') return Number.isFinite(item.turn.startedAt) ? item.turn.startedAt : null;
+	const at = Date.parse(item.message.createdAt);
+	return Number.isFinite(at) ? at : null;
+};
+
+const sameDay = (a: Date, b: Date): boolean => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** "Today · 2:14 PM", "Yesterday · 9:03 AM", "Mon 3 Aug · 2:14 PM" (locale-aware time). */
+export const formatLopuSeparator = (at: number, now: number = Date.now()): string => {
+	const date = new Date(at);
+	const today = new Date(now);
+	const yesterday = new Date(now - 86_400_000);
+	let day: string;
+	if (sameDay(date, today)) day = 'Today';
+	else if (sameDay(date, yesterday)) day = 'Yesterday';
+	else {
+		const options: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short', ...(date.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) };
+		day = date.toLocaleDateString(undefined, options);
+	}
+	return `${day} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+};
+
+/**
+ * Decorate the timeline for drawing: consecutive rows by the same author
+ * within LOPU_GROUP_GAP_MS form a group (avatar on the first, meta on the
+ * last), and a gap over LOPU_SEPARATOR_GAP_MS (or a day change) gets a time
+ * separator. Pure; `format` is injectable for tests.
+ */
+export const decorateLopuTimeline = (
+	items: LopuTimelineItem[],
+	options?: { now?: number; format?: (at: number, now: number) => string; groupGapMs?: number; separatorGapMs?: number }
+): LopuTimelineRow[] => {
+	const now = options?.now ?? Date.now();
+	const format = options?.format ?? formatLopuSeparator;
+	const groupGap = options?.groupGapMs ?? LOPU_GROUP_GAP_MS;
+	const separatorGap = options?.separatorGapMs ?? LOPU_SEPARATOR_GAP_MS;
+	const rows: LopuTimelineRow[] = [];
+	let previous: LopuTimelineRow | null = null;
+	let lastAt: number | null = null;
+	for (const item of items) {
+		const role: 'user' | 'assistant' = item.kind === 'turn' ? 'assistant' : item.role;
+		const at = timelineItemTime(item);
+		let separator: string | null = null;
+		if (at !== null && (lastAt === null || at - lastAt > separatorGap || !sameDay(new Date(at), new Date(lastAt)))) separator = format(at, now);
+		const continues = !!previous && previous.role === role && !separator && (at === null || lastAt === null || at - lastAt <= groupGap);
+		const row: LopuTimelineRow = { item, role, at, first: !continues, last: true, separator };
+		if (continues && previous) previous.last = false;
+		rows.push(row);
+		previous = row;
+		if (at !== null) lastAt = at;
+	}
+	return rows;
 };
 
 /** Merge rows by id, keeping the incoming order for new ones (oldest first). */

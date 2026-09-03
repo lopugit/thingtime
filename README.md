@@ -1096,7 +1096,7 @@ and runs tools as the signed-in viewer (pages, sections, components, actions,
 schemas, data). Models come from the `ai-model` catalog (`GET /api/v1/ai/models`,
 seeded from `AI_WORKFLOW_BASE_MODELS`; admins toggle rows at `/admin` → Lopu
 models and set the chat defaults at `/api/v1/settings/lopu-chat-defaults`).
-Design note: `PRs/lopu-ai-assistant-design.md`.
+Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`.
 
 ```sh
 # at least one provider key makes Lopu think; with neither she answers with an

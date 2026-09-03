@@ -30,6 +30,9 @@ export type LopuReplyBody = {
 	model?: string;
 	effort?: string;
 	speed?: string;
+	// one of the viewer's Secure Vault providers (GET /ai/models → vaultProviders[].id);
+	// the server resolves the credential, the client only ever names it
+	providerId?: string;
 	context?: LopuReplyContext;
 };
 

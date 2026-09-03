@@ -1,6 +1,8 @@
 import React from 'react';
-import { Badge, Box, Button, Flex, Select, Switch, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Select, Text } from '@chakra-ui/react';
 
+import { LopuToggle } from '~/components/Lopu/LopuModelPicker';
+import { LOPU_UI, lopuEyebrowSx } from '~/components/Lopu/lopuTheme';
 import { useLopu } from '~/components/Lopu/useLopu';
 import {
 	describeLopuEffort,
@@ -31,14 +33,38 @@ const STORED_DEFAULTS_CACHE_KEY = 'tt-lopu-admin-chat-defaults';
 
 const EMPTY_DEFAULTS: LopuCatalogDefaults = { model: null, effort: null, speed: null };
 
-const eyebrow = {
-	fontFamily: 'var(--tt-font-mono, ui-monospace, Menlo, monospace)',
-	fontSize: '10px',
-	fontWeight: 600,
-	letterSpacing: '0.08em',
-	textTransform: 'uppercase' as const,
-	color: 'var(--tt-muted, #9a9aa6)'
-};
+// the Lopu family's eyebrow + a neutral hairline chip (no colour-coded badges)
+const eyebrow = lopuEyebrowSx;
+
+const Chip = ({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'ink' | 'danger' }) => (
+	<Box
+		as="span"
+		display="inline-flex"
+		alignItems="center"
+		height="18px"
+		px="7px"
+		borderRadius={LOPU_UI.pill}
+		border={LOPU_UI.border}
+		bg={LOPU_UI.card}
+		fontSize="10px"
+		fontWeight={600}
+		letterSpacing="0.02em"
+		lineHeight={1}
+		whiteSpace="nowrap"
+		color={tone === 'danger' ? LOPU_UI.danger : tone === 'ink' ? LOPU_UI.ink : LOPU_UI.muted}
+	>
+		{children}
+	</Box>
+);
+
+const selectSx = {
+	bg: LOPU_UI.card,
+	color: LOPU_UI.ink,
+	borderColor: LOPU_UI.borderColor,
+	borderRadius: LOPU_UI.radiusSm,
+	_hover: { borderColor: LOPU_UI.faint },
+	_focusVisible: { borderColor: LOPU_UI.ink, boxShadow: 'none' }
+} as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
 	anthropic: 'Anthropic',
@@ -194,28 +220,28 @@ export const LopuModelsEditor = () => {
 	return (
 		<Flex flexDirection="column" rowGap={3}>
 			<Text sx={eyebrow}>Lopu models 🦄</Text>
-			<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
 				The catalog Lopu may think with. A model is offered to people only while it is enabled here and its provider key is set on the server.
 				{providerSummary.length > 0 && (
 					<>
 						{' '}
-						{providerSummary.map(([provider, info]) => `${providerLabel(provider)}: ${info.configured ? 'key set ✓' : 'no key'}`).join(' · ')}
+						{providerSummary.map(([provider, info]) => `${providerLabel(provider)}: ${info.configured ? 'key set' : 'no key'}`).join(' · ')}
 					</>
 				)}
 			</Text>
 
 			{!hasCatalog && loading && (
-				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+				<Text fontSize="xs" color={LOPU_UI.muted}>
 					Loading the catalog…
 				</Text>
 			)}
 			{!hasCatalog && failed && (
-				<Text fontSize="xs" color="red.500">
+				<Text fontSize="xs" color={LOPU_UI.danger}>
 					Could not load the catalog. Seed it below, or try again in a moment.
 				</Text>
 			)}
 			{hasCatalog && catalog.models.length === 0 && (
-				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+				<Text fontSize="xs" color={LOPU_UI.muted}>
 					No models yet — seed the catalog to create one `ai-model` thing per base model.
 				</Text>
 			)}
@@ -230,47 +256,33 @@ export const LopuModelsEditor = () => {
 							columnGap={3}
 							rowGap={1}
 							flexWrap="wrap"
-							padding={2}
-							borderRadius="var(--tt-radius-sm, 9px)"
-							background="var(--tt-surface-alt, #f5f5f7)"
+							px={3}
+							py={2}
+							borderRadius={LOPU_UI.radiusMd}
+							border={LOPU_UI.border}
+							background={LOPU_UI.surfaceAlt}
 							opacity={model.enabled ? 1 : 0.7}
 						>
 							<Box minWidth={0} flex="1 1 200px">
-								<Flex alignItems="center" columnGap={2} flexWrap="wrap">
-									<Text fontSize="sm" fontWeight={600} color="var(--tt-ink, #16161a)" noOfLines={1}>
+								<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
+									<Text fontSize="sm" fontWeight={600} color={LOPU_UI.ink} noOfLines={1}>
 										{model.label}
 									</Text>
-									<Badge fontSize="9px" colorScheme={model.provider === 'anthropic' ? 'purple' : model.provider === 'openai' ? 'green' : 'gray'}>
-										{providerLabel(model.provider)}
-									</Badge>
-									{model.isDefault && (
-										<Badge fontSize="9px" colorScheme="pink">
-											default
-										</Badge>
-									)}
-									{!configured && (
-										<Badge fontSize="9px" colorScheme="orange">
-											needs {providerLabel(model.provider)} key
-										</Badge>
-									)}
+									<Chip>{providerLabel(model.provider)}</Chip>
+									{model.isDefault && <Chip tone="ink">default</Chip>}
+									{!configured && <Chip tone="danger">needs {providerLabel(model.provider)} key</Chip>}
 								</Flex>
-								<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" wordBreak="break-word">
+								<Text fontSize="11px" color={LOPU_UI.muted} wordBreak="break-word" mt="2px">
 									{model.id}
 									{model.efforts.length ? ` · effort ${model.efforts.map((effort) => describeLopuEffort(effort)).join(' / ')}` : ''}
-									{model.speeds.includes('fast') ? ' · fast mode ⚡' : ''}
+									{model.speeds.includes('fast') ? ' · fast mode' : ''}
 								</Text>
 							</Box>
 							<Flex alignItems="center" columnGap={2} marginLeft="auto">
-								<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+								<Text fontSize="xs" color={LOPU_UI.muted}>
 									{model.enabled ? 'On' : 'Off'}
 								</Text>
-								<Switch
-									size="sm"
-									isChecked={model.enabled}
-									isDisabled={busyId === model.id}
-									aria-label={`${model.label} enabled`}
-									onChange={(event) => toggleModel(model, event.target.checked)}
-								/>
+								<LopuToggle checked={model.enabled} disabled={busyId === model.id} label={`${model.label} enabled`} onChange={(next) => toggleModel(model, next)} />
 							</Flex>
 						</Flex>
 					);
@@ -278,21 +290,21 @@ export const LopuModelsEditor = () => {
 			</Flex>
 
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-				<Button size="xs" variant="outline" isLoading={seeding} onClick={seed}>
-					{catalog.models.length ? 'Re-seed catalog 🌱' : 'Seed catalog 🌱'}
+				<Button size="xs" variant="outline" borderColor={LOPU_UI.borderColor} color={LOPU_UI.ink} borderRadius={LOPU_UI.radiusSm} isLoading={seeding} onClick={seed}>
+					{catalog.models.length ? 'Re-seed catalog' : 'Seed catalog'}
 				</Button>
-				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+				<Text fontSize="xs" color={LOPU_UI.muted}>
 					Upserts one `ai-model` thing per base model; your enabled/disabled choices are kept.
 				</Text>
 			</Flex>
 
 			<Text sx={eyebrow}>Chat defaults</Text>
-			<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
 				What every Lopu conversation starts from. Resolved right now: <strong>{resolvedLabel}</strong>
 				{stored.model && stored.model !== catalog.defaults.model ? ` (stored ${stored.model} is unavailable, so the first available model stands in)` : ''}.
 			</Text>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-				<Select size="xs" maxWidth="240px" value={current.model ?? ''} aria-label="Default model" onChange={(event) => pickDefaultModel(event.target.value)}>
+				<Select size="xs" maxWidth="240px" value={current.model ?? ''} aria-label="Default model" sx={selectSx} onChange={(event) => pickDefaultModel(event.target.value)}>
 					{!current.model && (
 						<option value="" disabled>
 							Pick a model…
@@ -312,6 +324,7 @@ export const LopuModelsEditor = () => {
 						maxWidth="160px"
 						value={current.effort ?? ''}
 						aria-label="Default reasoning effort"
+						sx={selectSx}
 						onChange={(event) => setDraft({ ...current, effort: event.target.value || null })}
 					>
 						{currentModel.efforts.map((effort) => (
@@ -327,20 +340,32 @@ export const LopuModelsEditor = () => {
 						maxWidth="140px"
 						value={current.speed ?? 'normal'}
 						aria-label="Default speed"
+						sx={selectSx}
 						onChange={(event) => setDraft({ ...current, speed: normalizeLopuSpeed(event.target.value) })}
 					>
 						{currentModel.speeds.map((speed) => (
 							<option key={speed} value={speed}>
-								{speed === 'fast' ? 'Fast ⚡' : 'Normal'}
+								{speed === 'fast' ? 'Fast' : 'Normal'}
 							</option>
 						))}
 					</Select>
 				)}
-				<Button size="xs" variant="outline" isLoading={savingDefaults} isDisabled={!dirty || !current.model} onClick={saveDefaults}>
-					Save defaults 💾
+				<Button
+					size="xs"
+					variant="solid"
+					bg={LOPU_UI.ink}
+					color={LOPU_UI.card}
+					borderRadius={LOPU_UI.radiusSm}
+					_hover={{ opacity: 0.9 }}
+					_disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
+					isLoading={savingDefaults}
+					isDisabled={!dirty || !current.model}
+					onClick={saveDefaults}
+				>
+					Save defaults
 				</Button>
 				{dirty && (
-					<Button size="xs" variant="ghost" onClick={() => setDraft(null)}>
+					<Button size="xs" variant="ghost" color={LOPU_UI.muted} onClick={() => setDraft(null)}>
 						Discard
 					</Button>
 				)}

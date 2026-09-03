@@ -1,16 +1,21 @@
 import React from 'react';
-import { Box } from '@chakra-ui/react';
+import { Box, Center } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
-import { RAINBOW } from '~/theme/rainbow';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuStreaming, subscribeLopuStore } from './lopuChatStore';
+import { LOPU_UI, lopuRainbowRing } from './lopuTheme';
 import { isLopuTurnActive } from './lopuTurnCore';
 
-// A tiny pulsing rainbow dot shown wherever Lopu is mentioned (the drawer's
-// "Lopu" row, the launcher bubble, the window header) while one of her turns
-// is still streaming. Reads the shared chat store so the badge stays in sync
-// whether the turn was started from the floating window or the /lopu page.
-// Renders nothing while she is idle, so callers can drop it in unconditionally.
+// 🦄 Lopu's identity chrome, shared by every surface so the launcher, the
+// navbar opener, the window header and the page title read as ONE object:
+//
+// - `LopuRingAvatar` — the 🦄 on Lopu's single restrained rainbow ring.
+// - `LopuActivityBadge` — a tiny pulsing dot shown wherever Lopu is mentioned
+//   (the drawer's "Lopu" row, the launcher, the nav button, the window
+//   header) while one of her turns is still streaming. Reads the shared chat
+//   store so the badge stays in sync whether the turn was started from the
+//   floating window or the /lopu page. Renders nothing while she is idle, so
+//   callers can drop it in unconditionally.
 
 const pulse = keyframes`
 	0% { transform: scale(0.85); opacity: 0.55; }
@@ -26,9 +31,24 @@ export const useLopuStreamingActivity = (): boolean => {
 	return React.useSyncExternalStore(subscribeLopuStore, readStreaming, readServerStreaming);
 };
 
+// The 🦄 on a rainbow ring. `size` is the outer diameter (ring included);
+// the inner disc is the card surface so it sits calmly on light and dark.
+export const LopuRingAvatar = (props: { size?: number; ring?: number; className?: string; title?: string }) => {
+	const size = props.size ?? 28;
+	const ring = props.ring ?? 2;
+	const inner = size - ring * 2;
+	return (
+		<Box as="span" className={props.className ?? 'lopuRingAvatar'} aria-hidden={props.title ? undefined : true} title={props.title} sx={lopuRainbowRing(size, ring)}>
+			<Center as="span" width={`${inner}px`} height={`${inner}px`} borderRadius="999px" background={LOPU_UI.card} fontSize={`${Math.round(inner * 0.58)}px`} lineHeight={1}>
+				🦄
+			</Center>
+		</Box>
+	);
+};
+
 export const LopuActivityBadge = (props: {
 	// 'inline' sits in a text row (default); 'corner' pins to the top-right of a
-	// relatively-positioned parent (the launcher bubble)
+	// relatively-positioned parent (the launcher bubble, the nav button)
 	placement?: 'inline' | 'corner';
 	size?: number;
 	label?: string;
@@ -59,11 +79,11 @@ export const LopuActivityBadge = (props: {
 			height={`${size}px`}
 			flexShrink={0}
 			borderRadius="999px"
-			background={RAINBOW}
-			backgroundSize="calc(100px + 200%)"
-			boxShadow="0 0 0 2px var(--tt-card, #ffffff)"
+			background={LOPU_UI.rainbow}
+			boxShadow={`0 0 0 2px ${LOPU_UI.card}`}
 			sx={{
-				animation: `${pulse} 1.4s ease-in-out infinite, var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)`
+				animation: `${pulse} 1.4s ease-in-out infinite`,
+				'@media (prefers-reduced-motion: reduce)': { animation: 'none' }
 			}}
 		/>
 	);

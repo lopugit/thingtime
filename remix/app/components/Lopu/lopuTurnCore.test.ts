@@ -7,12 +7,18 @@ import {
 	buildLopuTimeline,
 	buildUserMessage,
 	chatTitleFromText,
+	decorateLopuTimeline,
+	describeLopuCodeBlock,
+	describeLopuStatusLine,
+	describeLopuTurnMeta,
 	initialLopuTurn,
 	isLopuAssistantMessage,
 	isLopuChatEvent,
 	isOptimisticLopuMessage,
 	isSiteRelativePath,
 	LIVE_PREVIEW_TOOLS,
+	LOPU_TOOL_DETAILS_MAX_CHARS,
+	lopuMessageMeta,
 	markLopuTurnAborted,
 	markLopuTurnFailed,
 	mergeMessages,
@@ -22,6 +28,8 @@ import {
 	reduceLopuTurn,
 	toolLabel,
 	toolLinks,
+	toolRowDetails,
+	toolRowSummary,
 	type LopuChatEvent,
 	type LopuTurnState
 } from './lopuTurnCore.ts';
@@ -273,6 +281,131 @@ test('markdown: an unterminated fence streams as an open code block', () => {
 	assert.deepEqual(blocks[1], { kind: 'code', lang: 'json', text: '{"a":', open: true });
 	assert.deepEqual(parseLopuInlines(''), []);
 	assert.deepEqual(parseLopuMarkdown(''), []);
+});
+
+test('markdown: links are site-relative only — anything else is demoted to plain text', () => {
+	assert.deepEqual(parseLopuInlines('Open [the builder](/builder?page=p1) now'), [
+		{ kind: 'text', text: 'Open ' },
+		{ kind: 'link', text: 'the builder', href: '/builder?page=p1' },
+		{ kind: 'text', text: ' now' }
+	]);
+	assert.deepEqual(parseLopuInlines('See [docs](https://evil.example/x)'), [
+		{ kind: 'text', text: 'See ' },
+		{ kind: 'text', text: 'docs (https://evil.example/x)' }
+	]);
+	assert.deepEqual(parseLopuInlines('[x](//evil.example) and [y](javascript:alert(1))'), [
+		{ kind: 'text', text: 'x (//evil.example)' },
+		{ kind: 'text', text: ' and ' },
+		{ kind: 'text', text: 'y (javascript:alert(1))' }
+	]);
+	// a link inside inline code stays code
+	assert.deepEqual(parseLopuInlines('`[a](/b)`'), [{ kind: 'code', text: '[a](/b)' }]);
+});
+
+test('code blocks describe themselves for the header + copy button', () => {
+	assert.deepEqual(describeLopuCodeBlock({ kind: 'code', lang: 'ts', text: 'const x = 1;\nconst y = 2;\n\n', open: false }), {
+		label: 'TS',
+		clipboardText: 'const x = 1;\nconst y = 2;',
+		copyable: true,
+		lines: 2
+	});
+	const open = describeLopuCodeBlock({ kind: 'code', lang: null, text: '{"a":', open: true });
+	assert.equal(open.label, 'CODE');
+	assert.equal(open.copyable, false, 'a streaming block is not copyable yet');
+	assert.equal(describeLopuCodeBlock({ kind: 'code', lang: 'sh', text: '   ', open: false }).copyable, false);
+	assert.equal(describeLopuCodeBlock({ kind: 'code', lang: 'averyveryverylonglanguage', text: 'x', open: false }).label.length, 12);
+});
+
+test('persisted assistant rows expose their lopu meta (provider, tool calls) defensively', () => {
+	assert.equal(lopuMessageMeta(null), null);
+	assert.equal(lopuMessageMeta({ lopu: 'nope' }), null);
+	const meta = lopuMessageMeta({
+		lopu: {
+			role: 'assistant',
+			model: 'gpt-5',
+			effort: 'high',
+			speed: 'fast',
+			provider: 'vault',
+			providerLabel: 'Acme proxy',
+			usage: { inputTokens: 10, outputTokens: '2' },
+			toolCalls: [{ name: 'create_page', ok: true, summary: 'Created Home', thingId: 'p1' }, { name: '', ok: true }, 'junk', { name: 'get_thing', ok: 'no' }],
+			stopReason: 'end_turn'
+		}
+	});
+	assert.equal(meta?.provider, 'vault');
+	assert.equal(meta?.providerLabel, 'Acme proxy');
+	assert.deepEqual(meta?.usage, { inputTokens: 10 });
+	assert.deepEqual(meta?.toolCalls, [
+		{ name: 'create_page', ok: true, summary: 'Created Home', thingId: 'p1' },
+		{ name: 'get_thing', ok: false, summary: '', thingId: null }
+	]);
+	assert.equal(lopuMessageMeta({ lopu: { provider: 'martian' } })?.provider, null);
+});
+
+test('turn meta and status lines read as one calm line', () => {
+	assert.equal(describeLopuTurnMeta(null), null);
+	assert.equal(describeLopuTurnMeta({ provider: 'fallback', label: null, model: null, effort: null, speed: null }), "from Lopu's little book");
+	assert.equal(describeLopuTurnMeta({ provider: 'claude', label: 'Claude Opus 5', model: 'claude-opus-5', effort: 'high', speed: 'fast' }), 'via Claude Opus 5 · High · Fast');
+	assert.equal(describeLopuTurnMeta({ provider: 'vault', label: null, model: 'gpt-4o', effort: null, speed: null, providerLabel: 'Acme proxy' }), 'via Acme proxy · gpt-4o');
+	assert.equal(describeLopuTurnMeta({ provider: 'vault', label: null, model: null, effort: null, speed: null }), 'via your provider');
+	const base = { model: 'gpt-5', effort: 'high', speed: 'normal', providerId: null, modelLabels: { 'gpt-5': 'GPT-5' }, providerNames: { 'vp-1': 'Acme proxy' } };
+	assert.equal(describeLopuStatusLine(base), 'GPT-5 · High');
+	assert.equal(describeLopuStatusLine({ ...base, speed: 'fast' }), 'GPT-5 · High · Fast');
+	assert.equal(describeLopuStatusLine({ ...base, providerId: 'vp-1' }), 'Acme proxy');
+	assert.equal(describeLopuStatusLine({ ...base, providerId: 'ghost' }), 'Your provider');
+	assert.equal(describeLopuStatusLine({ ...base, streaming: true }), 'Replying…');
+	assert.equal(describeLopuStatusLine({ ...base, streaming: true, listening: true }), 'Listening…');
+	assert.equal(describeLopuStatusLine({ ...base, model: null }), 'Choosing a model');
+	assert.equal(describeLopuStatusLine({ ...base, model: null, modelLabels: {} }), 'Ready');
+});
+
+test('tool rows: a one-line summary and a bounded details drawer', () => {
+	const turn = fold([
+		META,
+		{ type: 'tool_use_start', id: 't1', name: 'create_component' },
+		{ type: 'tool_input_delta', id: 't1', name: 'create_component', partial: '{"name":"Ca' },
+		{ type: 'tool_use', id: 't1', name: 'create_component', input: { name: 'Card', render: { tag: 'div' } } },
+		{ type: 'tool_result', id: 't1', name: 'create_component', ok: true, summary: 'Created Card\nwith two props', data: { thing: { id: 'c1' } } }
+	]);
+	const [tool] = turn.tools;
+	assert.equal(toolRowSummary(tool), 'Created Card');
+	const details = toolRowDetails(tool);
+	assert.equal(details.hasDetails, true);
+	assert.equal(details.input, JSON.stringify({ name: 'Card', render: { tag: 'div' } }, null, 2));
+	assert.ok(details.result?.includes('"summary": "Created Card\\nwith two props"'));
+	// streaming: the partial fragment stands in for the input
+	const streaming = fold([META, { type: 'tool_input_delta', id: 't2', name: 'patch_page', partial: '{"ops":[' }]);
+	assert.equal(toolRowDetails(streaming.tools[0]).input, '{"ops":[');
+	assert.equal(toolRowSummary(streaming.tools[0]), '');
+	assert.equal(toolRowSummary({ name: 'get_thing', status: 'error', result: null }), 'This step did not finish.');
+	const long = toolRowSummary({ name: 'x', status: 'ok', result: { ok: true, summary: 'y'.repeat(400) } });
+	assert.equal(long.length, 140);
+	assert.ok(long.endsWith('…'));
+	const huge = toolRowDetails({ input: { blob: 'z'.repeat(LOPU_TOOL_DETAILS_MAX_CHARS * 2) }, partialInput: '', result: null });
+	assert.ok(huge.input!.length < LOPU_TOOL_DETAILS_MAX_CHARS + 32);
+	assert.ok(huge.input!.endsWith('… (truncated)'));
+	assert.equal(toolRowDetails({ input: null, partialInput: '', result: null }).hasDetails, false);
+});
+
+test('the timeline decorates same-author runs and time gaps for drawing', () => {
+	const at = (ms: number) => new Date(ms).toISOString();
+	const user = (id: string, ms: number) => ({ ...buildUserMessage(initialLopuTurn({ requestId: id, userText: id, startedAt: ms }), 'u1', 'chat-1'), id, createdAt: at(ms) });
+	const lopu = (id: string, ms: number) => ({ ...user(id, ms), externalSource: { provider: 'lopu', role: 'assistant' } as any });
+	const T0 = Date.UTC(2026, 8, 3, 10, 0, 0);
+	const messages = [user('u1', T0), user('u2', T0 + 30_000), lopu('a1', T0 + 60_000), lopu('a2', T0 + 90_000), user('u3', T0 + 40 * 60_000), lopu('a3', T0 + 41 * 60_000)];
+	const rows = decorateLopuTimeline(buildLopuTimeline(messages, [], 'u1'), { now: T0 + 3_600_000, format: (value) => `sep:${(value - T0) / 60_000}` });
+	assert.deepEqual(
+		rows.map((row) => `${row.role}:${row.first ? 'F' : '-'}${row.last ? 'L' : '-'}${row.separator ? `[${row.separator}]` : ''}`),
+		['user:F-[sep:0]', 'user:-L', 'assistant:F-', 'assistant:-L', 'user:FL[sep:40]', 'assistant:FL']
+	);
+	// a session turn sits in the assistant run right after its user row
+	const turn = fold([{ ...META, userMessageId: 'u3' }, { type: 'delta', text: 'hi' }], initialLopuTurn({ requestId: 'r3', userText: 'u3', startedAt: T0 + 40 * 60_000 + 500 }));
+	const withTurn = decorateLopuTimeline(buildLopuTimeline(messages.slice(0, 5), [turn], 'u1'), { now: T0 + 3_600_000, format: () => 'sep' });
+	const last = withTurn[withTurn.length - 1];
+	assert.equal(last.item.kind, 'turn');
+	assert.equal(last.first, true);
+	assert.equal(last.separator, null);
+	assert.deepEqual(decorateLopuTimeline([]), []);
 });
 
 test('optimistic messages: user row re-keys after meta, assistant rows prefer the persisted segments', () => {

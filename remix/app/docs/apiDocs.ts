@@ -2524,7 +2524,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu model catalog',
     endpoint: '/api/v1/ai/models',
-    summary: 'Lists every AI model Lopu can chat with, its availability, and the resolved chat defaults.',
+    featureVersion: '1.1.0',
+    summary: 'Lists every AI model Lopu can chat with, its availability, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
@@ -2535,17 +2536,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'model when it is available, else the first available model in catalog order with its effort clamped (preferring high), ' +
       'else `model: null` when no provider is configured (Lopu then answers from the canned fallback). `providers` reports key ' +
       'presence only; no value ever leaves the server. Model ids compose into the same `<model>[:effort][:fast]` option ids ' +
-      'the AI workflow waterfall stores, and the chat reply endpoint accepts either form.',
+      'the AI workflow waterfall stores, and the chat reply endpoint accepts either form. A signed-in viewer additionally ' +
+      'receives `vaultProviders` — their own Secure Vault AI connections (Settings → Secure Vault), redacted to ' +
+      '{ id, name, kind, model, endpointHost, available, reason? }: never a token and never an endpoint beyond its hostname; ' +
+      '`available` is false (with a reason) when the vault key is not configured, the host is outside the server allowlist, ' +
+      'or the connection has no model — and `vault: { configured }`. Anonymous callers get an empty list. Send a ' +
+      'connection’s id as providerId to /api/v1/lopu/chats (pin it to a conversation) or /api/v1/lopu/chats/reply (run a ' +
+      'turn on it) — the turn then runs on the caller’s own provider instead of the server keys.',
     auth: {
       mode: 'optional',
-      description: 'Public. A session, when present, only keys the ai.models rate limit by user instead of by IP.'
+      description: 'Public. A session, when present, keys the ai.models rate limit by user instead of by IP and unlocks vaultProviders.'
     },
     methods: ['GET'],
     steps: [
       'GET to load the catalog before rendering a model picker (cache it locally; the list carries no secrets).',
       'Offer only models with available: true; show the rest disabled with a "needs <provider> key" hint.',
       'Seed a new conversation from defaults (model, effort, speed); a null model means no provider is configured.',
-      'Send the chosen model as { model, effort, speed } or as a composed id such as claude-opus-5:high:fast.'
+      'Send the chosen model as { model, effort, speed } or as a composed id such as claude-opus-5:high:fast.',
+      'For a session, list vaultProviders ("Your own providers") beside the catalog; send one as providerId to pin it to a chat or run a turn on it, and show reason for an unavailable one.'
     ],
     requestExamples: [{ name: 'Load the catalog', description: 'Read every model with availability and defaults.', method: 'GET' }],
     responseExamples: [
@@ -2579,12 +2587,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             }
           ],
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
-          providers: { anthropic: { configured: true }, openai: { configured: false } }
+          providers: { anthropic: { configured: true }, openai: { configured: false } },
+          vaultProviders: [
+            { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'My Claude', kind: 'anthropic', model: 'claude-sonnet-4-6', endpointHost: 'api.anthropic.com', available: true },
+            {
+              id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+              name: 'Home lab',
+              kind: 'compatible',
+              model: 'llama-3.3-70b',
+              endpointHost: 'llm.example.com',
+              available: false,
+              reason: 'This endpoint host is not enabled by the Thingtime administrator.'
+            }
+          ],
+          vault: { configured: true }
         }
       },
       { status: 429, description: 'Rate limited (ai.models).', body: { ok: false, error: 'The model catalog is being read too quickly — try again in a moment 🦄' } }
     ],
-    notes: ['Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.']
+    notes: [
+      'Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.',
+      'vaultProviders is empty for anonymous callers and when the Secure Vault key is not configured; a vault read failure degrades to an empty list, never a failed catalog.'
+    ]
   }),
   endpoint({
     id: 'admin-ai-models',
@@ -3855,6 +3879,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu conversations',
     endpoint: '/api/v1/lopu/chats',
+    featureVersion: '1.1.0',
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
@@ -3864,8 +3889,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'one: title (defaults to "Lopu") plus the model settings the conversation should use — model (a catalog ' +
       'model id or a composed id such as claude-opus-5:high:fast), effort and speed are validated against the ' +
       'model catalog; omitted or null fields mean "catalog default", which the reply route resolves through the ' +
-      'admin defaults and provider availability on every turn. Lopu’s replies are rows owned by the caller that ' +
-      'carry a read-only assistant externalSource; the user’s own rows stay editable and deletable.',
+      'admin defaults and provider availability on every turn. `providerId` pins one of the caller’s own Secure Vault ' +
+      'AI connections (see vaultProviders on /api/v1/ai/models) so turns run on it instead of the server keys — it must be ' +
+      'the caller’s own (400 otherwise), null means Thingtime’s models — and every list/get entry carries the chat’s ' +
+      'settings under `lopu` ({ model, effort, speed, providerId, turns, lastModel }). Lopu’s replies are rows owned by ' +
+      'the caller that carry a read-only assistant externalSource; the user’s own rows stay editable and deletable.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token. POST bodies must be application/json.'
@@ -3873,10 +3901,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with credentials to list Lopu conversations (limit caps the page, default 100, max 300).',
-      'POST { title?, model?, effort?, speed? } with Content-Type: application/json to start a conversation.',
+      'POST { title?, model?, effort?, speed?, providerId? } with Content-Type: application/json to start a conversation.',
       'Use chat.id from the response as chatId for /api/v1/lopu/chats/reply, /update and /delete.',
       'Read the transcript through /api/v1/chats/messages?chatId= like any other chat.',
-      'Handle 400 for an unknown model or an effort/speed the model does not offer, and 415 for a non-JSON body.'
+      'Handle 400 for an unknown model, an effort/speed the model does not offer, or a providerId that is not one of your vault connections, and 415 for a non-JSON body.'
     ],
     requestExamples: [
       {
@@ -3927,21 +3955,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Update Lopu conversation',
     endpoint: '/api/v1/lopu/chats/update',
-    summary: 'Renames a Lopu conversation or retunes its model, effort and speed.',
+    featureVersion: '1.1.0',
+    summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider.',
     detail:
-      'POST { chatId, title?, model?, effort?, speed? }. Only the conversation’s member (its owner) may update it. ' +
+      'POST { chatId, title?, model?, effort?, speed?, providerId? }. Only the conversation’s member (its owner) may update it. ' +
       'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
       'segments, null resets a field to the catalog default, and an effort or speed the chosen model does not ' +
-      'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). Unlike ' +
-      '/api/v1/chats/update no system message is inserted — the conversation is a private notebook, not a room.',
+      'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). ' +
+      '`providerId` pins one of the caller’s own Secure Vault AI connections (400 when it is not theirs); null returns the ' +
+      'conversation to Thingtime’s models. Unlike /api/v1/chats/update no system message is inserted — the conversation ' +
+      'is a private notebook, not a room.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token. Bodies must be application/json.'
     },
     methods: ['POST'],
     steps: [
-      'POST the chatId with any of title, model, effort, or speed.',
-      'Send null to reset model, effort, or speed to the catalog default.',
+      'POST the chatId with any of title, model, effort, speed, or providerId.',
+      'Send null to reset model, effort, or speed to the catalog default, or providerId: null to leave your own provider.',
       'Expect 400 when nothing changes, the title is empty, or the model rejects the effort/speed.',
       'Read the updated settings back from the returned chat entry or GET /api/v1/lopu/chats.'
     ],
@@ -4024,9 +4055,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu reply stream',
     endpoint: '/api/v1/lopu/chats/reply',
+    featureVersion: '1.1.0',
     summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
-      'POST { chatId?, text, requestId, model?, effort?, speed?, context? }. The user turn is persisted first (omit chatId to start a ' +
+      'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
       'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
       '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
@@ -4039,7 +4071,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings, and ' +
       'when no provider is configured the reply is an honest canned line. A provider that fails before emitting anything falls ' +
       'through to the other configured provider; the assistant turn is persisted even when the stream errors or the client ' +
-      'disconnects. Limits per reply: 12 model hops, 24 tool executions, 240 seconds, 96KB per tool input.',
+      'disconnects. `providerId` runs the turn on one of the caller’s own Secure Vault AI connections (vaultProviders on ' +
+      '/api/v1/ai/models) instead of the server keys: an explicit id must be the caller’s own (400 before anything is persisted) ' +
+      'and becomes the chat’s setting (null clears it); a chat’s stored id is honoured on every turn and dropped if the ' +
+      'connection was deleted. On a vault turn meta carries provider "vault" and providerLabel (the connection’s name), model is ' +
+      'the connection’s own, tools ride native function calling on known vendors and the fenced tt-tool protocol on a custom ' +
+      'compatible host, and the endpoint is fenced like the voice turn (server allowlist, fresh public DNS, no redirects). A ' +
+      'failure of the caller’s provider surfaces as an error event with a friendly message followed by the canned line — the ' +
+      'server keys are never used as a fallback for a vault turn. Limits per reply: 12 model hops, 24 tool executions, 240 ' +
+      'seconds, 96KB per tool input.',
     auth: {
       mode: 'session',
       description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json and at most 256KB.'
@@ -4050,7 +4090,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Read the response line by line; each line is one JSON event and meta always comes first.',
       'Append delta.text values; render tool_use_start/tool_result as activity; apply patch.ops to the open builder draft.',
       'Treat done as the end of the turn — it carries assistantMessageId and the persisted messages.',
-      'Reuse of a requestId answers 409; 429 means the lopu.chat budget (40 replies per 10 minutes) is spent.'
+      'Reuse of a requestId answers 409; 429 means the lopu.chat budget (40 replies per 10 minutes) is spent — vault turns count against the same budget.',
+      'Send providerId (a vaultProviders id from /api/v1/ai/models) to run the turn on your own provider; expect 400 for an id that is not yours and an error event + canned line when your provider fails.'
     ],
     requestExamples: [
       {
@@ -4101,8 +4142,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     notes: [
-      'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed.',
-      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.'
+      'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
+      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
+      'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
     ]
   }),
   endpoint({

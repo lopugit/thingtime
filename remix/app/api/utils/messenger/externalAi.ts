@@ -169,7 +169,7 @@ export const publicExternalAiSource = (value: unknown): PublicExternalAiSource |
 // UI can render tool-activity cards for historical turns. The sanitiser is
 // the stored shape too: whatever the reply route hands over is bounded here
 // once, on the way in, and read back verbatim.
-export const LOPU_TURN_PROVIDERS = ['claude', 'openai', 'test', 'fallback'] as const;
+export const LOPU_TURN_PROVIDERS = ['claude', 'openai', 'vault', 'test', 'fallback'] as const;
 export type LopuTurnProvider = (typeof LOPU_TURN_PROVIDERS)[number];
 export const LOPU_MAX_TOOL_CALLS = 20;
 export const LOPU_TOOL_SUMMARY_MAX_CHARS = 240;

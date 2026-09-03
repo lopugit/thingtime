@@ -33,6 +33,8 @@ import {
 	selectLopuChat,
 	selectLopuChatSummary,
 	selectLopuMessages,
+	selectLopuModelLabels,
+	selectLopuProviderNames,
 	selectLopuStreaming,
 	selectLopuTurnsForChat,
 	sendLopuMessage,
@@ -42,8 +44,11 @@ import {
 	takeLopuNotices,
 	undoLopuPatch,
 	type AiModelPublic,
+	type LopuChatDefaults,
 	type LopuChatSettings,
 	type LopuChatSummary,
+	type LopuVaultInfo,
+	type LopuVaultProvider,
 	type SendLopuResult
 } from './lopuChatStore';
 import type { LopuReplyContext } from './lopuChatStream';
@@ -126,10 +131,18 @@ export type UseLopuChat = {
 	models: AiModelPublic[];
 	modelsLoading: boolean;
 	modelsLoaded: boolean;
-	defaults: LopuChatSettings | null;
+	defaults: LopuChatDefaults | null;
+	// the viewer's own Secure Vault providers (metadata only) + vault status
+	vaultProviders: LopuVaultProvider[];
+	vault: LopuVaultInfo | null;
+	// { model, effort, speed, providerId } — providerId (a vault provider) wins
 	settings: LopuChatSettings;
 	setSettings: (patch: Partial<LopuChatSettings>) => void;
+	// id → label / name lookups for status lines
+	modelLabels: Record<string, string>;
+	providerNames: Record<string, string>;
 	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean };
+	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean }>) => void;
 	contextLabel: string | null;
 	undoPatch: (toolId: string) => boolean;
 	canUndoPatch: (toolId: string) => boolean;
@@ -143,7 +156,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice } = useLopuSettings();
+	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const contextLabel = useActiveDraftLabel();
@@ -222,10 +235,22 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const setSettings = React.useCallback(
 		(patch: Partial<LopuChatSettings>) => {
 			setLopuSettings(patch);
+			// the catalog choice is also the viewer's preference (settings.lopu.*);
+			// a provider-only change is per chat and leaves the preference alone
+			if (!('model' in patch || 'effort' in patch || 'speed' in patch)) return;
 			const next = getLopuStoreSnapshot().settings;
 			setModelChoice({ model: next.model, effort: next.effort, speed: next.speed === 'fast' || next.speed === 'normal' ? next.speed : null });
 		},
 		[setModelChoice]
+	);
+
+	const setPreferences = React.useCallback(
+		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean }>) => {
+			if (typeof patch.enterSends === 'boolean') setEnterSends(patch.enterSends);
+			if (typeof patch.applyPatches === 'boolean') setApplyPatches(patch.applyPatches);
+			if (typeof patch.confirmDeletes === 'boolean') setConfirmDeletes(patch.confirmDeletes);
+		},
+		[setEnterSends, setApplyPatches, setConfirmDeletes]
 	);
 
 	const selectChat = React.useCallback((chatId: string | null) => selectLopuChat(chatId), []);
@@ -234,6 +259,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messages = React.useMemo(() => selectLopuMessages(snapshot, activeChatId), [snapshot, activeChatId]);
 	const turns = React.useMemo(() => selectLopuTurnsForChat(snapshot, activeChatId), [snapshot, activeChatId]);
 	const timeline = React.useMemo(() => buildLopuTimeline(messages, turns, userId || ''), [messages, turns, userId]);
+	const modelLabels = React.useMemo(() => selectLopuModelLabels(snapshot), [snapshot]);
+	const providerNames = React.useMemo(() => selectLopuProviderNames(snapshot), [snapshot]);
 	const streamingAny = selectLopuStreaming(snapshot);
 	const streaming = streamingAny && streamingAny.chatId === activeChatId ? streamingAny : null;
 
@@ -258,9 +285,14 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		modelsLoading: snapshot.modelsLoading,
 		modelsLoaded: snapshot.modelsLoaded,
 		defaults: snapshot.defaults,
+		vaultProviders: snapshot.vaultProviders,
+		vault: snapshot.vault,
 		settings: snapshot.settings,
 		setSettings,
+		modelLabels,
+		providerNames,
 		preferences: { applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes },
+		setPreferences,
 		contextLabel,
 		undoPatch: undoLopuPatch,
 		canUndoPatch: canUndoLopuPatch,

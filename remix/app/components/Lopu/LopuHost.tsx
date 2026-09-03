@@ -1,14 +1,18 @@
 import React from 'react';
 import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { useLocation, useNavigate } from 'react-router';
-import { ChevronDown, Maximize2, Minus, X } from 'lucide-react';
+import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 
-import { LopuActivityBadge } from './LopuActivityBadge';
+import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
+import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
+import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
 import {
 	LOPU_LAUNCHER_BOTTOM_INSET,
 	LOPU_LAUNCHER_INSET,
 	LOPU_LAUNCHER_SIZE,
+	LOPU_VOICE_PATH,
 	LOPU_WINDOW_MARGIN,
 	LOPU_WINDOW_MIN_SIZE,
 	clampLopuLauncherPosition,
@@ -27,6 +31,7 @@ import {
 	useLopuSettings,
 	writeLopuLauncherPosition,
 	writeLopuWindowGeometry,
+	type LopuCatalog,
 	type LopuDock,
 	type LopuPoint,
 	type LopuViewport,
@@ -35,15 +40,16 @@ import {
 import { LOPU_LAUNCHER_Z, LOPU_WINDOW_Z, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { startPointerGesture } from '../Thingtime/EditorSplit';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
-import { RAINBOW } from '~/theme/rainbow';
 import { shouldIgnoreGlobalKeydown } from '~/utils/editableTarget';
 
 // 🦄 The global floating Lopu: a draggable launcher bubble (bottom-right,
 // stacked above DevKit) and a draggable / resizable / dockable chat window
 // that renders the same LopuChatView as the /lopu page (they share one chat
-// store, so a conversation continues wherever you open it). Mounted once from
-// root.tsx after DrawerSystem; hidden on /lopu itself and when the user turns
-// the launcher off in settings.
+// store, so a conversation continues wherever you open it). The window's
+// mic flips it into voice mode with the same LopuVoiceSurface the page
+// uses. Mounted once from root.tsx after DrawerSystem; hidden on /lopu*
+// itself. The launcher setting hides the bubble only — the navbar's
+// LopuNavButton can still open the window.
 //
 // Layering: LOPU_WINDOW_Z sits with the floating editor windows (above the
 // drawer panel, below a hovered drawer, popups and modals); LOPU_LAUNCHER_Z
@@ -53,8 +59,11 @@ import { shouldIgnoreGlobalKeydown } from '~/utils/editableTarget';
 // Lopu appears.
 
 const DRAG_THRESHOLD_PX = 4;
-const HEADER_HEIGHT_PX = 44;
+const HEADER_HEIGHT_PX = 48;
 const DOCK_HANDLE_PX = 6;
+// below this width the header drops the model chip (the status line still names the model)
+const CHIP_MIN_WINDOW_WIDTH = 380;
+const SHEET_DISMISS_PX = 120;
 
 const readViewport = (): LopuViewport => ({
 	width: typeof window === 'undefined' ? 1 : window.innerWidth,
@@ -65,11 +74,11 @@ const isControlTarget = (target: EventTarget | null): boolean => {
 	return !!(target as Element | null)?.closest?.('[data-lopu-control]');
 };
 
-const RAINBOW_TEXT_SX = {
-	WebkitBackgroundClip: 'text',
-	backgroundClip: 'text',
-	WebkitTextFillColor: 'transparent'
-} as const;
+const launcherPulse = keyframes`
+	0% { transform: scale(0.92); opacity: 0.8; }
+	70% { transform: scale(1.4); opacity: 0; }
+	100% { transform: scale(1.4); opacity: 0; }
+`;
 
 // Render errors inside the chat view must never take the whole app shell
 // down with them (LopuHost lives in root.tsx).
@@ -91,7 +100,7 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 					<Text fontSize="sm" fontWeight={600}>
 						Lopu tripped over her horn 🌧️
 					</Text>
-					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+					<Text fontSize="xs" color={LOPU_UI.muted}>
 						{this.state.error.message || 'Something went wrong while drawing the chat.'}
 					</Text>
 					<Button size="xs" variant="outline" onClick={() => this.setState({ error: null })}>
@@ -104,38 +113,39 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 	}
 }
 
-const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode }) => (
+const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean }) => (
 	<Center
 		as="button"
 		type="button"
 		data-lopu-control
 		aria-label={props.title}
+		aria-pressed={props.active}
 		title={props.title}
-		width="26px"
-		height="26px"
+		width="28px"
+		height="28px"
 		flexShrink={0}
-		borderRadius="var(--tt-radius-xs, 7px)"
-		color="var(--tt-muted, #9a9aa6)"
 		cursor="pointer"
-		transition="background 0.15s ease, color 0.15s ease"
-		_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
+		background={props.active ? LOPU_UI.surfaceAlt : 'transparent'}
+		sx={{ ...lopuIconButtonSx, color: props.active ? LOPU_UI.ink : LOPU_UI.muted }}
+		_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '1px' }}
 		onClick={props.onClick}
 	>
 		{props.children}
 	</Center>
 );
 
-// The header's model chip: shows the effective choice, opens a small in-window
+// The header's model chip: shows the effective model, opens a small in-window
 // picker (a plain absolutely-positioned list — Chakra's portal menus would
 // layer beneath the window's z rung).
-const ModelChip = (props: { active: boolean }) => {
+const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean }) => {
+	const { catalog, hasCatalog } = props;
 	const { settings, setModelChoice } = useLopuSettings();
-	const { catalog, hasCatalog } = useLopuModelCatalog(props.active);
 	const [menuOpen, setMenuOpen] = React.useState(false);
 	const menuRef = useOutsideTapClose<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
 
 	const choice = resolveLopuModelChoice(catalog, settings);
-	const label = describeLopuModelChoice(catalog, settings);
+	const model = findLopuCatalogModel(catalog, choice.model);
+	const label = model?.label ?? (choice.model ? choice.model : catalog.models.length ? 'No model' : 'Auto');
 
 	return (
 		<Box ref={menuRef} position="relative" data-lopu-control minWidth={0}>
@@ -147,18 +157,20 @@ const ModelChip = (props: { active: boolean }) => {
 				title={hasCatalog ? 'Choose the model Lopu thinks with' : 'Model'}
 				alignItems="center"
 				columnGap={1}
-				maxWidth="160px"
+				maxWidth="128px"
 				paddingX={2}
 				height="24px"
 				borderRadius="999px"
-				border="1px solid var(--tt-border, #ececef)"
-				background="var(--tt-surface-alt, #f5f5f7)"
-				color="var(--tt-muted, #5a5a66)"
+				border={LOPU_UI.border}
+				background={LOPU_UI.surfaceAlt}
+				color={LOPU_UI.muted}
 				cursor="pointer"
-				_hover={{ color: 'var(--tt-ink, #16161a)', borderColor: 'var(--tt-faint, #b6b6c0)' }}
+				transition={`color ${LOPU_UI.transitionFast}, border-color ${LOPU_UI.transitionFast}`}
+				_hover={{ color: LOPU_UI.ink, borderColor: LOPU_UI.faint }}
+				_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '1px' }}
 				onClick={() => setMenuOpen((prev) => !prev)}
 			>
-				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.04em" noOfLines={1} wordBreak="break-all">
+				<Text fontSize={LOPU_UI.fontTiny} fontWeight={600} noOfLines={1} wordBreak="break-all">
 					{label}
 				</Text>
 				<ChevronDown size={11} strokeWidth={2} />
@@ -176,22 +188,22 @@ const ModelChip = (props: { active: boolean }) => {
 					maxHeight="280px"
 					overflowY="auto"
 					padding={1}
-					background="var(--tt-card, #ffffff)"
-					border="1px solid var(--tt-border, #ececef)"
-					borderRadius="var(--tt-radius-md, 12px)"
-					boxShadow="var(--tt-shadow-panel, 0 18px 50px rgba(20,20,40,0.18))"
+					background={LOPU_UI.card}
+					border={LOPU_UI.border}
+					borderRadius={LOPU_UI.radiusMd}
+					boxShadow={LOPU_UI.shadowFloating}
 				>
 					{catalog.models.length === 0 && (
-						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" padding={2}>
+						<Text fontSize="xs" color={LOPU_UI.muted} padding={2}>
 							{hasCatalog ? 'No models in the catalog yet.' : 'Loading models…'}
 						</Text>
 					)}
-					{catalog.models.map((model) => {
-						const selected = choice.model === model.id;
-						const disabled = !model.available;
+					{catalog.models.map((entry) => {
+						const selected = choice.model === entry.id;
+						const disabled = !entry.available;
 						return (
 							<Flex
-								key={model.id}
+								key={entry.id}
 								as="button"
 								type="button"
 								role="option"
@@ -202,32 +214,32 @@ const ModelChip = (props: { active: boolean }) => {
 								textAlign="left"
 								paddingX={2}
 								paddingY="6px"
-								borderRadius="var(--tt-radius-sm, 9px)"
+								borderRadius={LOPU_UI.radiusSm}
 								opacity={disabled ? 0.45 : 1}
 								cursor={disabled ? 'not-allowed' : 'pointer'}
-								background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
-								_hover={disabled ? undefined : { background: 'var(--tt-surface-hover, #ececee)' }}
-								title={disabled ? (model.enabled ? `needs ${model.provider} key` : 'disabled by an admin') : undefined}
+								background={selected ? LOPU_UI.surfaceAlt : 'transparent'}
+								_hover={disabled ? undefined : { background: LOPU_UI.surfaceHover }}
+								title={disabled ? (entry.enabled ? `needs ${entry.provider} key` : 'disabled by an admin') : undefined}
 								onClick={() => {
 									if (disabled) {
 										return;
 									}
-									setModelChoice({ model: model.id, effort: preferredLopuEffort(model, catalog.defaults.effort), speed: null });
+									setModelChoice({ model: entry.id, effort: preferredLopuEffort(entry, catalog.defaults.effort), speed: null });
 									setMenuOpen(false);
 								}}
 							>
 								<Box minWidth={0} flex="1">
-									<Text fontSize="xs" fontWeight={selected ? 700 : 500} noOfLines={1}>
-										{model.label}
+									<Text fontSize="xs" fontWeight={selected ? 700 : 500} noOfLines={1} color={LOPU_UI.ink}>
+										{entry.label}
 									</Text>
-									<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
-										{model.provider}
-										{disabled ? (model.enabled ? ` · needs ${model.provider} key` : ' · disabled') : ''}
-										{model.isDefault ? ' · default' : ''}
+									<Text fontSize="10px" color={LOPU_UI.muted} noOfLines={1}>
+										{entry.provider}
+										{disabled ? (entry.enabled ? ` · needs ${entry.provider} key` : ' · disabled') : ''}
+										{entry.isDefault ? ' · default' : ''}
 									</Text>
 								</Box>
 								{selected && (
-									<Text fontSize="xs" flexShrink={0}>
+									<Text fontSize="xs" flexShrink={0} color={LOPU_UI.ink}>
 										✓
 									</Text>
 								)}
@@ -242,15 +254,15 @@ const ModelChip = (props: { active: boolean }) => {
 							paddingX={2}
 							paddingY="6px"
 							marginTop={1}
-							borderTop="1px solid var(--tt-border, #ececef)"
+							borderTop={LOPU_UI.border}
 							cursor="pointer"
-							_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+							_hover={{ background: LOPU_UI.surfaceHover }}
 							onClick={() => {
 								setModelChoice({ model: null, effort: null, speed: null });
 								setMenuOpen(false);
 							}}
 						>
-							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+							<Text fontSize="xs" color={LOPU_UI.muted}>
 								Use the catalog default
 							</Text>
 						</Flex>
@@ -266,7 +278,7 @@ const ModelChip = (props: { active: boolean }) => {
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed } =
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe } =
 		useLopuSettings();
 	const { catalog, hasCatalog } = useLopuModelCatalog(true);
 	const choice = resolveLopuModelChoice(catalog, settings);
@@ -278,7 +290,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			{renderRow(
 				'Floating Lopu 🦄',
 				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show the floating Lopu bubble" />,
-				'Show the draggable Lopu bubble on every page'
+				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens her either way)'
 			)}
 			{renderRow(
 				'Window docking',
@@ -305,6 +317,16 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				'Enter sends',
 				<Switch isChecked={settings.enterSends} onChange={(event) => setEnterSends(event.target.checked)} aria-label="Enter sends the message" />,
 				'Enter sends your message and Shift+Enter adds a line'
+			)}
+			{renderRow(
+				'Spoken replies',
+				<Switch isChecked={settings.spokenReplies} onChange={(event) => setSpokenReplies(event.target.checked)} aria-label="Spoken replies" />,
+				'Voice mode reads Lopu’s replies aloud (off: text only)'
+			)}
+			{renderRow(
+				'Transcribe mode',
+				<Switch isChecked={settings.transcribe} onChange={(event) => setTranscribe(event.target.checked)} aria-label="Transcribe mode" />,
+				'Voice mode saves each utterance as a private transcript page and quotes it back instead of asking Lopu'
 			)}
 			{renderRow(
 				'Preferred model',
@@ -355,20 +377,33 @@ export const LopuHost = () => {
 	const navigate = useNavigate();
 	const isMobile = useIsMobileViewport();
 	const { settings, open, setOpen, toggleOpen, setDock } = useLopuSettings();
+	const streaming = useLopuStreamingActivity();
 
 	const [viewport, setViewport] = React.useState<LopuViewport>(readViewport);
 	const [launcherRaw, setLauncherRaw] = React.useState<LopuPoint | null>(readLopuLauncherPosition);
 	const [windowRaw, setWindowRaw] = React.useState<Partial<LopuWindowGeometry> | null>(readLopuWindowGeometry);
-	const [gesture, setGesture] = React.useState<'launcher' | 'move' | 'resize' | null>(null);
+	const [gesture, setGesture] = React.useState<'launcher' | 'move' | 'resize' | 'sheet' | null>(null);
 	const [minimised, setMinimised] = React.useState(false);
+	const [voiceMode, setVoiceMode] = React.useState(false);
+	const [voicePhase, setVoicePhase] = React.useState<LopuVoicePhase>('idle');
+	const [sheetOffset, setSheetOffset] = React.useState(0);
 
 	const windowRef = React.useRef<HTMLDivElement | null>(null);
 	const launcherRef = React.useRef<HTMLButtonElement | null>(null);
 	// a drag that moved past the threshold must not also count as a click
 	const launcherMovedRef = React.useRef(false);
 
-	const hidden = isLopuHostHiddenOnPath(pathname) || !settings.launcher;
+	// the /lopu page IS the chat: nothing floats there. The launcher setting
+	// hides the bubble only — the window still follows `open` (the navbar
+	// 🦄 toggles it)
+	const hiddenOnPath = isLopuHostHiddenOnPath(pathname);
+	const showLauncher = !hiddenOnPath && settings.launcher;
+	const showWindow = !hiddenOnPath && open;
+	const showSheet = showWindow && isMobile;
+	const showFrame = showWindow && !isMobile;
 	const docked = settings.dock !== 'free';
+
+	const { catalog, hasCatalog } = useLopuModelCatalog(showWindow);
 
 	// keep both surfaces on screen when the viewport changes
 	React.useEffect(() => {
@@ -378,20 +413,19 @@ export const LopuHost = () => {
 		return () => window.removeEventListener('resize', onResize);
 	}, []);
 
-	// a fresh open always starts expanded
+	// a fresh open always starts expanded, in chat mode
 	React.useEffect(() => {
 		if (!open) {
 			setMinimised(false);
+			setVoiceMode(false);
+			setVoicePhase('idle');
+			setSheetOffset(0);
 		}
 	}, [open]);
 
 	const launcherPos = launcherRaw ? clampLopuLauncherPosition(launcherRaw, viewport) : null;
 	const freeGeometry = resolveLopuWindowGeometry(windowRaw, viewport, launcherPos);
 	const geometry = docked ? dockedLopuWindowGeometry(settings.dock as Exclude<LopuDock, 'free'>, freeGeometry.width, viewport) : freeGeometry;
-
-	const showWindow = !hidden && open;
-	const showSheet = showWindow && isMobile;
-	const showFrame = showWindow && !isMobile;
 
 	// Escape closes the window — from inside it, or from anywhere on the page
 	// that is not a text field (a caret in a page input keeps its Escape).
@@ -407,8 +441,9 @@ export const LopuHost = () => {
 			if (!inside && shouldIgnoreGlobalKeydown(event)) {
 				return;
 			}
-			// an open menu/picker inside the window (model chip, composer
-			// picker) owns this Escape — it closes the menu, not the window
+			// an open menu/picker/popover inside the window (model chip,
+			// composer picker, voice gear) owns this Escape — it closes the
+			// menu, not the window
 			if (windowRef.current?.querySelector('[aria-expanded="true"]')) {
 				return;
 			}
@@ -436,12 +471,17 @@ export const LopuHost = () => {
 
 	const openFull = React.useCallback(() => {
 		setOpen(false);
-		navigate('/lopu');
-	}, [navigate, setOpen]);
+		navigate(voiceMode ? LOPU_VOICE_PATH : '/lopu');
+	}, [navigate, setOpen, voiceMode]);
 
 	const close = React.useCallback(() => {
 		setOpen(false);
 	}, [setOpen]);
+
+	const toggleVoice = React.useCallback(() => {
+		setMinimised(false);
+		setVoiceMode((prev) => !prev);
+	}, []);
 
 	// launcher: drag to reposition (persisted per device), click to toggle
 	const onLauncherPointerDown = React.useCallback((event: React.PointerEvent) => {
@@ -630,9 +670,51 @@ export const LopuHost = () => {
 		[freeGeometry, geometry.width, settings.dock]
 	);
 
-	if (hidden) {
+	// mobile sheet: drag the handle down to dismiss
+	const onSheetHandlePointerDown = React.useCallback(
+		(event: React.PointerEvent) => {
+			if (event.button !== 0) {
+				return;
+			}
+			event.preventDefault();
+			const startY = event.clientY;
+			let latest = 0;
+			setGesture('sheet');
+			startPointerGesture(
+				event,
+				(move) => {
+					latest = Math.max(0, move.clientY - startY);
+					setSheetOffset(latest);
+				},
+				() => {
+					setGesture(null);
+					if (latest > SHEET_DISMISS_PX) {
+						setOpen(false);
+					} else {
+						setSheetOffset(0);
+					}
+				}
+			);
+		},
+		[setOpen]
+	);
+
+	if (hiddenOnPath) {
 		return null;
 	}
+
+	const choice = resolveLopuModelChoice(catalog, settings);
+	const chipVisible = !minimised && !voiceMode && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
+	const detail = [describeLopuEffort(choice.effort), choice.speed === 'fast' ? 'Fast ⚡' : null].filter(Boolean).join(' · ');
+	const status = streaming
+		? 'Replying…'
+		: voiceMode
+			? voicePhase === 'idle'
+				? 'Voice · tap the mic'
+				: lopuVoicePhaseLabel(voicePhase)
+			: chipVisible
+				? detail || 'Ready'
+				: describeLopuModelChoice(catalog, settings);
 
 	const header = (variant: 'frame' | 'sheet') => (
 		<Flex
@@ -641,9 +723,10 @@ export const LopuHost = () => {
 			columnGap={2}
 			flexShrink={0}
 			height={`${HEADER_HEIGHT_PX}px`}
-			paddingX={3}
-			borderBottom={minimised ? 'none' : '1px solid var(--tt-border, #ececef)'}
-			background="var(--tt-card, #ffffff)"
+			paddingLeft={3}
+			paddingRight={2}
+			borderBottom={minimised ? 'none' : LOPU_UI.border}
+			background={LOPU_UI.card}
 			cursor={variant === 'frame' ? (gesture === 'move' ? 'grabbing' : 'grab') : 'default'}
 			userSelect="none"
 			sx={{ touchAction: 'none' }}
@@ -651,21 +734,28 @@ export const LopuHost = () => {
 			onPointerDown={variant === 'frame' ? onHeaderPointerDown : undefined}
 			onDoubleClick={variant === 'frame' ? onHeaderDoubleClick : undefined}
 		>
-			<Text fontSize="md" lineHeight={1} aria-hidden>
-				🦄
-			</Text>
-			<Text fontWeight={800} fontSize="sm" background={RAINBOW} sx={RAINBOW_TEXT_SX} whiteSpace="nowrap">
-				Lopu
-			</Text>
-			<LopuActivityBadge />
-			<Box flex="1" minWidth={0} />
-			{!minimised && <ModelChip active={showWindow} />}
+			<Box as="span" position="relative" display="inline-flex" flexShrink={0}>
+				<LopuRingAvatar size={28} />
+				<LopuActivityBadge placement="corner" size={9} />
+			</Box>
+			<Box minWidth={0} flex="1">
+				<Text fontSize="13px" fontWeight={700} color={LOPU_UI.ink} lineHeight="1.2" whiteSpace="nowrap">
+					Lopu
+				</Text>
+				<Text fontSize={LOPU_UI.fontTiny} color={LOPU_UI.muted} lineHeight="1.3" noOfLines={1} wordBreak="break-all">
+					{status}
+				</Text>
+			</Box>
+			<HeaderButton title={voiceMode ? 'Back to typing' : 'Talk to Lopu'} onClick={toggleVoice} active={voiceMode}>
+				<Mic size={14} strokeWidth={2} />
+			</HeaderButton>
+			{chipVisible && <ModelChip catalog={catalog} hasCatalog={hasCatalog} />}
 			{variant === 'frame' && (
 				<HeaderButton title={minimised ? 'Expand' : 'Minimise'} onClick={() => setMinimised((prev) => !prev)}>
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
 				</HeaderButton>
 			)}
-			<HeaderButton title="Open Lopu's page" onClick={openFull}>
+			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} onClick={openFull}>
 				<Maximize2 size={13} strokeWidth={2} />
 			</HeaderButton>
 			<HeaderButton title="Close (Esc)" onClick={close}>
@@ -677,7 +767,7 @@ export const LopuHost = () => {
 	const body = (
 		<Flex flex="1" minHeight={0} flexDirection="column" display={minimised ? 'none' : 'flex'}>
 			<LopuHostBoundary>
-				<LopuChatView compact showConversations={false} onOpenFull={openFull} />
+				{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
 			</LopuHostBoundary>
 		</Flex>
 	);
@@ -694,6 +784,7 @@ export const LopuHost = () => {
 					role="complementary"
 					aria-label="Lopu assistant"
 					data-lopu-dock={settings.dock}
+					data-lopu-mode={voiceMode ? 'voice' : 'chat'}
 					position="fixed"
 					zIndex={LOPU_WINDOW_Z}
 					left={`${geometry.x}px`}
@@ -701,22 +792,14 @@ export const LopuHost = () => {
 					width={`${geometry.width}px`}
 					height={`${frameHeight}px`}
 					flexDirection="column"
-					background="var(--tt-card, #ffffff)"
-					border="1px solid var(--tt-border, #ececef)"
-					borderRadius={docked ? 0 : 'var(--tt-radius-lg, 16px)'}
-					boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
+					background={LOPU_UI.card}
+					border={LOPU_UI.border}
+					borderRadius={docked ? 0 : LOPU_UI.radiusLg}
+					boxShadow={LOPU_UI.shadowFloating}
 					overflow="hidden"
 					opacity={gesture === 'move' ? 0.92 : 1}
 					transition={gesture ? 'none' : 'opacity 0.15s ease, width 0.12s ease, height 0.12s ease'}
 				>
-					{/* rainbow accent line */}
-					<Box
-						flexShrink={0}
-						height="3px"
-						background={RAINBOW}
-						backgroundSize="calc(100px + 200%)"
-						sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
-					/>
 					{header('frame')}
 					{body}
 					{!minimised && !docked && (
@@ -728,7 +811,7 @@ export const LopuHost = () => {
 							width="16px"
 							height="16px"
 							cursor="nwse-resize"
-							color="var(--tt-faint, #b6b6c0)"
+							color={LOPU_UI.faint}
 							sx={{ touchAction: 'none' }}
 							title="Drag to resize"
 							onPointerDown={onResizePointerDown}
@@ -749,7 +832,7 @@ export const LopuHost = () => {
 							width={`${DOCK_HANDLE_PX}px`}
 							cursor="ew-resize"
 							sx={{ touchAction: 'none' }}
-							_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+							_hover={{ background: LOPU_UI.surfaceHover }}
 							title="Drag to resize"
 							onPointerDown={onDockHandlePointerDown}
 						/>
@@ -759,22 +842,13 @@ export const LopuHost = () => {
 
 			{showSheet && (
 				<>
-					<Box
-						className="lopuSheetScrim"
-						position="fixed"
-						zIndex={LOPU_WINDOW_Z - 1}
-						top={0}
-						right={0}
-						bottom={0}
-						left={0}
-						background="rgba(0,0,0,0.25)"
-						onClick={close}
-					/>
+					<Box className="lopuSheetScrim" position="fixed" zIndex={LOPU_WINDOW_Z - 1} top={0} right={0} bottom={0} left={0} background="rgba(0,0,0,0.28)" onClick={close} />
 					<Flex
 						ref={windowRef}
 						className="lopuSheet"
 						role="complementary"
 						aria-label="Lopu assistant"
+						data-lopu-mode={voiceMode ? 'voice' : 'chat'}
 						position="fixed"
 						zIndex={LOPU_WINDOW_Z}
 						right={0}
@@ -787,19 +861,17 @@ export const LopuHost = () => {
 							}
 						}}
 						flexDirection="column"
-						background="var(--tt-card, #ffffff)"
-						borderTopRadius="var(--tt-radius-xl, 20px)"
-						boxShadow="0px -8px 30px rgba(0,0,0,0.18)"
+						background={LOPU_UI.card}
+						borderTopRadius={LOPU_UI.radiusXl}
+						boxShadow={LOPU_UI.shadowFloating}
 						overflow="hidden"
 						paddingBottom="var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px))"
+						transform={sheetOffset ? `translateY(${sheetOffset}px)` : 'none'}
+						transition={gesture === 'sheet' ? 'none' : `transform ${LOPU_UI.transition}`}
 					>
-						<Box
-							flexShrink={0}
-							height="3px"
-							background={RAINBOW}
-							backgroundSize="calc(100px + 200%)"
-							sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
-						/>
+						<Center className="lopuSheetHandle" flexShrink={0} paddingTop={2} paddingBottom={1} cursor="grab" sx={{ touchAction: 'none' }} onPointerDown={onSheetHandlePointerDown} aria-hidden>
+							<Box width="36px" height="4px" borderRadius="999px" background={LOPU_UI.borderColor} />
+						</Center>
 						{header('sheet')}
 						{body}
 					</Flex>
@@ -807,7 +879,7 @@ export const LopuHost = () => {
 			)}
 
 			{/* a docked column runs the full edge — the bubble would only sit on top of it */}
-			{!showSheet && !(showFrame && docked) && (
+			{showLauncher && !showSheet && !(showFrame && docked) && (
 				<Box
 					className="lopuLauncher"
 					position="fixed"
@@ -828,23 +900,36 @@ export const LopuHost = () => {
 						aria-pressed={open}
 						title={open ? 'Hide Lopu · drag to move' : 'Talk to Lopu 🦄 · drag to move'}
 						position="relative"
-						width="100%"
-						height="100%"
-						padding="2px"
-						borderRadius="999px"
-						background={RAINBOW}
-						backgroundSize="calc(100px + 200%)"
-						boxShadow="var(--tt-shadow-toast, 0 10px 28px rgba(20,20,40,0.22))"
+						boxShadow={LOPU_UI.shadowCard}
 						cursor={gesture === 'launcher' ? 'grabbing' : 'grab'}
-						transition={gesture === 'launcher' ? 'none' : 'transform 0.15s ease, box-shadow 0.15s ease'}
-						_hover={{ transform: 'scale(1.05)' }}
+						transition={gesture === 'launcher' ? 'none' : `transform ${LOPU_UI.transitionFast}, box-shadow ${LOPU_UI.transitionFast}`}
+						_hover={{ transform: 'translateY(-2px)', boxShadow: LOPU_UI.shadowFloating }}
 						_active={{ transform: 'scale(0.97)' }}
-						_focusVisible={{ outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' }}
-						sx={{ touchAction: 'none', animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+						_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '3px' }}
+						_before={
+							streaming
+								? {
+										content: '""',
+										position: 'absolute',
+										inset: '-3px',
+										borderRadius: '999px',
+										background: LOPU_UI.rainbowSoft,
+										animation: `${launcherPulse} 2s ease-out infinite`,
+										pointerEvents: 'none',
+										zIndex: -1
+									}
+								: undefined
+						}
+						sx={{
+							...lopuRainbowRing(LOPU_LAUNCHER_SIZE, 2),
+							isolation: 'isolate',
+							touchAction: 'none',
+							'@media (prefers-reduced-motion: reduce)': { transition: 'none', '&::before': { animation: 'none', opacity: 0.6 } }
+						}}
 						onPointerDown={onLauncherPointerDown}
 						onClick={onLauncherClick}
 					>
-						<Center width="100%" height="100%" borderRadius="999px" background="var(--tt-card, #ffffff)" fontSize="22px" lineHeight={1}>
+						<Center width="100%" height="100%" borderRadius="999px" background={LOPU_UI.card} fontSize="22px" lineHeight={1}>
 							<Box as="span" aria-hidden transform={open ? 'rotate(-12deg)' : 'none'} transition="transform 0.2s ease">
 								🦄
 							</Box>

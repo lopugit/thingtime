@@ -29,10 +29,14 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 			['lopu-chat', '/lopu'],
 			['lopu-voice', '/lopu/voice'],
 			['lopu-conversations', '/messages'],
-			['lopu-vault', '/settings'],
-			['lopu-settings', '/settings']
+			['lopu-vault', '/settings#secure-vault'],
+			['lopu-settings', '/settings#lopu']
 		]
 	);
+	// the settings deep links land on real anchors
+	const settingsPage = read('components/Settings/SettingsPage.tsx');
+	assert.match(settingsPage, /id="secure-vault"/);
+	assert.match(settingsPage, /id="lopu"/);
 
 	// the chat page has a signed-out state; voice (microphone + vault providers),
 	// the Messenger-backed conversation list and the Secure Vault are gated behind login
@@ -110,7 +114,14 @@ test("the floating window's open state is tab-local while Lopu preferences still
 
 test('the floating host is non-modal chrome that hides on /lopu and honours the launcher setting', () => {
 	const source = read('components/Lopu/LopuHost.tsx');
-	assert.match(source, /isLopuHostHiddenOnPath\(pathname\) \|\| !settings\.launcher/);
+	// nothing floats on the page that IS the chat
+	assert.match(source, /const hiddenOnPath = isLopuHostHiddenOnPath\(pathname\);/);
+	assert.match(source, /if \(hiddenOnPath\) \{\s*return null;/);
+	// the launcher setting hides the bubble only — the window still follows
+	// `open`, so the navbar 🦄 can open it with the bubble turned off
+	assert.match(source, /const showLauncher = !hiddenOnPath && settings\.launcher;/);
+	assert.match(source, /const showWindow = !hiddenOnPath && open;/);
+	assert.match(source, /\{showLauncher && !showSheet && !\(showFrame && docked\) && \(/);
 	assert.doesNotMatch(source, /role="dialog"/, 'the window must not claim to be a dialog while non-modal');
 	assert.match(source, /role="complementary"/);
 	assert.match(source, /zIndex=\{LOPU_WINDOW_Z\}/);

@@ -140,7 +140,23 @@ const server = createServer(async (request, response) => {
 
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-const envNames = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'LOPU_CHAT_PROVIDER', 'LOPU_OPENAI_TOOLS', 'LOPU_CLAUDE_MODEL', 'LOPU_OPENAI_MODEL'];
+const envNames = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'OPENAI_ORG_ID',
+  'OPENAI_PROJECT_ID',
+  'LOPU_CHAT_PROVIDER',
+  'LOPU_OPENAI_TOOLS',
+  'LOPU_CLAUDE_MODEL',
+  'LOPU_OPENAI_MODEL',
+  'THINGTIME_LOPU_PROVIDER_DEV_REWRITES',
+  'THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS',
+  'NODE_ENV',
+  'VERCEL'
+];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 
 mock.module(new URL('../settings/prConflictResolverModelWaterfall.ts', import.meta.url).href, {
@@ -152,8 +168,9 @@ mock.module(new URL('../settings/prConflictResolverModelWaterfall.ts', import.me
   }
 });
 
-const { streamLopuChatTurn, LOPU_CHAT_MAX_TOOL_EXECUTIONS, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
+const { streamLopuChatTurn, LOPU_CHAT_MAX_TOOL_EXECUTIONS, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
 const { parseAiWorkflowModelOptionId } = await import('../settings/prConflictResolverModelWaterfallCore.ts');
+const { LOPU_VAULT_HOST_NOT_ALLOWED_REASON } = await import('./vaultProviders.ts');
 
 type ToolCallRecord = { id: string; name: string; input: any };
 let toolCalls: ToolCallRecord[] = [];
@@ -218,6 +235,13 @@ beforeEach(() => {
   delete process.env.LOPU_OPENAI_TOOLS;
   process.env.LOPU_CLAUDE_MODEL = 'claude-provider-default';
   process.env.LOPU_OPENAI_MODEL = 'openai-provider-default';
+  delete process.env.OPENAI_ORG_ID;
+  delete process.env.OPENAI_PROJECT_ID;
+  delete process.env.THINGTIME_LOPU_PROVIDER_DEV_REWRITES;
+  delete process.env.THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS;
+  delete process.env.VERCEL;
+  if (originalEnv.NODE_ENV === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalEnv.NODE_ENV;
 });
 
 after(async () => {
@@ -603,4 +627,161 @@ test('an OpenAI-compatible endpoint that refuses streaming is served by the plai
   assert.equal(openAiRequests[3].body.stream, false);
   assert.match(openAiRequests[3].body.messages.at(-1).content, /```tt-tool-result/);
   assert.equal(anthropicRequests.length, 0);
+});
+
+// ── the viewer's own provider (Secure Vault, design note §1.3) ──────────────
+//
+// The fake server stands in for the user's endpoint: a vault connection saved
+// with a public HTTPS origin is rewritten to it through the dev-only
+// THINGTIME_LOPU_PROVIDER_DEV_REWRITES table (inert in production builds), so
+// the real guard, SDK construction, and request shapes are exercised.
+
+const FAKE_VAULT_ORIGIN = 'https://lopu-fake-provider.invalid';
+const vaultRecord = (overrides: Record<string, unknown> = {}) => ({
+  id: 'prov-0123456789',
+  name: 'My own key',
+  provider: 'compatible' as const,
+  endpoint: `${FAKE_VAULT_ORIGIN}/v1`,
+  model: 'my-model',
+  token: 'vault-token-xyz',
+  effort: null,
+  ...overrides
+});
+const rewriteToFake = (savedOrigin = FAKE_VAULT_ORIGIN) => {
+  process.env.THINGTIME_LOPU_PROVIDER_DEV_REWRITES = `${savedOrigin}=${origin}`;
+};
+
+test('a vault turn runs on the viewer’s own OpenAI-compatible connection: its key, its model, text tools — never the server keys or org', async () => {
+  rewriteToFake();
+  process.env.OPENAI_ORG_ID = 'org-server-secret';
+  process.env.OPENAI_PROJECT_ID = 'proj-server-secret';
+  const fence = '```tt-tool\n{"name":"navigate","input":{"path":"/lopu"}}\n```';
+  openAiPlans.push({ contentChunks: ['Hi from your key ', fence], finish: 'stop' }, { contentChunks: ['Done.'], finish: 'stop' });
+
+  const { events, outcome } = await collect(turn('go', 'claude-opus-5:high', { vaultProvider: vaultRecord({ effort: 'high' }) }));
+
+  assert.equal(events[0].type, 'meta');
+  assert.equal(meta(events).provider, 'vault');
+  assert.equal(meta(events).providerLabel, 'My own key');
+  assert.equal(meta(events).model, 'my-model');
+  assert.equal(meta(events).effort, 'high');
+  assert.equal(meta(events).speed, 'normal');
+  assert.equal(meta(events).label, 'My own key · my-model');
+  assert.equal(text(events), 'Hi from your key Done.');
+  assert.equal(events.find((event) => event.type === 'tool_use')?.name, 'navigate');
+  assert.equal(events.find((event) => event.type === 'tool_result')?.ok, true);
+  assert.deepEqual(toolCalls.map((call) => call.name), ['navigate']);
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(outcome.model, 'my-model');
+  assert.equal(outcome.effort, 'high');
+  assert.equal(outcome.stopReason, 'end_turn');
+
+  assert.equal(openAiRequests.length, 2);
+  assert.equal(openAiRequests[0].headers.authorization, 'Bearer vault-token-xyz');
+  assert.equal(openAiRequests[0].headers['openai-organization'], undefined);
+  assert.equal(openAiRequests[0].headers['openai-project'], undefined);
+  assert.equal(openAiRequests[0].body.model, 'my-model');
+  assert.equal(openAiRequests[0].body.reasoning_effort, 'high');
+  assert.equal(openAiRequests[0].body.max_completion_tokens, 16000);
+  // a custom compatible host gets the fenced-text tool protocol, not function tools
+  assert.equal(openAiRequests[0].body.tools, undefined);
+  assert.match(openAiRequests[0].body.messages[0].content, /```tt-tool/);
+  assert.match(openAiRequests[1].body.messages.at(-1).content, /```tt-tool-result/);
+  assert.equal(anthropicRequests.length, 0);
+  assert.equal(waterfallReads, 0);
+});
+
+test('a vault turn on an Anthropic connection sends the vault key to the Messages API with native tools and never the server bearer token', async () => {
+  rewriteToFake('https://lopu-fake-anthropic.invalid');
+  process.env.ANTHROPIC_AUTH_TOKEN = 'server-bearer-secret';
+  anthropicPlans.push({ blocks: [{ type: 'text', text: 'Claude on your key' }], stopReason: 'end_turn' });
+
+  const { events, outcome } = await collect(
+    turn('hi', null, { vaultProvider: vaultRecord({ provider: 'anthropic', endpoint: 'https://lopu-fake-anthropic.invalid', model: 'claude-own' }) })
+  );
+
+  assert.equal(meta(events).provider, 'vault');
+  assert.equal(meta(events).providerLabel, 'My own key');
+  assert.equal(meta(events).model, 'claude-own');
+  assert.equal(meta(events).effort, null);
+  assert.equal(text(events), 'Claude on your key');
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(outcome.model, 'claude-own');
+  assert.equal(anthropicRequests.length, 1);
+  assert.equal(anthropicRequests[0].headers['x-api-key'], 'vault-token-xyz');
+  assert.equal(anthropicRequests[0].headers.authorization, undefined);
+  assert.equal(anthropicRequests[0].surface, 'stable');
+  assert.equal(anthropicRequests[0].body.model, 'claude-own');
+  assert.equal(anthropicRequests[0].body.output_config, undefined);
+  assert.equal(anthropicRequests[0].body.max_tokens, 16000);
+  assert.ok(anthropicRequests[0].body.tools.some((tool: any) => tool.name === 'create_page'), 'native tools ride along');
+  assert.equal(anthropicRequests[0].body.system[0].cache_control.type, 'ephemeral');
+  assert.equal(openAiRequests.length, 0);
+  assert.equal(waterfallReads, 0);
+});
+
+test('a vault provider that rejects the key surfaces a friendly error then the canned vault line — the server keys are never a fallback', async () => {
+  rewriteToFake();
+  openAiPlans.push({ status: 401 }, { status: 401 });
+
+  const { events, outcome } = await collect(turn('hi', 'claude-opus-5:high', { vaultProvider: vaultRecord() }));
+
+  assert.deepEqual(types(events).slice(0, 2), ['meta', 'error']);
+  assert.equal(meta(events).provider, 'vault');
+  assert.equal(meta(events).providerLabel, 'My own key');
+  assert.match(events[1].message, /^My own key rejected the saved key \(HTTP 401\)/);
+  assert.doesNotMatch(events[1].message, /vault-token|invalid/);
+  assert.equal(events[1].retryable, true);
+  assert.equal(text(events), LOPU_FALLBACK_VAULT);
+  assert.equal(outcome.provider, 'fallback');
+  assert.equal(outcome.stopReason, 'fallback');
+  assert.equal(outcome.model, 'my-model');
+  assert.match(outcome.error, /rejected the saved key/);
+  // the bare stream and then the plain rung, both on the vault endpoint with the vault key
+  assert.equal(openAiRequests.length, 2);
+  assert.ok(openAiRequests.every((request) => request.headers.authorization === 'Bearer vault-token-xyz'));
+  assert.equal(openAiRequests[1].body.stream, false);
+  assert.equal(anthropicRequests.length, 0);
+  assert.equal(waterfallReads, 0);
+});
+
+test('a vault endpoint outside the server allowlist is refused before any request leaves the server', async () => {
+  // no rewrite, not a built-in vendor host, not in THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS
+  const { events, outcome } = await collect(turn('hi', null, { vaultProvider: vaultRecord({ endpoint: 'https://evil.example/v1' }) }));
+
+  assert.deepEqual(types(events).slice(0, 2), ['meta', 'error']);
+  assert.equal(meta(events).provider, 'vault');
+  assert.equal(meta(events).model, 'my-model');
+  assert.equal(events[1].message, LOPU_VAULT_HOST_NOT_ALLOWED_REASON);
+  assert.equal(text(events), LOPU_FALLBACK_VAULT);
+  assert.equal(outcome.provider, 'fallback');
+  assert.equal(outcome.error, LOPU_VAULT_HOST_NOT_ALLOWED_REASON);
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+});
+
+test('the dev rewrite table is inert in production builds, so the same connection is refused there', async () => {
+  rewriteToFake();
+  process.env.NODE_ENV = 'production';
+
+  const { events } = await collect(turn('hi', null, { vaultProvider: vaultRecord() }));
+
+  assert.equal(events[1].type, 'error');
+  assert.equal(events[1].message, LOPU_VAULT_HOST_NOT_ALLOWED_REASON);
+  assert.equal(openAiRequests.length, 0);
+});
+
+test('a vault turn takes precedence over LOPU_CHAT_PROVIDER=test and is served by the plain rung when the endpoint refuses streaming', async () => {
+  process.env.LOPU_CHAT_PROVIDER = 'test';
+  rewriteToFake();
+  openAiPlans.push({ rejectStreaming: true }, { plain: { content: 'Plain from your key' } });
+
+  const { events, outcome } = await collect(turn('hello', null, { vaultProvider: vaultRecord() }));
+
+  assert.equal(meta(events).provider, 'vault');
+  assert.equal(text(events), 'Plain from your key');
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(outcome.stopReason, 'end_turn');
+  assert.equal(openAiRequests.length, 2);
+  assert.equal(openAiRequests[0].body.stream, true);
+  assert.equal(openAiRequests[1].body.stream, false);
 });

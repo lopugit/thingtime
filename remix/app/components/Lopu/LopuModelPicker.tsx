@@ -1,196 +1,382 @@
 import React from 'react';
-import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Switch, Text } from '@chakra-ui/react';
+import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
+import { Link as RouterLink } from 'react-router';
+import { Check, ChevronDown } from 'lucide-react';
 
-import type { AiModelPublic, LopuChatSettings } from './lopuChatStore';
+import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, subscribeLopuStore, type LopuChatDefaults, type LopuChatSettings } from './lopuChatStore';
+import {
+	buildLopuProviderGroups,
+	describeLopuChoice,
+	effortLabel,
+	findLopuProviderOption,
+	lopuProviderChoiceKey,
+	modelUnavailableReason,
+	parseLopuProviderChoiceKey,
+	providerKeyLabel,
+	type AiModelPublic,
+	type LopuProviderChoice,
+	type LopuProviderOption,
+	type LopuVaultInfo,
+	type LopuVaultProvider
+} from './lopuProviderCore';
+import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx } from './lopuTheme';
 
-// The composer's model chip (design note §3.2): model → the efforts THAT
-// model offers → a speed toggle only when the model offers 'fast'. Unavailable
-// models stay visible but disabled with the reason ("needs Anthropic key" /
-// "disabled by an admin"), so the viewer learns what an admin has to add.
-// Uncontrolled Popover on purpose: a controlled trigger re-runs onToggle
-// after our onClick and closes on the same click.
+// The composer's model chip and its picker popover (design brief): server
+// models grouped by provider family (Claude / OpenAI), then "Your providers"
+// from the viewer's Secure Vault; a per-model effort segmented control; the
+// speed toggle only when the model offers a fast lane; unavailable entries
+// stay listed but disabled with the reason; a footer link to manage vault
+// providers. Uncontrolled Popover on purpose (a controlled trigger re-runs
+// onToggle after our onClick and closes on the same click) — the render
+// prop hands us onClose for the footer link.
+//
+// `LopuProviderSelect` is the same choice as ONE native <select> for
+// settings rows and the voice page (W2): value in, { model, providerId } out.
 
-const MUTED = 'var(--tt-muted, #9a9aa6)';
-const INK = 'var(--tt-ink, #16161a)';
+export const LOPU_MANAGE_PROVIDERS_PATH = '/settings#secure-vault';
 
-const PROVIDER_LABELS: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI' };
-const EFFORT_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-
-export const providerLabel = (provider: string): string => PROVIDER_LABELS[provider] || provider;
-export const effortLabel = (effort: string | null | undefined): string => (effort ? EFFORT_LABELS[effort] || effort : '');
-
-export const unavailableReason = (model: AiModelPublic): string | null => {
-	if (model.enabled === false) return 'disabled by an admin';
-	if (model.available === false) return `needs ${providerLabel(model.provider)} key`;
-	return null;
-};
-
-export const describeModelChoice = (models: AiModelPublic[], value: LopuChatSettings): string => {
-	const model = value.model ? models.find((entry) => entry.id === value.model) : null;
-	if (!value.model) return models.length ? 'No model' : 'Auto';
-	const bits = [model?.label || value.model];
-	if (value.effort) bits.push(effortLabel(value.effort));
-	return `${bits.join(' · ')}${value.speed === 'fast' ? ' ⚡' : ''}`;
-};
+// compatibility names used elsewhere in the Lopu family
+export { effortLabel };
+export const providerLabel = providerKeyLabel;
+export const unavailableReason = modelUnavailableReason;
+export const describeModelChoice = (models: AiModelPublic[], value: Pick<LopuChatSettings, 'model' | 'effort' | 'speed'> & { providerId?: string | null }): string =>
+	describeLopuChoice(models, null, value);
 
 // the effort a freshly picked model starts on: keep the current one when
 // offered, else the catalog default, else 'high', else the deepest tier
-const effortFor = (model: AiModelPublic, current: string | null, preferred: string | null): string | null => {
-	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
+const effortFor = (model: AiModelPublic | null, current: string | null, preferred: string | null): string | null => {
+	const efforts = model && Array.isArray(model.efforts) ? model.efforts : [];
 	if (!efforts.length) return null;
 	for (const candidate of [current, preferred, 'high']) if (candidate && efforts.includes(candidate)) return candidate;
 	return efforts[efforts.length - 1] ?? null;
 };
 
+// An ink-on-hairline switch (Chakra's default track is a brand blue — Lopu
+// keeps colour for the rainbow only).
+export const LopuToggle = ({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) => (
+	<Switch
+		size="sm"
+		isChecked={checked}
+		isDisabled={disabled}
+		aria-label={label}
+		onChange={(event) => onChange(event.target.checked)}
+		sx={{
+			'.chakra-switch__track': { bg: LOPU_UI.faint, boxShadow: 'none' },
+			'.chakra-switch__track[data-checked]': { bg: LOPU_UI.ink },
+			'.chakra-switch__track[data-focus-visible]': { outline: '2px solid var(--tt-ink, #18181b)', outlineOffset: '2px' },
+			'.chakra-switch__thumb': { bg: LOPU_UI.card }
+		}}
+	/>
+);
+
+// A hairline segmented control (effort tiers).
+export const LopuSegmented = ({
+	options,
+	value,
+	onChange,
+	label
+}: {
+	options: { value: string; label: string }[];
+	value: string | null;
+	onChange: (value: string) => void;
+	label: string;
+}) => (
+	<Flex role="radiogroup" aria-label={label} bg={LOPU_UI.surfaceAlt} border={LOPU_UI.border} borderRadius={LOPU_UI.pill} p="2px" gap="2px">
+		{options.map((option) => {
+			const selected = option.value === value;
+			return (
+				<Box
+					as="button"
+					type="button"
+					key={option.value}
+					role="radio"
+					aria-checked={selected}
+					flex={1}
+					minW={0}
+					height="26px"
+					px={2}
+					borderRadius={LOPU_UI.pill}
+					border={selected ? LOPU_UI.border : '1px solid transparent'}
+					bg={selected ? LOPU_UI.card : 'transparent'}
+					color={selected ? LOPU_UI.ink : LOPU_UI.muted}
+					fontSize={LOPU_UI.fontSmall}
+					fontWeight={600}
+					lineHeight={1}
+					whiteSpace="nowrap"
+					overflow="hidden"
+					textOverflow="ellipsis"
+					cursor="pointer"
+					transition={`background ${LOPU_UI.transitionFast}, color ${LOPU_UI.transitionFast}`}
+					_hover={selected ? undefined : { color: LOPU_UI.ink }}
+					sx={lopuFocusRingSx}
+					onClick={() => onChange(option.value)}
+				>
+					{option.label}
+				</Box>
+			);
+		})}
+	</Flex>
+);
+
+const OptionRow = ({ option, selected, compact, onPick }: { option: LopuProviderOption; selected: boolean; compact: boolean; onPick: (option: LopuProviderOption) => void }) => (
+	<Box
+		as="button"
+		type="button"
+		role="option"
+		aria-selected={selected}
+		aria-disabled={option.disabled || undefined}
+		disabled={option.disabled}
+		title={option.reason || option.hint || option.model || undefined}
+		display="flex"
+		alignItems="center"
+		gap={2}
+		width="100%"
+		textAlign="left"
+		minH={compact ? '32px' : '36px'}
+		px={2.5}
+		py={1}
+		borderRadius={LOPU_UI.radiusSm}
+		bg={selected ? LOPU_UI.surfaceAlt : 'transparent'}
+		color={LOPU_UI.ink}
+		cursor={option.disabled ? 'not-allowed' : 'pointer'}
+		opacity={option.disabled ? 0.5 : 1}
+		transition={`background ${LOPU_UI.transitionFast}`}
+		_hover={option.disabled ? undefined : { bg: LOPU_UI.surfaceHover }}
+		sx={lopuFocusRingSx}
+		onClick={() => {
+			if (!option.disabled) onPick(option);
+		}}
+	>
+		<Box minW={0} flex={1}>
+			<Text as="span" display="block" fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} fontWeight={selected ? 700 : 500} lineHeight="1.3" isTruncated>
+				{option.label}
+				{option.isDefault ? (
+					<Text as="span" color={LOPU_UI.muted} fontWeight={500}>
+						{' '}
+						· default
+					</Text>
+				) : null}
+			</Text>
+			{option.reason || option.hint ? (
+				<Text as="span" display="block" fontSize="11px" color={LOPU_UI.muted} lineHeight="1.3" isTruncated>
+					{option.reason || option.hint}
+				</Text>
+			) : null}
+		</Box>
+		{selected ? (
+			<Box as="span" display="inline-flex" color={LOPU_UI.ink} flexShrink={0} aria-hidden="true">
+				<Check size={14} strokeWidth={2.4} />
+			</Box>
+		) : null}
+	</Box>
+);
+
 export type LopuModelPickerProps = {
 	models: AiModelPublic[];
+	vaultProviders?: LopuVaultProvider[] | null;
+	vault?: LopuVaultInfo | null;
 	value: LopuChatSettings;
-	defaults?: LopuChatSettings | null;
+	defaults?: LopuChatDefaults | null;
 	onChange: (patch: Partial<LopuChatSettings>) => void;
 	compact?: boolean;
 	disabled?: boolean;
+	// mobile: the chip keeps its visual height but grows a 44px hit area
+	mobile?: boolean;
 };
 
-export const LopuModelPicker = ({ models, value, defaults, onChange, compact = false, disabled = false }: LopuModelPickerProps) => {
-	const current = value.model ? models.find((model) => model.id === value.model) ?? null : null;
+export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults, onChange, compact = false, disabled = false, mobile = false }: LopuModelPickerProps) => {
+	const groups = React.useMemo(() => buildLopuProviderGroups(models, vaultProviders), [models, vaultProviders]);
+	const current = value.providerId ? null : value.model ? models.find((model) => model.id === value.model) ?? null : null;
 	const efforts = current && Array.isArray(current.efforts) ? current.efforts : [];
 	const offersFast = !!current && Array.isArray(current.speeds) && current.speeds.includes('fast');
-	const summary = describeModelChoice(models, value);
-	const grouped = React.useMemo(() => {
-		const byProvider = new Map<string, AiModelPublic[]>();
-		for (const model of models) {
-			const list = byProvider.get(model.provider) || [];
-			list.push(model);
-			byProvider.set(model.provider, list);
+	const summary = describeLopuChoice(models, vaultProviders, value);
+	const selectedKey = lopuProviderChoiceKey(value);
+
+	const pick = (option: LopuProviderOption) => {
+		if (option.kind === 'vault') {
+			onChange({ providerId: option.providerId });
+			return;
 		}
-		return [...byProvider.entries()];
-	}, [models]);
+		const model = option.catalog;
+		onChange({
+			providerId: null,
+			model: option.model,
+			effort: effortFor(model, value.effort, defaults?.effort ?? null),
+			speed: model && Array.isArray(model.speeds) && value.speed && model.speeds.includes(value.speed) ? value.speed : 'normal'
+		});
+	};
 
 	return (
-		<Popover placement="top-start" isLazy>
-			<PopoverTrigger>
-				<Button
-					size="xs"
-					variant="outline"
-					height="26px"
-					px={2}
-					fontWeight={600}
-					fontSize="11px"
-					borderColor="var(--tt-border, #ececef)"
-					color={INK}
-					bg="var(--tt-card, #ffffff)"
-					isDisabled={disabled}
-					maxW={compact ? '180px' : '260px'}
-					title="Choose the model Lopu thinks with"
-					aria-label={`Model: ${summary}`}
-					_hover={{ borderColor: 'var(--tt-accent, #7c6cff)' }}
-				>
-					<Text as="span" isTruncated>
-						🧠 {summary}
-					</Text>
-				</Button>
-			</PopoverTrigger>
-			<PopoverContent width="300px" maxW="calc(100vw - 24px)" borderRadius="14px" boxShadow="var(--tt-shadow-toast, 0 14px 38px rgba(20,20,40,0.18))" _focus={{ outline: 'none' }}>
-				<PopoverBody p={3}>
-					<Text fontSize="10px" fontFamily="var(--tt-font-mono, monospace)" letterSpacing="0.08em" textTransform="uppercase" color={MUTED} mb={1.5}>
-						Model
-					</Text>
-					{models.length === 0 ? (
-						<Text fontSize="xs" color={MUTED} mb={2}>
-							No models in the catalog yet — Lopu answers from her little book until an admin adds a provider key.
-						</Text>
-					) : null}
-					<Flex direction="column" gap={2} mb={efforts.length || offersFast ? 3 : 0}>
-						{grouped.map(([provider, list]) => (
-							<Box key={provider}>
-								<Text fontSize="10px" color={MUTED} mb={1}>
-									{providerLabel(provider)}
-								</Text>
-								<Flex direction="column" gap={1}>
-									{list.map((model) => {
-										const reason = unavailableReason(model);
-										const selected = model.id === value.model;
-										return (
-											<Button
-												key={model.id}
-												size="xs"
-												variant={selected ? 'solid' : 'ghost'}
-												justifyContent="space-between"
-												height="28px"
-												px={2}
-												fontWeight={selected ? 700 : 500}
-												bg={selected ? 'var(--tt-accent, #7c6cff)' : undefined}
-												color={selected ? 'var(--tt-accent-contrast, #ffffff)' : INK}
-												isDisabled={!!reason}
-												title={reason || model.id}
-												onClick={() => {
-													if (reason) return;
-													onChange({
-														model: model.id,
-														effort: effortFor(model, value.effort, defaults?.effort ?? null),
-														speed: Array.isArray(model.speeds) && value.speed && model.speeds.includes(value.speed) ? value.speed : 'normal'
-													});
-												}}
-												_hover={selected ? { opacity: 0.92 } : { bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-											>
-												<Text as="span" isTruncated>
-													{model.label}
-													{model.isDefault ? ' · default' : ''}
-												</Text>
-												{reason ? (
-													<Text as="span" fontSize="10px" color={MUTED} ml={2} flexShrink={0}>
-														{reason}
-													</Text>
-												) : null}
-											</Button>
-										);
-									})}
-								</Flex>
-							</Box>
-						))}
-					</Flex>
-					{efforts.length ? (
-						<Box mb={offersFast ? 3 : 0}>
-							<Text fontSize="10px" fontFamily="var(--tt-font-mono, monospace)" letterSpacing="0.08em" textTransform="uppercase" color={MUTED} mb={1.5}>
-								Reasoning effort
+		<Popover placement="top-start" isLazy strategy="fixed" gutter={8}>
+			{({ onClose }) => (
+				<>
+					<PopoverTrigger>
+						<Box
+							as="button"
+							type="button"
+							className="lopuModelChip"
+							data-lopu-control
+							aria-haspopup="dialog"
+							aria-label={`Model: ${summary}`}
+							title="Choose what Lopu thinks with"
+							disabled={disabled}
+							sx={{
+								...lopuChipSx,
+								height: `${compact ? 26 : LOPU_UI.controlCompact}px`,
+								maxWidth: compact ? '160px' : '240px',
+								position: 'relative',
+								...(mobile ? { _before: { content: '""', position: 'absolute', left: 0, right: 0, top: '-8px', bottom: '-8px' } } : {})
+							}}
+						>
+							<Text as="span" isTruncated minW={0}>
+								{summary}
 							</Text>
-							<Flex gap={1} wrap="wrap">
-								{efforts.map((effort) => {
-									const selected = effort === value.effort;
-									return (
-										<Button
-											key={effort}
-											size="xs"
-											height="24px"
-											px={2}
-											variant={selected ? 'solid' : 'outline'}
-											bg={selected ? 'var(--tt-accent, #7c6cff)' : 'var(--tt-card, #ffffff)'}
-											color={selected ? 'var(--tt-accent-contrast, #ffffff)' : INK}
-											borderColor="var(--tt-border, #ececef)"
-											onClick={() => onChange({ effort })}
-										>
-											{effortLabel(effort)}
-										</Button>
-									);
-								})}
-							</Flex>
+							<ChevronDown size={12} strokeWidth={2.2} aria-hidden style={{ flexShrink: 0, opacity: 0.7 }} />
 						</Box>
-					) : null}
-					{offersFast ? (
-						<Flex align="center" justify="space-between" gap={3}>
-							<Box>
-								<Text fontSize="xs" fontWeight={600} color={INK}>
-									⚡ Fast mode
+					</PopoverTrigger>
+					<PopoverContent
+						width="320px"
+						maxW="calc(100vw - 24px)"
+						sx={lopuPopoverSx}
+						_focus={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
+						_focusVisible={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
+						aria-label="Choose what Lopu thinks with"
+					>
+						<PopoverBody p={0}>
+							<Flex align="center" px={3} pt={2.5} pb={1}>
+								<Text as="span" sx={lopuEyebrowSx}>
+									Model
 								</Text>
-								<Text fontSize="10px" color={MUTED}>
-									Quicker replies, same model.
-								</Text>
+							</Flex>
+							<Box maxH="272px" overflowY="auto" px={1.5} pb={1.5} role="listbox" aria-label="Models and providers">
+								{groups.length === 0 ? (
+									<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} px={2} py={2} lineHeight="1.5">
+										No models in the catalog yet — Lopu answers from her little book until an admin adds a provider key.
+									</Text>
+								) : null}
+								{groups.map((group) => (
+									<Box key={group.id} role="group" aria-label={group.label} mb={1}>
+										<Text as="span" display="block" sx={lopuEyebrowSx} px={2.5} pt={1.5} pb={1}>
+											{group.label}
+										</Text>
+										{group.options.map((option) => (
+											<OptionRow key={option.key} option={option} selected={option.key === selectedKey} compact={compact} onPick={pick} />
+										))}
+									</Box>
+								))}
 							</Box>
-							<Switch size="sm" isChecked={value.speed === 'fast'} onChange={(event) => onChange({ speed: event.target.checked ? 'fast' : 'normal' })} aria-label="Fast mode" />
-						</Flex>
-					) : null}
-				</PopoverBody>
-			</PopoverContent>
+							{efforts.length ? (
+								<Box borderTop={LOPU_UI.border} px={3} py={2.5}>
+									<Text as="span" display="block" sx={lopuEyebrowSx} mb={1.5}>
+										Effort
+									</Text>
+									<LopuSegmented label="Reasoning effort" options={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))} value={value.effort} onChange={(effort) => onChange({ effort })} />
+								</Box>
+							) : null}
+							{offersFast ? (
+								<Flex borderTop={LOPU_UI.border} px={3} py={2.5} align="center" justify="space-between" gap={3}>
+									<Box minW={0}>
+										<Text fontSize={LOPU_UI.fontSmall} fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
+											Fast mode
+										</Text>
+										<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.3">
+											Quicker replies, same model.
+										</Text>
+									</Box>
+									<LopuToggle checked={value.speed === 'fast'} onChange={(fast) => onChange({ speed: fast ? 'fast' : 'normal' })} label="Fast mode" />
+								</Flex>
+							) : null}
+							<Flex borderTop={LOPU_UI.border} px={3} py={2} align="center" justify="space-between" gap={3}>
+								<Box
+									as={RouterLink}
+									to={LOPU_MANAGE_PROVIDERS_PATH}
+									fontSize={LOPU_UI.fontSmall}
+									fontWeight={600}
+									color={LOPU_UI.link}
+									textDecoration="underline"
+									textUnderlineOffset="2px"
+									textDecorationColor={LOPU_UI.faint}
+									_hover={{ textDecorationColor: LOPU_UI.ink }}
+									sx={lopuFocusRingSx}
+									onClick={onClose}
+								>
+									Manage your providers →
+								</Box>
+								{vault && !vault.configured ? (
+									<Text fontSize="11px" color={LOPU_UI.muted} whiteSpace="nowrap">
+										Vault not configured
+									</Text>
+								) : null}
+							</Flex>
+						</PopoverBody>
+					</PopoverContent>
+				</>
+			)}
 		</Popover>
+	);
+};
+
+// ——— the single-control variant ————————————————————————————————————————
+
+export type LopuProviderSelectChange = LopuProviderChoice & { key: string; option: LopuProviderOption | null };
+
+export type LopuProviderSelectProps = {
+	// a composite key ('model:<id>' / 'vault:<id>' / bare catalog id / '') or { model, providerId }
+	value: string | Partial<LopuProviderChoice> | null | undefined;
+	onChange: (choice: LopuProviderSelectChange) => void;
+	compact?: boolean;
+	// default to the shared chat store's catalog + vault list
+	models?: AiModelPublic[];
+	vaultProviders?: LopuVaultProvider[] | null;
+	disabled?: boolean;
+	'aria-label'?: string;
+	// offer a leading entry (value '') that clears both model and providerId
+	includeDefault?: boolean;
+	defaultLabel?: string;
+	// only the viewer's own providers (voice needs a vault provider)
+	vaultOnly?: boolean;
+	maxWidth?: string;
+};
+
+export const LopuProviderSelect = (props: LopuProviderSelectProps) => {
+	const snapshot = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
+	const models = props.models ?? snapshot.models;
+	const vaultProviders = props.vaultProviders ?? snapshot.vaultProviders;
+	const groups = React.useMemo(() => buildLopuProviderGroups(props.vaultOnly ? [] : models, vaultProviders), [models, vaultProviders, props.vaultOnly]);
+	const key = typeof props.value === 'string' ? lopuProviderChoiceKey(parseLopuProviderChoiceKey(props.value)) : lopuProviderChoiceKey(props.value);
+	const includeDefault = props.includeDefault ?? true;
+	return (
+		<Select
+			size={props.compact ? 'xs' : 'sm'}
+			value={key}
+			isDisabled={props.disabled}
+			aria-label={props['aria-label'] || 'Model or provider'}
+			maxW={props.maxWidth || '260px'}
+			bg={LOPU_UI.card}
+			color={LOPU_UI.ink}
+			borderColor={LOPU_UI.borderColor}
+			borderRadius={LOPU_UI.radiusSm}
+			fontSize={props.compact ? LOPU_UI.fontSmall : LOPU_UI.fontCompact}
+			_hover={{ borderColor: LOPU_UI.faint }}
+			_focusVisible={{ borderColor: LOPU_UI.ink, boxShadow: 'none' }}
+			onChange={(event) => {
+				const nextKey = event.target.value;
+				const parsed = parseLopuProviderChoiceKey(nextKey) ?? { model: null, providerId: null };
+				props.onChange({ ...parsed, key: nextKey, option: findLopuProviderOption(groups, nextKey) });
+			}}
+		>
+			{includeDefault ? <option value="">{props.defaultLabel || (props.vaultOnly ? 'Choose a provider' : 'Catalog default')}</option> : null}
+			{groups.map((group) => (
+				<optgroup key={group.id} label={group.label}>
+					{group.options.map((option) => (
+						<option key={option.key} value={option.key} disabled={option.disabled}>
+							{option.label}
+							{option.hint ? ` · ${option.hint}` : ''}
+							{option.reason ? ` — ${option.reason}` : ''}
+						</option>
+					))}
+				</optgroup>
+			))}
+		</Select>
 	);
 };

@@ -255,7 +255,9 @@ export function useApi() {
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
 			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [])
     },
-    // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers })
+    // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
+    // + for a signed-in viewer their Secure Vault providers as metadata only:
+    // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
       models: useCallback(async () => getJson('/api/v1/ai/models'), [])
     },
@@ -430,13 +432,15 @@ export function useApi() {
     lopu: {
       chats: {
         list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
+        // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
+        // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
-          async (args?: { title?: string; model?: string; effort?: string; speed?: string }) =>
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
             asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string }) =>
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
             asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' }),
           [asyncFetcher]
         ),
