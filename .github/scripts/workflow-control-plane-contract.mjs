@@ -890,7 +890,27 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /base_has_pr_listener/u);
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
   assert.match(codeql, /git\/commits\/\$merge_sha/u);
-  assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  // GitHub refreshes `refs/pull/N/merge` and `pulls/N.base.sha` independently.
+  // Requiring the cached pointer alone made a current merge ref read as stale
+  // once the base branch advanced, so the dispatched scan analyzed the exact
+  // head, Advanced Security bound the PR's aggregate CodeQL check to that
+  // branch snapshot, and the slow language landed after it had already closed
+  // `timed_out`.
+  assert.match(
+    codeql,
+    /gh api "repos\/\$REPO\/git\/ref\/heads\/\$base_ref"/u,
+    "the analyzer scope resolves the live base branch tip instead of trusting only the cached base pointer",
+  );
+  assert.match(
+    codeql,
+    /\.\[1\] == \$head\n\s+and \(\.\[0\] == \$base\n\s+or \(\$branch_base != "" and \.\[0\] == \$branch_base\)\)/u,
+    "a merge ref parented on either accepted base is current, while the live head parent stays required",
+  );
+  assert.match(
+    codeql,
+    /\[\[ "\$base_ref" =~ \^\[A-Za-z0-9\._\/-\]\+\$ \]\]/u,
+    "only a well-formed base branch name reaches the live tip lookup",
+  );
   assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
   assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
   assert.match(codeql, /^      security-events: read$/mu);
@@ -900,7 +920,16 @@ export function assertControlPlaneContract() {
   assert.match(codeqlBackfill, /sort\(\(left, right\)[\s\S]*right\.updated_at/u);
   assert.match(codeqlBackfill, /ACTIVE_RUN_STATUSES/u);
   assert.match(codeqlBackfill, /git\/ref\/pull\/\$\{number\}\/merge/u);
-  assert.match(codeqlBackfill, /parents\[0\] === baseSha[\s\S]*parents\[1\] === headSha/u);
+  assert.match(
+    codeqlBackfill,
+    /\(parents\[0\] === baseSha \|\| \(liveBaseSha !== "" && parents\[0\] === liveBaseSha\)\)[\s\S]*parents\[1\] === headSha/u,
+    "the backfill selector accepts the same two bases as the analyzer scope and still requires the live head parent",
+  );
+  assert.match(
+    codeqlBackfill,
+    /git\/ref\/heads\/\$\{branch\}/u,
+    "the backfill selector resolves the live base branch tip once per distinct base branch",
+  );
   assert.match(codeqlBackfill, /analysisSnapshots\.get\(number\)/u);
   assert.doesNotMatch(
     codeqlBackfill,

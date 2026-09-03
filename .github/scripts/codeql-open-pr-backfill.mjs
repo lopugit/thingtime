@@ -225,15 +225,24 @@ function listActiveCodeqlRuns(repository) {
   return runs;
 }
 
-export function analysisSnapshotForPullRequest(pullRequest, mergeCommit = null) {
+// `pulls/N.base.sha` is GitHub's cached base pointer and `refs/pull/N/merge`
+// is recomputed independently, so the two skew in both directions whenever the
+// base branch advances. Accept the live base branch tip as a second valid first
+// parent; otherwise a freshly recomputed merge ref reads as stale, the exact
+// head is analyzed instead, and Advanced Security opens the PR's aggregate
+// CodeQL check against that branch snapshot.
+export function analysisSnapshotForPullRequest(pullRequest, mergeCommit = null, baseBranchSha = "") {
   const number = Number(pullRequest?.number);
   const headSha = String(pullRequest?.head?.sha || "");
   const baseSha = String(pullRequest?.base?.sha || "");
+  const liveBaseSha = /^[0-9a-f]{40,64}$/u.test(String(baseBranchSha || ""))
+    ? String(baseBranchSha)
+    : "";
   const mergeSha = String(mergeCommit?.sha || "");
   const parents = (mergeCommit?.parents || []).map((parent) => String(parent?.sha || ""));
   const exactMerge = /^[0-9a-f]{40,64}$/u.test(mergeSha)
     && parents.length === 2
-    && parents[0] === baseSha
+    && (parents[0] === baseSha || (liveBaseSha !== "" && parents[0] === liveBaseSha))
     && parents[1] === headSha;
   return {
     analysisRef: exactMerge ? `refs/pull/${number}/merge` : `refs/pull/${number}/head`,
@@ -259,13 +268,34 @@ function optionalPullMergeCommit(repository, number) {
   }
 }
 
+function optionalBranchTipSha(repository, branch, cache) {
+  if (!/^[A-Za-z0-9._/-]+$/u.test(branch)) return "";
+  if (cache.has(branch)) return cache.get(branch);
+  let tip = "";
+  try {
+    const ref = ghJson(["api", `repos/${repository}/git/ref/heads/${branch}`]);
+    const sha = String(ref?.object?.sha || "");
+    if (/^[0-9a-f]{40,64}$/u.test(sha)) tip = sha;
+  } catch (error) {
+    if (!/\b(?:404|409|422)\b/u.test(String(error?.message || ""))) throw error;
+  }
+  cache.set(branch, tip);
+  return tip;
+}
+
 function resolveLiveAnalysisSnapshots(repository, pullRequests) {
   const snapshots = new Map();
+  const baseTips = new Map();
   for (const pullRequest of pullRequests) {
     const number = Number(pullRequest.number);
     if (!Number.isSafeInteger(number) || number < 1) continue;
     const mergeCommit = optionalPullMergeCommit(repository, number);
-    snapshots.set(number, analysisSnapshotForPullRequest(pullRequest, mergeCommit));
+    const baseBranchSha = optionalBranchTipSha(
+      repository,
+      String(pullRequest?.base?.ref || ""),
+      baseTips,
+    );
+    snapshots.set(number, analysisSnapshotForPullRequest(pullRequest, mergeCommit, baseBranchSha));
   }
   return snapshots;
 }
@@ -411,6 +441,54 @@ function selfTest() {
     analysisRef: "refs/pull/4/head",
     analysisSha: sha("4"),
   });
+
+  // GitHub refreshes `refs/pull/N/merge` and `pulls/N.base.sha` independently,
+  // so a live merge ref legitimately skews from the cached base pointer in
+  // either direction once the base branch advances. Only a merge commit that
+  // matches neither accepted base is stale. Reading the exact head instead
+  // makes Advanced Security bind the PR's aggregate CodeQL check to the branch
+  // snapshot and close it `timed_out` when the slow language lands late.
+  const skewed = {
+    number: 5,
+    updated_at: "2026-08-05T00:00:00Z",
+    head: { sha: sha("5") },
+    base: { sha: sha("a"), ref: "develop" },
+  };
+  const mergeOf = (first) => ({ sha: sha("e"), parents: [{ sha: first }, { sha: sha("5") }] });
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(skewed, mergeOf(sha("b")), sha("b")),
+    { analysisRef: "refs/pull/5/merge", analysisSha: sha("e") },
+    "a merge ref recomputed onto the live base branch tip is current, not stale",
+  );
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(skewed, mergeOf(sha("a")), sha("b")),
+    { analysisRef: "refs/pull/5/merge", analysisSha: sha("e") },
+    "a merge ref still parented on the cached base pointer stays current",
+  );
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(skewed, mergeOf(sha("a")), ""),
+    { analysisRef: "refs/pull/5/merge", analysisSha: sha("e") },
+    "an unavailable base branch tip keeps the original cached-base acceptance",
+  );
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(skewed, mergeOf(sha("f")), sha("b")),
+    { analysisRef: "refs/pull/5/head", analysisSha: sha("5") },
+    "a merge ref matching neither accepted base remains stale and falls back to the head",
+  );
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(skewed, mergeOf("not-a-sha"), "not-a-sha"),
+    { analysisRef: "refs/pull/5/head", analysisSha: sha("5") },
+    "a malformed base branch tip never widens the stale-merge guard",
+  );
+  assert.deepEqual(
+    analysisSnapshotForPullRequest(
+      skewed,
+      { sha: sha("e"), parents: [{ sha: sha("b") }, { sha: sha("9") }] },
+      sha("b"),
+    ),
+    { analysisRef: "refs/pull/5/head", analysisSha: sha("5") },
+    "the live head parent is still required, so an outdated merge ref is rejected",
+  );
 
   // Exercise the read classifier against real decoder output rather than
   // asserting on the message strings: these are the shapes an inventory
