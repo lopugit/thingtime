@@ -371,7 +371,20 @@ export const unlinkConnection = async (
     // in its secure blob); synced external posts stay — they are inert
     // public/audience content other users' comments may hang off.
     const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountId });
-    if (remaining === 0) {
+    // `parentId` is the indexed denormalization of crystal.accountId, and it is
+    // healed on connect ($set above) rather than backfilled — so a link written
+    // by an earlier build carries the crystal field but no parentId until its
+    // owner happens to reconnect. Everywhere else that costs a stale count;
+    // HERE it would read "nobody else links this account" and take the
+    // destructive branch, deleting a live account thing (with its sealed
+    // credentials) and every membership row behind another user's feed. One
+    // confirming count on the authoritative field, only ever on the
+    // already-rare last-unlink path, keeps the irreversible step fail-closed.
+    const confirmed =
+      remaining === 0
+        ? await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId })
+        : remaining;
+    if (confirmed === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
       // The account is gone, so no viewer can ever match its membership rows
       // again — drain them rather than leaving dead index entries that every

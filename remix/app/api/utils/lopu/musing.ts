@@ -264,6 +264,49 @@ async function* streamOpenAI(
   }
 }
 
+// Drain a provider stream, giving up if `deadlineAt` passes mid-stream.
+//
+// A caller-side "have I run out of time?" check can only ever gate STARTING a
+// call: once `for await` is waiting on the provider, nothing short of the SDK's
+// own (10-minute) default timeout ends it. That is the whole gap this closes —
+// a request-scoped deadline has to be enforced where the stream is consumed.
+//
+// The abandoned generator is returned but NOT awaited: `.return()` on an async
+// generator with a pending `next()` queues BEHIND that next, so awaiting it
+// would block for exactly as long as the stall we are escaping. Firing it
+// un-awaited closes the underlying SDK stream whenever the read settles, while
+// the caller returns now. `Promise.race` keeps a handler attached to the losing
+// `next()`, so a late provider rejection is never an unhandled rejection.
+const drainWithin = async (gen: AsyncGenerator<string>, deadlineAt: number | null): Promise<string | null> => {
+  if (deadlineAt === null) {
+    let all = '';
+    for await (const chunk of gen) all += chunk;
+    return all;
+  }
+  const abandon = () => void Promise.resolve(gen.return(undefined as never)).catch(() => {});
+  let text = '';
+  for (;;) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0) {
+      abandon();
+      return null;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const step = await Promise.race([
+      gen.next(),
+      new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), remaining);
+      })
+    ]).finally(() => clearTimeout(timer));
+    if (step === 'timeout') {
+      abandon();
+      return null;
+    }
+    if (step.done) return text;
+    text += step.value;
+  }
+};
+
 // Generic non-streaming completion for other Thingtime features (e.g. the
 // connections feed filters). Same provider waterfall + admin model routing as
 // the musing, same graceful degradation: null when no provider is configured
@@ -276,25 +319,37 @@ async function* streamOpenAI(
 // the ceiling would silently receive a truncated completion — for the feed
 // classifier that loses the closing bracket and the whole batch — so degrade to
 // its non-AI fallback instead of answering with something unparseable.
+// `timeoutMs` bounds the WHOLE call — every provider attempt in the waterfall
+// shares the one deadline, so a caller that must answer inside a request budget
+// gets that budget, not a multiple of it. Omitted = drain to completion (the
+// musing's own behaviour, where the response IS the stream).
 export const generateAiCompletion = async (opts: {
   system: string;
   user: string;
   maxTokens?: number;
+  timeoutMs?: number;
 }): Promise<{ text: string; source: 'claude' | 'openai' } | null> => {
   if (!hasAnyKey()) return null;
   if ((opts.maxTokens ?? 0) > MUSING_MAX_OUTPUT_TOKENS) return null;
+  const deadlineAt = opts.timeoutMs !== undefined && opts.timeoutMs > 0 ? Date.now() + opts.timeoutMs : null;
   // One durable waterfall read serves every provider attempt, as in the musing.
   const choices = await getLopuModelChoices();
   for (const provider of providerOrder()) {
     const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
     if (!key) continue;
+    // A provider that burned the whole deadline must not hand the NEXT one a
+    // fresh start — that is how a two-provider waterfall doubles its own bound.
+    if (deadlineAt !== null && Date.now() >= deadlineAt) return null;
     try {
       const gen =
         provider === 'claude'
           ? streamClaude(opts.system, opts.user, choices.claude)
           : streamOpenAI(opts.system, opts.user, choices.openai);
-      let text = '';
-      for await (const chunk of gen) text += chunk;
+      const text = await drainWithin(gen, deadlineAt);
+      // null = the deadline passed mid-stream. Falling through to the next
+      // provider would spend a bound that is already gone, so stop here and let
+      // the caller take its non-AI fallback.
+      if (text === null) return null;
       if (text.trim()) return { text: text.trim(), source: provider };
     } catch {
       // try the next provider

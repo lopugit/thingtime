@@ -50,9 +50,15 @@ const CLASSIFY_CONCURRENCY = 4;
 // request, and the cache makes that convergence monotonic.
 const CLASSIFY_MAX_AI_CALLS = 12;
 // Wall clock is the second bound, because the call cap alone still trusts the
-// provider to return. musing.ts puts no timeout on its stream (only
-// fetchWeather has one), so a slow provider would otherwise stall the feed for
-// as long as the platform allows — `fluid: true` means minutes.
+// provider to return: 12 calls that each hang is still a hung feed. The
+// deadline is absolute and shared by every filter on the request, and it is
+// enforced in BOTH places it can be lost — reserveAiCall refuses to start a
+// call once it has passed, and the remaining budget is handed to
+// generateAiCompletion, which abandons a stream that overruns it. Only the
+// second one bounds a call already in flight: the provider SDKs fall back to
+// their own 10-minute default, and `fluid: true` means the platform will wait.
+// Overrunning is not an error — the batch degrades to the heuristic below and,
+// being uncached, is retried for real on the next read.
 const CLASSIFY_DEADLINE_MS = 20_000;
 
 export type FeedFilterAction = 'warn' | 'hide';
@@ -214,12 +220,20 @@ const CLASSIFIER_SYSTEM =
 
 const aiVerdicts = async (
   prompt: string,
-  posts: { id: string; text: string }[]
+  posts: { id: string; text: string }[],
+  deadlineAt: number
 ): Promise<{ byId: Map<string, { matched: boolean; reason: string }>; source: 'claude' | 'openai' } | null> => {
   const user =
     `Filter rule: ${prompt}\n\nPosts:\n` +
     JSON.stringify(posts.map((post) => ({ id: post.id, text: post.text.slice(0, CLASSIFY_TEXT_CHARS) })));
-  const completion = await generateAiCompletion({ system: CLASSIFIER_SYSTEM, user, maxTokens: CLASSIFY_MAX_TOKENS });
+  // The request's remaining wall clock, handed to the provider call itself —
+  // reserveAiCall's deadline check can only gate calls it has not started yet.
+  const completion = await generateAiCompletion({
+    system: CLASSIFIER_SYSTEM,
+    user,
+    maxTokens: CLASSIFY_MAX_TOKENS,
+    timeoutMs: Math.max(1, deadlineAt - Date.now())
+  });
   if (!completion) return null;
   const jsonMatch = completion.text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return null;
@@ -305,7 +319,7 @@ export const applyFeedFilters = async (
       let verdicts: Map<string, { matched: boolean; reason: string }> | null = null;
       let source: 'claude' | 'openai' | 'heuristic' = 'heuristic';
       if (reserveAiCall()) {
-        const ai = await aiVerdicts(filter.prompt, batch);
+        const ai = await aiVerdicts(filter.prompt, batch, deadlineAt);
         if (ai) {
           verdicts = ai.byId;
           source = ai.source;

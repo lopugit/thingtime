@@ -65,7 +65,7 @@
     "test:editable-target": "node --import tsx --test app/utils/editableTarget.test.ts",
     "test:graphify-cas": "node --test ../scripts/graphify-cas.test.mjs",
     "test:lopu": "node --import tsx --test app/api/utils/lopu/*.test.ts",
-    "test:lopu-streaming": "node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/musing.streaming.test.mts",
+    "test:lopu-streaming": "node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/*.test.mts",
     "test:migrations": "node --import tsx --test app/api/utils/migrations/*.test.ts app/components/Schemas/migrationUiCore.test.ts",
     "test:messenger": "node --import tsx --test app/api/utils/messenger/*.test.ts app/components/Messenger/*.test.ts",
     "test:inline-tokens": "node --import tsx --test app/components/Feed/hashtags.test.ts app/utils/mentions.test.ts",
