@@ -27,6 +27,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   disable/close cleanup remains bounded to Thingtime-owned preview resources.
   See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
 
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
+
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
 - `@Thingtime login` is now callable before authentication and returns its

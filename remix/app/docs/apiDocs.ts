@@ -1,5 +1,6 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -3374,19 +3375,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'email-config',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'email',
     title: 'Email delivery config',
     endpoint: '/api/v1/email/config',
-    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    summary: 'Returns sanitized email delivery configuration in local development and Vercel previews.',
     detail:
-      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+      'Dev/preview-only helper for the /tests page. Use it to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved. Production and unknown production-like hosts return 403, and credentials are never included.',
     auth: {
       mode: 'none',
-      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the endpoint (POST behaves identically).',
+      'Use it only in local development or a Vercel preview; production returns 403.',
       'Read provider to confirm whether real SES delivery or console logging is active.',
       'Use sesSandbox and testRecipient to plan /tests email checks.'
     ],
@@ -3415,6 +3419,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             testRecipientDomain: 'thingtime.com'
           }
         }
+      },
+      {
+        status: 403,
+        description: 'Production and unknown production-like environments do not expose email diagnostics.',
+        body: { ok: false, error: 'Email config is available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -3525,11 +3534,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
-    summary: 'Reports Nitro API runtime readiness.',
-    detail: 'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
+    summary: 'Reports Nitro API runtime and critical storage-accounting readiness.',
+    detail:
+      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. It reports degraded while backfill-user-storage-accounting is required, because uploads and other positive storage writes intentionally fail closed in that state.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -3538,7 +3550,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
-      'Read service, state, runtime, nodeEnv, and responseMs.',
+      'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
+      'If state is degraded, run the named migration from the admin migrations console and recheck until ready.',
       'Use this before deeper API tests to separate server availability from endpoint behavior.'
     ],
     requestExamples: [
@@ -3552,7 +3565,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Nitro is ready.',
-        body: { ok: true, service: 'nitro', state: 'ready', runtime: 'nitro' }
+        body: {
+          ok: true,
+          service: 'nitro',
+          state: 'ready',
+          runtime: 'nitro',
+          storageAccounting: {
+            state: 'ready',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Nitro is reachable but positive storage writes are fenced until the migration completes.',
+        body: {
+          ok: false,
+          service: 'nitro',
+          state: 'degraded',
+          storageAccounting: {
+            state: 'migration-required',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
       }
     ]
   }),
