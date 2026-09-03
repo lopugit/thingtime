@@ -161,8 +161,14 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
     handle: String(accountDoc?.crystal?.handle || ''),
     displayName: String(accountDoc?.crystal?.displayName || ''),
-    avatarUrl: typeof accountDoc?.crystal?.avatarUrl === 'string' ? accountDoc.crystal.avatarUrl : null,
-    profileUrl: typeof accountDoc?.crystal?.profileUrl === 'string' ? accountDoc.crystal.profileUrl : null
+    // Scheme-checked on the way out, exactly like the synced-post author links
+    // above (and toPublicPosts' safeExternalLink): an account's crystal carries
+    // provider-supplied values — RSS takes `profileUrl` straight from a feed's
+    // <link href>, and that feed is any URL a user named — so a bare typeof
+    // check would let a hostile source park a `javascript:` target in a field
+    // the UI is free to render as an <a href>/<img src> later.
+    avatarUrl: webLink(accountDoc?.crystal?.avatarUrl),
+    profileUrl: webLink(accountDoc?.crystal?.profileUrl)
   },
   ...(provider?.id === 'youtube' ? { channels: sanitizeChannelList(accountDoc?.crystal?.config?.channels) } : {}),
   lastSyncedAt: accountDoc?.crystal?.lastSyncedAt instanceof Date ? accountDoc.crystal.lastSyncedAt.toISOString() : null,

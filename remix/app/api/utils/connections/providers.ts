@@ -1019,7 +1019,11 @@ const rssProvider: ConnectionProvider = {
         displayName: feed.title || host,
         handle: host,
         avatarUrl: null,
-        profileUrl: feed.link,
+        // The feed's own <link href> — fully attacker-controlled, since the
+        // feed is whatever URL the user typed. Every other remote-supplied
+        // link in this file rides webLink for exactly this reason; without it
+        // a `javascript:` href is stored verbatim on the account crystal.
+        profileUrl: webLink(feed.link),
         config: { feedUrl: raw }
       }
     };
@@ -1354,7 +1358,11 @@ const mastodonProvider: ConnectionProvider = {
         displayName: boundedText(looked.data.display_name, 120) || `@${acct}`,
         handle: `@${looked.data.acct || acct}@${instance}`,
         avatarUrl: httpsImage(looked.data.avatar),
-        profileUrl: typeof looked.data.url === 'string' ? looked.data.url.slice(0, 1500) : `https://${instance}/@${acct}`,
+        // The instance is whatever host the user named, so `url` is remote
+        // input like every other link here: scheme-check it rather than just
+        // truncating. webLink already caps at 1500, and rejecting an
+        // over-long URL beats storing a silently truncated (broken) one.
+        profileUrl: webLink(looked.data.url) || `https://${instance}/@${acct}`,
         config: { instance, accountId: String(looked.data.id), account: acct }
       }
     };
@@ -2109,7 +2117,8 @@ const mastodonAccountProvider: ConnectionProvider = {
           displayName: boundedText(me.data.display_name, 120) || `@${me.data.acct}`,
           handle: `@${me.data.acct}@${instance}`,
           avatarUrl: httpsImage(me.data.avatar),
-          profileUrl: typeof me.data.url === 'string' ? me.data.url.slice(0, 1500) : `https://${instance}/@${me.data.acct}`,
+          // Same remote-input rule as the instance-lookup branch above.
+          profileUrl: webLink(me.data.url) || `https://${instance}/@${me.data.acct}`,
           config: { instance }
         }
       };
