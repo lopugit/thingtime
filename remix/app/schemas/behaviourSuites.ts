@@ -24,7 +24,7 @@
 // Every materialised crystal clears its kind's write gate unchanged; the unit
 // test asserts that for both modes across the whole catalog.
 
-import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from './webpageDemos';
+import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from './webpageDemos.ts';
 
 export const SUITE_SLUG_PREFIX = 'demo-';
 

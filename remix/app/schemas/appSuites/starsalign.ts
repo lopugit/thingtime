@@ -13,8 +13,8 @@
 // the original app stored them under app-data — now as data things of the
 // viewer's own `profile` schema.
 
-import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites';
-import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos';
+import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites.ts';
+import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos.ts';
 
 // ── palette (night theme of the original) ───────────────────────────────────
 const BG = '#0b0b16';

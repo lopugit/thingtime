@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_WEBPAGE_BLOCKS, validateThingtimeCrystal } from './registry';
+import { MAX_WEBPAGE_BLOCKS, validateThingtimeCrystal } from './registry.ts';
 import {
 	BEHAVIOUR_SUITES,
 	getBehaviourSuite,
@@ -13,9 +13,9 @@ import {
 	suiteSlug,
 	summarizeBehaviourSuite,
 	type SuiteMode
-} from './behaviourSuites';
-import { countDemoBlocks, type DemoBlock } from './webpageDemos';
-import { ALL_SUITES } from './appSuites/index';
+} from './behaviourSuites.ts';
+import { countDemoBlocks, type DemoBlock } from './webpageDemos.ts';
+import { ALL_SUITES } from './appSuites/index.ts';
 
 // Controls may also name the page runtime's pseudo-actions (a refresh, an
 // install) — those never reach the run endpoint.
