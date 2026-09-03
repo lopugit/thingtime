@@ -17,6 +17,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview builds now maintain one
+  GitHub App-owned PR comment. It is posted before deployment launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
 - `@Thingtime login` is now callable before authentication and returns its

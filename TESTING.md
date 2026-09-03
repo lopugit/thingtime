@@ -3070,7 +3070,7 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.2.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3085,10 +3085,17 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub App-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail
