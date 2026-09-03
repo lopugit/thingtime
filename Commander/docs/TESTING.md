@@ -28,10 +28,10 @@
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
-- [ ] Start from populated results, type a different query, and verify the prior rows remain visually unchanged but
-      non-executable until cached/live batches stream in. No dim, empty-state, or catalog-only flash may appear; the
-      first exact or nearest-prefix cached batch must paint before the live filesystem batch, and an identical final
-      batch must not remount the rows.
+- [ ] Start from populated results, type a different query, and verify the prior rows disappear immediately rather
+      than being presented as matches for the new input. The first exact or nearest-prefix cached batch for the new
+      query may paint before the live filesystem batch; it must be query-relevant, and an identical final batch must
+      not remount the rows.
 - [ ] With an index above one million records, time cold and repeated two-character filesystem searches such as `ea`.
       Verify the cold path uses the bounded indexed prefix lookup rather than a whole-database contains scan, then
       type a refinement and repeat the query to confirm warmed candidate and exact-result cache frames paint promptly.
