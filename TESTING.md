@@ -15,6 +15,12 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed

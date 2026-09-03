@@ -25,9 +25,12 @@ After it succeeds, call `list_thingtime_accounts` to report safe account metadat
 Treat `@Thingtime list accounts` as an explicit request to call
 `list_thingtime_accounts` and return only its safe account metadata.
 
-Never ask the user to paste a Thingtime personal access token into chat. A
-connected client’s revocable bridge credentials do not expire by default; tell
-the user to reconnect only if a connection is revoked or an account is missing.
+Never ask the user to paste a Thingtime personal access token into chat. The
+first-party connection page uses Thingtime SSO and defaults to a generated
+read/write-all Things token; Advanced settings are the only place to narrow or
+regenerate its scopes. A connected client’s revocable bridge credentials do
+not expire by default; tell the user to reconnect only if a connection is
+revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
@@ -59,7 +62,7 @@ known and its attached comments are needed, call `list_thingtime_comments` with
 that `targetId`; do not fetch a global Things page and discard unrelated rows.
 
 If a tool says the token lacks a scope, explain the minimum missing Thingtime
-scope and ask the user to create a narrower replacement token in Thingtime
-Settings → Token minter, then reconnect. Removing the final account revokes
-every bridge and refresh credential in that ChatGPT connection. Do not suggest
-an unrestricted account-session credential.
+scope and ask the user to reconnect, open Advanced connection settings, and
+regenerate the scoped credential with that access rule. Removing the final
+account revokes every bridge and refresh credential in that ChatGPT connection.
+Do not suggest an unrestricted account-session credential.

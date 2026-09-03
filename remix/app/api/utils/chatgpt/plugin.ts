@@ -1,8 +1,10 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
+import { mintPatToken, PAT_SCOPE_CATALOG, revokePatToken } from '~/api/utils/auth/patTokens';
 import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
@@ -422,11 +424,13 @@ export const beginChatGptAuthorization = async ({ request }: { request: Request 
   if (!configuredCipherKey()) return oauthErrorPage(503, 'This Thingtime endpoint has not configured encrypted ChatGPT credential storage.');
 
   const requestToken = await requestClaimsToken(parsed.request);
-  return new Response(renderConnectionPage(requestToken, allowed), {
+  const normalizedOrigin = normalizeThingtimeEndpoint(requestOrigin(request));
+  const defaultEndpoint = normalizedOrigin && allowed.includes(normalizedOrigin) ? normalizedOrigin : allowed[0];
+  return new Response(renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
     headers: {
       ...noStoreHeaders,
       'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors https://chatgpt.com",
+      'Content-Security-Policy': "default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors https://chatgpt.com",
       'Referrer-Policy': 'no-referrer'
     }
   });
@@ -539,6 +543,59 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
   const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
   if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+
+  if (form.value.get('intent') === 'prepare') {
+    const user = await getCurrentUser(request);
+    if (!user) return json({ ok: false, error: 'Sign in with Thingtime to continue.' }, { status: 401, headers: noStoreHeaders });
+
+    const endpoint = normalizeThingtimeEndpoint(form.value.get('endpoint'));
+    const originEndpoint = normalizeThingtimeEndpoint(requestOrigin(request));
+    if (!endpoint || endpoint !== originEndpoint || !allowedThingtimeEndpoints().includes(endpoint)) {
+      return json({ ok: false, error: 'Automatic sign-in can only generate a token for this Thingtime endpoint. Use Advanced settings for another endpoint.' }, { status: 400, headers: noStoreHeaders });
+    }
+
+    const requestedScopes = form.value.getAll('scope').filter((scope): scope is string => typeof scope === 'string');
+    const minted = await mintPatToken(user.id, {
+      name: `Thingtime ChatGPT connection · @${user.username}`,
+      scopes: requestedScopes.length ? requestedScopes : ['things'],
+      expiresInMs: null,
+      maxUses: null,
+      visibility: 'all',
+      createdVia: 'chatgpt-oauth'
+    });
+    if (minted.ok === false) return json({ ok: false, error: minted.error }, { status: minted.status, headers: noStoreHeaders });
+
+    // The browser keeps the generated token only in its password field. When a
+    // user explicitly regenerates it, revoke the previous generated token so a
+    // scope change never quietly leaves a second all-access credential active.
+    const replaceTokenId = form.value.get('replaceTokenId');
+    if (typeof replaceTokenId === 'string' && replaceTokenId && replaceTokenId !== minted.tokenInfo.id) {
+      const sessions = await getSessionsCollection();
+      const previous = await sessions.findOne({
+        jti: replaceTokenId,
+        userId: user.id,
+        purpose: 'pat',
+        revokedAt: null,
+        'meta.createdVia': 'chatgpt-oauth'
+      });
+      if (previous) await revokePatToken(user.id, previous.jti);
+    }
+
+    return json(
+      {
+        ok: true,
+        token: minted.token,
+        tokenId: minted.tokenInfo.id,
+        account: {
+          label: user.displayName?.trim() || user.username,
+          username: user.username,
+          endpoint,
+          scopes: minted.tokenInfo.scopes
+        }
+      },
+      { headers: noStoreHeaders }
+    );
+  }
 
   const labels = form.value.getAll('label');
   const endpoints = form.value.getAll('endpoint');
