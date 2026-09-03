@@ -149,6 +149,14 @@ jobs:
 
               merge_ref="refs/pull/$PR_NUMBER/merge"
               merge_sha=""
+              # Whether GitHub publishes a synthetic merge ref for this PR at
+              # all, which is a strictly different question from whether the
+              # one it published is current. Only a PR GitHub cannot merge
+              # lacks the ref entirely, and that is the only case in which no
+              # `pull_request` run exists to own the analysis. Keep the two
+              # apart: the freshness check below clears `merge_sha`, and the
+              # ownership decision must not read that as "unmergeable".
+              mergeable_pr=false
               # `gh api` writes GitHub's JSON error body to stdout for a
               # missing synthetic merge ref. Do not capture that body through
               # `|| true` and later mistake it for a commit SHA. A conflicted
@@ -160,6 +168,7 @@ jobs:
               )"; then
                 if [[ "$candidate_merge_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
                   merge_sha="$candidate_merge_sha"
+                  mergeable_pr=true
                 elif [ -n "$candidate_merge_sha" ]; then
                   echo "::warning::PR #$PR_NUMBER returned an invalid synthetic merge SHA; analyzing its exact head instead."
                 fi
@@ -175,11 +184,27 @@ jobs:
                   merge_sha=""
                 fi
               fi
+              # Gate ownership on `mergeable_pr`, not on `merge_sha`. GitHub
+              # recomputes `refs/pull/N/merge` lazily, so a mergeable PR whose
+              # base advanced legitimately reports parents that match neither
+              # the cached `pulls/N.base.sha` nor the live tip. That is a stale
+              # *ref*, not an absent one: the `pull_request` run still exists
+              # and is still analyzing `refs/pull/N/merge` right now. Reading
+              # the cleared `merge_sha` as "no merge ref" sent this dispatch
+              # down the exact-head fallback beside it, and the two uploads
+              # then raced under different refs. Advanced Security opens the
+              # PR's aggregate CodeQL check against whichever snapshot lands
+              # first: on PR #557 the head-ref `actions` analysis opened it at
+              # 11:30:19Z and the head-ref `javascript-typescript` analysis did
+              # not arrive until 11:41:49Z (12m43s under the contention the
+              # duplicate scans themselves created), so the check closed
+              # `timed_out` at 11:36:46Z and never reopened. Same hazard the
+              # push path already guards against below, one event away.
               if [ "$base_has_pr_listener" = true ] \
-                 && [ -n "$merge_sha" ] \
+                 && [ "$mergeable_pr" = true ] \
                  && [ "$BACKFILL_LISTENER_OWNED" != true ]; then
                 analyze=false
-                echo "PR #$PR_NUMBER has a merge ref and its target carries the normal listener; that pull_request run owns analysis."
+                echo "PR #$PR_NUMBER is mergeable and its target carries the normal listener; that pull_request run owns analysis."
               elif [ -n "$merge_sha" ]; then
                 analysis_ref="$merge_ref"
                 analysis_sha="$merge_sha"
@@ -193,7 +218,28 @@ jobs:
                 analysis_ref="refs/pull/$PR_NUMBER/head"
                 analysis_sha="$live_head_sha"
                 checkout_ref="$analysis_ref"
-                echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+                # Report the two facts the block now keeps apart. Saying "no
+                # merge ref" for a ref that is merely stale is what made the
+                # PR #557 incident hard to read: the log claimed the ref was
+                # absent on the line directly after announcing it was stale,
+                # which hid that a live pull_request run was analyzing that
+                # very ref. Only a PR GitHub cannot merge is refless.
+                #
+                # A stale ref reaching this fallback is only a concurrency
+                # warning when the target actually carries the listener, which
+                # now means a deliberate `backfill_listener_owned` activation
+                # scan running beside a live `pull_request` merge-ref run --
+                # the residual #557 shape, opted into. Without the listener no
+                # `pull_request` run exists to race, so raising the same alarm
+                # there would fire on the ordinary path and train readers to
+                # ignore the line that matters.
+                if [ "$mergeable_pr" != true ]; then
+                  echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+                elif [ "$base_has_pr_listener" = true ]; then
+                  echo "::warning::PR #$PR_NUMBER has a stale merge ref and this activation backfill is analyzing its exact head; a pull_request run may be analyzing its merge ref concurrently."
+                else
+                  echo "PR #$PR_NUMBER has a stale merge ref and its target carries no listener; Lopu will analyze its exact head, and no pull_request run competes for it."
+                fi
               fi
 
               if [ "$analyze" = true ]; then

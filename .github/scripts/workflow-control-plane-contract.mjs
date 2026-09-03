@@ -890,6 +890,68 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /base_has_pr_listener/u);
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
   assert.match(codeql, /git\/commits\/\$merge_sha/u);
+  // The property is that the freshness check still compares the merge commit's
+  // first parent against a base and its second against the live head. Pin those
+  // two comparisons separately rather than as one adjacent phrase: the jq
+  // program is legitimately rewritten across more than one line the moment a
+  // second accepted base is added (PR #579 widens `.[0]` to also accept the
+  // live base branch tip, because `pulls/N.base.sha` and `refs/pull/N/merge`
+  // are refreshed independently and skew whenever the base advances). Pinning
+  // the single-line spelling made this contract fail on that rewrite while the
+  // property it exists to protect was fully intact — and both PRs land on this
+  // same base, so the union of the two is exactly the tree CI would run.
+  assert.match(
+    codeql,
+    /\.\[0\] == \$base/u,
+    "the merge-ref freshness check still compares the first parent against the PR base",
+  );
+  assert.match(
+    codeql,
+    /\.\[1\] == \$head/u,
+    "the merge-ref freshness check still requires the second parent to be the live head",
+  );
+  // A stale merge ref and an absent one are different facts and must stay
+  // separately recorded. The freshness check clears `merge_sha`; only a PR
+  // GitHub cannot merge clears `mergeable_pr`, and only that PR has no
+  // `pull_request` run of its own. Gating listener ownership on the cleared
+  // `merge_sha` is what sent a dispatched backfill down the exact-head
+  // fallback alongside a live `pull_request` merge-ref analysis, split one
+  // PR's two languages across two refs, and closed its aggregate CodeQL check
+  // `timed_out` (PR #557 @ bb151336, run 33624842347).
+  assert.match(
+    codeql,
+    /mergeable_pr=true/u,
+    "the analyzer scope records that GitHub published a merge ref independently of whether that ref is current",
+  );
+  assert.match(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ "\$mergeable_pr" = true \] \\\n\s+&& \[ "\$BACKFILL_LISTENER_OWNED" != true \]; then\n\s+analyze=false/u,
+    "a mergeable listener-owned PR is never centrally re-analyzed on its exact head beside its own pull_request run",
+  );
+  assert.doesNotMatch(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ -n "\$merge_sha" \]/u,
+    "listener ownership must not be decided by the freshness-cleared merge SHA",
+  );
+  // The three assertions above pin how `mergeable_pr` is read but not how it
+  // is written, and the regression that matters is a write: adding
+  // `mergeable_pr=false` beside the `merge_sha=""` in the freshness check
+  // re-collapses the two facts and reproduces #557 exactly (`analyze=true`,
+  // `ref=refs/pull/N/head` beside the live `pull_request` merge-ref run) while
+  // leaving all three green. Pin the variable's whole lifecycle instead: two
+  // assignments, in this order, and the `true` only where a well-formed
+  // published merge SHA is captured. Nothing between the lookup and the
+  // ownership gate may touch it.
+  assert.deepEqual(
+    codeql.match(/^\s*mergeable_pr=\S+$/gmu)?.map((assignment) => assignment.trim()),
+    ["mergeable_pr=false", "mergeable_pr=true"],
+    "`mergeable_pr` is initialized false and set true exactly once, so the freshness check cannot clear it",
+  );
+  assert.match(
+    codeql,
+    /merge_sha="\$candidate_merge_sha"\n\s+mergeable_pr=true$/mu,
+    "`mergeable_pr` records the published merge SHA GitHub actually returned, never an unconditional default",
+  );
   // GitHub refreshes `refs/pull/N/merge` and `pulls/N.base.sha` independently.
   // Requiring the cached pointer alone made a current merge ref read as stale
   // once the base branch advanced, so the dispatched scan analyzed the exact
