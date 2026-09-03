@@ -41,6 +41,9 @@ test('the OAuth connection page is SSO-first and defaults to all Things read/wri
   assert.match(page, /data-scope value="things" checked/);
   assert.match(page, /\/authorize\?self=1/);
   assert.match(page, /Generate a new token with these rules/);
+  assert.match(page, /Completing your secure Thingtime connection/);
+  assert.match(page, /data\.set\('intent','complete'\)/);
+  assert.match(page, /window\.location\.assign\(body\.redirectUri\)/);
   assert.doesNotMatch(page, /Create a least-privilege token/);
 });
 

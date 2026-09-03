@@ -10,9 +10,12 @@ new task by listing accounts when the requested account is ambiguous, then
 select the requested account explicitly.
 
 Treat `@Thingtime login` as an explicit request to start the installed
-Thingtime MCP server's native OAuth flow. Run `codex mcp login thingtime`
-instead of calling `login_thingtime`: before a connection exists, MCP tool
-calls are intentionally protected and cannot bootstrap authentication.
+Thingtime MCP server's native OAuth flow. On a local desktop, run
+`node scripts/desktop-oauth-login.mjs`: it starts `codex mcp login thingtime`
+and opens Codex's exact one-time browser URL in Chrome while preserving the
+local callback listener. Do not manually copy, rewrite, or open a partial
+OAuth URL. Before a connection exists, MCP tool calls are intentionally
+protected and cannot bootstrap authentication.
 
 When the user is on a remote or mobile client, run
 `node scripts/mobile-oauth-login.mjs` from this plugin directory instead. It
