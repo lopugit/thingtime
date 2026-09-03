@@ -1407,6 +1407,31 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
   assert.match(reviewBlock, /\.reviewed_base_sha == \$reviewed_base_sha/u, "authority binds the reviewed base revision");
   assert.match(reviewBlock, /\.merge_sha' <<<"\$record"/u, "merge-ref alerts bind the captured merge SHA");
+  // `gh api` prints GitHub's JSON error body on stdout, so capturing the merge
+  // ref through `|| true` stored that body and the SHA shape check then failed
+  // the whole review batch. GitHub drops `refs/pull/N/merge` while it
+  // recomputes after a base advance, so that 404 is a normal race on a
+  // candidate the snapshot saw as mergeable.
+  assert.doesNotMatch(
+    reviewBlock,
+    /git\/ref\/pull\/\$number\/merge"[^\n]*\|\| true/u,
+    "the merge-ref read never captures gh's error body through `|| true`",
+  );
+  assert.match(
+    reviewBlock,
+    /if candidate_merge_sha="\$\(\s*\n\s*gh_read_retry api "repos\/\$REPO\/git\/ref\/pull\/\$number\/merge"/u,
+    "the merge-ref read keeps gh's exit status so a missing merge ref stays empty",
+  );
+  // Once the empty outcome is soft, an unretried read degrades silently: a
+  // 502 or transport reset would drop every merge-ref alert from the snapshot
+  // and from the disposition authority derived from it, indistinguishably
+  // from a PR that genuinely has no merge ref. So this read must use the same
+  // helper as the two above it, and the empty result must reach the log.
+  assert.match(
+    reviewBlock,
+    /if \[ -z "\$merge_sha" \]; then\s*\n\s*echo "::notice::PR #\$number has no readable merge ref/u,
+    "a merge ref that could not be read narrows the alert snapshot visibly, not silently",
+  );
   assert.match(
     reviewBlock,
     /"false positive" \| "used in tests"/u,

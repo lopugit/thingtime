@@ -4530,10 +4530,35 @@ jobs:
             fetch_ref "$head"
             base_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$base^{commit}")"
             head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
-            merge_sha="$(gh api "repos/$REPO/git/ref/pull/$number/merge" --jq '.object.sha' 2>/dev/null || true)"
-            if [ -n "$merge_sha" ] && ! [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::PR #$number returned an invalid merge-ref SHA."
-              exit 1
+            # `gh api` writes GitHub's JSON error body to stdout, so `|| true`
+            # captured that body for a missing synthetic merge ref and the
+            # shape check below then aborted the whole review batch. Candidates
+            # are filtered on a `gh pr list` snapshot, but GitHub drops
+            # `refs/pull/N/merge` while it recomputes after the base advances,
+            # so a normal race legitimately 404s here. `merge_sha` only widens
+            # the CodeQL alert filter below and is optional there: keep the
+            # exit status, leave it empty on a failed read, and reserve the
+            # hard error for a successful response with a malformed SHA.
+            # Because that empty outcome is now soft, the read has to be
+            # retried like the other idempotent metadata reads in this step:
+            # `gh_read_retry` replays a 5xx or transport reset instead of
+            # letting it silently narrow the alert snapshot below, and it
+            # never puts a failing response body on stdout at all. Announce
+            # the narrowed snapshot so a missing merge ref stays visible.
+            merge_sha=""
+            if candidate_merge_sha="$(
+              gh_read_retry api "repos/$REPO/git/ref/pull/$number/merge" \
+                --jq '.object.sha'
+            )"; then
+              if [[ "$candidate_merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
+                merge_sha="$candidate_merge_sha"
+              elif [ -n "$candidate_merge_sha" ]; then
+                echo "::error::PR #$number returned an invalid merge-ref SHA."
+                exit 1
+              fi
+            fi
+            if [ -z "$merge_sha" ]; then
+              echo "::notice::PR #$number has no readable merge ref; Lopu reviews its exact head and only head-ref CodeQL alerts this pass."
             fi
             worktree="$review_root/$number"
             git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
