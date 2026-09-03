@@ -203,10 +203,21 @@ jobs:
                 # absent on the line directly after announcing it was stale,
                 # which hid that a live pull_request run was analyzing that
                 # very ref. Only a PR GitHub cannot merge is refless.
-                if [ "$mergeable_pr" = true ]; then
-                  echo "PR #$PR_NUMBER has a stale merge ref and reached the exact-head fallback anyway; a pull_request run may be analyzing its merge ref concurrently."
-                else
+                #
+                # A stale ref reaching this fallback is only a concurrency
+                # warning when the target actually carries the listener, which
+                # now means a deliberate `backfill_listener_owned` activation
+                # scan running beside a live `pull_request` merge-ref run --
+                # the residual #557 shape, opted into. Without the listener no
+                # `pull_request` run exists to race, so raising the same alarm
+                # there would fire on the ordinary path and train readers to
+                # ignore the line that matters.
+                if [ "$mergeable_pr" != true ]; then
                   echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+                elif [ "$base_has_pr_listener" = true ]; then
+                  echo "::warning::PR #$PR_NUMBER has a stale merge ref and this activation backfill is analyzing its exact head; a pull_request run may be analyzing its merge ref concurrently."
+                else
+                  echo "PR #$PR_NUMBER has a stale merge ref and its target carries no listener; Lopu will analyze its exact head, and no pull_request run competes for it."
                 fi
               fi
 
