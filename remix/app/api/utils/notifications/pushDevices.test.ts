@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildApnsPayload, notificationURL } from './apns';
-import { normalizePushDeviceInput } from './pushDevices';
+import { normalizePushDeviceInput, pushDeviceUpsert } from './pushDevices';
 
 test('normalizes variable-length APNs tokens without hardcoding 32 bytes', () => {
   const result = normalizePushDeviceInput({ token: `<${'AB'.repeat(40)}>`, platform: 'watchos', environment: 'sandbox' });
@@ -18,6 +18,31 @@ test('rejects malformed tokens, platforms, and environments', () => {
   assert.equal(normalizePushDeviceInput({ token: 'not-hex', platform: 'watchos', environment: 'sandbox' }).ok, false);
   assert.equal(normalizePushDeviceInput({ token: 'ab'.repeat(32), platform: 'android', environment: 'sandbox' }).ok, false);
   assert.equal(normalizePushDeviceInput({ token: 'ab'.repeat(32), platform: 'ios', environment: 'preview' }).ok, false);
+});
+
+test('re-registering rebinds the device to the current owner and session', () => {
+  const device = normalizePushDeviceInput({ token: 'ab'.repeat(32), platform: 'ios', environment: 'production' });
+  assert.equal(device.ok, true);
+  if (!device.ok) return;
+
+  const now = new Date('2026-09-03T00:00:00.000Z');
+  const update = pushDeviceUpsert('user-2', 'session-jti-2', device, now);
+
+  // One physical device is one row (uniqueKeys is token-scoped), so the row a
+  // second login matches is the FIRST login's row. Both identity fields must
+  // ride $set: listPushDevicesForUser drops any device whose targetId session
+  // is not live and owned by ownerId, so leaving either frozen at insert makes
+  // push permanently undeliverable after logout/login or an account switch.
+  assert.equal(update.$set.targetId, 'session-jti-2');
+  assert.equal(update.$set.ownerId, 'user-2');
+  assert.ok(!('targetId' in update.$setOnInsert), 'targetId must not be pinned at insert');
+  assert.ok(!('ownerId' in update.$setOnInsert), 'ownerId must not be pinned at insert');
+
+  // Insert-only fields stay insert-only: rewriting them would rotate the
+  // public id and creation time of a device that never actually changed.
+  assert.equal(update.$setOnInsert.createdAt, now);
+  assert.equal(typeof update.$setOnInsert.shareId, 'string');
+  assert.ok(!('shareId' in update.$set), 'shareId must be stable across re-registration');
 });
 
 test('builds portable APNs content with a safe Thingtime deep link', () => {

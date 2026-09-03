@@ -613,6 +613,13 @@ email whose link points at the attacker.
       values. Register a token longer than 32 bytes and confirm it is accepted,
       deduplicated by hash, retained only in protected secure storage, and removed
       after APNs reports `BadDeviceToken`, `Unregistered`, or HTTP 410.
+- [ ] Regression class (2026-09): a device row is keyed by token alone, so
+      re-registering must REBIND it to the caller. Sign in, register the device,
+      sign out (revoking that session), sign back in, and re-register the same
+      token: the alert must still arrive. Repeat as a different account on the
+      same device and confirm alerts follow the new owner. Pinning `ownerId` or
+      `targetId` at insert makes both cases permanently undeliverable — the row
+      keeps a dead session id and re-registration cannot heal it.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 

@@ -72,6 +72,46 @@ const publicDevice = (doc: any): PublicPushDevice => ({
   updatedAt: new Date(doc.updatedAt).toISOString()
 });
 
+// The upsert document, kept pure so the ownership/session rebinding contract
+// below is testable without a live Mongo.
+//
+// `uniqueKeys` is keyed on environment:topic:token ONLY, so one physical device
+// has exactly one row no matter who signs in on it. That makes re-registration
+// the rebinding path, and every field that identifies the *current* holder must
+// therefore be rewritten on each call rather than frozen at insert:
+//   - `ownerId`, so the row follows an account switch on a shared device;
+//   - `targetId` (the session jti), because `listPushDevicesForUser` only
+//     delivers to a device whose session is still live AND belongs to the
+//     owner. Every login mints a fresh jti (auth/sessions.ts), so pinning this
+//     at insert made the row undeliverable the moment the first session ended
+//     — and, because the upsert then matched that same row, re-registering
+//     could never heal it. Push stayed silently dead for that device.
+export const pushDeviceUpsert = (
+  ownerId: string,
+  sessionId: string,
+  device: { token: string; platform: PushPlatform; environment: PushEnvironment; topic: string; key: string },
+  now: Date
+) => ({
+  $set: {
+    ownerId,
+    crystal: { platform: device.platform, environment: device.environment, topic: device.topic },
+    secure: packToken(device.token),
+    targetId: sessionId,
+    updatedAt: now
+  },
+  $setOnInsert: {
+    shareId: randomUUID(),
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+    thingtime: ['push-device'],
+    uniqueKeys: [thingUniqueKey('pushDevice', device.key)],
+    extended: null,
+    acl: [ACL_OWNER],
+    tags: [],
+    storageClass: 'control',
+    createdAt: now
+  }
+});
+
 export const registerPushDevices = async (
   ownerId: string,
   sessionId: string,
@@ -90,26 +130,7 @@ export const registerPushDevices = async (
     if (device.ok === false) continue;
     await things.updateOne(
       thingUniqueKeyFilter('pushDevice', device.key) as any,
-      {
-        $set: {
-          ownerId,
-          crystal: { platform: device.platform, environment: device.environment, topic: device.topic },
-          secure: packToken(device.token),
-          updatedAt: now
-        },
-        $setOnInsert: {
-          shareId: randomUUID(),
-          schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-          thingtime: ['push-device'],
-          uniqueKeys: [thingUniqueKey('pushDevice', device.key)],
-          extended: null,
-          acl: [ACL_OWNER],
-          targetId: sessionId,
-          tags: [],
-          storageClass: 'control',
-          createdAt: now
-        }
-      } as any,
+      pushDeviceUpsert(ownerId, sessionId, device, now) as any,
       { upsert: true }
     );
   }
