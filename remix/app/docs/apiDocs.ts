@@ -1,5 +1,6 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -798,19 +799,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-ci-previews',
+    contractVersion: '2.0.0',
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.0.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    featureVersion: '2.0.0',
+    summary: 'Store exact-SHA Develop and Production/Main preview choices and dispatch the protected github-actions publisher.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only endpoint validates a live, open, non-draft pull request from the configured repository, stores independent Develop and Production/Main switches, then sends the full selected set through the installed GitHub App to the protected github-actions branch. The product server never receives or uses a Vercel deployment credential. Protected controller code authenticates the App sender, revalidates the exact live ref and SHA, immediately writes one GitHub Actions-owned marker comment with every expected persistent URL and estimated ready time, and builds each selected environment on GitHub without environment secrets. Only validated prebuilt output reaches the credentialed publisher. The same comment receives each immutable snapshot URL and terminal status; READY receipts move only that environment\'s PR-scoped alias. Production enabling requires an explicit acknowledgement, automatic domain assignment stays disabled, primary domains never move, and disable/close cleanup is limited to controller-marked resources.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
       'Select a same-repository open pull request.',
       'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
-      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+      'Follow the immediate estimate and then each URL pair in the single updated PR comment and the signed webhook status in CI Control.'
     ],
     requestExamples: [
       {
@@ -829,10 +831,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored and the exact-SHA deployment created or reused.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+        description: 'Policy stored and its complete environment set dispatched to the protected github-actions controller.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, controller: { status: 'dispatched', controllerRef: 'github-actions', environments: ['develop', 'production'] }, expectedEnvironments: ['develop', 'production'] }
       },
-      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the GitHub App could not dispatch the protected controller.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]
   }),
   endpoint({
@@ -3632,19 +3634,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'email-config',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'email',
     title: 'Email delivery config',
     endpoint: '/api/v1/email/config',
-    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    summary: 'Returns sanitized email delivery configuration in local development and Vercel previews.',
     detail:
-      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+      'Dev/preview-only helper for the /tests page. Use it to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved. Production and unknown production-like hosts return 403, and credentials are never included.',
     auth: {
       mode: 'none',
-      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the endpoint (POST behaves identically).',
+      'Use it only in local development or a Vercel preview; production returns 403.',
       'Read provider to confirm whether real SES delivery or console logging is active.',
       'Use sesSandbox and testRecipient to plan /tests email checks.'
     ],
@@ -3673,6 +3678,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             testRecipientDomain: 'thingtime.com'
           }
         }
+      },
+      {
+        status: 403,
+        description: 'Production and unknown production-like environments do not expose email diagnostics.',
+        body: { ok: false, error: 'Email config is available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -3783,11 +3793,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
-    summary: 'Reports Nitro API runtime readiness.',
-    detail: 'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
+    summary: 'Reports Nitro API runtime and critical storage-accounting readiness.',
+    detail:
+      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. It reports degraded while backfill-user-storage-accounting is required, because uploads and other positive storage writes intentionally fail closed in that state.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -3796,7 +3809,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
-      'Read service, state, runtime, nodeEnv, and responseMs.',
+      'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
+      'If state is degraded, run the named migration from the admin migrations console and recheck until ready.',
       'Use this before deeper API tests to separate server availability from endpoint behavior.'
     ],
     requestExamples: [
@@ -3810,7 +3824,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Nitro is ready.',
-        body: { ok: true, service: 'nitro', state: 'ready', runtime: 'nitro' }
+        body: {
+          ok: true,
+          service: 'nitro',
+          state: 'ready',
+          runtime: 'nitro',
+          storageAccounting: {
+            state: 'ready',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Nitro is reachable but positive storage writes are fenced until the migration completes.',
+        body: {
+          ok: false,
+          service: 'nitro',
+          state: 'degraded',
+          storageAccounting: {
+            state: 'migration-required',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
       }
     ]
   }),
