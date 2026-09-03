@@ -28,6 +28,12 @@ test('account-hint privacy contracts publish their patch-level capability update
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
 });
 
+test('capabilities publish the native Apple notification device contract', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.notifications-devices'], '1.0.0');
+});
+
 test('capabilities publish the non-secret data authority used by a bundle', () => {
 	const manifest = createApiCapabilitiesManifest([], {
 		schemaVersion: 1,

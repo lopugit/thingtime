@@ -2,6 +2,12 @@
 
 Native iOS shell for Thingtime.
 
+The project also includes a native watchOS companion. It pairs with the signed-in
+iPhone app, mirrors the newest Thingtime notifications, shows the unread count,
+marks individual rows read, and registers its own APNs token for watch alerts.
+Authentication remains on the iPhone WebView session so passwords and reusable
+session credentials are not copied to the watch.
+
 The first version is intentionally small: a SwiftUI app that embeds Thingtime
 in a native `WKWebView`. It defaults to `https://thingtime.com` and can be
 pointed at a Vercel preview or branch deployment for TestFlight builds. A
@@ -40,6 +46,20 @@ xcodegen generate
 ./scripts/build.sh
 ./scripts/test.sh
 ```
+
+To build the watch app without signing:
+
+```sh
+xcodebuild -project Thingtime.xcodeproj \
+  -scheme ThingtimeWatch \
+  -destination 'generic/platform=watchOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+For device delivery, create App IDs and provisioning profiles for both
+`com.thingtime.appletime` and `com.thingtime.appletime.watchkitapp`, enable Push
+Notifications on both, and configure the server-side APNs values documented in
+the root README. Do not put the `.p8` provider key in this Xcode project.
 
 Set `DEVELOPMENT_TEAM` in Xcode, CI, or `config/Base.xcconfig` for local signing. Do not commit personal signing credentials or secrets.
 

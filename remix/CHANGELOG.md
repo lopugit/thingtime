@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Native Apple Watch notification companion — Codex (AI)
+
+- Added a native watchOS 10 SwiftUI companion that pairs through the signed-in
+  iPhone app, mirrors the notification inbox and unread count, marks rows read,
+  and registers for watch alerts without copying a Thingtime credential.
+- Added protected iPhone/watch APNs device registration, a versioned
+  `api.notifications-devices` capability contract, token-based APNs delivery,
+  invalid-token cleanup, configuration docs, and focused contract tests.
+
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 
 - Grouped summary; details in the PR note

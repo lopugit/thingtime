@@ -9266,6 +9266,66 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'notifications-devices',
+    contractVersion: '1.0.0',
+    group: 'notifications',
+    title: 'Register notification devices',
+    endpoint: '/api/v1/notifications/devices',
+    summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
+    detail:
+      'POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
+      'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
+      'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST', 'DELETE'],
+    steps: [
+      'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
+      'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
+      'DELETE a stale device id when the user explicitly disconnects that device.'
+    ],
+    requestExamples: [
+      {
+        name: 'Register paired Apple devices',
+        description: 'Register current sandbox tokens from an iPhone and its paired watch.',
+        method: 'POST',
+        body: {
+          devices: [
+            { token: '<hex APNs token>', platform: 'ios', environment: 'sandbox' },
+            { token: '<hex APNs token>', platform: 'watchos', environment: 'sandbox' }
+          ]
+        }
+      },
+      {
+        name: 'Disconnect one device',
+        description: 'Remove a registration owned by the current account.',
+        method: 'DELETE',
+        body: { id: 'device-registration-id' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Registered; tokens are intentionally omitted.',
+        body: {
+          ok: true,
+          devices: [
+            {
+              id: 'device-registration-id',
+              platform: 'watchos',
+              environment: 'sandbox',
+              topic: 'com.thingtime.appletime.watchkitapp',
+              updatedAt: '2026-09-03T00:00:00.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'notifications-settings',
     group: 'notifications',
     title: 'Notification settings',

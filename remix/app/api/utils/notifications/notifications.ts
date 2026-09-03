@@ -9,6 +9,7 @@ import { getUserNotificationPrefs } from '../auth/users';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, normalizeNotificationPrefs } from '~/schemas/registry';
 import type { NotificationType } from '~/schemas/registry';
 import { emailNotificationsBulk, maybeEmailNotification } from './emails';
+import { sendNotificationPush } from './apns';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
@@ -110,8 +111,12 @@ export const emitNotification = async (input: EmitNotificationInput): Promise<vo
     const pushOn = prefs.masters.push && prefs.push[input.type] !== false;
     if (pushOn) {
       const things = await getThingsCollection();
-      await things.insertOne(notificationDoc(input, new Date()) as any);
+      const doc = notificationDoc(input, new Date());
+      await things.insertOne(doc as any);
       void trimRecipient(input.recipientId).catch(() => {});
+      void sendNotificationPush({ ...input, notificationId: doc.shareId }).catch((err: any) => {
+        console.error('[notifications] APNs delivery failed:', err?.message || err);
+      });
     }
     // The email channel rides the same emit but is fire-and-forget — the
     // social action never waits on SES (emails.ts re-checks its own gates).

@@ -2019,6 +2019,26 @@ const notificationThingSchema: ThingtimeSchema = {
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
 
+const pushDeviceThingSchema: ThingtimeSchema = {
+  id: 'push-device',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Push Device',
+  summary: 'A protected APNs delivery target owned by one Thingtime account.',
+  detail:
+    'Registered only through /api/v1/notifications/devices. The public crystal contains platform, ' +
+    'environment, and server-selected topic metadata; the APNs token is encrypted-at-rest-compatible ' +
+    'binary secure data and is never returned by the API or exposed through generic Thing CRUD.',
+  createdVia: 'POST /api/v1/notifications/devices',
+  fields: [
+    { name: 'platform', type: 'enum', required: true, values: ['ios', 'watchos'], description: 'Apple device family.' },
+    { name: 'environment', type: 'enum', required: true, values: ['sandbox', 'production'], description: 'APNs gateway environment.' },
+    { name: 'topic', type: 'string', required: true, description: 'Server-selected application bundle topic.' }
+  ],
+  example: { platform: 'watchos', environment: 'sandbox', topic: 'com.thingtime.appletime.watchkitapp' }
+};
+
 // Folders: the Drive-style organization kind behind /things. A folder is an
 // ordinary thing (thingtime ["folder"]) whose crystal names it; containment is
 // a `folderId` pointer ON THE CHILD (FUNDAMENTALS §3 — never an embedded list
@@ -3139,6 +3159,7 @@ export const PROTECTED_THINGTIME = [
   'follow',
   'friend',
   'notification',
+  'push-device',
   // auth-plane credentials: a forged passkey doc would BE a working login
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
@@ -3327,6 +3348,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // supersedes the earlier followThingSchema (crystal.follow marker) draft.
   friendThingSchema,
   notificationThingSchema,
+  pushDeviceThingSchema,
   // auth-plane credentials (protected, server-minted by auth/passkeys.ts)
   passkeyThingSchema,
   passkeyAppLinkThingSchema,

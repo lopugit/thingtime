@@ -581,6 +581,39 @@ email whose link points at the attacker.
       their branch cards, disclosure controls stay tappable, and vertical
       scrolling never triggers the horizontal drawer-close gesture.
 
+## Apple Watch notifications
+
+- [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
+      sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
+      asking for a password or exposing a session credential on the watch.
+- [ ] Tap Enable alerts on the watch, approve the system prompt, relaunch both
+      apps, and confirm the iPhone and watch APNs registrations appear through
+      `/api/v1/notifications/devices` without either token appearing in the JSON
+      response or generic Thing APIs.
+- [ ] From a second account, create a friend request, follow, comment, reply,
+      reaction, share, and mention. Confirm the watch alert names the actor, the
+      inbox refreshes, the unread count matches Thingtime, and tapping an unread
+      row marks that same notification read on the phone/web inbox.
+- [ ] Send the same payload to the paired iPhone and watch registration and
+      confirm only one user-visible alert appears. Repeat in Debug/sandbox and a
+      signed Release/production build so each token uses the matching APNs host.
+- [ ] Disable a push type and then the push master in Settings → Notifications;
+      confirm new events of those types produce neither a watch alert nor a
+      watch inbox row. Re-enable them and verify delivery resumes.
+- [ ] Sign out on the paired iPhone and confirm the watch returns to the pairing
+      screen and later activity for that account produces no device alert. The
+      registration may await cleanup, but its revoked/expired session binding
+      must make it immediately ineligible. Then sign in as another account and
+      confirm both device tokens move to the new owner without leaking the prior
+      inbox.
+- [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
+      two-line preview states on the smallest supported watch. Scroll top to
+      bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09): APNs device tokens are variable-length binary
+      values. Register a token longer than 32 bytes and confirm it is accepted,
+      deduplicated by hash, retained only in protected secure storage, and removed
+      after APNs reports `BadDeviceToken`, `Unregistered`, or HTTP 410.
+
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run

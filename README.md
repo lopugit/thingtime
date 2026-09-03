@@ -1514,6 +1514,36 @@ Signed-in admins can run the same endpoint manually (`?dryRun=1` or
 a six-day per-recipient lookback in the `email_messages` outbox prevents
 double-sends.
 
+### Native Apple push notifications (iPhone + Apple Watch)
+
+The native targets register their current APNs tokens through the authenticated
+`POST /api/v1/notifications/devices` session. Thingtime chooses the application
+topics server-side, stores tokens only in protected binary `secure` data, and
+never returns token values from the API. The paired watch receives its signed-in
+state and notification inbox from the iPhone through Watch Connectivity; no
+Thingtime password or reusable web credential is copied to the watch. Each
+registration is bound to the browser session that created it, so logout,
+revocation, or session expiry immediately makes that target ineligible for
+delivery even if its cleanup is delayed.
+
+Configure the APNs provider in each Vercel environment that should deliver
+native alerts:
+
+```sh
+APNS_KEY_ID="<Apple push key id>"
+APNS_TEAM_ID="<Apple developer team id>"
+APNS_PRIVATE_KEY="<base64-encoded .p8 contents>"
+APNS_IOS_BUNDLE_ID="com.thingtime.appletime"
+APNS_WATCH_BUNDLE_ID="com.thingtime.appletime.watchkitapp"
+```
+
+Keep the `.p8` key in Vercel or another approved secret store only. Never add it
+to `.env.example`, the repository, build logs, or client configuration. The two
+bundle identifiers need Push Notifications capability and matching development
+and distribution provisioning before a real device can receive alerts. If the
+APNs variables are absent, the in-app notification remains durable and the
+provider send is intentionally skipped.
+
 ### Service account provisioning
 
 Apps and backend services can create service-owned Thingtime accounts through:
