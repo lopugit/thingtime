@@ -912,8 +912,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` maps @Thingtime login to the host’s OAuth browser and registered callback; `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, and static UI/contract resources are public metadata and never return account data. Account resources and every tool call require a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
-    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
+      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for account/data tools. tools/list and login_thingtime are public; unauthenticated login returns a tool-level MCP OAuth challenge without failing the HTTP transport.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
@@ -933,12 +933,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'login_thingtime', securitySchemes: [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }, { name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
       },
       {
-        status: 401,
-        description: 'MCP OAuth challenge.',
-        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"' },
+        status: 200,
+        description: 'Tool-level OAuth challenge returned by login_thingtime so the invoking host can authenticate without a transport error.',
         body: { jsonrpc: '2.0', id: 1, result: { isError: true, _meta: { 'mcp/www_authenticate': ['Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"'] } } }
       }
     ],
@@ -961,7 +960,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Let ChatGPT or Codex open this endpoint with its OAuth parameters and sign in with the existing Thingtime SSO page when prompted.',
       'Review the default read/write-all connection or open Advanced settings to narrow scopes, regenerate the generated credential, or add another approved account.',
-      'The browser redirects to ChatGPT with a short-lived code and original state.'
+      'The page sends an explicit completion request, reports any server-side error in place, then deliberately navigates to the registered callback with a short-lived code and original state.'
     ],
     requestExamples: [
       {
@@ -982,7 +981,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'First-party SSO connection page. It prepares the default encrypted read/write-all account without exposing a token in the client host or chat.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
+      { status: 200, description: 'The explicit completion request returns the exact registered callback URL only after validating and encrypting the selected account; the page then navigates there with code, state, and issuer.' },
+      { status: 302, description: 'Legacy form submission redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
     ]
   }),
@@ -4105,6 +4105,68 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.'
     ]
   }),
+  endpoint({
+		id: 'lopu-vault',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu Secure Vault',
+		endpoint: '/api/v1/lopu/vault',
+		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
+		detail:
+			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only. Provider tokens and generic secret values are accepted on writes and never returned. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'GET the provider templates, environments, and redacted entry metadata.',
+			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'POST delete with an owner-scoped record id to remove it.'
+		],
+		requestExamples: [
+			{
+				name: 'Save an AI provider',
+				description: 'The token is write-only and omitted from every response.',
+				method: 'POST',
+				body: {
+					action: 'save-provider',
+					name: 'My Claude',
+					provider: 'anthropic',
+					endpoint: 'https://api.anthropic.com',
+					model: 'claude-sonnet-4-6',
+					token: '<provider-token>',
+					groupId: '<environment-id>'
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, groups: [], entries: [{ id: '<id>', kind: 'provider', name: 'My Claude', provider: 'anthropic', hasValue: true }] } },
+			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
+		]
+	}),
+  endpoint({
+		id: 'lopu-voice-reply',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu voice turn',
+		endpoint: '/api/v1/lopu/voice/reply',
+		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
+		detail:
+			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint, and streams NDJSON text deltas. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session.' },
+		methods: ['POST'],
+		steps: [
+			'Choose one provider entry for conversation mode, or enable transcribeMode.',
+			'POST a final speech transcript and stable sessionId.',
+			'Read NDJSON events through done; speak delta text only when the client’s Text response setting is off.'
+		],
+		requestExamples: [
+			{ name: 'Conversation turn', description: 'Use one write-only provider connection.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', transcribeMode: false, history: [] } },
+			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
+			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
+		]
+	}),
   endpoint({
     id: 'deployment-links',
     group: 'deployments',

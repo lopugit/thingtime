@@ -41,6 +41,39 @@ Thingtime desktop profiles, then import projects, chats, and visible messages
 through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
 for both workflows and their privacy boundaries.
 
+## Lopu voice + personal Secure Vault
+
+Signed-in people can open `/lopu` for a continuous voice conversation or use
+**Transcribe mode** to save each final utterance as its own timestamped,
+numbered, owner-private Thing page. The session gear remains available before,
+during, and after listening; **Text response** suppresses spoken playback. The
+iOS app adds native speech recognition, background audio, and a local Live
+Activity so an active conversation can continue while the phone is locked.
+
+Each account has a personal Secure Vault in **Settings → Secure Vault** for
+password/key-value records and Lopu provider connections. Values are
+write-only in the browser and AES-256-GCM encrypted at rest with record- and
+owner-bound authenticated data. Configure a 32-byte base64url key as
+`THINGTIME_USER_VAULT_KEY`; when omitted, Thingtime derives a purpose-separated
+user-vault key from `THINGTIME_ADMIN_VAULT_KEY` so an existing deployment can
+reuse its vault root without sharing the admin vault's ciphertext domain. For a
+new fork, generate the secret outside the repository and put it only in the
+runtime secret store:
+
+```sh
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
+Built-in connection templates cover OpenAI/Codex, Anthropic/Claude, Google
+Gemini, xAI/Grok, and OpenRouter. Store provider tokens only through the
+write-only Secure Vault form—never in source or a public environment file.
+Custom OpenAI-compatible endpoint hostnames must be public HTTPS destinations
+and must also appear in the comma-separated
+`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting; built-in provider
+hosts are already allowed. DNS is checked again immediately before each
+server-side provider request, redirects are rejected, and credentials never
+reach the browser after storage.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON

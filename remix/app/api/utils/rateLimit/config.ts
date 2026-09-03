@@ -247,6 +247,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // window accommodates a first full-history import while still fencing a
   // runaway renderer or replay loop.
   'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
+	// User Secure Vault writes are rare and credential-sensitive; voice replies
+	// can spend a user-supplied provider quota, so both fail closed at routes.
+	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
+	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails
 	// closed at the routes; state/command/event budgets are deliberately roomy
 	// enough for a live desktop while still bounding stuck pollers and replays.

@@ -46,6 +46,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Env: `LOPU_CHAT_PROVIDER`, `LOPU_OPENAI_TOOLS`, `LOPU_CLAUDE_MODEL`,
   `LOPU_OPENAI_MODEL` (README "Lopu AI assistant"). Live verification:
   `node scripts/verify-lopu.mjs <base>` (99 checks).
+### 2026-09-03 — Lopu voice, Live Activities + personal Secure Vault — Codex (AI)
+
+- Added continuous Lopu voice chat on web and iOS with persistent in-session
+  settings, optional text-only replies, provider-per-chat selection, and a
+  feedback-loop guard that pauses listening while Lopu answers.
+- Added Transcribe mode: every final utterance becomes a timestamped, numbered,
+  owner-private Thing page and streams back into chat as a linked quote.
+- Added iOS background audio and a Live Activity / Dynamic Island surface for
+  listening, thinking, transcribing, and speaking while the device is locked.
+- Added a user-facing AES-256-GCM Secure Vault for environment-grouped
+  password/key-value records and write-only BYO provider tokens, with built-in
+  OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
+  server-allowlisted compatible endpoint path.
+
+### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
+
+- `@Thingtime login` is now callable before authentication and returns its
+  OAuth challenge as a successful MCP tool response, allowing the invoking
+  ChatGPT/Codex task to own PKCE, browser launch, callback, and subsequent
+  authenticated requests without a separate CLI transport.
+- Account and data tools remain OAuth-only and continue to fail closed at the
+  HTTP authorization boundary.
 
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 

@@ -27,20 +27,22 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 		lopu.children.map((child) => [child.id, child.to]),
 		[
 			['lopu-chat', '/lopu'],
+			['lopu-voice', '/lopu/voice'],
 			['lopu-conversations', '/messages'],
+			['lopu-vault', '/settings'],
 			['lopu-settings', '/settings']
 		]
 	);
 
-	// the chat page has a signed-out state, so only the Messenger-backed
-	// conversation list is gated behind login
+	// the chat page has a signed-out state; voice (microphone + vault providers),
+	// the Messenger-backed conversation list and the Secure Vault are gated behind login
 	assert.deepEqual(
 		filterDrawerItemsByAuth(lopu.children, false).map((child) => child.id),
 		['lopu-chat', 'lopu-settings']
 	);
 	assert.deepEqual(
 		filterDrawerItemsByAuth(lopu.children, true).map((child) => child.id),
-		['lopu-chat', 'lopu-conversations', 'lopu-settings']
+		['lopu-chat', 'lopu-voice', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
 	);
 
 	// a navigating hub: clicking it closes the drawer like Feed/Messages do

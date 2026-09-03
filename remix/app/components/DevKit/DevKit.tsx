@@ -419,7 +419,8 @@ export const DevKit = (_props) => {
 	// development-only helper off the route rather than obscuring product UI.
 	// The Lopu page is the same shape (a chat whose composer sits bottom-right).
 	const chatRoute = ['/messages', '/lopu'].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-	if (!mounted || !devKit || chatRoute) return null;
+	// Settings hosts the Secure Vault forms bottom-right, so the corner stays clear there too.
+	if (!mounted || !devKit || chatRoute || location.pathname === '/settings') return null;
 
   return (
     <>
