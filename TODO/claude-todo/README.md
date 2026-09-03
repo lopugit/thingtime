@@ -45,6 +45,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 24 | Migration-safe continuous availability (pending storage migrations never block established reads or writes; expand/coexist/migrate/verify/contract) | 🔴 P0 invariant · not started | [24-migration-safe-continuous-availability.md](./24-migration-safe-continuous-availability.md) |
 | 25 | Accessibility and language readiness — complete-journey access matrix, shared interaction foundations, canonical locale semantics, and pilot language | 🟣 Proposed · owner decision needed | [25-accessibility-and-language-readiness.md](./25-accessibility-and-language-readiness.md) |
 | 26 | Community safety and accountable moderation — personal boundaries, reports, scoped governance, decisions, appeals, remedies, and privacy-safe transparency | 🟣 Proposed · owner decision needed | [26-community-safety-and-accountable-moderation.md](./26-community-safety-and-accountable-moderation.md) |
+| 27 | Trusted developer ecosystem — declarations, immutable releases, review receipts, consentful updates, incident recovery, and fair discovery | 🟣 Proposed · owner decision needed | [27-trusted-developer-ecosystem.md](./27-trusted-developer-ecosystem.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

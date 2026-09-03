@@ -83,6 +83,35 @@ translate copy, or change settings/API behavior.
 Validation and exact-head CI/preview receipts for this run are recorded in the
 PR body after publication.
 
+## 2026-09-03 — trusted developer ecosystem
+
+This run connects Thingtime's registered-app identity, origin-bound OAuth,
+explicit consent scopes, revocation layers, user-owned app data, sandbox,
+self-documenting API, semantic capability manifest, bounded actions, and
+ChatGPT plugin handoff to a missing general distribution lifecycle. It adds:
+
+- `NOTES/trusted-developer-ecosystem-baseline.md`, a dated evidence ledger with
+  current strengths, compatibility debt, release/review/incident gaps, external
+  standards, measures, risks, and owner questions;
+- `PLAN/trusted-developer-ecosystem-roadmap.md`, a gated path from one app
+  declaration and no-secrets conformance kit through immutable releases,
+  reproducible review receipts, consentful updates, narrow containment,
+  remediation, appeal, fair discovery, and aligned developer services;
+- `TODO/claude-todo/27-trusted-developer-ecosystem.md`, an implementation epic
+  with owners, dependencies, phases, security/privacy/accessibility boundaries,
+  acceptance criteria, and a concrete first decision packet.
+
+The proposal keeps declarations and review evidence separate from runtime
+authority. It rejects score-only approval, inherited trust for changed child
+artifacts, silent permission expansion, pay-to-rank/pay-to-trust, private
+source or grant analytics, and suspension paths that strand owner data. No app,
+OAuth, scope, token, storage, review, marketplace, or API behavior changed.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
+TODO 22 dependency list. Validation and exact-head CI/preview receipts for this
+run are recorded in the PR body after publication.
+
 ## 2026-09-03 — community safety and accountable moderation
 
 This run connects Thingtime's existing community roles, invite controls,

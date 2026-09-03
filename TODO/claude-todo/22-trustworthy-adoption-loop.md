@@ -44,6 +44,10 @@ experiment by itself.
   block semantics, report/case state, scoped moderation, appeals, remedies, and
   privacy-safe safety transparency. Sharing or community growth must not create
   an experiment-specific enforcement path.
+- [TODO 27](./27-trusted-developer-ecosystem.md) owns publisher declarations,
+  immutable releases, review receipts, app permission/update clarity,
+  ecosystem incidents, abandonment, and fair discovery. Creator growth must
+  not invent a popularity-based trust badge or parallel app review contract.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

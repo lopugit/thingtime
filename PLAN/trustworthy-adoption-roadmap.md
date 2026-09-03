@@ -11,6 +11,9 @@
 **Safety dependency:**
 [Community safety and accountable moderation](./community-safety-and-accountable-moderation-roadmap.md)
 
+**Ecosystem dependency:**
+[Trusted developer ecosystem](./trusted-developer-ecosystem-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -162,6 +165,10 @@ and credited.
 - Define provenance, version compatibility, moderation status, and update
   behavior for schemas, components, actions, themes, algorithms, and composed
   apps.
+- Use the [trusted developer ecosystem roadmap](./trusted-developer-ecosystem-roadmap.md)
+  for publisher declarations, immutable releases, permission diffs, review
+  receipts, incidents, appeals, abandonment, and discovery. Do not create a
+  second app trust badge or release vocabulary inside an adoption experiment.
 - Keep foreign content on untrusted render paths; never grant action authority
   because a component is popular.
 - Publish contributor guidance, review expectations, accessibility criteria,

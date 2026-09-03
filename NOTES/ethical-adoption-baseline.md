@@ -31,6 +31,7 @@ turns these observations into phases. The executable backlog lives in
 | The public backlog is PR-heavy and issue-light. | GitHub returned no open issues and 36 open PRs during the snapshot. Many old feature PRs still target `develop`. | High for the timestamp only. Refresh before prioritization and do not interpret "no issues" as "no user problems." |
 | The original planning snapshot lacked a cross-product accessibility, internationalization, and adoption measurement gate. | The 2026-09-01 search found isolated accessibility requirements and privacy warnings but no shared metric dictionary or release-wide accessibility/i18n plan. The adoption metric gap is now staged here; the implementation gap is now grounded in the [accessibility and language-readiness baseline](./accessibility-and-language-readiness-baseline.md) and its proposed roadmap. | High for planning history, not implementation status. Re-run the dedicated baseline before any release or conformance claim. |
 | Existing community and automated-moderation controls do not yet form a user-report, appeal, or accountable-governance loop. | The dedicated [community safety baseline](./community-safety-and-accountable-moderation-baseline.md) inventories shipped roles, invites, request buckets, mute, and model/admin review alongside the missing personal block, case, scoped moderator, appeal, and transparency contracts. | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before scaling community or sharing work. |
+| Strong app/OAuth primitives do not yet form a general release, review, incident, and discovery lifecycle. | The [trusted developer ecosystem baseline](./trusted-developer-ecosystem-baseline.md) connects app identity, scopes, revocation, user-owned namespace data, sandbox, capability manifests, and the one-off ChatGPT submission handoff to the missing publisher declaration, immutable release, review receipt, permission-diff, containment, and abandonment contracts. | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before launching public app or artifact discovery. |
 
 ## What the evidence suggests
 
@@ -117,6 +118,9 @@ Any later measurement design should fail closed unless all of these are true:
    accessibility, or reliability guardrails regress?
 8. What minimum community-safety capacity and accountable report/appeal path
    must exist before consentful sharing or public-community growth scales?
+9. What publisher, release, review, consent-update, incident, and data-control
+   gates must be proven before apps or reusable artifacts enter public
+   discovery?
 
 ## Refresh checklist
 

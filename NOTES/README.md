@@ -14,6 +14,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Attention agency and calm-use baseline](./attention-agency-baseline.md) | Evidence on feed continuation, passive algorithm training, correction/explanation gaps, notification defaults, and calm-use decisions | 2026-09-02 |
 | [Accessibility and language-readiness baseline](./accessibility-and-language-readiness-baseline.md) | Evidence on shared interaction affordances, release-wide accessibility gaps, static English semantics, locale ownership, and privacy boundaries | 2026-09-02 |
 | [Community safety and accountable moderation baseline](./community-safety-and-accountable-moderation-baseline.md) | Evidence on community roles, personal controls, automated moderation, missing report/appeal contracts, privacy, and accountable governance | 2026-09-03 |
+| [Trusted developer ecosystem baseline](./trusted-developer-ecosystem-baseline.md) | Evidence on app identity, OAuth consent, user-owned app data, capability negotiation, release/review gaps, incidents, and sustainable distribution | 2026-09-03 |
 
 ## Conventions
 

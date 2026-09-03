@@ -395,3 +395,18 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     phased roadmap, then execute
     `claude-todo/26-community-safety-and-accountable-moderation.md` only after
     the owner approves scope, evidence retention, staffing, and stop conditions.
+
+27. **🧩 Build a trusted developer ecosystem.**
+
+    Preserve Thingtime's origin-bound OAuth, explicit scopes, revocation,
+    user-owned app data, sandbox, generated API docs, semantic capability
+    negotiation, and capability-bounded actions while adding the missing
+    distribution lifecycle: accountable publisher declarations, immutable
+    releases, permission and compatibility diffs, reproducible review receipts,
+    narrow incident containment, remediation/appeal, abandonment, and fair
+    discovery. A declaration or badge must never widen runtime authority, and
+    popularity or payment must never substitute for evidence. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/27-trusted-developer-ecosystem.md` only after the owner approves
+    the first artifact family, review capacity, consent rules, incident states,
+    funding boundaries, and stop conditions.

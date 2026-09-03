@@ -14,6 +14,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Attention agency and calm-use roadmap](./attention-agency-roadmap.md) | User-controlled feed continuation, algorithm learning/correction/explanation, stopping points, and notification delivery | Proposed |
 | [Accessibility and language-readiness roadmap](./accessibility-and-language-readiness-roadmap.md) | Complete-journey access baseline, shared interaction repair, one locale foundation, pilot language, and continuous release gates | Proposed |
 | [Community safety and accountable moderation roadmap](./community-safety-and-accountable-moderation-roadmap.md) | Immediate personal controls through report intake, scoped governance, appeals, remedies, and privacy-safe transparency | Proposed |
+| [Trusted developer ecosystem roadmap](./trusted-developer-ecosystem-roadmap.md) | App declarations and sandbox conformance through immutable releases, review receipts, consentful updates, incident recovery, and fair discovery | Proposed |
 
 ## Conventions
 
