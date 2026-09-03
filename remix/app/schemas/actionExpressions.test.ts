@@ -5,6 +5,7 @@ import {
 	EXPRESSION_CATALOGUE,
 	EXPRESSION_FUNCTION_NAMES,
 	MAX_EXPRESSION_LIST_LENGTH,
+	MAX_EXPRESSION_STRING_CHARS,
 	evaluateExpression,
 	isLambdaArg,
 	type ExpressionContext,
@@ -291,4 +292,54 @@ test('flatten refuses an oversized result without building it first', () => {
 	assert.deepEqual(run(['flatten', [[1], [2, 3], 4]]), [1, 2, 3, 4]);
 	assert.equal(run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH }, (_value, index) => index)]]).length, MAX_EXPRESSION_LIST_LENGTH);
 	assert.throws(() => run(['flatten', [Array.from({ length: MAX_EXPRESSION_LIST_LENGTH + 1 }, (_value, index) => index)]]), /lists cap at/);
+});
+
+test('replace and join refuse an oversized result without building it first', () => {
+	// Same hazard as flatten, on the text side. `capText` reads `.length` on a
+	// FINISHED string, and V8's Array#join materialises the whole flat result:
+	// a 20k-char haystack split on a 1-char needle and rejoined with a 20k-char
+	// replacement built 399,980,001 chars (~382MB RSS, ~173ms of blocking,
+	// uninterruptible CPU) before the cap looked at it. Both sources are
+	// reachable from one saved program — `padStart` clamps its target length to
+	// exactly MAX_EXPRESSION_STRING_CHARS — and `actions.run` allows 240/min,
+	// so the refusal has to cost O(input), not O(would-be output).
+	const big = run(['padStart', 'x', MAX_EXPRESSION_STRING_CHARS, 'y']);
+	assert.equal(big.length, MAX_EXPRESSION_STRING_CHARS);
+
+	for (const expression of [
+		['replace', big, 'y', big],
+		['join', Array.from({ length: 200 }, () => big), big]
+	]) {
+		const started = process.hrtime.bigint();
+		assert.throws(() => run(expression), /text caps at/, `${expression[0]} must refuse`);
+		const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+		// projecting the length is single-digit ms; building ~400M chars first
+		// is hundreds of ms and hundreds of megabytes
+		assert.ok(elapsedMs < 100, `${expression[0]} refusal took ${Math.round(elapsedMs)}ms — it is building the whole result before capping`);
+	}
+
+	// ordinary semantics and the exact boundary are untouched
+	assert.equal(run(['replace', 'a-b-c', '-', '+']), 'a+b+c');
+	assert.equal(run(['replace', 'abc', '', '+']), 'abc');
+	assert.equal(run(['replace', 'aaa', 'a', '']), '');
+	assert.equal(run(['join', ['a', 'b'], '-']), 'a-b');
+	assert.equal(run(['join', ['a', 'b']]), 'a, b');
+	assert.equal(run(['join', []]), '');
+	assert.equal(run(['join', [big.slice(0, MAX_EXPRESSION_STRING_CHARS - 1), 'z'], '']).length, MAX_EXPRESSION_STRING_CHARS);
+	assert.throws(() => run(['join', [big, 'z'], '']), /text caps at/);
+});
+
+test('dateAdd refuses an out-of-range result instead of throwing a raw RangeError', () => {
+	// `toISOString()` on an overflowed Date throws RangeError('Invalid time
+	// value'), which reaches the run record as an opaque message rather than a
+	// catalogue-shaped refusal like every other failure in this module.
+	for (const [amount, unit] of [
+		[1e9, 'year'],
+		[1e15, 'day']
+	] as const) {
+		assert.throws(() => run(['dateAdd', '2026-01-01T00:00:00.000Z', amount, unit]), /dateAdd overflowed the representable date range/);
+	}
+	// the ordinary range still answers
+	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'day']), '2026-02-01T00:00:00.000Z');
+	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'year']), '2027-01-31T00:00:00.000Z');
 });

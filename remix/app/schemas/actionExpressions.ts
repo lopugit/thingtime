@@ -281,6 +281,19 @@ const capText = (text: string, ctx: ExpressionContext): string => {
 	return text;
 };
 
+// `join` and `replace` are the text builders whose OUTPUT can dwarf their
+// inputs, so — exactly like `flatten` below — the cap has to bite BEFORE the
+// result exists. `capText` reads `.length` on a FINISHED string, and V8's
+// Array#join materialises the whole flat result rather than a lazy rope: a
+// 20k-char haystack split on a 1-char needle and rejoined with a 20k-char
+// replacement built 399,980,001 chars (~382MB RSS, ~173ms of blocking,
+// uninterruptible CPU — no deadline check runs inside an expression) and only
+// THEN failed the cap, so the refusal cost far more than the success. Project
+// the length from the parts and refuse at the same bound: O(input) either way.
+const capProjectedText = (projected: number, ctx: ExpressionContext): void => {
+	if (projected > MAX_EXPRESSION_STRING_CHARS) ctx.fail(`Expression text caps at ${MAX_EXPRESSION_STRING_CHARS} characters`);
+};
+
 const ownGet = (target: unknown, key: unknown): unknown => {
 	if (target === null || target === undefined) return undefined;
 	if (Array.isArray(target)) {
@@ -535,8 +548,12 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 		}
 		case 'length':
 			return Array.isArray(args[0]) ? (args[0] as unknown[]).length : text(0).length;
-		case 'join':
-			return capText(list(0).map(toText).join(args.length > 1 ? text(1) : ', '), ctx);
+		case 'join': {
+			const parts = list(0).map(toText);
+			const separator = args.length > 1 ? text(1) : ', ';
+			capProjectedText(parts.reduce((total, part) => total + part.length, 0) + Math.max(0, parts.length - 1) * separator.length, ctx);
+			return capText(parts.join(separator), ctx);
+		}
 		case 'split': {
 			const separator = text(1);
 			return capList(separator ? text(0).split(separator) : [...text(0)], ctx);
@@ -549,7 +566,12 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return text(0).endsWith(text(1));
 		case 'replace': {
 			const needle = text(1);
-			return capText(needle ? text(0).split(needle).join(text(2)) : text(0), ctx);
+			const source = text(0);
+			if (!needle) return capText(source, ctx);
+			const replacement = text(2);
+			const parts = source.split(needle);
+			capProjectedText(source.length + (parts.length - 1) * (replacement.length - needle.length), ctx);
+			return capText(parts.join(replacement), ctx);
 		}
 		case 'padStart':
 			return capText(text(0).padStart(Math.max(0, Math.min(MAX_EXPRESSION_STRING_CHARS, Math.trunc(num(1)))), args.length > 2 ? text(2) || ' ' : ' '), ctx);
@@ -723,6 +745,11 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			else if (unit === 'year') date.setUTCFullYear(date.getUTCFullYear() + amount);
 			else if (DATE_UNITS_MS[unit]) date.setTime(date.getTime() + amount * DATE_UNITS_MS[unit]);
 			else ctx.fail('dateAdd unit must be minute/hour/day/week/month/year');
+			// A big enough amount walks off the ±8.64e15ms range and `toISOString`
+			// throws a raw RangeError('Invalid time value') instead of refusing the
+			// way every other function here does. Every failure in this module is a
+			// ctx.fail with a catalogue-shaped message; this one has to be too.
+			if (!Number.isFinite(date.getTime())) ctx.fail('dateAdd overflowed the representable date range');
 			return date.toISOString();
 		}
 		case 'dateDiff': {
