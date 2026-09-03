@@ -87,12 +87,14 @@ jobs:
     permissions:
       actions: read
       contents: read
+      issues: write
       pull-requests: read
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
       pr_number: ${{ steps.plan.outputs.pr_number }}
       head_sha: ${{ steps.plan.outputs.head_sha }}
       head_ref: ${{ steps.plan.outputs.head_ref }}
+      expected_ready_at: ${{ steps.plan.outputs.expected_ready_at }}
     env:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
@@ -137,8 +139,19 @@ jobs:
 
       - name: Install pinned package manager
         run: |
+          set -euo pipefail
           corepack enable
-          corepack prepare pnpm@10.12.1 --activate
+          for attempt in 1 2 3; do
+            if corepack prepare pnpm@10.12.1 --activate; then
+              corepack pnpm --version
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::Could not install pinned pnpm after three attempts."
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
 
       - name: Install exact locked dependencies
         run: corepack pnpm --dir product/remix install --frozen-lockfile
@@ -192,6 +205,7 @@ jobs:
       DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
       PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
       PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
+      PREVIEW_EXPECTED_READY_AT: ${{ needs.prepare.outputs.expected_ready_at }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Check out protected deployment controller
@@ -313,8 +327,19 @@ jobs:
 
       - name: Install pinned package manager
         run: |
+          set -euo pipefail
           corepack enable
-          corepack prepare pnpm@10.12.1 --activate
+          for attempt in 1 2 3; do
+            if corepack prepare pnpm@10.12.1 --activate; then
+              corepack pnpm --version
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::Could not install pinned pnpm after three attempts."
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
 
       - name: Install exact locked dependencies
         run: corepack pnpm --dir product/remix install --frozen-lockfile

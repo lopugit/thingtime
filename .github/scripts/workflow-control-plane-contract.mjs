@@ -1109,6 +1109,11 @@ export function assertControlPlaneContract() {
     /environment: vercel-develop-pr-control/u,
     "the protected authorizer can read its environment-scoped non-secret settings",
   );
+  assert.match(
+    developPreviewPrepareJob,
+    /issues: write[\s\S]*expected_ready_at: \$\{\{ steps\.plan\.outputs\.expected_ready_at \}\}/u,
+    "the protected authorizer can publish and preserve the expected URL and ready time before build",
+  );
   assert.doesNotMatch(
     developPreviewBuildJob,
     /environment: vercel-develop-pr-control/u,
@@ -1123,6 +1128,11 @@ export function assertControlPlaneContract() {
     developPreviewBuildJob,
     /node scripts\/vercel-build\.mjs[\s\S]*actions\/upload-artifact@[0-9a-f]{40}/u,
     "develop preview builds Vercel output on GitHub and hands it off through a pinned artifact action",
+  );
+  assert.match(
+    developPreviewBuildJob,
+    /for attempt in 1 2 3; do[\s\S]*corepack prepare pnpm@10\.12\.1 --activate[\s\S]*Could not install pinned pnpm after three attempts/u,
+    "develop preview retries only its pinned package-manager bootstrap after transient registry failures",
   );
   assert.doesNotMatch(
     developPreviewBuildJob,
@@ -1154,6 +1164,11 @@ export function assertControlPlaneContract() {
     /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
     "develop preview validates the original manual PR input inside the trusted controller",
   );
+  assert.match(
+    developPreviewController,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await upsertComment\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
+    "develop preview publishes its expected URL and estimate before releasing the build plan",
+  );
   const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
   const adminPreviewBuildJob = developPreview.match(/\n  admin_build:\n[\s\S]*?\n  admin_controller:\n/u)?.[0] ?? "";
   const adminPreviewControllerJob = developPreview.match(/\n  admin_controller:\n[\s\S]*$/u)?.[0] ?? "";
@@ -1171,6 +1186,11 @@ export function assertControlPlaneContract() {
     adminPreviewBuildJob,
     /fromJSON\(needs\.admin_prepare\.outputs\.environments\)[\s\S]*ref: \$\{\{ needs\.admin_prepare\.outputs\.head_sha \}\}[\s\S]*node scripts\/vercel-build\.mjs/u,
     "every selected environment is built from the exact authorized SHA",
+  );
+  assert.match(
+    adminPreviewBuildJob,
+    /for attempt in 1 2 3; do[\s\S]*corepack prepare pnpm@10\.12\.1 --activate[\s\S]*Could not install pinned pnpm after three attempts/u,
+    "admin preview matrices retry only their pinned package-manager bootstrap after transient registry failures",
   );
   assert.doesNotMatch(
     adminPreviewBuildJob,
