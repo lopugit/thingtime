@@ -29,6 +29,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
 
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
 - Nitro health now reports `degraded` and names
   `backfill-user-storage-accounting` whenever current user ledgers are absent,
   malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
