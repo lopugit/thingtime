@@ -152,6 +152,15 @@ merge the exact snapshotted base, but use Git partial-clone blob filtering so
 Lopu does not download the repository's multi-gigabyte historical file corpus
 for every PR. Required working-tree and merge blobs are fetched lazily.
 
+Every non-deleted target-branch push is also an update signal for eligible
+same-repository PRs whose base is that exact branch. Lopu snapshots the live
+head and base refs and merges the target into the PR head under an exact-head
+lease, even when GitHub has not yet recomputed its `BEHIND`/mergeability fields.
+This is a merge, not a rebase: it preserves contributor history. Forks,
+protected/default heads, and `no-ai-merge` or `ai-merge-paused` PRs remain
+excluded; a worker that finds its exact base already present exits successfully
+without creating a graph-only commit or pushing the branch.
+
 The default backend is Claude. To use Codex through the OpenAI Platform API,
 configure these repository settings (all names and values are examples; never
 commit a real key):
