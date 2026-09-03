@@ -165,8 +165,17 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 
 export const EXPRESSION_FUNCTION_NAMES = Object.keys(EXPRESSION_CATALOGUE);
 
+// The ONE way to read the catalogue. `CATALOGUE[fn]` alone is not a closed
+// lookup: the table is an object literal, so it inherits Object.prototype and
+// `constructor` / `valueOf` / `hasOwnProperty` / `__proto__` all answer with a
+// truthy value that is not a signature. Their `.min` / `.max` are undefined,
+// and every arity comparison against undefined is false, so an inherited name
+// clears both the save-time gate and the run-time gate. Own properties only.
+export const catalogueSignature = (fn: string): ExpressionSignature | undefined =>
+	Object.prototype.hasOwnProperty.call(EXPRESSION_CATALOGUE, fn) ? EXPRESSION_CATALOGUE[fn] : undefined;
+
 export const isLambdaArg = (fn: string, index: number): boolean => {
-	const entry = EXPRESSION_CATALOGUE[fn];
+	const entry = catalogueSignature(fn);
 	return !!entry?.lambda?.includes(index);
 };
 
@@ -272,6 +281,19 @@ const capText = (text: string, ctx: ExpressionContext): string => {
 	return text;
 };
 
+// `join` and `replace` are the text builders whose OUTPUT can dwarf their
+// inputs, so — exactly like `flatten` below — the cap has to bite BEFORE the
+// result exists. `capText` reads `.length` on a FINISHED string, and V8's
+// Array#join materialises the whole flat result rather than a lazy rope: a
+// 20k-char haystack split on a 1-char needle and rejoined with a 20k-char
+// replacement built 399,980,001 chars (~382MB RSS, ~173ms of blocking,
+// uninterruptible CPU — no deadline check runs inside an expression) and only
+// THEN failed the cap, so the refusal cost far more than the success. Project
+// the length from the parts and refuse at the same bound: O(input) either way.
+const capProjectedText = (projected: number, ctx: ExpressionContext): void => {
+	if (projected > MAX_EXPRESSION_STRING_CHARS) ctx.fail(`Expression text caps at ${MAX_EXPRESSION_STRING_CHARS} characters`);
+};
+
 const ownGet = (target: unknown, key: unknown): unknown => {
 	if (target === null || target === undefined) return undefined;
 	if (Array.isArray(target)) {
@@ -361,7 +383,7 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 	if (ctx.budget.nodes <= 0) ctx.fail(`Expression budget exhausted (max ${MAX_EXPRESSION_NODES_PER_RUN} evaluations per run)`);
 	ctx.budget.nodes -= 1;
 	const fn = String(expression[0]);
-	const signature = EXPRESSION_CATALOGUE[fn];
+	const signature = catalogueSignature(fn);
 	if (!signature) ctx.fail(`Unknown expression function "${fn.slice(0, 40)}"`);
 	const rawArgs = expression.slice(1);
 	if (rawArgs.length < signature.min || rawArgs.length > signature.max) {
@@ -507,8 +529,26 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return typeof value === 'object' ? 'object' : typeof value;
 		}
 		// ── text ──
-		case 'concat':
-			return capText(args.map(toText).join(''), ctx);
+		case 'concat': {
+			// Capped DURING the walk, like `flatten` below rather than like `join`:
+			// `capText` reads `.length` on a FINISHED string, so capping after the
+			// join makes the refusal cost O(would-be output). The arg COUNT is
+			// bounded (24) but an arg's SIZE is not — one `$step` ref to a
+			// things.search result resolves to hundreds of thousands of characters,
+			// so 24 of them built ~8.4M chars (423x this cap) before it ever looked.
+			// Stopping at the first arg that crosses the bound also avoids
+			// serialising the remaining args, which is where the rest of the cost
+			// was: `toText` on a big object is a whole JSON.stringify each.
+			const parts: string[] = [];
+			let projected = 0;
+			for (const value of args) {
+				const part = toText(value);
+				projected += part.length;
+				capProjectedText(projected, ctx);
+				parts.push(part);
+			}
+			return capText(parts.join(''), ctx);
+		}
 		case 'upper':
 			return text(0).toUpperCase();
 		case 'lower':
@@ -526,11 +566,45 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 		}
 		case 'length':
 			return Array.isArray(args[0]) ? (args[0] as unknown[]).length : text(0).length;
-		case 'join':
-			return capText(list(0).map(toText).join(args.length > 1 ? text(1) : ', '), ctx);
+		case 'join': {
+			const parts = list(0).map(toText);
+			const separator = args.length > 1 ? text(1) : ', ';
+			capProjectedText(parts.reduce((total, part) => total + part.length, 0) + Math.max(0, parts.length - 1) * separator.length, ctx);
+			return capText(parts.join(separator), ctx);
+		}
 		case 'split': {
+			// The fifth builder whose OUTPUT can dwarf its input, so it caps
+			// DURING the walk like `flatten` / `concat` above rather than after.
+			// `capList` reads `.length` on a FINISHED array, and split's input is
+			// not bounded the way its siblings' are: `text(0)` is `toText` of ANY
+			// resolved value, and a `$step` ref to a things.search result
+			// (MAX_ACTION_SEARCH_LIMIT = 100 docs, each crystal as large as the
+			// things write route accepts) serialises to tens of millions of
+			// characters. `.split('')` on that materialises one element per
+			// character before the cap ever looks: measured 280ms of blocking,
+			// uninterruptible CPU and +172MB heap for a refusal, so the refusal
+			// cost far more than the success. Pushing under the cap makes it
+			// O(cap) — and `actions.run` allows 240/min.
 			const separator = text(1);
-			return capList(separator ? text(0).split(separator) : [...text(0)], ctx);
+			const source = text(0);
+			const out: string[] = [];
+			const push = (piece: string): void => {
+				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				out.push(piece);
+			};
+			// no separator = one element per CODE POINT, exactly like the [...text]
+			// spread this replaces (not String#split(''), which yields code units)
+			if (!separator) {
+				for (const character of source) push(character);
+				return out;
+			}
+			let from = 0;
+			for (let at = source.indexOf(separator); at !== -1; at = source.indexOf(separator, from)) {
+				push(source.slice(from, at));
+				from = at + separator.length;
+			}
+			push(source.slice(from));
+			return out;
 		}
 		case 'includes':
 			return Array.isArray(args[0]) ? (args[0] as unknown[]).some((entry) => looseEquals(entry, args[1])) : text(0).includes(text(1));
@@ -540,7 +614,12 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return text(0).endsWith(text(1));
 		case 'replace': {
 			const needle = text(1);
-			return capText(needle ? text(0).split(needle).join(text(2)) : text(0), ctx);
+			const source = text(0);
+			if (!needle) return capText(source, ctx);
+			const replacement = text(2);
+			const parts = source.split(needle);
+			capProjectedText(source.length + (parts.length - 1) * (replacement.length - needle.length), ctx);
+			return capText(parts.join(replacement), ctx);
 		}
 		case 'padStart':
 			return capText(text(0).padStart(Math.max(0, Math.min(MAX_EXPRESSION_STRING_CHARS, Math.trunc(num(1)))), args.length > 2 ? text(2) || ' ' : ' '), ctx);
@@ -624,11 +703,26 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return list(0).findIndex((value) => looseEquals(value, args[1]));
 		case 'pluck':
 			return list(0).map((value) => ownGet(value, args[1]) ?? null);
-		case 'flatten':
-			return capList(
-				list(0).reduce<unknown[]>((out, value) => (Array.isArray(value) ? out.concat(value) : out.concat([value])), []),
-				ctx
-			);
+		case 'flatten': {
+			// The one list function whose OUTPUT can dwarf its input, so it caps
+			// DURING the walk instead of after. `reduce` + `concat` copied the
+			// whole accumulator per element, and the post-hoc cap only looked at
+			// the finished array — so the refusal cost the same as the success:
+			// `flatten(map(range(1000), range(1000)))` spent ~2.2s of blocking,
+			// uninterruptible CPU (no deadline check runs inside an expression)
+			// for ~2k of the 20k node budget, then refused. Push into one array
+			// and stop at the cap: the same refusal now costs O(cap).
+			const out: unknown[] = [];
+			const push = (entry: unknown): void => {
+				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				out.push(entry);
+			};
+			for (const value of list(0)) {
+				if (Array.isArray(value)) for (const entry of value) push(entry);
+				else push(value);
+			}
+			return out;
+		}
 		case 'append':
 			return capList([...list(0), ...args.slice(1)], ctx);
 		// ── object ──
@@ -699,6 +793,11 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			else if (unit === 'year') date.setUTCFullYear(date.getUTCFullYear() + amount);
 			else if (DATE_UNITS_MS[unit]) date.setTime(date.getTime() + amount * DATE_UNITS_MS[unit]);
 			else ctx.fail('dateAdd unit must be minute/hour/day/week/month/year');
+			// A big enough amount walks off the ±8.64e15ms range and `toISOString`
+			// throws a raw RangeError('Invalid time value') instead of refusing the
+			// way every other function here does. Every failure in this module is a
+			// ctx.fail with a catalogue-shaped message; this one has to be too.
+			if (!Number.isFinite(date.getTime())) ctx.fail('dateAdd overflowed the representable date range');
 			return date.toISOString();
 		}
 		case 'dateDiff': {
@@ -727,8 +826,10 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return new Intl.DateTimeFormat('en-US', { ...options, timeZone: timeZone || 'UTC' }).format(date);
 		}
 		default: {
-			// domain packs
-			const implementation = ctx.packs[fn];
+			// domain packs — own properties only, for the same reason the
+			// catalogue lookup is: the bound pack table is a plain object, and an
+			// inherited name would hand this branch a callable that is not a pack.
+			const implementation = Object.prototype.hasOwnProperty.call(ctx.packs, fn) ? ctx.packs[fn] : undefined;
 			if (!implementation) ctx.fail(`Expression function ${fn} is not available on this deployment`);
 			ctx.onPackCall?.(fn);
 			return implementation(args);

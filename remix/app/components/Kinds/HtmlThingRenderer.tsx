@@ -86,7 +86,10 @@ const ALLOWED_TAGS = new Set([
 	'g'
 ]);
 
-const ALLOWED_PROPS = new Set([
+// Exported so the allowlist itself carries a regression test: every entry is a
+// decision about what untrusted markup may hand the browser, and a prop added
+// back by habit should fail a test rather than ship.
+export const ALLOWED_PROPS = new Set([
 	'style',
 	'className',
 	'class',
@@ -117,10 +120,23 @@ const ALLOWED_PROPS = new Set([
 	'selected',
 	'autoComplete',
 	'inputMode',
-	'pattern',
+	// accessibility labelling: inert strings the browser only ever exposes to
+	// assistive tech — no URL, no JS sink, no validation engine
 	'role',
 	'aria-label',
 	'aria-hidden',
+	// NOT `pattern`. Every other constraint-validation prop above is a cheap
+	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
+	// and runs from untrusted markup, on the main thread, with no timeout.
+	// Constraint validation runs as soon as a field has a non-empty value —
+	// and `fieldProps` below turns a template's `value` into `defaultValue`,
+	// so a component thing can ship both halves — which makes
+	// `<input value="aaaaaaaaaaaaaaaaaaaaaaaaaaX" pattern="(a+)+$">` a wedged
+	// tab for anyone who merely renders that component. Nothing in the
+	// library uses it, the run inputs are validated server-side by the action
+	// input descriptors (type/min/max/maxLength/enum) rather than by the
+	// field's own validity, and a client-side hint is not worth an
+	// author-supplied regex engine.
 	'rows',
 	'cols',
 	'controls',

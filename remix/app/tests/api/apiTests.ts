@@ -2460,6 +2460,99 @@ export const apiTests: ApiTestDefinition[] = [
       'Census kept the demo and suite counts disjoint and inside their catalog totals.'
     )
   },
+  // ---- suite install (the one MUTATING endpoint the library adds) ----------
+  // The read side above is covered nine ways; the write side needs its own
+  // assertions because it creates programs (schemas, controls, actions, data,
+  // pages) in the caller's own things. The three claims the docs entry makes —
+  // session-only, 404 on an unknown key, idempotent by key — are asserted here
+  // in order: the install below runs before the re-install that checks it did
+  // not duplicate.
+  {
+    id: 'webpages-suites-install-anonymous',
+    name: 'Suite install requires a session',
+    description:
+      'POST /webpages/suites/install refuses an anonymous caller with 401 before reading the body. Installing writes programs the caller then runs as themselves, so it is session-only like actions.run — app tokens and PATs never resolve through getCurrentUser.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous install was refused with a 401 error shape.')
+  },
+  {
+    id: 'webpages-suites-install-unknown',
+    name: 'Suite install rejects an unknown key',
+    description: 'An unknown suite key is a 404 error shape and writes nothing (401 when the run carries no session, 429 when rate-limited).',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'definitely-missing-suite' },
+    expect: expectJson(
+      [404, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown suite key was refused with an error shape.'
+    )
+  },
+  {
+    id: 'webpages-suites-install-own-things',
+    name: 'Suite install writes the bundle into the caller’s own things',
+    description:
+      'POST { key: guestbook } installs the own-mode bundle through the ordinary create path and answers with a per-part id map. Every id is a real thing id, so the page’s controls resolve owner-only against the caller’s own actions rather than the seeded copies.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            body?.suite === 'guestbook' &&
+            typeof body?.created === 'number' &&
+            typeof body?.updated === 'number' &&
+            body?.entryPageKey === 'demo-suite-guestbook' &&
+            typeof body?.entryPageId === 'string' &&
+            body.entryPageId.length > 0 &&
+            // the seed's reserved ids are the SYSTEM copies; an install must
+            // hand back the caller's own things, never the seeded shareIds
+            !body.entryPageId.startsWith('webpage-') &&
+            Object.values(body?.schemaIds || {}).length >= 1 &&
+            Object.values(body?.actionIds || {}).length >= 1 &&
+            // CONCAT the four maps rather than spreading them into one object:
+            // suite part keys are per-kind, so a suite with a `sign` control
+            // AND a `sign` action collides on merge and a dropped id would go
+            // unchecked. Every returned id must be one of the caller's own
+            // things — never a seeded shareId, which carries a reserved prefix
+            // that generic thing creation refuses outright.
+            [body?.schemaIds, body?.componentIds, body?.actionIds, body?.pageIds]
+              .flatMap((map: any) => Object.values(map || {}))
+              .every((id: any) => typeof id === 'string' && id.length > 0 && !/^(schema|component|action|webpage)-/.test(id))
+          : body?.ok === false && typeof body?.error === 'string',
+      'Suite install created the caller’s own bundle (or was correctly session-gated).'
+    )
+  },
+  {
+    id: 'webpages-suites-install-idempotent',
+    name: 'Re-installing a suite updates in place instead of duplicating',
+    description:
+      'The second identical install of the same suite must create nothing: every part is keyed inside the caller’s things (schema name, componentKey, actionKey, pageKey, sample stamp), so a re-install reconciles rather than minting a second copy. Runs straight after the install above and shares its session.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && body?.created === 0 && typeof body?.updated === 'number' && typeof body?.entryPageId === 'string'
+          : body?.ok === false && typeof body?.error === 'string',
+      'Re-install created nothing new (or was correctly session-gated).'
+    )
+  },
   ...apiDocsSmokeTests
 ];
 

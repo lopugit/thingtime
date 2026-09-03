@@ -13,8 +13,8 @@
 // the original app stored them under app-data — now as data things of the
 // viewer's own `profile` schema.
 
-import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites';
-import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos';
+import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites.ts';
+import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos.ts';
 
 // ── palette (night theme of the original) ───────────────────────────────────
 const BG = '#0b0b16';
@@ -616,8 +616,17 @@ const schoolSearchAction: SuiteActionDef = {
 };
 
 // Entries are PUBLIC DATA THINGS (seeded from the pack's content): the action
-// searches them by entryId in public scope, so the page reads real things —
-// browsable on /things, forkable, and exactly what the seed wrote.
+// searches them by entryId, so the page reads real things — browsable on
+// /things, forkable, and exactly what the seed wrote.
+//
+// SYSTEM scope, not public. The crystal fields found here are merged OVER the
+// pack's trusted entry below, so whoever can write into this corpus writes
+// what every reader sees. `crystal.schema` is a free-form field on the open
+// `data` crystal and this schema is seeded world-readable, so under `public`
+// scope any signed-in account could publish a data thing wearing the entry
+// stamp; newest-first with `limit: 1` would then serve that forged row to
+// everyone. `system` pins ownerId to the seed, which is what "exactly what
+// the seed wrote" was always meant to say.
 const entryAction: SuiteActionDef = {
 	key: 'school-entry',
 	name: 'A School entry',
@@ -625,7 +634,7 @@ const entryAction: SuiteActionDef = {
 	category: 'starsalign',
 	inputs: [{ name: 'id', type: 'string', label: 'Entry id', required: true, maxLength: 60 }],
 	steps: (refs) => [
-		{ op: 'things.search', schema: refs.schema('entry'), scope: 'public', where: { entryId: '$input.id' }, limit: 1 },
+		{ op: 'things.search', schema: refs.schema('entry'), scope: 'system', where: { entryId: '$input.id' }, limit: 1 },
 		{ op: 'compute', value: firstCrystal('$step.1') },
 		{ op: 'compute', value: { ttExpr: ['astro.entry', '$input.id'] } },
 		{

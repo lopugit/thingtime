@@ -18,8 +18,8 @@
 // badges, pokédex), one `pokemon` per creature (party or box), one `battle`
 // while a wild fight is on. The species catalogue is public system data.
 
-import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites';
-import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos';
+import type { BehaviourSuite, SuiteActionDef, SuiteComponentDef, SuiteRefs } from '../behaviourSuites.ts';
+import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from '../webpageDemos.ts';
 
 // ── palette (the original's Tailwind + game-ui.css) ─────────────────────────
 const GRASS = '#70c0a0';

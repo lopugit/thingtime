@@ -19,7 +19,10 @@ export const bindPacks = (
 	context: PackContext,
 	packs: ActionPack = ACTION_PACKS
 ): Record<string, (args: unknown[]) => unknown> => {
-	const bound: Record<string, (args: unknown[]) => unknown> = {};
+	// null prototype: the expression engine looks a pack up by a name the
+	// program chose, and an inherited `constructor` / `valueOf` must resolve to
+	// nothing rather than to a callable that is not a pack.
+	const bound: Record<string, (args: unknown[]) => unknown> = Object.create(null);
 	for (const [name, implementation] of Object.entries(packs)) {
 		bound[name] = (args: unknown[]) => (implementation as PackFunction)(args, context);
 	}

@@ -321,6 +321,17 @@ describe('catching', () => {
 		assert.ok(result.player.hp < player.hp);
 		assert.throws(() => call('pokeworld.catchRoll', [{ wild, ball: 'master-ball' }]), /ball must be/);
 	});
+
+	it('refuses a ball name inherited from Object.prototype', () => {
+		// `spec.ball in BALL_BONUS` walked the prototype chain: 'constructor'
+		// cleared the guard, and BALL_BONUS.constructor is a function, so the
+		// capture formula multiplied by it and went NaN — a silent "broke free"
+		// where the caller asked for an item that does not exist.
+		const wild = wildOf(25, 5);
+		for (const ball of ['constructor', 'valueOf', 'toString', 'hasOwnProperty', '__proto__']) {
+			assert.throws(() => call('pokeworld.catchRoll', [{ wild, ball }]), /ball must be/, `ball ${ball}`);
+		}
+	});
 });
 
 // --- Encounters ---------------------------------------------------------------

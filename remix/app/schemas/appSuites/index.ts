@@ -4,9 +4,9 @@
 // lists suites imports from HERE and iterates ALL_SUITES: the demo originals
 // keep `demo-` slugs, the apps get `app-` slugs (behaviourSuites.suiteSlug).
 
-import { BEHAVIOUR_SUITES, registerAppSuite, type BehaviourSuite } from '../behaviourSuites';
-import { pokeworldSuite } from './pokeworld';
-import { starsalignSuite } from './starsalign';
+import { BEHAVIOUR_SUITES, registerAppSuite, type BehaviourSuite } from '../behaviourSuites.ts';
+import { pokeworldSuite } from './pokeworld.ts';
+import { starsalignSuite } from './starsalign.ts';
 
 registerAppSuite(pokeworldSuite);
 registerAppSuite(starsalignSuite);
