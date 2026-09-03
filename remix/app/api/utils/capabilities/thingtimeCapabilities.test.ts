@@ -54,7 +54,7 @@ test('capability negotiation accepts compatible updates and rejects missing or b
 
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  assert.equal(manifest.features['api.ai-models']?.version, '1.2.0');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-ai-models']?.version, '1.1.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
