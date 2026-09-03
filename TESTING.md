@@ -741,6 +741,12 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
+      copied image, video, and generic file. File-bearing pastes turn Photos on
+      when needed and queue into the one Media & files panel; pasting again
+      anywhere inside that open panel does the same. Plain/rich text paste stays
+      in the focused field, and pasting inside the separate Thing editor modal
+      never attaches the file to the post.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a

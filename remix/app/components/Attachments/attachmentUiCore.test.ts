@@ -3,6 +3,7 @@ import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
+	attachmentFilesFromClipboard,
 	attachmentContentUrl,
 	attachmentDisplayName,
 	attachmentThingUrl,
@@ -23,6 +24,27 @@ import {
 	safeAttachmentMediaKind,
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
+
+test('clipboard files prefer the canonical file list without double-queuing item fallbacks', () => {
+	const screenshot = { name: 'Screenshot.png', size: 42 } as File;
+	const duplicatedItem = { kind: 'file', getAsFile: () => screenshot };
+	assert.deepEqual(attachmentFilesFromClipboard({ files: [screenshot], items: [duplicatedItem] }), [screenshot]);
+});
+
+test('clipboard files fall back to file-kind items when the browser file list is empty', () => {
+	const copiedImage = { name: 'pasted-image.png', size: 7 } as File;
+	assert.deepEqual(
+		attachmentFilesFromClipboard({
+			files: [],
+			items: [
+				{ kind: 'string', getAsFile: () => null },
+				{ kind: 'file', getAsFile: () => copiedImage },
+				{ kind: 'file', getAsFile: () => null }
+			]
+		}),
+		[copiedImage]
+	);
+});
 
 test('upload purposes map to exactly one canonical approval scope', () => {
 	for (const purpose of ['post', 'comment', 'custom-emoji'] as const) {
