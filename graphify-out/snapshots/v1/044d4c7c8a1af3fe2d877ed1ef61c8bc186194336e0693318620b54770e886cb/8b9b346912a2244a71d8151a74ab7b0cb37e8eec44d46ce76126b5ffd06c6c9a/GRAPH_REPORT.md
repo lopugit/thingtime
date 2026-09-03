@@ -1,16 +1,16 @@
-# Graph Report - worktree  (2026-09-01)
+# Graph Report - thingtime  (2026-09-03)
 
 ## Corpus Check
-- 44 files · ~187,595 words
+- 45 files · ~197,146 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 829 nodes · 1710 edges · 94 communities (45 shown, 49 thin omitted)
+- 844 nodes · 1743 edges · 94 communities (45 shown, 49 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `62eb33a7`
+- Built from commit: `2a0dd69c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -158,7 +158,7 @@ Nodes (103): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), 
 
 ### Community 1 - "graphify-cas.mjs"
 Cohesion: 0.09
-Nodes (54): activateSnapshot(), artifactHash(), baselineNodeCount(), compareSnapshotQuality(), computeSourceFingerprint(), copyPortableFiles(), ensureSnapshot(), fail() (+46 more)
+Nodes (55): activateSnapshot(), artifactHash(), baselineNodeCount(), compareSnapshotQuality(), computeSourceFingerprint(), copyPortableFiles(), dropNestedRepositories(), ensureSnapshot() (+47 more)
 
 ### Community 2 - "promotion-pr-changelog.mjs"
 Cohesion: 0.11
@@ -194,7 +194,7 @@ Nodes (26): cancelPromotionRetirement(), closeRedundantPass(), createPromotionPr
 
 ### Community 10 - "codeql-open-pr-backfill.mjs"
 Cohesion: 0.21
-Nodes (22): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), analysisSnapshotForPullRequest(), commandFailureText(), completeAnalysisKeys(), dispatchAnalysisWithInput(), flattenSlurp() (+14 more)
+Nodes (23): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), analysisSnapshotForPullRequest(), commandFailureText(), completeAnalysisKeys(), dispatchAnalysisWithInput(), flattenSlurp() (+15 more)
 
 ### Community 11 - "verify job"
 Cohesion: 0.20
@@ -205,8 +205,8 @@ Cohesion: 0.13
 Nodes (18): CFG, checkpointRecoveryDisposition(), encodePromotionAttestation(), env(), EXEC_OPTS, flag(), isExactPausedPromotionSnapshot(), listSourceIssueComments() (+10 more)
 
 ### Community 13 - "resolve-pr-conflicts-routing-contract.mjs"
-Cohesion: 0.17
-Nodes (18): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), decodeBatch(), encodeBatch(), LOPU_ACTION_URL (+10 more)
+Cohesion: 0.13
+Nodes (26): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertCapturedStdoutStaysClean(), assertRoute(), assertWorkflowSource(), CALLS_HELPER(), decodeBatch() (+18 more)
 
 ### Community 14 - "merge-main-develop-sync-pr.mjs"
 Cohesion: 0.20
@@ -237,8 +237,8 @@ Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
 ### Community 21 - "promotion-worker-routing-contract.mjs"
-Cohesion: 0.17
-Nodes (11): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, graphify, lopuAgent, mainDevelopSyncWorkflow, promoter (+3 more)
+Cohesion: 0.14
+Nodes (13): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, featureStackMergeIf, featureStackMergeJob, graphify, lopuAgent (+5 more)
 
 ### Community 22 - "recoverPromotionReviewCheckpoint"
 Cohesion: 0.27
@@ -257,8 +257,8 @@ Cohesion: 0.24
 Nodes (10): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionBody(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation() (+2 more)
 
 ### Community 26 - "stage-graphify-snapshots.mjs"
-Cohesion: 0.40
-Nodes (9): addExisting(), filesUnder(), git(), LEGACY_ROOT, PORTABLE, restoreTrackedFromHead(), selfTest(), stageGraphifySnapshots() (+1 more)
+Cohesion: 0.36
+Nodes (11): addExisting(), filesUnder(), git(), LEGACY_ROOT, missingFromWorktree(), PORTABLE, removeFromIndex(), restoreTrackedFromHead() (+3 more)
 
 ### Community 27 - "feature-stack-plan.mjs"
 Cohesion: 0.64
@@ -329,7 +329,7 @@ Cohesion: 0.40
 Nodes (4): Outcome, PR #534 — Feature Stack progress heartbeat controller, Safety and cost, Validation
 
 ## Knowledge Gaps
-- **212 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+207 more)
+- **214 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+209 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -337,13 +337,13 @@ Nodes (4): Outcome, PR #534 — Feature Stack progress heartbeat controller, Saf
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `promote: replay merged develop PRs` connect `promotion-pr-changelog.mjs` to `promote-features-to-main.mjs`?**
-  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
-  _212 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _214 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06019766397124888 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.09175920514319112 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0903954802259887 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.10631229235880399 - nodes in this community are weakly interconnected._
 - **Should `refresh-promotion-graphify.sh` be split into smaller, more focused modules?**
