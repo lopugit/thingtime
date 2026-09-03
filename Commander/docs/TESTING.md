@@ -22,8 +22,13 @@
       and verify the learned ordering persists locally.
 - [ ] With a large mixed application/file index containing many one-token matches, search `raycast stop`; verify the
       separator-equivalent `raycast-stop` application is surfaced above `raycast-start`, `raycast-status`, and noisy
-      files. Run the indexer regression with a one-result output limit and verify all 129 matching FTS candidates are
-      evaluated before ranking. Type several refinements quickly and verify only the active and latest query complete.
+      files. Run the broad-fuzzy indexer regression with a one-result output limit and verify all 129 matching FTS
+      candidates are evaluated before ranking. Type several refinements quickly and verify only the active and latest
+      query complete.
+- [ ] With an index above one million records, search a separator-equivalent multiword application such as
+      `thingtime recovery`; verify the strict FTS path returns the application promptly. Then search a long,
+      nonexistent multiword phrase and verify the bounded fuzzy/path fallbacks reach No results in under two seconds
+      rather than leaving the centered Searching spinner visible until the five-second client timeout.
 - [ ] Create an extensionless executable named `raycast-start`, a hidden file, a broken symlink, and a nested `.app`
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.
