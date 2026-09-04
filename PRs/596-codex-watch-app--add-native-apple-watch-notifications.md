@@ -8,8 +8,20 @@
   for the iPhone container and embedded Watch app.
 - Bumped `CURRENT_PROJECT_VERSION` to `16` and targeted the PR #596 preview so
   the build exercises the matching notification-device API contract.
-- Added a release workflow that uses macOS 26 with release Xcode 26.6 because
-  Apple does not support release Xcode 26 on this machine's macOS 27 beta host.
-- The local Xcode 27 simulator build succeeds with the Watch app embedded. The
-  CI archive, IPA signature inspection, upload receipt, and App Store Connect
-  processing state are recorded below once complete.
+- Added a manually dispatched release workflow that uses GitHub's `macos-15`
+  runner with Xcode 26.2 because Apple does not support release Xcode 26 on
+  this machine's macOS 27 beta host. Its read-only status mode can inspect a
+  requested TestFlight build without creating or uploading another build.
+- The local Xcode 27 simulator build succeeds with the Watch app embedded.
+- GitHub Actions run
+  [33831269540](https://github.com/lopugit/thingtime/actions/runs/33831269540)
+  archived and exported the signed iPhone app, embedded
+  `ThingtimeWatch.app` under the App Store-required `Watch/` directory,
+  verified the bundle identifier and deep signature, and completed Apple's
+  native upload with `Upload succeeded` / `EXPORT SUCCEEDED`.
+- Read-only status run
+  [33831873108](https://github.com/lopugit/thingtime/actions/runs/33831873108)
+  confirmed TestFlight build 16 is `VALID`, internally `IN_BETA_TESTING`, and
+  externally `READY_FOR_BETA_SUBMISSION`.
+- App Store Connect:
+  <https://appstoreconnect.apple.com/apps/6783335401/testflight/ios>

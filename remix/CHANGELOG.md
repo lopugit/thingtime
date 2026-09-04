@@ -21,8 +21,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Added target-specific App Store profile mapping for the iPhone and embedded
   Watch apps, bumped the native build to `16`, and added an encrypted
-  macOS 26/Xcode 26.6 TestFlight workflow for release builds when a developer
-  machine is running an incompatible beta macOS host.
+  `macos-15`/Xcode 26.2 TestFlight workflow for release builds when a developer
+  machine is running an incompatible beta macOS host. Apple accepted the
+  signed iPhone app with its companion under `Watch/`; build 16 is valid and
+  in internal beta testing.
 
 ### 2026-09-03 — Native Apple Watch notification companion — Codex (AI)
 
