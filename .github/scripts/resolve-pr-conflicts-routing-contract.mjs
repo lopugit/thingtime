@@ -819,6 +819,70 @@ function assertWorkflowSource() {
     /pull_request_review_comment:\n    types: \[created, edited\]/u,
     "human inline review comments wake Lopu",
   );
+  // Deterministic controller comments are posted with CONFLICT_RESOLVER_PAT, so
+  // GitHub reports `comment.user.type == 'User'` under the repository owner and
+  // the identity gate alone admits them. `edited` is a trigger type, and comment
+  // handoffs are deliberately non-coalescible, so every refresh of a long-lived
+  // status comment (the develop preview rewrites its own on each deploy) spent a
+  // full Lopu review session on an unchanged head. Both conversation gates must
+  // also require the absence of the `<!-- thingtime-` marker every control-plane
+  // comment carries and no human writes.
+  for (const [job, start, end] of [
+    ["route", "\n  route:", "\n  manage_rebases:"],
+    ["review_detect", "\n  review_detect:", "\n    runs-on:"],
+  ]) {
+    const gate = source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+    assert.match(
+      gate,
+      /github\.event_name != 'issue_comment'\s*\n\s*\|\| \(github\.event\.issue\.pull_request\s*\n\s*&& github\.event\.comment\.user\.type == 'User'\s*\n\s*&& !contains\(github\.event\.comment\.body, '<!-- thingtime-'\)\)/u,
+      `${job} admits an issue_comment only from a User author with no control-plane marker`,
+    );
+    assert.match(
+      gate,
+      /github\.event_name != 'pull_request_review_comment'\s*\n\s*\|\| \(github\.event\.comment\.user\.type == 'User'\s*\n\s*&& !contains\(github\.event\.comment\.body, '<!-- thingtime-'\)\)/u,
+      `${job} admits a review comment only from a User author with no control-plane marker`,
+    );
+  }
+  // The gate is only as good as the convention it reads, so pin the convention.
+  //
+  // The control plane writes two families of hidden marker, and only one of
+  // them can ever reach this gate:
+  //   - Comment markers (`thingtime-…`) label a status/conversation comment.
+  //     Those arrive as issue_comment / pull_request_review_comment, which is
+  //     exactly what the gate above filters, so they MUST keep the prefix.
+  //   - PR-body markers (the `promotion-*` family) label the pull request
+  //     itself, are frequently hand-written by an operator, and arrive as
+  //     pull_request_target `edited` — never as a comment event. Filtering on
+  //     them would be wrong, so they are exempt by name rather than by prefix.
+  //
+  // A new marker outside both sets fails here on purpose: classify it, then
+  // either give it the prefix or add it to the body-marker list.
+  {
+    const bodyMarkers = new Set(["promotion-of", "promotion-group", "promotion-changelog"]);
+    const controlPlane = join(REPO_ROOT, ".github");
+    const markers = new Set();
+    let scanned = 0;
+    for (const name of readdirSync(controlPlane, { recursive: true })) {
+      if (!/\.(?:ya?ml|mjs|cjs|js|sh)$/u.test(name)) continue;
+      scanned += 1;
+      for (const [, marker] of readFileSync(join(controlPlane, name), "utf8").matchAll(/<!--\s*([\w:.-]+)/gu)) {
+        markers.add(marker);
+      }
+    }
+    assert.ok(scanned > 20, `expected to scan the control plane for comment markers, saw ${scanned} files`);
+    assert.ok(markers.size > 10, `expected the control-plane comment markers, found ${markers.size}`);
+    let commentMarkers = 0;
+    for (const marker of markers) {
+      // `promotion-changelog:start` / `:end` / `-prs:` are all that one body marker.
+      if ([...bodyMarkers].some((body) => marker === body || marker.startsWith(`${body}:`) || marker.startsWith(`${body}-`))) continue;
+      assert.ok(
+        marker.startsWith("thingtime-"),
+        `control-plane marker '${marker}' must either keep the 'thingtime-' prefix the conversation gate filters on, or be classified as a PR-body marker`,
+      );
+      commentMarkers += 1;
+    }
+    assert.ok(commentMarkers > 10, `expected the thingtime- comment markers, found ${commentMarkers}`);
+  }
   assert.match(source, /check_run:\n    types: \[completed\]/u, "failed PR checks wake Lopu");
   assert.match(
     source,
