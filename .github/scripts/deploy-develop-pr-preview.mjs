@@ -875,6 +875,50 @@ const runSelfTest = async () => {
 		'invalid-base-ref'
 	);
 
+	// A trusted control-plane PR still has nothing to preview: its head carries
+	// only `.github`, so the contents probe 404s and the PR is ineligible rather
+	// than authorized into a build that can only fail.
+	const bundleProbe = (result) => async (repository, headSha) => {
+		equal(repository, config.repository);
+		equal(headSha, base.head.sha);
+		if (result instanceof Error) throw result;
+		return result;
+	};
+	await assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(true) });
+	checks += 1;
+	await assert.rejects(
+		assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(false) }),
+		(error) => error instanceof EligibilityError && error.reason === 'head-has-no-preview-bundle'
+	);
+	checks += 1;
+	// A transport fault must not be silently read as "nothing to preview".
+	await assert.rejects(
+		assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(new HttpError(500, 'server_error')) }),
+		(error) => error instanceof HttpError && error.status === 500
+	);
+	checks += 1;
+	const contentsProbe = (response) => async (path) => {
+		equal(path, `/repos/${config.repository}/contents/${PREVIEW_BUNDLE_PATH}?ref=${base.head.sha}`);
+		if (response instanceof Error) throw response;
+		return response;
+	};
+	equal(await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe({ type: 'file' })), true);
+	equal(await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe({ type: 'dir' })), false);
+	equal(
+		await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe(new HttpError(404, 'not_found'))),
+		false
+	);
+	await assert.rejects(
+		headHasPreviewBundle(config.repository, base.head.sha, contentsProbe(new HttpError(403, 'forbidden'))),
+		(error) => error instanceof HttpError && error.status === 403
+	);
+	checks += 1;
+	await assert.rejects(
+		headHasPreviewBundle(config.repository, 'not-a-sha', contentsProbe({ type: 'file' })),
+		(error) => error instanceof EligibilityError && error.reason === 'invalid-head-sha'
+	);
+	checks += 1;
+
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
 
@@ -1066,6 +1110,41 @@ const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null
 	// same-repository author, ref, or immutable head SHA.
 	await assertTrustedPullRequest(config, pullRequest, { actor, assertPrincipal });
 	return { pullRequest, stack: { chain: [pullRequest], terminalBranch: pullRequest.base.ref } };
+};
+
+// Trust is not the same question as buildability. The build job checks the
+// exact head out into the `product/` directory and then runs
+// `pnpm --dir product/remix install`, so the head must carry `remix/` for the
+// preview to build at all — no matter how trusted its author is. Control-plane
+// PRs (base `github-actions`) carry only `.github` and the root docs, so every
+// one of them was authorized, failed the build with
+// `ENOENT ... /product/remix`, and published a "Develop S3 preview failed"
+// comment telling the operator to correct the deployment, DNS, or CORS
+// configuration. Probe the head instead and let the controller take its
+// ordinary skip/reconcile path.
+//
+// The path is repository-relative: `product/` is the checkout directory, not
+// part of the repository layout. This is also deliberately a head-content
+// probe rather than a base-ref filter, because the caller workflow does not
+// filter by base ref either — retarget and close events must still reach
+// cleanup.
+const PREVIEW_BUNDLE_PATH = 'remix/package.json';
+
+const headHasPreviewBundle = async (repository, headSha, request = githubRequest) => {
+	if (!/^[0-9a-f]{40}$/.test(headSha ?? '')) throw new EligibilityError('invalid-head-sha');
+	try {
+		const entry = await request(`/repos/${repository}/contents/${PREVIEW_BUNDLE_PATH}?ref=${headSha}`);
+		return entry?.type === 'file';
+	} catch (error) {
+		if (error instanceof HttpError && error.status === 404) return false;
+		throw error;
+	}
+};
+
+const assertPreviewBundle = async (config, pullRequest, { hasPreviewBundle = headHasPreviewBundle } = {}) => {
+	if (!(await hasPreviewBundle(config.repository, pullRequest.head?.sha))) {
+		throw new EligibilityError('head-has-no-preview-bundle');
+	}
 };
 
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
@@ -2032,6 +2111,7 @@ const prepareBuildPlan = async () => {
 	}
 	try {
 		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+		await assertPreviewBundle(config, pullRequest);
 	} catch (error) {
 		if (!(error instanceof EligibilityError)) throw error;
 		await writePrepareOutputs({ shouldBuild: false });
@@ -2099,6 +2179,9 @@ const main = async () => {
 	let stackEligibilityError = null;
 	try {
 		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+		// The reconcile/report step re-enters here with no prebuilt bundle, so a
+		// head that cannot build must be classified before deploy() is reached.
+		await assertPreviewBundle(config, pullRequest);
 	} catch (error) {
 		if (!(error instanceof EligibilityError)) throw error;
 		stackEligibilityError = error;
