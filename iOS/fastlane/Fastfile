@@ -45,17 +45,22 @@ def manual_profile_signing?
     !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
 end
 
+def distribution_profile_suffix
+  certificate_id = ENV["IOS_DISTRIBUTION_CERTIFICATE_ID"].to_s.strip
+  certificate_id.empty? ? "" : " #{certificate_id}"
+end
+
 def ios_provisioning_profile_name
   ENV.fetch(
     "PROVISIONING_PROFILE_SPECIFIER",
-    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}"
+    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}#{distribution_profile_suffix}"
   )
 end
 
 def watch_provisioning_profile_name
   ENV.fetch(
     "WATCH_PROVISIONING_PROFILE_SPECIFIER",
-    "Thingtime Watch App Store #{ENV.fetch('WATCH_BUNDLE_IDENTIFIER')}"
+    "Thingtime Watch App Store #{ENV.fetch('WATCH_BUNDLE_IDENTIFIER')}#{distribution_profile_suffix}"
   )
 end
 
