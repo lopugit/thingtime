@@ -17,6 +17,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
+
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 8).

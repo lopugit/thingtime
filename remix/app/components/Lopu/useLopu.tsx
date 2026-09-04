@@ -5,26 +5,16 @@ import { Link as RouterLink } from 'react-router';
 
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
 import { normalizeLopuMessage } from './lopuMessage';
+import { lopuToastPlacement } from './lopuPosition';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
-// from Lopu, below the fixed nav. `useLopu` shows a one-shot toast; the streaming
-// variant `useLopuStream` pops instantly and types the response in live.
-
-// A full-viewport flex container centers the card via flow (immune to the
-// ancestor-transform quirk that broke translateX(-50%) centering). translateY
-// offsets each toast below the nav *visually only* — it doesn't affect layout,
-// so Chakra's native tight stacking + slide/fade animation is preserved
-// (marginTop would compound into big gaps). pointerEvents:none keeps the wide
-// invisible container from eating clicks (the card re-enables them).
-const CONTAINER_STYLE = {
-  transform: 'translateY(70px)',
-  width: '100vw',
-  maxWidth: '100vw',
-  display: 'flex',
-  justifyContent: 'center',
-  pointerEvents: 'none'
-} as const;
+// from Lopu in the corner the user picked (Settings → Appearance → Lopu
+// messages; bottom-left by default). `useLopu` shows a one-shot toast; the
+// streaming variant `useLopuStream` pops instantly and types the response in
+// live. Placement (Chakra position + the per-toast flex container) comes from
+// lopuToastPlacement() in lopuPosition.ts, read at fire time from the
+// synchronous tt-lopu-position cache so no caller subscribes to settings state.
 
 // Blinking caret/ellipsis uses the shared global `tt-blink` keyframes
 // (defined once in GlobalStyles).
@@ -218,8 +208,7 @@ export const useLopu = () => {
       const message = normalizeLopuMessage({ title, description, status });
       return toast({
         duration,
-        position: 'top',
-        containerStyle: CONTAINER_STYLE,
+        ...lopuToastPlacement(),
         render: ({ onClose }) => (
           <LopuToast
             title={message.title}
@@ -267,16 +256,17 @@ export const useLopuStream = () => {
           return <LopuToast {...props} onClose={close} />;
         };
 
-      // Pop instantly; duration:null keeps it open while streaming.
+      // Pop instantly; duration:null keeps it open while streaming. Placement is
+      // fixed for the toast's lifetime (Chakra can't move an open toast).
+      const placement = lopuToastPlacement();
       const id = toast({
         duration: null,
-        position: 'top',
-        containerStyle: CONTAINER_STYLE,
+        ...placement,
         render: render({ loading: true })
       });
 
       const update = (props: LopuArgs & { loading?: boolean; countdown?: number | null }, duration: number | null) =>
-        toast.update(id, { duration, containerStyle: CONTAINER_STYLE, render: render(props) });
+        toast.update(id, { duration, containerStyle: placement.containerStyle, render: render(props) });
 
       let text = '';
       let source: string | undefined;

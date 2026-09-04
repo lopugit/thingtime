@@ -133,6 +133,9 @@ export function useApi() {
           // the Saved library cache can carry private/circle posts the
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
+          // the /notifications history seed quotes private posts and the
+          // viewer's own action runs — same shared-browser privacy bar
+          clearLocalCachePrefix('tt-notif-history-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
