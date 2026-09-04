@@ -82,6 +82,9 @@ export default function App() {
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
+      // the generated marketing pages set their own title + meta description
+      // (components/Marketing/MarketingShell.tsx useMarketingSeo)
+      if (pathname.startsWith('/marketing')) return;
       const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
       const routeTitle = pathname.startsWith('/docs/design')
         ? `${baseTitle} docs - Design mockups`
