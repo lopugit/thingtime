@@ -40,8 +40,10 @@ every entry is attributed the same way the app changelog attributes them.
   can now reach the same ordered Claude credential waterfall already used by
   Lopu's repository-review worker instead of failing before the model starts.
   The hardened repo-less conflict scratch now carries, hashes, and restores the
-  two credential helper scripts needed by that nested Lopu action. — Codex
-  (AI), 2026-09-05
+  two credential helper scripts needed by that nested Lopu action, and exposes
+  a disposable empty Git repository for the action's required bot-identity
+  bootstrap without reconnecting the model to the real rebase repository. —
+  Codex (AI), 2026-09-05
 
 - Moved the ordinary Develop preview's expected URL and ready estimate into the
   protected authorization phase so the PR comment exists before checkout,
