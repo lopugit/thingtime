@@ -583,6 +583,29 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] On a signed-in paired Watch, open **Add private Thing**, pick one and five
+      Photos-library screenshots, and record a short audio clip. Confirm every
+      item remains queued across a Watch app relaunch until the iPhone reports
+      success, then appears as a searchable owner-only Thing with exactly one
+      bound attachment and `acl: ["tt:user"]`.
+- [ ] Put the iPhone offline before choosing a Watch screenshot, then restore
+      connectivity and open the signed-in iPhone app. Confirm the same stable
+      request resumes without duplicate attachment Things; repeat while signed
+      out and confirm the Watch explains that Thingtime must be opened and
+      signed in, without losing the queued bytes.
+- [ ] Deny microphone access on the Watch and confirm the recorder shows an
+      actionable status instead of crashing. Grant access, record for several
+      seconds, stop, and confirm an `.m4a` attachment uploads. Pick a file over
+      32 MB and confirm it is rejected locally without beginning a transfer.
+- [ ] Against an origin missing or breaking any required attachment/Things
+      capability, confirm the iPhone fails closed before reserving storage and
+      the Watch shows the compatibility error. Verify normal uploads use the
+      active WebView origin and never copy its session credential to watchOS.
+- [ ] Regression class (2026-09): `WCSessionFile` is temporary on receipt. Kill
+      the iPhone app immediately after delivery and confirm the inbox copy still
+      resumes on next launch; the Watch must retain its original until the
+      private Thing creation result arrives.
+
 - [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
       Xcode 26.2, verify the locally exported IPA, and upload the same archive
       through `xcodebuild -exportArchive` with `destination: upload` and the App

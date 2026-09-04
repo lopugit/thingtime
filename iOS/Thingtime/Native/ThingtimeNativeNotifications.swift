@@ -14,11 +14,15 @@ final class ThingtimeNativeNotifications: NSObject {
     private var refreshTimer: Timer?
     private var isRefreshing = false
     private var requestedAuthorization = false
+    private let attachmentUploader = ThingtimeWatchAttachmentUploader()
 
     private let session: WCSession? = WCSession.isSupported() ? .default : nil
 
     private override init() {
         super.init()
+        attachmentUploader.resultHandler = { [weak self] result in
+            self?.sendAttachmentResult(result)
+        }
     }
 
     func activate() {
@@ -28,6 +32,7 @@ final class ThingtimeNativeNotifications: NSObject {
 
     func attach(webView: WKWebView) {
         self.webView = webView
+        attachmentUploader.attach(webView: webView)
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
@@ -121,6 +126,7 @@ final class ThingtimeNativeNotifications: NSObject {
             publish(snapshot)
             await requestNotificationAuthorizationIfNeeded()
             await registerPendingDevices()
+            attachmentUploader.processPending()
         } catch {
 #if DEBUG
             print("[ThingtimeNativeNotifications] refresh failed: \(error.localizedDescription)")
@@ -201,6 +207,17 @@ final class ThingtimeNativeNotifications: NSObject {
         }
     }
 
+    private func sendAttachmentResult(_ result: ThingtimeWatchAttachmentUploader.Result) {
+        let message = result.transferDictionary
+        session?.transferUserInfo(message)
+        guard session?.isReachable == true else { return }
+        session?.sendMessage(message, replyHandler: nil) { error in
+#if DEBUG
+            print("[ThingtimeNativeNotifications] immediate watch result failed: \(error.localizedDescription)")
+#endif
+        }
+    }
+
     private func handleWatchMessage(_ message: [String: Any], reply: (([String: Any]) -> Void)? = nil) {
         switch message["kind"] as? String {
         case "register-device":
@@ -255,6 +272,17 @@ extension ThingtimeNativeNotifications: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         Task { @MainActor in self.handleWatchMessage(userInfo) }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        do {
+            _ = try ThingtimeWatchAttachmentUploader.persistIncoming(file)
+            Task { @MainActor in self.attachmentUploader.processPending() }
+        } catch {
+#if DEBUG
+            print("[ThingtimeNativeNotifications] incoming watch attachment failed: \(error.localizedDescription)")
+#endif
+        }
     }
 }
 

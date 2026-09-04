@@ -7,8 +7,18 @@ struct ThingtimeWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if DEBUG
+            if ProcessInfo.processInfo.environment["THINGTIME_WATCH_ATTACHMENT_PREVIEW"] == "1" {
+                NavigationStack { ThingtimeWatchAttachmentView() }
+                    .environmentObject(store)
+            } else {
+                ThingtimeWatchRootView()
+                    .environmentObject(store)
+            }
+#else
             ThingtimeWatchRootView()
                 .environmentObject(store)
+#endif
         }
     }
 }

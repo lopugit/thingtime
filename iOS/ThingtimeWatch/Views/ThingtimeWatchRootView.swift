@@ -65,6 +65,14 @@ struct ThingtimeWatchRootView: View {
                     }
                 }
 
+                Section("Create") {
+                    NavigationLink {
+                        ThingtimeWatchAttachmentView()
+                    } label: {
+                        Label("Add private Thing", systemImage: "paperclip.circle.fill")
+                    }
+                }
+
                 if store.snapshot.notifications.isEmpty {
                     ContentUnavailableView("All caught up", systemImage: "rainbow", description: Text("New Thingtime notifications will appear here."))
                 } else {

@@ -17,6 +17,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Apple Watch private attachment Things — Codex (AI)
+
+- Added an authenticated **Add private Thing** Watch flow for selecting up to
+  five Photos-library screenshots/images or recording an audio clip. Files use
+  a durable Watch-to-iPhone queue, capability-gated checksummed multipart upload,
+  and owner-only Thing creation without copying the iPhone session to watchOS.
+
 ### 2026-09-04 — Watch-enabled TestFlight release path — Codex (AI)
 
 - Added target-specific App Store profile mapping for the iPhone and embedded

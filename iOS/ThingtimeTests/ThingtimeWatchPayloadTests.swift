@@ -34,4 +34,42 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
         XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.notifications.isEmpty)
         XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.message?.contains("iPhone") == true)
     }
+
+    func testAttachmentMetadataRoundTripsThroughTransferDictionary() throws {
+        let requestId = "86cdb8af-2bf8-4c9c-9447-0fb449e43d1d"
+        let metadata = try ThingtimeWatchAttachmentTransfer.makeMetadata(
+            requestId: requestId,
+            filename: "Apple-Watch-Audio.m4a",
+            contentType: "audio/mp4",
+            sizeBytes: 4_096
+        )
+
+        XCTAssertEqual(try ThingtimeWatchAttachmentTransfer.metadata(from: metadata.transferDictionary), metadata)
+    }
+
+    func testAttachmentMetadataRejectsUnsafeOrOversizedFiles() {
+        XCTAssertThrowsError(try ThingtimeWatchAttachmentTransfer.makeMetadata(
+            filename: "../secret.txt",
+            contentType: "text/plain",
+            sizeBytes: 100
+        ))
+        XCTAssertThrowsError(try ThingtimeWatchAttachmentTransfer.makeMetadata(
+            filename: "large.mov",
+            contentType: "video/quicktime",
+            sizeBytes: ThingtimeWatchAttachmentTransfer.maximumBytes + 1
+        ))
+        XCTAssertThrowsError(try ThingtimeWatchAttachmentTransfer.makeMetadata(
+            filename: "audio.m4a",
+            contentType: "not a mime type",
+            sizeBytes: 100
+        ))
+    }
+
+    func testWatchUploadCapabilityVersionsFailClosed() {
+        XCTAssertTrue(ThingtimeWatchUploadRequirements.satisfies(actual: "1.1.0", minimum: "1.0.0"))
+        XCTAssertTrue(ThingtimeWatchUploadRequirements.satisfies(actual: "1.0.1", minimum: "1.0.0"))
+        XCTAssertFalse(ThingtimeWatchUploadRequirements.satisfies(actual: "0.9.9", minimum: "1.0.0"))
+        XCTAssertFalse(ThingtimeWatchUploadRequirements.satisfies(actual: "2.0.0", minimum: "1.0.0"))
+        XCTAssertFalse(ThingtimeWatchUploadRequirements.satisfies(actual: "latest", minimum: "1.0.0"))
+    }
 }
