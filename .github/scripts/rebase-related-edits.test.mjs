@@ -57,7 +57,9 @@ function hashTrustedTree(root) {
     ...filesUnder(root, ".github/actions/lopu-agent"),
     ...filesUnder(root, ".github/actions/rebase-conflict-round"),
     ...filesUnder(root, ".github/scripts/rebase-stack"),
+    ".github/scripts/classify-claude-credential-failure.mjs",
     ".github/scripts/graphify-cas.mjs",
+    ".github/scripts/lopu-credential-vault.mjs",
     ".github/scripts/stage-graphify-snapshots.mjs",
   ]);
 }
@@ -112,7 +114,12 @@ function copyTrustedTree(destination) {
     cpSync(path.join(repositoryRoot, relative), target, { recursive: true });
   }
   mkdirSync(path.join(destination, ".github/scripts"), { recursive: true });
-  for (const name of ["graphify-cas.mjs", "stage-graphify-snapshots.mjs"]) {
+  for (const name of [
+    "classify-claude-credential-failure.mjs",
+    "graphify-cas.mjs",
+    "lopu-credential-vault.mjs",
+    "stage-graphify-snapshots.mjs",
+  ]) {
     cpSync(
       path.join(repositoryRoot, ".github/scripts", name),
       path.join(destination, ".github/scripts", name),

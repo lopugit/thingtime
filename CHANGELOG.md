@@ -38,8 +38,10 @@ every entry is attributed the same way the app changelog attributes them.
 - Allowed the rebase conflict-round credential gate to recognize the existing
   Thingtime credential-vault router secret. Repository-dispatch rebase workers
   can now reach the same ordered Claude credential waterfall already used by
-  Lopu's repository-review worker instead of failing before the model starts. —
-  Codex (AI), 2026-09-05
+  Lopu's repository-review worker instead of failing before the model starts.
+  The hardened repo-less conflict scratch now carries, hashes, and restores the
+  two credential helper scripts needed by that nested Lopu action. — Codex
+  (AI), 2026-09-05
 
 - Moved the ordinary Develop preview's expected URL and ready estimate into the
   protected authorization phase so the PR comment exists before checkout,
