@@ -6,7 +6,9 @@ The protected Lopu PR manager stays below GitHub's workflow run-graph size
 boundary, with a deterministic 510,000-byte contract ceiling. The preview
 controller continues after GitHub drops a previously verified listener run's
 pull-request association, provided the immutable same-repository SHA and ref
-still match, and retries only HTTP 403 responses proven to be rate limits.
+still match. GitHub API errors identify the failing route and error class;
+proven rate limits and response-less transient 403s retry, while explicit
+integration permission denials remain terminal.
 
 ## Live diagnosis
 
@@ -28,14 +30,17 @@ The association-loss fallback still requires the exact source run id,
 pull-request-target event, trusted workflow path, repository id, triggering
 actor, same-repository head, SHA, and ref. The controller then independently
 reloads the live PR and revalidates its head before build or publication.
-Arbitrary permission-denied 403 responses remain terminal.
+Explicit permission-denied 403 responses remain terminal.
 
 ## Validation
 
-- Develop preview self-test: 114/114 pass
+- Develop preview self-test: pass
 - Lopu routing contract self-test: pass
 - Routing contract fixtures: 10/10 pass
 - Workflow control-plane contract: pass
 - Workflow YAML parse and diff whitespace checks: pass
 - Graphify code and semantic refresh: pass
-- Live post-merge Lopu and preview deployment evidence: pending merge
+- Live post-merge Lopu run: 33877702487, success
+- Live exact-head PR #592 preview run: 33878101950, success
+- Persistent PR #592 URL: https://pr-592.previews.dev.thingtime.com/
+- Immutable PR #592 URL: https://thingtime-hwhh9pxrz-lopugits-projects.vercel.app/
