@@ -16,6 +16,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Community safety and accountable moderation roadmap](./community-safety-and-accountable-moderation-roadmap.md) | Immediate personal controls through report intake, scoped governance, appeals, remedies, and privacy-safe transparency | Proposed |
 | [Trusted developer ecosystem roadmap](./trusted-developer-ecosystem-roadmap.md) | App declarations and sandbox conformance through immutable releases, review receipts, consentful updates, incident recovery, and fair discovery | Proposed |
 | [Service continuity and recovery roadmap](./service-continuity-and-recovery-roadmap.md) | Journey-level service objectives through safe degradation, restore drills, incident operations, and sustainable release gates | Proposed |
+| [Content provenance and correction roadmap](./content-provenance-and-correction-roadmap.md) | Honest edit state through revision evidence, source/derivation context, bounded credentials, corrections, disputes, and portable receipts | Proposed |
 
 ## Conventions
 

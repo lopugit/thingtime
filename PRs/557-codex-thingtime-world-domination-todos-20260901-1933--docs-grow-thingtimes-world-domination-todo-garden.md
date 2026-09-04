@@ -172,3 +172,34 @@ The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
 indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
 TODO 22 dependency list. Validation and exact-head CI/preview receipts for this
 run are recorded in the PR body after publication.
+
+## 2026-09-04 — content provenance and correction integrity
+
+This run separates account-bound authorship and current timestamps from the
+stronger evidence people need to understand edits, source claims, derivation,
+platform assistance, corrections, and disputes. It adds:
+
+- `NOTES/content-provenance-and-correction-baseline.md`, a dated evidence ledger
+  covering current post projection and edit behavior, terminology, assertion
+  authority, privacy boundaries, abuse cases, interoperability references, and
+  open owner questions;
+- `PLAN/content-provenance-and-correction-roadmap.md`, a gated path from honest
+  public edit state through protected relational revision evidence, source and
+  derivation context, bounded platform observations, one C2PA media pilot,
+  corrections, disputes, reuse, export, and operational proof;
+- `TODO/claude-todo/29-content-provenance-and-correction-integrity.md`, an
+  implementation epic with dependencies, API capability-manifest obligations,
+  security/privacy/accessibility safeguards, acceptance criteria, stop
+  conditions, and a concrete first decision packet.
+
+The proposal rejects universal truth badges, AI-detector guesses, hidden
+prompt/source disclosure, retroactive revision mutation, and authority gained
+from unsigned user claims. Absence or stripping of provenance remains unknown,
+while corrections and disputes remain distinct from moderation and deletion.
+No runtime, API, schema, storage, media, moderation, or production behavior
+changed.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
+TODO 22 dependency list. Validation and exact-head CI/preview receipts for this
+run are recorded in the PR body after publication.

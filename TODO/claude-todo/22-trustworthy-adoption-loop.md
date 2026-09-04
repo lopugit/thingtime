@@ -52,6 +52,11 @@ experiment by itself.
   objectives, safe degradation, truthful write outcomes, restore proof,
   incident operations, and dependency resilience. Adoption experiments must
   not hide reliability failures behind aggregate conversion or engagement.
+- [TODO 29](./29-content-provenance-and-correction-integrity.md) owns material
+  edit visibility, revision evidence, source and derivation assertions,
+  platform-assistance disclosure, corrections, disputes, and portable receipts.
+  Sharing experiments must not collapse those claims into an authenticity badge
+  or leak private source material.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

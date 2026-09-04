@@ -423,3 +423,17 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     `claude-todo/28-service-continuity-and-recovery.md` only after the owner
     approves critical journeys, objectives, recovery targets, communication
     ownership, drill environments, and stop conditions.
+
+29. **🧭 Make content provenance and correction integrity legible.**
+
+    Preserve Thingtime's account-bound authorship, creation/update timestamps,
+    sharing references, and public projections while making material edits,
+    source claims, derivation, platform assistance, corrections, disputes, and
+    evidence limits understandable. Never turn provenance into a universal
+    truth badge, infer AI use from a detector, expose private prompts or source
+    material, or let unsigned user declarations gain platform authority. Start
+    with the evidence note and phased roadmap, then execute
+    `claude-todo/29-content-provenance-and-correction-integrity.md` only after
+    the owner approves the first artifact family, public edit policy, retention
+    and deletion semantics, assertion authority, dispute/remedy ownership, and
+    interoperability pilot boundary.

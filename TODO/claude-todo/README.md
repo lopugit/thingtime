@@ -47,6 +47,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 26 | Community safety and accountable moderation — personal boundaries, reports, scoped governance, decisions, appeals, remedies, and privacy-safe transparency | 🟣 Proposed · owner decision needed | [26-community-safety-and-accountable-moderation.md](./26-community-safety-and-accountable-moderation.md) |
 | 27 | Trusted developer ecosystem — declarations, immutable releases, review receipts, consentful updates, incident recovery, and fair discovery | 🟣 Proposed · owner decision needed | [27-trusted-developer-ecosystem.md](./27-trusted-developer-ecosystem.md) |
 | 28 | Service continuity and recovery — journey SLOs, safe degradation, backup/restore proof, incident operations, and dependency resilience | 🟣 Proposed · owner decision needed | [28-service-continuity-and-recovery.md](./28-service-continuity-and-recovery.md) |
+| 29 | Content provenance and correction integrity — honest edit state, revision evidence, source/derivation context, bounded credentials, corrections, and disputes | 🟣 Proposed · owner decision needed | [29-content-provenance-and-correction-integrity.md](./29-content-provenance-and-correction-integrity.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

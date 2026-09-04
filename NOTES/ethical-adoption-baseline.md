@@ -32,6 +32,7 @@ turns these observations into phases. The executable backlog lives in
 | The original planning snapshot lacked a cross-product accessibility, internationalization, and adoption measurement gate. | The 2026-09-01 search found isolated accessibility requirements and privacy warnings but no shared metric dictionary or release-wide accessibility/i18n plan. The adoption metric gap is now staged here; the implementation gap is now grounded in the [accessibility and language-readiness baseline](./accessibility-and-language-readiness-baseline.md) and its proposed roadmap. | High for planning history, not implementation status. Re-run the dedicated baseline before any release or conformance claim. |
 | Existing community and automated-moderation controls do not yet form a user-report, appeal, or accountable-governance loop. | The dedicated [community safety baseline](./community-safety-and-accountable-moderation-baseline.md) inventories shipped roles, invites, request buckets, mute, and model/admin review alongside the missing personal block, case, scoped moderator, appeal, and transparency contracts. | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before scaling community or sharing work. |
 | Strong app/OAuth primitives do not yet form a general release, review, incident, and discovery lifecycle. | The [trusted developer ecosystem baseline](./trusted-developer-ecosystem-baseline.md) connects app identity, scopes, revocation, user-owned namespace data, sandbox, capability manifests, and the one-off ChatGPT submission handoff to the missing publisher declaration, immutable release, review receipt, permission-diff, containment, and abandonment contracts. | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before launching public app or artifact discovery. |
+| Account-bound authorship and update timestamps do not yet explain material edits, source assertions, derivation, platform assistance, corrections, or disputes. | The [content provenance and correction baseline](./content-provenance-and-correction-baseline.md) distinguishes current post projection and edit behavior from the missing revision-evidence and assertion-authority contracts. | High for the 2026-09-04 repository snapshot. Re-run the dedicated baseline before widening public sharing, reuse, or provenance claims. |
 
 ## What the evidence suggests
 
@@ -63,6 +64,9 @@ turns these observations into phases. The executable backlog lives in
 5. **Sustainability is undefined.** The repository does not connect hosting
    cost, storage accounting, community value, and a business model that avoids
    selling attention or personal data.
+6. **Public content history is implicit.** A current author and creation time
+   do not tell a recipient whether meaning changed, which source or parent was
+   asserted, what the platform observed, or how a correction was resolved.
 
 ## Proposed outcome vocabulary
 
@@ -125,6 +129,8 @@ Any later measurement design should fail closed unless all of these are true:
 10. Which critical journeys need service objectives, degraded-mode contracts,
     recovery targets, restore drills, and incident ownership before Thingtime
     can responsibly widen adoption?
+11. Which public artifact family should first make material edits, source and
+    derivation assertions, corrections, disputes, and evidence limits legible?
 
 ## Refresh checklist
 

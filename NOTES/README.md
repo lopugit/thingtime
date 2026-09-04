@@ -16,6 +16,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Community safety and accountable moderation baseline](./community-safety-and-accountable-moderation-baseline.md) | Evidence on community roles, personal controls, automated moderation, missing report/appeal contracts, privacy, and accountable governance | 2026-09-03 |
 | [Trusted developer ecosystem baseline](./trusted-developer-ecosystem-baseline.md) | Evidence on app identity, OAuth consent, user-owned app data, capability negotiation, release/review gaps, incidents, and sustainable distribution | 2026-09-03 |
 | [Service continuity and recovery baseline](./service-continuity-and-recovery-baseline.md) | Evidence on health signals, dependency failure, degraded operation, backup/restore proof, incident ownership, and recovery objectives | 2026-09-04 |
+| [Content provenance and correction baseline](./content-provenance-and-correction-baseline.md) | Evidence on authorship, edits, source assertions, derivation, verification limits, corrections, disputes, privacy, and interoperability | 2026-09-04 |
 
 ## Conventions
 

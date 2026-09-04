@@ -17,6 +17,9 @@
 **Continuity dependency:**
 [Service continuity and recovery](./service-continuity-and-recovery-roadmap.md)
 
+**Content-integrity dependency:**
+[Content provenance and correction](./content-provenance-and-correction-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -153,6 +156,10 @@ and error budgets stay within approved bounds.
   already mature; do not launch every share type at once.
 - Provide honest previews, provenance, expiry/revoke where applicable, and a
   useful unauthenticated state.
+- Apply the [content provenance and correction roadmap](./content-provenance-and-correction-roadmap.md)
+  to the chosen artifact family so authorship, material edits, asserted
+  sources, corrections, and evidence limits remain legible without exposing
+  private source material.
 - Reuse the defensive invite contract in
   [TODO 18](../TODO/claude-todo/18-account-invite-links.md) for account growth.
 - Treat open theme, algorithm, Commander, and sharing PRs as dependencies to
@@ -173,6 +180,9 @@ and credited.
 - Define provenance, version compatibility, moderation status, and update
   behavior for schemas, components, actions, themes, algorithms, and composed
   apps.
+- Keep content-origin and correction evidence under the
+  [content provenance and correction roadmap](./content-provenance-and-correction-roadmap.md);
+  do not reuse app review receipts as claims that authored content is true.
 - Use the [trusted developer ecosystem roadmap](./trusted-developer-ecosystem-roadmap.md)
   for publisher declarations, immutable releases, permission diffs, review
   receipts, incidents, appeals, abandonment, and discovery. Do not create a
@@ -235,6 +245,7 @@ Every experiment copied into `TODO/` should contain:
 | Sharing drives abuse faster than value | Spam, impersonation, report backlog, revoked-link access | Disable the experiment flag, preserve evidence, and fix controls before resuming. |
 | Accessibility or language quality lags | Journey fails keyboard, screen reader, reduced motion, touch, or target locales | Do not broaden acquisition; fix the blocker and rerun the same journey. |
 | Availability hides unrecoverable state | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming. |
+| Provenance becomes a deceptive truth badge | A source declaration, signature, or credential is presented as proof that a claim is accurate | Remove the claim, show assertion authority and evidence limits, preserve correction/dispute paths, and satisfy the content-integrity gate before resuming. |
 | Costs grow faster than usefulness | Storage, compute, email, moderation, or support cost per useful return rises | Narrow the experiment, improve efficiency, or test an aligned paid tier. |
 | Metrics optimize the proxy | Page views/time rise while useful outcomes or trust fall | Retire the proxy and return to outcome-based evaluation. |
 
