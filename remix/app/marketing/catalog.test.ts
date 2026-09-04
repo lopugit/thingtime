@@ -29,6 +29,39 @@ test('the catalog holds well over a thousand pages and assets', () => {
 	assert.equal(PAGES.length, PAGE_COUNT);
 });
 
+// The suite's promise is that counts never drift, and almost every count is
+// derived (`formatCount(PAGE_COUNT)`, `${TRENDS.length} viral styles`). Six
+// user-visible strings spell theirs out in words instead, and nothing else
+// would notice when a thirteenth trend or a twelfth category lands — the page
+// would read "twelve viral styles" above thirteen of them, and one of these
+// strings is a category blurb that also ships as the page's meta description.
+// Adding to any of these lists is a documented extension point
+// (docs/marketing-suite.md § Adding content), so pin the three lengths and
+// name the call sites here rather than let the copy go quietly wrong.
+test('the counts spelled out in words still match the lists', () => {
+	const spelledOut: { count: number; expected: number; wording: string; sites: string[] }[] = [
+		{
+			count: TRENDS.length,
+			expected: 12,
+			wording: 'twelve',
+			sites: [
+				'catalog.ts CATEGORIES styles.blurb ("re-cut in twelve viral trends" — also the category meta description)',
+				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")',
+				'routes/marketing/page.tsx ("Re-cut in eleven other styles" — TRENDS.length - 1)'
+			]
+		},
+		{ count: SOCIAL_FORMATS.length, expected: 10, wording: 'ten', sites: ['routes/marketing/_index.tsx ("ten platform sizes")'] },
+		{ count: CATEGORIES.length, expected: 11, wording: 'Eleven', sites: ['routes/marketing/_index.tsx ("Eleven kinds of page, one social suite")'] }
+	];
+	for (const entry of spelledOut) {
+		assert.equal(
+			entry.count,
+			entry.expected,
+			`This list now has ${entry.count} entries, but ${entry.sites.length} place(s) still say "${entry.wording}". Update the copy (or derive it, as social-media.tsx does with \${TRENDS.length}) and this expectation:\n  - ${entry.sites.join('\n  - ')}`
+		);
+	}
+});
+
 test('every category has pages and every page has a category', () => {
 	const counts = categoryCounts();
 	for (const category of CATEGORIES) assert.ok((counts[category.key] ?? 0) > 0, `category ${category.key} is empty`);
