@@ -583,6 +583,10 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
+      Xcode 26.2 and upload it through `altool` with an explicit long-form
+      `--platform ios`. Confirm App Store Connect accepts the upload instead of
+      reporting that it cannot determine the platform.
 - [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
       sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
       asking for a password or exposing a session credential on the watch.

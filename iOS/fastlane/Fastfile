@@ -3,6 +3,7 @@ require "fileutils"
 require "plist"
 require "shellwords"
 require "tempfile"
+require "tmpdir"
 
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 
@@ -96,6 +97,32 @@ def export_options
       ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name
     }
   )
+end
+
+def upload_testflight_ipa(ipa_path)
+  issuer_id = asc_issuer_id
+  UI.user_error!("ASC_ISSUER_ID is required for TestFlight upload") unless issuer_id
+
+  Dir.mktmpdir("thingtime-asc-key") do |key_directory|
+    key_path = File.join(key_directory, "AuthKey_#{ENV.fetch('ASC_KEY_ID')}.p8")
+    File.binwrite(key_path, Base64.decode64(ENV.fetch("ASC_KEY_CONTENT")))
+    File.chmod(0o600, key_path)
+
+    previous_key_directory = ENV["API_PRIVATE_KEYS_DIR"]
+    ENV["API_PRIVATE_KEYS_DIR"] = key_directory
+    begin
+      sh(
+        "xcrun", "altool",
+        "--upload-app",
+        "-f", ipa_path,
+        "--platform", "ios",
+        "--apiKey", ENV.fetch("ASC_KEY_ID"),
+        "--apiIssuer", issuer_id
+      )
+    ensure
+      ENV["API_PRIVATE_KEYS_DIR"] = previous_key_directory
+    end
+  end
 end
 
 platform :ios do
@@ -198,22 +225,12 @@ platform :ios do
   desc "Build and upload to TestFlight"
   lane :beta do
     build
-    upload_to_testflight(
-      api_key: app_store_api_key,
-      ipa: File.join(OUTPUT_DIRECTORY, OUTPUT_NAME),
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
-    )
+    upload_testflight_ipa(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   desc "Upload an already-built IPA to TestFlight (IPA_PATH overrides the default build output)"
   lane :upload do
-    upload_to_testflight(
-      api_key: app_store_api_key,
-      ipa: ENV["IPA_PATH"] || File.join(OUTPUT_DIRECTORY, OUTPUT_NAME),
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
-    )
+    upload_testflight_ipa(ENV["IPA_PATH"] || File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   private_lane :app_store_api_key do
