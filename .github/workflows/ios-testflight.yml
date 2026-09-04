@@ -34,6 +34,8 @@ jobs:
       DEVELOPMENT_TEAM: 6DQQ9V7C84
       PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.appletime
       WATCH_BUNDLE_IDENTIFIER: com.thingtime.appletime.watchkitapp
+      IOS_DISTRIBUTION_CERTIFICATE_ID: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_ID }}
+      IOS_DISTRIBUTION_CERT_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_P12_PASSWORD }}
       THINGTIME_WEB_URL: ${{ github.event.inputs.web_url || 'https://pr-596.previews.dev.thingtime.com' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -58,9 +60,31 @@ jobs:
       - name: Install XcodeGen
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
+      - name: Prepare distribution identity
+        env:
+          IOS_DISTRIBUTION_CERT_P12: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+        run: |
+          test -n "$IOS_DISTRIBUTION_CERT_P12"
+          ruby -rbase64 -e 'File.binwrite(ARGV.fetch(0), Base64.decode64(ENV.fetch("IOS_DISTRIBUTION_CERT_P12")))' \
+            "$RUNNER_TEMP/thingtime-distribution.p12"
+          chmod 600 "$RUNNER_TEMP/thingtime-distribution.p12"
+          echo "IOS_DISTRIBUTION_CERTIFICATE_PATH=$RUNNER_TEMP/thingtime-distribution.p12" >> "$GITHUB_ENV"
+
       - name: Build and upload TestFlight IPA
         working-directory: iOS
         run: ./scripts/testflight-beta.sh
+
+      - name: Verify signed iPhone and Watch apps
+        run: |
+          test -s iOS/build/Thingtime.ipa
+          ditto -x -k iOS/build/Thingtime.ipa "$RUNNER_TEMP/thingtime-ipa"
+          phone_app="$RUNNER_TEMP/thingtime-ipa/Payload/Thingtime.app"
+          test -d "$phone_app"
+          watch_app="$(find "$phone_app" -mindepth 2 -type d -name '*.app' -print -quit)"
+          test -n "$watch_app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$watch_app/Info.plist")" = "$WATCH_BUNDLE_IDENTIFIER"
+          codesign --verify --deep --strict "$phone_app"
+          echo "Verified signed iPhone app with embedded Watch app."
 
       - name: Preserve a newly generated distribution identity
         if: always()
