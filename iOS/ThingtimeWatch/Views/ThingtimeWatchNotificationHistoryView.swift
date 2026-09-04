@@ -61,8 +61,18 @@ struct ThingtimeWatchNotificationHistoryView: View {
                     Text(message)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    if store.canRetryHistory {
+                        Button {
+                            store.retryHistoryRequest()
+                        } label: {
+                            Label("Retry with iPhone", systemImage: "arrow.clockwise")
+                        }
+                    }
                 }
             }
+
+            ThingtimeWatchConnectionSection()
 
             if !store.historyNotifications.isEmpty {
                 Section("Notifications") {

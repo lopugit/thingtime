@@ -27,6 +27,20 @@ struct ThingtimeWatchAttachmentView: View {
                 }
                 .disabled(isBusy)
 
+                NavigationLink {
+                    ThingtimeWatchSavedRecordingsView(recorder: recorder)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Choose saved recording", systemImage: "waveform.badge.magnifyingglass")
+                        Text(recorder.recordings.isEmpty
+                            ? "No Thingtime recordings yet"
+                            : "\(recorder.recordings.count) on this Watch")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(recorder.recordings.isEmpty)
+
             } header: {
                 Text("Add attachment")
             }
@@ -35,45 +49,22 @@ struct ThingtimeWatchAttachmentView: View {
                 Toggle("Upload after saving", isOn: $autoUploadRecordings)
             }
 
-            if !recorder.recordings.isEmpty {
-                Section("Saved on this Watch") {
-                    ForEach(recorder.recordings) { recording in
-                        Button {
-                            Task { await upload(recording) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Label("Upload recording", systemImage: "arrow.up.circle")
-                                Text("\(recording.displayDate) · \(recording.displaySize)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .disabled(isBusy)
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                recorder.delete(recording)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-            }
-
             if let message = recorder.errorMessage ?? store.attachmentStatusMessage {
                 Section("Status") {
                     Text(message)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
-                    if !store.attachmentIsBusy && store.attachmentStatusMessage?.contains("Couldn’t") == true {
-                        Button("Try again") { store.retryAttachmentTransfers() }
+                    if store.canRetryAttachments {
+                        Button("Retry saved upload") { store.retryAttachmentTransfers() }
                     }
                 }
             }
 
+            ThingtimeWatchConnectionSection()
+
             Section {
-                Text("Each upload becomes a private Thing. Apple keeps Voice Memos inside its app, so an existing memo can’t be imported directly on Watch; sync it to iPhone and upload it in Thingtime there.")
+                Text("Choose saved recording lists audio previously made with Thingtime’s Apple recorder. Apple keeps the separate Voice Memos library private; sync those memos to iPhone, export one to Files, then upload it in Thingtime there.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

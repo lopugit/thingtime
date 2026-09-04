@@ -82,8 +82,14 @@ final class ThingtimeNativeNotifications: NSObject {
         }
     }
 
-    private func refresh() async {
-        guard !isRefreshing, let webView else { return }
+    @discardableResult
+    private func refresh() async -> RefreshOutcome {
+        guard let webView else {
+            return .failure("Open Thingtime on your iPhone to reconnect this Watch.")
+        }
+        guard !isRefreshing else {
+            return .failure("Thingtime on iPhone is already checking your connection. Try again in a moment.")
+        }
         isRefreshing = true
         defer { isRefreshing = false }
 
@@ -110,8 +116,11 @@ final class ThingtimeNativeNotifications: NSObject {
             }
 
             guard status == 200 else {
-                if status == 401 { publish(.signedOut) }
-                return
+                if status == 401 {
+                    publish(.signedOut)
+                    return .snapshot(.signedOut)
+                }
+                return .failure("The iPhone reached Thingtime, but notification refresh returned HTTP \(status).")
             }
 
             guard let bodyData = body.data(using: .utf8) else { throw NativeBridgeError.invalidResponse }
@@ -128,10 +137,12 @@ final class ThingtimeNativeNotifications: NSObject {
             await requestNotificationAuthorizationIfNeeded()
             await registerPendingDevices()
             attachmentUploader.processPending()
+            return .snapshot(snapshot)
         } catch {
 #if DEBUG
             print("[ThingtimeNativeNotifications] refresh failed: \(error.localizedDescription)")
 #endif
+            return .failure("Thingtime on iPhone couldn’t refresh. Check its connection, then retry from the Watch.")
         }
     }
 
@@ -375,7 +386,25 @@ final class ThingtimeNativeNotifications: NSObject {
             let ids = message["ids"] as? [String] ?? []
             Task { await markRead(ids: ids) }
         case "refresh", "pair":
-            Task { await refresh() }
+            Task {
+                let outcome = await refresh()
+                guard let reply else { return }
+                switch outcome {
+                case let .snapshot(snapshot):
+                    if var message = try? ThingtimeWatchWire.message(for: snapshot) {
+                        message["ok"] = true
+                        reply(message)
+                    } else {
+                        reply(ThingtimeWatchWire.connectionResult(
+                            ok: false,
+                            message: "Thingtime on iPhone couldn’t prepare its Watch status."
+                        ))
+                    }
+                case let .failure(message):
+                    reply(ThingtimeWatchWire.connectionResult(ok: false, message: message))
+                }
+            }
+            return
         case ThingtimeWatchNotificationHistory.requestKind:
             if let request = try? ThingtimeWatchNotificationHistory.request(
                 from: message,
@@ -461,6 +490,11 @@ private struct NotificationsResponse: Decodable {
     let notifications: [ThingtimeWatchNotification]
     let unreadCount: Int
     let nextCursor: String?
+}
+
+private enum RefreshOutcome {
+    case snapshot(ThingtimeWatchSnapshot)
+    case failure(String)
 }
 
 private enum NativeBridgeError: LocalizedError {

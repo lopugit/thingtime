@@ -1,5 +1,24 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 20 — resilient iPhone connection and recording chooser
+
+- Watch-to-iPhone authentication refreshes now wait for an authenticated
+  snapshot or explicit failure instead of treating message delivery as success.
+  The Watch shows activating, checking, connected, waiting, signed-out, and
+  failed states with the last successful reply and a manual retry action.
+- Unreachable refreshes are durably queued and retried after 2, 5, and 10
+  seconds. Interactive refresh and notification-history requests have bounded
+  response timeouts instead of leaving the Watch in an indefinite loading state.
+- Added a dedicated **Choose saved recording** screen that lists every
+  Thingtime-owned `.m4a` retained on the Watch, supports tap-to-upload and
+  swipe-to-delete, and remains browseable while another transfer finishes.
+- Apple's recorder callback now waits briefly for the saved file to become
+  non-empty before queueing it. If finalization takes longer, the recording is
+  retained and can be selected later rather than being reported as lost.
+- Apple Voice Memos remain private to Apple's app. Those recordings sync to
+  Voice Memos on iPhone and can be exported to Files for upload through the
+  iPhone Thingtime app.
+
 ## TestFlight build 19 — Apple-native recorder and saved recordings
 
 - Replaced the in-app recording controls with Apple's native Watch audio

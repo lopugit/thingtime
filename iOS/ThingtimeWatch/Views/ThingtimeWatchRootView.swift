@@ -29,12 +29,15 @@ struct ThingtimeWatchRootView: View {
                 Text("Pair Thingtime")
                     .font(.headline)
 
+                Label(store.phoneConnectionState.title, systemImage: store.phoneConnectionState.systemImage)
+                    .font(.caption.bold())
+
                 Text(store.connectionMessage ?? store.snapshot.message ?? "Open Thingtime on your iPhone and sign in.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                Button("I’m signed in") {
+                Button("Retry iPhone connection") {
                     store.requestPairing()
                 }
                 .buttonStyle(.borderedProminent)
@@ -100,6 +103,8 @@ struct ThingtimeWatchRootView: View {
                         .disabled(store.historyIsLoading)
                     }
                 }
+
+                ThingtimeWatchConnectionSection()
 
                 if store.notificationAuthorization != .authorized && store.notificationAuthorization != .provisional {
                     Section { notificationPermissionButton }

@@ -35,6 +35,24 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
         XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.message?.contains("iPhone") == true)
     }
 
+    func testConnectionFailureRoundTripsWithBoundedMessage() {
+        let message = String(repeating: "x", count: 400)
+        let envelope = ThingtimeWatchWire.connectionResult(ok: false, message: message)
+        let result = ThingtimeWatchWire.connectionResult(from: envelope)
+
+        XCTAssertEqual(result?.ok, false)
+        XCTAssertEqual(result?.message.count, 300)
+        XCTAssertNil(ThingtimeWatchWire.connectionResult(from: ["kind": "unexpected"]))
+    }
+
+    func testConnectionRetryBackoffIsBounded() {
+        XCTAssertEqual(ThingtimeWatchWire.connectionRetryDelay(afterAttempt: 0), 2)
+        XCTAssertEqual(ThingtimeWatchWire.connectionRetryDelay(afterAttempt: 1), 5)
+        XCTAssertEqual(ThingtimeWatchWire.connectionRetryDelay(afterAttempt: 2), 10)
+        XCTAssertNil(ThingtimeWatchWire.connectionRetryDelay(afterAttempt: 3))
+        XCTAssertNil(ThingtimeWatchWire.connectionRetryDelay(afterAttempt: -1))
+    }
+
     func testAttachmentMetadataRoundTripsThroughTransferDictionary() throws {
         let requestId = "86cdb8af-2bf8-4c9c-9447-0fb449e43d1d"
         let metadata = try ThingtimeWatchAttachmentTransfer.makeMetadata(

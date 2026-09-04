@@ -12,7 +12,10 @@ the Voice Memos app's private recording library to third-party watchOS apps;
 existing Watch Voice Memos must sync to iPhone and be uploaded in Thingtime
 there.
 Authentication remains on the iPhone WebView session so passwords and reusable
-session credentials are not copied to the watch.
+session credentials are not copied to the watch. The Watch shows whether that
+connection is activating, checking, connected, waiting for the iPhone, signed
+out, or failed; missed refreshes are queued and retried with a visible manual
+retry action.
 
 The first version is intentionally small: a SwiftUI app that embeds Thingtime
 in a native `WKWebView`. It defaults to `https://thingtime.com` and can be

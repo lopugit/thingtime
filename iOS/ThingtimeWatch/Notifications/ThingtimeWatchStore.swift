@@ -7,9 +7,41 @@ import WatchKit
 final class ThingtimeWatchStore: NSObject, ObservableObject {
     static let shared = ThingtimeWatchStore()
 
+    enum PhoneConnectionState: Equatable {
+        case activating
+        case checking
+        case connected
+        case waitingForPhone
+        case signedOut
+        case failed
+
+        var title: String {
+            switch self {
+            case .activating: "Connecting to iPhone"
+            case .checking: "Checking Thingtime sign-in"
+            case .connected: "Connected to iPhone"
+            case .waitingForPhone: "Waiting for iPhone"
+            case .signedOut: "Sign in on iPhone"
+            case .failed: "Connection needs attention"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .activating, .checking: "arrow.trianglehead.2.clockwise.rotate.90"
+            case .connected: "iphone.and.arrow.forward"
+            case .waitingForPhone: "iphone.slash"
+            case .signedOut: "person.crop.circle.badge.exclamationmark"
+            case .failed: "exclamationmark.icloud"
+            }
+        }
+    }
+
     @Published private(set) var snapshot: ThingtimeWatchSnapshot = .signedOut
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     @Published private(set) var connectionMessage: String?
+    @Published private(set) var phoneConnectionState: PhoneConnectionState = .activating
+    @Published private(set) var lastPhoneContactAt: Date?
     @Published private(set) var attachmentStatusMessage: String?
     @Published private(set) var attachmentIsBusy = false
     @Published private(set) var historyNotifications: [ThingtimeWatchNotification] = []
@@ -26,25 +58,56 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     private var activeHistoryTo: String?
     private var downloadedArchive: ThingtimeWatchNotificationArchive?
     private var downloadedVisibleCount = 0
+    private var connectionAttempt = 0
+    private var connectionRetryTask: Task<Void, Never>?
+    private var connectionTimeoutTask: Task<Void, Never>?
+    private var queuedConnectionRefresh = false
+    private var activeConnectionRequestId: String?
+    private var historyResponseTimeoutTask: Task<Void, Never>?
+    private var lastHistoryRequest: (request: ThingtimeWatchNotificationHistoryRequest, archive: Bool)?
 
     private override init() {
         super.init()
     }
 
     func activate() {
-        session?.delegate = self
-        session?.activate()
-        if let context = session?.receivedApplicationContext {
-            apply(context)
+        guard let session else {
+            phoneConnectionState = .failed
+            connectionMessage = "This Watch can’t connect to a paired iPhone."
+            return
+        }
+        phoneConnectionState = .activating
+        connectionMessage = "Activating the secure iPhone connection…"
+        session.delegate = self
+        session.activate()
+        if let context = session.receivedApplicationContext as [String: Any]? {
+            apply(context, confirmedContact: false)
         }
         restorePendingAttachments()
         attemptAttachmentTransfers()
         restoreLatestNotificationArchive()
         Task { await refreshAuthorizationStatus() }
+        startPhoneConnectionAttempt(resetBackoff: true)
     }
 
     func requestRefresh() {
-        send(["kind": "refresh"])
+        startPhoneConnectionAttempt(resetBackoff: true)
+    }
+
+    func retryPhoneConnection() {
+        startPhoneConnectionAttempt(resetBackoff: true)
+    }
+
+    var canRetryPhoneConnection: Bool {
+        phoneConnectionState != .connected && phoneConnectionState != .checking
+    }
+
+    var canRetryHistory: Bool {
+        lastHistoryRequest != nil && !historyIsLoading
+    }
+
+    var canRetryAttachments: Bool {
+        !pendingAttachments.isEmpty && !attachmentIsBusy
     }
 
     var canLoadOlderInbox: Bool { snapshot.nextCursor != nil }
@@ -114,8 +177,8 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     }
 
     func requestPairing() {
-        connectionMessage = "Open Thingtime on your iPhone and sign in. This watch will pair automatically."
-        send(["kind": "pair"])
+        connectionMessage = "Checking Thingtime on your iPhone…"
+        startPhoneConnectionAttempt(resetBackoff: true, kind: "pair")
     }
 
     func markRead(id: String) {
@@ -179,14 +242,25 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             let message = try archive
                 ? ThingtimeWatchNotificationHistory.archiveRequestMessage(request)
                 : ThingtimeWatchNotificationHistory.requestMessage(request)
-            sendInteractiveOrGuaranteed(message)
+            lastHistoryRequest = (request, archive)
+            sendInteractiveOrGuaranteed(message, requestId: request.requestId)
         } catch {
             historyIsLoading = false
             historyStatusMessage = error.localizedDescription
         }
     }
 
-    private func sendInteractiveOrGuaranteed(_ message: [String: Any]) {
+    func retryHistoryRequest() {
+        guard let lastHistoryRequest else { return }
+        historyIsLoading = true
+        historyStatusMessage = lastHistoryRequest.archive
+            ? "Retrying the full download with your iPhone…"
+            : "Retrying with your iPhone…"
+        startPhoneConnectionAttempt(resetBackoff: true)
+        sendHistoryRequest(lastHistoryRequest.request, archive: lastHistoryRequest.archive)
+    }
+
+    private func sendInteractiveOrGuaranteed(_ message: [String: Any], requestId: String) {
         guard let session else {
             historyIsLoading = false
             historyStatusMessage = "This Watch can’t connect to its paired iPhone."
@@ -194,14 +268,39 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         }
         guard session.isReachable else {
             session.transferUserInfo(message)
-            historyStatusMessage = "Queued for your iPhone. Open Thingtime there to continue."
+            historyIsLoading = false
+            phoneConnectionState = .waitingForPhone
+            connectionMessage = "Open Thingtime on your iPhone; the request is safely queued."
+            historyStatusMessage = "Queued safely. Open Thingtime on your iPhone, then tap Retry if it doesn’t continue."
             return
         }
-        session.sendMessage(message, replyHandler: nil) { error in
+        scheduleHistoryResponseTimeout(requestId: requestId)
+        session.sendMessage(message, replyHandler: { _ in }, errorHandler: { [weak self] error in
             session.transferUserInfo(message)
+            Task { @MainActor in
+                guard let self, self.activeHistoryRequestId == requestId else { return }
+                self.historyResponseTimeoutTask?.cancel()
+                self.historyIsLoading = false
+                self.phoneConnectionState = .waitingForPhone
+                self.connectionMessage = "The request is queued for Thingtime on iPhone."
+                self.historyStatusMessage = "The iPhone didn’t answer immediately. Open Thingtime there, then tap Retry."
+            }
 #if DEBUG
             print("[ThingtimeWatchStore] immediate history request failed: \(error.localizedDescription)")
 #endif
+        })
+    }
+
+    private func scheduleHistoryResponseTimeout(requestId: String) {
+        historyResponseTimeoutTask?.cancel()
+        historyResponseTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.activeHistoryRequestId == requestId, self.historyIsLoading else { return }
+                self.historyIsLoading = false
+                self.historyStatusMessage = "No response yet. Open Thingtime on your iPhone, then tap Retry."
+            }
         }
     }
 
@@ -209,6 +308,9 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         do {
             guard let page = try ThingtimeWatchNotificationHistory.page(from: message),
                   page.requestId == activeHistoryRequestId else { return }
+            markPhoneContact()
+            phoneConnectionState = snapshot.authenticated ? .connected : .signedOut
+            historyResponseTimeoutTask?.cancel()
             historyIsLoading = false
             if page.target == .inbox {
                 let existing = Set(snapshot.notifications.map(\.id))
@@ -240,12 +342,17 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     private func applyHistoryError(_ message: [String: Any]) {
         guard message[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.errorKind,
               message["requestId"] as? String == activeHistoryRequestId else { return }
+        markPhoneContact()
+        phoneConnectionState = snapshot.authenticated ? .connected : .signedOut
+        historyResponseTimeoutTask?.cancel()
         historyIsLoading = false
         historyStatusMessage = message["message"] as? String ?? "Notification history could not be fetched."
     }
 
     private func applyDownloadedArchive(_ archive: ThingtimeWatchNotificationArchive) {
         guard activeHistoryRequestId == nil || activeHistoryRequestId == archive.requestId else { return }
+        markPhoneContact()
+        phoneConnectionState = snapshot.authenticated ? .connected : .signedOut
         activeHistoryRequestId = archive.requestId
         activeHistoryFrom = archive.from
         activeHistoryTo = archive.to
@@ -328,8 +435,120 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     }
 
     func retryAttachmentTransfers() {
-        attachmentIsBusy = !pendingAttachments.isEmpty
+        guard !pendingAttachments.isEmpty else { return }
+        attachmentIsBusy = true
+        attachmentStatusMessage = "Retrying with your iPhone…"
+        startPhoneConnectionAttempt(resetBackoff: true)
         attemptAttachmentTransfers()
+    }
+
+    private func startPhoneConnectionAttempt(resetBackoff: Bool, kind: String = "refresh") {
+        if resetBackoff {
+            connectionRetryTask?.cancel()
+            connectionTimeoutTask?.cancel()
+            connectionAttempt = 0
+            queuedConnectionRefresh = false
+        }
+
+        guard let session else {
+            phoneConnectionState = .failed
+            connectionMessage = "This Watch can’t connect to a paired iPhone."
+            return
+        }
+        guard session.activationState == .activated else {
+            phoneConnectionState = .activating
+            connectionMessage = "Activating the secure iPhone connection…"
+            session.activate()
+            schedulePhoneConnectionRetry(kind: kind)
+            return
+        }
+
+        let request = ["kind": kind]
+        guard session.isReachable else {
+            phoneConnectionState = .waitingForPhone
+            connectionMessage = "Open Thingtime on your iPhone; reconnecting automatically."
+            if !queuedConnectionRefresh {
+                session.transferUserInfo(request)
+                queuedConnectionRefresh = true
+            }
+            schedulePhoneConnectionRetry(kind: kind)
+            return
+        }
+
+        phoneConnectionState = .checking
+        connectionMessage = "Checking Thingtime sign-in on your iPhone…"
+        let requestId = UUID().uuidString
+        activeConnectionRequestId = requestId
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.activeConnectionRequestId == requestId else { return }
+                self.phoneConnectionState = .failed
+                self.connectionMessage = "The iPhone didn’t answer. Open Thingtime there, then retry."
+                self.schedulePhoneConnectionRetry(kind: kind)
+            }
+        }
+        session.sendMessage(request, replyHandler: { [weak self] reply in
+            Task { @MainActor in self?.handlePhoneConnectionReply(reply, requestId: requestId) }
+        }, errorHandler: { [weak self] _ in
+            session.transferUserInfo(request)
+            Task { @MainActor in
+                guard let self, self.activeConnectionRequestId == requestId else { return }
+                self.connectionTimeoutTask?.cancel()
+                self.queuedConnectionRefresh = true
+                self.phoneConnectionState = .waitingForPhone
+                self.connectionMessage = "The refresh is queued. Open Thingtime on your iPhone; retrying automatically."
+                self.schedulePhoneConnectionRetry(kind: kind)
+            }
+        })
+    }
+
+    private func handlePhoneConnectionReply(_ reply: [String: Any], requestId: String) {
+        guard activeConnectionRequestId == requestId else { return }
+        connectionTimeoutTask?.cancel()
+        do {
+            if let incoming = try ThingtimeWatchWire.snapshot(from: reply) {
+                applySnapshot(incoming, confirmedContact: true)
+                return
+            }
+        } catch {}
+        if let result = ThingtimeWatchWire.connectionResult(from: reply) {
+            phoneConnectionState = result.ok ? .connected : .failed
+            connectionMessage = result.message
+            if result.ok {
+                markPhoneContact()
+            } else {
+                schedulePhoneConnectionRetry()
+            }
+            return
+        }
+        phoneConnectionState = .failed
+        connectionMessage = "Thingtime on iPhone sent an unreadable connection status."
+        schedulePhoneConnectionRetry()
+    }
+
+    private func schedulePhoneConnectionRetry(kind: String = "refresh") {
+        guard let delay = ThingtimeWatchWire.connectionRetryDelay(afterAttempt: connectionAttempt) else { return }
+        connectionAttempt += 1
+        connectionRetryTask?.cancel()
+        connectionRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.startPhoneConnectionAttempt(resetBackoff: false, kind: kind)
+            }
+        }
+    }
+
+    private func markPhoneContact() {
+        lastPhoneContactAt = Date()
+        connectionAttempt = 0
+        queuedConnectionRefresh = false
+        activeConnectionRequestId = nil
+        connectionRetryTask?.cancel()
+        connectionTimeoutTask?.cancel()
     }
 
     private func refreshAuthorizationStatus() async {
@@ -353,16 +572,16 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
                   FileManager.default.fileExists(atPath: Self.payloadURL(for: metadata).path) else { continue }
             pendingAttachments[metadata.requestId] = metadata
         }
-        attachmentIsBusy = !pendingAttachments.isEmpty
-        if attachmentIsBusy {
-            attachmentStatusMessage = "Waiting to send \(pendingAttachments.count) attachment\(pendingAttachments.count == 1 ? "" : "s")…"
+        attachmentIsBusy = false
+        if !pendingAttachments.isEmpty {
+            attachmentStatusMessage = "\(pendingAttachments.count) saved attachment\(pendingAttachments.count == 1 ? " is" : "s are") ready to retry."
         }
     }
 
     private func attemptAttachmentTransfers() {
         guard let session, session.activationState == .activated else {
-            attachmentIsBusy = !pendingAttachments.isEmpty
-            if attachmentIsBusy { attachmentStatusMessage = "Waiting for your paired iPhone…" }
+            attachmentIsBusy = false
+            if !pendingAttachments.isEmpty { attachmentStatusMessage = "Waiting for your paired iPhone. Tap Retry to check again." }
             return
         }
         let outstanding = Set(session.outstandingFileTransfers.compactMap {
@@ -379,6 +598,8 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     private func applyAttachmentResult(_ message: [String: Any]) {
         guard message["kind"] as? String == ThingtimeWatchAttachmentTransfer.resultKind,
               let requestId = message["requestId"] as? String else { return }
+        markPhoneContact()
+        phoneConnectionState = snapshot.authenticated ? .connected : .signedOut
         let success = message["ok"] as? Bool == true
         let filename = message["filename"] as? String ?? pendingAttachments[requestId]?.filename ?? "Attachment"
         attachmentStatusMessage = message["message"] as? String ??
@@ -402,13 +623,31 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         }
     }
 
-    private func apply(_ message: [String: Any]) {
+    private func apply(_ message: [String: Any], confirmedContact: Bool = true) {
         do {
             guard let incoming = try ThingtimeWatchWire.snapshot(from: message) else { return }
-            snapshot = incoming
-            connectionMessage = incoming.message
+            applySnapshot(incoming, confirmedContact: confirmedContact)
         } catch {
             connectionMessage = "Thingtime sent an unreadable watch update."
+            phoneConnectionState = .failed
+        }
+    }
+
+    private func applySnapshot(_ incoming: ThingtimeWatchSnapshot, confirmedContact: Bool) {
+        snapshot = incoming
+        guard confirmedContact else {
+            connectionMessage = incoming.authenticated
+                ? "Checking the last known iPhone connection…"
+                : incoming.message
+            return
+        }
+        markPhoneContact()
+        if incoming.authenticated {
+            phoneConnectionState = .connected
+            connectionMessage = "Thingtime is signed in and connected through your iPhone."
+        } else {
+            phoneConnectionState = .signedOut
+            connectionMessage = incoming.message ?? "Open Thingtime on your iPhone and sign in."
         }
     }
 
@@ -506,17 +745,23 @@ extension ThingtimeWatchStore: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            if error != nil || activationState != .activated {
+                self.phoneConnectionState = .failed
+                self.connectionMessage = "The iPhone connection couldn’t activate. Tap Retry to try again."
+                self.schedulePhoneConnectionRetry()
+                return
+            }
             if let context = session.receivedApplicationContext as [String: Any]? {
-                self.apply(context)
+                self.apply(context, confirmedContact: false)
             }
             self.sendDeviceToken()
-            self.requestRefresh()
             self.attemptAttachmentTransfers()
+            self.startPhoneConnectionAttempt(resetBackoff: true)
         }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        Task { @MainActor in self.apply(applicationContext) }
+        Task { @MainActor in self.apply(applicationContext, confirmedContact: true) }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
@@ -566,6 +811,18 @@ extension ThingtimeWatchStore: WCSessionDelegate {
         let requestId = fileTransfer.file.metadata?["requestId"] as? String
         Task { @MainActor in
             if let requestId { self.finishTransfer(requestId: requestId, error: error) }
+        }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in
+            if session.isReachable {
+                self.startPhoneConnectionAttempt(resetBackoff: true)
+            } else if self.phoneConnectionState != .signedOut {
+                self.phoneConnectionState = .waitingForPhone
+                self.connectionMessage = "Open Thingtime on your iPhone; reconnecting automatically."
+                self.schedulePhoneConnectionRetry()
+            }
         }
     }
 }

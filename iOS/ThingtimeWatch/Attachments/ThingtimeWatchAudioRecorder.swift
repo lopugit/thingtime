@@ -13,7 +13,10 @@ final class ThingtimeWatchAudioRecorder: ObservableObject {
         var id: String { url.path }
 
         var displayDate: String {
-            createdAt.formatted(date: .abbreviated, time: .shortened)
+            let formatter = DateFormatter()
+            formatter.locale = .autoupdatingCurrent
+            formatter.setLocalizedDateFormatFromTemplate("dMMMhm")
+            return formatter.string(from: createdAt)
         }
 
         var displaySize: String {
@@ -99,12 +102,22 @@ final class ThingtimeWatchAudioRecorder: ObservableObject {
             return
         }
 
-        refresh()
-        guard let recording = recordings.first(where: { $0.url == outputURL }) else {
-            errorMessage = "The recording was saved, but Thingtime couldn’t prepare it."
-            return
+        Task { [weak self] in
+            guard let self else { return }
+            for attempt in 0..<12 {
+                if let recording = try? Self.recording(at: outputURL) {
+                    self.refresh()
+                    self.errorMessage = nil
+                    self.completedRecording?(recording)
+                    return
+                }
+                if attempt < 11 {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            self.refresh()
+            self.errorMessage = "The recording is still saved on this Watch. Open Choose saved recording, then retry its upload."
         }
-        completedRecording?(recording)
     }
 
     private func makeOutputURL() throws -> URL {
@@ -124,19 +137,25 @@ final class ThingtimeWatchAudioRecorder: ObservableObject {
             options: [.skipsHiddenFiles]
         )
 
-        return try urls.compactMap { url in
-            guard url.pathExtension.lowercased() == "m4a" else { return nil }
-            let values = try url.resourceValues(forKeys: keys)
-            guard values.isRegularFile == true, let size = values.fileSize, size > 0 else { return nil }
-            return Recording(
-                url: url,
-                filename: url.lastPathComponent,
-                contentType: "audio/mp4",
-                createdAt: values.contentModificationDate ?? .distantPast,
-                sizeBytes: Int64(size)
-            )
-        }
+        return urls.compactMap { try? recording(at: $0, keys: keys) }
         .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    nonisolated private static func recording(
+        at url: URL,
+        keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+    ) throws -> Recording? {
+        guard url.pathExtension.lowercased() == "m4a" else { return nil }
+        let values = try url.resourceValues(forKeys: keys)
+        guard values.isRegularFile == true, let size = values.fileSize, size > 0 else { return nil }
+        let normalizedURL = url.standardizedFileURL
+        return Recording(
+            url: normalizedURL,
+            filename: normalizedURL.lastPathComponent,
+            contentType: "audio/mp4",
+            createdAt: values.contentModificationDate ?? .distantPast,
+            sizeBytes: Int64(size)
+        )
     }
 
     nonisolated private static func recordingsDirectory() throws -> URL {

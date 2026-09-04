@@ -30,7 +30,6 @@ final class ThingtimeWatchAttachmentUploader {
 
     func attach(webView: WKWebView) {
         self.webView = webView
-        processPending()
     }
 
     func processPending() {

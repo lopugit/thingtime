@@ -589,6 +589,16 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] Launch the Watch app with the paired iPhone app closed, then open
+      Thingtime on iPhone. Confirm the Watch visibly moves through **Waiting for
+      iPhone** / **Checking Thingtime sign-in** to **Connected to iPhone**,
+      displays the last reply time, and reconnects without exposing or copying a
+      reusable web session credential. Repeat while signed out and confirm it
+      settles on **Sign in on iPhone**.
+- [ ] Leave the iPhone unreachable through the Watch's bounded 2, 5, and
+      10-second retry sequence. Confirm loading stops with an actionable status,
+      **Retry connection** starts a fresh attempt, and opening the iPhone later
+      consumes the safely queued refresh without duplicate work.
 - [ ] On a signed-in paired Watch, confirm the inbox initially shows the newest
       10 notifications. Tap **Load previous 10** repeatedly and verify each page
       appends in newest-first order without duplicates or gaps, including when
@@ -621,12 +631,15 @@ email whose link points at the attacker.
       signed in, without losing the queued bytes.
 - [ ] Tap **Record with Apple**, deny microphone access, and confirm Apple's
       native recorder returns safely without crashing. Grant access, save a
-      several-second recording, and confirm the `.m4a` remains under **Saved on
-      this Watch** after relaunch. With **Upload after saving** enabled, confirm
-      it queues automatically; disable that preference, save another recording,
-      and confirm it waits for the manual **Upload recording** action.
-- [ ] Re-upload one saved Watch recording and confirm it creates a new private
-      Thing without altering the retained original. Swipe-delete another saved
+      several-second recording, and confirm the completion callback does not
+      falsely report that Thingtime could not prepare it while the file is still
+      finalizing. Confirm the `.m4a` appears under **Choose saved recording**
+      after relaunch. With **Upload after saving** enabled, confirm it queues
+      automatically; disable that preference, save another recording, and
+      confirm it waits for selection in the saved-recording screen.
+- [ ] Open **Choose saved recording**, tap one retained Watch recording, and
+      confirm it creates a new private Thing without altering the retained
+      original. Swipe-delete another saved
       recording and confirm only that on-watch copy disappears. Confirm the
       explanatory copy does not claim third-party access to Apple's sandboxed
       Voice Memos library and directs existing Watch Voice Memos to the synced

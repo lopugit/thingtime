@@ -17,6 +17,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Resilient Watch pairing and saved-recording chooser — Codex (AI)
+
+- Added acknowledged Watch-to-iPhone authentication refreshes with visible
+  connection state, bounded automatic retries, durable unreachable-phone
+  fallback, response timeouts, and manual retry actions across pairing,
+  notification history, and attachment transfer screens.
+- Added a dedicated **Choose saved recording** screen for Thingtime recordings
+  retained on the Watch, and made Apple-recorder completion tolerate delayed
+  file finalization so a successfully saved `.m4a` is not falsely rejected.
+
 ### 2026-09-04 — Apple-native Watch recordings and upload-later library — Codex (AI)
 
 - Replaced the custom Watch recording controls with Apple's native high-quality

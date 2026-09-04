@@ -164,6 +164,9 @@ enum ThingtimeWatchWire {
     static let kindKey = "kind"
     static let payloadKey = "payload"
     static let snapshotKind = "notification-snapshot"
+    static let connectionResultKind = "connection-result-v1"
+
+    static let connectionRetryDelays: [TimeInterval] = [2, 5, 10]
 
     static func message(for snapshot: ThingtimeWatchSnapshot) throws -> [String: Any] {
         [kindKey: snapshotKind, payloadKey: try JSONEncoder().encode(snapshot)]
@@ -174,6 +177,26 @@ enum ThingtimeWatchWire {
             return nil
         }
         return try JSONDecoder().decode(ThingtimeWatchSnapshot.self, from: data)
+    }
+
+    static func connectionResult(ok: Bool, message: String) -> [String: Any] {
+        [
+            kindKey: connectionResultKind,
+            "ok": ok,
+            "message": String(message.prefix(300))
+        ]
+    }
+
+    static func connectionResult(from message: [String: Any]) -> (ok: Bool, message: String)? {
+        guard message[kindKey] as? String == connectionResultKind,
+              let ok = message["ok"] as? Bool,
+              let value = message["message"] as? String else { return nil }
+        return (ok, value)
+    }
+
+    static func connectionRetryDelay(afterAttempt attempt: Int) -> TimeInterval? {
+        guard attempt >= 0, attempt < connectionRetryDelays.count else { return nil }
+        return connectionRetryDelays[attempt]
     }
 }
 
