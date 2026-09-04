@@ -1,4 +1,5 @@
 import { FEATURES } from './features';
+import { byKey } from './lookup';
 import type { Feature, MockScreenKey, UseCase, Walkthrough, WalkthroughStep } from './types';
 import { USE_CASES } from './useCases';
 
@@ -359,7 +360,7 @@ export const walkthroughForUseCase = (useCase: UseCase): Walkthrough => {
 
 export const WALKTHROUGHS: Walkthrough[] = [...FEATURES.map(walkthroughForFeature), ...USE_CASES.map(walkthroughForUseCase)];
 
-export const WALKTHROUGH_BY_KEY: Record<string, Walkthrough> = Object.fromEntries(WALKTHROUGHS.map((walkthrough) => [walkthrough.key, walkthrough]));
+export const WALKTHROUGH_BY_KEY: Record<string, Walkthrough> = byKey(WALKTHROUGHS, (walkthrough) => walkthrough.key);
 
 export const getWalkthrough = (key: string): Walkthrough => {
 	const walkthrough = WALKTHROUGH_BY_KEY[key];

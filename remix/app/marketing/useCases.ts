@@ -1,3 +1,4 @@
+import { byKey } from './lookup';
 import type { UseCase } from './types';
 
 // Concrete things people keep in Thingtime. Each use case renders as a
@@ -337,7 +338,7 @@ export const USE_CASES: UseCase[] = [
 	}
 ];
 
-export const USE_CASE_BY_KEY: Record<string, UseCase> = Object.fromEntries(USE_CASES.map((useCase) => [useCase.key, useCase]));
+export const USE_CASE_BY_KEY: Record<string, UseCase> = byKey(USE_CASES, (useCase) => useCase.key);
 
 export const getUseCase = (key: string): UseCase => {
 	const useCase = USE_CASE_BY_KEY[key];

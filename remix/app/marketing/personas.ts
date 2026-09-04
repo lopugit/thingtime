@@ -1,3 +1,4 @@
+import { byKey } from './lookup';
 import type { Persona, PersonaKey } from './types';
 
 // Audience personas. Pains and gains are written to be true of the audience
@@ -115,10 +116,7 @@ export const PERSONAS: Persona[] = [
 	}
 ];
 
-export const PERSONA_BY_KEY: Record<PersonaKey, Persona> = Object.fromEntries(PERSONAS.map((persona) => [persona.key, persona])) as Record<
-	PersonaKey,
-	Persona
->;
+export const PERSONA_BY_KEY: Record<PersonaKey, Persona> = byKey(PERSONAS, (persona) => persona.key);
 
 export const getPersona = (key: PersonaKey): Persona => {
 	const persona = PERSONA_BY_KEY[key];

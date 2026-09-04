@@ -1,3 +1,4 @@
+import { byKey } from './lookup';
 import type { SocialFormat, Trend, TrendKey } from './types';
 
 // Twelve visual "trend" styles the social suite and landing variants render
@@ -177,7 +178,7 @@ export const TRENDS: Trend[] = [
 	}
 ];
 
-export const TREND_BY_KEY: Record<TrendKey, Trend> = Object.fromEntries(TRENDS.map((trend) => [trend.key, trend])) as Record<TrendKey, Trend>;
+export const TREND_BY_KEY: Record<TrendKey, Trend> = byKey(TRENDS, (trend) => trend.key);
 
 export const getTrend = (key: TrendKey): Trend => {
 	const trend = TREND_BY_KEY[key];
@@ -199,7 +200,7 @@ export const SOCIAL_FORMATS: SocialFormat[] = [
 	{ key: 'youtube-banner', name: 'YouTube banner', platform: 'YouTube', emoji: '▶️', width: 2560, height: 1440, label: '2560 × 1440' }
 ];
 
-export const SOCIAL_FORMAT_BY_KEY: Record<string, SocialFormat> = Object.fromEntries(SOCIAL_FORMATS.map((format) => [format.key, format]));
+export const SOCIAL_FORMAT_BY_KEY: Record<string, SocialFormat> = byKey(SOCIAL_FORMATS, (format) => format.key);
 
 export const getSocialFormat = (key: string): SocialFormat => {
 	const format = SOCIAL_FORMAT_BY_KEY[key];

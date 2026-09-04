@@ -12,6 +12,7 @@ the counts, links and copy can never drift.
 | Path | What |
 | --- | --- |
 | `remix/app/marketing/types.ts` | Shared types (Feature, Persona, Competitor, UseCase, Trend, SocialFormat, Walkthrough, SectionBlock, MarketingPage…). |
+| `remix/app/marketing/lookup.ts` | `byKey()` — the one way the suite builds a key → entry map. Null-prototype, so `MAP[key]` guards never resolve inherited names like `constructor` or `__proto__`. |
 | `remix/app/marketing/features.ts` | The feature inventory (one entry per real product surface: route, tagline, highlights, audiences, mock screen, competitors it answers). |
 | `remix/app/marketing/personas.ts` | Audiences with pains, gains and lead features. |
 | `remix/app/marketing/competitors.ts` | Comparison subjects with fair differences, strengths and a side-by-side table. |
@@ -47,6 +48,7 @@ the counts, links and copy can never drift.
 - Every walkthrough uses only targets its mock screen exposes; every mock screen renders every target exactly once.
 - Every trend × format renders valid SVG at the exact platform size with no `NaN`, no unescaped ampersands and no scripts.
 - Copy generators fill every placeholder and stay deterministic per seed.
+- Every `*_BY_KEY` / `PAGE_BY_SLUG` map is null-prototype, so a URL segment or query value naming an `Object.prototype` member (`constructor`, `toString`, `__proto__`…) resolves to nothing and hits the normal not-found path instead of a half-built page.
 
 ## Manual checks
 
