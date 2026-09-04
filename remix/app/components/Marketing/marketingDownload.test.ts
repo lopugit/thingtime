@@ -87,6 +87,29 @@ test('socialCaption carries the hook, the feature description and platform hasht
 	assert.equal(a, socialCaption({ feature: 'feed', trend: 'bold-brutal', format: 'ig-square' }), 'captions are deterministic');
 });
 
+// PLATFORM_FOR_FORMAT is the one lookup table in the suite TypeScript cannot
+// check for us: SocialFormat['key'] is `string` (unlike Trend['key'], which is
+// the TrendKey union), so the map is typed Record<string, HookPlatform> and a
+// format added to SOCIAL_FORMATS without an entry here still compiles. Both
+// readers then silently fall back to 'instagram' — buildSocialSvg for the hook
+// on the image, socialCaption for the hook *and* the hashtags — so the new
+// platform would ship Instagram copy under its own name with nothing failing.
+// The test above only covers three hand-listed formats, and catalog.test.ts's
+// trend × format sweep only checks SVG shape, so neither notices the gap.
+// Which voice a format borrows stays an editorial call (`story` deliberately
+// uses TikTok's); this pins only that every format resolves to a real one.
+test('every social format maps to a real hook platform', () => {
+	assert.deepEqual(
+		Object.keys(PLATFORM_FOR_FORMAT).sort(),
+		SOCIAL_FORMATS.map((format) => format.key).sort(),
+		'PLATFORM_FOR_FORMAT must carry exactly one entry per social format — no gaps, no leftovers'
+	);
+	for (const format of SOCIAL_FORMATS) {
+		const platform = PLATFORM_FOR_FORMAT[format.key];
+		assert.ok(HASHTAGS[platform]?.length, `${format.key} maps to "${platform}", which is not a hook platform with hashtags`);
+	}
+});
+
 test('copyText returns false instead of throwing when neither clipboard nor document exist', async () => {
 	assert.equal(typeof document, 'undefined', 'this test expects to run without a DOM');
 	await withNavigator(undefined, async () => {
