@@ -494,6 +494,27 @@ const runSelfTest = async () => {
 		previewAliasSuffix: 'previews.dev.thingtime.com',
 		productionPreviewAliasSuffix: 'previews.thingtime.com'
 	};
+	truthy(
+		isManagedPreviewComment({
+			user: { login: 'github-actions[bot]', type: 'Bot' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
+	truthy(
+		isManagedPreviewComment({
+			user: { login: 'lopugit', type: 'User' },
+			author_association: 'OWNER',
+			body: COMMENT_MARKER
+		})
+	);
+	truthy(
+		!isManagedPreviewComment({
+			user: { login: 'outside-user', type: 'User' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
 	const previousExpectedReady = process.env.PREVIEW_EXPECTED_READY_AT;
 	process.env.PREVIEW_EXPECTED_READY_AT = '2026-09-03T12:30:00.000Z';
 	equal(expectedReadyForRun(), '2026-09-03T12:30:00.000Z');
@@ -1054,13 +1075,19 @@ const assertCurrentPullRequest = async (config, snapshot, actor) => {
 	return current;
 };
 
+const isManagedPreviewComment = (comment) => {
+	const login = String(comment?.user?.login ?? '').trim().toLowerCase();
+	const trustedAuthor = login === 'github-actions[bot]' || (comment?.user?.type === 'User' && comment?.author_association === 'OWNER');
+	return trustedAuthor && comment?.body?.includes(COMMENT_MARKER);
+};
+
 const upsertComment = async (repository, number, body) => {
 	const prNumber = boundedInteger(number, 'PR number');
 	let existing = null;
 	for (let page = 1; page <= MAX_GITHUB_PAGES && !existing; page += 1) {
 		const comments = await githubRequest(`/repos/${repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
 		if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
-		existing = comments.find((comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(COMMENT_MARKER));
+		existing = [...comments].reverse().find(isManagedPreviewComment) ?? null;
 		if (comments.length < 100) break;
 		if (page === MAX_GITHUB_PAGES) throw new Error('GitHub comment scan exceeded its safety bound');
 	}
