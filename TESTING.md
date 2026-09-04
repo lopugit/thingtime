@@ -583,6 +583,26 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] On a signed-in paired Watch, confirm the inbox initially shows the newest
+      10 notifications. Tap **Load previous 10** repeatedly and verify each page
+      appends in newest-first order without duplicates or gaps, including when
+      two notifications have the same `createdAt` timestamp.
+- [ ] Open **Notification history**, choose **One date**, and fetch the first
+      10. Confirm only notifications inside that local calendar day appear.
+      Switch to **Date range**, choose inclusive From and Through dates, and
+      confirm **Fetch 10 more** pages through that full period without crossing
+      either day boundary.
+- [ ] Tap **Download whole period**, background or close both apps while the
+      transfer completes, then reopen the Watch app offline. Confirm the archive
+      persists, initially reveals 10 rows, and **Show 10 more** reveals the rest
+      without network access. Mark an archived row read, relaunch, and confirm
+      its read state remains saved. The archive must contain no more than the
+      service-retained latest 500 notifications.
+- [ ] Queue both a historical page request and a period download while the
+      iPhone is unreachable, then open the signed-in iPhone app. Confirm each
+      request resumes once, a stale response cannot overwrite a newer selected
+      period, and malformed or metadata-mismatched archive files are rejected.
+
 - [ ] On a signed-in paired Watch, open **Add private Thing**, pick one and five
       Photos-library screenshots, and record a short audio clip. Confirm every
       item remains queued across a Watch app relaunch until the iPhone reports

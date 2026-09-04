@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Apple Watch notification history and offline archives — Codex (AI)
+
+- Added stable opaque notification cursors, 10-at-a-time Watch inbox/history
+  paging, one-date and inclusive date-range selection, and full-period offline
+  archive downloads to the paired Watch. Historical transfers remain bounded
+  by Thingtime's retained latest 500 notifications and fail closed when the
+  selected origin lacks the `api.notifications-list` 1.1 capability.
+
 ### 2026-09-04 — Apple Watch private attachment Things — Codex (AI)
 
 - Added an authenticated **Add private Thing** Watch flow for selecting up to

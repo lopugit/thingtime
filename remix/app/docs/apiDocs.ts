@@ -9174,6 +9174,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -9183,14 +9185,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
       'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
       'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
-      'pagination via before=<nextBefore>.',
+      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) and to (exclusive) ISO timestamps bound historical pages and exports.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET'],
     steps: [
-      'GET ?limit=&before= — newest first.',
+      'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
       'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
@@ -9200,7 +9202,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Bell dropdown',
         description: 'First page for the notifications popover.',
         method: 'GET',
-        query: { limit: 20 }
+        query: { limit: 10 }
       }
     ],
     responseExamples: [
@@ -9225,7 +9227,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             }
           ],
           unreadCount: 1,
-          nextBefore: null
+          nextBefore: null,
+          nextCursor: null
         }
       }
     ]

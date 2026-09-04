@@ -1,6 +1,6 @@
 import Foundation
 
-struct ThingtimeWatchNotification: Codable, Hashable, Identifiable {
+struct ThingtimeWatchNotification: Codable, Hashable, Identifiable, Sendable {
     let id: String
     let type: String
     let actorUsername: String?
@@ -39,16 +39,125 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
     let authenticated: Bool
     let unreadCount: Int
     let notifications: [ThingtimeWatchNotification]
+    let nextCursor: String?
     let syncedAt: String
     let message: String?
+
+    init(
+        authenticated: Bool,
+        unreadCount: Int,
+        notifications: [ThingtimeWatchNotification],
+        nextCursor: String? = nil,
+        syncedAt: String,
+        message: String?
+    ) {
+        self.authenticated = authenticated
+        self.unreadCount = unreadCount
+        self.notifications = notifications
+        self.nextCursor = nextCursor
+        self.syncedAt = syncedAt
+        self.message = message
+    }
 
     static let signedOut = ThingtimeWatchSnapshot(
         authenticated: false,
         unreadCount: 0,
         notifications: [],
+        nextCursor: nil,
         syncedAt: ISO8601DateFormatter().string(from: Date()),
         message: "Open Thingtime on your iPhone and sign in to pair this watch."
     )
+}
+
+enum ThingtimeWatchNotificationHistoryTarget: String, Codable, Sendable {
+    case inbox
+    case range
+}
+
+struct ThingtimeWatchNotificationHistoryRequest: Codable, Equatable, Sendable {
+    let requestId: String
+    let target: ThingtimeWatchNotificationHistoryTarget
+    let from: String?
+    let to: String?
+    let cursor: String?
+    let limit: Int
+}
+
+struct ThingtimeWatchNotificationHistoryPage: Codable, Equatable, Sendable {
+    let requestId: String
+    let target: ThingtimeWatchNotificationHistoryTarget
+    let from: String?
+    let to: String?
+    let notifications: [ThingtimeWatchNotification]
+    let unreadCount: Int
+    let nextCursor: String?
+}
+
+struct ThingtimeWatchNotificationArchive: Codable, Equatable, Sendable {
+    let requestId: String
+    let from: String
+    let to: String
+    let downloadedAt: String
+    let notifications: [ThingtimeWatchNotification]
+}
+
+enum ThingtimeWatchNotificationHistory {
+    static let requestKind = "notification-history-request-v1"
+    static let pageKind = "notification-history-page-v1"
+    static let archiveRequestKind = "notification-archive-request-v1"
+    static let archiveFileKind = "notification-archive-file-v1"
+    static let errorKind = "notification-history-error-v1"
+    static let pageSize = 10
+    static let maximumArchiveNotifications = 500
+    static let minimumVersions = ["api.notifications-list": "1.1.0"]
+
+    static func requestMessage(_ request: ThingtimeWatchNotificationHistoryRequest) throws -> [String: Any] {
+        [ThingtimeWatchWire.kindKey: requestKind, ThingtimeWatchWire.payloadKey: try JSONEncoder().encode(request)]
+    }
+
+    static func archiveRequestMessage(_ request: ThingtimeWatchNotificationHistoryRequest) throws -> [String: Any] {
+        [ThingtimeWatchWire.kindKey: archiveRequestKind, ThingtimeWatchWire.payloadKey: try JSONEncoder().encode(request)]
+    }
+
+    static func request(from message: [String: Any], kind: String) throws -> ThingtimeWatchNotificationHistoryRequest? {
+        guard message[ThingtimeWatchWire.kindKey] as? String == kind,
+              let data = message[ThingtimeWatchWire.payloadKey] as? Data else { return nil }
+        let request = try JSONDecoder().decode(ThingtimeWatchNotificationHistoryRequest.self, from: data)
+        guard UUID(uuidString: request.requestId) != nil,
+              request.limit >= 1,
+              request.limit <= 50 else { throw ThingtimeWatchNotificationHistoryError.invalidRequest }
+        return request
+    }
+
+    static func pageMessage(_ page: ThingtimeWatchNotificationHistoryPage) throws -> [String: Any] {
+        [ThingtimeWatchWire.kindKey: pageKind, ThingtimeWatchWire.payloadKey: try JSONEncoder().encode(page)]
+    }
+
+    static func page(from message: [String: Any]) throws -> ThingtimeWatchNotificationHistoryPage? {
+        guard message[ThingtimeWatchWire.kindKey] as? String == pageKind,
+              let data = message[ThingtimeWatchWire.payloadKey] as? Data else { return nil }
+        return try JSONDecoder().decode(ThingtimeWatchNotificationHistoryPage.self, from: data)
+    }
+
+    static func errorMessage(requestId: String, message: String) -> [String: Any] {
+        [ThingtimeWatchWire.kindKey: errorKind, "requestId": requestId, "message": String(message.prefix(300))]
+    }
+
+    static func archiveTransferMetadata(for archive: ThingtimeWatchNotificationArchive) -> [String: Any] {
+        [
+            ThingtimeWatchWire.kindKey: archiveFileKind,
+            "requestId": archive.requestId,
+            "from": archive.from,
+            "to": archive.to,
+            "count": archive.notifications.count
+        ]
+    }
+}
+
+enum ThingtimeWatchNotificationHistoryError: LocalizedError {
+    case invalidRequest
+
+    var errorDescription: String? { "The notification history request is invalid." }
 }
 
 enum ThingtimeWatchWire {

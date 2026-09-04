@@ -90,7 +90,7 @@ final class ThingtimeNativeNotifications: NSObject {
         do {
             let result = try await webView.callAsyncJavaScript(
                 """
-                const response = await fetch('/api/v1/notifications?limit=20', {
+                const response = await fetch('/api/v1/notifications?limit=10', {
                   credentials: 'same-origin',
                   headers: { Accept: 'application/json' }
                 });
@@ -120,6 +120,7 @@ final class ThingtimeNativeNotifications: NSObject {
                 authenticated: response.ok,
                 unreadCount: response.unreadCount,
                 notifications: response.notifications,
+                nextCursor: response.nextCursor,
                 syncedAt: ISO8601DateFormatter().string(from: Date()),
                 message: nil
             )
@@ -218,6 +219,151 @@ final class ThingtimeNativeNotifications: NSObject {
         }
     }
 
+    private func sendGuaranteedWatchMessage(_ message: [String: Any]) {
+        guard let session else { return }
+        guard session.isReachable else {
+            session.transferUserInfo(message)
+            return
+        }
+        session.sendMessage(message, replyHandler: nil) { error in
+            session.transferUserInfo(message)
+#if DEBUG
+            print("[ThingtimeNativeNotifications] immediate watch message failed: \(error.localizedDescription)")
+#endif
+        }
+    }
+
+    private func fetchNotificationHistory(_ request: ThingtimeWatchNotificationHistoryRequest) async {
+        do {
+            try await verifyHistoryCapabilities()
+            let response = try await notificationPage(request: request, limit: request.limit, cursor: request.cursor)
+            let page = ThingtimeWatchNotificationHistoryPage(
+                requestId: request.requestId,
+                target: request.target,
+                from: request.from,
+                to: request.to,
+                notifications: response.notifications,
+                unreadCount: response.unreadCount,
+                nextCursor: response.nextCursor
+            )
+            sendGuaranteedWatchMessage(try ThingtimeWatchNotificationHistory.pageMessage(page))
+        } catch {
+            sendGuaranteedWatchMessage(ThingtimeWatchNotificationHistory.errorMessage(
+                requestId: request.requestId,
+                message: error.localizedDescription
+            ))
+        }
+    }
+
+    private func downloadNotificationArchive(_ request: ThingtimeWatchNotificationHistoryRequest) async {
+        do {
+            guard let from = request.from, let to = request.to else {
+                throw NativeBridgeError.invalidHistoryWindow
+            }
+            try await verifyHistoryCapabilities()
+            var notifications: [ThingtimeWatchNotification] = []
+            var cursor: String?
+            var seenCursors = Set<String>()
+            repeat {
+                let response = try await notificationPage(request: request, limit: 50, cursor: cursor)
+                notifications.append(contentsOf: response.notifications)
+                cursor = response.nextCursor
+                if let cursor, !seenCursors.insert(cursor).inserted {
+                    throw NativeBridgeError.repeatedHistoryCursor
+                }
+            } while cursor != nil && notifications.count < ThingtimeWatchNotificationHistory.maximumArchiveNotifications
+
+            if notifications.count > ThingtimeWatchNotificationHistory.maximumArchiveNotifications {
+                notifications = Array(notifications.prefix(ThingtimeWatchNotificationHistory.maximumArchiveNotifications))
+            }
+            let archive = ThingtimeWatchNotificationArchive(
+                requestId: request.requestId,
+                from: from,
+                to: to,
+                downloadedAt: ISO8601DateFormatter().string(from: Date()),
+                notifications: notifications
+            )
+            let fileURL = try Self.persistNotificationArchive(archive)
+            guard let session else { throw NativeBridgeError.watchUnavailable }
+            session.transferFile(fileURL, metadata: ThingtimeWatchNotificationHistory.archiveTransferMetadata(for: archive))
+        } catch {
+            sendGuaranteedWatchMessage(ThingtimeWatchNotificationHistory.errorMessage(
+                requestId: request.requestId,
+                message: error.localizedDescription
+            ))
+        }
+    }
+
+    private func notificationPage(
+        request: ThingtimeWatchNotificationHistoryRequest,
+        limit: Int,
+        cursor: String?
+    ) async throws -> NotificationsResponse {
+        var components = URLComponents()
+        components.path = "/api/v1/notifications"
+        components.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        if let from = request.from { components.queryItems?.append(URLQueryItem(name: "from", value: from)) }
+        if let to = request.to { components.queryItems?.append(URLQueryItem(name: "to", value: to)) }
+        if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
+        guard let path = components.string else { throw NativeBridgeError.invalidResponse }
+        let json = try await fetchJSON(path: path)
+        let data = try JSONSerialization.data(withJSONObject: json)
+        return try JSONDecoder().decode(NotificationsResponse.self, from: data)
+    }
+
+    private func verifyHistoryCapabilities() async throws {
+        let manifest = try await fetchJSON(path: "/.well-known/thingtime-capabilities.json")
+        guard let features = manifest["features"] as? [String: Any] else {
+            throw NativeBridgeError.historyUnavailable
+        }
+        for (feature, minimum) in ThingtimeWatchNotificationHistory.minimumVersions {
+            let raw = features[feature]
+            let actual = raw as? String ?? (raw as? [String: Any])?["version"] as? String
+            guard let actual, ThingtimeWatchUploadRequirements.satisfies(actual: actual, minimum: minimum) else {
+                throw NativeBridgeError.historyUnavailable
+            }
+        }
+    }
+
+    private func fetchJSON(path: String) async throws -> [String: Any] {
+        guard let webView else { throw NativeBridgeError.openPhone }
+        let result = try await webView.callAsyncJavaScript(
+            """
+            const response = await fetch(requestPath, {
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json' }
+            });
+            return JSON.stringify({ status: response.status, body: await response.text() });
+            """,
+            arguments: ["requestPath": path],
+            in: nil,
+            contentWorld: .page
+        )
+        guard let raw = result as? String,
+              let envelopeData = raw.data(using: .utf8),
+              let envelope = try JSONSerialization.jsonObject(with: envelopeData) as? [String: Any],
+              let status = envelope["status"] as? Int,
+              let responseBody = envelope["body"] as? String,
+              let responseData = responseBody.data(using: .utf8),
+              let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            throw NativeBridgeError.invalidResponse
+        }
+        guard (200..<300).contains(status), json["ok"] as? Bool != false else {
+            if status == 401 { throw NativeBridgeError.openPhone }
+            throw NativeBridgeError.server(json["error"] as? String ?? "Thingtime returned HTTP \(status).")
+        }
+        return json
+    }
+
+    nonisolated private static func persistNotificationArchive(_ archive: ThingtimeWatchNotificationArchive) throws -> URL {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("NotificationArchiveOutbox", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(archive.requestId).appendingPathExtension("json")
+        try JSONEncoder().encode(archive).write(to: url, options: .atomic)
+        return url
+    }
+
     private func handleWatchMessage(_ message: [String: Any], reply: (([String: Any]) -> Void)? = nil) {
         switch message["kind"] as? String {
         case "register-device":
@@ -230,6 +376,20 @@ final class ThingtimeNativeNotifications: NSObject {
             Task { await markRead(ids: ids) }
         case "refresh", "pair":
             Task { await refresh() }
+        case ThingtimeWatchNotificationHistory.requestKind:
+            if let request = try? ThingtimeWatchNotificationHistory.request(
+                from: message,
+                kind: ThingtimeWatchNotificationHistory.requestKind
+            ) {
+                Task { await fetchNotificationHistory(request) }
+            }
+        case ThingtimeWatchNotificationHistory.archiveRequestKind:
+            if let request = try? ThingtimeWatchNotificationHistory.request(
+                from: message,
+                kind: ThingtimeWatchNotificationHistory.archiveRequestKind
+            ) {
+                Task { await downloadNotificationArchive(request) }
+            }
         default:
             break
         }
@@ -284,16 +444,45 @@ extension ThingtimeNativeNotifications: WCSessionDelegate {
 #endif
         }
     }
+
+    nonisolated func session(
+        _ session: WCSession,
+        fileTransfer: WCSessionFileTransfer,
+        didFinishWithError error: Error?
+    ) {
+        guard fileTransfer.file.metadata?[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.archiveFileKind,
+              error == nil else { return }
+        try? FileManager.default.removeItem(at: fileTransfer.file.fileURL)
+    }
 }
 
 private struct NotificationsResponse: Decodable {
     let ok: Bool
     let notifications: [ThingtimeWatchNotification]
     let unreadCount: Int
+    let nextCursor: String?
 }
 
-private enum NativeBridgeError: Error {
+private enum NativeBridgeError: LocalizedError {
     case invalidResponse
+    case invalidHistoryWindow
+    case repeatedHistoryCursor
+    case watchUnavailable
+    case historyUnavailable
+    case openPhone
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: "Thingtime returned an unreadable notification response."
+        case .invalidHistoryWindow: "Choose a valid notification date or range."
+        case .repeatedHistoryCursor: "Thingtime repeated a notification page. Try the download again."
+        case .watchUnavailable: "The paired Apple Watch is unavailable."
+        case .historyUnavailable: "This Thingtime needs the notification history API before the Watch can download a period."
+        case .openPhone: "Open Thingtime on your iPhone and sign in to fetch notification history."
+        case let .server(message): message
+        }
+    }
 }
 
 private extension URL {

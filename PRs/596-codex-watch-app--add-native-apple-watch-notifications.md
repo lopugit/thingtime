@@ -1,5 +1,28 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 18 — notification history and offline downloads
+
+- The Watch inbox now requests the newest 10 notifications and can append
+  previous pages 10 at a time with an opaque timestamp-plus-id cursor that does
+  not skip notifications sharing the same timestamp.
+- Added a native **Notification history** screen with one-date and date-range
+  selection. **Fetch first 10** / **Fetch 10 more** page through that window;
+  **Download whole period** asks the signed-in iPhone to fetch all available
+  pages and transfer one bounded archive back to the Watch.
+- The Watch persists the latest archive for offline viewing, reveals it 10 rows
+  at a time, and preserves locally marked-read state across relaunches. Archive
+  metadata is checked against the payload before it is accepted.
+- The server's `api.notifications-list` contract is now version 1.1 with
+  optional inclusive `from`, exclusive `to`, and stable `cursor` parameters;
+  legacy `before` pagination remains available.
+- Focused notification tests, API capability-manifest tests, lint, native unit
+  tests, and a Watch simulator build/UI inspection cover the release. The full
+  repository typecheck still reports the branch's pre-existing unrelated
+  errors; none originate in the notification-history implementation.
+- Physical paired-device WatchConnectivity archive delivery remains the final
+  acceptance check because `WCSession.transferFile` is unavailable in the
+  Watch simulator.
+
 ## TestFlight build 17 — private attachment Things
 
 - Added **Add private Thing** to the authenticated Watch inbox with native

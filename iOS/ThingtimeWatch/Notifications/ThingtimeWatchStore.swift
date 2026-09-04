@@ -12,10 +12,20 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     @Published private(set) var connectionMessage: String?
     @Published private(set) var attachmentStatusMessage: String?
     @Published private(set) var attachmentIsBusy = false
+    @Published private(set) var historyNotifications: [ThingtimeWatchNotification] = []
+    @Published private(set) var historyStatusMessage: String?
+    @Published private(set) var historyIsLoading = false
+    @Published private(set) var historyNextCursor: String?
+    @Published private(set) var downloadedHistoryCount = 0
 
     private let session: WCSession? = WCSession.isSupported() ? .default : nil
     private var deviceToken: String?
     private var pendingAttachments: [String: ThingtimeWatchAttachmentMetadata] = [:]
+    private var activeHistoryRequestId: String?
+    private var activeHistoryFrom: String?
+    private var activeHistoryTo: String?
+    private var downloadedArchive: ThingtimeWatchNotificationArchive?
+    private var downloadedVisibleCount = 0
 
     private override init() {
         super.init()
@@ -29,11 +39,78 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         }
         restorePendingAttachments()
         attemptAttachmentTransfers()
+        restoreLatestNotificationArchive()
         Task { await refreshAuthorizationStatus() }
     }
 
     func requestRefresh() {
         send(["kind": "refresh"])
+    }
+
+    var canLoadOlderInbox: Bool { snapshot.nextCursor != nil }
+
+    var canLoadMoreHistory: Bool {
+        if let downloadedArchive {
+            return downloadedVisibleCount < downloadedArchive.notifications.count
+        }
+        return historyNextCursor != nil
+    }
+
+    func requestOlderNotifications() {
+        guard let cursor = snapshot.nextCursor else { return }
+        historyIsLoading = true
+        let request = ThingtimeWatchNotificationHistoryRequest(
+            requestId: UUID().uuidString.lowercased(),
+            target: .inbox,
+            from: nil,
+            to: nil,
+            cursor: cursor,
+            limit: ThingtimeWatchNotificationHistory.pageSize
+        )
+        activeHistoryRequestId = request.requestId
+        sendHistoryRequest(request, archive: false)
+    }
+
+    func fetchHistory(from: String, to: String) {
+        downloadedArchive = nil
+        downloadedVisibleCount = 0
+        downloadedHistoryCount = 0
+        historyNotifications = []
+        historyNextCursor = nil
+        activeHistoryFrom = from
+        activeHistoryTo = to
+        requestHistoryPage(cursor: nil)
+    }
+
+    func loadMoreHistory() {
+        if let downloadedArchive {
+            downloadedVisibleCount = min(
+                downloadedVisibleCount + ThingtimeWatchNotificationHistory.pageSize,
+                downloadedArchive.notifications.count
+            )
+            historyNotifications = Array(downloadedArchive.notifications.prefix(downloadedVisibleCount))
+            historyStatusMessage = "Showing \(historyNotifications.count) of \(downloadedArchive.notifications.count) downloaded notifications."
+            return
+        }
+        guard let cursor = historyNextCursor else { return }
+        requestHistoryPage(cursor: cursor)
+    }
+
+    func downloadHistory(from: String, to: String) {
+        let request = ThingtimeWatchNotificationHistoryRequest(
+            requestId: UUID().uuidString.lowercased(),
+            target: .range,
+            from: from,
+            to: to,
+            cursor: nil,
+            limit: ThingtimeWatchNotificationHistory.pageSize
+        )
+        activeHistoryRequestId = request.requestId
+        activeHistoryFrom = from
+        activeHistoryTo = to
+        historyIsLoading = true
+        historyStatusMessage = "Downloading the full period from your iPhone…"
+        sendHistoryRequest(request, archive: true)
     }
 
     func requestPairing() {
@@ -42,12 +119,11 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     }
 
     func markRead(id: String) {
-        guard let index = snapshot.notifications.firstIndex(where: { $0.id == id }) else { return }
-        let current = snapshot.notifications[index]
+        let current = snapshot.notifications.first(where: { $0.id == id }) ?? historyNotifications.first(where: { $0.id == id })
+        guard let current else { return }
         guard current.isUnread else { return }
 
-        var notifications = snapshot.notifications
-        notifications[index] = ThingtimeWatchNotification(
+        let updated = ThingtimeWatchNotification(
             id: current.id,
             type: current.type,
             actorUsername: current.actorUsername,
@@ -58,14 +134,133 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             readAt: ISO8601DateFormatter().string(from: Date()),
             createdAt: current.createdAt
         )
+        let notifications = snapshot.notifications.map { $0.id == id ? updated : $0 }
+        historyNotifications = historyNotifications.map { $0.id == id ? updated : $0 }
+        if let archive = downloadedArchive {
+            let updatedArchive = ThingtimeWatchNotificationArchive(
+                requestId: archive.requestId,
+                from: archive.from,
+                to: archive.to,
+                downloadedAt: archive.downloadedAt,
+                notifications: archive.notifications.map { $0.id == id ? updated : $0 }
+            )
+            downloadedArchive = updatedArchive
+            try? Self.persistNotificationArchive(updatedArchive)
+        }
         snapshot = ThingtimeWatchSnapshot(
             authenticated: true,
             unreadCount: max(0, snapshot.unreadCount - 1),
             notifications: notifications,
+            nextCursor: snapshot.nextCursor,
             syncedAt: snapshot.syncedAt,
             message: nil
         )
         send(["kind": "mark-read", "ids": [id]], guaranteed: true)
+    }
+
+    private func requestHistoryPage(cursor: String?) {
+        guard let from = activeHistoryFrom, let to = activeHistoryTo else { return }
+        let request = ThingtimeWatchNotificationHistoryRequest(
+            requestId: UUID().uuidString.lowercased(),
+            target: .range,
+            from: from,
+            to: to,
+            cursor: cursor,
+            limit: ThingtimeWatchNotificationHistory.pageSize
+        )
+        activeHistoryRequestId = request.requestId
+        historyIsLoading = true
+        historyStatusMessage = cursor == nil ? "Fetching the first 10…" : "Fetching 10 more…"
+        sendHistoryRequest(request, archive: false)
+    }
+
+    private func sendHistoryRequest(_ request: ThingtimeWatchNotificationHistoryRequest, archive: Bool) {
+        do {
+            let message = try archive
+                ? ThingtimeWatchNotificationHistory.archiveRequestMessage(request)
+                : ThingtimeWatchNotificationHistory.requestMessage(request)
+            sendInteractiveOrGuaranteed(message)
+        } catch {
+            historyIsLoading = false
+            historyStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func sendInteractiveOrGuaranteed(_ message: [String: Any]) {
+        guard let session else {
+            historyIsLoading = false
+            historyStatusMessage = "This Watch can’t connect to its paired iPhone."
+            return
+        }
+        guard session.isReachable else {
+            session.transferUserInfo(message)
+            historyStatusMessage = "Queued for your iPhone. Open Thingtime there to continue."
+            return
+        }
+        session.sendMessage(message, replyHandler: nil) { error in
+            session.transferUserInfo(message)
+#if DEBUG
+            print("[ThingtimeWatchStore] immediate history request failed: \(error.localizedDescription)")
+#endif
+        }
+    }
+
+    private func applyHistoryPage(_ message: [String: Any]) {
+        do {
+            guard let page = try ThingtimeWatchNotificationHistory.page(from: message),
+                  page.requestId == activeHistoryRequestId else { return }
+            historyIsLoading = false
+            if page.target == .inbox {
+                let existing = Set(snapshot.notifications.map(\.id))
+                let appended = snapshot.notifications + page.notifications.filter { !existing.contains($0.id) }
+                snapshot = ThingtimeWatchSnapshot(
+                    authenticated: true,
+                    unreadCount: page.unreadCount,
+                    notifications: appended,
+                    nextCursor: page.nextCursor,
+                    syncedAt: ISO8601DateFormatter().string(from: Date()),
+                    message: nil
+                )
+                historyStatusMessage = page.notifications.isEmpty ? "No older notifications." : "Loaded \(page.notifications.count) older notifications."
+                return
+            }
+
+            let existing = Set(historyNotifications.map(\.id))
+            historyNotifications.append(contentsOf: page.notifications.filter { !existing.contains($0.id) })
+            historyNextCursor = page.nextCursor
+            historyStatusMessage = page.notifications.isEmpty
+                ? "No notifications in this period."
+                : "Showing \(historyNotifications.count) notification\(historyNotifications.count == 1 ? "" : "s")."
+        } catch {
+            historyIsLoading = false
+            historyStatusMessage = "Thingtime sent an unreadable history page."
+        }
+    }
+
+    private func applyHistoryError(_ message: [String: Any]) {
+        guard message[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.errorKind,
+              message["requestId"] as? String == activeHistoryRequestId else { return }
+        historyIsLoading = false
+        historyStatusMessage = message["message"] as? String ?? "Notification history could not be fetched."
+    }
+
+    private func applyDownloadedArchive(_ archive: ThingtimeWatchNotificationArchive) {
+        guard activeHistoryRequestId == nil || activeHistoryRequestId == archive.requestId else { return }
+        activeHistoryRequestId = archive.requestId
+        activeHistoryFrom = archive.from
+        activeHistoryTo = archive.to
+        downloadedArchive = archive
+        downloadedHistoryCount = archive.notifications.count
+        downloadedVisibleCount = min(ThingtimeWatchNotificationHistory.pageSize, archive.notifications.count)
+        historyNotifications = Array(archive.notifications.prefix(downloadedVisibleCount))
+        historyNextCursor = nil
+        historyIsLoading = false
+        historyStatusMessage = "Downloaded \(archive.notifications.count) notification\(archive.notifications.count == 1 ? "" : "s") for offline viewing."
+    }
+
+    private func restoreLatestNotificationArchive() {
+        guard let archive = Self.loadLatestNotificationArchive() else { return }
+        applyDownloadedArchive(archive)
     }
 
     func enableAlerts() async {
@@ -217,6 +412,49 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         }
     }
 
+    nonisolated private static var notificationArchiveDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("NotificationArchives", isDirectory: true)
+    }
+
+    nonisolated private static func persistNotificationArchive(_ file: WCSessionFile) throws -> ThingtimeWatchNotificationArchive {
+        guard file.metadata?[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.archiveFileKind else {
+            throw ThingtimeWatchNotificationHistoryError.invalidRequest
+        }
+        let data = try Data(contentsOf: file.fileURL)
+        let archive = try JSONDecoder().decode(ThingtimeWatchNotificationArchive.self, from: data)
+        guard UUID(uuidString: archive.requestId) != nil,
+              archive.notifications.count <= ThingtimeWatchNotificationHistory.maximumArchiveNotifications,
+              file.metadata?["requestId"] as? String == archive.requestId,
+              file.metadata?["from"] as? String == archive.from,
+              file.metadata?["to"] as? String == archive.to,
+              (file.metadata?["count"] as? NSNumber)?.intValue == archive.notifications.count else {
+            throw ThingtimeWatchNotificationHistoryError.invalidRequest
+        }
+        try persistNotificationArchive(archive)
+        return archive
+    }
+
+    nonisolated private static func persistNotificationArchive(_ archive: ThingtimeWatchNotificationArchive) throws {
+        try FileManager.default.createDirectory(at: notificationArchiveDirectory, withIntermediateDirectories: true)
+        let destination = notificationArchiveDirectory.appendingPathComponent(archive.requestId).appendingPathExtension("json")
+        try JSONEncoder().encode(archive).write(to: destination, options: .atomic)
+    }
+
+    nonisolated private static func loadLatestNotificationArchive() -> ThingtimeWatchNotificationArchive? {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: notificationArchiveDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return nil }
+        let latest = urls.filter { $0.pathExtension == "json" }.max {
+            let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return left < right
+        }
+        guard let latest, let data = try? Data(contentsOf: latest) else { return nil }
+        return try? JSONDecoder().decode(ThingtimeWatchNotificationArchive.self, from: data)
+    }
+
     nonisolated private static var attachmentQueueDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("WatchAttachmentQueue", isDirectory: true)
@@ -283,8 +521,12 @@ extension ThingtimeWatchStore: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         Task { @MainActor in
-            if userInfo["kind"] as? String == ThingtimeWatchAttachmentTransfer.resultKind {
+            if userInfo[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchAttachmentTransfer.resultKind {
                 self.applyAttachmentResult(userInfo)
+            } else if userInfo[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.pageKind {
+                self.applyHistoryPage(userInfo)
+            } else if userInfo[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.errorKind {
+                self.applyHistoryError(userInfo)
             } else {
                 self.apply(userInfo)
             }
@@ -293,8 +535,25 @@ extension ThingtimeWatchStore: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         Task { @MainActor in
-            if message["kind"] as? String == ThingtimeWatchAttachmentTransfer.resultKind {
+            if message[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchAttachmentTransfer.resultKind {
                 self.applyAttachmentResult(message)
+            } else if message[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.pageKind {
+                self.applyHistoryPage(message)
+            } else if message[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.errorKind {
+                self.applyHistoryError(message)
+            }
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?[ThingtimeWatchWire.kindKey] as? String == ThingtimeWatchNotificationHistory.archiveFileKind else { return }
+        do {
+            let archive = try Self.persistNotificationArchive(file)
+            Task { @MainActor in self.applyDownloadedArchive(archive) }
+        } catch {
+            Task { @MainActor in
+                self.historyIsLoading = false
+                self.historyStatusMessage = "The downloaded notification archive was invalid."
             }
         }
     }

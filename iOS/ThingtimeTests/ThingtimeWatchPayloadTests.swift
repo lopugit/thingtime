@@ -72,4 +72,45 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
         XCTAssertFalse(ThingtimeWatchUploadRequirements.satisfies(actual: "2.0.0", minimum: "1.0.0"))
         XCTAssertFalse(ThingtimeWatchUploadRequirements.satisfies(actual: "latest", minimum: "1.0.0"))
     }
+
+    func testNotificationHistoryRequestAndPageRoundTrip() throws {
+        let request = ThingtimeWatchNotificationHistoryRequest(
+            requestId: "5b36db4d-2e2b-44fe-a21e-23aeef7c9a22",
+            target: .range,
+            from: "2026-09-01T00:00:00.000Z",
+            to: "2026-09-03T00:00:00.000Z",
+            cursor: "opaque-cursor",
+            limit: 10
+        )
+        let requestMessage = try ThingtimeWatchNotificationHistory.requestMessage(request)
+        XCTAssertEqual(
+            try ThingtimeWatchNotificationHistory.request(
+                from: requestMessage,
+                kind: ThingtimeWatchNotificationHistory.requestKind
+            ),
+            request
+        )
+
+        let page = ThingtimeWatchNotificationHistoryPage(
+            requestId: request.requestId,
+            target: .range,
+            from: request.from,
+            to: request.to,
+            notifications: [],
+            unreadCount: 3,
+            nextCursor: "next-page"
+        )
+        XCTAssertEqual(
+            try ThingtimeWatchNotificationHistory.page(
+                from: ThingtimeWatchNotificationHistory.pageMessage(page)
+            ),
+            page
+        )
+    }
+
+    func testNotificationArchiveIsBoundedAndCapabilityGated() {
+        XCTAssertEqual(ThingtimeWatchNotificationHistory.pageSize, 10)
+        XCTAssertEqual(ThingtimeWatchNotificationHistory.maximumArchiveNotifications, 500)
+        XCTAssertEqual(ThingtimeWatchNotificationHistory.minimumVersions["api.notifications-list"], "1.1.0")
+    }
 }

@@ -24,6 +24,7 @@ const MAX_PREVIEW_CHARS = 140;
 const MAX_NOTIFICATIONS_PER_USER = 500;
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
+const MAX_CURSOR_CHARS = 512;
 
 export type NotificationActor = {
   id: string;
@@ -203,18 +204,88 @@ export type ListNotificationsResult = {
   notifications: PublicNotification[];
   unreadCount: number;
   nextBefore: string | null;
+  nextCursor: string | null;
 };
 
-export const listNotifications = async (userId: string, options: { limit?: unknown; before?: unknown } = {}): Promise<ListNotificationsResult> => {
+export type NotificationListOptions = {
+  limit?: unknown;
+  before?: unknown;
+  cursor?: unknown;
+  from?: unknown;
+  to?: unknown;
+};
+
+type NormalizedNotificationListOptions = {
+  limit: number;
+  before: Date | null;
+  cursor: { createdAt: Date; shareId: string } | null;
+  from: Date | null;
+  to: Date | null;
+};
+
+const parseOptionalDate = (value: unknown): Date | null | undefined => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.length > 64) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : new Date(timestamp);
+};
+
+export const notificationCursorFor = (createdAt: Date, shareId: string): string =>
+  Buffer.from(JSON.stringify({ createdAt: createdAt.toISOString(), shareId }), 'utf8').toString('base64url');
+
+const parseNotificationCursor = (value: unknown): NormalizedNotificationListOptions['cursor'] | undefined => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.length > MAX_CURSOR_CHARS) return undefined;
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>;
+    if (Object.keys(decoded).some((key) => key !== 'createdAt' && key !== 'shareId')) return undefined;
+    const createdAt = parseOptionalDate(decoded.createdAt);
+    const shareId = typeof decoded.shareId === 'string' ? decoded.shareId.trim() : '';
+    if (!createdAt || !shareId || shareId.length > 128) return undefined;
+    return { createdAt, shareId };
+  } catch {
+    return undefined;
+  }
+};
+
+export const notificationCursorClauseFor = (cursor: { createdAt: Date; shareId: string }) => ({
+  $or: [
+    { createdAt: { $lt: cursor.createdAt } },
+    { createdAt: cursor.createdAt, shareId: { $gt: cursor.shareId } }
+  ]
+});
+
+export const normalizeNotificationListOptions = (
+  options: NotificationListOptions = {}
+): { ok: true; value: NormalizedNotificationListOptions } | { ok: false; error: string } => {
   const limitRaw = Number(options.limit);
-	const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_LIST_LIMIT) : DEFAULT_LIST_LIMIT;
-	const before = typeof options.before === 'string' && !Number.isNaN(Date.parse(options.before)) ? new Date(options.before) : null;
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_LIST_LIMIT) : DEFAULT_LIST_LIMIT;
+  const before = parseOptionalDate(options.before);
+  const from = parseOptionalDate(options.from);
+  const to = parseOptionalDate(options.to);
+  const cursor = parseNotificationCursor(options.cursor);
+  if (before === undefined) return { ok: false, error: 'before must be a valid date' };
+  if (from === undefined) return { ok: false, error: 'from must be a valid date' };
+  if (to === undefined) return { ok: false, error: 'to must be a valid date' };
+  if (cursor === undefined) return { ok: false, error: 'cursor is invalid' };
+  if (before && cursor) return { ok: false, error: 'Pass before or cursor, not both' };
+  if (from && to && from.getTime() >= to.getTime()) return { ok: false, error: 'from must be earlier than to' };
+  return { ok: true, value: { limit, before, cursor, from, to } };
+};
+
+export const listNotifications = async (
+  userId: string,
+  options: NotificationListOptions = {}
+): Promise<ListNotificationsResult | { ok: false; status: 400; error: string }> => {
+  const normalized = normalizeNotificationListOptions(options);
+  if (normalized.ok === false) return { ok: false, status: 400, error: normalized.error };
+  const { limit, before, cursor, from, to } = normalized.value;
 
   const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(userId));
   // Push master off = the bell goes quiet entirely (list AND badge), without
   // touching the stored per-type switches.
   if (!prefs.masters.push) {
-    return { ok: true, notifications: [], unreadCount: 0, nextBefore: null };
+    return { ok: true, notifications: [], unreadCount: 0, nextBefore: null, nextCursor: null };
   }
   const disabled = Object.entries(prefs.push)
     .filter(([, enabled]) => enabled === false)
@@ -223,10 +294,23 @@ export const listNotifications = async (userId: string, options: { limit?: unkno
   const base: Record<string, any> = { thingtime: 'notification', ownerId: userId };
   if (disabled.length) base['crystal.type'] = { $nin: disabled };
 
+  const clauses: Record<string, any>[] = [base];
+  if (from || to) {
+    clauses.push({
+      createdAt: {
+        ...(from ? { $gte: from } : {}),
+        ...(to ? { $lt: to } : {})
+      }
+    });
+  }
+  if (before) clauses.push({ createdAt: { $lt: before } });
+  if (cursor) clauses.push(notificationCursorClauseFor(cursor));
+  const pageFilter = clauses.length === 1 ? base : { $and: clauses };
+
   const things = await getThingsCollection();
   const [docs, unreadCount] = await Promise.all([
     things
-      .find((before ? { ...base, createdAt: { $lt: before } } : base) as any)
+      .find(pageFilter as any)
       .sort({ createdAt: -1, shareId: 1 })
       .limit(limit)
       .toArray(),
@@ -253,7 +337,10 @@ export const listNotifications = async (userId: string, options: { limit?: unkno
   });
 
 	const nextBefore = docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
-  return { ok: true, notifications, unreadCount, nextBefore };
+  const nextCursor = docs.length === limit
+    ? notificationCursorFor(new Date((docs as any[])[docs.length - 1].createdAt), String((docs as any[])[docs.length - 1].shareId))
+    : null;
+  return { ok: true, notifications, unreadCount, nextBefore, nextCursor };
 };
 
 export const markNotificationsRead = async (

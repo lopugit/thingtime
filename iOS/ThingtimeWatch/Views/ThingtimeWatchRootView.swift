@@ -73,6 +73,14 @@ struct ThingtimeWatchRootView: View {
                     }
                 }
 
+                Section("Notifications") {
+                    NavigationLink {
+                        ThingtimeWatchNotificationHistoryView()
+                    } label: {
+                        Label("Notification history", systemImage: "calendar.badge.clock")
+                    }
+                }
+
                 if store.snapshot.notifications.isEmpty {
                     ContentUnavailableView("All caught up", systemImage: "rainbow", description: Text("New Thingtime notifications will appear here."))
                 } else {
@@ -83,6 +91,13 @@ struct ThingtimeWatchRootView: View {
                             NotificationRow(notification: notification)
                         }
                         .buttonStyle(.plain)
+                    }
+
+                    if store.canLoadOlderInbox {
+                        Button("Load previous 10") {
+                            store.requestOlderNotifications()
+                        }
+                        .disabled(store.historyIsLoading)
                     }
                 }
 
@@ -115,8 +130,9 @@ struct ThingtimeWatchRootView: View {
     }
 }
 
-private struct NotificationRow: View {
+struct NotificationRow: View {
     let notification: ThingtimeWatchNotification
+    var showsDate = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -138,12 +154,25 @@ private struct NotificationRow: View {
                         .font(.caption2)
                         .lineLimit(2)
                 }
+                if showsDate {
+                    Text(notification.createdAt.formattedNotificationDate)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notification.displayActor) \(notification.actionText)")
         .accessibilityHint(notification.isUnread ? "Marks this notification as read" : "Already read")
+    }
+}
+
+private extension String {
+    var formattedNotificationDate: String {
+        guard let date = ISO8601DateFormatter().date(from: self) else { return self }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
