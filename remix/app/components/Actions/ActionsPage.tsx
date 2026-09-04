@@ -95,9 +95,24 @@ export const ActionCard = ({
 							reads {schema === '*' ? 'things' : displayRef(schema, schemaNames)}
 						</ActionChip>
 					))}
+					{effects.publicReads.map((schema) => (
+						<ActionChip key={`pr-${schema}`} size={size} tone="read">
+							reads everyone’s public {displayRef(schema, schemaNames)}
+						</ActionChip>
+					))}
+					{effects.systemReads.map((schema) => (
+						<ActionChip key={`sr-${schema}`} size={size} tone="read">
+							reads the platform’s {displayRef(schema, schemaNames)}
+						</ActionChip>
+					))}
 					{effects.updates ? (
 						<ActionChip size={size} tone="write">
 							updates things
+						</ActionChip>
+					) : null}
+					{effects.deletes ? (
+						<ActionChip size={size} tone="danger">
+							deletes things
 						</ActionChip>
 					) : null}
 					{effects.invokes.map((key) => (

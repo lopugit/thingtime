@@ -133,6 +133,13 @@ export function useApi() {
           // the Saved library cache can carry private/circle posts the
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
+          // builder-page source results are whole action results run AS the
+          // viewer (their orders, their expense rows, their trainer) cached to
+          // paint /p/<page> without a spinner — the same shared-browser rule.
+          // The keys carry the viewer id, so a stale line can no longer be
+          // READ by the next account; dropping them here also stops it
+          // outliving the session that authorized it on disk.
+          clearLocalCachePrefix('tt-page-source:');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

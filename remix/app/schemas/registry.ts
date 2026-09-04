@@ -15,7 +15,7 @@
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
-import { EXPRESSION_CATALOGUE, MAX_EXPRESSION_ARGS, isLambdaArg } from './actionExpressions.ts';
+import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -371,6 +371,13 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   lopuCredentials: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
+  // CI control-plane satellite (api/utils/ciControl): every ci-* Thing —
+  // current-state projections AND the append-only ci-event history — lives
+  // here, NOT in `things`. Machine-written webhook telemetry arrives at
+  // hundreds of thousands of rows per day and must never share a collection
+  // (or its ~60-index write amplification and wildcard text index) with user
+  // content. Rows carry root `expiresAt` retention (ciControl/retentionCore.ts).
+  ciControl: 1,
   email_events: 1,
   email_templates: 1,
   email_subscriptions: 1,
@@ -1286,7 +1293,23 @@ export const MAX_ACTION_SEARCH_WHERE_KEYS = 8;
 export const MAX_ACTION_SEARCH_MATCH_KEYS = 4;
 export const MAX_ACTION_SEARCH_MATCH_CHARS = 120;
 export const MAX_ACTION_EACH_ITEMS = 20;
-export const ACTION_SEARCH_SCOPES = ['own', 'public'] as const;
+// A search reads ONE of three corpora. 'own' and 'public' differ only in
+// whose docs they match; 'system' is a different KIND of source and exists
+// because "public" is not the same claim as "platform-authored".
+//
+// Seeded app content (StarsAlign's school entries, Pokeworld's species) is
+// public data things, so a `public` search finds it — but it also finds
+// every OTHER public data thing carrying the same schema stamp, and
+// `crystal.schema` is a free-form convention field on the open `data`
+// crystal: any signed-in account can create a public data thing naming a
+// public schema (createThing only checks that a supplied `schemaId` resolves
+// to a schema the writer can SEE, and a seeded schema is world-readable).
+// A platform action reading its own seeded corpus in `public` scope
+// therefore reads a corpus strangers can write into: with the default
+// newest-first sort and `limit: 1`, the newest forged row wins and every
+// viewer of that app page reads it. 'system' pins `ownerId: 'system'` so a
+// program that means "the rows the seed wrote" says exactly that.
+export const ACTION_SEARCH_SCOPES = ['own', 'public', 'system'] as const;
 export const ACTION_SEARCH_SORT_DIRECTIONS = ['asc', 'desc'] as const;
 export const ACTION_SEARCH_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,59}$/;
 export const MAX_ACTION_TRACE_ENTRIES = 60;
@@ -1775,7 +1798,8 @@ const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-e
     'A private, system-owned control-plane projection written only by signed GitHub/Vercel webhook ingestion, ' +
     'an administrator reconciliation, or an allowlisted administrator dispatch. The deterministic shareId ' +
     'keeps one current projection per external entity; status changes are stored separately as relational ' +
-    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it.',
+    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it. ' +
+    'Stored in the ciControl satellite collection (never in things); activity rows carry root expiresAt retention.',
   createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
   fields: [
     { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Authoritative provider.' },
@@ -1856,7 +1880,8 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail:
       'A relational audit record keyed by provider delivery id and parent entity. Events are append-only and ' +
       'bounded; retries of the same signed webhook do not duplicate history. Generic Thing CRUD cannot create, ' +
-      'edit, or delete it.',
+      'edit, or delete it. Stored in the ciControl satellite collection with root expiresAt retention ' +
+      '(THINGTIME_CI_EVENT_RETENTION_DAYS, default 14); a delivery that changes nothing on the repository row records no event.',
     createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
     fields: [
       { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Event provider.' },
@@ -4873,7 +4898,7 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope
 			return fail(400, `Step ${stepIndex} ttExpr needs [fn, ...args] with at most ${MAX_EXPRESSION_ARGS} args`);
 		}
 		const fn = typeof expression[0] === 'string' ? expression[0] : '';
-		const signature = EXPRESSION_CATALOGUE[fn];
+		const signature = catalogueSignature(fn);
 		if (!signature) {
 			return fail(400, `Step ${stepIndex} ttExpr names an unknown function "${String(expression[0]).slice(0, 40)}" (the catalogue is closed)`);
 		}
@@ -5154,15 +5179,16 @@ const sanitizeActionSteps = (
 				}
 				step.offset = offset;
 			}
-			// scope: 'own' (default — the invoker's own data things) or
-			// 'public' (tt:all data things, which REQUIRES a schema so a public
-			// search can never be the whole public corpus)
+			// scope: 'own' (default — the invoker's own data things), 'public'
+			// (tt:all data things from anyone) or 'system' (tt:all data things
+			// the SEED owns). The two non-own scopes REQUIRE a schema so a
+			// cross-owner search can never be the whole corpus.
 			if (raw.scope !== undefined && raw.scope !== null) {
 				const scope = typeof raw.scope === 'string' ? raw.scope : '';
 				if (!(ACTION_SEARCH_SCOPES as readonly string[]).includes(scope)) {
-					return fail(400, `Step ${stepIndex} scope must be ${ACTION_SEARCH_SCOPES.join(' or ')}`);
+					return fail(400, `Step ${stepIndex} scope must be ${ACTION_SEARCH_SCOPES.join(', ')}`);
 				}
-				if (scope === 'public' && typeof step.schema !== 'string') return fail(400, `Step ${stepIndex} public searches must name a schema`);
+				if (scope !== 'own' && typeof step.schema !== 'string') return fail(400, `Step ${stepIndex} ${scope} searches must name a schema`);
 				step.scope = scope;
 			}
 			// where: equality on crystal fields; match: case-insensitive substring
@@ -5260,10 +5286,13 @@ export type ActionEffects = {
 	computes: boolean;
 	// schemas searched across OTHER people's public data things
 	publicReads: string[];
+	// schemas searched across the SEED's own public data things — platform
+	// content, so a narrower claim than publicReads and worth its own chip
+	systemReads: string[];
 };
 
 export const deriveActionEffects = (steps: unknown): ActionEffects => {
-	const effects: ActionEffects = { creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [] };
+	const effects: ActionEffects = { creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
 	if (!Array.isArray(steps)) return effects;
 	for (const entry of steps) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -5277,6 +5306,9 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		// a public-scope search reads OTHER people's public data things of that
 		// schema — a distinct disclosure from "reads your own"
 		if (step.op === 'things.search' && step.scope === 'public' && schema && !effects.publicReads.includes(schema)) effects.publicReads.push(schema);
+		// a system-scope search reads only what the SEED wrote — no stranger's
+		// row can enter that corpus, so it is not a public-corpus disclosure
+		if (step.op === 'things.search' && step.scope === 'system' && schema && !effects.systemReads.includes(schema)) effects.systemReads.push(schema);
 		if (step.op === 'things.update') effects.updates = true;
 		if (step.op === 'things.delete') effects.deletes = true;
 		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {

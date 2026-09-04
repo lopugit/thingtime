@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router';
 
+import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
@@ -85,6 +86,27 @@ const MAX_QUERY_KEYS = 32;
 const MAX_QUERY_VALUE_CHARS = 200;
 const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 
+// A shared-load entry only earns its keep for the SIBLING blocks that ask for
+// the same key in the same beat, and one page draws at most
+// MAX_WEBPAGE_BLOCKS of them. The version reset below is not on its own a
+// bound: an `interval` source varies its key every tick (and a manual refetch
+// on every press) WITHOUT moving the runtime version, so on a page that never
+// runs a control — a clock, a live tally — the map would keep one entry, and
+// the whole action result it retains, for every tick of the session. Evict
+// oldest-first past a full page's worth of live blocks: the burst of loads for
+// one version is a single render pass, so no sibling can lose an entry it is
+// still waiting on, and the worst case past the cap is one duplicate request.
+export const MAX_SHARED_SOURCE_LOADS = MAX_WEBPAGE_BLOCKS;
+
+export const evictSharedLoads = <T,>(promises: Map<string, T>, max: number = MAX_SHARED_SOURCE_LOADS): void => {
+	// Map iterates in insertion order, so the first key is always the oldest
+	while (promises.size > max) {
+		const oldest = promises.keys().next();
+		if (oldest.done) return;
+		promises.delete(oldest.value);
+	}
+};
+
 // URL search params as a bounded string map: templates read `{query.id}`,
 // source inputs interpolate `{query.<name>}`. Values are plain strings —
 // they only ever become action INPUTS, which the executor validates.
@@ -158,6 +180,7 @@ export const WebpageRuntimeProvider = ({
 			if (existing) return existing;
 			const promise = fetcher();
 			store.promises.set(key, promise);
+			evictSharedLoads(store.promises);
 			return promise;
 		},
 		[version]
@@ -196,25 +219,45 @@ export const WebpageRuntimeProvider = ({
 
 // The localStorage tier for source results — optimistic paint on the next
 // visit (house rule: never flash a loading state when a last-known value
-// exists). Keys are per page + block so two apps never share a cache line.
-const CACHE_PREFIX = 'tt-page-source:';
+// exists). Keys are per VIEWER + page + block, so two apps never share a
+// cache line AND two people never do.
+//
+// The viewer segment is the privacy bar, not a nicety. A source result is the
+// signed-in viewer's OWN private data — their orders, their expense rows,
+// their trainer, a natal chart derived from their birth details — and /p/ is
+// a shared public URL. `useThingSource` seeds its state from this cache in a
+// lazy initializer, BEFORE it knows whether the viewer is signed in and
+// before any fetch can replace it, so a page-scoped key would paint the last
+// signed-in viewer's data to whoever opens that page next on the same
+// browser: the signed-out visitor, or the next account on a shared machine.
+// Keyed by viewer, a cache line is only ever readable by the person who
+// filled it; no viewer means no cache line at all (the builder canvas and
+// gallery thumbnails render outside a provider and simply fetch).
+// Sign-out additionally drops these keys (hooks/useApi logout), the same
+// shared-browser rule the tt-activity-/tt-saved- caches follow.
+export const SOURCE_CACHE_PREFIX = 'tt-page-source:';
 
-export const readSourceCache = (pageId: string | null, blockId: string): unknown => {
-	if (!pageId || typeof window === 'undefined') return undefined;
+export const sourceCacheKey = (viewerId: string | null, pageId: string | null, blockId: string): string | null =>
+	viewerId && pageId && blockId ? `${SOURCE_CACHE_PREFIX}${viewerId}:${pageId}:${blockId}` : null;
+
+export const readSourceCache = (viewerId: string | null, pageId: string | null, blockId: string): unknown => {
+	const key = sourceCacheKey(viewerId, pageId, blockId);
+	if (!key || typeof window === 'undefined') return undefined;
 	try {
-		const raw = window.localStorage.getItem(`${CACHE_PREFIX}${pageId}:${blockId}`);
+		const raw = window.localStorage.getItem(key);
 		return raw ? JSON.parse(raw) : undefined;
 	} catch {
 		return undefined;
 	}
 };
 
-export const writeSourceCache = (pageId: string | null, blockId: string, value: unknown): void => {
-	if (!pageId || typeof window === 'undefined') return;
+export const writeSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, value: unknown): void => {
+	const key = sourceCacheKey(viewerId, pageId, blockId);
+	if (!key || typeof window === 'undefined') return;
 	try {
 		const encoded = JSON.stringify(value);
 		if (encoded.length > 256 * 1024) return;
-		window.localStorage.setItem(`${CACHE_PREFIX}${pageId}:${blockId}`, encoded);
+		window.localStorage.setItem(key, encoded);
 	} catch {
 		// storage full or unavailable — the live fetch still paints
 	}

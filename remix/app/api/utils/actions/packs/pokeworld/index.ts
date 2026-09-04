@@ -444,7 +444,12 @@ export const pokeworldPack: ActionPack = {
 	'pokeworld.catchRoll': ([specArg], context) => {
 		const spec = asRecord('catchRoll', specArg, 'spec');
 		const wild = normalizeMember(spec.wild, 'spec.wild');
-		if (typeof spec.ball !== 'string' || !(spec.ball in BALL_BONUS)) throw fail('catchRoll', 'ball must be poke-ball, great-ball or ultra-ball');
+		// hasOwnProperty, not `in`: `in` walks the prototype chain, so
+		// ball: 'constructor' would clear this guard and then multiply the catch
+		// formula by a function — NaN all the way to a silent "broke free".
+		if (typeof spec.ball !== 'string' || !Object.prototype.hasOwnProperty.call(BALL_BONUS, spec.ball)) {
+			throw fail('catchRoll', 'ball must be poke-ball, great-ball or ultra-ball');
+		}
 		const ball = spec.ball;
 		const player = spec.player === undefined || spec.player === null ? null : normalizeMember(spec.player, 'spec.player');
 		const thrown = `You threw a ${ball.replace(/-/g, ' ').toUpperCase()}!`;

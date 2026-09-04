@@ -8,7 +8,7 @@ import {
 	MAX_COMPONENT_KEY_CHARS,
 	COMPONENT_KEY_PATTERN,
 	validateThingtimeCrystal
-} from './registry';
+} from './registry.ts';
 import {
 	COMPONENT_DEMO_REFS,
 	WEBPAGE_DEMO_FAMILIES,
@@ -21,7 +21,7 @@ import {
 	webpageDemoPageKey,
 	webpageDemoShareId,
 	type DemoBlock
-} from './webpageDemos';
+} from './webpageDemos.ts';
 
 // The library's contract: a few hundred demos, every one of which the real
 // webpage write gate accepts unchanged. A registry bound tightened later fails

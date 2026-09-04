@@ -23,10 +23,13 @@ export const EACH_HARD_CAP = 160;
 
 // REPEAT_HARD_CAP bounds ONE ttRepeat; it does not bound the PRODUCT across
 // nested ones. `{ ttRepeat: { node: … } }` costs 2 levels of template depth
-// and ~3 nodes, so 11 nested repeats still pass the stored-crystal gates in
-// schemas/registry.ts (MAX_SCHEMA_RENDER_DEPTH 24 / _NODES 600 / _BYTES 32Ki)
-// while expanding to 24^11 values here. The renderers' own 600-node budgets
-// cannot help: this resolver materialises the whole tree BEFORE they see it,
+// and ~3 nodes, so the stored-crystal gates in schemas/registry.ts
+// (MAX_SCHEMA_RENDER_DEPTH 48 / _NODES 2000 / _BYTES 48Ki) admit 24 nested
+// repeats — depth binds first — while they expand to 24^24 values here. Those
+// gates were raised for app-screen templates, so this bound grew with them:
+// the budget below is what actually holds the line, not the crystal gates.
+// The renderers' own 600-node budgets cannot help either: this resolver
+// materialises the whole tree BEFORE they see it,
 // so a hostile public component would hang the tab of everyone who opened
 // /components. Resolution therefore carries ONE budget for the entire tree —
 // once spent the remainder is dropped, degrading to a truncated preview
@@ -282,8 +285,16 @@ export const resolveTemplate = (
 		const spec = isPlainObject(template.ttEach) ? template.ttEach : {};
 		const raw = argValue(scope, String(spec.arg));
 		const list: unknown[] = Array.isArray(raw) ? raw : isPlainObject(raw) ? Object.entries(raw).map(([key, value]) => ({ key, value })) : [];
-		const max = Math.min(Number(spec.max) || 0, EACH_HARD_CAP) || EACH_HARD_CAP;
-		const items = list.slice(0, max);
+		// `max` is an optional author hint, and EACH_HARD_CAP is the bound that
+		// has to hold for markup nobody vetted. ttRepeat above floors its count
+		// with Math.max(0, …); this needed the same floor, because `max` lands in
+		// slice() rather than in a loop bound: a NEGATIVE max counts from the END
+		// of the list, so `max: -1` both dropped the last element and iterated
+		// list.length - 1 times — past the cap, with MAX_RESOLVED_VALUES left as
+		// the only guard. Anything that is not a positive integer (absent, 0,
+		// NaN, negative) means "unset" and falls back to the cap.
+		const requested = Math.trunc(Number(spec.max) || 0);
+		const items = list.slice(0, requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP);
 		if (!items.length) return spec.empty === undefined ? undefined : resolveTemplate(spec.empty, scope, budget);
 		const out: unknown[] = [];
 		for (let index = 0; index < items.length; index++) {
