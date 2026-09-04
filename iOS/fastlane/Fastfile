@@ -111,14 +111,15 @@ def upload_testflight_ipa(ipa_path)
     previous_key_directory = ENV["API_PRIVATE_KEYS_DIR"]
     ENV["API_PRIVATE_KEYS_DIR"] = key_directory
     begin
-      sh(
+      output = sh(
         "xcrun", "altool",
-        "--upload-app",
-        "-f", ipa_path,
+        "--upload-package", ipa_path,
         "--platform", "ios",
+        "--apple-id", ENV.fetch("APP_STORE_APP_ID"),
         "--apiKey", ENV.fetch("ASC_KEY_ID"),
         "--apiIssuer", issuer_id
       )
+      UI.user_error!("Apple reported an upload error") if output.match?(/\bERROR:/i)
     ensure
       ENV["API_PRIVATE_KEYS_DIR"] = previous_key_directory
     end
