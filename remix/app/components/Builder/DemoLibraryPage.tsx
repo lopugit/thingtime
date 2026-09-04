@@ -5,36 +5,63 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { BEHAVIOUR_SUITES, materializeSuite, summarizeBehaviourSuite, type BehaviourSuite, type MaterializedSuite } from '~/schemas/behaviourSuites';
-import { ALL_SUITES, APP_SUITE_LIST } from '~/schemas/appSuites/index';
+import { materializeSuite, summarizeBehaviourSuite, type BehaviourSuite, type MaterializedSuite } from '~/schemas/behaviourSuites';
+// the REGISTRY module (not just the lookups): importing it registers the app
+// suites, so the gallery lists Pokeworld and StarsAlign on a cold load
+import { ALL_SUITES } from '~/schemas/appSuites/index';
 import { installSuite as installSuiteThings, installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
 import {
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
 	getWebpageDemos,
-	webpageDemoCrystal,
+	webpageDemoPageKey,
 	webpageDemoShareId,
-	type WebpageDemo,
-	type WebpageDemoKind
+	type WebpageDemo
 } from '~/schemas/webpageDemos';
 import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
-import { WebpageBlocksRenderer, buildComponentsByRef, type ComponentsByRef } from './WebpageBlocksRenderer';
+import { useActionRunConfirm } from '../Actions/ActionRunConfirm';
+import { WebpageBlocksRenderer, buildComponentsByRef, type ComponentsByRef, type WebpageBlocksRendererProps } from './WebpageBlocksRenderer';
+import { WebpageRuntimeProvider } from './webpageRuntime';
+import {
+	KIND_FILTERS,
+	KIND_LABELS,
+	demoDetailHref,
+	demoMatchesSearch,
+	isSuiteKind,
+	parseKindFilter,
+	runtimeIdentityFor,
+	suiteActionNames,
+	suiteComponentsByRef,
+	suiteKindLabel,
+	suiteMatchesSearch,
+	suitesForKind,
+	templateCrystalOf,
+	type KindFilter
+} from './demoDetail';
 import type { WebpageBlock } from './webpageBlocks';
 
 // /builder/demos — the builder DEMO LIBRARY: every catalog demo (sections,
 // full pages, component-block pages) as a live scaled thumbnail, filterable by
-// family/kind/search, plus the BEHAVIOUR SUITES tab (schemas + components +
-// actions + data + page bundles). The catalogs are code
-// (schemas/webpageDemos, schemas/behaviourSuites), so the gallery paints
-// instantly from the modules; GET /api/v1/webpages/demos then reconciles
-// which entries are seeded on this deployment (those open at /p/ and in the
-// builder directly) and hands back the platform library components the
-// component-kind demos reference — the one part of a demo that lives in the
-// DB rather than in code. "Use this template" clones a demo, and "Install suite"
-// clones a whole bundle, into the viewer's own things through the ordinary
-// things write path — the same call the builder's New page makes — so both
-// work before any seed runs and never mutate the shared seed.
+// family/kind/search, plus the BEHAVIOUR SUITES, INTERACTIVE suites, and APPS
+// tabs (schemas + components + actions + data + page bundles). The catalogs
+// are code (schemas/webpageDemos, schemas/behaviourSuites, schemas/appSuites),
+// so the gallery paints instantly from the modules; GET /api/v1/webpages/demos
+// then reconciles which entries are seeded on this deployment (those open at
+// /p/ and in the builder directly) and hands back the platform library
+// components the component-kind demos reference — the one part of a demo that
+// lives in the DB rather than in code. "Use this template" clones a demo, and
+// "Install suite" clones a whole bundle, into the viewer's own things through
+// the ordinary things write path — the same call the builder's New page makes
+// — so both work before any seed runs and never mutate the shared seed.
+//
+// Every card is a LINK to the entry's own page (/builder/demos/<slug>) —
+// browse cards stay inert; the dedicated page (and the Preview modal here)
+// is where a block tree goes live. TRUST RULE for the modal: a catalog-
+// compiled block tree is platform-curated (it is code in this repository,
+// seeded system-owned), so it renders live for any signed-in viewer, with the
+// catalog-side run confirmation and, for suites, run-or-install. Ownership or
+// curation decide interactivity — never markup.
 
 const PAGE_SIZE = 36;
 const THUMB_WIDTH = 760;
@@ -42,10 +69,6 @@ const THUMB_SCALE = 0.42;
 const THUMB_HEIGHT = 200;
 
 type SeededState = { seeded: Set<string>; suites: Set<string>; seededCount: number; total: number };
-
-type KindFilter = WebpageDemoKind | 'all' | 'suite' | 'app';
-
-const KIND_LABELS: Record<KindFilter, string> = { all: 'Everything', section: 'Sections', page: 'Pages', component: 'Component blocks', suite: '🧪 Behaviour suites', app: '📱 Apps' };
 
 type Preview = { kind: 'demo'; demo: WebpageDemo } | { kind: 'suite'; suite: BehaviourSuite; materialized: MaterializedSuite };
 
@@ -62,18 +85,24 @@ const chipSx = (active: boolean) => ({
 	_hover: { background: active ? 'var(--tt-ink, #16161a)' : 'var(--tt-surface-sunken, #f1f1f4)' }
 });
 
-// A suite's controls render from the catalog's own component crystals, so a
-// preview needs no resolve round trip and no seed.
-const suiteComponentsByRef = (materialized: MaterializedSuite): ComponentsByRef => {
-	const out: ComponentsByRef = {};
-	for (const component of materialized.components) out[component.slug] = { id: component.slug, crystal: component.crystal };
-	return out;
-};
+export type DemoBlockList = WebpageDemo['blocks'];
 
-// Scaled live render of a block tree. Mounts once scrolled near the viewport
-// (a few hundred renderers at once would be wasteful) and stays mounted after
-// — no flicker while filtering.
-const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList; background: string; componentsByRef?: ComponentsByRef }) => {
+// Scaled live render of a block tree — INERT (no click wrapper, no runtime),
+// the catalog's picture of a page. Mounts once scrolled near the viewport (a
+// few hundred renderers at once would be wasteful) and stays mounted after —
+// no flicker while filtering. Shared with the dedicated demo page's PREVIEW
+// pane, which is the same picture at a taller height.
+export const DemoThumb = ({
+	blocks,
+	background,
+	componentsByRef,
+	height = THUMB_HEIGHT
+}: {
+	blocks: DemoBlockList;
+	background: string;
+	componentsByRef?: ComponentsByRef;
+	height?: number;
+}) => {
 	const ref = React.useRef<HTMLDivElement | null>(null);
 	const [visible, setVisible] = React.useState(false);
 	// the canvas is laid out at THUMB_WIDTH and scaled to the card: a fixed
@@ -123,7 +152,7 @@ const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList;
 	return (
 		<Box
 			ref={ref}
-			height={`${THUMB_HEIGHT}px`}
+			height={`${height}px`}
 			overflow="hidden"
 			borderRadius="12px"
 			background={background}
@@ -141,7 +170,10 @@ const Thumb = ({ blocks, background, componentsByRef }: { blocks: DemoBlockList;
 	);
 };
 
-type DemoBlockList = WebpageDemo['blocks'];
+// the card title/thumbnail links: real anchors (middle-click and keyboard
+// work) to the entry's own page; the buttons beside them are siblings, not
+// descendants, so they never bubble into the link
+const cardLinkSx = { _hover: { textDecoration: 'none', opacity: 0.92 }, _focusVisible: { outline: '2px solid var(--tt-ink, #16161a)', outlineOffset: '2px', borderRadius: '12px' } };
 
 const DemoCard = ({
 	demo,
@@ -160,14 +192,15 @@ const DemoCard = ({
 }) => {
 	const family = WEBPAGE_DEMO_FAMILIES.find((entry) => entry.key === demo.family);
 	const id = webpageDemoShareId(demo.slug);
+	const href = demoDetailHref(demo.slug);
 	const blockCount = React.useMemo(() => countDemoBlocks(demo.blocks), [demo.blocks]);
 	return (
 		<Flex {...CARD_STYLES} flexDirection="column" rowGap={3} padding={3} minWidth={0} data-testid="demo-card" data-demo-slug={demo.slug}>
-			<Box cursor="pointer" onClick={onPreview} role="button" aria-label={`Preview ${demo.name}`}>
-				<Thumb blocks={demo.blocks} background={demo.previewBg} componentsByRef={componentsByRef} />
+			<Box as={Link} to={href} display="block" aria-label={`Open ${demo.name}`} sx={cardLinkSx} data-testid="demo-card-thumb-link">
+				<DemoThumb blocks={demo.blocks} background={demo.previewBg} componentsByRef={componentsByRef} />
 			</Box>
 			<Flex flexDirection="column" rowGap={1} minWidth={0}>
-				<Text color="var(--tt-ink, #16161a)" fontWeight={700} fontSize="sm" noOfLines={1} minWidth={0}>
+				<Text as={Link} to={href} color="var(--tt-ink, #16161a)" fontWeight={700} fontSize="sm" noOfLines={1} minWidth={0} sx={cardLinkSx} data-testid="demo-card-title-link">
 					{demo.name}
 				</Text>
 				<Flex alignItems="center" columnGap={2} flexWrap="wrap" rowGap={1}>
@@ -206,13 +239,14 @@ const SuiteCard = ({ suite, seeded, onPreview, onInstall, busy }: { suite: Behav
 	const materialized = React.useMemo(() => materializeSuite(suite, 'own'), [suite]);
 	const componentsByRef = React.useMemo(() => suiteComponentsByRef(materialized), [materialized]);
 	const counts = summary.counts;
+	const href = demoDetailHref(suite.key);
 	return (
 		<Flex {...CARD_STYLES} flexDirection="column" rowGap={3} padding={3} minWidth={0} data-testid="suite-card" data-suite-key={suite.key}>
-			<Box cursor="pointer" onClick={onPreview} role="button" aria-label={`Preview ${suite.title} suite`}>
-				<Thumb blocks={materialized.page.crystal.blocks as DemoBlockList} background={String(materialized.page.crystal.previewBg || 'var(--tt-surface, #fafafb)')} componentsByRef={componentsByRef} />
+			<Box as={Link} to={href} display="block" aria-label={`Open ${suite.title}`} sx={cardLinkSx} data-testid="suite-card-thumb-link">
+				<DemoThumb blocks={materialized.page.crystal.blocks as DemoBlockList} background={String(materialized.page.crystal.previewBg || 'var(--tt-surface, #fafafb)')} componentsByRef={componentsByRef} />
 			</Box>
 			<Flex flexDirection="column" rowGap={1} minWidth={0}>
-				<Text color="var(--tt-ink, #16161a)" fontWeight={700} fontSize="sm" noOfLines={1}>
+				<Text as={Link} to={href} color="var(--tt-ink, #16161a)" fontWeight={700} fontSize="sm" noOfLines={1} sx={cardLinkSx} data-testid="suite-card-title-link">
 					{suite.emoji} {suite.title}
 				</Text>
 				<Text color="var(--tt-text, #5a5a66)" fontSize="xs" noOfLines={2}>
@@ -260,6 +294,15 @@ const SuiteCard = ({ suite, seeded, onPreview, onInstall, busy }: { suite: Behav
 	);
 };
 
+const searchPlaceholderFor = (kind: KindFilter): string => {
+	if (kind === 'app') return 'Search apps — pokeworld, starsalign…';
+	if (kind === 'interactive') return 'Search interactive suites — calculator, converter…';
+	if (kind === 'suite') return 'Search suites — guestbook, orders…';
+	return 'Search demos — hero, pricing, ink…';
+};
+
+const suiteNounFor = (kind: KindFilter): string => (kind === 'app' ? 'app' : kind === 'interactive' ? 'interactive suite' : 'suite');
+
 export default function DemoLibraryPage() {
 	const api = useApi();
 	const apiRef = React.useRef(api);
@@ -271,7 +314,8 @@ export default function DemoLibraryPage() {
 
 	const demos = React.useMemo(() => getWebpageDemos(), []);
 	const family = searchParams.get('family') || '';
-	const kind = (searchParams.get('kind') || 'all') as KindFilter;
+	const kind = parseKindFilter(searchParams.get('kind'));
+	const suiteKind = isSuiteKind(kind);
 	const [search, setSearch] = React.useState(searchParams.get('q') || '');
 	const [shown, setShown] = React.useState(PAGE_SIZE);
 	const [seededState, setSeededState] = React.useState<SeededState>({ seeded: new Set(), suites: new Set(), seededCount: 0, total: demos.length });
@@ -347,21 +391,10 @@ export default function DemoLibraryPage() {
 
 	const needle = search.trim().toLowerCase();
 	const filtered = React.useMemo(() => {
-		if (kind === 'suite' || kind === 'app') return [];
-		return demos.filter(
-			(demo) =>
-				(!family || demo.family === family) &&
-				(kind === 'all' || demo.kind === kind) &&
-				(!needle || demo.name.toLowerCase().includes(needle) || demo.tags.some((tag) => tag.includes(needle)) || demo.description.toLowerCase().includes(needle))
-		);
-	}, [demos, family, kind, needle]);
-	const filteredSuites = React.useMemo(
-		() =>
-			kind === 'suite' || kind === 'app'
-				? (kind === 'app' ? APP_SUITE_LIST : BEHAVIOUR_SUITES).filter((suite) => !needle || suite.title.toLowerCase().includes(needle) || suite.description.toLowerCase().includes(needle) || suite.key.includes(needle))
-				: [],
-		[kind, needle]
-	);
+		if (suiteKind) return [];
+		return demos.filter((demo) => (!family || demo.family === family) && (kind === 'all' || demo.kind === kind) && demoMatchesSearch(demo, needle));
+	}, [demos, family, kind, needle, suiteKind]);
+	const filteredSuites = React.useMemo(() => (suiteKind ? suitesForKind(kind, ALL_SUITES).filter((suite) => suiteMatchesSearch(suite, needle)) : []), [kind, needle, suiteKind]);
 
 	const visible = filtered.slice(0, shown);
 
@@ -376,14 +409,9 @@ export default function DemoLibraryPage() {
 		if (!requireUser('use a template')) return;
 		setBusyKey(demo.slug);
 		try {
-			const { pageKey: _pageKey, ...crystal } = webpageDemoCrystal(demo) as Record<string, unknown> & { pageKey?: string };
 			const resp: any = await apiRef.current.v1.things.create({
 				thingtime: ['webpage'],
-				crystal: {
-					...crystal,
-					name: demo.name,
-					...(seededState.seeded.has(demo.slug) ? { forkOf: webpageDemoShareId(demo.slug) } : {})
-				},
+				crystal: templateCrystalOf(demo, { seeded: seededState.seeded.has(demo.slug) }),
 				acl: ['tt:user']
 			});
 			if (!resp?.ok) throw resp;
@@ -402,8 +430,8 @@ export default function DemoLibraryPage() {
 	// ordinary things write path, in dependency order: schemas (their ids
 	// stamp the data), components, actions, data, then the page. The page's
 	// controls then run the viewer's own actions (owner-only resolution).
-	const installSuite = async (suite: BehaviourSuite) => {
-		if (!requireUser('install a suite')) return;
+	const installSuite = async (suite: BehaviourSuite): Promise<boolean> => {
+		if (!requireUser('install a suite')) return false;
 		setBusyKey(`suite:${suite.key}`);
 		try {
 			if (suite.app) {
@@ -418,7 +446,7 @@ export default function DemoLibraryPage() {
 				});
 				setPreview(null);
 				navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`);
-				return;
+				return true;
 			}
 			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
 			const bundle = materializeSuite(suite, 'own');
@@ -431,8 +459,10 @@ export default function DemoLibraryPage() {
 			});
 			setPreview(null);
 			navigate(`/p/${encodeURIComponent(pageId)}`);
+			return true;
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Couldn’t install the suite — try again 🌈', description: err?.error ? undefined : 'Some parts may have been created; check /things.', status: 'error' });
+			return false;
 		} finally {
 			setBusyKey(null);
 		}
@@ -466,6 +496,14 @@ export default function DemoLibraryPage() {
 		[lopu, navigate, preview, scheduleHandoff, seededState.suites, user?.id]
 	);
 
+	// the `$install` pseudo-action a suite page may render (the runtime's
+	// install hook): the same install the button runs, read through a ref so
+	// the hook sees the latest seeded flags without re-creating per render
+	const installSuiteRef = React.useRef(installSuite);
+	installSuiteRef.current = installSuite;
+	const previewSuite = preview?.kind === 'suite' ? preview.suite : null;
+	const onPreviewInstall = React.useCallback(async (): Promise<boolean> => (previewSuite ? installSuiteRef.current(previewSuite) : false), [previewSuite]);
+
 	const seedDemos = async () => {
 		setSeeding(true);
 		try {
@@ -489,6 +527,28 @@ export default function DemoLibraryPage() {
 	);
 	const previewSeeded = preview ? (preview.kind === 'demo' ? seededState.seeded.has(preview.demo.slug) : seededState.suites.has(preview.suite.key)) : false;
 	const previewSeededId = preview ? (preview.kind === 'demo' ? webpageDemoShareId(preview.demo.slug) : preview.materialized.page.shareId) : '';
+	const previewPageKey = preview ? (preview.kind === 'demo' ? webpageDemoPageKey(preview.demo.slug) : String(preview.materialized.page.crystal.pageKey || '')) : '';
+	const previewSlug = preview ? (preview.kind === 'demo' ? preview.demo.slug : preview.suite.key) : '';
+	// the runtime identity of the modal's render: the seeded copy's when it
+	// exists on this deployment, else a catalog: id (see demoDetail.ts)
+	const previewRuntime = runtimeIdentityFor({ pageKey: previewPageKey, shareId: previewSeededId }, previewSeeded);
+	const previewActionNames = React.useMemo(() => (preview?.kind === 'suite' ? suiteActionNames(preview.materialized) : {}), [preview]);
+	// the catalog-side run confirmation: the first press of each control
+	// names what will run before anything executes (ActionRunConfirm)
+	const { confirm: previewConfirm, dialog: previewConfirmDialog } = useActionRunConfirm({
+		resolveActionName: (action) => previewActionNames[action] || null
+	});
+	// `confirm` is not a WebpageBlocksRenderer prop yet — it is threaded here
+	// so the gate arms the moment the renderer forwards it to ComponentBlockView
+	// (useTtActionClicks already accepts it); until then the dialog stays idle
+	const previewRendererProps: WebpageBlocksRendererProps & { confirm: typeof previewConfirm } = {
+		blocks: previewBlocks as WebpageBlock[],
+		componentsByRef: previewComponents,
+		// platform-curated → live for any signed-in viewer (see the header note)
+		interactive: !!user?.id,
+		onTtActionUnowned: preview?.kind === 'suite' ? onPreviewUnowned : undefined,
+		confirm: previewConfirm
+	};
 	const notSeeded = seededState.total + ALL_SUITES.length - seededState.seededCount - seededState.suites.size;
 
 	return (
@@ -496,7 +556,7 @@ export default function DemoLibraryPage() {
 			<PageHeader
 				eyebrow="Thingtime · builder"
 				title="Demo library 🧱✨"
-				subtitle={`${demos.length} example sections, pages, and component compositions, plus ${BEHAVIOUR_SUITES.length} behaviour suites that wire schemas, actions, and controls into working programs — preview any of them, then make it yours with one tap.`}
+				subtitle={`${demos.length} example sections, pages, and component compositions, plus ${ALL_SUITES.length} behaviour suites, interactive suites, and apps that wire schemas, actions, and controls into working programs — open any of them on its own page, preview it live, then make it yours with one tap.`}
 				after={
 					<Flex columnGap={2} alignItems="center">
 						<Button as={Link} to="/builder" size="sm" variant="outline" data-testid="demos-back-to-builder">
@@ -513,7 +573,7 @@ export default function DemoLibraryPage() {
 
 			<Flex flexDirection="column" rowGap={3}>
 				<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
-					{(['all', 'section', 'page', 'component', 'suite', 'app'] as const).map((entry) => (
+					{KIND_FILTERS.map((entry) => (
 						<Button key={entry} size="xs" sx={chipSx(kind === entry)} onClick={() => setParam('kind', entry === 'all' ? '' : entry)} data-testid={`demos-kind-${entry}`}>
 							{KIND_LABELS[entry]}
 						</Button>
@@ -525,16 +585,16 @@ export default function DemoLibraryPage() {
 							setSearch(event.target.value);
 							setShown(PAGE_SIZE);
 						}}
-						placeholder={kind === 'suite' ? 'Search suites — guestbook, orders…' : kind === 'app' ? 'Search apps — pokeworld, starsalign…' : 'Search demos — hero, pricing, ink…'}
+						placeholder={searchPlaceholderFor(kind)}
 						maxWidth="280px"
 						marginLeft={{ base: 0, md: 'auto' }}
 						borderRadius="999px"
 						data-testid="demos-search"
 					/>
 				</Flex>
-				{kind === 'suite' || kind === 'app' ? (
+				{suiteKind ? (
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" data-testid="demos-count">
-						{filteredSuites.length} {kind === 'app' ? 'app' : 'suite'}{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{ALL_SUITES.length} seeded on this deployment
+						{filteredSuites.length} {suiteNounFor(kind)}{filteredSuites.length === 1 ? '' : 's'} · each installs its schemas, controls, actions, sample data, and page into your own things · {seededState.suites.size}/{ALL_SUITES.length} seeded on this deployment
 					</Text>
 				) : (
 					<>
@@ -556,12 +616,17 @@ export default function DemoLibraryPage() {
 				)}
 			</Flex>
 
-			{kind === 'suite' || kind === 'app' ? (
+			{suiteKind ? (
 				filteredSuites.length === 0 ? (
 					<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
 						<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
-							No suite matches 🫧
+							No {suiteNounFor(kind)} matches 🫧
 						</Text>
+						{kind === 'interactive' && !needle ? (
+							<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+								Interactive suites land as they are written — try the behaviour suites or the apps meanwhile.
+							</Text>
+						) : null}
 					</Flex>
 				) : (
 					<Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap={4} data-testid="suites-grid">
@@ -602,7 +667,7 @@ export default function DemoLibraryPage() {
 				</Box>
 			)}
 
-			{kind !== 'suite' && kind !== 'app' && visible.length < filtered.length ? (
+			{!suiteKind && visible.length < filtered.length ? (
 				<Flex justifyContent="center">
 					<Button variant="outline" size="sm" onClick={() => setShown((count) => count + PAGE_SIZE)} data-testid="demos-show-more">
 						Show {Math.min(PAGE_SIZE, filtered.length - visible.length)} more ({filtered.length - visible.length} left)
@@ -616,10 +681,14 @@ export default function DemoLibraryPage() {
 					<ModalHeader paddingBottom={2}>
 						<Flex flexDirection="column" rowGap={1} paddingRight={8}>
 							<Text fontSize="lg" fontWeight={800} color="var(--tt-ink, #16161a)" noOfLines={1}>
-								{preview?.kind === 'demo' ? preview.demo.name : preview ? `${preview.suite.emoji} ${preview.suite.title} · behaviour suite` : ''}
+								{preview?.kind === 'demo' ? preview.demo.name : preview ? `${preview.suite.emoji} ${preview.suite.title} · ${suiteKindLabel(preview.suite)}` : ''}
 							</Text>
 							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" fontWeight={400}>
-								{preview?.kind === 'demo' ? preview.demo.description : preview ? `${preview.suite.description} ${user?.id ? 'Tap a control: it installs the suite as your own programs and runs.' : 'Sign in and tap a control to install the suite as your own programs.'}` : ''}
+								{preview?.kind === 'demo'
+									? `${preview.demo.description} ${user?.id ? 'This preview is live — controls run as you.' : 'Sign in to try its controls live.'}`
+									: preview
+										? `${preview.suite.description} ${user?.id ? 'Tap a control: it installs the suite as your own programs and runs.' : 'Sign in and tap a control to install the suite as your own programs.'}`
+										: ''}
 							</Text>
 							<Flex columnGap={2} rowGap={2} flexWrap="wrap" marginTop={2}>
 								{preview?.kind === 'demo' ? (
@@ -628,7 +697,12 @@ export default function DemoLibraryPage() {
 									</Button>
 								) : preview ? (
 									<Button size="xs" onClick={() => installSuite(preview.suite)} isLoading={busyKey === `suite:${preview.suite.key}`} data-testid="suite-modal-install">
-										Install suite ✨
+										{preview.suite.app ? 'Install app ✨' : 'Install suite ✨'}
+									</Button>
+								) : null}
+								{preview ? (
+									<Button as={Link} to={demoDetailHref(previewSlug)} size="xs" variant="outline" data-testid="preview-open-page">
+										Open its page ↗
 									</Button>
 								) : null}
 								{preview && previewSeeded ? (
@@ -647,14 +721,21 @@ export default function DemoLibraryPage() {
 					<ModalCloseButton />
 					<ModalBody paddingBottom={8} data-testid="demo-modal-body">
 						{preview ? (
-							<Box width="100%" maxWidth="960px" marginX="auto" whiteSpace="normal">
-								<WebpageBlocksRenderer
-									blocks={previewBlocks as WebpageBlock[]}
-									componentsByRef={previewComponents}
-									interactive={preview.kind === 'suite' && !!user?.id}
-									onTtActionUnowned={preview.kind === 'suite' ? onPreviewUnowned : undefined}
-								/>
-							</Box>
+							// the page runtime is what makes source-bound blocks fetch and
+							// refetch after every control run — without it the render is
+							// inert (sources never load, $refresh/$install no-op)
+							<WebpageRuntimeProvider
+								pageId={previewRuntime.pageId}
+								pageKey={previewPageKey || null}
+								suiteKey={preview.kind === 'suite' ? preview.suite.key : null}
+								source={previewRuntime.source}
+								onInstall={preview.kind === 'suite' ? onPreviewInstall : undefined}
+							>
+								<Box width="100%" maxWidth="960px" marginX="auto" whiteSpace="normal" minWidth={0}>
+									<WebpageBlocksRenderer {...previewRendererProps} />
+								</Box>
+								{previewConfirmDialog}
+							</WebpageRuntimeProvider>
 						) : null}
 					</ModalBody>
 				</ModalContent>

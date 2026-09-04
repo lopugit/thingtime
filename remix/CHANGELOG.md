@@ -17,6 +17,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Every card opens a dedicated live page — Claude (AI)
+
+- Grouped summary; details in `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`
+  ("Round 3 — dedicated live pages").
+- **One live-render path**: `useThingSource` + `LiveTemplate`
+  (`remix/app/components/Builder/liveComponent.tsx`) render a component thing
+  live everywhere (builder pages, `/components/:key`, `/thing/:id`, the demo
+  library); `useBlockSource` delegates to it. Source bindings gain
+  `refresh: "interval"` (5s–1h).
+- **Confirm gate**: `useTtActionClicks` accepts an optional `confirm`;
+  `useActionRunConfirm` (`ActionRunConfirm.tsx`) names the action + inputs
+  before a catalog-surface control runs (per-action, per-page-session skip).
+- **New pages**: `/builder/demos/:slug` (demo / suite / app detail with
+  preview + live panes, app pages as tabs, install) and `/schemas/:key`
+  (field tree, render preview, inline create-a-thing, "your things with this
+  shape"). `/components/:key` and `/thing/:id` gain live panes with the
+  ownership/curation trust ladder; `/thing/:id` renders webpages inline.
+- **Cards → pages**: components, demo library, schemas, `/things` tiles and
+  `/actions` cards are real links to their dedicated page; previews stay
+  inert; card buttons keep working in place.
+
 ### 2026-09-02 — App suites: Pokeworld + StarsAlign on Thingtime — Claude (AI)
 
 - Grouped summary; details in `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
