@@ -44,3 +44,16 @@ the rescue.
 
 Merge #578 first, then this PR (or merge this branch into
 `claude/builder-demo-library` to fold round 3 into #578).
+
+## Trust-ladder note (from the rescue's browser pass)
+
+`componentTrustFor` (componentBrowseTypes.ts) grants `seeded` only to a
+system-owned, `component-`-prefixed thing whose `demo-`/`app-` componentKey
+resolves to a suite in `ALL_SUITES`. The local dev database still holds older
+seeded components such as `component-demo-accordion-panel` /
+`demo-hangman-panel` / `demo-tabs-panel` whose keys name suites that no longer
+exist in the registry, so their live pane reads `inert` even for a signed-in
+viewer. That is the ladder failing closed on stale seed data, not a regression
+in this round; components of registered suites (guestbook, rsvp, poll, tasks,
+…) and the viewer's own components take the `platform · live` / `yours · live`
+paths.
