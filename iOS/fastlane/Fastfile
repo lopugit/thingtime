@@ -9,7 +9,7 @@ ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 default_platform(:ios)
 
 SCHEME = "Thingtime"
-OUTPUT_DIRECTORY = "build"
+OUTPUT_DIRECTORY = File.expand_path("../build", __dir__)
 OUTPUT_NAME = "Thingtime.ipa"
 
 def api_key_xcargs
