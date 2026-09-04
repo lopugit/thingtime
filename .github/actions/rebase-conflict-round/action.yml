@@ -287,6 +287,13 @@ runs:
           "$SAFE_TRUSTED_PATH/.github/scripts/lopu-credential-vault.mjs" \
           "$WORKSPACE_PATH/trusted/.github/scripts/"
 
+        # claude-code-action configures its bot identity with repository-local
+        # `git config` before starting Claude. The bounded scratch must remain
+        # detached from the real rebase repository, so give the action an empty
+        # disposable repository solely for that bootstrap contract. It is
+        # removed with the temporary action before scratch verification.
+        git init -q -- "$WORKSPACE_PATH"
+
     - name: Record this mechanically-derived conflict set for the caller
       if: steps.prepare.outcome == 'success'
       shell: bash
@@ -529,7 +536,7 @@ runs:
         # preceding step. It is not a conflict file and must never participate
         # in the exact scratch allowlist comparison (including rounds whose
         # conflicts were all handled deterministically and skipped the model).
-        rm -rf -- "$scratch_abs/trusted"
+        rm -rf -- "$scratch_abs/trusted" "$scratch_abs/.git"
 
     # SECURITY: this post-model verifier is inline in action metadata parsed
     # before Claude starts. It executes no action/workspace script. The model

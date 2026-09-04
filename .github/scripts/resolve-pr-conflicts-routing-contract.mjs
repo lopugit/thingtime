@@ -1767,13 +1767,13 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
-    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"[\s\S]*?classify-claude-credential-failure\.mjs[\s\S]*?lopu-credential-vault\.mjs[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/scripts\/"/u,
-    "the protected nested Lopu action and credential helpers are rematerialized after scratch preparation wipes the workspace",
+    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"[\s\S]*?classify-claude-credential-failure\.mjs[\s\S]*?lopu-credential-vault\.mjs[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/scripts\/"[\s\S]*?git init -q -- "\$WORKSPACE_PATH"/u,
+    "the protected nested Lopu action and credential helpers are rematerialized with a disposable scratch repository",
   );
   assert.match(
     rebaseActionSource,
-    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted"[\s\S]*?Scratch omitted one or more required conflict files/u,
-    "the temporary nested action is discarded before every required-conflict scratch comparison",
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted" "\$scratch_abs\/\.git"[\s\S]*?Scratch omitted one or more required conflict files/u,
+    "the temporary nested action and disposable repository are discarded before every required-conflict scratch comparison",
   );
   assert.match(
     rebaseActionSource,

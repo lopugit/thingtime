@@ -66,4 +66,8 @@ then reached the vault fetch and exposed a second boundary: scratch preparation
 correctly preserved the nested Lopu action, but not the two trusted helper
 scripts that action invokes. Those helpers now participate in every trusted-tree
 hash and safe-copy/restore phase, including rematerialization after the workspace
-is replaced by repo-less conflict scratch.
+is replaced by repo-less conflict scratch. The next live replay reached the
+nested Claude action, which requires a repository-local Git identity bootstrap
+even when the model workspace intentionally contains no real checkout. The
+scratch now receives an empty disposable Git repository for that bootstrap; it
+is removed with the temporary action before the exact allowlist verifier runs.
