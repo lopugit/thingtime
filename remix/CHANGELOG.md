@@ -17,6 +17,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/<n>-claude-session-ffdf75--marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
+
+
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 8).
