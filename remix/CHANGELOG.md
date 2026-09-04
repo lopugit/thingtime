@@ -17,6 +17,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-05 — Re-land hidden 🕵️ links, the PAT GET bridge and custom audiences 🎭 — Claude (AI)
+
+- PRs #413 and #431 merged into their stacked base branches a minute after that base (#411)
+  had merged into develop, so the feature stack never reached develop or main. PR #613
+  re-lands `origin/claude/hidden-links-get-bridge` on current develop; conflict
+  resolutions and the 149-check `verify-pat-tokens.mjs` run are recorded in
+  `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
+- `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
+  (develop's shape) as well as the older array form.
+
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)

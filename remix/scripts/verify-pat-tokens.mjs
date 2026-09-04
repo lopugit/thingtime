@@ -13,6 +13,9 @@ import { randomBytes } from 'node:crypto';
 // baseUrl defaults to TT_VERIFY_BASE or http://127.0.0.1:19582.
 
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:19582';
+// search/feed responses key `posts` by thing id (develop) — older builds returned an array
+const postRows = (body) => (Array.isArray(body?.posts) ? body.posts : Object.values(body?.posts || {}));
+
 
 let passed = 0;
 const failures = [];
@@ -564,7 +567,7 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
   check(
     'private-only cannot reach public posts through the anon search view',
     privSearchAnon.status === 200 &&
-      ![...(privSearchAnon.body?.posts || []), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
+      ![...postRows(privSearchAnon), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
     `${privSearchAnon.status}`
   );
   // a genuinely credential-less anon=1 call still gets the cacheable public
