@@ -1,4 +1,6 @@
 require "base64"
+require "fileutils"
+require "plist"
 require "shellwords"
 require "tempfile"
 
@@ -160,15 +162,32 @@ platform :ios do
       ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
     end
 
+    archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    FileUtils.mkdir_p(OUTPUT_DIRECTORY)
     build_app(
       scheme: SCHEME,
       configuration: "Release",
+      archive_path: archive_path,
       output_directory: OUTPUT_DIRECTORY,
       output_name: OUTPUT_NAME,
       include_symbols: false,
       xcargs: xcodebuild_xcargs,
-      export_options: export_options
+      skip_package_ipa: true
     )
+
+    Tempfile.create(["ThingtimeExportOptions", ".plist"]) do |export_options_file|
+      export_options_file.write(export_options.to_plist)
+      export_options_file.flush
+      sh(
+        "xcodebuild",
+        "-exportArchive",
+        "-archivePath", archive_path,
+        "-exportPath", File.expand_path(OUTPUT_DIRECTORY),
+        "-exportOptionsPlist", export_options_file.path
+      )
+    end
+
+    UI.user_error!("Xcode did not export #{OUTPUT_NAME}") unless File.exist?(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   desc "Build and upload to TestFlight"
@@ -176,6 +195,7 @@ platform :ios do
     build
     upload_to_testflight(
       api_key: app_store_api_key,
+      ipa: File.join(OUTPUT_DIRECTORY, OUTPUT_NAME),
       skip_waiting_for_build_processing: true,
       distribute_external: false
     )
