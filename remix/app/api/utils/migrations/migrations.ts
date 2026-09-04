@@ -1,7 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
-import { ensureIndexes, getAdoptionIssues, getCollection, getSettingsCollection, getThingtimeDb, withMongoTransaction } from '../mongodb/collections';
+import {
+  ensureHomeThingsIndexPlan,
+  ensureIndexes,
+  getAdoptionIssues,
+  getCiControlCollection,
+  getCollection,
+  getHomeThingsCollection,
+  getHomeThingtimeDb,
+  getSettingsCollection,
+  getThingtimeDb,
+  thingsIndexPlanNames,
+  withMongoTransaction
+} from '../mongodb/collections';
 import { COLLECTIONS, classifyPhysicalCollections, collectionVersion, physicalCollectionName } from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
 import {
@@ -22,6 +34,7 @@ import { SERVICE_QUOTA_THINGTIME, buildConservativeLegacyServiceQuotaThing, clas
 import {
 	buildUserSecure,
 	findLegacyUserStorageFieldsByIds,
+	fromBin,
 	packRecentReactions,
 	profileAttachmentRefsForUserRoot,
 	removeLegacyUserStorageFields,
@@ -32,7 +45,14 @@ import {
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
 import { themeAcl } from '../themes/themes';
-import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import {
+	builtinSchemaSeedNeedsRefresh,
+	bulkWriteErrorCodesByOp,
+	conversionBuildOutcomes,
+	exactDocumentSnapshotMatch,
+	storageMigrationOwnership,
+	upsertedOpIndexes
+} from './migrationCore';
 import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
@@ -42,22 +62,30 @@ import {
 	userSubscriptionLedgerEnvelopeIsTrusted,
 	userSubscriptionLedgerMatch
 } from '../subscriptions/subscriptionIdentity';
-import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS, storageSandboxState, thingStorageSizeBytes } from '../storage/storageCore';
+import {
+	InvalidAttachmentStorageEnvelopeError,
+	USER_STORAGE_ACCOUNTING_VERSION,
+	USER_STORAGE_STATUS,
+	storageSandboxState,
+	thingStorageSizeBytes
+} from '../storage/storageCore';
 import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
 import {
   ACL_ALL,
   ACL_INHERIT,
   ACL_OWNER,
   APP_STORAGE_ACCOUNTING_VERSION,
-	APP_STORAGE_RESERVED_ID_PREFIX,
+  APP_STORAGE_RESERVED_ID_PREFIX,
+  CI_CONTROL_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
-	USER_STORAGE_LEDGER_ENVELOPE_VERSION,
+  USER_STORAGE_LEDGER_ENVELOPE_VERSION,
   aclFromVisibility,
   projectBuiltinSchemaCrystal,
   thingtimeSchemas,
   validateThingtimeCrystal
 } from '~/schemas/registry';
+import { relocateCiControlRows, rebuildPlanIndexes } from './ciControlRelocationCore';
 
 // Admin-run database schema-version migrations. Every collection stores the
 // root-level schemaVersion each doc was written at (docs without one predate
@@ -635,7 +663,8 @@ const thingsMigration: Migration = {
 };
 
 // ---------------------------------------------------------------------------
-// Collection → things migrations (claude-todo/12: everything is a thing).
+// Collection → things migrations (everything is a thing —
+// TODO/claude-todo/22-everything-is-a-thing-collections.md).
 // users, themes, feedAlgorithms, and waitlist collapse into the things
 // collection. The destination shapes are EXACTLY what the new-write paths
 // produce (auth/users insertUser, themes saveTheme, algorithms
@@ -733,18 +762,58 @@ const writeCollectionConversionReceipt = async (collection: string, source: any,
 	);
 };
 
-const hasCollectionConversionReceipt = async (collection: string, source: any): Promise<boolean> => {
-	const receipt = await (
-		await getSettingsCollection()
-	).findOne(
-		{ key: migrationReceiptKey(collection, source._id), sourceCollection: collection },
-		{ projection: { sourceUpdatedAtMs: 1, sourceDigest: 1, destinationShareId: 1 } }
-	);
+// Everything the receipt decision needs; `key` is carried so a batched read can
+// map each row back to the source it certifies.
+const CONVERSION_RECEIPT_PROJECTION = { key: 1, sourceUpdatedAtMs: 1, sourceDigest: 1, destinationShareId: 1 };
+
+// Does an ALREADY-FETCHED receipt certify this exact source snapshot? Pure, so
+// the single-doc and batched lookups below cannot drift apart in what they
+// accept — the two are read by the same consume phase and disagreement would
+// mean deleting a legacy source on weaker proof in one path than the other.
+export const conversionReceiptCovers = (receipt: any, source: any): boolean => {
 	if (!receipt || typeof receipt.destinationShareId !== 'string') return false;
 	const sourceTime = sourceUpdatedAtMs(source);
 	return sourceTime !== null && Number.isFinite(receipt.sourceUpdatedAtMs)
 		? Number(receipt.sourceUpdatedAtMs) >= sourceTime
 		: receipt.sourceDigest === migrationSourceDigest(source);
+};
+
+const hasCollectionConversionReceipt = async (collection: string, source: any): Promise<boolean> => {
+	const receipt = await (
+		await getSettingsCollection()
+	).findOne(
+		{ key: migrationReceiptKey(collection, source._id), sourceCollection: collection },
+		{ projection: CONVERSION_RECEIPT_PROJECTION }
+	);
+	return conversionReceiptCovers(receipt, source);
+};
+
+// Batched form of the lookup above: one `key: { $in: [...] }` read resolves a
+// whole page's receipts against the unique `settings.key` index, instead of one
+// findOne per surviving document.
+//
+// Safe to hoist out of the per-doc loop because the receipt key derives ONLY
+// from (collection, source._id) — identical for a page-query snapshot and its
+// consume-phase re-read — and because receipts are only ever upserted, never
+// deleted or revoked. So a page-old snapshot can miss a receipt a concurrent
+// runner just wrote, but can never invent one: a miss falls through to the
+// stricter semantic-equality path, which is the same direction every other
+// batched read here already fails. The freshness comparison itself stays
+// per-document, run against the exact snapshot being judged.
+const findCollectionConversionReceipts = async (collection: string, sourceIds: any[]): Promise<Map<string, any>> => {
+	if (!sourceIds.length) return new Map();
+	const sourceIdByKey = new Map(sourceIds.map((id) => [migrationReceiptKey(collection, id), String(id)]));
+	const receipts = (await (
+		await getSettingsCollection()
+	)
+		.find({ key: { $in: [...sourceIdByKey.keys()] }, sourceCollection: collection }, { projection: CONVERSION_RECEIPT_PROJECTION })
+		.toArray()) as any[];
+	const bySourceId = new Map<string, any>();
+	for (const receipt of receipts) {
+		const sourceId = sourceIdByKey.get(String(receipt?.key));
+		if (sourceId !== undefined) bySourceId.set(sourceId, receipt);
+	}
+	return bySourceId;
 };
 
 const conversionSemanticFields = [
@@ -790,6 +859,14 @@ type ConvertSpec = {
   // when the destination shareId is NOT deterministic (waitlist mints uuids),
   // locate the existing counterpart by its uniqueKeys instead
   findExisting?: (things: any, doc: any, thing: Record<string, any>) => Promise<any>;
+  // batched form of findExisting: given the whole page of built candidates,
+  // return each one's existing counterpart (or null) in ONE query so the
+  // non-deterministic path costs O(pages) reads instead of O(docs). Falls back
+  // to per-doc findExisting when a spec doesn't provide it.
+  findExistingMany?: (
+    things: any,
+    candidates: { doc: any; thing: Record<string, any> }[]
+  ) => Promise<(any | null)[]>;
   // is the doc sitting at the destination genuinely this legacy doc's twin?
   isGenuine: (twin: any, doc: any, thing: Record<string, any>) => boolean;
 };
@@ -825,9 +902,25 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
     let created = 0;
     let skipped = 0;
 
-    // batch through the legacy collection; collided/malformed docs stay put
-    // and would re-match forever, so exclude the ones skipped this run
+    // Batch through the legacy collection ONE ~CONVERT_BATCH page at a time,
+    // batching every Mongo step that can batch without weakening a guard: the
+    // claim is one bulk write and the consume-phase source/destination re-reads
+    // are one query each, so a ~50k collection is O(pages) round trips for
+    // those steps instead of O(docs) × 3-4. The receipt-verified consume of
+    // each survivor (CAS repair, exact-snapshot delete, receipt write) stays
+    // per-doc — a conversion receipt may only certify a delete that verifiably
+    // landed. Every guard the per-doc path had is preserved — only the
+    // batching around it changed.
+    //
+    // Collided/malformed docs stay put and would re-match the page query
+    // forever, so exclude the ones skipped this run.
     const skippedIds: any[] = [];
+    const skip = (doc: any, reason: string) => {
+      notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
+      skipped += 1;
+      skippedIds.push(doc._id);
+    };
+
     for (;;) {
 			await assertLease?.();
       const filter = skippedIds.length ? { _id: { $nin: skippedIds } } : {};
@@ -836,110 +929,251 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
 				.limit(CONVERT_BATCH)
 				.toArray()) as any[];
       if (!batch.length) break;
-      for (const doc of batch) {
-				// This callback is invoked synchronously for only the current document;
-				// it never escapes the loop iteration.
-				// eslint-disable-next-line no-loop-func
-        const skip = (reason: string) => {
-          notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
-          skipped += 1;
-          skippedIds.push(doc._id);
-        };
-        try {
-          const built = spec.toThing(doc);
-          if (!built.ok) {
-            const reason = 'reason' in built ? built.reason : 'conversion failed';
-            skip(`${reason} — left for a later re-run`);
-            continue;
-          }
-          const thing = built.thing;
 
-          let twin = spec.findExisting ? await spec.findExisting(things, doc, thing) : null;
-          let inserted = false;
-          if (!twin) {
-            try {
-              if (spec.findExisting) {
-                // non-deterministic shareId — the unique uniqueKeys index is
-                // what dedupes concurrent/partial runs
-                await things.insertOne(thing as any);
-                inserted = true;
-              } else {
-                // atomic claim of the deterministic destination id: either we
-                // created the doc at shareId (upsertedCount, genuinely ours by
-                // construction) or something already sits there — re-read it
-                // and let the genuine check decide
-								const res = await things.updateOne({ shareId: thing.shareId } as any, { $setOnInsert: thing }, { upsert: true });
-                inserted = !!res.upsertedCount;
-                if (!inserted) twin = await things.findOne({ shareId: thing.shareId } as any);
-              }
-            } catch (err: any) {
-              if (err?.code !== 11000) throw err;
-              // a unique index (shareId race, or a uniqueKeys element held by
-              // another doc) blocked the insert — re-read the counterpart and
-              // let the genuine check decide; nothing was written
-							twin = spec.findExisting ? await spec.findExisting(things, doc, thing) : await things.findOne({ shareId: thing.shareId } as any);
-              if (!twin) {
-                skip('unique key held by a foreign doc — left for a later re-run');
+      // Phase 1 — BUILD every destination thing (pure, no I/O). A malformed doc
+      // is skipped + noted exactly as the per-doc path did, and so is one whose
+      // conversion THROWS: the per-doc loop built inside its try/catch, and
+      // losing that isolation would let a single corrupt legacy row abort the
+      // whole run before it ever reaches skippedIds (see conversionBuildOutcomes).
+      const candidates: { doc: any; thing: Record<string, any> }[] = [];
+      for (const outcome of conversionBuildOutcomes(batch, spec.toThing)) {
+        // `=== false`, not `!outcome.ok`: this tsconfig runs with
+        // strictNullChecks off, where truthiness does NOT narrow a boolean
+        // discriminant (the same reason the old build read `'reason' in built`)
+        if (outcome.ok === false) {
+          skip(outcome.doc, `${outcome.reason} — left for a later re-run`);
+          continue;
+        }
+        candidates.push({ doc: outcome.doc, thing: outcome.thing });
+      }
+      // Every doc on this page was malformed → all now in skippedIds; the next
+      // page query excludes them and eventually returns empty. Guard against a
+      // no-progress spin only if the whole page skipped (candidates empty).
+      if (!candidates.length) continue;
+
+      // Per-candidate outcome of the CLAIM phase, aligned to `candidates`:
+      //  inserted[i] — a fresh doc we created (genuinely ours by construction)
+      //  twins[i]    — a verified genuine prior-run counterpart at the destination
+      //  done[i]     — skipped in this phase (collision/error), excluded below
+      const inserted = new Array<boolean>(candidates.length).fill(false);
+      const twins = new Array<any>(candidates.length).fill(null);
+      const done = new Array<boolean>(candidates.length).fill(false);
+
+      if (spec.findExisting) {
+        // Non-deterministic shareId (waitlist mints uuids): the unique uniqueKeys
+        // index is the identity, so we can't upsert on shareId. Locate existing
+        // twins in one batched read when the spec supports it, else per-doc.
+        const existingTwins = spec.findExistingMany
+          ? await spec.findExistingMany(things, candidates)
+          : await (async () => {
+              const out: (any | null)[] = [];
+              for (const c of candidates) out.push(await spec.findExisting!(things, c.doc, c.thing));
+              return out;
+            })();
+        existingTwins.forEach((twin, i) => {
+          if (twin) twins[i] = twin;
+        });
+
+        // Insert the ones with no twin in a single unordered bulk insert; the
+        // unique uniqueKeys index dedupes concurrent/partial runs.
+        const toInsert = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !twins[i]);
+        if (toInsert.length) {
+          try {
+            await things.bulkWrite(
+              toInsert.map(({ c }) => ({ insertOne: { document: c.thing } })) as any,
+              { ordered: false }
+            );
+            toInsert.forEach(({ i }) => {
+              inserted[i] = true;
+            });
+          } catch (err: any) {
+            // position in toInsert → code (the ops array IS toInsert here)
+            const failed = bulkWriteErrorCodesByOp(err);
+            if (!failed) throw err; // not a per-op bulk failure
+            // Inserts are all-or-nothing per op, so absence from the error map
+            // IS the success signal — unlike the upsert branch below, where a
+            // non-failing op may have merely matched an existing doc.
+            toInsert.forEach(({ i }, pos) => {
+              if (!failed.has(pos)) inserted[i] = true;
+            });
+            // A per-doc fallback ONLY for genuine conflicts: a unique key already
+            // held. If it's OUR counterpart (uniqueKeys race), re-read + let the
+            // genuine check below decide; a foreign holder is skipped for a later
+            // re-run. A non-11000 error is a generic per-doc conversion error.
+            for (const [pos, code] of failed) {
+              const { c, i } = toInsert[pos];
+              if (code !== 11000) {
+                skip(c.doc, 'conversion error — left for a later re-run');
+                done[i] = true;
                 continue;
               }
+              const twin = await spec.findExisting!(things, c.doc, c.thing);
+              if (twin) twins[i] = twin;
+              else {
+                skip(c.doc, 'unique key held by a foreign doc — left for a later re-run');
+                done[i] = true;
+              }
             }
           }
-          if (!inserted && (!twin || !spec.isGenuine(twin, doc, thing))) {
-            skip('destination id held by a foreign doc — left for a later re-run');
+        }
+
+        // Anything not freshly inserted must sit at a genuine twin, or it's a
+        // foreign doc squatting our unique key.
+        candidates.forEach((c, i) => {
+          if (inserted[i] || done[i]) return;
+          if (!twins[i] || !spec.isGenuine(twins[i], c.doc, c.thing)) {
+            skip(c.doc, 'destination id held by a foreign doc — left for a later re-run');
+            done[i] = true;
+          }
+        });
+      } else {
+        // Deterministic destination shareId: ONE unordered bulk upsert atomically
+        // CLAIMS every id. upsertedIds tells us which we created (genuinely ours
+        // by construction); every other candidate already existed (or hit a
+        // unique key) and is verified by a single re-read below.
+        const ops = candidates.map((c) => ({
+          updateOne: { filter: { shareId: c.thing.shareId }, update: { $setOnInsert: c.thing }, upsert: true }
+        }));
+        const errorCodes = new Map<number, number>(); // op index → write-error code
+        try {
+          const res: any = await things.bulkWrite(ops as any, { ordered: false });
+          for (const i of upsertedOpIndexes(res)) inserted[i] = true;
+        } catch (err: any) {
+          const codes = bulkWriteErrorCodesByOp(err);
+          if (!codes) throw err; // not a per-op bulk failure
+          // Unordered: the non-failing ops still applied — recover their upserts.
+          for (const i of upsertedOpIndexes(err?.result)) inserted[i] = true;
+          for (const [i, code] of codes) errorCodes.set(i, code);
+        }
+
+        // Non-11000 failures are generic per-doc errors (the per-doc path threw
+        // to its outer catch → skip); isolate them to that doc.
+        for (const [i, code] of errorCodes) {
+          if (code !== 11000 && !inserted[i]) {
+            skip(candidates[i].doc, 'conversion error — left for a later re-run');
+            done[i] = true;
+          }
+        }
+
+        // One re-read for every not-inserted candidate closes the genuine check:
+        // a prior-run twin (same owner/target per spec.isGenuine) is kept; an id
+        // with NO doc after an 11000 means a foreign doc holds one of our OTHER
+        // unique keys (uniqueKeys); a non-genuine holder squats the id.
+        const pending = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !inserted[i] && !done[i]);
+        if (pending.length) {
+          const found = (await things
+            .find({ shareId: { $in: pending.map(({ c }) => c.thing.shareId) } } as any)
+            .toArray()) as any[];
+          const byShareId = new Map(found.map((t) => [String(t.shareId), t]));
+          for (const { c, i } of pending) {
+            const twin = byShareId.get(String(c.thing.shareId)) ?? null;
+            if (!twin) {
+              skip(
+                c.doc,
+                errorCodes.get(i) === 11000
+                  ? 'unique key held by a foreign doc — left for a later re-run'
+                  : 'destination id held by a foreign doc — left for a later re-run'
+              );
+              done[i] = true;
+              continue;
+            }
+            if (!spec.isGenuine(twin, c.doc, c.thing)) {
+              skip(c.doc, 'destination id held by a foreign doc — left for a later re-run');
+              done[i] = true;
+              continue;
+            }
+            twins[i] = twin;
+          }
+        }
+      }
+
+      // Survivors: freshly inserted, or a verified genuine twin. Their legacy
+      // source may be consumed only after the receipt verification below
+      // (thingsMigration's convention: never delete data that wasn't safely
+      // relocated).
+      const survivors = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !done[i]);
+      created += survivors.filter(({ i }) => inserted[i]).length;
+      if (!survivors.length) continue;
+
+      // Batched form of the per-doc consume guard: re-read every survivor's
+      // legacy source and its destination thing in ONE query each, then require
+      // either byte-semantic equivalence or a prior server receipt before
+      // consuming the source — a kind/owner-shaped twin alone is never
+      // conversion proof. Every mutation below is CAS-guarded on these
+      // snapshots (destinationVersionCas for the repair, the exact source
+      // snapshot for the delete), so a write racing the batched reads matches 0
+      // and leaves the doc for the next (idempotent) run instead of dropping
+      // the racing write.
+      const freshDocs = (await legacy
+        .find({ _id: { $in: survivors.map(({ c }) => c.doc._id) } } as any)
+        .toArray()) as any[];
+      const freshById = new Map(freshDocs.map((d) => [String(d._id), d]));
+      const destinations = (await things
+        .find({ shareId: { $in: survivors.map(({ c, i }) => (inserted[i] ? c.thing.shareId : twins[i]?.shareId ?? c.thing.shareId)) } } as any)
+        .toArray()) as any[];
+      const destinationByShareId = new Map(destinations.map((d) => [String(d.shareId), d]));
+      // Third batched read: the conversion receipts. Keyed by source _id, which
+      // both consume-phase checks below share (`fresh` is this same _id re-read),
+      // so one page-wide lookup serves the already-consumed branch and the
+      // freshness check alike.
+      const receiptBySourceId = await findCollectionConversionReceipts(
+        spec.collection,
+        survivors.map(({ c }) => c.doc._id)
+      );
+
+      for (const { c, i } of survivors) {
+        const { doc, thing } = c;
+        const twin = twins[i];
+        const fresh = freshById.get(String(doc._id));
+        const destinationShareId = inserted[i] ? thing.shareId : twin?.shareId ?? thing.shareId;
+        try {
+          const receipt = receiptBySourceId.get(String(doc._id));
+          if (!fresh) {
+            // Another runner already consumed the source. Its receipt, not our
+            // observation of a destination-shaped row, is the completion proof.
+            if (!conversionReceiptCovers(receipt, doc)) {
+              skip(doc, 'source changed during conversion — left for a later re-run');
+            }
             continue;
           }
-					// Re-read the source and require either byte-semantic equivalence or
-					// a prior server receipt before consuming it. A kind/owner-shaped
-					// twin alone is never conversion proof.
-          if (inserted) created += 1;
-          const fresh = await legacy.findOne({ _id: doc._id } as any);
-					const destinationShareId = inserted ? thing.shareId : twin?.shareId ?? thing.shareId;
-					if (!fresh) {
-						// Another runner already consumed the source. Its receipt, not our
-						// observation of a destination-shaped row, is the completion proof.
-						if (!(await hasCollectionConversionReceipt(spec.collection, doc))) {
-							skip('source changed during conversion — left for a later re-run');
-						}
-						continue;
-					}
-            const rebuilt = spec.toThing(fresh);
-					if (!rebuilt.ok) {
-						skip('source changed to an invalid shape during conversion — left for a later repair');
-						continue;
-					}
-					const expected = { ...rebuilt.thing, shareId: destinationShareId };
-					const destination = await things.findOne({ shareId: destinationShareId } as any);
-					if (!destination || !spec.isGenuine(destination, fresh, expected)) {
-						skip('destination changed during conversion — left for a later re-run');
-						continue;
-					}
-					const receiptCoversFresh = await hasCollectionConversionReceipt(spec.collection, fresh);
-					if (!receiptCoversFresh && !conversionThingSemanticallyEquals(destination, expected, !!spec.findExisting)) {
-						// We may repair only the row inserted by THIS invocation, and only
-						// while it still equals our original snapshot. A pre-existing weak
-						// twin or a concurrently edited destination is left untouched.
-						if (!inserted || !conversionThingSemanticallyEquals(destination, thing, !!spec.findExisting)) {
-							skip('destination payload differs from the source and has no conversion receipt — left for repair');
-							continue;
-						}
-						const replaced = await things.replaceOne(destinationVersionCas(destination) as any, expected as any);
-						if (!replaced.matchedCount) {
-							skip('destination changed during conversion — left for a later re-run');
-							continue;
-						}
-            }
-					await assertLease?.();
-					const deleted = await legacy.deleteOne(exactDocumentSnapshotMatch(fresh) as any);
-					if (!deleted.deletedCount) {
-						skip('source changed during conversion — left for a later re-run');
-						continue;
+          const rebuilt = spec.toThing(fresh);
+          if (!rebuilt.ok) {
+            skip(doc, 'source changed to an invalid shape during conversion — left for a later repair');
+            continue;
           }
-					await writeCollectionConversionReceipt(spec.collection, fresh, destinationShareId);
+          const expected = { ...rebuilt.thing, shareId: destinationShareId };
+          const destination = destinationByShareId.get(String(destinationShareId)) ?? null;
+          if (!destination || !spec.isGenuine(destination, fresh, expected)) {
+            skip(doc, 'destination changed during conversion — left for a later re-run');
+            continue;
+          }
+          const receiptCoversFresh = conversionReceiptCovers(receipt, fresh);
+          if (!receiptCoversFresh && !conversionThingSemanticallyEquals(destination, expected, !!spec.findExisting)) {
+            // We may repair only the row inserted by THIS invocation, and only
+            // while it still equals our original snapshot. A pre-existing weak
+            // twin or a concurrently edited destination is left untouched.
+            if (!inserted[i] || !conversionThingSemanticallyEquals(destination, thing, !!spec.findExisting)) {
+              skip(doc, 'destination payload differs from the source and has no conversion receipt — left for repair');
+              continue;
+            }
+            const replaced = await things.replaceOne(destinationVersionCas(destination) as any, expected as any);
+            if (!replaced.matchedCount) {
+              skip(doc, 'destination changed during conversion — left for a later re-run');
+              continue;
+            }
+          }
+          await assertLease?.();
+          const deleted = await legacy.deleteOne(exactDocumentSnapshotMatch(fresh) as any);
+          if (!deleted.deletedCount) {
+            skip(doc, 'source changed during conversion — left for a later re-run');
+            continue;
+          }
+          await writeCollectionConversionReceipt(spec.collection, fresh, destinationShareId);
           migrated += 1;
         } catch (err: any) {
           // generic note only — never echo err.message (could embed a doc
           // field value) into the admin-visible migration report
-          skip('conversion error — left for a later re-run');
+          skip(doc, 'conversion error — left for a later re-run');
         }
       }
     }
@@ -1069,7 +1303,7 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
   description:
     'Converts each legacy feedAlgorithms doc into a feed-algorithm thing (thingtime ' +
     '["feed-algorithm"]) shaped exactly like createAlgorithm writes new ones: the trained ' +
-    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt }, ALWAYS ' +
+    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt, shared }, ALWAYS ' +
     'private (acl ["tt:user"] — weights encode reading habits), targetId null so the ' +
     'reaction-unique partial index can never collide on crystal.emoji. shareIds are preserved so ' +
     'users.meta.activeFeedAlgorithmId pointers keep working. Each legacy doc is deleted only ' +
@@ -1092,7 +1326,13 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
           parentId: doc.parentId ?? null,
           weights: doc.weights && typeof doc.weights === 'object' ? doc.weights : { types: {}, tags: {}, authors: {} },
           eventCount: typeof doc.eventCount === 'number' && doc.eventCount >= 0 ? doc.eventCount : 0,
-          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null
+          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null,
+          // the "try my feed brain 🧠" branch invitation is owner state, not
+          // derived: dropping it here would silently revoke every share link a
+          // legacy-era owner had handed out, since the source doc is deleted
+          // once the twin verifies. Strict === true matches algorithmThingToDoc,
+          // so a pre-share doc migrates as unshared.
+          shared: doc.shared === true
         },
         ownerId: String(doc.ownerId),
         acl: [ACL_OWNER],
@@ -1151,6 +1391,15 @@ const waitlistToThings = collectionToThingsMigration({
   },
   // random shareId — the hashed-email uniqueKey is the deterministic identity
   findExisting: async (things, _doc, thing) => things.findOne({ uniqueKeys: thing.uniqueKeys[0] } as any),
+  // batched form: one $in over the whole page's hashed-email keys, mapped back
+  // by decoding each BinData uniqueKey (fromBin is the canonical decoder)
+  findExistingMany: async (things, candidates) => {
+    const keys = candidates.map((c) => c.thing.uniqueKeys[0]);
+    const found = (await things.find({ uniqueKeys: { $in: keys } } as any).toArray()) as any[];
+    const byKey = new Map<string, any>();
+    for (const doc of found) for (const key of doc.uniqueKeys || []) byKey.set(fromBin(key), doc);
+    return candidates.map((c) => byKey.get(fromBin(c.thing.uniqueKeys[0])) ?? null);
+  },
 	isGenuine: (twin) => Array.isArray(twin?.thingtime) && twin.thingtime.includes('waitlist') && twin.ownerId === 'system'
 });
 
@@ -1442,11 +1691,11 @@ const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
 };
 
 // ---------------------------------------------------------------------------
-// Full-power app namespaces (claude-todo/16): pre-namespace app-data things
-// carry only crystal.appId. Stamp the scalar root appId (the namespace
-// marker every app-lens query keys on) + sizeBytes (the storage ledger's
-// unit), then reconcile each (user, app) ledger to the $sum of its
-// namespace — absolute writes, so re-running is always safe. Sandbox docs
+// Full-power app namespaces (TODO/claude-todo/16-full-power-app-namespaces.md):
+// pre-namespace app-data things carry only crystal.appId. Stamp the scalar
+// root appId (the namespace marker every app-lens query keys on) + sizeBytes
+// (the storage ledger's unit), then reconcile each (user, app) ledger to the
+// $sum of its namespace — absolute writes, so re-running is always safe. Sandbox docs
 // get stamped too but never enter a standing ledger (they TTL away).
 
 const appNamespaceBackfillFilter = {
@@ -1773,9 +2022,21 @@ const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>)
 	return { rebuilt, quarantined };
 };
 
+// Both the pending census and the mutation pass must read the same complete
+// source document. Attachment accounting is intentionally defined by a closed
+// protected root envelope, including optional in-flight/delete fields. A
+// projection of ordinary Thing payload fields makes a valid attachment look
+// corrupt during the final fixed-point check even after it was stamped
+// successfully by the mutation pass.
+export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
+	things.find({ ownerId: { $type: 'string' } });
+
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
-	const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
+	// USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION enumerates the fields this
+	// pass needs; reading the whole document is the stronger form of the same
+	// guarantee, because no future protected root field can be dropped here.
+	const cursor = userStorageAccountingSourceCursor(things);
 	let pending = 0;
 	for await (const doc of cursor) {
 		// Every data-kind service-quota claim is counted independently above. An
@@ -2148,7 +2409,10 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
-			const cursor = things.find({ ownerId: { $type: 'string' } }).project(USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION);
+			// Same rule as the census pass: the mutation pass reads whole documents
+			// rather than USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION's field list,
+			// so a protected attachment root field can never be projected away.
+			const cursor = userStorageAccountingSourceCursor(things);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
 				if (initialSandboxState === 'sandbox') continue;
@@ -2174,7 +2438,18 @@ const backfillUserStorageAccounting: Migration = {
 							diagnosticObjectIds: [String(doc._id)]
 						});
 					}
-					const sizeBytes = thingStorageSizeBytes(doc as any);
+					let sizeBytes: number;
+					try {
+						sizeBytes = thingStorageSizeBytes(doc as any);
+					} catch (error) {
+						if (error instanceof InvalidAttachmentStorageEnvelopeError) {
+							throw new MigrationOperatorError('invalid_attachment_envelope', {
+								internalMessage: `Attachment Thing ${String(doc._id)} has an invalid protected storage envelope`,
+								diagnosticObjectIds: [String(doc._id)]
+							});
+						}
+						throw error;
+					}
 					if (
 						doc.storageClass === 'content' &&
 						doc.storageAccountingVersion === USER_STORAGE_ACCOUNTING_VERSION &&
@@ -2558,6 +2833,187 @@ const dropStaleCollectionGenerations: Migration = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// CI control-plane relocation. Every ci-* Thing (current-state projections +
+// the append-only ci-event history) now lives on the ciControl satellite
+// collection (FUNDAMENTALS §3). This moves the rows a pre-satellite deployment
+// left in `things`, applying the retention policy as it goes: a row whose
+// window has already closed is deleted without being copied. Insert-if-absent
+// by deterministic shareId, so a row the live writers have already re-created
+// on the satellite is never overwritten by its stale copy. Time-budgeted and
+// idempotent: one run drains as much as it can inside the request window and
+// reports what is left; re-run until pending reads 0.
+const CI_RELOCATION_BUDGET_MS = Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) > 0 ? Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) : 120_000;
+
+const relocateCiControlTelemetry: Migration = {
+  id: 'relocate-ci-control-telemetry',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Relocate CI control-plane rows out of things (into ciControl)',
+  description:
+    'Moves every ci-* Thing (ci-event history, workflow runs/jobs, deployments, previews, repository/branch/PR ' +
+    'projections, policies, dispatches, feature stacks) from things into the ciControl satellite collection, ' +
+    'stamping root expiresAt from the CI retention policy (events 14d, job rows 30d, runs/deployments/previews ' +
+    '90d by default; entities never expire). Rows already past their window are deleted without being copied. ' +
+    'Copies are insert-if-absent by shareId so live satellite rows are never overwritten. Each run works inside ' +
+    'a time budget and reports drained: false when more remains — re-run until pending is 0, then run ' +
+    'rebuild-things-indexes to reclaim the index storage the deleted rows leave behind. Destructive (deletes ' +
+    'from things): the real run requires confirm: true.',
+  // HOME things explicitly, NOT getCollection('things'). The data-plane
+  // migrations above follow the request's active endpoint on purpose (an
+  // override's things_v2 gets the same schema treatment), but ci-* rows are
+  // control plane: every writer used getHomeThingsCollection before this
+  // change and the target getCiControlCollection() is home-pinned like every
+  // satellite. Reading the active plane here would, under an endpoint
+  // override, count and drain the OPERATOR'S OWN database into Thingtime's
+  // home ciControl — and report drained: true while production is untouched.
+  pending: async () => (await getHomeThingsCollection()).countDocuments({ thingtime: { $in: [...CI_CONTROL_THINGTIME] } }),
+  run: async ({ dryRun, assertLease }) => {
+    const [things, satellite] = await Promise.all([getHomeThingsCollection(), getCiControlCollection()]);
+    const notes = makeNotes();
+    const report = await relocateCiControlRows({
+      source: things,
+      target: satellite,
+      kinds: CI_CONTROL_THINGTIME,
+      targetSchemaVersion: collectionVersion('ciControl'),
+      dryRun,
+      budgetMs: CI_RELOCATION_BUDGET_MS,
+      assertLease
+    });
+    for (const [kind, counts] of Object.entries(report.byKind).sort((a, b) => b[1].matched - a[1].matched)) {
+      notes.push(
+        `${kind}: ${counts.matched} row(s) — ${counts.copied} ${dryRun ? 'would relocate' : 'relocated'} (insert-if-absent by shareId), ` +
+          `${counts.expired} past retention (${dryRun ? 'would be ' : ''}deleted without copying)`
+      );
+    }
+    if (!report.drained) {
+      // A dry run writes nothing, so pending cannot move: telling the operator
+      // to "re-run until pending reads 0" here would be an instruction that can
+      // never be satisfied. On the 1.8M-row production collection the dry run
+      // hits the budget every time, so this is the note the rollout actually
+      // starts on — the counts above are a sample, not the whole collection.
+      const budgetSeconds = Math.round(CI_RELOCATION_BUDGET_MS / 1000);
+      notes.push(
+        dryRun
+          ? `Time budget reached (${budgetSeconds}s): the counts above cover only the rows scanned so far, not every pending row — pending() is the authoritative total`
+          : `Time budget reached (${budgetSeconds}s): more rows remain — run this migration again until pending reads 0`
+      );
+    } else if (!dryRun && report.matched) {
+      notes.push('things has no ci-* rows left — run rebuild-things-indexes next to reclaim the index storage they occupied');
+    }
+    return { dryRun, matched: report.matched, migrated: report.copied, created: report.copied, skipped: report.expired, notes: notes.list() };
+  }
+};
+
+// Index rebuild. Deleting ~1.8M rows leaves every things index file at its
+// old size (WiredTiger keeps freed pages inside the file, and the boot ensure
+// only creates what is MISSING). Dropping an index releases its file, so this
+// drops every plan-owned things index and recreates it from the current plan.
+// Unique constraints never lapse: each unique index gets a same-key twin with
+// an equivalent partial filter first, and the twin is dropped once the rebuilt
+// original is back. Indexes the plan does not own (another deployment's
+// residue, an operator's ad-hoc index) are reported and left alone.
+const rebuildThingsIndexes: Migration = {
+  id: 'rebuild-things-indexes',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Rebuild things indexes (reclaim storage after mass deletes)',
+  description:
+    'Drops and recreates every index the current code plan owns on things so their storage shrinks to the rows ' +
+    'that remain — run it after relocate-ci-control-telemetry has drained. Unique indexes are protected by a ' +
+    'same-key twin throughout, so no duplicate can slip in mid-rebuild; non-unique indexes are briefly absent ' +
+    '(queries fall back to scans of a small collection). The wildcard text index is rebuilt last, so ranked ' +
+    'text search errors for the seconds it takes to build. Indexes the plan does not own are listed, never ' +
+    'dropped. pending() reports 1 while any plan-owned index is larger than 8× the collection data size ' +
+    '(the signature of a file that still holds freed pages). Requires confirm: true.',
+  pending: async () => {
+    const db = await getHomeThingtimeDb();
+    const physical = physicalCollectionName('things');
+    const stats = await collectionStorage(db, physical);
+    if (!stats) return 0;
+    const owned = await thingsIndexPlanNames();
+    const bloated = Object.entries(stats.indexSizes).filter(([name, bytes]) => owned.has(name) && bytes > Math.max(8 * stats.dataBytes, 64 * 1024 * 1024));
+    return bloated.length ? 1 : 0;
+  },
+  run: async ({ dryRun, assertLease }) => {
+    const db = await getHomeThingtimeDb();
+    const collection = db.collection(physicalCollectionName('things'));
+    const notes = makeNotes();
+    const before = await collectionStorage(db, physicalCollectionName('things'));
+    const report = await rebuildPlanIndexes({
+      collection,
+      planNames: await thingsIndexPlanNames(),
+      ensurePlan: () => ensureHomeThingsIndexPlan(db),
+      dryRun,
+      assertLease
+    });
+    notes.push(
+      `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
+    );
+    if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
+    for (const name of report.unprotected) notes.push(`${name}: rebuilt WITHOUT a twin — the collection sits at MongoDB's 64-index cap, so its uniqueness lapsed for the rebuild window`);
+    for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
+    if (!dryRun) {
+      const after = await collectionStorage(db, physicalCollectionName('things'));
+      if (before && after) notes.push(`things index storage: ${formatBytes(before.indexBytes)} → ${formatBytes(after.indexBytes)}`);
+    } else if (before) {
+      notes.push(`things index storage now: ${formatBytes(before.indexBytes)} for ${formatBytes(before.dataBytes)} of documents`);
+    }
+    return { dryRun, matched: report.rebuilt.length + report.skipped.length, migrated: dryRun ? 0 : report.rebuilt.length, created: 0, skipped: report.skipped.length, notes: notes.list() };
+  }
+};
+
+// Storage census for one physical collection ($collStats): document bytes,
+// on-disk storage, and per-index bytes — the numbers the generations table and
+// the index rebuild reason about. null when there is no census to report.
+//
+// ADVISORY, never fatal. $collStats is not universally available: it is
+// rejected on a view (CommandNotSupportedOnView 166), restricted on some
+// managed tiers, and gone the moment a generation is dropped
+// (NamespaceNotFound 26). Every caller already has a null path — the
+// generations table falls back to estimatedDocumentCount and renders "—",
+// and rebuild-things-indexes reports no pending work — so a census that
+// cannot be taken must degrade, not 500 /api/v1/admin/migrations. That
+// endpoint is the ONLY in-app way to run relocate-ci-control-telemetry and
+// rebuild-things-indexes, so losing it to a decorative number would block
+// the very rollout the census exists to guide.
+export type CollectionStorage = { docs: number; dataBytes: number; storageBytes: number; indexBytes: number; indexSizes: Record<string, number> };
+export const collectionStorage = async (db: any, physical: string): Promise<CollectionStorage | null> => {
+  try {
+    const [row] = await db
+      .collection(physical)
+      .aggregate([{ $collStats: { storageStats: {} } }])
+      .toArray();
+    const stats = row?.storageStats;
+    if (!stats) return null;
+    return {
+      docs: Number(stats.count) || 0,
+      dataBytes: Number(stats.size) || 0,
+      storageBytes: Number(stats.storageSize) || 0,
+      indexBytes: Number(stats.totalIndexSize) || 0,
+      indexSizes: Object.fromEntries(Object.entries(stats.indexSizes || {}).map(([name, bytes]) => [name, Number(bytes) || 0]))
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+};
+
 // Does a registered migration still READ this stale physical collection while
 // having pending work? Cleanup keeps the collection until that migration is
 // done. (Declared via sourcePhysicals on future copy-forward migrations.)
@@ -2683,6 +3139,8 @@ export const migrations: Migration[] = [
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
+	relocateCiControlTelemetry,
+	rebuildThingsIndexes,
   dropStaleCollectionGenerations
 ];
 
@@ -2707,6 +3165,17 @@ export type CollectionGenerationStatus = {
   docs: number;
   current: boolean;
   stale: boolean;
+  // storage census ($collStats): uncompressed document bytes, on-disk
+  // collection bytes, total index bytes, and the index count — so "which
+  // generation is eating the cluster" is visible where cleanup is decided.
+  // OPTIONAL: absent when the census could not be taken (collectionStorage).
+  // "Unknown" must not serialize as 0 — 0 B of documents beside 0 B of index
+  // is what a genuinely empty generation looks like, and the panel decides
+  // whether to raise its bloat badge from exactly these numbers.
+  dataBytes?: number;
+  storageBytes?: number;
+  indexBytes?: number;
+  indexes?: number;
 };
 
 // Per-collection version census + storage generations + which registered
@@ -2750,14 +3219,27 @@ export const getMigrationStatus = async (): Promise<{
   // admin sees exactly what cleanup would drop before running it
   const physicalNames = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
   const generations = await Promise.all(
-    classifyPhysicalCollections(physicalNames).map(async (row) => ({
-      collection: row.collection,
-      physical: row.physical,
-      version: row.version,
-      docs: await db.collection(row.physical).estimatedDocumentCount(),
-      current: row.current,
-      stale: row.stale
-    }))
+    classifyPhysicalCollections(physicalNames).map(async (row): Promise<CollectionGenerationStatus> => {
+      const storage = await collectionStorage(db, row.physical);
+      // omitted, not zeroed, when there is no census — see CollectionStorage
+      const census: Partial<CollectionGenerationStatus> = storage
+        ? {
+            dataBytes: storage.dataBytes,
+            storageBytes: storage.storageBytes,
+            indexBytes: storage.indexBytes,
+            indexes: Object.keys(storage.indexSizes).length
+          }
+        : {};
+      return {
+        collection: row.collection,
+        physical: row.physical,
+        version: row.version,
+        docs: storage ? storage.docs : await db.collection(row.physical).estimatedDocumentCount(),
+        current: row.current,
+        stale: row.stale,
+        ...census
+      };
+    })
   );
   generations.sort((a, b) => a.collection.localeCompare(b.collection) || (a.version ?? 0) - (b.version ?? 0));
 

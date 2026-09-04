@@ -105,6 +105,14 @@ const appShapedDataCrystal = (() => {
   return { name: `tt-api-test-app-shaped-${suffix}`, appId: `tt-api-test-appid-${suffix}`, key: 'tt-api-test-shared-key' };
 })();
 
+// Webpages group scaffolding: ONE page per runner load. The create test
+// persists it under the ambient session (established by the earlier email
+// register test in full-suite runs), the resolve test reads it back through
+// /webpages/resolve, and the trailing DELETE removes it again — so the suite
+// leaves nothing behind on a shared DB.
+const WEBPAGES_GROUP = 'webpages' as const;
+const webpageTestShareId = `tt-api-test-webpage-${uniqueSuffix()}`;
+
 const decodeJwtPayload = (token: unknown) => {
   const encodedPayload = String(token || '').split('.')[1] || '';
   const base64 = encodedPayload
@@ -173,6 +181,30 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/auth/jwks',
     expect: expectJson([200, 503], (body) => Array.isArray(body?.keys), 'JWKS body contains a keys array.')
+  },
+  {
+    id: 'auth-introspect-missing-token',
+    name: 'Introspect without token',
+    description: 'Token introspection requires a token in the body or Bearer header.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Introspection rejected a missing token.')
+  },
+  {
+    id: 'auth-introspect-invalid-token',
+    name: 'Introspect invalid token',
+    description: 'An unverifiable token introspects as inactive with no failure reason (no oracle).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not-a-real-jwt' },
+    expect: expectJson(
+      [200],
+      (body) => body?.active === false && Object.keys(body || {}).length === 1,
+      'Invalid token reported as bare { active: false }.'
+    )
   },
   {
     id: 'auth-me-anonymous',
@@ -429,6 +461,16 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/service-account',
     mutates: true,
+    // This is the FIRST account-creating test in the suite, so it is the one
+    // that pays createUserAccount's awaited ensureIndexes() bootstrap against a
+    // cold database (index pruning, the device-index layout migration, then
+    // every things index). That one-time cost is measured in seconds and had
+    // been creeping past the 12s default, aborting a request the server had in
+    // fact completed. The other two account-creating tests already opt into
+    // 30s for the same reason — this one was simply left behind. It asserts a
+    // contract (non-expiring token, 5 GiB allowance, seven-day window), never a
+    // latency budget.
+    timeoutMs: 30000,
     body: uniqueServiceAccountBody,
     expect: expectJson(
       [200, 429, 503],
@@ -794,6 +836,39 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared theme id returned a 404 error shape.')
   },
   {
+    id: 'themes-shared-gallery-list',
+    name: 'Public theme gallery list',
+    description: 'Omitting id lists the public gallery: an array of public themes (possibly empty), anonymously readable.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.themes) &&
+        body.themes.length <= 60 &&
+        body.themes.every(
+          (theme: any) =>
+            typeof theme?.id === 'string' && typeof theme?.name === 'string' && theme?.theme && typeof theme?.theme === 'object'
+        ),
+      'Gallery list returned ok with a bounded array of public theme shapes.'
+    )
+  },
+  {
+    id: 'themes-shared-gallery-limit',
+    name: 'Public theme gallery limit',
+    description: 'The gallery list honours a lower ?limit bound.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared?limit=1',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.themes) && body.themes.length <= 1,
+      'Gallery list with limit=1 returned at most one theme.'
+    )
+  },
+  {
     id: 'themes-active-guarded',
     name: 'Active theme requires auth',
     description: 'Setting the active theme without a session is rejected with a 401 error shape.',
@@ -818,6 +893,49 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { id: 'not-a-real-theme-id' },
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Theme delete was rejected with an error shape.')
+  },
+  {
+    id: 'embed-things-public-missing',
+    name: 'Embedded thing public reads are bounded',
+    description: 'An unknown embedded thing returns the public CORS error shape without exposing private data.',
+    group: 'embed',
+    method: 'GET',
+    path: '/api/v1/embed/things?id=definitely-not-a-real-embedded-thing',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown embedded thing returned a 404 error shape.'
+    )
+  },
+  {
+    id: 'embed-things-create-guarded',
+    name: 'Embedded thing writes require auth',
+    description: 'Creating embedded data without a session is rejected before anything is written.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    mutates: true,
+    body: { name: 'API test embed', value: { hello: 'world' }, visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.thing?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Embedded thing creation either persisted for a session or returned an auth error.'
+    )
+  },
+  {
+    id: 'embed-things-json-only',
+    name: 'Embedded thing writes require JSON',
+    description: 'Safelisted text/plain requests are rejected before cookie authentication, closing the simple-request CSRF path.',
+    group: 'embed',
+    method: 'POST',
+    path: '/api/v1/embed/things',
+    body: { name: 'Must not save', value: { hello: 'world' } },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson(
+      [415],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Embedded thing writes rejected a non-JSON content type.'
+    )
   },
   {
     id: 'things-feed-public',
@@ -1739,6 +1857,24 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'algorithms-shared-not-found',
+    name: 'Shared algorithm unknown id',
+    description: 'Unknown, unshared, and private algorithm ids all resolve to the same 404 error shape.',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared?id=not-a-real-algorithm-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared algorithm id returned a 404 error shape.')
+  },
+  {
+    id: 'algorithms-shared-empty-id',
+    name: 'Shared algorithm requires an id',
+    description: 'The shared preview without an id is a 404 error shape, never a listing (algorithms are private).',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms/shared',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Shared algorithm preview without an id returned a 404 error shape.')
+  },
+  {
     id: 'algorithms-delete-guarded',
     name: 'Algorithm delete is guarded',
     description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',
@@ -1786,6 +1922,35 @@ export const apiTests: ApiTestDefinition[] = [
           !Object.prototype.hasOwnProperty.call(body.profile, 'emailVerified')) ||
         (body?.ok === false && typeof body?.error === 'string'),
       'Seeded profile exposed only public fields (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-get-never-leaks-birthday',
+    name: 'Public profile never leaks birthday',
+    description: 'The birthday is private state — the public projection must not carry the field at all.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile?username=rick.deckard',
+    expect: expectJson(
+      [200, 404],
+      (body) =>
+        (body?.ok === true && !Object.prototype.hasOwnProperty.call(body.profile ?? {}, 'birthday')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Public profile carried no birthday field (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-update-birthday-validates',
+    name: 'Profile update rejects malformed birthdays',
+    description: 'A birthday that is not a real YYYY-MM-DD date is a 400 before anything is written.',
+    group: 'profile',
+    method: 'POST',
+    path: '/api/v1/users/profile',
+    body: { birthday: '2001-02-31' },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Impossible birthday rejected with an error shape (400 signed in, 401 anonymous).'
     )
   },
   {
@@ -1936,6 +2101,154 @@ export const apiTests: ApiTestDefinition[] = [
         details: `status ${response.status}, markdown content-type ${markdown}, title ${hasTitle}, endpoints ${hasEndpoints}`
       };
     }
+  },
+  // ---- webpages (block-based site builder read model) -----------------------
+  // CI-safe on a fresh DB: site pages may be unseeded (page: null is a
+  // legitimate resolve answer), and the page created here is the throwaway
+  // session user's own private doc, deleted again by the final test. The
+  // docs-twin smoke tests for webpages-resolve / admin-webpages-seed are
+  // auto-generated from apiDocs.ts — only behavior lives here.
+  {
+    id: 'webpages-resolve-requires-query',
+    name: 'Webpage resolve validates its query',
+    description: 'GET /webpages/resolve without id/path/global is a 400 error shape — for anonymous callers too.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/resolve',
+    anonymous: true,
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Resolve without a query was rejected with a 400 error shape.')
+  },
+  {
+    id: 'webpages-resolve-malformed-path',
+    name: 'Webpage resolve validates path shape',
+    description: 'A site-route path without a leading slash is rejected (400) before any lookup runs.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/resolve?path=status',
+    anonymous: true,
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Malformed path was rejected with a 400 error shape.')
+  },
+  {
+    id: 'webpages-resolve-unknown-id',
+    name: 'Webpage resolve unknown id',
+    description: 'An unknown webpage shareId resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/resolve?id=definitely-missing-webpage',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown webpage id returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-resolve-site-route',
+    name: 'Site route resolves anonymously',
+    description:
+      'path=/status answers ok with the page/source/components/refs envelope — page is the seeded system doc where the admin seed ran, and null on a fresh unseeded DB (both are correct).',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/resolve?path=/status',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Object.prototype.hasOwnProperty.call(body, 'page') &&
+        Object.prototype.hasOwnProperty.call(body, 'source') &&
+        Array.isArray(body?.components) &&
+        isObject(body?.refs),
+      'Site-route resolve returned the page/source/components/refs envelope.'
+    )
+  },
+  {
+    id: 'webpages-create',
+    name: 'Webpage create via unified things path',
+    description:
+      'POST /things with thingtime ["webpage"] persists a private one-block page for the session user (401 anonymous) — webpages ride the ordinary things surface, no bespoke create endpoint.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: {
+      thingtime: ['webpage'],
+      shareId: webpageTestShareId,
+      acl: ['tt:user'],
+      crystal: { name: 'test page', blocks: [{ id: 'a', type: 'text', text: 'hi' }] }
+    },
+    // 409: a /tests page re-run after an aborted run can find the previous
+    // load's page still present — the resolve below reads it either way and
+    // the trailing DELETE clears it for the next run
+    expect: expectJson(
+      [200, 401, 409, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true && Array.isArray(body?.thing?.crystal?.blocks) && body.thing.crystal.blocks.length === 1,
+      'Webpage create persisted the sanitized one-block page (or was rejected without a session).'
+    )
+  },
+  {
+    id: 'webpages-resolve-created-id',
+    name: 'Created webpage resolves by id',
+    description:
+      'The page created above resolves by shareId for its owner (200, one block, source "user"); when the create was refused (anonymous / group-only run) the id is simply absent (404 error shape).',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: `/api/v1/webpages/resolve?id=${webpageTestShareId}`,
+    expect: expectJson(
+      [200, 404],
+      (body, response) =>
+        response.status === 404
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true && body?.source === 'user' && body?.page?.crystal?.blocks?.length === 1,
+      'Owner resolved the created page (or it was never created and 404s).'
+    )
+  },
+  {
+    id: 'webpages-create-duplicate-block-ids',
+    name: 'Duplicate block ids are refused',
+    description: 'The webpage block sanitizer rejects a blocks list carrying two blocks with the same id (400; 401 anonymous).',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/things',
+    body: {
+      thingtime: ['webpage'],
+      crystal: {
+        name: 'dup blocks',
+        blocks: [
+          { id: 'a', type: 'text', text: 'one' },
+          { id: 'a', type: 'text', text: 'two' }
+        ]
+      }
+    },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Duplicate block ids were rejected with an error shape.')
+  },
+  {
+    id: 'webpages-create-reserved-shareid',
+    name: 'Reserved webpage- shareId is refused',
+    description: 'The seeded site docs own the webpage- shareId prefix — a user create squatting it is a 400 (401 anonymous).',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/things',
+    body: {
+      thingtime: ['webpage'],
+      shareId: 'webpage-squat',
+      crystal: { name: 'squat', blocks: [{ id: 'a', type: 'text', text: 'hi' }] }
+    },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Reserved-prefix shareId was rejected with an error shape.')
+  },
+  {
+    id: 'webpages-delete-created',
+    name: 'Created webpage cleans up',
+    description:
+      'DELETE /things removes the page this group created, so repeated runs leave nothing behind; anonymous / group-only runs see the ordinary guard shape instead (401/404).',
+    group: WEBPAGES_GROUP,
+    method: 'DELETE',
+    path: `/api/v1/things?id=${webpageTestShareId}`,
+    mutates: true,
+    expect: expectJson(
+      [200, 401, 404],
+      (body, response) => (response.status === 200 ? body?.ok === true : body?.ok === false && typeof body?.error === 'string'),
+      'Created webpage was deleted (or was never created and the guard answered).'
+    )
   },
   ...apiDocsSmokeTests
 ];

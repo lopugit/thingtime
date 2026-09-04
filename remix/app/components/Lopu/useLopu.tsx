@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
+import { Link as RouterLink } from 'react-router';
 
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
 import { normalizeLopuMessage } from './lopuMessage';
@@ -64,9 +65,21 @@ const CountdownRing = ({ ms }: { ms: number }) => (
   </Box>
 );
 
-type LopuStatus = 'success' | 'error' | 'info';
+type LopuStatus = 'success' | 'error' | 'info' | 'warning';
 
 type LopuLink = { label: string; href: string };
+
+const LOPU_LINK_STYLE = {
+  mt: 2,
+  display: 'inline-block',
+  fontSize: 'xs',
+  fontWeight: '700',
+  color: 'purple.500',
+  textDecoration: 'underline',
+  wordBreak: 'break-all'
+} as const;
+
+const isInternalLopuHref = (href: string) => href.startsWith('/') && !href.startsWith('//');
 
 type LopuArgs = {
   title?: string;
@@ -92,8 +105,10 @@ const LopuToast = ({
   onClose
 }: LopuArgs & { loading?: boolean; countdown?: number | null; onClose: () => void }) => (
   <Box
+		className="lopuToast"
 		role={announceDescription ? 'status' : 'group'}
     pointerEvents="auto"
+    userSelect="text"
     p="2px"
     borderRadius="var(--tt-radius-xl, 20px)"
     background={RAINBOW}
@@ -126,11 +141,14 @@ const LopuToast = ({
           display="flex"
           alignItems="center"
           justifyContent="center"
-          width="20px"
-          height="20px"
+          width="28px"
+          height="28px"
+          margin="-4px"
           borderRadius="full"
           fontSize="xs"
           lineHeight={1}
+          cursor="pointer"
+          userSelect="none"
           color="var(--tt-faint, #b6b6c0)"
           _hover={{ color: 'var(--tt-ink, #16161a)', bg: 'var(--tt-surface-alt, #f5f5f7)' }}
           transition="all 140ms ease"
@@ -177,21 +195,16 @@ const LopuToast = ({
           {description}
         </Text>
       )}
-      {link && (
-        <Box
-          as="a"
-          href={link.href}
-          mt={2}
-          display="inline-block"
-          fontSize="xs"
-          fontWeight="700"
-          color="purple.500"
-          textDecoration="underline"
-          wordBreak="break-all"
-        >
-          {link.label}
-        </Box>
-      )}
+      {link &&
+        (isInternalLopuHref(link.href) ? (
+          <Box as={RouterLink} to={link.href} {...LOPU_LINK_STYLE}>
+            {link.label}
+          </Box>
+        ) : (
+          <Box as="a" href={link.href} {...LOPU_LINK_STYLE}>
+            {link.label}
+          </Box>
+        ))}
       {!loading && countdown ? <CountdownRing ms={countdown} /> : null}
     </Box>
   </Box>

@@ -13,6 +13,7 @@ import {
 	normalizePublicAttachment
 } from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
+import { AudioAttachmentPlayer } from './AudioAttachmentPlayer';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 
@@ -110,7 +111,8 @@ const NsfwShield = ({
 // images-per-row pattern (extras repeat the last row size); grid = uniform
 // columns with per-image spans (wide/tall/big). Clicking any image opens the
 // MediaLightbox at that image's ATTACHMENT-ORDER index — layout never changes
-// lightbox order. Videos keep inline players; generic files stay download rows.
+// lightbox order. Videos and audio keep inline native players; generic files
+// stay download rows.
 
 // chunk images into row sizes per the pattern, repeating the last row size
 export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
@@ -258,8 +260,7 @@ export const PostAttachments = ({
 
 	const images = normalized.filter((attachment) => attachment.mediaKind === 'image');
 	const videos = normalized.filter((attachment) => attachment.mediaKind === 'video');
-	// The public normalizer deliberately maps audio to the generic file kind so
-	// it stays a safe download row rather than an autoplay-capable player.
+	const audio = normalized.filter((attachment) => attachment.mediaKind === 'audio');
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
 
 	const layout: PostMediaLayout = mediaLayout && images.length > 1 ? mediaLayout : { mode: 'masonry' };
@@ -293,11 +294,18 @@ export const PostAttachments = ({
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
 		);
+		const interactiveProps = shielded
+			? {}
+			: {
+				as: 'button' as const,
+				type: 'button' as const,
+				'aria-label': `View ${attachment.title || attachmentDisplayName(attachment)}`,
+				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })
+			};
 		return (
 			<Box
 				key={attachment.id}
-				as={shielded ? 'div' : 'button'}
-				type={shielded ? undefined : 'button'}
+				{...interactiveProps}
 				display="block"
 				width="100%"
 				position="relative"
@@ -305,10 +313,6 @@ export const PostAttachments = ({
 				overflow="hidden"
 				cursor={shielded ? 'default' : 'zoom-in'}
 				sx={tileSx}
-				aria-label={shielded ? undefined : `View ${attachment.title || attachmentDisplayName(attachment)}`}
-				// the lightbox skips shielded media, so open it at this image's index
-				// within that list rather than its attachment-order index
-				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
 			>
 				{shielded ? (
 					<NsfwShield
@@ -413,6 +417,8 @@ export const PostAttachments = ({
 					video
 				);
 			})}
+
+			{audio.length > 0 ? <AudioAttachmentPlayer attachments={audio} compact={compact} /> : null}
 
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>

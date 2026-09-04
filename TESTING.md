@@ -15,13 +15,25 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.
@@ -87,6 +99,21 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
+
+- [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
+      page retains current rows while Refresh runs, requests at most 25 rows,
+      and **Load next bounded page** advances only one opaque cursor page (no
+      all-peers request or automatic unbounded hydration).
+- [ ] Exercise Grid, Cards, and List at desktop and 390px widths. Search
+      origin, `active`/`expired`, a signing-key fragment, and each displayed
+      timestamp via the property selector; every view shows the same filtered
+      rows with no horizontal page overflow (the List table itself may scroll).
+- [ ] As a non-admin or signed-out user, `/peers` shows only the quiet access
+      gate and `GET /api/v1/admin/peers` returns 401/403 with private no-store
+      headers. Confirm no browser response contains `syncCursor`, request
+      signatures, a peer secret, or a private key.
+
 ## Admin integration vault + policy proxy
 
 - [ ] Sign in as an admin and open **/admin → External integrations**. Without
@@ -140,12 +167,34 @@ is fixed, and cite the checklist you ran in the PR description.
       deployment, a signed-out visit shows the "Continue as… ✨" corner card;
       picking an account routes to `/login?u=<username>` with the username
       prefilled and password focused; "Not now" snoozes it for a day; it never
-      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
-      while signed in.
+      renders on `/authorize`, `/reset-password`, or while signed in. On a
+      foreign `*.vercel.app` login/register page, the recovery card is the
+      intentional exception: it opens the matching first-party hub.
 - [ ] Hint liveness: log out on the OTHER deployment → the suggestion
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
+- [ ] Account-hint response privacy: both the same-origin endpoint and the
+      credentialed federated resolver send `Cache-Control: private, no-store`;
+      their `Vary` headers include `Cookie` (the resolver also includes
+      `Origin`) and a 429 retains its `Retry-After` header.
+- [ ] Cross-deployment account hint: the compact row names the deployment
+      environment (for example `Dev preview · PR #68`, never `Production` for
+      a preview); expand its chevron to reveal every environment badge, exact
+      origin, and last-active time without selecting or signing in as the
+      suggested account.
+- [ ] Vercel-preview account recovery: on a `*.vercel.app` login page, the
+      account card remains available and opens `https://dev.thingtime.com`
+      (not production) for the same development environment. The preview
+      itself cannot read the `.thingtime.com` cookie; the Dev Thingtime popup
+      must present its first-party signed-in account choices instead.
+- [ ] Data-authority identity: deploy a Preview whose branch name and
+      `VERCEL_ENV` disagree with its configured `THINGTIME_DATA_ENV`. Root
+      data and `/api/v1/capabilities` must expose the same safe
+      `{ id, kind, federationId, authorityOrigin }` identity; sign-in routing
+      must use that authority rather than infer an environment from Vercel
+      metadata. No database host, database name, connection string, or secret
+      may appear in either public response.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
@@ -237,6 +286,65 @@ is fixed, and cite the checklist you ran in the PR description.
       an unknown user gets `404`.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
+
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`)
+
+Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
+Vite dev port serves the raw shell without injection; in production, Vercel
+routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
+`remix/scripts/patch-vercel-output.mjs`).
+
+- [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
+      `og:title` carrying the author + truncated text (or the poll question),
+      an `og:description` capped near 200 chars, an absolute `og:url` /
+      `og:image`, and `twitter:card summary` (`summary_large_image` when the
+      post has an image attachment or a legacy `images[0]` URL, which then
+      becomes the `og:image`).
+- [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
+      `/post/<garbage id>` both return ONLY the generic site block —
+      indistinguishable from each other, and no post text, author, or image
+      may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
+      a 404 Response from this middleware as "unhandled" and would fall
+      through to the raw source template — see `server/routes/[...].ts`.)
+- [ ] `curl -s <nitro>/profile/<username>` returns `og:type profile`, the
+      `displayName (@username)` title, the bio as description, and the avatar
+      as `og:image` when set; an unknown username gets the generic block.
+- [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
+      HTML-escaped and whitespace-collapsed inside `content="…"`.
+- [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
+      https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
+      URLs (the request-origin pattern, not a hardcoded host).
+- [ ] Every other page (`/`, `/feed`, deep unknown paths) carries the injected
+      site-default block (site_name Thingtime, generic description, brand
+      image, `twitter:card summary`) with absolute URLs, and responses from
+      the shell handler carry the `X-TT-Shell: social-meta` header.
+- [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
+      routes sit between the API routes and the SPA fallback and point at the
+      Nitro server function.
+- [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
+      renders the SPA (the injected head block must not break the shell).
+
+## Emailed-link origin trust (`remix/app/api/utils/auth/appOrigin.ts`)
+
+Verification and password-reset links carry single-use auth tokens, so a
+`Host`-derived origin is an account-takeover primitive: the victim gets a real
+email whose link points at the attacker.
+
+- [ ] `npm run test:auth-origin` passes (APP_URL precedence, spoofed/lookalike
+      hosts, the multi-tenant `*.vercel.app` namespace, Vercel preview vs
+      production env precedence, and the local-dev host allowlist).
+- [ ] With `APP_URL` set, `curl -X POST .../api/v1/auth/password-reset -H 'Host:
+      attacker.example'` (and the same via `X-Forwarded-Host`) emails a link on
+      the `APP_URL` origin — never the supplied host.
+- [ ] With `APP_URL` UNSET on a Vercel preview, the emailed link uses the
+      deployment's own `VERCEL_BRANCH_URL`, and a spoofed `Host:
+      attacker-xyz.vercel.app` does not change it. Our own preview namespace is
+      NOT trusted from the Host header — anyone can deploy into `*.vercel.app`.
+- [ ] With `APP_URL` unset and no Vercel env (plain local dev), links use the
+      requested origin for `localhost`/`127.0.0.1`/`[::1]`/`*.thingtime.com`/
+      `*.ts.net`, and any other Host yields `https://thingtime.com`.
+- [ ] All four emailed-link routes stay on the helper: `register`,
+      `resend-verification`, `password-reset`, `service-account`.
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
@@ -639,6 +747,14 @@ is fixed, and cite the checklist you ran in the PR description.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
+      FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
+      `/thing/<attachment-id>` detail view shows native controls instead of a
+      download-only row; the content response is `inline` with its detected
+      audio MIME; a multi-audio post advances through its queue in attachment
+      order; and "Save full file offline" plays the complete same-account
+      IndexedDB copy after a reload. Check desktop and 390px mobile widths for
+      no overflow, then remove the offline copy and confirm streaming resumes.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a
@@ -1021,6 +1137,16 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
+- [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
+      inside the post composer, a comment box, the login form, and any
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      no thingtime state changes. With focus on the page background (no editable
+      focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
+      `e.key === 'Z'`, so redo was unreachable before this guard normalised
+      case). Mid-IME composition (Japanese/Chinese input) Cmd/Ctrl+Z never
+      triggers a thingtime undo. The guard predicate itself is covered by
+      `npm run test:editable-target` (`app/utils/editableTarget.ts`); this
+      manual pass is for the wiring and the real browser key codes.
 - [ ] A very large thing (deeply nested, hundreds of nodes) mounts COLLAPSED
       and scrolls within a bounded box — it never mass-mounts nodes or
       wall-of-texts the feed.
@@ -1043,6 +1169,39 @@ is fixed, and cite the checklist you ran in the PR description.
       token reads still return 404 (the owner recovery exception applies only
       to persisted `attachment` Things).
 
+## Poll voting (`remix/app/api/utils/things/vote.ts`, `PollRenderer`)
+
+- [ ] Compose a poll from the feed composer's 🗳️ Poll tab (question in the
+      main box, 2–6 option rows with add/remove) and post it: the card renders
+      the poll (question + tappable options), NOT the raw Thingtime tree.
+- [ ] Tap an option while logged in: the bar fills and the ✓/accent highlight
+      lands INSTANTLY (optimistic), then the server tally reconciles.
+      Tapping a different option MOVES the vote (totals unchanged); tapping
+      your own option again REMOVES it. `POST /api/v1/things/vote` returns
+      `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
+- [ ] One vote per user per poll survives races: double-tap fast / two tabs —
+      the `things_vote_key_unique` index keeps ONE vote doc per
+      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+- [ ] Logged out: the poll shows results only (bars + percentages visible,
+      no vote recorded); tapping toasts "Log in to vote 🗳️".
+- [ ] A poll on a private/friends-only post can't be voted on by a viewer
+      outside the audience (404 from the vote endpoint — acl + `tt:inherit`
+      chains re-checked per vote), and out-of-range `optionIndex` 400s.
+- [ ] Generic CRUD refuses the kind: `POST /api/v1/things` with
+      `thingtime: ["vote"]` answers 403 (votes mint only through the vote
+      endpoint, which writes the server-owned `voteKey`).
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/vote` once)
+      reverts the optimistic bars to the pre-tap tally and shows a Lopu
+      error toast — never a stuck wrong count.
+- [ ] A shared poll's nested sub-card shows the live tally read-only; voting
+      happens on the original's own card/permalink.
+- [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
+      docs pointing at the gone poll); vote docs never list as /things rows
+      and folder copy skips them like reactions/saves.
+- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
+      data crystal) makes the vote endpoint answer 409 — never a silent
+      `ok: true` that drops the vote.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the
@@ -1055,6 +1214,32 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] The design-system anatomy stories (/docs/design-system →
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
+
+## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
+
+- [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy
+      named "Copy of X" appears beside the original — in the ORIGINAL's own
+      folder, not the browsed folder — immediately (real server id painted
+      from the bulk response, reconciled by the refetch); the original keeps
+      its name, content, and folder. The menu row shows the 🐑 emoji (emoji
+      icon style) / copy-plus (lucide), never the 🤷‍♂️ fallback.
+- [ ] Duplicate from SEARCH results (type a query, right-click a result from a
+      different folder): the copy lands in that result's own folder, the
+      active search re-runs, and "Copy of X" appears in the results.
+- [ ] Duplicate from an ANCESTOR column in columns view: the copy appears in
+      the column you acted in (the original's folder), not the deepest one.
+- [ ] The per-item ⋯ kebab menu offers 🐑 Duplicate for duplicable things
+      (this is the only path on iOS/touch, where right-click never opens).
+- [ ] Multi-select N things → Duplicate N things duplicates all of them
+      (one bulk copy per source folder; "Duplicated N ✨" Lopu toast;
+      per-item failures report as "Duplicated n, m skipped" with the first
+      error).
+- [ ] Duplicating a folder copies its whole subtree (bounded server-side);
+      uncopyable child kinds inside are skipped with honest counts.
+- [ ] Uncopyable kinds (comment/reaction/save/share/vote — the server
+      UNCOPYABLE set) never show a Duplicate item in the context menu.
+- [ ] No ⌘D keyboard shortcut (that's the browser bookmark chord) — Duplicate
+      is context-menu only.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
@@ -1079,6 +1264,15 @@ is fixed, and cite the checklist you ran in the PR description.
       Click, hover, and touch-and-hold all open the quick-react popup on the
       POST button; picking an emoji applies optimistically (no wait), and ＋
       opens the full custom picker.
+- [ ] EMOJI SPLASH (`emojiSplash.ts`): ADDING a reaction (quick-tap heart,
+      quick-row pick, full-picker pick — post or comment) erupts 5–8 floating
+      copies of the chosen emoji from the react button; a live poll vote
+      bursts the option's leading emoji (🗳️ fallback) from the tapped row.
+      REMOVING a reaction / un-voting never bursts, guests never burst.
+      Spam-tap: at most 3 concurrent bursts (oldest culled) and the DOM
+      returns to its pre-tap node count within ~1.5s (no leaked spans).
+      With reduced motion emulated (or `--tt-motion: 0`), zero DOM is
+      created — same `motionOK()` gate as confetti.
 - [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
       revalidate in the background even when the cache already covers their
       reply count — reactions/edits made elsewhere reconcile in within a
@@ -1177,6 +1371,17 @@ is fixed, and cite the checklist you ran in the PR description.
       Log out 🗝️ (+ Resend verification when unverified): All settings
       navigates to /settings, and the buttons wrap cleanly on mobile with no
       overflow.
+- [ ] Activity heatmap (`ActivityHeatmap.tsx`, `/api/v1/users/activity`):
+      a profile with visible things shows the contribution grid between the
+      header and Posts (month labels, hover tooltip `<n> things · <date>`,
+      `<n> things in the last year 🌱` caption); logged out it counts public
+      things only while the owner's own view also counts private ones (create
+      a public + a private post and compare); a profile with zero visible
+      things renders no Activity section at all; on mobile the grid scrolls
+      inside its own container (auto-scrolled to today) without widening the
+      page; cell colors follow the active theme accent in light and dark
+      themes; server-minted records (the `user` doc, notifications, friend
+      state) never count while reactions/comments/votes do.
 
 ## Required Web CI contexts (`.github/workflows/web-ci.yml`)
 
@@ -1651,6 +1856,10 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
+- [ ] Whenever a builtin crystal schema is added, removed, or changes its
+      projected fields, run `npm run test:schemas`: the pinned projection table
+      must name the builtin and its exact retained fields so schema seeding
+      cannot drift silently or fail only in Web CI.
 - [ ] Unique-slot squat class (closed structurally): relationship dedupe
       rides the server-only root `uniqueKeys` namespace
       (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
@@ -1666,6 +1875,15 @@ is fixed, and cite the checklist you ran in the PR description.
       notes also census (never modify) data things carrying relationship
       names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] Desktop AI import hashes and device idempotency hashes also ride root
+      Binary `uniqueKeys`, never one unique index per crystal field. Run
+      `npm --prefix remix run test:collections`, `test:devices`, and
+      `test:messenger`; the complete home Things plan must remain at or below
+      60/64, repeated device/import writes must reuse the original row, and a
+      home bootstrap must backfill then retire the five
+      `things_{ai_connection,external_*,device_unique_keys}` generations.
+      A custom data endpoint must receive only the current additive index plan:
+      it must never run Thingtime's home-only backfill/drop migration.
 - [ ] The data-crystal namespace reserves NO names: a data thing carrying
       `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
       `friendKey`, or `voteKey` at its crystal root (any nesting, any value
@@ -1688,6 +1906,58 @@ is fixed, and cite the checklist you ran in the PR description.
       an error), min reactions/comments (bounded-window mode), text length.
 - [ ] Profile panels are locked to the profile's user (no By-user field) and
       the header post count stays the profile total, not the filtered count.
+- [ ] Paginated appends never duplicate a post id (`appendPostsDeduped` in
+      `feedTypes.ts`): scroll the feed through several pages in BOTH latest and
+      ranked modes and on a profile with >20 posts, then confirm every rendered
+      `[data-thing-id]` is unique (ranked re-scores a moving window, so later
+      pages can re-serve earlier ids; duplicates collide as React keys).
+      Every `setPosts` path — including the reset/first page — runs through the
+      helper, so a single page that repeats an id is collapsed too. The helper
+      itself is covered by `npm run test:feed`
+      (`app/components/Feed/feedTypes.test.ts`); this manual pass is for the
+      wiring (which pager calls it, and with which `prev`).
+
+## Commander palette (`remix/app/components/Commander/CommanderV2.tsx`, `commanderCommands.ts`, `commanderShortcut.ts`)
+
+The `>` registry and the Cmd+K chord rule are unit-tested headlessly
+(`npm run test:commander`, including a route contract that every `>command`
+navigation target is a route the router declares). These are the browser-only
+halves.
+
+- [ ] `Cmd/Ctrl+K` from anywhere on the page (nothing focused, a button focused,
+      mid-scroll) opens AND focuses the nav Commander; pressing it again closes
+      it. Exactly one Commander reacts — the nav instance — with a second
+      Commander mounted on the page.
+- [ ] `Cmd/Ctrl+K` inside an Editor.js block opens the editor's **link tool
+      only** — the palette must not open on top of it or steal focus. Editor.js
+      binds `CMD+K` to its core link inline tool, so the editor wins inside its
+      own blocks (`targetOwnsCommanderChord`, keyed off the `.codex-editor`
+      holder). Everywhere else the palette still wins, because nothing else
+      binds the chord: check the login form, a comment box and the search field
+      still open the Commander, and that Cmd+K still closes the Commander while
+      its own input is focused.
+- [ ] Typing `>` flips the dropdown to command rows (usage + description) and
+      fires NO search request (check the network tab). Backspacing back to
+      ordinary text restores the pinned `Search things for…` row and the live
+      results.
+- [ ] Highlight a row (arrow keys or mouse), then edit the input across the `>`
+      boundary in BOTH directions. The highlight must never carry over onto an
+      unrelated row of the new list — Enter must not run a command the user
+      never selected (`>undo` sits at row index 2).
+- [ ] Highlight a row, then keep typing an ARGUMENT (`>the` → highlight
+      `>themes` → finish typing `>theme Midnight`). Arguments don't narrow the
+      rows, so the stale highlight must not win: Enter applies the Midnight
+      preset rather than navigating to /themes.
+- [ ] Enter runs the typed command even with no row highlighted: `>theme
+      Midnight` applies the preset, `>theme neon` lists the presets without
+      switching, `>undo`/`>redo` walk the timeline, `>help` toasts every
+      command, and an unknown `>xyz` toasts a pointer to `>help` instead of
+      falling through to the path/setter machinery.
+- [ ] Selecting a row: argument-less commands run and close the palette;
+      argument-taking rows (`>theme`, `>search`, `>docs`) complete to `>name `
+      and keep the palette open and focused.
+- [ ] Mobile (375×812): the command dropdown is full width with no overflow or
+      clipping, and the usage/description columns stay readable.
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 
@@ -1759,6 +2029,58 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
+
+## Hashtags & tag chips (`remix/app/components/Feed/hashtags.ts`, `PostCard.tsx`, `PostComposer.tsx`)
+
+- [ ] Publishing a post whose body contains inline `#tags` stores them in the
+      post's `tags` array (lowercased, deduped case-insensitively, merged
+      after any comma-separated explicit tags, 12-tag cap) while the literal
+      `#Text` stays in the post body. The composer's chip preview shows
+      inline tags live as you type.
+- [ ] PostCard renders `post.tags` as tappable pill chips (feed, /explore,
+      /post/:id, comments with tags — all PostCard surfaces) and linkifies
+      inline `#tags` in post text and quote captions. Both land on
+      `/search?tags=<tag>` with a visible `tags is <tag>` filter row seeded
+      and the search already run; tapping the same chip twice in a row still
+      re-runs (the post-search URL cleanup resets the deep-link guard).
+- [ ] The linkifier never matches URL fragments (`example.com/page#section`),
+      HTML entities (`&#39;`), mid-word hashes (`foo#bar`), or pure numbers
+      (`#42`) — those render as plain text — and Unicode tags (`#日本語`)
+      linkify correctly (unit-tested in `hashtags.test.ts`; spot-check one).
+
+## @Mentions (`remix/app/utils/mentions.ts`, `MentionAutocomplete.tsx`, `api/utils/notifications/mentions.ts`)
+
+- [ ] Posting `hey @<user> 👋` (or commenting it) mints a `mention` bell
+      notification for that user — "mentioned you" + preview text, click
+      lands on the post — and sends the mention email when their email
+      channel is on. Self-mentions and unknown `@nobody` names emit nothing;
+      at most 10 unique mentions per text are honoured.
+- [ ] A mentioned user gets exactly ONE notification per event: mentioning
+      the post author inside a comment on their post yields only the
+      `comment` notification, and a mentioned friend/follower is skipped by
+      the post fan-out (no `mention` + `post-from-friend` double-ring).
+- [ ] Mentions are visibility-gated (`emitTextMentions` in
+      `api/utils/things/things.ts`): mentioning a user in a PRIVATE post
+      emits nothing for them (no bell, no email, no preview leak — verify
+      their `/api/v1/notifications` stays empty while the post 404s for
+      them); a friends-only post's mention rings only accepted friends of
+      the author; a `tt:user/<name>` acl grant makes that user's mention
+      ring; comments gate on the parent thread's effective (inherited) acl.
+- [ ] Editing a post/comment text to add a NEW `@name` notifies that user
+      (same visibility gate); names already present in the pre-edit text and
+      the direct target owner never re-ring, and an edit that only removes
+      or keeps mentions emits nothing.
+- [ ] Typing `@` + ≥1 char in the composer body (post AND comment composers)
+      pops the people dropdown under the caret (debounced users/search);
+      ArrowUp/Down move, Enter/Tab/click insert `@username ` at the caret
+      with no cursor jump, Escape closes. Emails (`bob@example.com`) never
+      trigger it.
+- [ ] PostCard linkifies `@username` tokens in post/comment text to
+      `/profile/<username>`, composing with `#hashtag` links in one pass —
+      no nested/double links, `#tag@name` seams stay plain, and the literal
+      `@Casing` text is preserved (grammar unit-tested in
+      `mentions.test.ts`). Mentions in Settings → Notifications has its own
+      push/email switch row.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
@@ -1867,6 +2189,33 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Single-file embed bundle (`remix/vite.embed.config.ts`, `remix/scripts/verify-embed-bundle.mjs`)
+
+- [ ] `pnpm --dir remix run build:embed` writes exactly one generated asset
+      (`dist/embed/thingtime.min.js`) and `[verify] Single-file embed ready`
+      prints — no `.map` file and no second chunk.
+- [ ] The source-map guard matches an *annotation*, not a substring: appending
+      `//# sourceMappingURL=thingtime.min.js.map` to the built bundle fails
+      `verify:embed`, while the vendored css-loader/style-loader runtimes that
+      Editor.js ships pre-webpacked (they contain the literal
+      `/*# sourceMappingURL=data:…` inside code that builds an inline map at
+      runtime) must NOT fail it. `pnpm --dir remix run test:embed-bundle`
+      covers both directions.
+- [ ] `verify:embed` counts only what the embed build *generated*. Adding a file
+      to `remix/public/embed/` (the client build copies it into `dist/embed/`
+      before the embed build runs) must not fail it; a real second chunk or a
+      `.map` still must.
+- [ ] `/embed/demo.html` reaches `✓ Host globals untouched` (`data-passed="true"`
+      on `#host-integrity`) when served under the **production** CSP, not just on
+      the dev server. Deployed paths get `script-src 'self'` with no
+      `'unsafe-inline'` and no hash/nonce, so any inline `<script>` on that page
+      is silently refused and the verdict hangs on "Checking host isolation…"
+      forever — while `devCsp` allows inline scripts and hides it locally. The
+      demo's code must stay in `/embed/demo-host.js` and
+      `/embed/demo-integrity.js`; `verify:vercel-output` fails the build if an
+      inline executable script reappears in `embed/demo.html` or
+      `embed/bridge.html`.
 
 ## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
@@ -2033,6 +2382,58 @@ is fixed, and cite the checklist you ran in the PR description.
       Advanced dynamic states in light, dark, default-text, and large-text
       modes. No content may overlap, clip, or escape the native window.
 
+## Cross-tab Thingtime sync (`remix/app/Providers/thingtimeSyncChannel.ts`)
+
+- [ ] `npm run test:autosave` passes, including safe-codec Date/string/cycle
+      round-tripping, runtime-function stripping, explicit `undefined`,
+      malformed/foreign message rejection, self-echo suppression, channel
+      cleanup, and the no-`BroadcastChannel` fallback.
+- [ ] In two same-origin tabs, set a drawer preference in Tab A and a different
+      preference in Tab B. Each change appears in the other tab without reload;
+      then trigger another write from the formerly stale tab and confirm neither
+      preference is reverted by its next full-tree autosave.
+- [ ] Send at least 20 rapid path-level writes from one tab. Both tabs converge,
+      a reload restores the final values, undo/redo remains local to each tab,
+      and neither console shows an echo storm, serialization error, or channel
+      lifecycle error.
+- [ ] Make at least two local edits around an unrelated remote edit, then undo
+      locally. The restored data path reaches the peer, the peer's independent
+      value remains, and root `timemachine` metadata never crosses tabs.
+- [ ] In the Commander, assign the root itself (`tt = …` / `thingtime = …`) in
+      Tab A. Tab A replaces its own tree as before, but Tab B's tree and undo
+      timeline are untouched — a whole-tree replacement is never broadcast,
+      while a named child of the root (`tt.settings.…`) still syncs.
+- [ ] Repeat that root assignment through a doubled alias (`tt.tt = …`,
+      `thingtime.tt = …`) and write a doubled-alias timeline path
+      (`tt.tt.timemachine.… = …`). Neither crosses to Tab B: its root
+      `tt`/`thingtime` self-reference and its undo timeline both survive
+      intact, while `tt.tt.settings.…` still syncs as ordinary data.
+- [ ] View chrome stays in its own tab. With the Commander open and a query
+      half-typed in Tab B, open and then close the Commander in Tab A: Tab B's
+      palette neither opens, closes, steals focus, nor loses the typed query.
+      Open and close the nav drawer in Tab A: Tab B's drawer does not move.
+      Reload Tab B afterwards — both still restore from its own persisted
+      state, exactly as before the channel existed.
+- [ ] Drawer section selection follows each tab's own route. Put Tab A and Tab B
+      on routes under two different top-level drawer items, with both drawers
+      open, then click a third top-level item in Tab A. Tab B keeps its own
+      selection and submenu — it does not jump to Tab A's section, including
+      while Tab B's drawer is closed and after reopening it. Reload Tab B: it
+      still restores the section it last selected itself.
+- [ ] Editor open-config handoff stays in its own tab. With Tab B sitting on
+      `/editor` with windows open (and no config opened there since it loaded),
+      open a saved config from the drawer in Tab A. Tab B's layout is untouched.
+      Then set an intent in Tab B's drawer without navigating yet, open a config
+      in Tab A, and confirm Tab B still opens its own config when it arrives.
+- [ ] DevKit prefills stay in their own tab. With a real username/email/password
+      typed into the register form in Tab B, open DevKit in Tab A and click
+      "prefill register". Tab B's fields are untouched and its password field
+      stays masked. Repeat for the login form and "prefill login". In Tab A the
+      prefill still fills that tab's own form, and still does after a reload.
+- [ ] Drawer *preferences* still sync in the same session: change the width and
+      `opens.direction` in Tab A and confirm Tab B follows without a reload.
+      (This is the pair that distinguishes the fix from over-blocking.)
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
@@ -2119,6 +2520,35 @@ is fixed, and cite the checklist you ran in the PR description.
       in the Thingtime Docs title row. At mobile widths, opening the full-screen
       drawer keeps its close control visible in that same header row.
 
+## API docs Try-it runner (`remix/app/routes/docs/ApiTryIt.tsx`, `api.tsx`)
+
+- [ ] Every request example on /docs/api shows a "Try it" panel; nothing ever
+      auto-runs on page load or navigation — a request only fires from an
+      explicit Run click.
+- [ ] Run on a GET example (health or things/trending) shows a green
+      `HTTP 200` badge, a grey `<n> ms` timing badge, and pretty-printed JSON
+      in a dark code block with its copy button; the response headers list is
+      hidden behind the "Show response headers" toggle.
+- [ ] The things/rss example renders the Atom XML response as highlighted
+      raw text (content-type aware), not a JSON parse error.
+- [ ] Editing the query string input and re-running changes the request
+      (e.g. add `limit=1`); the URL is always the documented endpoint path —
+      typing an absolute URL (`https://evil.example/...`) or a
+      protocol-relative `//host` into the query input is rejected with an
+      inline error and no request is sent.
+- [ ] Invalid JSON typed into the body textarea shows an inline "not valid
+      JSON" error without sending; fixing the JSON clears the error.
+- [ ] Mutation examples (POST/PUT/PATCH/DELETE) are two-step: first click
+      arms a red "Really run" confirm with a cancel and a plain-English
+      warning; only the confirm click sends. GET examples run in one click.
+- [ ] The Run button is disabled (spinner) while a request is in flight and
+      never retries; a network failure or 30s timeout renders a friendly
+      inline message, not a toast or a crash.
+- [ ] Requests send the viewer's own session cookie (same-origin
+      credentials): logged out, a session-auth mutation answers 401 — and
+      that 401 renders as a normal red-badged response, the documented
+      teaching moment.
+
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
 - [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
@@ -2169,7 +2599,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       per-user sums and initializes aggregate last; two migration runners
       cannot overwrite a now-live aggregate.
 - [ ] Canonical account storage: create, grow, shrink, and delete first-party
-      Things, comments/reactions, themes, algorithms, and registered app data.
+      Things, posts, comments/reactions, themes, algorithms, every user-owned
+      Messenger row (including relationship edges), imported AI history, and
+      registered app data.
       Each mutation changes the protected subscription ledger by exactly the
       UTF-8 byte delta of `JSON.stringify({ crystal, extended, tags })` in the
       same transaction. App data changes the account, whole-app, and app-user
@@ -2212,6 +2644,25 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       GET /api/v1/apps/data/shared?appId= mirrors the app's own view
       (sharedRead reflects the grant) and 403s with the plain no-live-grant
       explanation after disconnect.
+
+## Account birthday & profile.birthday scope (`api/utils/auth/birthday.ts`, `/api/v1/oauth/userinfo`)
+
+- [ ] Settings → Profile: set a birthday, Save — a reload shows it back; clear
+      the field, Save — it stays empty after reload (meta.birthday removed).
+- [ ] POST /api/v1/users/profile with `birthday: '2001-02-31'` (or a future
+      date, or `1899-12-31`) returns 400 and writes nothing; `'2024-02-29'`
+      saves (leap day).
+- [ ] The birthday NEVER appears on a public profile: GET
+      /api/v1/users/profile?username=… has no birthday field, the profile page
+      shows none, and /api/v1/users/search results carry none.
+- [ ] The consent screen lists "Birthday 🎂" as its own line; a grant of plain
+      `profile` does NOT cover `profile.birthday` (exact consent — no ancestor
+      coverage), so /oauth/userinfo omits birthday for profile-only grants.
+- [ ] A grant that ticked the birthday returns it from /oauth/userinfo and in
+      the authorize handoff user object; untick/decline and both omit it.
+- [ ] GET /api/v1/oauth/scopes from a cross-origin page (embedding platform)
+      succeeds — the catalog response carries CORS headers so platforms can
+      feature-detect `profile.birthday` before opening the popup.
 
 ## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
 
@@ -2461,6 +2912,67 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
+
+Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
+which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
+(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
+
+- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
+      signed synthetic `workflow_job` delivery to
+      `/api/v1/integrations/github/webhook` on a local stack and confirm
+      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
+      the repository, job, and event rows (admin query workbench, collection
+      `ciControl`).
+- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
+      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
+      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
+      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
+      an update to a job refreshes its stamp from the new `updatedAt`.
+- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
+      from new events (kept forever); a non-numeric value falls back to the
+      default; values above 3650 clamp.
+- [ ] Repository no-op suppression: two consecutive deliveries for the same
+      repository with status `active` record ONE `ci-event` whose parent is the
+      repository row (the insert), not one per delivery; an `archived`
+      transition records one more. Entity events (PR `synchronize` with an
+      unchanged status) are still recorded.
+- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
+      `freshness.latestEventAt` still populate from the satellite; the
+      per-parent history drawer still lists events newest-first.
+- [ ] Boot ensure on a database that carries the seven retired `things`
+      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
+      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
+      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
+      and `sandboxExpiresAt_1` originals are replaced by the partial
+      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
+      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
+      never shows neither).
+- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
+      `ci_control_repository_updated`, `ci_control_repository_status`,
+      `ci_control_repository_external_id`, `ci_control_parent_created`, and
+      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
+- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
+      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
+      per-kind relocate/expired counts and writes nothing; the confirmed run
+      copies live rows (insert-if-absent by shareId — a satellite row that
+      already exists keeps its newer state), deletes every matched `things`
+      row including already-expired ones, and reports `drained`. A run that
+      hits its time budget says so and the panel's pending count keeps the
+      migration actionable until it reads 0. Non-CI things are untouched.
+- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
+      on-disk, and index bytes per physical collection with an orange `N× docs`
+      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
+      lists plan-owned indexes and any residue it would leave alone; the
+      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
+      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
+      total index bytes drop, and a duplicate `shareId` insert attempted during
+      the run is still rejected with E11000.
+- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
+      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
+      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
+      (collection allowlist now includes `ciControl`).
+
 ## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
 
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
@@ -2530,6 +3042,12 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       remains the final gate. The target worker must remain active until that
       PR is actually merged, and must fail if the PR closes unmerged. Pause or
       opt-out labels must stop the batch.
+- [ ] After a large Feature Stack publishes its target PR, run the required
+      Web CI aggregate against the combined head. Cross-branch additions must
+      retain every shared runtime import and keep the typecheck ratchet at or
+      below its baseline; repairing the published head must rerun required
+      checks without replacing the immutable stack history or disabling
+      auto-merge.
 - [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
       snapshot immediately, whenever its target phase changes, every ten
       minutes while unchanged, and once when all target workers are terminal.
@@ -2898,18 +3416,340 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       count zero, and create/comment/reaction/share activity emits no home bell
       notification or email. Resetting to home restores normal telemetry/emits.
 
+## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
+      after launch without an `App.init()` nil-optional crash, and its recovery
+      store must render before the first refresh completes.
+- [ ] Recovery follows every GitHub Release `Link` page (no arbitrary history
+      cap) so older rollback bundles remain discoverable; a repeated next-page
+      URL fails closed instead of spinning or presenting a partial catalog.
+- [ ] Before publishing, production packaging must extract every desktop and
+      Recovery ZIP into a clean staging directory and run the same full
+      signed-app, Gatekeeper, and notarization checks used for the unpacked
+      artifact. A malformed ZIP must block release creation rather than
+      becoming a broken recovery option.
+- [ ] With all six Developer ID/notarization secrets absent, run the
+      owner-approved PR worker and confirm it produces only a SemVer suffix of
+      `.unsigned`, `UNSIGNED` desktop and Recovery asset names, and release
+      notes that direct people to **Privacy & Security → Open Anyway**. With a
+      partial secret set, it must stop before publishing. In Thingtime Recovery,
+      verify the UNSIGNED badge, explicit cache acknowledgement, cache entry,
+      launch, and atomic install path; it must never appear as a verified
+      update. With all six secrets present, repeat the strict signed/notarized
+      ZIP round-trip instead.
+- [ ] From an ad-hoc unsigned Recovery app, launch and atomically install an
+      explicitly acknowledged `isUnsigned: true` cached desktop bundle. The
+      detached helper must derive the unsigned lane from that cache manifest,
+      re-check the ad-hoc bundle before each use, and preserve the prior bundle
+      on failure. Remove that manifest marker and confirm it fails closed as a
+      signed release rather than silently downgrading verification.
+- [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
+      MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
+      Cancellation/timeout cases must terminate the connector child and mark
+      ambiguous in-flight work for review, while queue scheduling still lets
+      steer and interrupt overtake a blocked queued send. Keep a real connector
+      pipe active beyond two minutes: incremental `AsyncBytes` reads must
+      deliver output before EOF, and a stale reader generation must never clear
+      or terminate its replacement process.
+- [ ] Build with the repository's exact Corepack pnpm version. Confirm the
+      package-manager preflight and electron-builder's nested dependency
+      collector both resolve that same version even when a different global
+      pnpm is first on the inherited `PATH`; the temporary shim is removed on
+      success and failure.
+- [ ] Build the local app with a stable Apple Development identity, then run
+      strict deep `codesign` and the repository verifier against the unpacked
+      bundle. Install only that verified bundle with `install:local`, rerun
+      both checks against `~/Applications/Thingtime.app`, and compare the outer
+      app/node/bridge team identifiers, designated requirements, and executable
+      hashes between build and install.
+- [ ] Confirm electron-builder compiled `electron/build/Thingtime.icon` into
+      the installed app. Inspect Finder/Dock in light and dark appearance: both
+      must keep the exact green canopy/brown trunk artwork legible against the
+      adaptive background, with no stale generic Electron icon.
+- [ ] Inspect the embedded
+      `Contents/Helpers/Thingtime Node.app/Contents/Resources/ThingtimeNode.icns`
+      and its `CFBundleIconFile` declaration. The prompt/Finder artwork must
+      show three separated green canopy nodes and one brown trunk node, each
+      visibly joined to the central pink/red square. It must retain transparent
+      outer corners and remain recognizable at 16, 32, and 128 px instead of
+      showing the generic app blueprint.
+- [ ] Build with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT` set to the intended PR
+      deployment. In **Thingtime desktop** settings, confirm production,
+      development, and that preview are pre-populated; add at least two named
+      custom origins, select between them, remove an inactive custom entry, and
+      reject credentials/query/fragment/non-loopback HTTP. A selected endpoint
+      must serve `/api/v1/devices` (authenticated data or 401/403, never 404),
+      become the bundled server's API proxy target and the LaunchAgent API
+      origin together, and keep its Keychain/journal pairing scope isolated
+      from every other endpoint. The BrowserWindow itself must stay on the
+      packaged loopback renderer, never navigate to the selected remote API
+      origin, and still render the packaged interface with the API target
+      unavailable.
+- [ ] With a previously selected preview that returns a real API 404, open
+      desktop Settings and confirm the saved preview remains selected while its
+      compatibility line says it does not expose the computers API. No managed
+      node restart, registration, or endpoint rewrite may occur; all unrelated
+      settings remain interactive while the small **Check now** indicator is
+      active. Once the deployment returns authenticated `/api/v1/devices`
+      data (or 401/403), use **Check now** and confirm the app additionally
+      accepts it only when the bundled loopback proxy reports that exact
+      fallback origin. Repeat with a proxy fallback mismatch: it must remain
+      incompatible even when the remote route itself exists.
+- [ ] Fetch `/api/v1/capabilities` from production, development, and a PR
+      preview. It must return schema version 1, exactly one semver `api.*`
+      contract for every entry in the API-doc registry, and a `route.*` entry
+      for every executable API route (including intentionally undocumented
+      diagnostics), plus a valid explicit data-authority identity. Verify the
+      desktop accepts a
+      compatible `api.devices` minor/patch update, rejects a missing or new
+      major, and uses the legacy `/api/v1/devices` probe only when an older
+      deployment returns a manifest 404.
+- [ ] Configure the same private `THINGTIME_PEER_DISCOVERY_SECRET`, a distinct
+      persistent Ed25519 private key, and exact public origin on two first-party
+      deployments. A dual-signed announcement must create/renew only its own
+      relational peer lease and pin its public key; a changed public key for
+      the same origin must fail closed. `GET /api/v1/peers`
+      must return capped NDJSON peer rows plus an opaque cursor—never a single
+      unbounded JSON list—and must reject missing/expired/bad-body signatures,
+      non-first-party hostnames, and loopback origins in production. Trigger a
+      self-signed sync and verify it first announces to `thingtime.com`, then
+      discovers only the bounded peer budget; every NDJSON event must verify
+      against the sending deployment's public key. No browser request may
+      possess either private credential. Repeat against a deployment with a
+      different `federationId`: its signed request and peer rows must be
+      rejected rather than merging distinct production/development/custom
+      data environments.
+- [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
+      signed bundle, then install a build which omits or renames that endpoint
+      profile. `desktop-settings.json` must retain the normalized selected URL
+      and label, migrate schema-v1 IDs when their old metadata is available,
+      and never fall back to production merely because a build-specific ID is
+      missing. Verify the node registration still uses the same selected API
+      origin after every step.
+- [ ] Navigate the packaged loopback renderer directly to `/things` (including
+      a `?device=` drawer deep link) and press Cmd+R. Both `/` and the deep link
+      must return the bundled React shell with HTTP 200; the window must never
+      show `Client app has not been built yet.` or fetch a remote UI shell.
+- [ ] On an existing paired computer, confirm the account badge is softly green
+      and **Action permissions** starts on **Always allow** without hiding any
+      other device controls. In a disposable account/device pairing, change to
+      **Ask every time** and confirm the next supported command enters the
+      existing approval flow; change to **Deny** and confirm a new command is
+      rejected before leasing. Return to **Always allow** and confirm supported
+      commands no longer create repeated Thingtime approval cards. Pairing,
+      capability, locked-session, and macOS privacy/TCC gates must still block
+      unsafe work in every mode.
+- [ ] Explicitly register the installed node login service, verify its
+      plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
+      runtime resolve inside the verified installed app, and its registry
+      resolves to the exact private user-data file. Bootstrap must not issue an
+      unconditional immediate kickstart. Replace an exact old managed node,
+      then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] With **Auto-start node on Thingtime launch** left at its default-on
+      setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
+      stopped while the managed plist remains, then Cmd+Q/reopen the installed
+      Electron app. It must bootstrap exactly one node from that existing plist.
+      Turn the setting off and repeat: reopening Electron must leave it stopped;
+      turn it back on and confirm it converges immediately. A Mac with no
+      managed plist must still require the explicit **Start node** confirmation.
+- [ ] Open the exact installed Electron app, record its bundled loopback
+      renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
+      stop while the launchd node and
+      connector remain alive from the installed bundle for more than two
+      minutes. Signed-parent status must remain responsive; relaunch Electron
+      and unregister through the same confirmed UI without touching a foreign
+      agent/process.
+- [ ] In that exact installed app, verify the draggable desktop region stops at
+      the 52px titlebar background: Commander, nav controls, Lopu notification
+      text, and the notification's 28px close target remain selectable,
+      hoverable, and clickable. The titlebar order is drawer, Back, Forward,
+      home, search, account, notifications; Back/Forward must traverse real
+      renderer history. Kill or delay the async desktop-info response once:
+      the preload platform hint must still apply Electron titlebar mode on the
+      first paint, without a missing drawer/history row or right-side account
+      regression.
+      Pin, hover, and focus the drawer: its temporary z-index lift must remain
+      below the titlebar controls, its hover popup must use the same 10px top
+      and side gutter, and the first menu row must not retain extra Electron-only
+      top padding. Recheck the open and closed drawer at 390 CSS px and scroll
+      the page through the footer with no horizontal overflow.
+- [ ] Select every built-in menu-bar artwork (colour/template/black/white/pink/
+      blue tree and colour/template/black/white wordmark), plus one custom
+      image. Verify one image-only status item with a readable accessibility
+      label; a fresh settings file must choose the pink four-square variant,
+      while an existing choice survives upgrade. The full colour wordmark must
+      render from the bundled tightly cropped raster at 86x16pt, sit vertically
+      centred, and show no SVG rectangle-join seams. Open its menu and verify
+      `Refresh Status`, `Open Thingtime`, optional `Restart Thingtime`, and
+      `Quit Thingtime`; no `Thingtime Node` menu copy or private custom path may
+      reach renderer or cloud state. `Quit Thingtime` must boot out the managed
+      LaunchAgent rather than immediately respawning under KeepAlive; opening
+      Thingtime again may explicitly register/start it.
+- [ ] Exercise **Pair this Mac**, resume, unpair, and **Request access** through
+      the signed Electron app. Each presence-gated operation gets one native
+      confirmation and can remain open for normal human response time without
+      the one-shot bridge timing out. In Privacy & Security, click Apple's
+      **Quit & Reopen** only as the user: launchd must replace the helper with
+      exactly one node PID and one menu item; a direct LaunchServices start of
+      the embedded helper must exit instead of creating a duplicate.
+- [ ] Before network pairing, verify the exact signed helper can create, read,
+      and delete a disposable `AfterFirstUnlockThisDeviceOnly` item in the
+      traditional macOS login Keychain without `errSecMissingEntitlement`
+      (`-34018`). A forced local Keychain failure must end as
+      `credential_store_unavailable`, make no prepare/complete request, and
+      never surface the remote-ambiguity “response was not confirmed” copy.
+      After a successful pair, confirm the device appears under `/things`,
+      then Quit/relaunch Electron and verify the launchd node and pairing remain.
+- [ ] During pairing, inject one lost/ambiguous prepare or complete response.
+      The already-approved native operation must replay the exact same signed
+      claim internally, succeed without a second confirmation, and create only
+      one device relationship. Then exhaust all three bounded attempts: the
+      Keychain proof must remain durable, `/things` must refresh from **Pair
+      this account** to **Resume pairing**, and that explicit resume must
+      reconcile without generating a replacement pairing secret.
+- [ ] After a successful pairing, trigger a background local-node refresh. The
+      last-known `1 account paired` (or plural) badge, **Add Codex project**, and
+      every unrelated setup control must remain present and interactive; only a
+      small green checking spinner may be added. A real action may mark only its
+      own button as working.
+- [ ] Open a paired computer from `/things`. The page overlay may dim the page
+      behind the right drawer, but it must sit below the drawer portal: close,
+      scroll, and non-destructive drawer controls remain clickable at desktop
+      and 390 CSS px, with no invisible full-page interception.
+- [ ] On a paired online Mac, quick controls and Applications must open first;
+      Audio & routing, Network & connectivity, Node & pairing, Action
+      permissions, Power, Connectors, Screen, Approvals, and Command activity
+      must start collapsed and retain that layout per computer. Open the three
+      audio-route menus and choose a reported device, then verify microphone and
+      alerts/effects level and mute controls are shown only when that exact route
+      reports support. Use the Wi-Fi controls
+      only with a saved/open SSID (never a password), open an application's
+      **More** context menu for Focus/Open, Hide/Show, Quit, and the
+      approval-required **Force quit**. Use the Applications heading menu for
+      **Hide other apps**, and expose **Sleep** from Power. Menus must stay
+      above the drawer overlay and remain usable without clipping or horizontal
+      overflow at desktop and 390 CSS px.
+- [ ] In the exact installed Electron app, open that device drawer and click
+      its 44px X while it overlaps the native title-bar band. Reopen it and
+      confirm the left edge has an always-visible centred grip with a forgiving
+      in-panel hover target; drag that grip narrower and wider until both bounds
+      engage. Confirm both the accessible splitter value **and the visible
+      panel boundary** move together; a changing value behind an unchanged
+      full-width panel is a failure. Then focus the separator and use Left/Right
+      (Home resets). Collapse and reopen Node, observed state, applications,
+      connectors, screen, approvals, and command activity independently; no
+      section toggle may close the drawer or block another control. At 390 CSS
+      px the resize edge is absent, the drawer remains full width, and every
+      section still toggles without horizontal overflow.
+- [ ] On `/things`, collapse a different selection of sections and choose a
+      different width for two paired computers. Close/reopen each drawer and
+      refresh the page: only that computer's locally stored section layout and
+      width may return; device state, messages, approvals, and commands must
+      never be written into this layout preference. In a regular desktop web
+      browser, the drawer, home, Commander search, account, and notification
+      controls must all share the 52px nav bar's 36px centerline. The Commander
+      button must open the global Commander on web as well as Electron.
+- [ ] Pair two different Macs to one disposable Thingtime account, then pair
+      one disposable Mac to two different Thingtime accounts. Every pairing
+      link must remain one-use, but the Mac must retain both account credentials
+      in its bounded Keychain vault, advertise both opaque device IDs locally,
+      and maintain one isolated heartbeat/command/live-sync loop per account.
+      Each account's `/things` view must match only its own device ID, while
+      prompts/responses never cross accounts. Repeat from a renderer origin
+      different from the configured node origin: completion must fail before
+      claim with the two explicit origins in the error, then succeed after an
+      intentional endpoint switch. Existing single-account credentials must
+      migrate without re-pairing.
+- [ ] Permission preflight must not prompt. Without grants, Accessibility and
+      Screen Recording operations fail closed with actionable instructions.
+      The explicit **Request access** action must invoke the matching native
+      system request before opening the exact settings pane, then refresh after
+      focus/relaunch. After the user grants the exact installed signed bundle,
+      relaunch that bundle and prove one harmless protected Accessibility
+      focus/read and one real bounded frame capture. Never automate a TCC
+      toggle/reset, and do not invoke the system-lock action without explicit
+      confirmation.
+- [ ] Treat the local Apple Development result only as stable local/TCC proof.
+      Gatekeeper rejection is expected for that non-distribution identity.
+      Before any direct-distribution release, patch the protected
+      `github-actions` workflow, import a Developer ID Application identity in
+      its ephemeral keychain, provide notarization credentials, remove every
+      unsigned fallback, and require strict signature, Gatekeeper, and stapler
+      validation before assets publish.
+
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
 Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
 running dev stack (86 live-API checks: permissions, requests, receipts,
 reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
+- [ ] Run `npm run test:messenger` and `npm run test:storage` from `remix/`.
+      Against a disposable loopback MongoDB replica set only, run
+      `npm run verify:messenger-storage` with
+      `TT_MESSENGER_STORAGE_TEST_ALLOW_LOCAL=1` and a loopback-only
+      `MONGODB_CONNECTION_STRING`: posts, native Messenger rows, AI
+      projects/chats/messages, and relationship rows all increase the same
+      account ledger; identical re-import adds zero bytes; a 1-byte allowance
+      rolls back the container plus owner membership; the v2 backfill recounts
+      legacy Messenger content.
+
 - [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
       the viewport: no body scroll, no footer under the composer, nav
-      clearance intact at desktop and mobile widths.
+      clearance intact at desktop and mobile widths. In local/dev builds the
+      draggable DevKit trigger is omitted on this full-viewport route, so it
+      cannot cover message actions, Send, attachment, emoji, or textarea
+      controls.
 - [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
       Slack-style rows and Messenger bubbles; the choice survives reload
       (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] In the installed Thingtime Electron app, **✦ AI** opens the connection
+      modal in both Spaces and Chats modes. It independently identifies
+      ChatGPT, Claude, and Claude Thingtime; the browser build instead explains
+      that desktop discovery requires the app. At desktop and 390px mobile
+      widths, open every modal state, scroll top-to-bottom, and confirm buttons,
+      provider links, progress, and close controls neither clip nor overlap.
+- [ ] With a paired online Mac, **✦ AI** lists only its active bounded
+      connectors. Refresh a Codex connector, open one mirrored live chat,
+      create a chat under an opaque project id/label, and send while idle and
+      while a turn is active: Queue, Steer, and Stop map to distinct native
+      operations, stable request ids reconcile an ambiguous retry once, and
+      reopening/reloading the chat resumes from its event cursor without
+      repeating completed text.
+- [ ] In a live Codex chat, observe several exact streaming deltas (including
+      whitespace boundaries), a completed assistant item, and a command/file
+      approval. The activity panel updates without a spinner replacing cached
+      history. Reload with an approval pending: only its opaque/redacted safe
+      projection replays, and approve/deny still acts on that one request.
+      Completed visible user/assistant text survives event expiry as relational
+      quota-accounted Messenger messages, while reasoning, command lines/output,
+      tool payloads, cookies, credentials, and local paths never appear in UI,
+      API payloads, logs, or rows.
+- [ ] For a semantic Accessibility connector, permission preflight never
+      prompts on launch. Only the already-visible selected chat can be read;
+      create, send, or queue appears only when that exact connector advertises
+      the capability, and every semantic mutation first requires Thingtime
+      approval. Locked, denied, missing-permission, ambiguous-selector, or
+      selector-drift states fail closed. Steer, Interrupt, arbitrary app
+      selection, coordinates, AppleScript, and shell execution remain
+      unavailable unless a future connector explicitly implements and safely
+      advertises a narrower operation.
+- [ ] Sync one local source and one official JSON/ZIP export. Projects appear
+      as Spaces, grouped conversations as channels, ungrouped conversations as
+      chats, and user/assistant messages retain order and provider badges.
+      Provider rows cannot be edited/deleted; reactions, threads, and new
+      Thingtime replies work without posting back to the provider.
+- [ ] Repeat the exact sync, interrupt one multi-batch sync and resume it, then
+      compare row counts and account usage: stable source rows are reused,
+      no message is duplicated, read receipts/mute state survive, and quota
+      usage is unchanged after the identical replay. Fill the account and
+      confirm the next transactional unit 507s without an orphan Space/chat,
+      membership, partial invite redemption, or unmetered row.
+- [ ] Inspect the Electron boundary: renderer code receives normalized batches
+      only; the selected export path, app data roots, provider credentials,
+      cookies, hidden reasoning, tool traffic, and internal context do not
+      appear in network payloads, API responses, logs, or persisted connection
+      rows. Expired/cancelled sync ids cannot be read again.
 - [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
       sends, bubble shows yours right/theirs left, conversation pins to the
       BOTTOM of the pane even when short.
@@ -2976,8 +3816,119 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       through `GET /api/v1/things?id=` for non-owners;
       `POST /api/v1/things/react` cannot reach another member's chat message.
 
+## Linked deployments (Settings → Linked deployments, `api/utils/deployments/*`, `/api/v1/deployment-links*`)
+
+- [ ] SSRF fence on the link URL (`normalizeDeploymentBaseUrl`): linking to an
+      IP literal (`https://10.0.0.5`, `https://169.254.169.254`,
+      `https://[fd00::1]`) or an internal-only name
+      (`https://metadata.google.internal`, `*.internal`, `*.local`) is refused
+      with a 400 — the server must never be steerable at its own network by a
+      signed-in user. `http://localhost:<port>` stays allowed for the
+      dev-against-dev flow above. Covered by `npm run test:deployments`
+      (`app/api/utils/deployments/remote.test.ts`); this row is the live check
+      that the route surfaces the refusal instead of attempting the fetch.
+- [ ] Two isolated stacks for testing: second mongod (`mongod --port 27018
+      --dbpath <tmp> --fork ...`) + second dev stack (`TT_WEB_PORT=11120
+      TT_HMR_PORT=11121 TT_API_PORT=11122
+      MONGODB_CONNECTION_STRING=mongodb://localhost:27018/ npm run dev`).
+      `/api/v1/health/mongodb` on each stack must report its OWN host.
+- [ ] Link via password: Settings → Linked deployments → Link a deployment →
+      URL + remote username/password → row appears with the remote @username
+      and a success toast. With email-2FA enabled on the remote account, the
+      form asks for the emailed code first (`requiresOtp` branch).
+- [ ] Token upgrade at link time: a password link against a deployment that
+      HAS this feature stores a non-expiring link token (`tokenExpiresAt:
+      null` in GET /api/v1/deployment-links); the login-derived 30-day
+      session is revoked after the swap. Against an OLDER deployment the
+      30-day token is kept and `tokenExpiresAt` shows its expiry.
+- [ ] The upgraded token actually AUTHENTICATES: right after a password link,
+      Sync now must succeed rather than 401 with "no longer accepts the link's
+      token". Regression — a session `purpose` that is not in
+      `sessionPurposeCanActAsAccount` (`api/utils/auth/credentialPurpose.ts`)
+      is dropped by `getCurrentUser`, so minting `deployment-link` without
+      allowlisting it stored a token that could never authenticate, and the
+      swap had already revoked the working one. Pinned by `npm run
+      test:deployments` (`app/api/utils/deployments/linkTokenPurpose.test.ts`);
+      re-check this row whenever a new `purpose` is added to `SessionDoc`.
+- [ ] Link via token: Create a link token 🔑 on deployment B (shown exactly
+      once), paste into deployment A's "Paste a token" form → link works
+      without a password crossing between deployments.
+- [ ] Sync now (two-way): things move BOTH ways keyed by shareId; a comment
+      never lands before its post (dependency ordering); schemas land before
+      data things citing them. Immediately re-running sync reports planned 0
+      / everything unchanged — copied things must never ping-pong (content
+      equality beats updatedAt).
+- [ ] Conflict: edit the SAME thing on both sides → two-way keeps the newest
+      edit on both, `conflictsResolved` increments. Push/pull modes only ever
+      move data in their one direction.
+- [ ] Profile path: displayName/bio/avatar/banner sync; two-way prefers the
+      non-empty side (a fresh local account pulls the remote profile instead
+      of blanking it).
+- [ ] Path rules: `things/<kind>: off` suppresses exactly that kind (preview
+      shows planned 0 for its pending changes); first matching rule wins,
+      then `things`, then the link mode. Invalid paths (`nonsense path!`)
+      are rejected with the profile/things/things/<kind> hint.
+- [ ] Collisions + skew are AUDIBLE: a shareId owned by a DIFFERENT account
+      on the destination reports "belongs to a different account — skipped";
+      a kind unknown to the destination registry reports its schema error.
+      Sync continues past per-thing errors; 401/429 from the remote abort
+      with `remaining` > 0 and re-running continues.
+- [ ] Guards: base URL must be https (http only for localhost), an origin
+      only (no path/query/credentials); redirects are refused. Link/unlink/
+      token-mint ride `deployments.link` (10/5min) and sync rides
+      `deployments.sync` (6/5min), both fail-closed — hammering Sync now
+      429s with the breather toast.
+- [ ] Secrecy: remote tokens live only in the user thing's `secure` blob
+      (meta.deploymentLinks) — GET /api/v1/deployment-links never returns a
+      token field, and unlinking best-effort revokes the remote session.
+- [ ] Optimistic UI: the section paints its last-known roster from
+      `tt-deployment-links-<userId>` localCache instantly; mode taps apply
+      optimistically and revert on failure; sync summary line updates after
+      each run. Mobile (375px): rows wrap, no horizontal scroll.
+
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] A paired Mac appears at `/things` root and search from the dedicated
+      devices projection, with cached-first name/presence and current system,
+      volume, brightness, lock, open-app, permission, and connector state.
+      Open `?device=<id>` at desktop and exactly 390 CSS px, exercise every
+      drawer section, collapse/reopen each section, and resize the drawer from
+      its left edge at both widths. Confirm the generous edge target draws only
+      the slim hover/focus line (no grip pill), the visible boundary follows the
+      splitter value, and the 390px panel can shrink to 280px without clipping
+      or horizontal overflow. Scroll top-to-bottom: stale and offline state is
+      explicit, and desired controls confirm or revert against a newer observed
+      revision.
+- [ ] Device rows never enter generic selection, copy/move/share/delete,
+      context-menu, or preview flows. Capability, permission, lock, connector,
+      version, local-only, offline-queue, and approval policy each disable or
+      gate the relevant control before a command is sent. Approve and deny one
+      command, replay its request id, and confirm the node leases only approved
+      work and never blindly re-executes an expired/ambiguous lease.
+- [ ] Pairing uses prepare + complete with a server nonce and exact signed
+      claim. Simulate a server-committed complete response being lost, restart
+      the node, and confirm the persisted pending credential/proof replays into
+      one paired device. A changed proof, nonce, credential, or descriptor 409s;
+      the legacy unsigned claim is rejected. Treat this as key continuity and
+      replay fencing, not platform attestation.
+- [ ] Publish a newer complete connector snapshot that removes one connector,
+      then replay both the old snapshot and a same-revision changed snapshot:
+      the removal stays tombstoned, the changed replay 409s, and live sync is
+      rejected for a stale, removed, or revision-mismatched connector. Flood
+      bounded command/events in a disposable account and confirm count/byte
+      pruning plus TTL indexes prevent quota-neutral control rows becoming an
+      unmetered archive; submitted chat text remains once in the billed message.
+- [ ] In a disposable account, record storage before pairing and publishing a
+      persistent device/state/connector mirror. The canonical stored bytes
+      increase the same account ledger as posts and Messenger content; an
+      identical revision replay adds zero bytes, while attachments remain
+      separately metered and expiring command/event transport does not become
+      quota-free durable content.
+- [ ] Screen sharing says `not installed` and exposes no fake video stream when
+      peer transport is absent. The signed native capture primitive itself
+      preflights without prompting, refuses a locked/unapproved session, caps
+      display size/FPS/queue/frame bytes, disables audio and input injection,
+      and stops on permission loss or display disappearance.
 - [ ] A fresh browser landing directly on `/things` blocks first paint only
       long enough to create one temporary session user, then serves the real
       Things UI (never the logged-out sign-in hero). Reload and navigation
@@ -3129,6 +4080,126 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
 
+## Explore / trending (`remix/app/components/Explore/ExplorePage.tsx`, `remix/app/api/utils/things/trending.ts`)
+
+- [ ] Logged OUT, open `/explore`: the Trending board renders public posts
+      only — no friends/family/private post ever appears, and
+      `GET /api/v1/things/trending` returns the same public-only `posts`
+      array with `ok: true` and a `generatedAt` timestamp.
+- [ ] Cards are real feed PostCards: reacting, commenting, and voting on a
+      poll all work in place on `/explore` (logged in), and the counts match
+      the same post viewed on `/feed`.
+- [ ] Engagement moves the board: a recent post that gains reactions/comments
+      outranks an older post with none, and a week-old post with stale
+      engagement decays below fresh activity (score =
+      (reactions×3 + comments×4 + votes×2 + views×0.25 + 1) / (hours+2)^1.4).
+- [ ] Optimistic first paint: revisit `/explore` after a prior visit — the
+      last-known board paints instantly from the `tt-explore` localStorage
+      cache with NO skeleton flash, then reconciles in the background;
+      skeletons appear only on a true cold start (cleared storage).
+- [ ] The drawer's Feed section shows "Explore 🔥" and navigates to
+      `/explore`; `/feed` itself still loads and paginates normally.
+
+## Saved library (`remix/app/components/Saved/SavedPage.tsx`, `remix/app/api/utils/things/saved.ts`, `GET /api/v1/things/saved`)
+
+- [ ] Logged in, every post card (feed, `/explore`, `/post/:id` permalink,
+      profile) shows a 🔖 bookmark button beside Share. Tapping it flips the
+      icon to filled/accent INSTANTLY (optimistic), toasts "Saved to your
+      library 🔖", and the state survives a reload (`viewerSaved` rides the
+      same batched projection as `viewerReactions` — one query per page, no
+      N+1). Tapping again unfills instantly and toasts the removal; a failed
+      toggle reverts the icon and toasts the error. Logged OUT, no bookmark
+      button renders anywhere and `PublicPost` carries no `viewerSaved` field.
+- [ ] `/saved` lists the viewer's saved posts newest-SAVED-first (save time,
+      not post time) as real PostCards — reactions, comments, polls, and the
+      bookmark itself work in place; unsaving a card removes it from the list
+      optimistically (a failed unsave restores it in place). Pagination loads
+      ~30 per page via `nextCursor`. Optimistic first paint from the
+      per-viewer `tt-saved-<viewerId>` localStorage cache (no skeleton flash
+      on revisit; skeleton only on a true cold start), and logout sweeps the
+      `tt-saved-` prefix so another account on the same browser never sees a
+      cached library.
+- [ ] Libraries are independent per user: two accounts saving different posts
+      each see only their own on `/saved`, and `GET /api/v1/things/saved`
+      401s logged out (`/saved` shows the quiet log-in state instead). A
+      saved post that is later DELETED (or its audience narrowed away from
+      the viewer) silently disappears from `/saved` — fail closed, no error
+      rows. The drawer's Feed section shows "Saved 🔖" (auth-only) linking to
+      `/saved`.
+
+## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
+
+- [ ] `GET /api/v1/things/rss` (logged in OR out) returns well-formed Atom XML
+      (`Content-Type: application/atom+xml; charset=utf-8`, edge cache headers)
+      of the latest ~50 PUBLIC posts only — no friends/family/private post ever
+      appears, cookies are ignored, and no viewer field leaks into entries.
+      Posts containing quotes, angle brackets (`"><script>` probes), emoji, or
+      control characters escape cleanly (feed still parses with xmllint), and
+      the shell `<head>` keeps the `<link rel="alternate"
+      type="application/atom+xml" href="/api/v1/things/rss">` discovery tag on
+      every page (it lives outside the swapped tt-social-meta block).
+
+## Feed keyboard shortcuts (`remix/app/hooks/useFeedShortcuts.ts`, `/feed` + `/explore`)
+
+- [ ] On `/feed` (desktop): `j`/`k` move an accent focus ring down/up the post
+      column (clamping at both ends, `scrollIntoView` keeping the card in
+      view), `l` toggles a ❤️ on the focused post optimistically (press again
+      to un-react; counts reconcile with the server), `c` does exactly what
+      the Show/Hide comments button does, `n` expands/focuses the composer's
+      editor, `?` opens the cheatsheet modal (Escape/backdrop closes it), and
+      Escape clears the focus ring. Same on `/explore` minus `n`.
+- [ ] Shortcuts are INERT while typing: with focus in the composer, a comment
+      box, the search field, any input/select/contenteditable, while any
+      modal/popover/menu is open, or while Commander is active, pressing
+      j/k/l/c/n/? types normally and never navigates or reacts. Modifier
+      chords (⌘/Ctrl/Alt + letter) always pass through to the browser.
+- [ ] Mobile is untouched: with no keyboard there is no focus ring, no
+      cheatsheet, and no visual change to the feed.
+
+## Feed "On this day" memories (`remix/app/components/Feed/MemoriesCard.tsx`, `/feed`)
+
+- [ ] Logged in with posts from this calendar day in previous years: a
+      dismissible "On this day" card sits between the composer and the post
+      column, showing up to 6 compact tiles (snippet + "N years ago today 🕰️")
+      that link to `/post/<id>`. Posts made TODAY (year offset 0) never appear
+      — this year is excluded from the query by construction. With no
+      anniversary posts (or logged out) the card renders NOTHING — zero layout
+      shift, no empty shell, no spinner.
+- [ ] ✕ dismisses the card for the rest of the LOCAL day (per viewer:
+      `tt-onthisday-<viewerId>` localCache) — reloading keeps it hidden; it
+      returns after the local date rolls over. Same-day revisits paint from the
+      cached entry instantly with no refetch (optimistic rendering); a stale
+      cached day refetches in the background. Logout sweeps the
+      `tt-onthisday-` prefix so another account on the same browser can never
+      see cached private-post snippets.
+- [ ] Query windows are the VIEWER's local calendar day per historical year
+      (local-midnight instants, DST-correct), not UTC days: a Sydney (UTC+10)
+      post from 09:00 local on this date last year appears, and a post from
+      08:00 local TOMORROW's date last year does not. "N years ago today" uses
+      the local year (a Jan 1 00:30 local post is Dec 31 UTC — label must not
+      be off by one).
+- [ ] A tab left open (or backgrounded) across local midnight rolls over
+      without a reload: at 00:00 yesterday's tiles/labels disappear, a
+      yesterday dismissal resets, and the new day's memories fetch on the
+      midnight timer or the next focus/visibility change.
+
+## Quick switcher (`remix/app/components/QuickSwitcher/`, global ⌘K)
+
+- [ ] `⌘K` / `Ctrl+K` from any page (including with focus in an input) opens
+      the centered palette; `Escape`, backdrop click, or `⌘K` again closes it.
+      Fuzzy-typing a page name ("expl", "msgs") surfaces the Pages section;
+      ArrowUp/Down move the highlight across sections and Enter navigates
+      client-side (no full reload). Typing a username fragment shows People
+      rows (avatar + name + @username → their profile); when logged in, a
+      matching own thing appears under "Your things" (title + kind →
+      `/thing/<id>`). Picks land in a per-viewer "Recent" section (localCache
+      `tt-quickswitch-<viewerId|anon>`, cap 8, swept on logout) shown when the
+      query is empty. The chord never fires while Commander is active or
+      another modal/menu is open; with the palette open, feed j/k/l/c
+      shortcuts stay parked (its `role="dialog"` trips the overlay check) and
+      Commander's own ⌘P behavior is untouched. The Nav bar's small ⌘ button
+      (mobile affordance) toggles the same palette.
+
 ## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
 
 - [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
@@ -3243,3 +4314,110 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Used by: /actions/:key lists the viewer's components binding the action
       via ttAction as clickable 🧩 chips; exact-token matching (an action key
       that prefixes another never cross-matches).
+
+## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
+      migrations, apps, raw, admin + sub-panels) renders the PageShell surface
+      wash, clears the fixed nav (no underlap at 54px), and shows the mono
+      eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
+- [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
+      private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
+      sub-blocks highlight innermost-wins; clicking selects (solid outline)
+      and opens the inspector in the right drawer.
+- [ ] Inline "+ add block" lines appear between siblings on hover; the menu
+      offers quick structural blocks and a live component search backed by
+      /api/v1/components/browse; picking a component renders it instantly.
+- [ ] Inspector args derive from the component's arg specs (string/text/
+      number/boolean/enum inputs); edits re-render the canvas live; align +
+      max-width apply; delete removes the block (native blocks can't be
+      deleted, only moved).
+- [ ] Drag the ⠿ chip onto any insert line to reorder/move blocks, including
+      into/out of containers; dropping a container into its own subtree is
+      refused.
+- [ ] Save on a fresh page creates the thing (private by default); the Public
+      toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
+      see public pages read-only (ttActions inert — owner-only interactivity).
+- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
+      /authorize) enters in-place editing of the current route; the live app
+      screen renders as the locked 🔒 native block; Save my version forks a
+      viewer-owned twin; leaving edit mode shows the personalised blocks in
+      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
+      refetch or remount on client navigation.
+- [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →
+      unchanged), GET returns the census, non-admins get 401/403, and
+      webpage- shareIds are refused on generic creates (reserved prefix).
+- [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
+      builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Nested blocks select on click: with a container (grid/row/column) holding
+      children, clicking a CHILD selects the child (inspector shows its
+      fields), clicking the container's own area selects the container —
+      ancestors never steal the capture-phase click (regression: outermost
+      frame always won and stopped propagation).
+- [ ] Grid ×2 + two blocks: first block lands in the LEFT cell, second sits
+      beside it, the trailing add-tile takes the next free cell (regression:
+      interleaved insert zones consumed grid cells and shoved blocks right).
+- [ ] Row container with two text blocks: children share one line via flex
+      sizing (regression: width-100% frames wrapped each child onto its own
+      line); row insert zones are slim vertical strips.
+- [ ] Inline WYSIWYG: clicking a text block edits in place with the caret
+      preserved while typing (regression: tag flips mid-edit replaced the DOM
+      node under the mount-only init and ATE the text); Enter/Shift+Enter
+      insert soft breaks; selecting text floats the B/I/U/S/link toolbar;
+      formatting survives deselect (renders through the allowlist renderer).
+- [ ] Custom CSS/tag/html/media fields round-trip a save and the gate rejects
+      `expression()`, `@import`, `javascript:`, non-https `url()`, script/
+      iframe text tags, ftp/js media src, and >20KB html
+      (`pnpm --dir remix run test:schemas` → webpageBlockGate).
+- [ ] Edit mode shows no white body bar between the 🌐 Global strip and the
+      page region (canvas paints the surface wash) and the Global eyebrow has
+      clear air below the navbar (view + edit).
+- [ ] Dropping an image FILE onto a media block replaces its src (never opens
+      the file in the browser); dropping anywhere else in edit mode uploads
+      and appends a media block (window-level guard); ⌘/Ctrl+V of a clipboard
+      image while a block is selected uploads at the selection, and plain
+      text paste into inputs/the inline editor is untouched.
+- [ ] Media inspector offers BOTH ⬆️ Upload file and a URL field; the Kind
+      select never wraps its option text (FieldPair min-width regression).
+- [ ] Inspector padding/margin mode toggles (▢/⬍⬌/⛶) write the css shorthand
+      and round-trip (axes ↔ sides keep values); per-corner radius, border
+      and shadow composers produce valid shorthands
+      (`pnpm --dir remix run test:webpages` → figmaControlValues).
+- [ ] Align=center on a block visibly centers it (fit-content + justify-self
+      in grids — regression: align-self alone did nothing on 100%-wide
+      blocks and was the wrong axis in grid cells).
+- [ ] Text block 📝 Rich editor (Editor.js) applies headers/lists/tables/code
+      as sanitised html and reopens editable; double-click on text inside a
+      component block opens the inline arg editor and patches the arg.
+- [ ] Drawer resizes by dragging its left edge (handle reachable even with
+      the inspector scrolled — content scrolls, not the shell); width
+      persists across reloads and the canvas padding follows live; selected
+      inline text editor shows ONE outline (no double border once padding is
+      set).
+- [ ] TRUE WYSIWYG: a saved block's top/left/size are IDENTICAL in edit mode
+      and view mode (toggle ✏️/Done and measure) — insert affordances are
+      overlay strips on block seams and never occupy layout; the 🌐 Global
+      label floats in the nav breathing band; grids have no add-tile cell.
+- [ ] Selecting a text block mounts the FULL Editor.js editor inline
+      (headings/lists/tables/quotes); a heading typed there renders at real
+      heading scale after deselect (regression: Chakra reset flattened
+      rendered rich markup to body size); right-click a text block →
+      "Advanced rich editor…" opens the modal.
+- [ ] Right-click any block (or the chip ⊞): Wrap with block drill-down wraps
+      IN PLACE (block becomes the container's only child), Duplicate
+      deep-clones with fresh ids, move/delete work
+      (`pnpm --dir remix run test:webpages` → wrapBlock/duplicateBlock).
+- [ ] Numeric inspector fields never rewrite mid-typing: type "300" into Max
+      width — it must NOT snap to 120 at the "3" (clamps commit on
+      blur/Enter); spaces can be typed in the uniform padding input.
+- [ ] Dropping the SAME OS file twice starts two uploads (regression: the
+      uploader's session dedupe silently swallowed re-drops); Rich-editor
+      Apply shows immediately in the still-mounted inline editor and is not
+      overwritten by its blur commit (external-change sync); pasting into
+      drawer inputs or the Editor.js modal is never hijacked by the
+      paste-to-upload listener; a padding of calc(100% - 20px) survives the
+      Sides control (paren-aware tokenizer) and a multi-token shorthand is
+      shown raw in uniform mode, never as an empty field.
+- [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.

@@ -39,7 +39,6 @@ test('post comment count layers never report a negative reply count', () => {
 test('an owner can recover an orphaned attachment permalink, but nobody else can', async () => {
 	const attachment = {
 		shareId: 'att-orphaned-image',
-		schemaVersion: 2,
 		ownerId: 'owner-1',
 		thingtime: ['attachment'],
 		acl: ['tt:inherit'],

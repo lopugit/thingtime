@@ -159,6 +159,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const props = {
 		...args
 	};
+	const safeEmbed = props?.safeEmbed === true;
 
 	const [thingtimeMachineNamespace, setThingtimeMachineNamespace] = React.useState(props?.thingtimeMachineNamespace || 'user');
 	const [timelineNamespace, setTimelineNamespace] = React.useState('user');
@@ -188,6 +189,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const thingtimeRef = React.useRef();
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
+	// hover context on the key/property name itself (claude-todo 08 §5): shown
+	// after a short hover intent so casual mouse travel doesn't flash tooltips
+	const [showKeyPathContext, setShowKeyPathContext] = React.useState(false);
+	const keyPathHoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const onKeyPathHoverEnter = React.useCallback(() => {
+		clearTimeout(keyPathHoverTimerRef.current);
+		keyPathHoverTimerRef.current = setTimeout(() => setShowKeyPathContext(true), 450);
+	}, []);
+	const onKeyPathHoverLeave = React.useCallback(() => {
+		clearTimeout(keyPathHoverTimerRef.current);
+		setShowKeyPathContext(false);
+	}, []);
+	React.useEffect(() => () => clearTimeout(keyPathHoverTimerRef.current), []);
 	// the nearest ancestor's collapse-all/expand-all cascade — read via context
 	// (not element props) so children mounting in the same commit as the
 	// cascade update still see the fresh value
@@ -342,8 +356,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// store this thing in the global db — NEVER for untrusted (other users')
 		// trees: this page-global would otherwise collect hostile feed payloads
 		// (the "Massive security leak" the code already flags), and every feed
-		// ThingView would clobber the same keys.
-		if (!props?.untrusted) {
+		// ThingView would clobber the same keys. Embed-SDK mounts (safeEmbed) live
+		// on third-party pages, so they never touch the page global either.
+		if (!safeEmbed && !props?.untrusted) {
 			try {
 				window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
 			} catch {
@@ -352,7 +367,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return fullPathReturn;
-	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing, props?.untrusted]);
+	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing, props?.untrusted, safeEmbed]);
 
 	// TODO
 	// attempt at making seedling button work with <Thingtime path argument only
@@ -390,13 +405,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// untrusted trees (other users' things mounted in feeds/search via
 		// ThingView) must never reach the chakra path — it spreads thing.props
 		// verbatim into Chakra components, which is only safe for data the
-		// viewer authored themselves
-		if (props?.untrusted) {
+		// viewer authored themselves. Embed-SDK mounts (safeEmbed) render
+		// JSON-only on third-party pages, so they are excluded for the same reason.
+		if (safeEmbed || props?.untrusted) {
 			return false;
 		}
 
 		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, editMode, props?.untrusted]);
+	}, [thing?.chakra, editMode, props?.untrusted, safeEmbed]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.slice(0, -1);
@@ -525,7 +541,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						paddingX="8px"
 						paddingY="2px"
 						borderRadius="var(--tt-radius-xs, 7px)"
-						background={thing ? 'var(--tt-positive-tint, #e4f6ea)' : 'var(--tt-surface-alt, #f5f5f7)'}
+						background={thing ? 'var(--tt-positive-soft, rgba(88,202,112,0.14))' : 'var(--tt-surface-alt, #f5f5f7)'}
 						color={thing ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
 						fontFamily="var(--tt-font-mono, monospace)"
 						fontSize="15px"
@@ -602,6 +618,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// if Thingtime object has "exec" then execute and set thing to returned data
 	React.useEffect(() => {
+		if (safeEmbed) return;
+
 		(async () => {
 			if (thing?.exec && typeof thing?.exec === 'function') {
 				try {
@@ -614,7 +632,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		})();
-	}, [thingDep, safeJoin(fullPath), setThingtime]);
+	}, [safeEmbed, thingDep, safeJoin(fullPath), setThingtime]);
 
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
@@ -738,6 +756,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								// pre-padded containers (editor windows) slim the key
 								// gutter for the whole tree, not just the root
 								pathPl={props?.pathPl}
+								safeEmbed={safeEmbed}
 							></Thingtime>
 						);
 					})}
@@ -787,6 +806,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		depth,
 		safeJoin(fullPath),
 		chakra,
+		safeEmbed,
 		collapseScope,
 		props?.pathPl,
 		props?.untrusted
@@ -1399,11 +1419,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			const { type } = args;
 			const newChild = typeof type?.value === 'function' ? type?.value() : type?.value || null;
 
-			console.log('[tt] newChild', newChild);
+			if (TT_DEBUG) console.log('[tt] newChild', newChild);
 
 			const thingIsArray = thing instanceof Array;
 
-			console.log('[tt] thingIsArray', thingIsArray);
+			if (TT_DEBUG) console.log('[tt] thingIsArray', thingIsArray);
 
 			if (thingIsArray) {
 				// add new child to array
@@ -1428,7 +1448,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			const newChildPath = newPath;
 			const newChildFullPath = [...safeSplit(fullPath), newChildPath];
 
-			console.log('[tt] newChildFullPath', newChildFullPath);
+			if (TT_DEBUG) console.log('[tt] newChildFullPath', newChildFullPath);
 
 			// create new child on thing using setThingtime
 			setThingtime(newChildFullPath, newChild, {
@@ -1443,8 +1463,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// should be absolute last
 	React.useEffect(() => {
-		// never register untrusted (other users') trees in this page global
-		if (props?.untrusted) return;
+		// never register untrusted (other users') trees, or embed-SDK mounts living
+		// on a third-party page, in this page global
+		if (safeEmbed || props?.untrusted) return;
 		try {
 			window.meta.things[uuid] = {
 				thing: props?.thing,
@@ -1463,14 +1484,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} catch {
 			// nothing
 		}
-	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeJoin(fullPath), parent, parentPath, path]);
+	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeEmbed, safeJoin(fullPath), parent, parentPath, path]);
 
 	if (chakra || chakraChild) {
 		return thingtimeChildren;
 	}
 	// log chakra and chakraChild
 	return (
-		<Safe {...props} depth={depth} uuid={uuid}>
+		<Safe {...props} disabled={safeEmbed} depth={depth} uuid={uuid}>
 			<Flex
 				ref={thingtimeRef}
 				position="relative"
@@ -1500,7 +1521,38 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							onMouseEnter={() => setShowContextIcon(true)}
 							onMouseLeave={() => setShowContextIcon(false)}
 						>
-							<Flex className="thingPathDom-raw" data-tt-zone="key">
+							<Flex
+								className="thingPathDom-raw"
+								data-tt-zone="key"
+								position="relative"
+								onMouseEnter={onKeyPathHoverEnter}
+								onMouseLeave={onKeyPathHoverLeave}
+							>
+								{/* full dotted path on key hover — same treatment as the
+								add-child seedling row's context window */}
+								{showKeyPathContext && !!safeJoin(fullPath) && (
+									<Flex
+										position="absolute"
+										bottom="100%"
+										left={0}
+										zIndex={2}
+										color="var(--tt-muted, #9a9aa6)"
+										fontFamily="mono"
+										fontSize="12px"
+										background="var(--tt-surface-alt, #f5f5f7)"
+										borderRadius="var(--tt-radius-xs, 7px)"
+										pointerEvents="none"
+										whiteSpace="nowrap"
+										maxWidth="min(80vw, 560px)"
+										overflow="hidden"
+										textOverflow="ellipsis"
+										display="block"
+										paddingX={3}
+										paddingY={1}
+									>
+										{safeJoin(fullPath)}
+									</Flex>
+								)}
 								{pathDom}
 							</Flex>
 							{(editMode || codeView) && !props?.hideRootPath && (

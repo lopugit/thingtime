@@ -13,18 +13,41 @@
   Full spec and Bambu Studio reference screenshot:
   `claude-todo/20-versioned-experience-history.md`.
 
-1. **URGENT HIGH PRIORITY: Make true `hydrateRoot(document, ...)` merge-ready.**
+1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
+   (closed 2026-07-21).**
 
-   Rollback checkpoint before deeper hydrate experiments: `61c234a` (`Fix Remix Emotion hydration styling`).
+   This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
+   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+   React document tree, and the remaining work was to eliminate dev-mode
+   `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
+   to the Vite + React Router non-framework shell: `remix/index.html` is a
+   static shell and `remix/app/entry.client.tsx` renders client-only via
+   `createRoot(document.getElementById('root'))` — there is no server-rendered
+   document and no hydration pass anywhere, so document-hydration mismatch
+   warnings can no longer occur. The original symptom (unstyled-content jump)
+   is handled by the static shell plus the pre-paint theme snapshot in
+   `remix/public/tt-boot.js` (a render-blocking external script loaded from
+   `index.html`'s `<head>` — external so the CSP can stay `script-src 'self'`).
+   If SSR is ever reintroduced, write a fresh spec against that architecture
+   instead of resurrecting this item.
 
-   The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
+2. **✅ FIXED — Tighten verification-link origin trust.**
 
-2. **Tighten verification-link origin trust.**
-
-   Email verification links are still built from the request origin. Move them
-   to a canonical `APP_URL` or explicit host allowlist before relying on real
-   email delivery, so unexpected or spoofed hosts cannot generate verification
-   URLs on the wrong origin.
+   Largely done before this pass: `resolveTrustedOrigin`
+   (`remix/app/api/utils/auth/appOrigin.ts`) already prefers `APP_URL` and all
+   four email-link routes use it. Finished on
+   `claude/todo2-verification-link-origin-s3`: when `APP_URL` is unset the
+   origin is resolved from the platform rather than the caller. On Vercel the
+   Host header is not consulted at all — `VERCEL_BRANCH_URL`/`VERCEL_URL` (or
+   `VERCEL_PROJECT_PRODUCTION_URL` on a production target) name the deployment,
+   and those are server-injected. Off-platform (local dev) a narrow Host
+   allowlist still applies — `localhost`, `127.0.0.1`, `[::1]`,
+   `*.thingtime.com`, `*.ts.net` — and every other Host gets the canonical
+   `https://thingtime.com`. `*.vercel.app` is deliberately NOT a trusted Host
+   pattern: that namespace is multi-tenant, so trusting it would have left the
+   spoof open to anyone willing to deploy a free project. Covered by
+   `npm run test:auth-origin` and the `TESTING.md` "Emailed-link origin trust"
+   checklist. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 
@@ -33,33 +56,48 @@
    fallback verifier and the legacy secret from deployment environments.
 
 4. **Add revocation-aware token introspection for external platforms.**
-
-   `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
-   expiry offline. If an external integration needs live session revocation
-   status, add a server-side introspection endpoint that checks Mongo sessions.
+   ✅ Built 2026-07-21: `POST /api/v1/auth/introspect` (RFC 7662 shape) —
+   `introspectToken` in `getCurrentUser.ts` verifies the signature then checks
+   the live Mongo session (revocation + expiry + user status). Possession of
+   the token is the authorization; inactive tokens return a bare
+   `{ active: false }` (no oracle). Rate-limited (`auth.introspect`),
+   documented on `/docs/api`, covered in `apiTests.ts`, and live-verified
+   (register → active:true; logout → active:false).
 
 5. **Replace Vercel status polling with Vercel webhooks.**
 
-   The footer status can poll while a deployment is actively building, but
+   ✅ **Code shipped 2026-07-21** (`claude/vercel-webhook-status`): signed
+   webhook receiver at `POST /api/v1/vercel/webhook` (HMAC sha1 over the raw
+   body, 404 when `VERCEL_WEBHOOK_SECRET` unset), latest status persisted per
+   git branch in the `settings` collection (`vercelWebhookStatus`, capped at 30
+   branches), and `getVercelDeploymentStatus` serves ready/error/canceled from
+   the persisted doc with zero Vercel API spend — mid-build states still live
+   poll for phase/progress. Remaining one-time setup (owner): create the
+   webhook in the Vercel dashboard for deployment created/succeeded/error/
+   canceled events pointing at `/api/v1/vercel/webhook`, and set
+   `VERCEL_WEBHOOK_SECRET` in the Vercel env. See `VERCEL_DEPLOYMENTS.md`.
+
+   Original report: the footer status can poll while a deployment is actively building, but
    ready deployments should not keep spending Vercel API calls just to detect
    a future build. Add a Vercel webhook endpoint for deployment created/ready/
    failed events, persist the latest project status server-side, and have the
    footer/dashboard read the cached status instead of polling Vercel directly.
 
-6. **Add cross-tab sync for persisted thingtime state.**
+6. **✅ Done (reconciled 2026-08-18): cross-tab sync for persisted thingtime state.**
 
-   `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx`, persist
-   effect around lines 420–450) persists the ENTIRE thingtime object to
-   localforage on every state change, and loads it only once on mount. With
-   two tabs open on the same origin, each tab's writes clobber the other's
-   (last-writer-wins), and neither tab sees the other's changes until reload —
-   observed live: a second dev tab reverted drawer settings
-   (`thingtime.settings.drawer.*`) written by the first. Design and implement
-   cross-tab sync, e.g. a `BroadcastChannel('thingtime')` that publishes
-   changed paths and applies them in other tabs via the existing `setThingtime`
-   queue with `ignoreUndoRedo`, or storage-event-driven reload of changed
-   subtrees. Follow `FUNDAMENTALS.md` and keep the single persist path in
-   `ThingtimeProvider`. Full spec: `claude-todo/07-cross-tab-thingtime-sync.md`.
+   `BroadcastChannel('thingtime')`
+   (`remix/app/Providers/thingtimeSyncChannel.ts`) publishes each successfully
+   applied local `setThingtime` write. Payloads go through the active safe
+   `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
+   persisted/runtime function source never crosses tabs. Other tabs apply the
+   write through the existing mutation queue with `{ ignoreUndoRedo: true,
+   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+   internal root `timemachine` path is excluded from channel traffic, while
+   ordinary paths restored by undo/redo still converge across tabs. The
+   debounced latest-revision autosave in `ThingtimeProvider` remains the one
+   persist path. Unit and live two-tab verification are recorded in
+   `claude-todo/07-cross-tab-thingtime-sync.md`; optional cold-tab revision
+   reconciliation remains future hardening.
 
 ---
 
@@ -67,35 +105,38 @@ _Added 2026-07-08 after a full multi-agent codebase review (27 agents: 6 subsyst
 readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
 below was confirmed by reading the cited code — file/line refs are load-bearing._
 
-7. **🔒 URGENT SECURITY: lock down the unauthenticated admin/data endpoints.**
-   _✅ Done 2026-07-21: raw-results and populate became admin-only + rate-limited
-   fail-closed in earlier PRs; service-account provisioning (public by design)
-   is now rate-limited fail-closed per IP, body-capped, and field-whitelisted —
-   see `claude-todo/09-security-hardening.md` §A._
+7. **🟡 PARTIALLY FIXED — 🔒 SECURITY: lock down the unauthenticated admin/data endpoints.**
 
-   Three live, prod-registered endpoints have **no auth, no rate limit, no env
-   gate**:
-   - `POST /api/v1/mongodb/raw-results`
-     (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx` L21–44) runs
-     `things.find().toArray()` and returns **every** `things` doc — including
-     `friends`/`family`/`private` posts — bypassing the `canView` /
-     `visibilityQueryFor` gating in `things.ts`. Full data exfiltration by anyone.
-   - `POST /api/v1/mongodb/populate` (`.../mongodb/populate/_populate.tsx` L24 →
-     `scripts/mongodb/setup.ts`) lets any anonymous caller seed the DB with
-     repo-known demo passwords and burn bcrypt/Mongo work per request (DoS
-     amplification).
-   - `POST /api/v1/auth/service-account`
-     (`.../auth/service-account/_service-account.tsx` L8 →
-     `serviceAccounts.ts` L48–109) mints a **non-expiring** bearer token
-     (`signJwt expiresIn:null`, `createSession expiresAt:null`) with a **5 GB**
-     storage allowance, with no caller check. Anyone can mass-mint permanent
-     tokens. (Partial mitigation only: `getCurrentUser` L35–41 disables an
-     *unverified* service token after a 7-day grace.)
+   > **Status — verified on main 2026-07-21, re-verified 2026-08-29.** A1 and A2
+   > are closed. A3 is throttled but not yet bounded. Do not re-claim A1/A2 or
+   > A3's throttle. Full spec and original finding:
+   > `claude-todo/09-security-hardening.md` §A.
 
-   Gate all three behind an admin/service-account/session check (or dev-only env
-   gate + remove from the prod dispatcher `remix/server/routes/api/[...].ts`
-   L32–33), and add visibility filtering to any that stay.
-   Full spec: `claude-todo/09-security-hardening.md`.
+   - ✅ **A1 — `POST /api/v1/mongodb/raw-results`**
+     (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`): loader and
+     action both gate on `requireAdmin`, then a fail-closed `mongodb.query`
+     `enforceRateLimit`, and only run bounded read-only queries through
+     `runMongoQuery`. The `things.find().toArray()` full-collection dump that
+     bypassed the `canView` / `visibilityQueryFor` gating in `things.ts` is gone.
+   - ✅ **A2 — `POST /api/v1/mongodb/populate`**
+     (`.../mongodb/populate/_populate.tsx`): `requireAdmin` plus a fail-closed
+     `mongodb.populate` limiter, so an anonymous caller can no longer seed
+     repo-known demo passwords or burn bcrypt/Mongo work per request.
+   - 🟡 **A3 — `POST /api/v1/auth/service-account`**
+     (`.../auth/service-account/_service-account.tsx` → `serviceAccounts.ts`):
+     public by design. PR #100 (merged 2026-08-12) added the fail-closed per-IP
+     `auth.serviceAccount` limiter, a 16 KiB body cap, and an explicit field
+     whitelist, so unauthenticated mass-minting is throttled. **Still open:** the
+     minted token is non-expiring (`signJwt expiresIn:null`,
+     `createSession expiresAt:null`) and carries the 5 GiB
+     `storageAllowanceBytes` default. Bound the token lifetime before closing
+     this item. (`getCurrentUser` only disables an *unverified* service token
+     after a 7-day grace, so it does not bound a verified one.) PR #103 was
+     closed unmerged and covered signup/item 8, not A3.
+
+   All three are still registered in the prod dispatcher
+   (`remix/server/routes/api/[...].ts`) — the gating above is what makes them
+   safe, so keep it in place if these routes ever move.
 
 8. **✅ FIXED — 🔒 SECURITY: brute-force + abuse rate limiting on auth endpoints.**
 
@@ -129,18 +170,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     than weakening the whole application policy.
     Full spec: `claude-todo/09-security-hardening.md`.
 
-11. **🐛 Feed shows duplicate posts in ranked mode.**
+11. **✅ FIXED: Feed shows duplicate posts in ranked mode.**
 
-    `Feed.tsx` `load()` (L79) appends pages with no id dedupe. Ranked pagination
-    re-scores a moving 400-candidate window by numeric offset
-    (`things.ts` L426–453), and the training flush every 8 s mutates weights
-    (`algorithms.ts` L283–291), so ordering shifts between pages and the same
-    `post.id` reappears on a later page. `PostList.tsx` L75 keys rows by
-    `post.id`, so duplicates produce duplicate React keys + glitched rows. Dedupe
-    appended pages against a `Set` of existing ids (and/or exclude served ids
-    server-side for ranked pagination).
+    Fixed on `claude/feed-ranked-dedupe-s7` (2026-07-21): every paginated
+    append now flows through one shared `appendPostsDeduped` helper
+    (`feedTypes.ts`) — the feed pager (both simple and advanced modes) and the
+    profile pager drop any page entry whose `post.id` is already rendered, so
+    ranked re-scoring of the moving candidate window can no longer produce
+    duplicate React keys. Server-side exclusion of served ids for ranked
+    pagination remains an optional follow-up optimisation (saves duplicate
+    delivery, not needed for correctness).
 
 12. **⚡ `React.memo` on `PostCard` is defeated → every card repaints on scroll.**
+    _✅ Done 2026-07-21: `PostCard`'s `onChanged` contract is now `(id, next)` so
+    `PostList` passes the consumers' already-`useCallback`-stable
+    `handlePostChanged` straight through — no per-card closure, memo bails
+    correctly. Feed + ProfilePage handlers already matched the new signature._
 
     `PostList.tsx` L78 passes a fresh inline closure
     `onChanged={(next) => onPostChanged(post.id, next)}` per render, so the
@@ -151,24 +196,36 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     already has `post`) or memoise a per-card wrapper. Apply to other `PostList`
     consumers (`ProfilePage`).
 
-13. **🐛 Global Cmd/Ctrl+Z listener hijacks native text undo everywhere.**
+13. **✅ FIXED: Global Cmd/Ctrl+Z listener hijacks native text undo everywhere.**
 
-    `useThingtimeMachine.tsx` `keyListener` (L93–140, mounted app-wide via
-    `ThingtimeProvider` L149) `preventDefault()`s undo/redo window-wide with no
-    guard for editable targets. Native undo is broken inside the post composer,
-    comment boxes, and login form (a thingtime undo fires instead, mutating
-    unrelated state). Bail when `e.target` is INPUT/TEXTAREA/SELECT/contentEditable
-    or `e.isComposing`; also normalise `e.key.toLowerCase() === 'z'` (Shift+Z
-    reports `'Z'`, making the redo branch at L101 unreachable in most browsers).
+    Fixed on `claude/undo-editable-guard-s8` (2026-07-21):
+    `useThingtimeMachine.tsx` `keyListener` now bails before `preventDefault()`
+    whenever `e.target` is INPUT/TEXTAREA/SELECT/contentEditable or
+    `e.isComposing`, so native text undo wins inside the post composer, comment
+    boxes, the login form, and Editor.js blocks. The combo match also
+    normalises case (`e.key.toLowerCase() === 'z'`), which makes the redo
+    branch reachable — Shift+Z reports `'Z'`, so Cmd/Ctrl+Shift+Z previously
+    never redid anything. Checklist line in `TESTING.md` under "Feed thing
+    rendering".
 
-14. **🧹 Remove render-time debug leaks in the hot path.**
+14. **✅ FIXED IN PR #115 — 🧹 Remove render-time debug leaks in the hot path.**
 
-    `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
-    unbounded per-instance array on `window.useThingtimeScope` on **every render**
-    of **every** consumer — a module-level object that leaks across SSR requests
-    and grows for the life of the tab; nothing ever trims it and it ships in prod
-    bundles. `ThingtimeURL.tsx` (L23–55) and `CommanderV2` (L337, per-keypress)
-    also log on every render. Dev-gate or remove.
+    The severe part — the unbounded `window.useThingtimeScope` per-render array
+    in `useThingtime.tsx` — was already gone before this pass (the hook is now a
+    plain context read). Remaining render-time `console.log`s were cleared on
+    `claude/render-log-leaks-s7` (2026-07-21): removed all four render-time logs
+    in `ThingtimeURL.tsx` (the `location`, path/thing `useMemo` bodies, and the
+    per-render return log), the per-render `commanderActive` log and the
+    per-keypress `e?.code` log in `CommanderV2.tsx`, the per-render `debug`
+    object + log in the `command` `useMemo` and the per-keypress `e?.code` log
+    in `CommanderV1Deprecated.tsx` (folded in from PR #110), and gated the three
+    `addNewChild` debug logs in `Thingtime.tsx` behind the file's existing
+    `TT_DEBUG` flag. Verified live: `/` and `/things` render cleanly with no
+    console errors and none of the removed logs. (Discrete event-handler logs in
+    `CommanderV2` — on select/close/error — were left as-is; they are not
+    render-time hot-path leaks. The two remaining render-body `console.debug`
+    calls in `LogoOld2.tsx`/`LogoOld3.tsx` are unreachable — neither component
+    is imported anywhere — so they are not hot-path leaks either.)
 
 15. **🟡 MOSTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
 
@@ -263,3 +320,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     app-ness as a view over an existing folder rather than overloading the
     client-identity control plane.
     Full spec: `claude-todo/21-app-composition-surface.md`.
+
+21. **🚨 P0: Keep all established functionality available across pending storage migrations.**
+
+    Deploying code to `develop`, production, or another running shared branch
+    must never make existing user-data reads or writes depend on an operator
+    having already run a migration. Use an expand/coexist/migrate/verify/contract
+    rollout with a centralized compatibility policy, dual-era read/write paths,
+    idempotent reconciliation, and explicit tests against unmigrated, partially
+    migrated, mixed, and fully migrated storage. Feature flags may gate only new
+    behavior; they must never disable existing create, comment, update, react,
+    save, share, or other established capabilities. If compatibility cannot be
+    preserved, block the deployment in CI rather than rejecting live user work.
+    Full spec: `claude-todo/24-migration-safe-continuous-availability.md`.

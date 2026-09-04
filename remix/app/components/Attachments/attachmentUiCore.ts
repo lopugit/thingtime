@@ -20,6 +20,7 @@ const INLINE_VIDEO_TYPES = new Set([
 	'video/x-m4v',
 	'video/x-matroska'
 ]);
+const isAudioContentType = (value: string) => value.startsWith('audio/');
 export const MAX_POST_ATTACHMENTS = 25;
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
@@ -31,11 +32,21 @@ export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose
 
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
+// Like the server, tags are NFC-normalized (composed and decomposed spellings
+// of one visible tag share a bucket), the cap counts code points (never
+// bisecting a surrogate pair) and lone surrogates are dropped so a tag can
+// never make encodeURIComponent throw when rendered.
 export const canonicalPostTags = (values: readonly unknown[]): string[] => {
 	const tags: string[] = [];
 	for (const value of values) {
 		if (typeof value !== 'string') continue;
-		const tag = value.trim().toLowerCase().slice(0, MAX_POST_TAG_CHARS);
+		const tag = Array.from(value.trim().toLowerCase().normalize('NFC'))
+			.filter((char) => {
+				const codePoint = char.codePointAt(0) ?? 0;
+				return codePoint < 0xd800 || codePoint > 0xdfff;
+			})
+			.slice(0, MAX_POST_TAG_CHARS)
+			.join('');
 		if (tag && !tags.includes(tag)) tags.push(tag);
 		if (tags.length >= MAX_POST_TAGS) break;
 	}
@@ -46,6 +57,10 @@ export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: un
 	const type = typeof contentType === 'string' ? contentType.trim().toLowerCase() : '';
 	if (requestedKind === 'image' && INLINE_IMAGE_TYPES.has(type)) return 'image';
 	if (requestedKind === 'video' && INLINE_VIDEO_TYPES.has(type)) return 'video';
+	// Older server rows deliberately marked audio as `file`; unlike visual
+	// media, an audio element is a safe sink, so recover every declared audio
+	// MIME regardless of that legacy render hint.
+	if (isAudioContentType(type)) return 'audio';
 	return 'file';
 };
 
@@ -54,7 +69,7 @@ export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: un
 // the original site in safe sinks, so the server's declared render hint is
 // trusted as-is (clamped to the kinds the renderers know).
 const safeLinkedMediaKind = (requestedKind: unknown): AttachmentMediaKind =>
-	requestedKind === 'image' || requestedKind === 'video' ? requestedKind : 'file';
+	requestedKind === 'image' || requestedKind === 'video' || requestedKind === 'audio' ? requestedKind : 'file';
 
 // Mirrors the server's canonicalLinkedAttachmentUrl (attachmentCore) — plain
 // absolute http(s), no credentials, no control/format/space characters,
@@ -103,21 +118,36 @@ export const LINKED_MEDIA_EXTENSION_KINDS: Record<string, AttachmentMediaKind> =
 	mp4: 'video',
 	ogv: 'video',
 	webm: 'video',
+	'3ga': 'audio',
 	'7z': 'file',
+	aac: 'audio',
+	aif: 'audio',
+	aiff: 'audio',
+	amr: 'audio',
+	caf: 'audio',
 	csv: 'file',
 	doc: 'file',
 	docx: 'file',
 	gz: 'file',
+	flac: 'audio',
 	json: 'file',
 	md: 'file',
-	mp3: 'file',
+	m4a: 'audio',
+	mid: 'audio',
+	midi: 'audio',
+	mp2: 'audio',
+	mp3: 'audio',
+	oga: 'audio',
+	ogg: 'audio',
+	opus: 'audio',
 	pdf: 'file',
 	ppt: 'file',
 	pptx: 'file',
 	rar: 'file',
 	svg: 'file',
 	txt: 'file',
-	wav: 'file',
+	wav: 'audio',
+	weba: 'audio',
 	xls: 'file',
 	xlsx: 'file',
 	zip: 'file'
@@ -161,6 +191,7 @@ export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKin
 	const type = file.type.trim().toLowerCase();
 	if (INLINE_IMAGE_TYPES.has(type)) return 'image';
 	if (INLINE_VIDEO_TYPES.has(type)) return 'video';
+	if (isAudioContentType(type)) return 'audio';
 	return 'file';
 };
 
@@ -195,11 +226,13 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		size,
 		contentType,
 		...(detectedContentType ? { detectedContentType } : {}),
-		// Audio is valid canonical server metadata, but is intentionally treated as
-		// a generic download until Thingtime ships a vetted inline audio player.
 		// Linked attachments keep the server's declared render hint instead — their
-		// bytes render straight from the external URL in safe sinks.
-		mediaKind: linkedUrl ? safeLinkedMediaKind(record.mediaKind) : safeAttachmentMediaKind(contentType, record.mediaKind),
+		// bytes render straight from the external URL in safe sinks. Legacy opaque
+		// rows may still carry a detected audio container, which lets the player
+		// offer playback without trusting a caller-provided media kind.
+		mediaKind: linkedUrl
+			? safeLinkedMediaKind(record.mediaKind)
+			: safeAttachmentMediaKind(contentType === 'application/octet-stream' && detectedContentType ? detectedContentType : contentType, record.mediaKind),
 		...(filenamePreview ? { filenamePreview } : {}),
 		...(title ? { title } : {}),
 		...(description ? { description } : {}),
@@ -231,6 +264,7 @@ const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
 	'application/zip': 'ZIP archive',
 	'audio/aac': 'AAC audio',
 	'audio/flac': 'FLAC audio',
+	'audio/mp4': 'M4A audio',
 	'audio/midi': 'MIDI audio',
 	'audio/mpeg': 'MP3 audio',
 	'audio/ogg': 'Ogg audio',
@@ -270,6 +304,12 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 // their external URL; everything else goes through the authenticated content
 // endpoint.
 export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string => attachment.url || attachmentContentUrl(attachment.id);
+
+// Older opaque rows retain their sniffed container in metadata. Supplying it
+// to <source type> lets browsers attempt playback while the migration updates
+// their content response on the next maintenance pass.
+export const attachmentPlaybackContentType = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string =>
+	attachment.contentType === 'application/octet-stream' && attachment.detectedContentType ? attachment.detectedContentType : attachment.contentType;
 
 export const formatAttachmentBytes = (bytes: number): string => {
 	if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown size';

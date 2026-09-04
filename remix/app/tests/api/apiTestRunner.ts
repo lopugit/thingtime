@@ -7,6 +7,7 @@ export type ApiTestGroup =
   | 'crypto'
   | 'docs'
   | 'email'
+  | 'embed'
   | 'health'
   | 'lopu'
   | 'mongodb'
@@ -19,7 +20,8 @@ export type ApiTestGroup =
   | 'themes'
   | 'things'
   | 'vercel'
-  | 'waitlist';
+  | 'waitlist'
+  | 'webpages';
 
 export type ApiTestResultStatus = 'pass' | 'fail';
 

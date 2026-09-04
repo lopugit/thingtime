@@ -6,6 +6,7 @@ import { EditorSplit } from './EditorSplit';
 import { Thingtime } from './Thingtime';
 import { parseThingMode, parseThingPath } from './thingRoute';
 import { useThingtime } from './useThingtime';
+import { PAGE_TOP_CLEARANCE } from '../Layout/PageShell';
 import { ThingtimeTypes } from '~/Providers/ThingtimeProvider';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -20,8 +21,6 @@ export const ThingtimeURL = (props) => {
   }, [matches]);
 
   const path = React.useMemo(() => {
-    console.log('ThingtimeURL location', location);
-
     // mode prefixes ('/things', '/edit', '/editor') are stripped by the shared
     // parser, so '/edit' shows the root thing in edit mode rather than a thing
     // literally named 'edit'
@@ -29,14 +28,7 @@ export const ThingtimeURL = (props) => {
   }, [location, pathname]);
 
   const thing = React.useMemo(() => {
-    console.log('[tt][ThingtimeURL.tsx/thing] getting new thing from path', path);
-    // remove /things/ from path
-
-    const ret = getThingtime(path);
-
-    console.log('[tt][ThingtimeURL.tsx/thing] got thing at path', path, 'value: ', ret);
-
-    return ret;
+    return getThingtime(path);
   }, [path, getThingtime]);
 
   const mode = React.useMemo(() => {
@@ -46,13 +38,6 @@ export const ThingtimeURL = (props) => {
   const inEditorMode = mode === 'editor';
 
   const inEditMode = mode === 'edit';
-
-  console.log('[tt][ThingtimeURL.tsx/return', {
-    inEditorMode,
-    inEditMode,
-    path,
-    thing
-  });
 
   // editor mode: sub-splittable multi-window workspace, each window with its
   // own path, mode, and scroll context
@@ -83,13 +68,16 @@ export const ThingtimeURL = (props) => {
       flexDirection={'column'}
       width="100%"
       maxWidth="100%"
+      minHeight="100vh"
+      background="var(--tt-surface, #fafafb)"
+      paddingTop={PAGE_TOP_CLEARANCE}
+      paddingBottom="48px"
     >
       <Thingtime
         className="inEditModeThingtime"
         edit={inEditMode}
         path={path}
         thing={thing}
-        chakras={{ marginY: '200px' }}
         width="100%"
       ></Thingtime>
     </Flex>

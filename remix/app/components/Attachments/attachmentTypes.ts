@@ -1,4 +1,4 @@
-export type AttachmentMediaKind = 'image' | 'video' | 'file';
+export type AttachmentMediaKind = 'image' | 'video' | 'audio' | 'file';
 
 export type AttachmentUploadPurpose = 'post' | 'comment' | 'message' | 'profile-avatar' | 'profile-banner' | 'custom-emoji';
 
