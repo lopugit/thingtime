@@ -94,7 +94,7 @@ describe('useCommander launcher sessions', () => {
     ]);
   });
 
-  it('keeps the last results visible until the next streamed search produces an update', async () => {
+  it('clears prior-query rows immediately while the next search is pending', async () => {
     const staleHit: SearchHit = {
       id: 'builtin:settings',
       title: 'Commander Settings',
@@ -123,7 +123,7 @@ describe('useCommander launcher sessions', () => {
 
     act(() => result.current.setQuery('emoji'));
 
-    expect(result.current.hits).toEqual([staleHit]);
+    expect(result.current.hits).toEqual([]);
     expect(result.current.selectedIndex).toBe(0);
     expect(result.current.searchPending).toBe(true);
     expect(result.current.resultsStale).toBe(true);
