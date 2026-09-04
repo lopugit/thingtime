@@ -875,7 +875,7 @@ runs:
 
         needles="$temp_dir/secret-needles"
         if [[ -s "$RUNNER_TEMP/lopu-credential-vault.json" ]]; then
-          node "$GITHUB_ACTION_PATH/../../scripts/lopu-credential-vault.mjs" needles "$needles"
+          node "$SAFE_TRUSTED_ABS/.github/scripts/lopu-credential-vault.mjs" needles "$needles"
         else
           : >"$needles"
         fi
