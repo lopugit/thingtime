@@ -964,6 +964,10 @@ email whose link points at the attacker.
 - [ ] Category index (`/marketing/styles` is the largest): groups render with
       counts, the filter narrows client-side, "Show more" paginates without
       reloading, nothing scrolls horizontally at 390px.
+- [ ] `/marketing/search?q=api` (mixes every grouping namespace): two separate
+      "Developers" sections render — the audience and the feature family — with
+      their own counts, and the console logs no duplicate-key warning. Typing
+      in the filter and clicking "Show more" keep both sections intact.
 - [ ] A page from each kind opens by URL (`landing/feed`, `guides/passkeys`,
       `walkthroughs/feature-messages`, `compare/thingtime-vs-notion`,
       `compare/notion-alternative`, `compare/feed-vs-twitter`,

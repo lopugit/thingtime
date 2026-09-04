@@ -6,12 +6,8 @@ import { Crumbs, MarketingShell, formatCount, useMarketingSeo } from '~/componen
 import { MK } from '~/components/Marketing/marketingTheme';
 import { MkButton, SectionEyebrow } from '~/components/Marketing/Sections';
 import { CATEGORY_BY_KEY, MARKETING_BASE, PAGES, pageHref, pagesInCategory, searchPages } from '~/marketing/catalog';
-import { COMPETITOR_BY_KEY } from '~/marketing/competitors';
-import { FEATURE_BY_KEY, FEATURE_CATEGORY_LABELS } from '~/marketing/features';
-import { PERSONA_BY_KEY } from '~/marketing/personas';
-import { TREND_BY_KEY } from '~/marketing/trends';
+import { groupPages } from '~/marketing/pageGroups';
 import type { MarketingPage, TrendKey } from '~/marketing/types';
-import { USE_CASE_BY_KEY } from '~/marketing/useCases';
 
 // /marketing/:category — the index of one category (and /marketing/search).
 // Pages are grouped by the reference that best explains them (persona,
@@ -34,31 +30,6 @@ const CATEGORY_TREND: Record<string, TrendKey> = {
 	faq: 'bold-brutal',
 	checklists: 'bento',
 	search: 'bold-brutal'
-};
-
-const groupLabel = (entry: MarketingPage): { key: string; label: string; emoji: string } => {
-	if (entry.refs.trend) {
-		const trend = TREND_BY_KEY[entry.refs.trend];
-		return { key: `trend:${trend.key}`, label: trend.name, emoji: trend.emoji };
-	}
-	if (entry.refs.persona) {
-		const persona = PERSONA_BY_KEY[entry.refs.persona];
-		return { key: `persona:${persona.key}`, label: persona.name, emoji: persona.emoji };
-	}
-	if (entry.refs.competitor) {
-		const competitor = COMPETITOR_BY_KEY[entry.refs.competitor];
-		return { key: `competitor:${competitor.key}`, label: competitor.name, emoji: competitor.emoji };
-	}
-	if (entry.refs.useCase && entry.kind !== 'template') {
-		const useCase = USE_CASE_BY_KEY[entry.refs.useCase];
-		return { key: `use-case:${useCase.key}`, label: useCase.name, emoji: useCase.emoji };
-	}
-	if (entry.refs.feature) {
-		const feature = FEATURE_BY_KEY[entry.refs.feature];
-		const label = FEATURE_CATEGORY_LABELS[feature.category];
-		return { key: `family:${feature.category}`, label: label.name, emoji: label.emoji };
-	}
-	return { key: 'all', label: 'All', emoji: '📄' };
 };
 
 const PageCard = ({ entry }: { entry: MarketingPage }) => (
@@ -118,16 +89,7 @@ export default function MarketingCategory() {
 		return pages.filter((entry) => `${entry.title} ${entry.description} ${entry.slug}`.toLowerCase().includes(needle));
 	}, [filter, pages]);
 
-	const groups = React.useMemo(() => {
-		const map = new Map<string, { label: string; emoji: string; pages: MarketingPage[] }>();
-		for (const entry of filtered.slice(0, limit)) {
-			const group = groupLabel(entry);
-			const bucket = map.get(group.key) ?? { label: group.label, emoji: group.emoji, pages: [] };
-			bucket.pages.push(entry);
-			map.set(group.key, bucket);
-		}
-		return Array.from(map.values());
-	}, [filtered, limit]);
+	const groups = React.useMemo(() => groupPages(filtered.slice(0, limit)), [filtered, limit]);
 
 	const title = isSearch ? (query ? `Search: ${query}` : 'Search') : (category?.name ?? 'Not found');
 	const description = isSearch
@@ -234,7 +196,7 @@ export default function MarketingCategory() {
 				</Box>
 			) : (
 				groups.map((group) => (
-					<Box as="section" key={group.label} paddingBottom={8} data-testid="marketing-group">
+					<Box as="section" key={group.key} paddingBottom={8} data-testid="marketing-group">
 						<Flex alignItems="baseline" gap={2} marginBottom={3}>
 							<Text as="h2" fontSize="18px" fontWeight={900} letterSpacing="-0.01em" margin={0}>
 								<span aria-hidden="true">{group.emoji}</span> {group.label}
