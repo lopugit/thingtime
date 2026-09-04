@@ -8,14 +8,17 @@ import type { RootLoaderData } from './root-data.server';
 // catch-all tree viewer. These are either the first paint or one click from
 // it, so a separate chunk fetch would cost more than it saves.
 import Authorize from './routes/authorize';
+import Explore from './routes/explore';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
 import MediaPage from './routes/media';
 import PostPage from './routes/post';
+import DeploymentPeersRoute from './routes/peers';
 import Profile from './routes/profile';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
+import SavedRoute from './routes/saved';
 import ThingtimeUrl from './routes/$';
 import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
@@ -56,6 +59,11 @@ const HydrateFallback = () => (
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
     ...init,
+    // Account/root responses are explicitly current-state reads. Electron's
+    // loopback origin can reuse a prior ephemeral port after relaunch, so a
+    // browser cache entry from a different endpoint must never determine the
+    // active account, branch label, or device pairing surface.
+    cache: init.cache || 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -138,6 +146,13 @@ export const router = createBrowserRouter([
       { path: 'apps/manage', lazy: lazyRoute(() => import('./routes/apps-manage')) },
       { path: 'branding', lazy: lazyRoute(() => import('./routes/branding/_index')) },
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
+      // the block-based site builder — create webpages from component things;
+      // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // published block-based webpages (reserved prefix — outranks the * catch-all)
+      { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      // the storybook-style design-system docs own the canonical short URL too
+      { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',
@@ -155,20 +170,23 @@ export const router = createBrowserRouter([
           { path: 'schemas', lazy: lazyRoute(() => import('./routes/docs/schemas')) }
         ]
       },
+      // public trending board — guest-visible like /feed
+      { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
       { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
-      {
-        path: 'mongodb-status',
-        lazy: lazyRoute(() => import('./routes/mongodb-status')),
-        loader: () => fetchJson('/api/v1/mongodb/status-data')
-      },
+      // mongodb-status renders from its native-section registry list; the
+      // sections' shared hook fetches — no navigation-blocking loader
+      { path: 'mongodb-status', lazy: lazyRoute(() => import('./routes/mongodb-status')) },
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// Developer-only, admin-gated deployment mesh diagnostics. The page
+			// itself renders the same shareable quiet gate as /admin.
+			{ path: 'peers', element: <DeploymentPeersRoute /> },
 			// every attachment is a Thing — its own page with comments/reactions
 			// (post lightbox + file rows deeplink here)
 			{ path: 'media/:id', element: <MediaPage /> },
@@ -184,6 +202,9 @@ export const router = createBrowserRouter([
       // (the emailed token/link is the credential, not the session)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
+      // the viewer's Saved library — no loader guard: it renders its own
+      // signed-out quiet state, like /apps
+      { path: 'saved', element: <SavedRoute /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
@@ -200,11 +221,9 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs })
       },
       { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
-      {
-        path: 'status',
-        lazy: lazyRoute(() => import('./routes/status')),
-        loader: () => fetchJson('/api/v1/vercel/status')
-      },
+      // status renders from its native-section registry list; the sections'
+      // shared hook fetches — no navigation-blocking loader
+      { path: 'status', lazy: lazyRoute(() => import('./routes/status')) },
       {
         path: 'vercel',
         lazy: lazyRoute(() => import('./routes/vercel')),
@@ -213,6 +232,7 @@ export const router = createBrowserRouter([
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
+      { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },

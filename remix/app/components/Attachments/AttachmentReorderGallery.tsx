@@ -71,7 +71,7 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 	attachmentsRef.current = attachments;
 
 	const visual = attachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
-	const files = attachments.filter((attachment) => attachment.mediaKind === 'file');
+	const files = attachments.filter((attachment) => attachment.mediaKind !== 'image' && attachment.mediaKind !== 'video');
 
 	const handleMove = React.useCallback(
 		(sourceId: string, targetId: string) => {
@@ -87,7 +87,9 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 			if (!source) return;
 			const sectionIds = current
 				.filter((attachment) =>
-					source.mediaKind === 'file' ? attachment.mediaKind === 'file' : attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+					source.mediaKind === 'image' || source.mediaKind === 'video'
+						? attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+						: attachment.mediaKind !== 'image' && attachment.mediaKind !== 'video'
 				)
 				.map((attachment) => attachment.id);
 			const targetId = nudgeTargetId(sectionIds, sourceId, nudge);

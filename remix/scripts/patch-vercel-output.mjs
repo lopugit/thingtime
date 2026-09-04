@@ -95,6 +95,15 @@ config.routes = [
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
+  // Social permalinks go through the Nitro shell handler (server/routes/[...].ts)
+  // so crawlers receive per-post/per-profile Open Graph tags; every other page
+  // keeps the plain static shell below.
+  ...(serverFallbackRoute
+    ? [
+        { src: '^/post/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest },
+        { src: '^/profile/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest }
+      ]
+    : []),
   { src: '/(?:.*)', headers: appShellHeaders, dest: '/index.html' }
 ];
 

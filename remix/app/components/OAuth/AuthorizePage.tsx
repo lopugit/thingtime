@@ -59,6 +59,7 @@ const SCOPE_EMOJI: Record<string, string> = {
   'profile.avatar': '🖼️',
   'profile.bio': '📝',
   'profile.banner': '🎨',
+  'profile.birthday': '🎂',
   email: '💌',
   'app-data': '📦',
   'app-data.shared': '🤝',

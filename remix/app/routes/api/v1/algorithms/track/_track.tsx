@@ -24,5 +24,6 @@ export const action = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
-  return json({ ok: true, trained: result.trained, applied: result.applied });
+  // eventCount: authoritative post-flush total, for growth-stage crossings
+  return json({ ok: true, trained: result.trained, applied: result.applied, eventCount: result.eventCount });
 };

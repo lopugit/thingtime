@@ -235,9 +235,10 @@ export default function ThingPage() {
 	};
 
 	const handlePostChanged = React.useCallback(
-		(change: PostChange) => {
+		(id: string, change: PostChange) => {
 			setLoadState((current) => {
 				if (current.key !== requestKey || current.data?.kind !== 'thing' || !current.data.post) return current;
+				if (current.data.post.id !== id) return current;
 				const next = typeof change === 'function' ? change(current.data.post) : change;
 				if (!next) {
 					navigate('/feed');

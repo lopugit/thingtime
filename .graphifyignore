@@ -8,6 +8,14 @@
 /remix/dist/**
 /remix/server/assets/
 /remix/server/assets/**
+/MCP/dist-desktop/
+/MCP/dist-desktop/**
+/electron/dist/
+/electron/dist/**
+/electron/release/
+/electron/release/**
+/macos/ThingtimeNode/.build/
+/macos/ThingtimeNode/.build/**
 
 # Root agent aliases resolve to AI_ALL.md; index the canonical file once.
 /AGENTS.md

@@ -1017,7 +1017,7 @@ export const ComponentsBrowsePage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         <Flex align="baseline" gap={3} wrap="wrap">
           <Text color="var(--tt-ink, #16161a)" fontSize="2xl" fontWeight={800}>
             Components
