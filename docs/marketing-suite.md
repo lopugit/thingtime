@@ -23,6 +23,7 @@ the counts, links and copy can never drift.
 | `remix/app/marketing/walkthroughs.ts` | `SCREEN_TARGETS` (the `data-wt` targets each mock screen exposes) and the cursor scripts per feature and use case. |
 | `remix/app/marketing/social.ts` | Pure SVG builders for every feature × trend × format social image, captions and filenames. |
 | `remix/app/marketing/catalog.ts` | Page enumeration (`PAGES`), per-page builders (`buildPage`), validation (`validateCatalog`) and search. |
+| `remix/app/marketing/pageGroups.ts` | `groupLabel()` / `groupPages()` — how a category index buckets pages by their best reference. Keys are namespaced (`persona:developers`, `family:developer`) because display labels collide across namespaces. |
 | `remix/app/components/Marketing/` | React: `MarketingShell` (chrome + SEO), `Sections` (block renderers), `MockScreens`, `WalkthroughPlayer`, `SocialImage`, `marketingTheme` (trend → `--mk-*` CSS variables). |
 | `remix/app/routes/marketing/` | Routes: hub (`_index`), `social-media`, category index (`category`, also `/marketing/search`), splat page resolver (`page`). |
 
@@ -49,6 +50,7 @@ the counts, links and copy can never drift.
 - Every trend × format renders valid SVG at the exact platform size with no `NaN`, no unescaped ampersands and no scripts.
 - Copy generators fill every placeholder and stay deterministic per seed.
 - Every `*_BY_KEY` / `PAGE_BY_SLUG` map is null-prototype, so a URL segment or query value naming an `Object.prototype` member (`constructor`, `toString`, `__proto__`…) resolves to nothing and hits the normal not-found path instead of a half-built page.
+- Category and search indexes group pages under unique keys, and grouping keeps every page exactly once in first-seen order. `/marketing/search` mixes namespaces, and one name ("Developers") is both a persona and a feature family — so the section key is the namespaced group key, never the visible label.
 
 ## Manual checks
 
