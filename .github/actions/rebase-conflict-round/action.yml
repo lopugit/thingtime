@@ -292,7 +292,7 @@ runs:
       shell: bash
       env:
         BACKEND: ${{ inputs.backend }}
-        HAS_CLAUDE_CREDENTIAL: ${{ inputs.claude-code-oauth-token-preferred != '' || inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
+        HAS_CLAUDE_CREDENTIAL: ${{ inputs.thingtime-ci-router-secret != '' || inputs.claude-code-oauth-token-preferred != '' || inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
         HAS_OPENAI_CREDENTIAL: ${{ inputs.openai-api-key != '' }}
       run: |
         set -euo pipefail

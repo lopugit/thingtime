@@ -52,3 +52,13 @@ Explicit permission-denied 403 responses remain terminal.
 - Live exact-head PR #592 preview run: 33878101950, success
 - Persistent PR #592 URL: https://pr-592.previews.dev.thingtime.com/
 - Immutable PR #592 URL: https://thingtime-hwhh9pxrz-lopugits-projects.vercel.app/
+
+## Follow-up acceptance repair
+
+A clean current-SHA Lopu run admitted a complete job graph and successfully
+finished both its exact PR scan and delegated repository review. That run also
+exercised the separate repository-dispatch rebase path, exposing a pre-existing
+credential gate that recognized only legacy static Claude slots even though the
+worker passed the configured Thingtime credential-vault router secret. The gate
+now treats that router secret as valid Claude credential authority, and the
+routing contract prevents the mismatch from returning.
