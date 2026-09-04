@@ -74,7 +74,7 @@ end
 
 def export_options
   options = {
-    method: "app-store",
+    method: "app-store-connect",
     signingStyle: "automatic",
     uploadSymbols: false
   }
