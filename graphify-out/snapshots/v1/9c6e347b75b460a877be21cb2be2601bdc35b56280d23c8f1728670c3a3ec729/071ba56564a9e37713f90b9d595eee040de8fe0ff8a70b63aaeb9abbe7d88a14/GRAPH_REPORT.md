@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 894 nodes · 1898 edges · 88 communities (46 shown, 42 thin omitted)
+- 902 nodes · 1904 edges · 90 communities (48 shown, 42 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.53)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `816859a1`
+- Built from commit: `8daf023a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -80,8 +80,8 @@
 - [[_COMMUNITY_Legacy PR conflict resolver (superseded)|Legacy PR conflict resolver (superseded)]]
 - [[_COMMUNITY_Clean Synchronization Lane|Clean Synchronization Lane]]
 - [[_COMMUNITY_develop Branch|develop Branch]]
+- [[_COMMUNITY_GitHub Exact-Head REST Merge|GitHub Exact-Head REST Merge]]
 - [[_COMMUNITY_GitHub Native Auto-Merge|GitHub Native Auto-Merge]]
-- [[_COMMUNITY_Semantic Graphify Extraction|Semantic Graphify Extraction]]
 - [[_COMMUNITY_Local Codex Proxy|Local Codex Proxy]]
 - [[_COMMUNITY_Lopu Conflict Resolver|Lopu Conflict Resolver]]
 - [[_COMMUNITY_main Branch|main Branch]]
@@ -101,6 +101,8 @@
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_Lopu PR Manager|Lopu PR Manager]]
 - [[_COMMUNITY_PR 492 Load Lopu credentials from Thingtime vault|PR #492 Load Lopu credentials from Thingtime vault]]
+- [[_COMMUNITY_Feature Stack Progress Reporter|Feature Stack Progress Reporter]]
+- [[_COMMUNITY_Feature Stack Target Workers|Feature Stack Target Workers]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 49 edges
@@ -130,11 +132,12 @@
 - None detected.
 
 ## Hyperedges (group relationships)
+- **Lopu PR Manager Maintenance Operations** — github_workflows_resolve_pr_conflicts_lopu_pr_manager, github_workflows_resolve_pr_conflicts_feature_stack, github_workflows_resolve_pr_conflicts_promotion_maintenance, github_workflows_resolve_pr_conflicts_codeql_backfill [EXTRACTED 0.95]
+- **Preview Admission Security Flow** — prs_609_codex_preview_manager_reliability_preview_controller, prs_609_codex_preview_manager_reliability_pr_association_loss_fallback, prs_609_codex_preview_manager_reliability_live_pr_revalidation [EXTRACTED 0.90]
 - **Develop PR Preview Build and Publish Flow** — github_workflows_develop_pr_preview_prepare, github_workflows_develop_pr_preview_build, github_workflows_develop_pr_preview_controller, github_workflows_develop_pr_preview_deploy_develop_pr_preview [EXTRACTED 0.95]
 - **Admin-selected PR Preview Flow** — github_workflows_develop_pr_preview_admin_prepare, github_workflows_develop_pr_preview_admin_build, github_workflows_develop_pr_preview_admin_controller, github_workflows_develop_pr_preview_deploy_admin_pr_previews [EXTRACTED 0.95]
 - **Feature Stack Progress Reporting** — prs_534_codex_feature_stack_progress_heartbeats_controller, prs_534_codex_feature_stack_progress_heartbeats_controller_reporter, prs_534_codex_feature_stack_progress_heartbeats_controller_target_workers [EXTRACTED 0.95]
 - **Admin Preview Publication Flow** — prs_603_codex_admin_preview_publisher_controller_admin_preview_publisher, prs_603_codex_admin_preview_publisher_controller_github_actions_branch, prs_603_codex_admin_preview_publisher_controller_vercel_deployment [EXTRACTED 0.90]
-- **Lopu PR Manager Maintenance Operations** — github_workflows_resolve_pr_conflicts_lopu_pr_manager, github_workflows_resolve_pr_conflicts_feature_stack, github_workflows_resolve_pr_conflicts_promotion_maintenance, github_workflows_resolve_pr_conflicts_codeql_backfill [EXTRACTED 0.95]
 - **Lopu Claude and Codex backend selection** — _github_actions_lopu_agent_action_lopu_agent_action, _github_actions_lopu_agent_action_claude_code_action, _github_actions_lopu_agent_action_codex_action, _github_actions_lopu_agent_action_lopu_credential_vault_mjs [EXTRACTED 0.92]
 - **Terminal Merge Safety Gate** — prs_506_codex_auto_merge_main_develop_sync_pr_trusted_terminal_merger, prs_506_codex_auto_merge_main_develop_sync_pr_thingtime_repository, prs_506_codex_auto_merge_main_develop_sync_pr_sync_main_into_develop_pr, prs_506_codex_auto_merge_main_develop_sync_pr_develop_branch, prs_506_codex_auto_merge_main_develop_sync_pr_main_branch, prs_506_codex_auto_merge_main_develop_sync_pr_exact_head_rest_merge [EXTRACTED 0.90]
 - **Validation Check Suite** — prs_506_codex_auto_merge_main_develop_sync_pr_pr_506, prs_506_codex_auto_merge_main_develop_sync_pr_self_tests, prs_506_codex_auto_merge_main_develop_sync_pr_graphify_extraction, prs_506_codex_auto_merge_main_develop_sync_pr_local_codex_proxy [EXTRACTED 0.85]
@@ -144,7 +147,7 @@
 - **Shared CI provider routing contract** — github_workflows_ci_provider_router_workflow, github_workflows_promote_develop_to_main_route, github_workflows_promote_features_to_main_route, github_workflows_resolve_pr_conflicts_workflow [EXTRACTED 0.80]
 - **develop→main promotion and back-sync automation** — github_workflows_promote_develop_to_main_workflow, github_workflows_promote_features_to_main_workflow, github_workflows_sync_main_into_develop_workflow, github_workflows_resolve_pr_conflicts_workflow, github_scripts_promote_features_to_main, github_scripts_promotion_pr_changelog [EXTRACTED 0.85]
 
-## Communities (88 total, 42 thin omitted)
+## Communities (90 total, 42 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -315,19 +318,27 @@ Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
 
 ### Community 44 - "Graphify CLI"
+Cohesion: 0.50
+Nodes (4): PR #609 — Restore Lopu and Preview Admission, 510,000-Byte Contract Ceiling, Protected Lopu PR Manager, GitHub Workflow Run-Graph Size Boundary
+
+### Community 45 - "Lopu Agent Action"
+Cohesion: 0.50
+Nodes (4): Live Pull Request Head Revalidation, Pull-Request Association-Loss Fallback, Preview Controller, Proven HTTP 403 Rate-Limit Retry
+
+### Community 46 - "AI_ALL.md Canonical Instruction File"
 Cohesion: 0.67
 Nodes (3): build_and_run.sh, Commander App Release workflow, release-version.mjs
 
-### Community 45 - "Lopu Agent Action"
+### Community 47 - "API Endpoint Registration Convention"
 Cohesion: 0.67
 Nodes (3): GitHub CodeQL Action, CodeQL Analyze Job, CodeQL Scope Job
 
-### Community 46 - "AI_ALL.md Canonical Instruction File"
+### Community 48 - "Delivery Messaging Rules"
 Cohesion: 0.67
 Nodes (3): Feature Stack Progress Heartbeat Controller, Feature Stack Progress Reporter, Feature Stack Target Workers
 
 ## Knowledge Gaps
-- **211 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+206 more)
+- **216 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+211 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **42 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -337,9 +348,9 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `Contract advisories job` connect `selfTest` to `deploy-develop-pr-preview.mjs`, `promotion-pr-changelog.mjs`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Why does `promote: replay merged develop PRs` connect `build-all-branch.mjs` to `resolve-pr-conflicts-routing-contract.mjs`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
-  _211 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _216 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.05901696088611977 - nodes in this community are weakly interconnected._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**

@@ -122,7 +122,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1788527732.5678637,
     "ast_hash": "b4b0494b9be5143b16b01d1380fb9c18",
-    "semantic_hash": ""
+    "semantic_hash": "b4b0494b9be5143b16b01d1380fb9c18"
   },
   ".github/workflows/sync-main-into-develop.yml": {
     "mtime": 1788527413.6165566,
@@ -147,7 +147,7 @@
   "CHANGELOG.md": {
     "mtime": 1788527747.9567845,
     "ast_hash": "64deb62605aba34774d0e1f8f1469a5e",
-    "semantic_hash": ""
+    "semantic_hash": "64deb62605aba34774d0e1f8f1469a5e"
   },
   "CLAUDE.md": {
     "mtime": 1788527413.6168635,
