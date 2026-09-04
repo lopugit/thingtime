@@ -754,7 +754,10 @@ const runSelfTest = async () => {
 	truthy(isRetryableHttpResponse(403, new Headers({ 'retry-after': '2' }), { message: 'secondary rate limit' }));
 	truthy(isRetryableHttpResponse(403, new Headers({ 'x-ratelimit-remaining': '0' }), { message: 'API rate limit exceeded' }));
 	truthy(isRetryableHttpResponse(403, new Headers(), { message: 'You have exceeded a secondary rate limit.' }));
+	truthy(isRetryableHttpResponse(403, new Headers(), null));
 	truthy(!isRetryableHttpResponse(403, new Headers(), { message: 'Resource not accessible by integration' }));
+	equal(parseErrorCode({ message: 'Resource not accessible by integration' }), 'integration-permission');
+	equal(parseErrorCode({ message: 'API rate limit exceeded for installation ID 123.' }), 'api-rate-limit');
 	truthy(CLEANUP_ACTIONS.has('converted_to_draft'));
 
 	const dispatchPayload = {
@@ -857,7 +860,14 @@ const runSelfTest = async () => {
 const parseErrorCode = (body) => {
 	if (!body || typeof body !== 'object') return 'unknown';
 	const code = body.error?.code ?? body.code;
-	return typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : 'unknown';
+	if (typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code)) return code;
+	const message = typeof body.message === 'string' ? body.message.toLowerCase() : '';
+	if (message.includes('resource not accessible by integration')) return 'integration-permission';
+	if (message.includes('secondary rate limit')) return 'secondary-rate-limit';
+	if (message.includes('api rate limit exceeded')) return 'api-rate-limit';
+	if (message.includes('not found')) return 'not-found';
+	if (message.includes('validation failed')) return 'validation-failed';
+	return 'unknown';
 };
 
 const isRetryableHttpResponse = (status, headers, body) => {
@@ -866,7 +876,13 @@ const isRetryableHttpResponse = (status, headers, body) => {
 	if (headers?.get?.('retry-after')) return true;
 	if (headers?.get?.('x-ratelimit-remaining') === '0') return true;
 	const message = typeof body?.message === 'string' ? body.message.toLowerCase() : '';
-	return message.includes('secondary rate limit') || message.includes('api rate limit exceeded');
+	return (
+		!message ||
+		message.includes('secondary rate limit') ||
+		message.includes('api rate limit exceeded') ||
+		message.includes('abuse detection') ||
+		message.includes('please wait a few minutes before you try again')
+	);
 };
 
 const retryDelayMs = (response, attempt) => {
@@ -928,11 +944,20 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 
 const githubUrl = (path) => `${process.env.GITHUB_API_URL ?? 'https://api.github.com'}${path}`;
 
-const githubRequest = (path, options = {}) =>
-	requestJson(githubUrl(path), {
-		...options,
-		token: requiredEnv('GH_TOKEN')
-	});
+const githubRequest = async (path, options = {}) => {
+	try {
+		return await requestJson(githubUrl(path), {
+			...options,
+			token: requiredEnv('GH_TOKEN')
+		});
+	} catch (error) {
+		if (error instanceof HttpError) {
+			const pathname = String(path).split('?')[0];
+			error.message = `GitHub ${String(options.method ?? 'GET').toUpperCase()} ${pathname} failed with HTTP ${error.status} (${error.code})`;
+		}
+		throw error;
+	}
+};
 
 const vercelRequest = (path, options = {}) => {
 	const separator = path.includes('?') ? '&' : '?';
