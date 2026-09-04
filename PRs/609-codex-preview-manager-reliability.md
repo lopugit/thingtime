@@ -70,4 +70,6 @@ is replaced by repo-less conflict scratch. The next live replay reached the
 nested Claude action, which requires a repository-local Git identity bootstrap
 even when the model workspace intentionally contains no real checkout. The
 scratch now receives an empty disposable Git repository for that bootstrap; it
-is removed with the temporary action before the exact allowlist verifier runs.
+also has a non-routable placeholder `origin` for the upstream action's checkout
+credential replacement. The entire `.git` directory is removed with the
+temporary action before the exact allowlist verifier runs.

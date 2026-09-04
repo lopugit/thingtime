@@ -293,6 +293,8 @@ runs:
         # disposable repository solely for that bootstrap contract. It is
         # removed with the temporary action before scratch verification.
         git init -q -- "$WORKSPACE_PATH"
+        git -C "$WORKSPACE_PATH" remote add origin \
+          https://github.invalid/thingtime-conflict-scratch.git
 
     - name: Record this mechanically-derived conflict set for the caller
       if: steps.prepare.outcome == 'success'
