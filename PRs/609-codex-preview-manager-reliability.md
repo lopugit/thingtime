@@ -10,6 +10,12 @@ still match. GitHub API errors identify the failing route and error class;
 proven rate limits and response-less transient 403s retry, while explicit
 integration permission denials remain terminal.
 
+GitHub can issue a declared-write `github.token` that still rejects issue
+comment creation for an individual PR. The protected authorization and
+publisher jobs therefore use the existing Lopu repository automation PAT when
+available, with the per-run token as fallback. The exact-SHA build jobs remain
+separate and secretless.
+
 ## Live diagnosis
 
 - The last-known-good 510,325-byte Lopu controller revision created a titled

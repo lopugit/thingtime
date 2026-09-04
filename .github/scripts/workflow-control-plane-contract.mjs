@@ -1114,6 +1114,11 @@ export function assertControlPlaneContract() {
     /issues: write[\s\S]*expected_ready_at: \$\{\{ steps\.plan\.outputs\.expected_ready_at \}\}/u,
     "the protected authorizer can publish and preserve the expected URL and ready time before build",
   );
+  assert.match(
+    developPreviewPrepareJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "the protected authorizer has a stable repository-token fallback for required PR comments",
+  );
   assert.doesNotMatch(
     developPreviewBuildJob,
     /environment: vercel-develop-pr-control/u,
@@ -1150,6 +1155,11 @@ export function assertControlPlaneContract() {
     /extract-vercel-prebuilt\.py[\s\S]*vercel@59\.10\.0[\s\S]*VERCEL_PREBUILT_DIR/u,
     "the publisher validates the untrusted archive and uses a pinned prebuilt-only Vercel CLI",
   );
+  assert.match(
+    developPreviewControllerJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "the protected publisher has a stable repository-token fallback for final comments and deployment receipts",
+  );
   assert.doesNotMatch(
     developPreviewControllerJob,
     /checkout[\s\S]{0,240}ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
@@ -1179,8 +1189,13 @@ export function assertControlPlaneContract() {
   );
   assert.doesNotMatch(
     adminPreviewPrepareJob,
-    /VERCEL_API_TOKEN|secrets\./u,
-    "admin preview preparation comments the expected URLs without a Vercel credential",
+    /VERCEL_API_TOKEN|secrets\.(?!CONFLICT_RESOLVER_PAT\b)/u,
+    "admin preview preparation may use only the existing repository automation PAT, never a Vercel or other credential",
+  );
+  assert.match(
+    adminPreviewPrepareJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "admin preview preparation has a stable protected-token fallback for required PR comments",
   );
   assert.match(
     adminPreviewBuildJob,

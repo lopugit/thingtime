@@ -117,7 +117,11 @@ jobs:
       - name: Authorize current same-repository PR SHA
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Some otherwise-valid PRs receive a per-run integration token that
+          # GitHub refuses for issue-comment writes. This trusted protected
+          # phase may use Lopu's existing repository automation PAT; the
+          # separate untrusted build job still receives no secrets.
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare
 
   build:
@@ -236,7 +240,7 @@ jobs:
       - name: Upload and publish GitHub-built preview
         if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
@@ -246,7 +250,7 @@ jobs:
       - name: Reconcile or clean up without a new build
         if: needs.prepare.outputs.should_build != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
@@ -254,7 +258,7 @@ jobs:
       - name: Report failed GitHub prebuild
         if: needs.prepare.outputs.should_build == 'true' && needs.build.result != 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
@@ -301,7 +305,7 @@ jobs:
       - name: Authenticate dispatch and publish expected URLs
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
         run: node .github/scripts/deploy-admin-pr-previews.mjs --prepare
 
   admin_build:
@@ -431,7 +435,7 @@ jobs:
 
       - name: Publish or clean up exact-SHA admin previews
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
           VERCEL_PREBUILT_ROOT: ${{ runner.temp }}/validated-admin-prebuilt

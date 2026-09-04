@@ -27,7 +27,11 @@ every entry is attributed the same way the app changelog attributes them.
   repository/SHA/ref fences. GitHub API failures now identify the exact safe
   route and error class, retry proven rate-limit responses plus response-less
   transient 403s, and still fail immediately on explicit integration
-  permission denials. — Codex (AI), 2026-09-04
+  permission denials. Protected preview authorization and publishing reuse
+  Lopu's repository automation credential when available so GitHub's
+  PR-specific integration-token downgrade cannot suppress the required early
+  comment or deployment receipt; untrusted build jobs remain secretless. —
+  Codex (AI), 2026-09-04
 
 - Moved the ordinary Develop preview's expected URL and ready estimate into the
   protected authorization phase so the PR comment exists before checkout,
