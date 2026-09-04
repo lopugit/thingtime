@@ -9,19 +9,24 @@ Use the Thingtime MCP tools only for accounts the user has connected. Start a
 new task by listing accounts when the requested account is ambiguous, then
 select the requested account explicitly.
 
-Treat `@Thingtime login` as an explicit request to start the installed
-Thingtime MCP server's native OAuth flow. Run `codex mcp login thingtime`
-instead of calling `login_thingtime`: before a connection exists, MCP tool
-calls are intentionally protected and cannot bootstrap authentication.
+Treat `@Thingtime login` as an explicit request to call `login_thingtime` in
+the current task. When no connection exists, the tool's
+`mcp/www_authenticate` result asks the invoking ChatGPT/Codex host to open its
+native OAuth browser, complete PKCE through the host's registered callback,
+store the resulting credentials, and attach them to later requests in this
+same task. After authentication, call `login_thingtime` again or call
+`list_thingtime_accounts` to verify the connection. Do not start a separate
+CLI listener, rewrite an OAuth URL, or move the flow to another browser/task.
 
-When the user is on a remote or mobile client, run
-`node scripts/mobile-oauth-login.mjs` from this plugin directory instead. It
-prints `THINGTIME_MOBILE_LOGIN_URL`; return that one-time value as a tappable
-Markdown link and, when `THINGTIME_MOBILE_LOGIN_QR` is printed, render that
-local image. The helper relays the completed first-party browser flow back to
-Codex's PKCE listener; keep it running until it reports success. Never ask the
-user to paste a token, authorization code, or any other credential into chat.
-After it succeeds, call `list_thingtime_accounts` to report safe account metadata.
+Only in an actual standalone Codex CLI session whose host cannot surface the
+tool-level OAuth handoff may you use `node scripts/desktop-oauth-login.mjs` as
+a compatibility fallback. For an actual remote CLI session with no native
+OAuth surface, `node scripts/mobile-oauth-login.mjs` may return its short-lived
+tappable link and optional QR image. Keep that helper running through its
+PKCE-bound callback. Never use either CLI helper as the authentication
+mechanism for a ChatGPT or Codex desktop task, and never ask the user to paste
+a token, authorization code, URL, or credential into chat.
+
 Treat `@Thingtime list accounts` as an explicit request to call
 `list_thingtime_accounts` and return only its safe account metadata.
 
