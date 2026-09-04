@@ -13,6 +13,17 @@ OUTPUT_DIRECTORY = File.expand_path("../build", __dir__)
 OUTPUT_NAME = "Thingtime.ipa"
 
 def api_key_xcargs
+  args = [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
+    "-authenticationKeyPath #{asc_p8_path}"
+  ]
+  issuer_id = asc_issuer_id
+  args << "-authenticationKeyIssuerID #{issuer_id}" if issuer_id
+  args.join(" ")
+end
+
+def asc_p8_path
   @asc_p8 ||= begin
     f = Tempfile.new(["AuthKey_#{ENV.fetch('ASC_KEY_ID')}", ".p8"])
     f.binmode
@@ -20,15 +31,19 @@ def api_key_xcargs
     f.flush
     f
   end
+  @asc_p8.path
+end
 
-  args = [
-    "-allowProvisioningUpdates",
-    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
-    "-authenticationKeyPath #{@asc_p8.path}"
-  ]
+def api_key_xcodebuild_args
   issuer_id = asc_issuer_id
-  args << "-authenticationKeyIssuerID #{issuer_id}" if issuer_id
-  args.join(" ")
+  UI.user_error!("ASC_ISSUER_ID is required for App Store upload") unless issuer_id
+
+  [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyID", ENV.fetch("ASC_KEY_ID"),
+    "-authenticationKeyPath", asc_p8_path,
+    "-authenticationKeyIssuerID", issuer_id
+  ]
 end
 
 def asc_issuer_id
@@ -79,9 +94,12 @@ def xcodebuild_xcargs
   args.join(" ")
 end
 
-def export_options
+def export_options(destination: "export")
   options = {
     method: "app-store-connect",
+    destination: destination,
+    distributionBundleIdentifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
+    manageAppVersionAndBuildNumber: false,
     signingStyle: "automatic",
     uploadSymbols: false
   }
@@ -181,7 +199,7 @@ platform :ios do
     )
 
     Tempfile.create(["ThingtimeExportOptions", ".plist"]) do |export_options_file|
-      export_options_file.write(export_options.to_plist)
+        export_options_file.write(export_options(destination: "export").to_plist)
       export_options_file.flush
       sh(
         "xcodebuild",
@@ -209,22 +227,20 @@ platform :ios do
   end
 
   private_lane :upload_testflight_ipa do |options|
-    previous_shell_transporter = ENV["FASTLANE_ITUNES_TRANSPORTER_USE_SHELL_SCRIPT"]
-    previous_package_upload = ENV["ITMSTRANSPORTER_FORCE_ITMS_PACKAGE_UPLOAD"]
-    begin
-      ENV["FASTLANE_ITUNES_TRANSPORTER_USE_SHELL_SCRIPT"] = "1"
-      ENV["ITMSTRANSPORTER_FORCE_ITMS_PACKAGE_UPLOAD"] = "1"
-      upload_to_testflight(
-        api_key: app_store_api_key,
-        ipa: options.fetch(:ipa_path),
-        app_platform: "ios",
-        apple_id: ENV.fetch("APP_STORE_APP_ID"),
-        skip_waiting_for_build_processing: true,
-        distribute_external: false
+    UI.user_error!("Xcode did not export #{options.fetch(:ipa_path)}") unless File.exist?(options.fetch(:ipa_path))
+
+    archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    Tempfile.create(["ThingtimeUploadOptions", ".plist"]) do |upload_options_file|
+      upload_options_file.write(export_options(destination: "upload").to_plist)
+      upload_options_file.flush
+      sh(
+        "xcodebuild",
+        "-exportArchive",
+        "-archivePath", archive_path,
+        "-exportPath", File.expand_path(OUTPUT_DIRECTORY),
+        "-exportOptionsPlist", upload_options_file.path,
+        *api_key_xcodebuild_args
       )
-    ensure
-      ENV["FASTLANE_ITUNES_TRANSPORTER_USE_SHELL_SCRIPT"] = previous_shell_transporter
-      ENV["ITMSTRANSPORTER_FORCE_ITMS_PACKAGE_UPLOAD"] = previous_package_upload
     end
   end
 

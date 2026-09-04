@@ -34,7 +34,6 @@ jobs:
       DEVELOPMENT_TEAM: 6DQQ9V7C84
       PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.appletime
       WATCH_BUNDLE_IDENTIFIER: com.thingtime.appletime.watchkitapp
-      APP_STORE_APP_ID: "6783335401"
       IOS_DISTRIBUTION_CERTIFICATE_ID: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_ID }}
       IOS_DISTRIBUTION_CERT_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_P12_PASSWORD }}
       THINGTIME_WEB_URL: ${{ github.event.inputs.web_url || 'https://pr-596.previews.dev.thingtime.com' }}

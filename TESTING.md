@@ -584,10 +584,11 @@ email whose link points at the attacker.
 ## Apple Watch notifications
 
 - [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
-      Xcode 26.2 and upload its generated metadata package through Apple's
-      Transporter using the App Store Connect JWT. Confirm App Store Connect
-      accepts the upload without relying on Xcode 26 `altool`, which can report
-      a platform error while incorrectly exiting with status 0.
+      Xcode 26.2, verify the locally exported IPA, and upload the same archive
+      through `xcodebuild -exportArchive` with `destination: upload` and the App
+      Store Connect API key. Confirm App Store Connect accepts the upload
+      without relying on Xcode 26 `altool`, which can report a platform error
+      while incorrectly exiting with status 0.
 - [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
       sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
       asking for a password or exposing a session credential on the watch.
