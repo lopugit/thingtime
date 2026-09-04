@@ -1,3 +1,4 @@
+import { byKey } from './lookup';
 import type { Feature } from './types';
 
 // The curated feature inventory the marketing engine fans out from. Every
@@ -1133,7 +1134,7 @@ export const FEATURES: Feature[] = [
 	}
 ];
 
-export const FEATURE_BY_KEY: Record<string, Feature> = Object.fromEntries(FEATURES.map((feature) => [feature.key, feature]));
+export const FEATURE_BY_KEY: Record<string, Feature> = byKey(FEATURES, (feature) => feature.key);
 
 export const getFeature = (key: string): Feature => {
 	const feature = FEATURE_BY_KEY[key];

@@ -20,6 +20,7 @@ import {
 	headlineForUseCase
 } from './copy';
 import { FEATURES, FEATURE_CATEGORY_LABELS, getFeature } from './features';
+import { byKey } from './lookup';
 import { PERSONAS, getPersona } from './personas';
 import { SOCIAL_ASSET_COUNT } from './social';
 import { TRENDS, getTrend } from './trends';
@@ -48,7 +49,7 @@ export const CATEGORIES: CatalogCategory[] = [
 	{ key: 'checklists', name: 'Checklists', emoji: '✅', blurb: 'Getting-started checklists per audience.', kinds: ['checklist'] }
 ];
 
-export const CATEGORY_BY_KEY: Record<string, CatalogCategory> = Object.fromEntries(CATEGORIES.map((category) => [category.key, category]));
+export const CATEGORY_BY_KEY: Record<string, CatalogCategory> = byKey(CATEGORIES, (category) => category.key);
 
 const TREND_FOR_KIND: Record<PageKind, TrendKey> = {
 	landing: 'bold-brutal',
@@ -315,7 +316,7 @@ export const enumeratePages = (): MarketingPage[] => {
 };
 
 export const PAGES: MarketingPage[] = enumeratePages();
-export const PAGE_BY_SLUG: Record<string, MarketingPage> = Object.fromEntries(PAGES.map((entry) => [entry.slug, entry]));
+export const PAGE_BY_SLUG: Record<string, MarketingPage> = byKey(PAGES, (entry) => entry.slug);
 export const PAGE_COUNT = PAGES.length;
 export const TOTAL_ASSET_COUNT = PAGE_COUNT + SOCIAL_ASSET_COUNT;
 

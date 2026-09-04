@@ -2,23 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
-import { CATEGORIES, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
+import { CATEGORIES, CATEGORY_BY_KEY, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
 // @ts-ignore see above
-import { FEATURES } from './features.ts';
+import { FEATURES, FEATURE_BY_KEY, getFeature } from './features.ts';
 // @ts-ignore see above
-import { PERSONAS } from './personas.ts';
+import { PERSONAS, PERSONA_BY_KEY } from './personas.ts';
 // @ts-ignore see above
-import { COMPETITORS } from './competitors.ts';
+import { COMPETITORS, COMPETITOR_BY_KEY } from './competitors.ts';
 // @ts-ignore see above
-import { USE_CASES } from './useCases.ts';
+import { USE_CASES, USE_CASE_BY_KEY } from './useCases.ts';
 // @ts-ignore see above
-import { CONCEPTS, TEMPLATES } from './concepts.ts';
+import { CONCEPTS, CONCEPT_BY_KEY, TEMPLATES, TEMPLATE_BY_KEY } from './concepts.ts';
 // @ts-ignore see above
-import { SOCIAL_FORMATS, TRENDS } from './trends.ts';
+import { SOCIAL_FORMATS, SOCIAL_FORMAT_BY_KEY, TRENDS, TREND_BY_KEY, getSocialFormat, getTrend } from './trends.ts';
 // @ts-ignore see above
 import { SOCIAL_ASSET_COUNT, buildSocialSvg, enumerateSocialAssets, parseSocialAssetKey, socialAssetFilename, socialAssetKey, socialCaption, wrapText } from './social.ts';
 // @ts-ignore see above
-import { SCREEN_TARGETS, WALKTHROUGHS } from './walkthroughs.ts';
+import { SCREEN_TARGETS, WALKTHROUGHS, WALKTHROUGH_BY_KEY } from './walkthroughs.ts';
 // @ts-ignore see above
 import { captionFor, hashString, hookFor, pick } from './copy.ts';
 
@@ -146,4 +146,41 @@ test('copy helpers are deterministic and fill every placeholder', () => {
 	assert.notEqual(hashString('a'), hashString('b'));
 	assert.equal(pick('x', [1, 2, 3]), pick('x', [1, 2, 3]));
 	assert.deepEqual(wrapText('one two three four five six', 160, 20), ['one two three', 'four five six']);
+});
+
+// Every route guard in the suite is written as `if (MAP[key])`, and the keys
+// come straight from the URL (`/marketing/:category`, the `/marketing/*`
+// splat, `?feature=`). A prototype-carrying map answers truthily for
+// "constructor" & friends, which walked a non-entry past those guards.
+test('lookup maps never resolve inherited Object.prototype keys', () => {
+	const maps = {
+		CATEGORY_BY_KEY,
+		PAGE_BY_SLUG,
+		FEATURE_BY_KEY,
+		TREND_BY_KEY,
+		SOCIAL_FORMAT_BY_KEY,
+		COMPETITOR_BY_KEY,
+		CONCEPT_BY_KEY,
+		TEMPLATE_BY_KEY,
+		PERSONA_BY_KEY,
+		USE_CASE_BY_KEY,
+		WALKTHROUGH_BY_KEY
+	};
+	const inherited = ['constructor', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', '__proto__', '__defineGetter__'];
+	for (const [name, map] of Object.entries(maps)) {
+		assert.equal(Object.getPrototypeOf(map), null, `${name} must be a null-prototype map`);
+		for (const key of inherited) {
+			assert.equal((map as Record<string, unknown>)[key], undefined, `${name}[${key}] must not resolve`);
+		}
+	}
+});
+
+test('unknown keys are rejected rather than resolving to a prototype member', () => {
+	for (const key of ['constructor', 'toString', '__proto__', 'nope']) {
+		assert.throws(() => getFeature(key), /Unknown marketing feature/, `getFeature(${key})`);
+		assert.throws(() => getTrend(key as never), /Unknown marketing trend/, `getTrend(${key})`);
+		assert.throws(() => getSocialFormat(key), /Unknown social format/, `getSocialFormat(${key})`);
+		// The `/marketing/*` splat resolves through this: a non-entry must 404.
+		assert.equal(buildPageBySlug(key), null, `buildPageBySlug(${key})`);
+	}
 });
