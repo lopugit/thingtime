@@ -266,10 +266,22 @@ on:
   # non-coalescible Lopu review session on an unchanged head.
   #
   # Every control-plane comment carries a hidden `<!-- thingtime-…` marker, and
-  # no human writes one, so the route/review_detect gates below require BOTH a
-  # `User` author AND the absence of that marker prefix. Keep the marker on
-  # every controller-authored comment — that convention is what makes this
-  # gate work.
+  # a human comment does not normally contain one, so the route/review_detect
+  # gates below require BOTH a `User` author AND the absence of that marker
+  # prefix. Keep the marker on every controller-authored comment — that
+  # convention is what makes this gate work.
+  #
+  # Known limitation, accepted deliberately: `contains()` matches the marker
+  # anywhere in the body, so a human comment that merely reproduces the marker
+  # text is dropped too, and silently. The likeliest way to hit that is
+  # GitHub's "Quote reply", which copies the quoted comment's raw Markdown
+  # including its hidden marker — i.e. replying to Lopu is exactly the case
+  # that can be swallowed. Narrowing it is not expressible here: Actions
+  # expressions have no regex and no newline literal, so the test cannot be
+  # anchored to the start of a line, and anchoring to the start of the body
+  # instead would leak every controller comment that carries a trailing
+  # marker (the promotion attestation is written that way). If a question to
+  # Lopu goes unanswered, post it as a new comment rather than a quoted reply.
   issue_comment:
     types: [created, edited]
   pull_request_review_comment:

@@ -857,28 +857,46 @@ function assertWorkflowSource() {
   //
   // A new marker outside both sets fails here on purpose: classify it, then
   // either give it the prefix or add it to the body-marker list.
+  //
+  // Spacing is part of the convention, not cosmetic. The gate matches an
+  // opening `<!--` plus one space plus `thingtime-` as one literal, so a
+  // marker written with no space after the comment opener — or with two —
+  // satisfies a prefix-only check here and still sails straight through the
+  // gate. Capture the spacing and pin it too.
+  //
+  // Note for anyone extending this block: it scans every control-plane file,
+  // including this one, so an illustrative marker spelled out in a comment
+  // here would be picked up as a real one.
   {
     const bodyMarkers = new Set(["promotion-of", "promotion-group", "promotion-changelog"]);
     const controlPlane = join(REPO_ROOT, ".github");
-    const markers = new Set();
+    const markers = new Map();
     let scanned = 0;
     for (const name of readdirSync(controlPlane, { recursive: true })) {
       if (!/\.(?:ya?ml|mjs|cjs|js|sh)$/u.test(name)) continue;
       scanned += 1;
-      for (const [, marker] of readFileSync(join(controlPlane, name), "utf8").matchAll(/<!--\s*([\w:.-]+)/gu)) {
-        markers.add(marker);
+      for (const [, spacing, marker] of readFileSync(join(controlPlane, name), "utf8").matchAll(/<!--(\s*)([\w:.-]+)/gu)) {
+        if (!markers.has(marker)) markers.set(marker, new Set());
+        markers.get(marker).add(spacing);
       }
     }
     assert.ok(scanned > 20, `expected to scan the control plane for comment markers, saw ${scanned} files`);
     assert.ok(markers.size > 10, `expected the control-plane comment markers, found ${markers.size}`);
     let commentMarkers = 0;
-    for (const marker of markers) {
+    for (const [marker, spacings] of markers) {
       // `promotion-changelog:start` / `:end` / `-prs:` are all that one body marker.
       if ([...bodyMarkers].some((body) => marker === body || marker.startsWith(`${body}:`) || marker.startsWith(`${body}-`))) continue;
       assert.ok(
         marker.startsWith("thingtime-"),
         `control-plane marker '${marker}' must either keep the 'thingtime-' prefix the conversation gate filters on, or be classified as a PR-body marker`,
       );
+      for (const spacing of spacings) {
+        assert.equal(
+          spacing,
+          " ",
+          `control-plane marker '${marker}' must be written as '<!-- ${marker}', with exactly one space: the conversation gate matches that literal, so any other spacing passes this contract and still wakes a Lopu session`,
+        );
+      }
       commentMarkers += 1;
     }
     assert.ok(commentMarkers > 10, `expected the thingtime- comment markers, found ${commentMarkers}`);
