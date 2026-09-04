@@ -651,7 +651,10 @@ runs:
           exit 1
         }
 
-        temp_dir="$(mktemp -d)"
+        # The credential-vault helper deliberately refuses to write outside
+        # RUNNER_TEMP. Keep every verifier scratch file inside that trusted
+        # boundary instead of relying on the host's generic /tmp default.
+        temp_dir="$(mktemp -d "$RUNNER_TEMP/rebase-verify.XXXXXX")"
         trap 'rm -rf -- "$temp_dir"' EXIT
         expected_conflicts="$temp_dir/expected-conflicts"
         expected_ai_files="$temp_dir/expected-ai-files"
