@@ -4,10 +4,10 @@ Status notes for `Auth: register + email verification + JWT/session + login (fou
 
 ## 1. JWT secret fallback
 
-- Status: needs decision / follow-up.
-- Review note: `remix/app/api/utils/auth/jwt.ts` uses a known fallback secret when `JWT_SECRET` is missing.
+- Status: done.
+- Review note: `remix/app/api/utils/auth/jwt.ts` used to fall back to a known secret when `JWT_SECRET` was missing.
 - Why this matters: JWTs are signed with a secret. If production accidentally runs without `JWT_SECRET`, every deployment would use the same public fallback string, so anyone who knows the code could forge valid-looking tokens. The Mongo session lookup still helps, but the app should not silently accept a known signing key in real environments.
-- Suggested action: keep the dev fallback for local work only, and throw when `NODE_ENV === "production"` and `JWT_SECRET` is missing.
+- Action taken: `getLegacySecret` now takes the dev fallback only when its caller passes `allowDevFallback`, and every call site passes `process.env.NODE_ENV !== 'production'`. With no fallback allowed it returns `null`, and it additionally throws in production, so the shared dev secret is unreachable outside local work. HS256 itself is now only a migration path for cookies minted before public-key verification.
 
 ## 2. Production source maps
 
