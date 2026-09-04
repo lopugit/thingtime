@@ -589,6 +589,9 @@ email whose link points at the attacker.
       Store Connect API key. Confirm App Store Connect accepts the upload
       without relying on Xcode 26 `altool`, which can report a platform error
       while incorrectly exiting with status 0.
+- [ ] Regression class (2026-09): inspect the exported IPA and confirm the
+      companion watchOS app is under `Payload/Thingtime.app/Watch/`, not
+      `PlugIns/`; App Store Connect rejects the latter as an invalid directory.
 - [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
       sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
       asking for a password or exposing a session credential on the watch.

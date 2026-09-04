@@ -71,8 +71,6 @@ targets:
       - target: ThingtimeWatch
         embed: true
         codeSign: true
-        copy:
-          destination: plugins
 
   ThingtimeWatch:
     type: application
