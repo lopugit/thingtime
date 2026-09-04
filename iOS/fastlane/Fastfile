@@ -226,6 +226,37 @@ platform :ios do
     )
   end
 
+  desc "Report the latest or requested TestFlight build state without changing it"
+  lane :testflight_status do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+
+    expected_build_number = ENV["EXPECTED_BUILD_NUMBER"].to_s.strip
+    builds = Spaceship::ConnectAPI::Build.all(
+      app_id: app.id,
+      platform: "IOS",
+      limit: 10
+    )
+    build = if expected_build_number.empty?
+              builds.first
+            else
+              builds.find { |candidate| candidate.version == expected_build_number }
+            end
+    UI.user_error!("TestFlight build #{expected_build_number} was not found") unless build
+
+    detail = build.build_beta_detail
+    UI.message(
+      "TESTFLIGHT_BUILD_STATUS " \
+      "version=#{build.app_version} " \
+      "build=#{build.version} " \
+      "processing=#{build.processing_state} " \
+      "internal=#{detail&.internal_build_state || 'UNAVAILABLE'} " \
+      "external=#{detail&.external_build_state || 'UNAVAILABLE'} " \
+      "uploaded=#{build.uploaded_date}"
+    )
+  end
+
   private_lane :upload_testflight_ipa do |options|
     UI.user_error!("Xcode did not export #{options.fetch(:ipa_path)}") unless File.exist?(options.fetch(:ipa_path))
 

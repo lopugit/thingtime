@@ -3,14 +3,21 @@ name: iOS TestFlight
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Upload a build or inspect the latest TestFlight build
+        required: true
+        type: choice
+        options:
+          - upload
+          - status
+        default: upload
+      expected_build_number:
+        description: Optional build number to inspect when operation is status
+        required: false
       web_url:
         description: Public Thingtime URL embedded in the native shell
         required: false
         default: https://thingtime.com
-  push:
-    paths:
-      - .github/workflows/ios-testflight.yml
-      - iOS/**
 
 permissions:
   contents: read
@@ -21,7 +28,6 @@ concurrency:
 
 jobs:
   upload:
-    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/codex/watch-app' && contains(github.event.head_commit.message, '[testflight]'))
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -39,12 +45,14 @@ jobs:
       THINGTIME_WEB_URL: ${{ github.event.inputs.web_url || 'https://pr-596.previews.dev.thingtime.com' }}
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
       FASTLANE_SKIP_UPDATE_CHECK: "1"
+      EXPECTED_BUILD_NUMBER: ${{ github.event.inputs.expected_build_number }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
       - name: Select release Xcode
+        if: github.event.inputs.operation == 'upload'
         run: |
           sudo xcode-select --switch "$DEVELOPER_DIR"
           xcodebuild -version
@@ -58,9 +66,11 @@ jobs:
           working-directory: iOS
 
       - name: Install XcodeGen
+        if: github.event.inputs.operation == 'upload'
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
       - name: Prepare distribution identity
+        if: github.event.inputs.operation == 'upload'
         env:
           IOS_DISTRIBUTION_CERT_P12: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
         run: |
@@ -71,10 +81,12 @@ jobs:
           echo "IOS_DISTRIBUTION_CERTIFICATE_PATH=$RUNNER_TEMP/thingtime-distribution.p12" >> "$GITHUB_ENV"
 
       - name: Build and upload TestFlight IPA
+        if: github.event.inputs.operation == 'upload'
         working-directory: iOS
         run: ./scripts/testflight-beta.sh
 
       - name: Verify signed iPhone and Watch apps
+        if: github.event.inputs.operation == 'upload'
         run: |
           test -s iOS/build/Thingtime.ipa
           ditto -x -k iOS/build/Thingtime.ipa "$RUNNER_TEMP/thingtime-ipa"
@@ -87,7 +99,7 @@ jobs:
           echo "Verified signed iPhone app with embedded Watch app."
 
       - name: Preserve a newly generated distribution identity
-        if: always()
+        if: always() && github.event.inputs.operation == 'upload'
         env:
           CERT_TRANSFER_PASSWORD: ${{ secrets.IOS_CERT_TRANSFER_PASSWORD }}
         run: |
@@ -106,10 +118,15 @@ jobs:
             -passout env:CERT_TRANSFER_PASSWORD
 
       - name: Upload encrypted distribution identity
-        if: always()
+        if: always() && github.event.inputs.operation == 'upload'
         uses: actions/upload-artifact@v4
         with:
           name: thingtime-distribution-identity-${{ github.run_id }}
           path: ${{ runner.temp }}/thingtime-distribution.p12
           if-no-files-found: ignore
           retention-days: 1
+
+      - name: Inspect TestFlight build state
+        if: github.event.inputs.operation == 'status'
+        working-directory: iOS
+        run: bundle exec fastlane testflight_status
