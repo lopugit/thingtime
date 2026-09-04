@@ -188,12 +188,18 @@ const vercelRequest = async (config, path, init = {}) => {
 
 const getPullRequest = (config, number) => githubRequest(`/repos/${config.repository}/pulls/${boundedInteger(number, 'PR number')}`);
 
+const isManagedPreviewComment = (comment) => {
+	const login = String(comment?.user?.login ?? '').trim().toLowerCase();
+	const trustedAuthor = login === 'github-actions[bot]' || (comment?.user?.type === 'User' && comment?.author_association === 'OWNER');
+	return trustedAuthor && comment?.body?.includes(COMMENT_MARKER);
+};
+
 const upsertComment = async (config, prNumber, body, createIfMissing = true) => {
 	let existing = null;
 	for (let page = 1; page <= MAX_GITHUB_PAGES; page += 1) {
 		const comments = await githubRequest(`/repos/${config.repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
 		if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
-		existing = comments.find((comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(COMMENT_MARKER));
+		existing = [...comments].reverse().find(isManagedPreviewComment) ?? null;
 		if (existing || comments.length < 100) break;
 		if (page === MAX_GITHUB_PAGES) throw new Error('GitHub comment scan exceeded its safety bound');
 	}
@@ -652,6 +658,27 @@ const runSelfTest = () => {
 			environments: ['production', 'develop']
 		}
 	};
+	assert.ok(
+		isManagedPreviewComment({
+			user: { login: 'github-actions[bot]', type: 'Bot' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
+	assert.ok(
+		isManagedPreviewComment({
+			user: { login: 'lopugit', type: 'User' },
+			author_association: 'OWNER',
+			body: COMMENT_MARKER
+		})
+	);
+	assert.ok(
+		!isManagedPreviewComment({
+			user: { login: 'outside-user', type: 'User' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
 	assert.deepEqual(parseDispatch(event, config).environments, ['develop', 'production']);
 	assert.throws(() => parseDispatch({ ...event, sender: { login: 'github-actions[bot]', type: 'Bot' } }, config), /sender/);
 	assert.throws(() => parseDispatch({ ...event, sender: { login: EXPECTED_DISPATCHER_LOGIN, type: 'User' } }, config), /sender/);

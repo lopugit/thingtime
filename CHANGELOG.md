@@ -30,7 +30,9 @@ every entry is attributed the same way the app changelog attributes them.
   permission denials. Protected preview authorization and publishing reuse
   Lopu's repository automation credential when available so GitHub's
   PR-specific integration-token downgrade cannot suppress the required early
-  comment or deployment receipt; untrusted build jobs remain secretless. —
+  comment or deployment receipt. Marker upserts recognize both the Actions bot
+  and the repository owner's automation identity, preventing one status
+  comment per deployment phase; untrusted build jobs remain secretless. —
   Codex (AI), 2026-09-04
 
 - Moved the ordinary Develop preview's expected URL and ready estimate into the

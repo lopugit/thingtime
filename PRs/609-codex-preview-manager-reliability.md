@@ -14,7 +14,9 @@ GitHub can issue a declared-write `github.token` that still rejects issue
 comment creation for an individual PR. The protected authorization and
 publisher jobs therefore use the existing Lopu repository automation PAT when
 available, with the per-run token as fallback. The exact-SHA build jobs remain
-separate and secretless.
+separate and secretless. Comment upserts accept the Actions bot or a marker
+comment owned by the repository owner, so PAT attribution still updates one
+durable comment instead of creating a comment for every phase.
 
 ## Live diagnosis
 
