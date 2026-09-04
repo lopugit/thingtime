@@ -141,6 +141,7 @@ final class ThingtimeNativeNotifications: NSObject {
                 nextCursor: response.nextCursor,
                 syncedAt: ISO8601DateFormatter().string(from: Date()),
                 message: nil,
+                accountUsername: response.viewer?.username,
                 phoneOrigin: webView.url?.origin,
                 phoneBuild: Self.buildNumber
             )
@@ -505,10 +506,15 @@ extension ThingtimeNativeNotifications: WCSessionDelegate {
 }
 
 private struct NotificationsResponse: Decodable {
+    struct Viewer: Decodable {
+        let username: String
+    }
+
     let ok: Bool
     let notifications: [ThingtimeWatchNotification]
     let unreadCount: Int
     let nextCursor: String?
+    let viewer: Viewer?
 }
 
 private enum RefreshOutcome {

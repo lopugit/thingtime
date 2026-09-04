@@ -1,5 +1,20 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 22 — visible account and live status checks
+
+- The Watch connection section now names the authenticated account as
+  `@username`, keeps its live connection state visible, shows last-check and
+  last-reply times, and provides an always-visible **Check & refresh** button
+  with an in-progress state.
+- The authenticated notifications response now carries only the viewer's
+  public username for native account confirmation. Its semantic capability is
+  bumped additively to `api.notifications-list` 1.2.0, with contract and
+  backwards-compatible Watch payload coverage.
+- All 30 native tests pass; focused notification/capability tests, focused
+  lint, and the complete Vercel output build pass. The Series 10 simulator
+  renders the waiting state through its bottom content with the button and
+  build 22 visible, and the button is accessibility-discoverable and tappable.
+
 ## TestFlight build 21 — correct origin migration and visible diagnostics
 
 - Fixed the persisted-destination upgrade path that could leave an updated

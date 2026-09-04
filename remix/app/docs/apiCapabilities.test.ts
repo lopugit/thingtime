@@ -32,7 +32,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	const manifest = createApiCapabilitiesManifest();
 
 	assert.equal(manifest.features['api.notifications-devices'], '1.0.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
 });
 
 test('capabilities publish the non-secret data authority used by a bundle', () => {

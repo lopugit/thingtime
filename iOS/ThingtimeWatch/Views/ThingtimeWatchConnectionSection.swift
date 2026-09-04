@@ -7,6 +7,11 @@ struct ThingtimeWatchConnectionSection: View {
         Section("iPhone connection") {
             Label(store.phoneConnectionState.title, systemImage: store.phoneConnectionState.systemImage)
 
+            if let username = store.snapshot.accountUsername, !username.isEmpty {
+                Label("@\(username)", systemImage: "person.crop.circle.fill")
+                    .font(.caption.bold())
+            }
+
             if let message = store.connectionMessage {
                 Text(message)
                     .font(.caption2)
@@ -18,6 +23,26 @@ struct ThingtimeWatchConnectionSection: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+
+            if let lastCheck = store.lastConnectionCheckAt {
+                Text("Last check \(lastCheck.formatted(.relative(presentation: .named)))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Button {
+                store.requestRefresh()
+            } label: {
+                HStack(spacing: 8) {
+                    if store.isCheckingPhoneConnection {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(store.isCheckingPhoneConnection ? "Checking…" : "Check & refresh")
+                }
+            }
+            .disabled(store.isCheckingPhoneConnection)
 
             Text(buildSummary)
                 .font(.caption2)
@@ -34,14 +59,6 @@ struct ThingtimeWatchConnectionSection: View {
                 Text("The iPhone and Watch apps differ. Update Thingtime on the Watch, then retry.")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-            }
-
-            if store.canRetryPhoneConnection {
-                Button {
-                    store.retryPhoneConnection()
-                } label: {
-                    Label("Retry connection", systemImage: "arrow.clockwise")
-                }
             }
         }
     }

@@ -42,6 +42,7 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
     let nextCursor: String?
     let syncedAt: String
     let message: String?
+    let accountUsername: String?
     let phoneOrigin: String?
     let phoneBuild: String?
 
@@ -52,6 +53,7 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
         nextCursor: String? = nil,
         syncedAt: String,
         message: String?,
+        accountUsername: String? = nil,
         phoneOrigin: String? = nil,
         phoneBuild: String? = nil
     ) {
@@ -61,6 +63,7 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
         self.nextCursor = nextCursor
         self.syncedAt = syncedAt
         self.message = message
+        self.accountUsername = accountUsername
         self.phoneOrigin = phoneOrigin
         self.phoneBuild = phoneBuild
     }

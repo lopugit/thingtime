@@ -372,7 +372,7 @@
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
     "mtime": 1788528286.0517263,
     "ast_hash": "23b5895f4a187b99ebb2829ced883376",
-    "semantic_hash": ""
+    "semantic_hash": "23b5895f4a187b99ebb2829ced883376"
   },
   "iOS/scripts/_xcode-common.sh": {
     "mtime": 1788427187.233258,
@@ -1190,9 +1190,9 @@
     "semantic_hash": "ccf02dff1acd3d7b93f804ac3ebaac87"
   },
   "remix/package.json": {
-    "mtime": 1788428060.9437797,
-    "ast_hash": "7b4fc3a77fe3bc4ee9fe2e685adc74f5",
-    "semantic_hash": "7b4fc3a77fe3bc4ee9fe2e685adc74f5"
+    "mtime": 1788529176.0545986,
+    "ast_hash": "236bdf9962118e2d8e36f5fa778828b8",
+    "semantic_hash": "236bdf9962118e2d8e36f5fa778828b8"
   },
   "remix/public/manifest.json": {
     "mtime": 1788427187.4824352,
@@ -1480,13 +1480,13 @@
     "semantic_hash": "e9065834cd91a8cb309ba920944ff112"
   },
   "iOS/project.yml": {
-    "mtime": 1788527639.6542351,
-    "ast_hash": "37f4cadf3d34d14c1cc1fbf1ff10816b",
+    "mtime": 1788529151.899281,
+    "ast_hash": "65aec429c9ac9afcae6e9f85a9d8a6a4",
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1788527927.090635,
-    "ast_hash": "bf82354505395b85e31bf25fd0c76659",
+    "mtime": 1788529176.0561993,
+    "ast_hash": "62e65ed3c7d1e174e330945b99a2b1f8",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2325,9 +2325,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1788511251.0259705,
-    "ast_hash": "b6b09530fbb95da40fe0f11582587721",
-    "semantic_hash": "b6b09530fbb95da40fe0f11582587721"
+    "mtime": 1788529151.8982792,
+    "ast_hash": "a2a0b20fddcfa865239b9a779fc07d9f",
+    "semantic_hash": "a2a0b20fddcfa865239b9a779fc07d9f"
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1788427187.3281274,
@@ -3270,8 +3270,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1788527927.0928688,
-    "ast_hash": "3a5362680a6e0b67445d929826e8ca03",
+    "mtime": 1788529176.055568,
+    "ast_hash": "0915606e20ee6e944ad36c551cc06d04",
     "semantic_hash": ""
   },
   "remix/public/sdk/demo.html": {
@@ -4905,9 +4905,9 @@
     "semantic_hash": "304543f0b3dd9570a2e63fed46437735"
   },
   "remix/app/routes/api/v1/notifications/_notifications.tsx": {
-    "mtime": 1788494685.3323922,
-    "ast_hash": "be8d8d42db7efe8a20555c821f110d58",
-    "semantic_hash": "be8d8d42db7efe8a20555c821f110d58"
+    "mtime": 1788529151.895988,
+    "ast_hash": "0cc68acb267073421099fba4b09d8848",
+    "semantic_hash": "0cc68acb267073421099fba4b09d8848"
   },
   "remix/app/routes/api/v1/notifications/email/unsubscribe/_unsubscribe.tsx": {
     "mtime": 1788427187.3211036,
@@ -7410,9 +7410,9 @@
     "semantic_hash": "263c662da6367cf0c4f587208975bfce"
   },
   "remix/app/docs/apiCapabilities.test.ts": {
-    "mtime": 1788511251.0241926,
-    "ast_hash": "3d630ab8e28688f4b10a80228ec40d27",
-    "semantic_hash": "3d630ab8e28688f4b10a80228ec40d27"
+    "mtime": 1788529151.8989112,
+    "ast_hash": "0bda1951038eff8c70c297f5139820d8",
+    "semantic_hash": "0bda1951038eff8c70c297f5139820d8"
   },
   "remix/app/routes/api/v1/admin/peers/_peers.test.ts": {
     "mtime": 1788427187.3080525,
@@ -10380,9 +10380,9 @@
     "semantic_hash": ""
   },
   "iOS/Shared/WatchNotifications/ThingtimeWatchPayload.swift": {
-    "mtime": 1788527605.6948292,
-    "ast_hash": "9dd3155d0781007d5f7033b119ce766c",
-    "semantic_hash": "9dd3155d0781007d5f7033b119ce766c"
+    "mtime": 1788529136.818444,
+    "ast_hash": "cd025244db1118b181feaf14b2867aea",
+    "semantic_hash": "cd025244db1118b181feaf14b2867aea"
   },
   "iOS/Thingtime/Native/ThingtimeAppDelegate.swift": {
     "mtime": 1788427662.7865036,
@@ -10390,14 +10390,14 @@
     "semantic_hash": "5c50a68167a6ecf0f7f25bc0046c5d69"
   },
   "iOS/Thingtime/Native/ThingtimeNativeNotifications.swift": {
-    "mtime": 1788527605.6953514,
-    "ast_hash": "5d30ded21a7a12657b5754de0ebace70",
-    "semantic_hash": "5d30ded21a7a12657b5754de0ebace70"
+    "mtime": 1788529136.8188295,
+    "ast_hash": "432c879ded734d6a599d734059730c40",
+    "semantic_hash": "432c879ded734d6a599d734059730c40"
   },
   "iOS/ThingtimeTests/ThingtimeWatchPayloadTests.swift": {
-    "mtime": 1788527605.6962256,
-    "ast_hash": "763a7fabfd2d928982a8dd620b57409d",
-    "semantic_hash": "763a7fabfd2d928982a8dd620b57409d"
+    "mtime": 1788529380.4445548,
+    "ast_hash": "cc74a426dcca28da41604b7f4f5f4da8",
+    "semantic_hash": "cc74a426dcca28da41604b7f4f5f4da8"
   },
   "iOS/ThingtimeWatch/App/ThingtimeWatchApp.swift": {
     "mtime": 1788512011.6164045,
@@ -10410,14 +10410,14 @@
     "semantic_hash": "d83966869c7cc34d49dbebb9c8483e40"
   },
   "iOS/ThingtimeWatch/Notifications/ThingtimeWatchStore.swift": {
-    "mtime": 1788527605.6957378,
-    "ast_hash": "4d682c6ab60d3c5f44edc76d8390cce1",
-    "semantic_hash": "4d682c6ab60d3c5f44edc76d8390cce1"
+    "mtime": 1788529380.4439561,
+    "ast_hash": "b1ae5bf9065932b2ff7a2d9108c0b84d",
+    "semantic_hash": "b1ae5bf9065932b2ff7a2d9108c0b84d"
   },
   "iOS/ThingtimeWatch/Views/ThingtimeWatchRootView.swift": {
-    "mtime": 1788527738.0658786,
-    "ast_hash": "ff5e627b1fc4f6ef5ffd07251111c6d3",
-    "semantic_hash": "ff5e627b1fc4f6ef5ffd07251111c6d3"
+    "mtime": 1788529184.761076,
+    "ast_hash": "4b0efe7263f9d0d34641cf8839d0c302",
+    "semantic_hash": "4b0efe7263f9d0d34641cf8839d0c302"
   },
   "remix/app/api/utils/notifications/apns.ts": {
     "mtime": 1788428960.5089657,
@@ -10445,8 +10445,8 @@
     "semantic_hash": ""
   },
   "PRs/596-codex-watch-app--add-native-apple-watch-notifications.md": {
-    "mtime": 1788527927.0911438,
-    "ast_hash": "7af92f75a11677e888f4941bd427800c",
+    "mtime": 1788529495.9047086,
+    "ast_hash": "26eedd617080069bc561bc209cc276b3",
     "semantic_hash": ""
   },
   "iOS/Shared/WatchAttachments/ThingtimeWatchAttachmentTransfer.swift": {
@@ -10520,13 +10520,18 @@
     "semantic_hash": ""
   },
   "iOS/ThingtimeWatch/Views/ThingtimeWatchConnectionSection.swift": {
-    "mtime": 1788527686.0625145,
-    "ast_hash": "c3ac31460ba9f83889b4c122d6f256f7",
-    "semantic_hash": "c3ac31460ba9f83889b4c122d6f256f7"
+    "mtime": 1788529380.444359,
+    "ast_hash": "397cbe93bfc8d37c6d7b2e81f1d06fdd",
+    "semantic_hash": "397cbe93bfc8d37c6d7b2e81f1d06fdd"
   },
   "iOS/ThingtimeWatch/Views/ThingtimeWatchSavedRecordingsView.swift": {
     "mtime": 1788512706.1582963,
     "ast_hash": "d52c9b643f35b9ae5ccc9109d457ca84",
     "semantic_hash": "d52c9b643f35b9ae5ccc9109d457ca84"
+  },
+  "remix/app/routes/api/v1/notifications/_notifications.test.ts": {
+    "mtime": 1788529151.8962035,
+    "ast_hash": "9e63d0500216d53a3d9890ffe9fac233",
+    "semantic_hash": "9e63d0500216d53a3d9890ffe9fac233"
   }
 }

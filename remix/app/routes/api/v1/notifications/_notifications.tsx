@@ -4,6 +4,23 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { listNotifications } from '~/api/utils/notifications/notifications';
 
+export const notificationListResponse = <Notification,>(
+  username: string,
+  result: {
+    notifications: Notification[];
+    unreadCount: number;
+    nextBefore: string | null;
+    nextCursor: string | null;
+  }
+) => ({
+  ok: true as const,
+  viewer: { username },
+  notifications: result.notifications,
+  unreadCount: result.unreadCount,
+  nextBefore: result.nextBefore,
+  nextCursor: result.nextCursor
+});
+
 // GET /api/v1/notifications?limit=&cursor=&from=&to= — the caller's notifications,
 // newest first, filtered by their notification prefs (a disabled type is
 // hidden even if it was written before the pref flip), plus the unread count
@@ -34,11 +51,5 @@ export const loader = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
-  return json({
-    ok: true,
-    notifications: result.notifications,
-    unreadCount: result.unreadCount,
-    nextBefore: result.nextBefore,
-    nextCursor: result.nextCursor
-  });
+  return json(notificationListResponse(user.username, result));
 };

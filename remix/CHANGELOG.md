@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Visible Watch account and live connection checks — Codex (AI)
+
+- The Apple Watch connection card now shows the authenticated Thingtime
+  username, live checking/connected/error state, last check and reply times,
+  and an always-visible **Check & refresh** action.
+- Notification pages now include a minimal viewer username projection for
+  native account confirmation; the `api.notifications-list` capability is
+  versioned at 1.2.0 for this additive response contract.
+
 ### 2026-09-04 — Watch origin migration and visible build diagnostics — Codex (AI)
 
 - TestFlight builds now migrate a legacy persisted production selection to the

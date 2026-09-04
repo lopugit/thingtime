@@ -41,6 +41,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     @Published private(set) var connectionMessage: String?
     @Published private(set) var phoneConnectionState: PhoneConnectionState = .activating
+    @Published private(set) var lastConnectionCheckAt: Date?
     @Published private(set) var lastPhoneContactAt: Date?
     @Published private(set) var attachmentStatusMessage: String?
     @Published private(set) var attachmentIsBusy = false
@@ -94,12 +95,8 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         startPhoneConnectionAttempt(resetBackoff: true)
     }
 
-    func retryPhoneConnection() {
-        startPhoneConnectionAttempt(resetBackoff: true)
-    }
-
-    var canRetryPhoneConnection: Bool {
-        phoneConnectionState != .connected && phoneConnectionState != .checking
+    var isCheckingPhoneConnection: Bool {
+        phoneConnectionState == .activating || phoneConnectionState == .checking
     }
 
     var canRetryHistory: Bool {
@@ -217,6 +214,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             nextCursor: snapshot.nextCursor,
             syncedAt: snapshot.syncedAt,
             message: nil,
+            accountUsername: snapshot.accountUsername,
             phoneOrigin: snapshot.phoneOrigin,
             phoneBuild: snapshot.phoneBuild
         )
@@ -324,6 +322,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
                     nextCursor: page.nextCursor,
                     syncedAt: ISO8601DateFormatter().string(from: Date()),
                     message: nil,
+                    accountUsername: snapshot.accountUsername,
                     phoneOrigin: snapshot.phoneOrigin,
                     phoneBuild: snapshot.phoneBuild
                 )
@@ -448,6 +447,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
 
     private func startPhoneConnectionAttempt(resetBackoff: Bool, kind: String = "refresh") {
         if resetBackoff {
+            lastConnectionCheckAt = Date()
             connectionRetryTask?.cancel()
             connectionTimeoutTask?.cancel()
             connectionAttempt = 0

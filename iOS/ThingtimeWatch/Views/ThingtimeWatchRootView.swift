@@ -37,11 +37,33 @@ struct ThingtimeWatchRootView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                Button("Retry iPhone connection") {
+                Button {
                     store.requestPairing()
+                } label: {
+                    HStack(spacing: 8) {
+                        if store.isCheckingPhoneConnection {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text(store.isCheckingPhoneConnection ? "Checking…" : "Check & refresh")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.purple)
+                .disabled(store.isCheckingPhoneConnection)
+
+                if let lastCheck = store.lastConnectionCheckAt {
+                    Text("Last check \(lastCheck.formatted(.relative(presentation: .named)))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                if let lastContact = store.lastPhoneContactAt {
+                    Text("Last reply \(lastContact.formatted(.relative(presentation: .named)))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
 
                 Text(signedOutBuildSummary)
                     .font(.caption2)

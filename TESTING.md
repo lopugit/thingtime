@@ -589,6 +589,11 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] On a signed-in paired Watch, confirm the connection section identifies
+      the active account as **@username**, keeps the current connection state
+      visible, and always shows **Check & refresh**. Tap it and confirm the
+      control changes to **Checking…**, then returns with updated **Last check**
+      and **Last reply** times without exposing a reusable session credential.
 - [ ] Regression class (2026-09): install a TestFlight build configured for a
       preview over an older install that implicitly retained `thingtime.com`.
       Confirm the iPhone migrates to the configured origin, the Watch displays

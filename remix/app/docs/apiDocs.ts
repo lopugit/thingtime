@@ -9212,8 +9212,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -9223,7 +9223,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
       'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
       'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
-      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) and to (exclusive) ISO timestamps bound historical pages and exports.',
+      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) and to (exclusive) ISO timestamps bound historical pages and exports. The viewer object identifies the authenticated account by username so native companions can visibly confirm which account is connected.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9249,6 +9249,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Notifications + unread count.',
         body: {
           ok: true,
+          viewer: { username: 'lopu' },
           notifications: [
             {
               id: 'a1b2…',
