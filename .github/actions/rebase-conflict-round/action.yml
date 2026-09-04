@@ -157,7 +157,9 @@ runs:
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
               printf '%s\0' \
+                .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
+                .github/scripts/lopu-credential-vault.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -180,10 +182,14 @@ runs:
           echo "::error::The protected Lopu agent action is missing."
           exit 1
         }
-        for helper in graphify-cas.mjs stage-graphify-snapshots.mjs; do
+        for helper in \
+          classify-claude-credential-failure.mjs \
+          graphify-cas.mjs \
+          lopu-credential-vault.mjs \
+          stage-graphify-snapshots.mjs; do
           [[ -f "$source_trusted/.github/scripts/$helper" \
              && ! -L "$source_trusted/.github/scripts/$helper" ]] || {
-            echo "::error::Trusted Graphify helper is missing or not a regular file: $helper"
+            echo "::error::Trusted runtime helper is missing or not a regular file: $helper"
             exit 1
           }
         done
@@ -200,7 +206,9 @@ runs:
         cp -pR "$source_trusted/.github/scripts/rebase-stack/." \
           "$safe_trusted/.github/scripts/rebase-stack/"
         cp -p \
+          "$source_trusted/.github/scripts/classify-claude-credential-failure.mjs" \
           "$source_trusted/.github/scripts/graphify-cas.mjs" \
+          "$source_trusted/.github/scripts/lopu-credential-vault.mjs" \
           "$source_trusted/.github/scripts/stage-graphify-snapshots.mjs" \
           "$safe_trusted/.github/scripts/"
 
@@ -269,9 +277,15 @@ runs:
         # conflict and may also admit a small set of related edits to existing
         # tracked regular-text files after validating their paths, modes,
         # sizes, contents, and final staged scope.
-        mkdir -p "$WORKSPACE_PATH/trusted/.github/actions/lopu-agent"
+        mkdir -p \
+          "$WORKSPACE_PATH/trusted/.github/actions/lopu-agent" \
+          "$WORKSPACE_PATH/trusted/.github/scripts"
         cp -pR "$SAFE_TRUSTED_PATH/.github/actions/lopu-agent/." \
           "$WORKSPACE_PATH/trusted/.github/actions/lopu-agent/"
+        cp -p \
+          "$SAFE_TRUSTED_PATH/.github/scripts/classify-claude-credential-failure.mjs" \
+          "$SAFE_TRUSTED_PATH/.github/scripts/lopu-credential-vault.mjs" \
+          "$WORKSPACE_PATH/trusted/.github/scripts/"
 
     - name: Record this mechanically-derived conflict set for the caller
       if: steps.prepare.outcome == 'success'
@@ -589,7 +603,9 @@ runs:
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
               printf '%s\0' \
+                .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
+                .github/scripts/lopu-credential-vault.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -1136,7 +1152,9 @@ runs:
               find .github/actions/rebase-conflict-round -type f -print0
               find .github/scripts/rebase-stack -type f -print0
               printf '%s\0' \
+                .github/scripts/classify-claude-credential-failure.mjs \
                 .github/scripts/graphify-cas.mjs \
+                .github/scripts/lopu-credential-vault.mjs \
                 .github/scripts/stage-graphify-snapshots.mjs
             } | LC_ALL=C sort -z)
           ) | sha256_stdin
@@ -1178,7 +1196,9 @@ runs:
         cp -pR "$safe_trusted_abs/.github/scripts/rebase-stack/." \
           "$restored/.github/scripts/rebase-stack/"
         cp -p \
+          "$safe_trusted_abs/.github/scripts/classify-claude-credential-failure.mjs" \
           "$safe_trusted_abs/.github/scripts/graphify-cas.mjs" \
+          "$safe_trusted_abs/.github/scripts/lopu-credential-vault.mjs" \
           "$safe_trusted_abs/.github/scripts/stage-graphify-snapshots.mjs" \
           "$restored/.github/scripts/"
         [[ "$(hash_trusted_tree "$restored")" == "$EXPECTED_TRUSTED_SHA256" ]] || {

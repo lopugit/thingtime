@@ -61,4 +61,9 @@ exercised the separate repository-dispatch rebase path, exposing a pre-existing
 credential gate that recognized only legacy static Claude slots even though the
 worker passed the configured Thingtime credential-vault router secret. The gate
 now treats that router secret as valid Claude credential authority, and the
-routing contract prevents the mismatch from returning.
+routing contract prevents the mismatch from returning. The first live replay
+then reached the vault fetch and exposed a second boundary: scratch preparation
+correctly preserved the nested Lopu action, but not the two trusted helper
+scripts that action invokes. Those helpers now participate in every trusted-tree
+hash and safe-copy/restore phase, including rematerialization after the workspace
+is replaced by repo-less conflict scratch.
