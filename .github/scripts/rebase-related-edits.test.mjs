@@ -102,6 +102,18 @@ function extractVerifierScript() {
     .join("\n");
 }
 
+test("verifier reads secret needles from the preserved trusted copy", () => {
+  const verifier = extractVerifierScript();
+  assert.match(
+    verifier,
+    /node "\$SAFE_TRUSTED_ABS\/\.github\/scripts\/lopu-credential-vault\.mjs" needles "\$needles"/u,
+  );
+  assert.doesNotMatch(
+    verifier,
+    /GITHUB_ACTION_PATH.*lopu-credential-vault\.mjs/u,
+  );
+});
+
 function copyTrustedTree(destination) {
   const paths = [
     ".github/actions/lopu-agent",
