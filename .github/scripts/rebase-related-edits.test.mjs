@@ -106,6 +106,10 @@ test("verifier reads secret needles from the preserved trusted copy", () => {
   const verifier = extractVerifierScript();
   assert.match(
     verifier,
+    /mktemp -d "\$RUNNER_TEMP\/rebase-verify\.XXXXXX"/u,
+  );
+  assert.match(
+    verifier,
     /node "\$SAFE_TRUSTED_ABS\/\.github\/scripts\/lopu-credential-vault\.mjs" needles "\$needles"/u,
   );
   assert.doesNotMatch(
@@ -174,7 +178,11 @@ function makeStoppedRebase(root, { executableConflict = false } = {}) {
   return { repo, head, rebaseHead, base };
 }
 
-function runVerifier({ addNewFile = false, executableConflict = false } = {}) {
+function runVerifier({
+  addNewFile = false,
+  executableConflict = false,
+  includeCredentialCache = false,
+} = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "thingtime-rebase-related-"));
   const fixture = makeStoppedRebase(root, { executableConflict });
   const scratch = path.join(root, "scratch");
@@ -190,11 +198,33 @@ function runVerifier({ addNewFile = false, executableConflict = false } = {}) {
   const githubEnv = path.join(root, "github-env");
   writeFileSync(output, "");
   writeFileSync(githubEnv, "");
+  const runId = "rebase-related-test-run";
+  const runAttempt = "1";
+  if (includeCredentialCache) {
+    writeFileSync(
+      path.join(root, "lopu-credential-vault.json"),
+      `${JSON.stringify({
+        runId,
+        runAttempt,
+        credentials: [{
+          id: "fixture-credential",
+          name: "Fixture Claude",
+          platform: "Claude",
+          credentialType: "claude-code-oauth-token",
+          value: "fixture-credential-value",
+          priority: 0,
+        }],
+      })}\n`,
+      { mode: 0o600 },
+    );
+  }
   const env = {
     ...process.env,
     RUNNER_TEMP: root,
     GITHUB_OUTPUT: output,
     GITHUB_ENV: githubEnv,
+    GITHUB_RUN_ID: runId,
+    GITHUB_RUN_ATTEMPT: runAttempt,
     REPO_ABS: fixture.repo,
     SCRATCH_ABS: scratch,
     SAFE_TRUSTED_ABS: trusted,
@@ -264,6 +294,16 @@ test("verifier imports a bounded related edit and completes the stopped rebase",
       "",
       "verified replay must leave a clean checkout",
     );
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("verifier generates credential needles inside RUNNER_TEMP", () => {
+  const run = runVerifier({ includeCredentialCache: true });
+  try {
+    assert.equal(run.result.status, 0, run.result.stderr || run.result.stdout);
+    assert.match(readFileSync(run.output, "utf8"), /^complete=true$/m);
   } finally {
     rmSync(run.root, { recursive: true, force: true });
   }
