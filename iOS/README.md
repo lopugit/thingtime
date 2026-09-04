@@ -91,13 +91,16 @@ Use a supported release or RC Xcode for uploads. If App Store Connect rejects
 the upload with `90534 Unsupported SDK or Xcode version`, rebuild with a
 supported `DEVELOPER_DIR`, such as `/Applications/Xcode.app/Contents/Developer`.
 
-If automatic App Store export reports that no profile was found, set
-`PROVISIONING_PROFILE_SPECIFIER` to the installed App Store provisioning profile
-name for `PRODUCT_BUNDLE_IDENTIFIER`. The Fastlane lane will keep automatic
-signing as the default and switch only the export step to manual profile
-mapping when that variable is present.
+Set `WATCH_BUNDLE_IDENTIFIER` to the Watch App ID paired with
+`PRODUCT_BUNDLE_IDENTIFIER`. If automatic App Store export reports that no
+profile was found, set `PROVISIONING_PROFILE_SPECIFIER` and
+`WATCH_PROVISIONING_PROFILE_SPECIFIER` to the installed App Store profile names
+for the iPhone and Watch targets. The Fastlane lane keeps automatic signing as
+the fallback and switches the archive and export to target-specific manual
+profile mapping when either profile variable is present.
 
-The lane syncs an Apple Distribution certificate and App Store provisioning
-profile with the App Store Connect API key before building. Set
+The lane syncs an Apple Distribution certificate and separate iPhone and Watch
+App Store provisioning profiles with the App Store Connect API key before
+building. Set
 `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the correct signing asset
 is already installed and you intentionally want to skip that step.

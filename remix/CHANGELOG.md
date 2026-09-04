@@ -17,6 +17,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Watch-enabled TestFlight release path — Codex (AI)
+
+- Added target-specific App Store profile mapping for the iPhone and embedded
+  Watch apps, bumped the native build to `16`, and added an encrypted
+  macOS 26/Xcode 26.6 TestFlight workflow for release builds when a developer
+  machine is running an incompatible beta macOS host.
+
 ### 2026-09-03 — Native Apple Watch notification companion — Codex (AI)
 
 - Added a native watchOS 10 SwiftUI companion that pairs through the signed-in

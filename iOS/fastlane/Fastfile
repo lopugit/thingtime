@@ -38,14 +38,34 @@ def thingtime_web_url_xcarg
   "THINGTIME_WEB_URL=#{Shellwords.escape(ENV.fetch('THINGTIME_WEB_URL', 'https://thingtime.com'))}"
 end
 
+def manual_profile_signing?
+  !ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+end
+
+def ios_provisioning_profile_name
+  ENV.fetch(
+    "PROVISIONING_PROFILE_SPECIFIER",
+    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}"
+  )
+end
+
+def watch_provisioning_profile_name
+  ENV.fetch(
+    "WATCH_PROVISIONING_PROFILE_SPECIFIER",
+    "Thingtime Watch App Store #{ENV.fetch('WATCH_BUNDLE_IDENTIFIER')}"
+  )
+end
+
 def xcodebuild_xcargs
   args = []
-  if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
-    args << api_key_xcargs
-  else
+  if manual_profile_signing?
     args << "CODE_SIGN_STYLE=Manual"
     args << "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}"
-    args << "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ENV.fetch('PROVISIONING_PROFILE_SPECIFIER'))}"
+    args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
+    args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
+  else
+    args << api_key_xcargs
   end
   args << "DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}"
   args << thingtime_web_url_xcarg
@@ -59,21 +79,15 @@ def export_options
     uploadSymbols: false
   }
 
-  return options if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+  return options unless manual_profile_signing?
 
   options.merge(
     signingStyle: "manual",
     teamID: ENV.fetch("DEVELOPMENT_TEAM"),
     provisioningProfiles: {
-      ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ENV.fetch("PROVISIONING_PROFILE_SPECIFIER")
+      ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
+      ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name
     }
-  )
-end
-
-def provisioning_profile_name
-  ENV.fetch(
-    "PROVISIONING_PROFILE_SPECIFIER",
-    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}"
   )
 end
 
@@ -98,16 +112,26 @@ platform :ios do
     end
 
     unless ENV["SKIP_PROFILE_SYNC"] == "1"
-      ENV["PROVISIONING_PROFILE_SPECIFIER"] = provisioning_profile_name
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
         app_identifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
-        provisioning_name: provisioning_profile_name,
+        provisioning_name: ios_provisioning_profile_name,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
         force: true,
         output_path: OUTPUT_DIRECTORY
       )
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: ENV.fetch("WATCH_BUNDLE_IDENTIFIER"),
+        provisioning_name: watch_provisioning_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: true,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["PROVISIONING_PROFILE_SPECIFIER"] = ios_provisioning_profile_name
+      ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = watch_provisioning_profile_name
     end
 
     build_app(

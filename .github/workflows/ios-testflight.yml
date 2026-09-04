@@ -1,0 +1,91 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: Public Thingtime URL embedded in the native shell
+        required: false
+        default: https://thingtime.com
+  push:
+    paths:
+      - .github/workflows/ios-testflight.yml
+      - iOS/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/codex/watch-app' && contains(github.event.head_commit.message, '[testflight]'))
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+      DEVELOPMENT_TEAM: 6DQQ9V7C84
+      PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.appletime
+      WATCH_BUNDLE_IDENTIFIER: com.thingtime.appletime.watchkitapp
+      THINGTIME_WEB_URL: ${{ github.event.inputs.web_url || 'https://pr-596.previews.dev.thingtime.com' }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select release Xcode
+        run: |
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "26.5"
+
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: iOS
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Build and upload TestFlight IPA
+        working-directory: iOS
+        run: ./scripts/testflight-beta.sh
+
+      - name: Preserve a newly generated distribution identity
+        if: always()
+        env:
+          CERT_TRANSFER_PASSWORD: ${{ secrets.IOS_CERT_TRANSFER_PASSWORD }}
+        run: |
+          key_path="$(find iOS/build -maxdepth 1 -type f -name '*.p12' -print -quit 2>/dev/null || true)"
+          if [[ -z "$key_path" ]]; then
+            echo "No new distribution private key was generated."
+            exit 0
+          fi
+          cert_path="${key_path%.p12}.cer"
+          test -s "$cert_path"
+          openssl x509 -inform DER -in "$cert_path" -out "$RUNNER_TEMP/distribution-cert.pem"
+          openssl pkcs12 -export \
+            -inkey "$key_path" \
+            -in "$RUNNER_TEMP/distribution-cert.pem" \
+            -out "$RUNNER_TEMP/thingtime-distribution.p12" \
+            -passout env:CERT_TRANSFER_PASSWORD
+
+      - name: Upload encrypted distribution identity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thingtime-distribution-identity-${{ github.run_id }}
+          path: ${{ runner.temp }}/thingtime-distribution.p12
+          if-no-files-found: ignore
+          retention-days: 1
