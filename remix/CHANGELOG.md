@@ -19,6 +19,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
 - **Lopu messages move to the bottom-left** by default. Settings →
   Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
   any of Chakra's six corners; the preference lives at
