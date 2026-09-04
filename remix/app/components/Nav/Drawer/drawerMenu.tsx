@@ -195,6 +195,21 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'marketing',
+		label: 'Marketing',
+		icon: '📣',
+		to: '/marketing',
+		children: [
+			{ id: 'marketing-home', label: 'Marketing hub', icon: '🌈', to: '/marketing' },
+			{ id: 'marketing-social', label: 'Social images', icon: '📸', to: '/marketing/social-media' },
+			{ id: 'marketing-landing', label: 'Feature pages', icon: '📄', to: '/marketing/landing' },
+			{ id: 'marketing-guides', label: 'How-to guides', icon: '📘', to: '/marketing/guides' },
+			{ id: 'marketing-walkthroughs', label: 'Walkthroughs', icon: '🖱️', to: '/marketing/walkthroughs' },
+			{ id: 'marketing-compare', label: 'Comparisons', icon: '⚖️', to: '/marketing/compare' },
+			{ id: 'marketing-for', label: 'For every audience', icon: '🎯', to: '/marketing/for' }
+		]
+	},
+	{
 		id: 'docs',
 		label: 'Docs',
 		icon: '📚',
@@ -211,7 +226,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 // submenu stays browsable (they're all multi-destination sections). An
 // explicit per-item "close after click" setting always wins over this
 // default, in either direction.
-export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'branding', 'docs'];
+export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'branding', 'marketing', 'docs'];
 
 // The one resolver for "does clicking this item close the drawer?" — shared
 // by the click handlers (useDrawer.closesOnClick) and the settings toggles so

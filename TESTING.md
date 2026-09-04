@@ -951,6 +951,48 @@ email whose link points at the attacker.
       `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
       when nothing changed).
 
+## Marketing suite (`remix/app/routes/marketing/`, `remix/app/components/Marketing/`, `remix/app/marketing/`)
+
+- [ ] `npm --prefix remix run test:marketing` passes: 1000+ pages, 1000+ social
+      assets, unique slugs, every related/in-page link resolves, every page
+      builds hero-first and CTA-last, every mock screen renders every
+      `data-wt` target its walkthrough scripts use.
+- [ ] `/marketing` hub: counts match the catalog, every category card and the
+      social card navigate, the search box lands on `/marketing/search?q=…`
+      with results, the showcase walkthrough autoplays and pauses when
+      scrolled out of view.
+- [ ] Category index (`/marketing/styles` is the largest): groups render with
+      counts, the filter narrows client-side, "Show more" paginates without
+      reloading, nothing scrolls horizontally at 390px.
+- [ ] A page from each kind opens by URL (`landing/feed`, `guides/passkeys`,
+      `walkthroughs/feature-messages`, `compare/thingtime-vs-notion`,
+      `compare/notion-alternative`, `compare/feed-vs-twitter`,
+      `for/developers`, `for/developers/open-api`, `use-cases/recipe-book`,
+      `use-cases/recipe-book/vs-notion`, `concepts/thing`, `templates/car`,
+      `styles/dark-neon/polls`, `faq/themes`,
+      `checklists/creators-getting-started`): hero renders with the animated
+      rainbow highlight word, tables scroll inside their own wrapper, FAQ
+      accordions toggle, the walkthrough cursor moves/clicks/types over the
+      mock screen, the social block shows three images with working PNG/SVG
+      downloads, related links resolve. An unknown slug shows the not-found
+      card with suggestions (no white screen).
+- [ ] Dark trends (`styles/dark-neon/*`, `styles/gradient-glow/*`,
+      `styles/kinetic-type/*`, `styles/listicle/*`) keep every text readable
+      and the sub-nav chips legible; the browser tab title and meta
+      description follow the page (`useMarketingSeo`) and revert when leaving
+      `/marketing`.
+- [ ] `/marketing/social-media`: the menu is navigable (feature → style →
+      format) and the URL updates; the grid re-renders with the right count;
+      PNG download produces a file at the platform's exact pixel size and SVG
+      opens standalone; "Copy caption" copies hashtags; "Download all shown"
+      caps at 40 and reports skipped items via Lopu; sidebar collapses to a
+      Menu button at 390px.
+- [ ] Reduced motion: with `prefers-reduced-motion: reduce` the cursor jumps
+      instead of gliding, the rainbow text is static and the hero voxel logo
+      does not float.
+- [ ] Drawer: the Marketing hub appears with its seven children and keeps the
+      drawer open on click like Branding/Docs.
+
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
 - [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
