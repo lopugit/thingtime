@@ -330,10 +330,10 @@ const repositoryDispatchSourceIssue = (run, payload, config) => {
 		? run.pull_requests.find((candidate) => Number(candidate.number) === payload.prNumber)
 		: null;
 	if (!sourcePullRequest) {
-		// GitHub removes the workflow run's pull_requests association after a PR
-		// closes. For that one event, bind the dispatch to the same-repository run's
-		// immutable head SHA and branch instead.
-		if (payload.action !== 'closed') return 'missing-source-pull-request';
+		// GitHub can remove the workflow run's pull_requests association while the
+		// PR is still open (observed after a successful listener dispatch). Bind the
+		// missing association to the same-repository run's immutable head instead;
+		// the current PR and its live head are independently revalidated below.
 		if (Number(run.head_repository?.id) !== config.repositoryId) return 'wrong-source-head-repository';
 		if (run.head_sha !== payload.headSha) return 'wrong-source-head-sha';
 		if (run.head_branch !== payload.headRef) return 'wrong-source-head-ref';
@@ -751,6 +751,10 @@ const runSelfTest = async () => {
 	throws(() => deploymentListParams(config, { sha: 'not-a-sha' }));
 	truthy(IDEMPOTENT_METHODS.has('GET'));
 	truthy(!IDEMPOTENT_METHODS.has('POST'));
+	truthy(isRetryableHttpResponse(403, new Headers({ 'retry-after': '2' }), { message: 'secondary rate limit' }));
+	truthy(isRetryableHttpResponse(403, new Headers({ 'x-ratelimit-remaining': '0' }), { message: 'API rate limit exceeded' }));
+	truthy(isRetryableHttpResponse(403, new Headers(), { message: 'You have exceeded a secondary rate limit.' }));
+	truthy(!isRetryableHttpResponse(403, new Headers(), { message: 'Resource not accessible by integration' }));
 	truthy(CLEANUP_ACTIONS.has('converted_to_draft'));
 
 	const dispatchPayload = {
@@ -784,7 +788,19 @@ const runSelfTest = async () => {
 	equal(repositoryDispatchSourceIssue({ ...sourceRun, path: '.github/workflows/untrusted.yml' }, dispatchPayload, config), 'wrong-workflow-path');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headSha: 'b'.repeat(40) }, config), 'wrong-source-head-sha');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headRef: 'codex/wrong' }, config), 'wrong-source-head-ref');
-	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), 'missing-source-pull-request');
+	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), null);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_repository: { id: 99 } }, dispatchPayload, config),
+		'wrong-source-head-repository'
+	);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_sha: 'b'.repeat(40) }, dispatchPayload, config),
+		'wrong-source-head-sha'
+	);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_branch: 'codex/wrong' }, dispatchPayload, config),
+		'wrong-source-head-ref'
+	);
 	const closedDispatchPayload = { ...dispatchPayload, action: 'closed' };
 	const closedSourceRun = { ...sourceRun, status: 'completed', pull_requests: [] };
 	equal(repositoryDispatchSourceIssue(closedSourceRun, closedDispatchPayload, config), null);
@@ -844,6 +860,23 @@ const parseErrorCode = (body) => {
 	return typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : 'unknown';
 };
 
+const isRetryableHttpResponse = (status, headers, body) => {
+	if (status === 429 || status >= 500) return true;
+	if (status !== 403) return false;
+	if (headers?.get?.('retry-after')) return true;
+	if (headers?.get?.('x-ratelimit-remaining') === '0') return true;
+	const message = typeof body?.message === 'string' ? body.message.toLowerCase() : '';
+	return message.includes('secondary rate limit') || message.includes('api rate limit exceeded');
+};
+
+const retryDelayMs = (response, attempt) => {
+	const retryAfterSeconds = Number(response.headers.get('retry-after'));
+	if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+		return Math.min(retryAfterSeconds * 1000, 30_000);
+	}
+	return 1000 * 2 ** attempt;
+};
+
 const requestJson = async (url, { method = 'GET', token, body, accept = [200], retries, timeoutMs = REQUEST_TIMEOUT_MS } = {}) => {
 	const normalizedMethod = method.toUpperCase();
 	const retryLimit = retries ?? (IDEMPOTENT_METHODS.has(normalizedMethod) ? 3 : 0);
@@ -884,8 +917,8 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 		if (accept.includes(response.status)) return parsed;
 		const error = new HttpError(response.status, parseErrorCode(parsed));
 		lastError = error;
-		if (attempt < retryLimit && (response.status === 429 || response.status >= 500)) {
-			await delay(1000 * 2 ** attempt);
+		if (attempt < retryLimit && isRetryableHttpResponse(response.status, response.headers, parsed)) {
+			await delay(retryDelayMs(response, attempt));
 			continue;
 		}
 		throw error;

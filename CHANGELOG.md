@@ -19,6 +19,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Restored Lopu PR manager admission after its protected workflow crossed
+  GitHub's workflow-size boundary and began accumulating permanently pre-queued
+  runs with no jobs or logs. The controller is compact again and its contract
+  now enforces byte headroom. Develop preview dispatches also tolerate GitHub
+  dropping a verified source run's PR association, while preserving exact
+  repository/SHA/ref fences, and retry only proven GitHub rate-limit 403s. —
+  Codex (AI), 2026-09-04
+
 - Moved the ordinary Develop preview's expected URL and ready estimate into the
   protected authorization phase so the PR comment exists before checkout,
   dependency installation, or build. The same timestamp is preserved through

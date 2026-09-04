@@ -25,6 +25,10 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
 const validDepth = (value) => /^[0-9]+$/.test(value) && Number(value) <= 3;
 const MAX_BATCH = 200;
+// GitHub does not create a run graph for oversized workflow revisions: the run
+// remains generically titled and pre-queued forever, with no jobs or logs. Keep
+// below the observed boundary (a 510,325-byte revision ran; 514,886 did not).
+const MAX_WORKFLOW_BYTES = 510_000;
 const standardBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export function encodeBatch(items) {
@@ -343,6 +347,10 @@ function assertCapturedStdoutStaysClean(source, label) {
 
 function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
+  assert.ok(
+    Buffer.byteLength(source, "utf8") <= MAX_WORKFLOW_BYTES,
+    `resolve-pr-conflicts.yml must stay at or below ${MAX_WORKFLOW_BYTES} bytes so GitHub can create its run graph`,
+  );
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");

@@ -1,165 +1,19 @@
-# AI-powered PR conflict resolution.
+# Lopu PR manager protected control plane. Product branches are thin reusable
+# workflow callers pinned to @github-actions; external events only detect work,
+# and bot-authenticated workflow_dispatch runs perform secret-bearing repairs.
 #
-# Supersedes .github/workflows/pr-conflict-resolver.yml (PR #81), which gave
-# the model unrestricted Bash(git:*)/Bash(gh:*); exactly one push-triggered
-# resolver may exist or they race each other's pushes.
+# Security invariants: exact live PR and branch SHAs are revalidated before
+# checkout, model execution, and publication; fork, protected-head, default-branch,
+# and user-paused PRs are rejected; git hooks and persisted checkout credentials
+# are disabled; model output is scope-checked before an exact-lease push.
 #
-# When any branch is pushed, every open PR (drafts included) that TARGETS that
-# branch — and the open PR FROM it, whose conflict may have been created by
-# that very head push during a quiet stretch on the base — is checked for
-# merge conflicts. A twice-hourly repository-wide sweep catches old conflicts
-# whose original event predated or otherwise missed the resolver, and a push to
-# the `github-actions` control-plane branch itself sweeps every open PR at once
-# — landing a resolver change is precisely when every conflicting PR deserves
-# an immediate retry under the new revision instead of waiting for the clock.
-#
-# OPT-OUT: a PR labelled `no-ai-merge` is dropped by the detector before any
-# comment, dispatch, or AI spend, on every trigger including the sweeps. Remove
-# the label to hand the PR back to the resolver. (`no-ai-rebase` is narrower —
-# it declines history rewriting only, and such a PR still uses this resolver.)
-#
-# CONTROL-PLANE IDENTITY (load-bearing): the product branches carry thin
-# listeners — one `uses:` of this file pinned at `@github-actions`, no runners,
-# no steps, no shell (enforced by remix/scripts/workflow-caller-contract.mjs) —
-# and every trigger they receive reaches this implementation through
-# `workflow_call`. In a called workflow `github.ref_name` is the CALLER's ref,
-# so a bare `github.ref_name == 'github-actions'` test rejects the entire
-# listener path: `develop`'s listener failed 100% of the time, in `detect`, on
-# every push, schedule and handoff it received, including the worker
-# handoffs that older branch copies still aim at the retired ref. That was red
-# noise rather than lost resolutions, because the detectors that run directly on
-# this branch cover the same work. Each gate below therefore asks:
-#
-#   github.ref_name == 'github-actions'                       (direct run)
-#   || github.workflow_ref == '<repo>/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop'
-#   || github.workflow_ref == '<repo>/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main'
-#
-# The caller contract is what makes the second and third clauses safe: a file
-# matching those names on a product branch cannot contain executable behavior
-# and cannot call anything but this implementation at this ref. `main` is listed
-# ahead of its own conversion to a listener; its current full copy has no
-# `uses:` and so can never satisfy the test. `github.job_workflow_ref` would
-# name the called file directly and be the tighter check, but it exists only as
-# an OIDC claim, not in the expression context.
-#
-# TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
-# ("Unsupported event type: push"), so a push-triggered run can only DETECT and
-# then hand off — the `handoff` job dispatches one bounded batch of exact PR
-# selections to this workflow at the protected `github-actions` control-plane
-# ref. That internal workflow_dispatch (a supported event) performs the
-# resolutions as isolated matrix jobs. Do not move the
-# resolve job back onto `push`; the AI step fails there every time, after the
-# merge has already been computed. pull_request_target and legacy
-# repository_dispatch runs take the same detector-only handoff hop — the action
-# rejects target-context events too, and PR code must never run there anyway.
-# Conflicting same-repo PRs get the base
-# branch merged into their head, with Claude resolving the conflicted files,
-# and the merge commit pushed back to the PR branch.
-#
-# Secrets:
-# - THINGTIME_CI_ROUTER_SECRET fetches the admin-ordered, encrypted Claude Code
-#   OAuth waterfall from Thingtime. Lopu masks the bundle and advances only for
-#   classified capacity/credential failures. The old OAuth secret names remain
-#   transitional bootstrap inputs until the first successful vault fetch.
-#   Max-turn exhaustion continues the exact selected session instead of
-#   restarting under another account.
-# - OPENAI_API_KEY (required when Lopu's review backend is Codex): powers the
-#   pinned Codex Action and the same post-merge Graphify semantic refresh. The
-#   configured review backend chooses which available provider Graphify tries
-#   first, with the other provider retained as a credential-backed fallback.
-# - CONFLICT_RESOLVER_PAT (optional): a PAT with repo + workflow scope. Without
-#   it, pushes use GITHUB_TOKEN, which GitHub rejects whenever the merge brings
-#   ANY change under .github/workflows/ (workflow runs are then skipped early,
-#   before AI spend, with a comment explaining the manual step). With it, those
-#   merges push fine AND the pushed merge commit retriggers CI + this workflow
-#   (natural stacked-PR cascade).
-#
-# Lopu execution model:
-# - Lopu has full repository and shell access to investigate, test, edit, and
-#   use GitHub tooling. Deterministic verification still re-derives the merge
-#   result and checks the published ref before it is pushed.
-# - The scope invariant is ENFORCED from git's object store alone: the verify
-#   step recomputes the auto-merge with `git merge-tree --write-tree` (HEAD is
-#   still the pre-merge commit mid-merge), stages ONLY the recomputed
-#   conflicted paths, and diffs the staged index tree against the auto-merge
-#   tree — every changed path must be a recomputed conflicted path (or
-#   graphify-out/**, reset deterministically before the model runs, with its
-#   staged subtree OID checked to equal the base side). Nothing the verify
-#   step trusts lives anywhere the model could write; RUNNER_TEMP files are
-#   informational only.
-# - Lopu's worker receives the full repository context and the configured
-#   Bash, file, search, and web tools. Git publication still uses an explicit
-#   token at the final push step, after the result has been re-verified.
-# - persist-credentials: false — no token in .git/config for the model to
-#   read; the push step injects auth via GIT_CONFIG_* env at push time only,
-#   and pushes to an explicit https URL (immune to remote-URL tampering).
-# - If the model deliberately leaves exactly one pnpm-lock.yaml marker-bearing
-#   after resolving every other conflict, a separate trusted step regenerates
-#   it from the base-side lockfile with the adjacent package.json and pinned
-#   pnpm@10.12.1. That subprocess receives an empty environment, no AI or
-#   repository-write credentials, and disables lifecycle scripts + pnpmfile
-#   hooks. The step proves every non-lockfile worktree byte stayed unchanged;
-#   the existing verifier still independently re-derives/stages/commits it.
-# - All deterministic git steps run hook-proof (core.hooksPath=/dev/null,
-#   core.fsmonitor=false via job-level GIT_CONFIG_* env), so a planted
-#   .git/hooks script can never execute.
-# - Detection snapshots the exact live head/base refs. Checkout and merge use
-#   those immutable SHAs; immediately before publication the workflow repeats
-#   the PR, repository, ref, ownership-label, stack-topology, default/protected
-#   branch, and live-SHA checks. An exact head lease preserves any concurrent
-#   push, and a post-push live-ref query classifies ambiguous transport errors.
-# - Staged conflicted files are scanned for the raw/base64 ANTHROPIC_API_KEY
-#   before commit. This scan is BEST-EFFORT, not a boundary: a determined
-#   injection could smuggle an exotic encoding past it. The actual boundary
-#   for same-repo collaborators (the only principals who can reach this code
-#   path) is that the commit lands on a reviewable PR branch, plus
-#   GitGuardian's push protection. ANTHROPIC_API_KEY necessarily sits in the
-#   model's own process env; treat it as exposed to same-repo collaborators
-#   who can engineer a conflict, and scope/rotate it accordingly.
-# - Fork PRs, protected heads, and the default branch are skipped: we can't
-#   safely push to them, and running the model when publication is forbidden
-#   would expose content to secrets and spend AI budget for no useful result.
-# - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
-#   direct stacked children are dispatched in bounded batches to the fixed
-#   `github-actions` control plane, with a depth cap as a loop guard. No
-#   secret-bearing resolver
-#   YAML is loaded from an arbitrary PR base or head ref.
-# - `ai-merge-paused` is a user-controlled, durable stop signal. Automation
-#   never creates, adds, removes, or treats it as stale: when present, every
-#   detector and worker abstains until a user removes it. This prevents base
-#   branch movement from silently re-spending AI/Vercel/GitHub compute.
-#
-# graphify-out/** is never given to the AI. The repo's merge driver for
-# graph.json is not configured in CI, so git would silently text-merge it into
-# a mixed base+head union (the poisoned-pair state CLAUDE.md forbids). Instead,
-# when BOTH sides touched graphify-out since the merge base, the whole
-# directory is deterministically reset to the base side before anything else.
-# AFTER the resolution is verified and committed, the graph is refreshed on a
-# pristine reset tree and committed separately, so the pushed graph reflects
-# the merged code. That ordering is required: the verify step asserts the
-# staged graphify-out subtree still equals the base side, so refreshing
-# earlier would fail its own check.
-#
-# The refresh includes LLM SEMANTIC extraction when a configured Lopu provider
-# credential exists: `graphify extract` + `graphify cluster-only` through
-# OPENAI_API_KEY, ANTHROPIC_API_KEY, or CLAUDE_CODE_OAUTH_TOKEN. The configured
-# review backend is preferred, so Terra/Sol-based Lopu review and Graphify use
-# the same OpenAI project credential while Claude remains a fallback. Extract
-# is manifest-incremental, and unchanged
-# content is served from the tracked content-addressed semantic cache
-# (graphify-out/cache/semantic/), so only content genuinely new to the merge
-# reaches the LLM — a typical conflict merge costs a handful of calls, often
-# zero. `extract --no-cluster` must NEVER be used here: it writes only the
-# newly-extracted nodes (verified: it reduces a 24k-node graph to 1 node),
-# and as a mechanical backstop for that whole failure class, a semantic
-# result whose node count halved is refused before staging.
-# With no credential, or when extraction fails, the step falls back to the
-# old AST-only `graphify update`. Handing this step a credential exposes it
-# to the pinned graphifyy package and the selected provider client (no NEW
-# principals — the review/resolve path already runs on the same secret); in exchange, the staged
-# refresh outputs get the same best-effort secret scan as resolved files
-# before committing, and the step still runs only after verification, on a
-# tree the model never influenced.
+# Operational invariants: one semantic detector waiter is retained, internal
+# batches use unique workflow concurrency, model jobs serialize through the
+# repository fleet, and every admitted worker revalidates its immutable snapshot.
+# Detailed behavior is enforced by resolve-pr-conflicts-routing-contract.mjs and
+# the comments beside each job and publication boundary below. Keep this file
+# below the guarded byte limit: GitHub leaves oversized revisions permanently
+# pre-queued with no jobs, logs, or cancellable run graph.
 
 name: Lopu PR manager
 
