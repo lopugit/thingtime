@@ -17,7 +17,7 @@
    (closed 2026-07-21).**
 
    This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
-   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
    React document tree, and the remaining work was to eliminate dev-mode
    `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
    to the Vite + React Router non-framework shell: `remix/index.html` is a
@@ -91,7 +91,7 @@
    `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
    persisted/runtime function source never crosses tabs. Other tabs apply the
    write through the existing mutation queue with `{ ignoreUndoRedo: true,
-   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
    internal root `timemachine` path is excluded from channel traffic, while
    ordinary paths restored by undo/redo still converge across tabs. The
    debounced latest-revision autosave in `ThingtimeProvider` remains the one
@@ -130,7 +130,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
      minted token is non-expiring (`signJwt expiresIn:null`,
      `createSession expiresAt:null`) and carries the 5 GiB
      `storageAllowanceBytes` default. Bound the token lifetime before closing
-     this item. (`getCurrentUser` only disables an *unverified* service token
+     this item. (`getCurrentUser` only disables an _unverified_ service token
      after a 7-day grace, so it does not bound a verified one.) PR #103 was
      closed unmerged and covered signup/item 8, not A3.
 
@@ -302,7 +302,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     confirmation, never the author-controlled button label, is the source of
     truth about what executes. Since the 2026-08-25 security review the
     delegated run path is owner-pinned, so foreign markup can only ever name
-    one of the viewer's *own* actions — with author-chosen inputs, and a bare
+    one of the viewer's _own_ actions — with author-chosen inputs, and a bare
     key is exactly the case the dialog cannot resolve client-side. Ownership
     therefore sets confirmation strength rather than acting as an on/off
     switch: a component the viewer did not author always confirms, with no
@@ -437,3 +437,18 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     the owner approves the first artifact family, public edit policy, retention
     and deletion semantics, assertion authority, dispute/remedy ownership, and
     interoperability pilot boundary.
+
+30. **🌱 Make resource-conscious reach a release contract.**
+
+    Preserve Thingtime's route splitting, immutable asset caching, lazy images,
+    exact byte ledgers, and explicit offline audio while adding complete-journey
+    budgets for constrained devices and networks, a private data-saver choice,
+    intentional media derivatives, bounded local copies, backend-work evidence,
+    and honest environmental-claim limits. Do not remove meaning or safety to
+    hit a score, infer constrained users from sensitive traits, confuse billing
+    bytes with emissions, or queue offline mutations before authority and
+    conflict semantics are approved. Start with the evidence note and phased
+    roadmap, then execute `claude-todo/30-resource-conscious-reach.md` only
+    after the owner approves journeys, test profiles, resource envelopes,
+    tier-neutral meaning, offline scope, signal boundaries, and accountable
+    owners.

@@ -203,3 +203,32 @@ The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
 indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
 TODO 22 dependency list. Validation and exact-head CI/preview receipts for this
 run are recorded in the PR body after publication.
+
+## 2026-09-05 — resource-conscious reach
+
+This run separates shipped point optimizations from a complete promise that
+Thingtime remains useful on constrained devices and networks. It adds:
+
+- `NOTES/resource-conscious-reach-baseline.md`, a dated evidence ledger covering
+  route splitting, immutable assets, lazy media, opt-in offline audio, exact
+  byte ledgers, missing journey budgets, privacy boundaries, and external
+  sustainability guidance;
+- `PLAN/resource-conscious-reach-roadmap.md`, a gated path from owner-approved
+  journeys and reproducible lab fixtures through client/media/offline/backend
+  budgets, honest environmental evidence, and continuous release checks;
+- `TODO/claude-todo/30-resource-conscious-reach.md`, an implementation epic
+  with dependencies, API capability-manifest obligations, security/privacy
+  invariants, acceptance criteria, stop conditions, and a first decision packet.
+
+The proposal keeps complete meaning, accessibility, safety, permissions,
+durable write truth, and deletion above byte or speed scores. It rejects device
+fingerprinting, punitive data-saver tiers, hidden offline authority, private
+media transformation outside the protected attachment path, and environmental
+marketing without current physical evidence and uncertainty. No runtime, API,
+schema, storage, media, infrastructure, telemetry, or production behavior
+changed.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes,
+plus the ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22
+dependency list. Validation and exact-head CI/preview receipts for this run are
+recorded in the PR body after publication.

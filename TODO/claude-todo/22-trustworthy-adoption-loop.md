@@ -57,6 +57,11 @@ experiment by itself.
   platform-assistance disclosure, corrections, disputes, and portable receipts.
   Sharing experiments must not collapse those claims into an authenticity badge
   or leak private source material.
+- [TODO 30](./30-resource-conscious-reach.md) owns constrained-journey
+  profiles, client/media/backend budgets, data-saver and offline boundaries,
+  local-footprint controls, and environmental evidence. Adoption experiments
+  must not exclude constrained users, paywall essential access, or turn logical
+  storage bytes into an impact claim.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

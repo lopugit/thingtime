@@ -20,6 +20,9 @@
 **Content-integrity dependency:**
 [Content provenance and correction](./content-provenance-and-correction-roadmap.md)
 
+**Resource-conscious reach dependency:**
+[Resource-conscious reach](./resource-conscious-reach-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -62,14 +65,14 @@ owner approves the exact journey and denominator.
 
 ## Adoption ladder
 
-| Stage | User outcome | Product proof | Must stay true |
-| --- | --- | --- | --- |
-| Discover | A person can understand what Thingtime is and find a relevant example. | A plain-language landing path and accessible, indexable examples explain data, components, actions, and sharing without requiring an account. | No misleading feature claims; production links are verified. |
-| First value | The person creates/imports something useful and can find it again. | A short path reaches one meaningful saved Thing with no destructive surprise. | Private by default; cold-start guidance works with keyboard, touch, reduced motion, and assistive technology. |
-| Repeat | The person returns and continues from last-known state. | Create/find/edit/compose outcomes work across sessions and relevant devices. | Optimistic rendering never hides stale/error state; export and delete remain obvious. |
-| Share | The person deliberately shares an artifact or invitation and the recipient understands the boundary. | Public previews, permissions, expiry, revoke, and recipient choices are explicit. | No contact scraping, privilege transfer, token leakage, or forced signup. |
-| Contribute | People publish reusable schemas, components, themes, algorithms, or composed apps with provenance. | Discovery, versioning, moderation, attribution, reporting, and safe reuse work end to end. | Foreign content remains untrusted; actions remain capability-bounded. |
-| Sustain | Hosted users, teams, builders, and creators can pay for aligned value. | Cost, quotas, billing, support, and service reliability are understandable. | No sale of personal data, pay-to-reach ranking, or dark-pattern lock-in. |
+| Stage       | User outcome                                                                                         | Product proof                                                                                                                                 | Must stay true                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Discover    | A person can understand what Thingtime is and find a relevant example.                               | A plain-language landing path and accessible, indexable examples explain data, components, actions, and sharing without requiring an account. | No misleading feature claims; production links are verified.                                                  |
+| First value | The person creates/imports something useful and can find it again.                                   | A short path reaches one meaningful saved Thing with no destructive surprise.                                                                 | Private by default; cold-start guidance works with keyboard, touch, reduced motion, and assistive technology. |
+| Repeat      | The person returns and continues from last-known state.                                              | Create/find/edit/compose outcomes work across sessions and relevant devices.                                                                  | Optimistic rendering never hides stale/error state; export and delete remain obvious.                         |
+| Share       | The person deliberately shares an artifact or invitation and the recipient understands the boundary. | Public previews, permissions, expiry, revoke, and recipient choices are explicit.                                                             | No contact scraping, privilege transfer, token leakage, or forced signup.                                     |
+| Contribute  | People publish reusable schemas, components, themes, algorithms, or composed apps with provenance.   | Discovery, versioning, moderation, attribution, reporting, and safe reuse work end to end.                                                    | Foreign content remains untrusted; actions remain capability-bounded.                                         |
+| Sustain     | Hosted users, teams, builders, and creators can pay for aligned value.                               | Cost, quotas, billing, support, and service reliability are understandable.                                                                   | No sale of personal data, pay-to-reach ranking, or dark-pattern lock-in.                                      |
 
 ## Metric contract to approve before collection
 
@@ -77,14 +80,14 @@ Every metric needs a versioned definition with numerator, denominator,
 exclusions, source, owner, retention, access policy, deletion behavior, and a
 quality guardrail. A dashboard without that contract is not decision evidence.
 
-| Metric | Candidate definition | Guardrail pair |
-| --- | --- | --- |
-| First-value completion | Eligible new participants who create/import a Thing and successfully reopen it within the evaluation window ÷ eligible new participants who start the journey. | Completion time; accessibility task success; error-free completion. |
-| Useful return | First-value participants who complete another meaningful outcome in a later window ÷ all first-value participants eligible to return. | No notification-spam increase; no rise in restore/data-loss reports. |
-| Consentful share success | Deliberate shares whose recipient reaches the public preview and explicitly continues ÷ valid recipient preview opens. | Abuse reports, revoked-link access, forced-signup exits, token leakage all remain at zero or an approved bound. |
-| Durable artifact rate | Sampled artifacts still readable, editable, exportable, and attributable after the durability window ÷ sampled artifacts eligible for the check. | Delete requests remain complete; no deleted content survives in measurement data. |
-| Trustworthy outcome rate | Useful outcomes completing without severe reliability, security, privacy, or accessibility failure ÷ attempted useful outcomes. | Each failure class remains separately visible; one class cannot average away another. |
-| Sustainable service margin | Revenue attributable to hosted value minus directly attributable serving/support cost. | No metric depends on personal-data resale, ad targeting, or compulsive engagement. |
+| Metric                     | Candidate definition                                                                                                                                           | Guardrail pair                                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| First-value completion     | Eligible new participants who create/import a Thing and successfully reopen it within the evaluation window ÷ eligible new participants who start the journey. | Completion time; accessibility task success; error-free completion.                                             |
+| Useful return              | First-value participants who complete another meaningful outcome in a later window ÷ all first-value participants eligible to return.                          | No notification-spam increase; no rise in restore/data-loss reports.                                            |
+| Consentful share success   | Deliberate shares whose recipient reaches the public preview and explicitly continues ÷ valid recipient preview opens.                                         | Abuse reports, revoked-link access, forced-signup exits, token leakage all remain at zero or an approved bound. |
+| Durable artifact rate      | Sampled artifacts still readable, editable, exportable, and attributable after the durability window ÷ sampled artifacts eligible for the check.               | Delete requests remain complete; no deleted content survives in measurement data.                               |
+| Trustworthy outcome rate   | Useful outcomes completing without severe reliability, security, privacy, or accessibility failure ÷ attempted useful outcomes.                                | Each failure class remains separately visible; one class cannot average away another.                           |
+| Sustainable service margin | Revenue attributable to hosted value minus directly attributable serving/support cost.                                                                         | No metric depends on personal-data resale, ad targeting, or compulsive engagement.                              |
 
 ## Milestones
 
@@ -214,6 +217,12 @@ Evaluate separately:
 - Creator packs or marketplaces with transparent terms and attribution.
 - Sponsorship, grants, and paid support for public-interest deployments.
 
+Use the [resource-conscious reach roadmap](./resource-conscious-reach-roadmap.md)
+to measure cost and bounded resource work per useful outcome. Do not turn
+logical storage bytes into an emissions claim, exclude constrained users to
+improve margin, or make data saver, accessibility, calm use, safety, export, or
+deletion premium-only.
+
 Reject models based on selling personal data, paid reach in personal feeds,
 artificial scarcity of export, or making privacy/security/accessibility a
 premium-only entitlement.
@@ -238,16 +247,17 @@ Every experiment copied into `TODO/` should contain:
 
 ## Risks and contingency paths
 
-| Risk | Early signal | Response |
-| --- | --- | --- |
-| Instrumentation becomes surveillance | Requests for raw content, queries, URLs, or person-level dashboards | Stop collection; answer the product question with local testing, aggregate counters, or sampled research. |
-| PR volume outruns review capacity | Long-lived open PRs, stale bases, repeated conflict automation | Pause new experiments; reconcile statuses and land or close prerequisites first. |
-| Sharing drives abuse faster than value | Spam, impersonation, report backlog, revoked-link access | Disable the experiment flag, preserve evidence, and fix controls before resuming. |
-| Accessibility or language quality lags | Journey fails keyboard, screen reader, reduced motion, touch, or target locales | Do not broaden acquisition; fix the blocker and rerun the same journey. |
-| Availability hides unrecoverable state | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming. |
-| Provenance becomes a deceptive truth badge | A source declaration, signature, or credential is presented as proof that a claim is accurate | Remove the claim, show assertion authority and evidence limits, preserve correction/dispute paths, and satisfy the content-integrity gate before resuming. |
-| Costs grow faster than usefulness | Storage, compute, email, moderation, or support cost per useful return rises | Narrow the experiment, improve efficiency, or test an aligned paid tier. |
-| Metrics optimize the proxy | Page views/time rise while useful outcomes or trust fall | Retire the proxy and return to outcome-based evaluation. |
+| Risk                                            | Early signal                                                                                                 | Response                                                                                                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instrumentation becomes surveillance            | Requests for raw content, queries, URLs, or person-level dashboards                                          | Stop collection; answer the product question with local testing, aggregate counters, or sampled research.                                                  |
+| PR volume outruns review capacity               | Long-lived open PRs, stale bases, repeated conflict automation                                               | Pause new experiments; reconcile statuses and land or close prerequisites first.                                                                           |
+| Sharing drives abuse faster than value          | Spam, impersonation, report backlog, revoked-link access                                                     | Disable the experiment flag, preserve evidence, and fix controls before resuming.                                                                          |
+| Accessibility or language quality lags          | Journey fails keyboard, screen reader, reduced motion, touch, or target locales                              | Do not broaden acquisition; fix the blocker and rerun the same journey.                                                                                    |
+| Availability hides unrecoverable state          | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work             | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming.                                 |
+| Provenance becomes a deceptive truth badge      | A source declaration, signature, or credential is presented as proof that a claim is accurate                | Remove the claim, show assertion authority and evidence limits, preserve correction/dispute paths, and satisfy the content-integrity gate before resuming. |
+| Growth excludes constrained devices or networks | Core-journey completion, transfer, long-task, or local-footprint evidence crosses an approved profile budget | Stop expansion; preserve complete meaning and satisfy the resource-conscious reach gate before resuming.                                                   |
+| Costs grow faster than usefulness               | Storage, compute, email, moderation, or support cost per useful return rises                                 | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |
+| Metrics optimize the proxy                      | Page views/time rise while useful outcomes or trust fall                                                     | Retire the proxy and return to outcome-based evaluation.                                                                                                   |
 
 ## First decision packet
 
