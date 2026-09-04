@@ -8,9 +8,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MOCK_SCREENS, MOCK_SCREEN_KEYS, MockScreen } from './MockScreens.tsx';
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import { SCREEN_TARGETS, WALKTHROUGHS } from '../../marketing/walkthroughs.ts';
+// @ts-ignore see above
+import type { MockScreenKey } from '../../marketing/types.ts';
 
+// `screen` stays a plain string on purpose: one test below feeds an unknown
+// key ('nope') to prove MockScreen falls back to the feed instead of throwing.
+// The cast is therefore at the boundary rather than on the parameter.
 const render = (screen: string, active: string | null = null, typed: Record<string, string> = {}) =>
-	renderToStaticMarkup(React.createElement(MockScreen, { screen, active, typed }));
+	renderToStaticMarkup(React.createElement(MockScreen, { screen: screen as MockScreenKey, active, typed }));
 
 const targetsIn = (html: string) => [...html.matchAll(/data-wt="([^"]+)"/g)].map((match) => match[1]);
 
