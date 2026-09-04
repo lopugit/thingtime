@@ -1854,6 +1854,11 @@ function assertAdminModelRouting(
     "the protected Lopu action fetches and exposes the bounded ordered Thingtime credential waterfall",
   );
   assert.match(
+    rebaseActionSource,
+    /HAS_CLAUDE_CREDENTIAL:\s*\$\{\{\s*inputs\.thingtime-ci-router-secret != '' \|\|/u,
+    "the rebase conflict gate accepts the Thingtime credential waterfall before invoking Lopu",
+  );
+  assert.match(
     lopuActionSource,
     /classify-claude-credential-failure\.mjs[\s\S]*claude_1_failure\.outputs\.retryable == 'true'[\s\S]*claude_7_failure\.outputs\.retryable == 'true'/u,
     "the protected Lopu action advances slots only after classified account-capacity or credential failures",
