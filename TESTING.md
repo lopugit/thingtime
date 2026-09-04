@@ -589,6 +589,16 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] Regression class (2026-09): install a TestFlight build configured for a
+      preview over an older install that implicitly retained `thingtime.com`.
+      Confirm the iPhone migrates to the configured origin, the Watch displays
+      that origin plus matching iPhone/Watch build numbers, and notification
+      history downloads. Then explicitly select production and confirm a
+      relaunch preserves that deliberate choice.
+- [ ] Update only the iPhone app while leaving an older companion on the Watch.
+      Confirm the Watch connection section displays both build numbers, warns
+      that they differ, and clears the warning after the Watch app updates.
+
 - [ ] Launch the Watch app with the paired iPhone app closed, then open
       Thingtime on iPhone. Confirm the Watch visibly moves through **Waiting for
       iPhone** / **Checking Thingtime sign-in** to **Connected to iPhone**,

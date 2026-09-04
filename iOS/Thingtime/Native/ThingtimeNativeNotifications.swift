@@ -117,8 +117,17 @@ final class ThingtimeNativeNotifications: NSObject {
 
             guard status == 200 else {
                 if status == 401 {
-                    publish(.signedOut)
-                    return .snapshot(.signedOut)
+                    let snapshot = ThingtimeWatchSnapshot(
+                        authenticated: false,
+                        unreadCount: 0,
+                        notifications: [],
+                        syncedAt: ISO8601DateFormatter().string(from: Date()),
+                        message: "Open Thingtime on your iPhone and sign in to pair this watch.",
+                        phoneOrigin: webView.url?.origin,
+                        phoneBuild: Self.buildNumber
+                    )
+                    publish(snapshot)
+                    return .snapshot(snapshot)
                 }
                 return .failure("The iPhone reached Thingtime, but notification refresh returned HTTP \(status).")
             }
@@ -131,7 +140,9 @@ final class ThingtimeNativeNotifications: NSObject {
                 notifications: response.notifications,
                 nextCursor: response.nextCursor,
                 syncedAt: ISO8601DateFormatter().string(from: Date()),
-                message: nil
+                message: nil,
+                phoneOrigin: webView.url?.origin,
+                phoneBuild: Self.buildNumber
             )
             publish(snapshot)
             await requestNotificationAuthorizationIfNeeded()
@@ -325,13 +336,21 @@ final class ThingtimeNativeNotifications: NSObject {
     private func verifyHistoryCapabilities() async throws {
         let manifest = try await fetchJSON(path: "/.well-known/thingtime-capabilities.json")
         guard let features = manifest["features"] as? [String: Any] else {
-            throw NativeBridgeError.historyUnavailable
+            throw NativeBridgeError.historyUnavailable(
+                origin: webView?.url?.host,
+                actual: nil,
+                minimum: ThingtimeWatchNotificationHistory.minimumVersions["api.notifications-list"] ?? "1.1.0"
+            )
         }
         for (feature, minimum) in ThingtimeWatchNotificationHistory.minimumVersions {
             let raw = features[feature]
             let actual = raw as? String ?? (raw as? [String: Any])?["version"] as? String
             guard let actual, ThingtimeWatchUploadRequirements.satisfies(actual: actual, minimum: minimum) else {
-                throw NativeBridgeError.historyUnavailable
+                throw NativeBridgeError.historyUnavailable(
+                    origin: webView?.url?.host,
+                    actual: actual,
+                    minimum: minimum
+                )
             }
         }
     }
@@ -502,7 +521,7 @@ private enum NativeBridgeError: LocalizedError {
     case invalidHistoryWindow
     case repeatedHistoryCursor
     case watchUnavailable
-    case historyUnavailable
+    case historyUnavailable(origin: String?, actual: String?, minimum: String)
     case openPhone
     case server(String)
 
@@ -512,10 +531,17 @@ private enum NativeBridgeError: LocalizedError {
         case .invalidHistoryWindow: "Choose a valid notification date or range."
         case .repeatedHistoryCursor: "Thingtime repeated a notification page. Try the download again."
         case .watchUnavailable: "The paired Apple Watch is unavailable."
-        case .historyUnavailable: "This Thingtime needs the notification history API before the Watch can download a period."
+        case let .historyUnavailable(origin, actual, minimum):
+            "History needs API \(minimum), but \(origin ?? "the selected Thingtime") has \(actual ?? "no compatible version"). On iPhone, choose the build's configured destination, then retry."
         case .openPhone: "Open Thingtime on your iPhone and sign in to fetch notification history."
         case let .server(message): message
         }
+    }
+}
+
+private extension ThingtimeNativeNotifications {
+    static var buildNumber: String? {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
     }
 }
 

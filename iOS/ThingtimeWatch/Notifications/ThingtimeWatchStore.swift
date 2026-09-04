@@ -216,7 +216,9 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             notifications: notifications,
             nextCursor: snapshot.nextCursor,
             syncedAt: snapshot.syncedAt,
-            message: nil
+            message: nil,
+            phoneOrigin: snapshot.phoneOrigin,
+            phoneBuild: snapshot.phoneBuild
         )
         send(["kind": "mark-read", "ids": [id]], guaranteed: true)
     }
@@ -321,7 +323,9 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
                     notifications: appended,
                     nextCursor: page.nextCursor,
                     syncedAt: ISO8601DateFormatter().string(from: Date()),
-                    message: nil
+                    message: nil,
+                    phoneOrigin: snapshot.phoneOrigin,
+                    phoneBuild: snapshot.phoneBuild
                 )
                 historyStatusMessage = page.notifications.isEmpty ? "No older notifications." : "Loaded \(page.notifications.count) older notifications."
                 return

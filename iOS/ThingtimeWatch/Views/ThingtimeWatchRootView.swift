@@ -43,10 +43,29 @@ struct ThingtimeWatchRootView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.purple)
 
+                Text(signedOutBuildSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if let origin = store.snapshot.phoneOrigin {
+                    Text("Origin: \(URL(string: origin)?.host ?? origin)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+
                 notificationPermissionButton
             }
             .padding(.horizontal, 8)
         }
+    }
+
+    private var signedOutBuildSummary: String {
+        let watchBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        guard let phoneBuild = store.snapshot.phoneBuild else {
+            return "Watch build \(watchBuild) · iPhone build unknown"
+        }
+        return "Watch build \(watchBuild) · iPhone build \(phoneBuild)"
     }
 
     private var notificationsView: some View {

@@ -42,6 +42,8 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
     let nextCursor: String?
     let syncedAt: String
     let message: String?
+    let phoneOrigin: String?
+    let phoneBuild: String?
 
     init(
         authenticated: Bool,
@@ -49,7 +51,9 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
         notifications: [ThingtimeWatchNotification],
         nextCursor: String? = nil,
         syncedAt: String,
-        message: String?
+        message: String?,
+        phoneOrigin: String? = nil,
+        phoneBuild: String? = nil
     ) {
         self.authenticated = authenticated
         self.unreadCount = unreadCount
@@ -57,6 +61,8 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
         self.nextCursor = nextCursor
         self.syncedAt = syncedAt
         self.message = message
+        self.phoneOrigin = phoneOrigin
+        self.phoneBuild = phoneBuild
     }
 
     static let signedOut = ThingtimeWatchSnapshot(

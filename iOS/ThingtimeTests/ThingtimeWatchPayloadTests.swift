@@ -19,7 +19,9 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
             unreadCount: 1,
             notifications: [notification],
             syncedAt: "2026-09-03T00:00:01.000Z",
-            message: nil
+            message: nil,
+            phoneOrigin: "https://pr-596.previews.dev.thingtime.com",
+            phoneBuild: "21"
         )
 
         let decoded = try ThingtimeWatchWire.snapshot(from: ThingtimeWatchWire.message(for: snapshot))
@@ -27,6 +29,17 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
         XCTAssertEqual(decoded, snapshot)
         XCTAssertEqual(decoded?.notifications.first?.actionText, "commented on your post")
         XCTAssertEqual(decoded?.notifications.first?.displayActor, "Lopu")
+        XCTAssertEqual(decoded?.phoneOrigin, "https://pr-596.previews.dev.thingtime.com")
+        XCTAssertEqual(decoded?.phoneBuild, "21")
+    }
+
+    func testSnapshotDecodesPayloadFromOlderPhoneWithoutDiagnostics() throws {
+        let data = Data(#"{"authenticated":true,"unreadCount":0,"notifications":[],"syncedAt":"2026-09-03T00:00:01.000Z","message":null}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(ThingtimeWatchSnapshot.self, from: data)
+
+        XCTAssertNil(decoded.phoneOrigin)
+        XCTAssertNil(decoded.phoneBuild)
     }
 
     func testSignedOutSnapshotCarriesPairingGuidance() {

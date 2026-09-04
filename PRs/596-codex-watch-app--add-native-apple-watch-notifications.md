@@ -1,5 +1,22 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 21 — correct origin migration and visible diagnostics
+
+- Fixed the persisted-destination upgrade path that could leave an updated
+  TestFlight iPhone app on `thingtime.com` even though that build was configured
+  for the PR preview containing notification-history API 1.1. Legacy implicit
+  production selections now follow the build configuration; explicit user
+  destination choices remain respected.
+- Watch snapshots now include the active iPhone origin and iPhone build number.
+  Connection screens show both companion build numbers and the origin, and
+  explicitly warn when the iPhone and Watch installations do not match.
+- Notification-history compatibility failures now name the selected host, its
+  actual capability version, and the required version instead of showing a
+  generic missing-API message.
+- Added focused migration and backward-compatible payload tests. All 30 native
+  tests pass, and the Watch companion builds and renders on a Series 10
+  simulator with its build number visible while disconnected.
+
 ## TestFlight build 20 — resilient iPhone connection and recording chooser
 
 - Watch-to-iPhone authentication refreshes now wait for an authenticated

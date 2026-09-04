@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Watch origin migration and visible build diagnostics — Codex (AI)
+
+- TestFlight builds now migrate a legacy persisted production selection to the
+  build's configured Thingtime origin unless the user explicitly chose another
+  destination, preventing the Watch from silently using an older API contract.
+- The Watch connection UI now shows its own build, the paired iPhone build, and
+  the active Thingtime origin, warns when companion builds differ, and reports
+  the actual notification-history capability version when an origin is stale.
+
 ### 2026-09-04 — Resilient Watch pairing and saved-recording chooser — Codex (AI)
 
 - Added acknowledged Watch-to-iPhone authentication refreshes with visible
