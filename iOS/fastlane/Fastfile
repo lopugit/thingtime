@@ -143,20 +143,21 @@ platform :ios do
         app_identifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
         provisioning_name: ios_provisioning_profile_name,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
-        force: true,
+        force: false,
         output_path: OUTPUT_DIRECTORY
       )
+      ENV["PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
         app_identifier: ENV.fetch("WATCH_BUNDLE_IDENTIFIER"),
         provisioning_name: watch_provisioning_profile_name,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
-        force: true,
+        force: false,
         output_path: OUTPUT_DIRECTORY
       )
-      ENV["PROVISIONING_PROFILE_SPECIFIER"] = ios_provisioning_profile_name
-      ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = watch_provisioning_profile_name
+      ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
     end
 
     build_app(
