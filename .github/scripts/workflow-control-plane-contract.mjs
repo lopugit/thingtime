@@ -1324,6 +1324,11 @@ export function assertControlPlaneContract() {
   assert.doesNotMatch(controlPlaneCi, /^\s+secrets:/m);
   assert.match(
     controlPlaneCi,
+    /concurrency:\n\s+group: workflow-control-plane-ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n/u,
+    "control-plane CI supersedes only same-subject runs, so an unrelated PR cannot cancel a green run into a red check",
+  );
+  assert.match(
+    controlPlaneCi,
     /Contract advisories \(non-blocking\)/u,
     "automation contracts run in their advisory-only lane",
   );
