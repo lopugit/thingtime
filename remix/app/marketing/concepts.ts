@@ -1,3 +1,4 @@
+import { byKey } from './lookup';
 import type { Concept, Template } from './types';
 
 // Glossary concepts: the vocabulary Thingtime uses, explained for people who
@@ -52,7 +53,7 @@ export const CONCEPTS: Concept[] = [
 	{ key: 'template', name: 'Template', emoji: '🧬', definition: 'A starting shape for a thing or page you can fork and fill in.', why: 'Start from something real instead of an empty box.', related: ['schema', 'webpage'] }
 ];
 
-export const CONCEPT_BY_KEY: Record<string, Concept> = Object.fromEntries(CONCEPTS.map((concept) => [concept.key, concept]));
+export const CONCEPT_BY_KEY: Record<string, Concept> = byKey(CONCEPTS, (concept) => concept.key);
 
 // Starter templates: shapes people can copy on day one. Each is a small
 // "kind of thing" with fields and a use case it belongs to.
@@ -89,4 +90,4 @@ export const TEMPLATES: Template[] = [
 	{ key: 'community', name: 'Community', emoji: '🎥', summary: 'Fans, polls, next video.', useCase: 'creator-community', fields: ['fans', 'polls[]', 'nextVideo'] }
 ];
 
-export const TEMPLATE_BY_KEY: Record<string, Template> = Object.fromEntries(TEMPLATES.map((template) => [template.key, template]));
+export const TEMPLATE_BY_KEY: Record<string, Template> = byKey(TEMPLATES, (template) => template.key);
