@@ -1767,8 +1767,8 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
-    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"[\s\S]*?classify-claude-credential-failure\.mjs[\s\S]*?lopu-credential-vault\.mjs[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/scripts\/"[\s\S]*?git init -q -- "\$WORKSPACE_PATH"/u,
-    "the protected nested Lopu action and credential helpers are rematerialized with a disposable scratch repository",
+    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"[\s\S]*?classify-claude-credential-failure\.mjs[\s\S]*?lopu-credential-vault\.mjs[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/scripts\/"[\s\S]*?git init -q -- "\$WORKSPACE_PATH"[\s\S]*?git -C "\$WORKSPACE_PATH" remote add origin[\s\S]*?https:\/\/github\.invalid\/thingtime-conflict-scratch\.git/u,
+    "the protected nested Lopu action and credential helpers are rematerialized with a disposable scratch repository and placeholder origin",
   );
   assert.match(
     rebaseActionSource,
