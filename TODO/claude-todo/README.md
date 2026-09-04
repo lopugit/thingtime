@@ -35,6 +35,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 21 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (48 in use, ~5 legacy-era slots reclaimable once the v1 read path retires, budget guard) | 🔴 Not started · no rush, headroom exists | [21-index-budget-consolidation.md](./21-index-budget-consolidation.md) |
 | 22 | Everything is a thing — collapse satellite collections (users/themes/feedAlgorithms/waitlist → `things`; `uniqueKeys` + `secure` mechanisms, dual-era migrations) | 🟡 In build (PR #69 stack) | [22-everything-is-a-thing-collections.md](./22-everything-is-a-thing-collections.md) |
 | 23 | Custom schema presentation via declarative vocabulary (data describes; versioned code interprets — never hydrate functions from documents) | 📐 Standing principle | [23-declarative-schema-presentation-vocabulary.md](./23-declarative-schema-presentation-vocabulary.md) |
+| 24 | Migration-safe continuous availability (pending storage migrations never block established reads or writes; expand/coexist/migrate/verify/contract) | 🔴 P0 invariant · not started | [24-migration-safe-continuous-availability.md](./24-migration-safe-continuous-availability.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

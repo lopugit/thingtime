@@ -586,6 +586,21 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.executeCommand).not.toHaveBeenCalled();
   });
 
+  it('keeps one fixed loading spinner mounted while search results stream', () => {
+    const commander = state({ hits: [], searchPending: true });
+    const view = render(<Launcher state={commander} />);
+
+    const spinner = screen.getByLabelText('Updating results');
+    expect(spinner).toHaveClass('search-spinner');
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+    expect(screen.getByText('Searching…')).toBeVisible();
+
+    view.rerender(<Launcher state={{ ...commander, hits }} />);
+
+    expect(screen.getByLabelText('Updating results')).toBe(spinner);
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+  });
+
   it('shows live index progress in the footer', () => {
     render(
       <Launcher

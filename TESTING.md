@@ -15,13 +15,25 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.
@@ -2078,6 +2090,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
@@ -2906,6 +2926,67 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
+
+Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
+which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
+(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
+
+- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
+      signed synthetic `workflow_job` delivery to
+      `/api/v1/integrations/github/webhook` on a local stack and confirm
+      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
+      the repository, job, and event rows (admin query workbench, collection
+      `ciControl`).
+- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
+      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
+      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
+      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
+      an update to a job refreshes its stamp from the new `updatedAt`.
+- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
+      from new events (kept forever); a non-numeric value falls back to the
+      default; values above 3650 clamp.
+- [ ] Repository no-op suppression: two consecutive deliveries for the same
+      repository with status `active` record ONE `ci-event` whose parent is the
+      repository row (the insert), not one per delivery; an `archived`
+      transition records one more. Entity events (PR `synchronize` with an
+      unchanged status) are still recorded.
+- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
+      `freshness.latestEventAt` still populate from the satellite; the
+      per-parent history drawer still lists events newest-first.
+- [ ] Boot ensure on a database that carries the seven retired `things`
+      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
+      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
+      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
+      and `sandboxExpiresAt_1` originals are replaced by the partial
+      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
+      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
+      never shows neither).
+- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
+      `ci_control_repository_updated`, `ci_control_repository_status`,
+      `ci_control_repository_external_id`, `ci_control_parent_created`, and
+      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
+- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
+      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
+      per-kind relocate/expired counts and writes nothing; the confirmed run
+      copies live rows (insert-if-absent by shareId — a satellite row that
+      already exists keeps its newer state), deletes every matched `things`
+      row including already-expired ones, and reports `drained`. A run that
+      hits its time budget says so and the panel's pending count keeps the
+      migration actionable until it reads 0. Non-CI things are untouched.
+- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
+      on-disk, and index bytes per physical collection with an orange `N× docs`
+      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
+      lists plan-owned indexes and any residue it would leave alone; the
+      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
+      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
+      total index bytes drop, and a duplicate `shareId` insert attempted during
+      the run is still rejected with E11000.
+- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
+      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
+      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
+      (collection allowlist now includes `ciControl`).
+
 ## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
 
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
@@ -3016,7 +3097,7 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3031,10 +3112,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub Actions-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
+- [ ] Inspect both selected-environment build jobs and confirm they check out
+      the exact controller-authorized SHA, receive no GitHub Environment or
+      Vercel token, and upload only a symlink-preserving prebuilt archive. The
+      protected publisher must validate each archive, use `--prebuilt` plus
+      `--skip-domain`, and reject a deployment whose actual Custom Environment
+      or production target does not match its selected row.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail

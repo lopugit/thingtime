@@ -211,6 +211,28 @@ THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
 THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
+CI control-plane rows (every `ci-*` Thing, including the append-only
+`ci-event` history) live in their own `ciControl` satellite collection, never
+in `things`, and are TTL-reaped by a root `expiresAt` stamp. The retention
+windows are optional, in days; `0` keeps that class forever, and unset means
+the default:
+
+```sh
+# append-only ci-event history (default 14)
+THINGTIME_CI_EVENT_RETENTION_DAYS="14"
+# per-job workflow rows — ci-workflow-run with a job: external id (default 30)
+THINGTIME_CI_JOB_RETENTION_DAYS="30"
+# top-level workflow runs, deployments, and previews (default 90)
+THINGTIME_CI_ACTIVITY_RETENTION_DAYS="90"
+```
+
+Repository, feature, branch, pull-request, policy, dispatch, and feature-stack
+projections never expire. A GitHub delivery that changes nothing on the
+repository row records no `ci-event` for it. Deployments that predate the
+satellite still hold their CI rows in `things`: run the admin migration
+`relocate-ci-control-telemetry` (repeat until it reports nothing left) and then
+`rebuild-things-indexes` from **/migrations** — see the MongoDB section.
+
 Create a repository-installed GitHub App with repository metadata read,
 Actions read/write (workflow dispatch and run/job observation), Administration
 read/write (short-lived self-hosted runner registration and deletion), Contents
@@ -270,27 +292,46 @@ is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
 
 The selected-PR detail panel also has independent, durable **Develop** and
-**Production / main** preview switches. Enabling either switch deploys the
-exact current same-repository PR SHA through Vercel; later `synchronize`,
-reopen, and ready-for-review deliveries rebuild every enabled environment.
-Production access requires an explicit admin acknowledgement and uses the
-project's Production environment values, but `autoAssignCustomDomains` remains
-false: the generated immutable `*.vercel.app` URL never replaces or aliases
-`thingtime.com`. Closing the PR removes only deployments carrying Thingtime's
-PR/environment ownership markers. Configure these server-only deployment
-values in every origin that hosts CI Control (placeholders only):
+**Production / main** preview switches. The product backend validates the live
+same-repository PR, stores the full policy, and sends only that bounded policy
+through the installed `thingtime-ci-control[bot]` GitHub App. It does not build,
+publish, alias, clean up, or hold a Vercel deployment credential. The protected
+`github-actions` controller revalidates the exact ref/SHA and writes one PR
+comment immediately with every selected environment's expected persistent URL
+and estimated ready time. Each selected environment is compiled on GitHub
+without environment secrets; only the validated prebuilt output enters the
+credentialed publisher. The same comment gains each immutable `*.vercel.app`
+snapshot URL and terminal status. A READY deployment moves only its PR-scoped
+alias and never replaces `thingtime.com` or `dev.thingtime.com`.
+
+Production access still requires an explicit admin acknowledgement. Later
+`synchronize`, reopen, and ready-for-review webhooks redispatch every enabled
+environment; disable and close dispatch marker-scoped cleanup. The backend
+therefore needs only the existing GitHub App credentials. Configure the
+following non-secret values and dedicated deployment token on the protected
+`vercel-develop-pr-control` GitHub Environment (placeholders only):
 
 ```sh
-VERCEL_API_TOKEN="<Vercel-API-token>"
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
 VERCEL_TEAM_ID="<Vercel-team-id>"
 VERCEL_PROJECT_ID="<Vercel-project-id>"
 VERCEL_PROJECT_NAME="<Vercel-project-name>"
 VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
 VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
 ```
 
-Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
-only for the Develop switch; the other five values are required for both.
+Never expose these as `PUBLIC_*` or copy them into the product deployment.
+`VERCEL_CUSTOM_ENVIRONMENT_ID` is required only for the Develop switch. The
+alias suffixes default to Thingtime's two preview namespaces, so forks must set
+both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
+The GitHub App needs Contents write permission to create the repository
+dispatch. GitHub Actions owns and updates the marker comment.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
@@ -785,6 +826,20 @@ placeholder:
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+### Index and storage hygiene
+
+The boot-time `ensureIndexes` converges every collection to the index plan in
+`remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
+`RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass
+delete (for example relocating CI telemetry out of `things`), each index keeps
+its old on-disk size until it is dropped and recreated. The admin migrations
+page (**/migrations**) shows a storage census per physical collection —
+document bytes, on-disk bytes, index bytes, and index count — and flags a
+generation whose index total is far above its document bytes. Reclaim it with
+the `rebuild-things-indexes` migration (unique constraints stay enforced by a
+twin index throughout). The audit that produced this runbook, with the
+production measurements, is in `docs/architecture/mongodb-index-storage-audit.md`.
 
 Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
 root `vercel.json`). For how that becomes region-local latency worldwide without
@@ -1918,15 +1973,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` remains unassigned. Admin CI Control can now create
-an opt-in production-environment preview for a trusted same-repository PR, but
-it deliberately keeps `autoAssignCustomDomains: false` and exposes only the
-generated immutable `*.vercel.app` deployment URL. Do not point the develop
-controller at that suffix, copy the production S3 role into generic Preview,
-or let ordinary Vercel feature/fork previews assume the production AWS role.
-Any future custom production-preview namespace still needs its own protected
-identity, exact production OIDC trust, cleanup, CORS probe, and bucket CORS
-rule before activation.
+`*.previews.thingtime.com` remains detached from the production branch and
+primary domains. Admin CI Control may assign only the exact
+`pr-<number>.previews.thingtime.com` alias to an owned, marker-verified READY
+production-environment preview. Its immutable `*.vercel.app` snapshot remains
+available beside that persistent URL. Do not point the develop controller at
+the production suffix, copy the production S3 role into generic Preview, or let
+ordinary Vercel feature/fork previews assume the production AWS role. The
+production-preview wildcard, exact production OIDC trust, cleanup, and bucket
+CORS rules must remain independently protected.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as
