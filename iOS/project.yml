@@ -104,7 +104,7 @@ targets:
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "4"
-        SKIP_INSTALL: false
+        SKIP_INSTALL: true
         SUPPORTS_MACCATALYST: false
     dependencies: []
 
