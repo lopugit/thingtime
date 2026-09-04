@@ -102,7 +102,11 @@ platform :ios do
   lane :build do
     generate
     setup_ci if ENV["CI"]
-    keychain_path = lane_context[SharedValues::KEYCHAIN_PATH]
+    keychain_path = if lane_context[SharedValues::KEYCHAIN_PATH]
+                      FastlaneCore::Helper.keychain_path(
+                        ENV.fetch("MATCH_KEYCHAIN_NAME", "fastlane_tmp_keychain")
+                      )
+                    end
 
     if ENV["IOS_DISTRIBUTION_CERTIFICATE_PATH"]
       UI.user_error!("Fastlane CI keychain was not created") unless keychain_path
