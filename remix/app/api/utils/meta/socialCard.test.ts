@@ -6,6 +6,7 @@ import type { SocialPreview } from './socialPreview';
 
 const gallery: SocialPreview = {
 	kind: 'gallery',
+	variant: 'gallery',
 	path: '/post/cats',
 	title: 'Nikk: This mah cat 😻',
 	description: 'A very important six-photo cat post.',
@@ -35,9 +36,37 @@ test('gallery cards lay out each available image as a collage and escape post te
 });
 
 test('the social-card renderer emits a standard PNG for a no-media route', async () => {
-	const png = await renderSocialCardPng({ ...gallery, kind: 'feed', images: [], imageCount: 0, author: undefined });
+	const png = await renderSocialCardPng({ ...gallery, kind: 'feed', variant: 'feed', images: [], imageCount: 0, author: undefined });
 	assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 	assert.ok(png.byteLength > 1_000);
+});
+
+test('every post-shaped card variant gets its own deliberate visual panel', () => {
+	const variants: SocialPreview['variant'][] = [
+		'text-post',
+		'image-post',
+		'gallery',
+		'poll',
+		'listing',
+		'thingtime',
+		'share',
+		'comment',
+		'reply',
+		'media-video',
+		'media-audio',
+		'media-file'
+	];
+	for (const variant of variants) {
+		const svg = buildSocialCardSvg({
+			...gallery,
+			kind: variant === 'reply' ? 'reply' : variant === 'comment' ? 'comment' : 'text-post',
+			variant,
+			images: [],
+			imageCount: 0
+		});
+		assert.match(svg, new RegExp(`data-preview-variant="${variant}"`));
+		assert.match(svg, new RegExp(`data-preview-panel="${variant}"`));
+	}
 });
 
 test('the social-card renderer emits a real multi-image collage PNG', async () => {

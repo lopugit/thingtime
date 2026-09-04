@@ -21,9 +21,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Shared public pages now publish route-aware Open Graph/Twitter metadata and
   colourful 1200×630 Thingtime PNG cards. Posts carry author/excerpt/context;
-  image posts safely render up to four stored images as a collage; polls,
-  listings, shares, profiles, media, Things, published pages, feeds and public
-  catalogue/docs routes each have their own preview treatment.
+  image posts safely render up to four stored images as a collage; text,
+  marketplace, structured Thingtime, poll, share, comment, reply, standalone
+  image/video/audio/file, profile, Thing, published page, feed and public
+  catalogue/docs variants each have their own preview treatment.
 
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 

@@ -10,12 +10,44 @@ export type SocialPreviewKind =
 	| 'explore'
 	| 'docs'
 	| 'collection'
-	| 'post'
+	| 'text-post'
+	| 'image-post'
 	| 'gallery'
 	| 'poll'
 	| 'listing'
+	| 'thingtime'
 	| 'share'
+	| 'comment'
+	| 'reply'
 	| 'media'
+	| 'webpage'
+	| 'profile'
+	| 'thing';
+
+// `kind` is the semantic surface; `variant` selects a recognisably different
+// card composition. They deliberately stay separate: a shared photo set is a
+// share semantically, while its card still has a photo collage, and a comment
+// with a video remains a comment with a video treatment rather than a generic
+// post. This keeps every shareable Thingtime shape distinguishable at a glance.
+export type SocialPreviewVariant =
+	| 'app'
+	| 'feed'
+	| 'explore'
+	| 'docs'
+	| 'collection'
+	| 'text-post'
+	| 'image-post'
+	| 'gallery'
+	| 'poll'
+	| 'listing'
+	| 'thingtime'
+	| 'share'
+	| 'comment'
+	| 'reply'
+	| 'media-image'
+	| 'media-video'
+	| 'media-audio'
+	| 'media-file'
 	| 'webpage'
 	| 'profile'
 	| 'thing';
@@ -27,6 +59,7 @@ export type SocialPreviewImage = {
 
 export type SocialPreview = {
 	kind: SocialPreviewKind;
+	variant: SocialPreviewVariant;
 	path: string;
 	title: string;
 	description: string;
@@ -47,6 +80,21 @@ export const SOCIAL_PREVIEW_HEIGHT = 630;
 const SITE_NAME = 'Thingtime';
 const DESCRIPTION_MAX = 200;
 const TITLE_MAX = 70;
+
+const staticVariantFor = (kind: SocialPreviewKind): SocialPreviewVariant => {
+	switch (kind) {
+		case 'home':
+			return 'app';
+		case 'feed':
+		case 'explore':
+		case 'docs':
+		case 'collection':
+		case 'profile':
+			return kind;
+		default:
+			return 'app';
+	}
+};
 
 export const cleanSocialText = (value: unknown): string =>
 	typeof value === 'string'
@@ -99,6 +147,14 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 					description: 'Posts, photos, polls, finds and little moments from your people.',
 					eyebrow: 'THINGTIME · FEED',
 					badges: ['Fresh things', 'People you follow']
+				};
+			case 'profile':
+				return {
+					kind: 'profile' as const,
+					title: 'Your Thingtime profile',
+					description: 'Your posts, photos, polls and the things you want people to find.',
+					eyebrow: 'THINGTIME · PROFILE',
+					badges: ['Your people', 'Your things']
 				};
 			case 'explore':
 				return {
@@ -191,6 +247,7 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 		const category = segment === 'docs' ? 'docs' : segment.slice(0, -1);
 		return {
 			...detail,
+			variant: staticVariantFor(detail.kind),
 			path,
 			title: `Thingtime ${category}: ${label(leaf)}`,
 			description: `${detail.description} Open ${label(leaf)} on Thingtime.`,
@@ -200,7 +257,7 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 			imageCount: 0
 		};
 	}
-	return { ...detail, path, article: false, options: [], images: [], imageCount: 0 };
+	return { ...detail, variant: staticVariantFor(detail.kind), path, article: false, options: [], images: [], imageCount: 0 };
 };
 
 const postImages = (post: any): SocialPreviewImage[] =>
@@ -259,6 +316,89 @@ const webpageBlockCount = (blocks: unknown): number => {
 	}, 0);
 };
 
+type StructuredThingPreview = {
+	kind: string;
+	title: string;
+	description: string;
+	badges: string[];
+};
+
+// A Thingtime post can carry an intentionally open, structured `thing`.
+// Preserve the useful human context in a bounded, plain-text form rather than
+// serialising JSON into a card. The selected fields cover the common shapes
+// (events, tasks, notes, places and little data things) without making a
+// crawler card a second detail view.
+const structuredThingPreview = (value: unknown): StructuredThingPreview => {
+	const thing = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+	const kind = cleanSocialText(thing.kind) || 'Thing';
+	const title = cleanSocialText(thing.title) || cleanSocialText(thing.name) || cleanSocialText(thing.headline);
+	const description = cleanSocialText(thing.description) || cleanSocialText(thing.summary) || cleanSocialText(thing.note);
+	const fields: Array<[string, unknown]> = [
+		['Status', thing.status],
+		['Category', thing.category],
+		['Location', thing.location],
+		['When', thing.date || thing.startsAt || thing.startDate],
+		['Priority', thing.priority]
+	];
+	const badges = [kind, ...fields.map(([, field]) => cleanSocialText(field)).filter(Boolean)].slice(0, 3);
+	return { kind, title, description, badges };
+};
+
+const postMediaVariant = (post: any): SocialPreviewVariant | null => {
+	const kinds = new Set(
+		(Array.isArray(post?.attachments) ? post.attachments : [])
+			.map((attachment: any) => cleanSocialText(attachment?.mediaKind).toLowerCase())
+			.filter(Boolean)
+	);
+	if (kinds.has('video')) return 'media-video';
+	if (kinds.has('audio')) return 'media-audio';
+	if (kinds.has('file') || kinds.size > 0) return 'media-file';
+	return null;
+};
+
+const humanPostKind = (kind: SocialPreviewKind, thingKind?: string): string => {
+	switch (kind) {
+		case 'text-post':
+			return 'TEXT POST';
+		case 'image-post':
+			return 'PHOTO POST';
+		case 'gallery':
+			return 'PHOTO SET';
+		case 'poll':
+			return 'POLL';
+		case 'listing':
+			return 'MARKETPLACE';
+		case 'thingtime':
+			return thingKind ? `THING · ${truncateSocialText(thingKind, 26).toUpperCase()}` : 'THING';
+		case 'share':
+			return 'SHARE';
+		case 'comment':
+			return 'COMMENT';
+		case 'reply':
+			return 'REPLY';
+		default:
+			return kind.replace(/-/g, ' ').toUpperCase();
+	}
+};
+
+export const normaliseSocialMediaKind = (value: unknown): 'image' | 'video' | 'audio' | 'file' => {
+	const kind = cleanSocialText(value).toLowerCase();
+	return kind === 'image' || kind === 'video' || kind === 'audio' ? kind : 'file';
+};
+
+export const socialMediaVariant = (value: unknown): Extract<SocialPreviewVariant, `media-${string}`> => {
+	switch (normaliseSocialMediaKind(value)) {
+		case 'image':
+			return 'media-image';
+		case 'video':
+			return 'media-video';
+		case 'audio':
+			return 'media-audio';
+		default:
+			return 'media-file';
+	}
+};
+
 const webpagePreview = async (path: string, id: string): Promise<SocialPreview> => {
 	const fallback = staticSocialPreview(path);
 	const { resolveWebpage } = await import('../webpages/webpages');
@@ -274,6 +414,7 @@ const webpagePreview = async (path: string, id: string): Promise<SocialPreview> 
 	const blockCount = webpageBlockCount(crystal.blocks);
 	return {
 		kind: 'webpage',
+		variant: 'webpage',
 		path,
 		title: `${truncateSocialText(name, TITLE_MAX)} on ${SITE_NAME}`,
 		description: truncateSocialText(description, DESCRIPTION_MAX),
@@ -289,19 +430,19 @@ const webpagePreview = async (path: string, id: string): Promise<SocialPreview> 
 	};
 };
 
-const postPreview = async (path: string, id: string): Promise<SocialPreview> => {
-	const fallback = staticSocialPreview(path);
-	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
-	const { getThing, viewerOf } = await import('../things/things');
-	const result = await getThing(viewerOf(null), id);
-	if (result.ok === false || !result.post) return fallback;
-	const post: any = result.post;
-	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return fallback;
-
+export const socialPreviewFromPublicPost = (path: string, post: any, context: { parent?: any; revision?: string } = {}): SocialPreview => {
 	const authorName =
-		cleanSocialText(post.author?.displayName) || (cleanSocialText(post.author?.username) ? `@${cleanSocialText(post.author.username)}` : 'Someone');
-	const original = post.isShare && post.shareOf ? post.shareOf : null;
-	const source = original || post;
+		cleanSocialText(post?.author?.displayName) || (cleanSocialText(post?.author?.username) ? `@${cleanSocialText(post.author.username)}` : 'Someone');
+	const original = post?.isShare && post?.shareOf ? post.shareOf : null;
+	const source = original || post || {};
+	const sourceAuthor =
+		cleanSocialText(source.author?.displayName) || (cleanSocialText(source.author?.username) ? `@${cleanSocialText(source.author.username)}` : '');
+	const isComment = Array.isArray(post?.thingtime) && post.thingtime.includes('comment');
+	const isReply = isComment && Array.isArray(context.parent?.thingtime) && context.parent.thingtime.includes('comment');
+	const parentAuthor =
+		cleanSocialText(context.parent?.author?.displayName) ||
+		(cleanSocialText(context.parent?.author?.username) ? `@${cleanSocialText(context.parent.author.username)}` : '');
+	const structured = structuredThingPreview(source.thing);
 	const question = cleanSocialText(source.thing?.question);
 	const listing = source.listing;
 	const options = question ? pollOptions(source) : [];
@@ -316,13 +457,29 @@ const postPreview = async (path: string, id: string): Promise<SocialPreview> => 
 	// Legacy image URLs contribute their count, but never become a server-side
 	// fetch — their tiles intentionally use the branded fallback treatment.
 	const imageCount = Math.max(attachmentImageCount, legacyImageCount);
-	const plainText = question || cleanSocialText(source.text);
-	const listingTitle = cleanSocialText(listing?.title);
-	const summary =
-		listingTitle ||
-		plainText ||
-		(attachmentCount ? `${attachmentCount} shared attachment${attachmentCount === 1 ? '' : 's'}` : 'A post on Thingtime');
-	const kind: SocialPreviewKind = original ? 'share' : listing ? 'listing' : question ? 'poll' : imageCount > 1 ? 'gallery' : 'post';
+	const sourceType = cleanSocialText(source.type).toLowerCase();
+	const mediaVariant = postMediaVariant(source);
+	const contentKind: SocialPreviewKind = listing
+		? 'listing'
+		: question
+		? 'poll'
+		: sourceType === 'thingtime'
+		? 'thingtime'
+		: imageCount > 1
+		? 'gallery'
+		: sourceType === 'image' || imageCount === 1
+		? 'image-post'
+		: 'text-post';
+	const kind: SocialPreviewKind = original ? 'share' : isReply ? 'reply' : isComment ? 'comment' : contentKind;
+	const variant: SocialPreviewVariant = original
+		? 'share'
+		: isReply
+		? 'reply'
+		: isComment
+		? 'comment'
+		: contentKind === 'text-post' && mediaVariant
+		? mediaVariant
+		: contentKind;
 	const listingBits = listing
 		? [
 				formatPrice(listing),
@@ -332,22 +489,51 @@ const postPreview = async (path: string, id: string): Promise<SocialPreview> => 
 				listing.sold ? 'Sold' : ''
 		  ].filter(Boolean)
 		: [];
-	const badges = [
-		...(original ? ['Shared post'] : []),
-		...(listingBits.length ? listingBits : []),
-		...cleanList(source.tags, 3).map((tag) => `#${tag.replace(/^#/, '')}`),
-		...(imageCount > 1 ? [`${imageCount} photos`] : imageCount === 1 ? ['Photo post'] : [])
-	].slice(0, 4);
+	const plainText = cleanSocialText(source.text);
+	const listingTitle = cleanSocialText(listing?.title);
+	const summary =
+		listingTitle ||
+		question ||
+		structured.title ||
+		plainText ||
+		structured.description ||
+		(attachmentCount ? `${attachmentCount} shared attachment${attachmentCount === 1 ? '' : 's'}` : 'A post on Thingtime');
+	const kindLabel = humanPostKind(contentKind, structured.kind);
+	const badges = Array.from(
+		new Set(
+			[
+				...(original ? [`Shared ${kindLabel.toLowerCase()}`, ...(sourceAuthor ? [`From ${sourceAuthor}`] : [])] : []),
+				...(isReply ? ['Reply', ...(parentAuthor ? [`To ${parentAuthor}`] : [])] : isComment ? ['Comment'] : []),
+				...(listingBits.length ? listingBits : []),
+				...(contentKind === 'thingtime' ? structured.badges : []),
+				...(mediaVariant && contentKind === 'text-post' ? [humanPostKind(mediaVariant as SocialPreviewKind)] : []),
+				...cleanList(source.tags, 3).map((tag) => `#${tag.replace(/^#/, '')}`),
+				...(imageCount > 1 ? [`${imageCount} photos`] : imageCount === 1 ? ['Photo'] : [])
+			].filter(Boolean)
+		)
+	).slice(0, 4);
 	const description = question
 		? truncateSocialText(['Poll:', question, options.length ? `· ${options.join(' / ')}` : ''].filter(Boolean).join(' '), DESCRIPTION_MAX)
+		: listing
+		? truncateSocialText(
+				[formatPrice(listing), cleanSocialText(listing.condition), cleanSocialText(listing.location), plainText].filter(Boolean).join(' · ') ||
+					summary,
+				DESCRIPTION_MAX
+		  )
+		: contentKind === 'thingtime'
+		? truncateSocialText(
+				[structured.description, plainText].filter(Boolean).join(' · ') || `A ${structured.kind.toLowerCase()} on ${SITE_NAME}.`,
+				DESCRIPTION_MAX
+		  )
 		: truncateSocialText(summary, DESCRIPTION_MAX) || `A post by ${authorName} on ${SITE_NAME}.`;
-	const titleLead = original ? `${authorName} shared` : authorName;
+	const titleLead = original ? `${authorName} shared` : isReply ? `${authorName} replied` : isComment ? `${authorName} commented` : authorName;
 	return {
 		kind,
+		variant,
 		path,
 		title: `${titleLead}: ${truncateSocialText(summary, TITLE_MAX)}`,
 		description,
-		eyebrow: `THINGTIME · ${kind === 'gallery' ? 'PHOTO SET' : kind.toUpperCase()}`,
+		eyebrow: `THINGTIME · ${kind === 'share' ? `SHARED ${kindLabel}` : humanPostKind(kind, structured.kind)}`,
 		article: true,
 		author: authorName,
 		initial: initialOf(authorName.replace(/^@/, '')),
@@ -355,8 +541,22 @@ const postPreview = async (path: string, id: string): Promise<SocialPreview> => 
 		options,
 		images,
 		imageCount,
-		revision: cleanSocialText((result as any).thing?.updatedAt) || cleanSocialText((result as any).thing?.createdAt)
+		revision: context.revision
 	};
+};
+
+const postPreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
+	const { getThing, viewerOf } = await import('../things/things');
+	const result = await getThing(viewerOf(null), id);
+	if (result.ok === false || !result.post) return fallback;
+	const post: any = result.post;
+	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return fallback;
+	return socialPreviewFromPublicPost(path, post, {
+		parent: (result as any).parent,
+		revision: cleanSocialText((result as any).thing?.updatedAt) || cleanSocialText((result as any).thing?.createdAt)
+	});
 };
 
 const profilePreview = async (path: string, username: string): Promise<SocialPreview> => {
@@ -369,6 +569,7 @@ const profilePreview = async (path: string, username: string): Promise<SocialPre
 	const handle = cleanSocialText(profile.username);
 	return {
 		kind: 'profile',
+		variant: 'profile',
 		path,
 		title: `${displayName} (@${handle}) on ${SITE_NAME}`,
 		description: truncateSocialText(cleanSocialText(profile.bio), DESCRIPTION_MAX) || `@${handle} is on ${SITE_NAME}.`,
@@ -392,9 +593,11 @@ const mediaPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const thing: any = (result as any).thing;
 	const media = thing.crystal || {};
 	const label = cleanSocialText(media.title) || cleanSocialText(media.filenamePreview) || cleanSocialText(media.name) || 'Shared media';
-	const mediaKind = cleanSocialText(media.mediaKind) || 'file';
+	const mediaKind = normaliseSocialMediaKind(media.mediaKind);
+	const variant = socialMediaVariant(mediaKind);
 	return {
 		kind: 'media',
+		variant,
 		path,
 		title: `${label} on ${SITE_NAME}`,
 		description:
@@ -425,6 +628,7 @@ const thingPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const description = cleanSocialText(crystal.description) || cleanSocialText(crystal.text) || `A ${kind.toLowerCase()} on ${SITE_NAME}.`;
 	return {
 		kind: 'thing',
+		variant: 'thing',
 		path,
 		title: `${truncateSocialText(title, TITLE_MAX)} on ${SITE_NAME}`,
 		description: truncateSocialText(description, DESCRIPTION_MAX),

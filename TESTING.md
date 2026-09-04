@@ -301,14 +301,20 @@ function — `remix/scripts/patch-vercel-output.mjs`).
 - [ ] `curl -o card.png '<nitro>/social-card?path=/post/<public-photo-post-id>'`
       yields a valid 1200×630 PNG. A two-photo post is a two-tile collage; a
       four-or-more-photo post is a four-tile collage, while its excerpt, author
-      and `N photos` badge remain visible alongside it. Polls show question +
-      options, listings show price/category/location, and shares identify the
-      original as a shared post.
+      and `N photos` badge remain visible alongside it. Text, image,
+      marketplace, and structured Thingtime posts each have their own card
+      variant; polls show question + options, listings show
+      price/category/location, and shares identify the original content type.
+- [ ] A rich comment permalink has the comment treatment; a reply permalink
+      has the threaded reply treatment and identifies its visible parent.
+      Comments with photos retain their collage, while text-post attachments
+      select a video, audio, or file treatment rather than the generic card.
 - [ ] `/media/:id`, `/thing/:id`, `/p/:id`, `/profile/:username`, `/feed`,
       `/explore`, deep docs/catalogue URLs, and `/social-card?path=/...` each
       produce a route-appropriate title, eyebrow and descriptive card rather
-      than the indistinguishable pink placeholder. A published `/p/:id` page
-      uses its name, description or safely extracted block text.
+      than the indistinguishable pink placeholder. Standalone image, video,
+      audio, and file routes have distinct media treatments. A published
+      `/p/:id` page uses its name, description or safely extracted block text.
 - [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
       `/post/<garbage id>` both return ONLY the generic site block —
       indistinguishable from each other, and no post text, author, or image
