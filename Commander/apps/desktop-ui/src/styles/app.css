@@ -387,9 +387,11 @@
   width: 13px;
   height: 13px;
 }
-.result-count.updating svg,
 .search-spinner {
-  animation: commander-spin 900ms linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: commander-spin 1s linear infinite;
+  will-change: transform;
 }
 .category-heading {
   min-height: 30px;

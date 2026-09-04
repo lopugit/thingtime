@@ -176,14 +176,19 @@ test('omitted tool filters stay omitted upstream instead of becoming the string 
 });
 
 test('the connection page escapes every HTML-significant character it interpolates', () => {
-  const page = renderConnectionPage('tok"><script>alert(1)</script>', ['https://thingtime.com']);
+  const page = renderConnectionPage(
+    'tok"><script>alert(1)</script>',
+    ['https://thingtime.com'],
+    'https://thingtime.com',
+    [{ id: 'things', title: 'Full things access', description: 'Read/write', emoji: '🗝️' }]
+  );
   // The request token lands in a double-quoted attribute: an unescaped quote
   // would close it and an unescaped angle bracket would open a real element.
   assert.equal(page.includes('<script>alert(1)</script>'), false);
   assert.equal(page.includes('tok"><script>'), false);
   assert.ok(page.includes('tok&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;'));
   // The page's own trusted markup and inline bootstrap must survive intact.
-  assert.ok(page.includes('<option value="https://thingtime.com">https://thingtime.com</option>'));
+  assert.ok(page.includes('<option value="https://thingtime.com" selected>https://thingtime.com</option>'));
   assert.ok(page.includes("document.getElementById('add')"));
 });
 

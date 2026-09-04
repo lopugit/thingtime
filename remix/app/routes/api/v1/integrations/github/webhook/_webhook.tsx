@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 import { ingestGitHubWebhook, verifyGitHubWebhookSignature } from '~/api/utils/ciControl/webhooks';
-import { syncAdminPrPreviewsForPullRequest } from '~/api/utils/ciControl/adminPreviewDeployments';
+import { syncAdminPrPreviewsForPullRequest } from '~/api/utils/ciControl/adminPreviewController';
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 

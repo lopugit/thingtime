@@ -28,8 +28,10 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   data and real signups share one code path.
 - Use one `thingtime` database and the everything-is-a-thing model: entities
   (users, themes, feed algorithms, waitlist, posts, comments, schemas, and so
-  on) live in `things` by `kind`, plus `sessions` and the single-purpose
-  auth/email satellites (`passwordResets`, `authOtps`, `email_*`, `rosters`).
+  on) live in `things` by `kind`, plus `sessions`, the single-purpose
+  auth/email satellites (`passwordResets`, `authOtps`, `email_*`, `rosters`),
+  and the `ciControl` satellite for every `ci-*` control-plane Thing (webhook
+  telemetry with TTL retention — never written to `things`).
   `users`, `themes`, `feedAlgorithms`, and `waitlist` are legacy collections:
   update existing records in place, but never add new records. Use one
   connection source (`mongodb/config.ts` `getMongoUri()`). Physical

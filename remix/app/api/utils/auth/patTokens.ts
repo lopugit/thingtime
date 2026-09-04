@@ -110,6 +110,9 @@ export type MintPatInput = {
   maxUses?: unknown;
   onlyCreatedThings?: unknown;
   visibility?: unknown;
+  // Internal mint sites can identify a generated credential without exposing
+  // the provenance knob on the public token-minter API.
+  createdVia?: 'chatgpt-oauth';
 };
 
 export type MintPatResult =
@@ -168,7 +171,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   // free mirrors MAX_PAT_TOKENS_PER_USER.
   const maxPats = (await getSubscription('user', userId)).effective.maxPats;
   if (maxPats !== null) {
-    const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
+    // Revoked credentials are no longer usable and already have a bounded
+    // reap date, so they must not prevent a user from replacing a token.
+    const existing = await sessions.countDocuments({ userId, purpose: 'pat', revokedAt: null });
     if (existing >= maxPats) {
       return {
         ok: false,
@@ -192,7 +197,7 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       // only restrictions are stored — absent means 'all', matching every
       // token minted before the field existed
       ...(visibility !== 'all' ? { visibility } : {}),
-      createdVia: 'token-minter'
+      createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
   });
 

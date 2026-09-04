@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
 	USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION,
+	collectionStorage,
 	conversionReceiptCovers,
 	conversionThingSemanticallyEquals,
 	userStorageAccountingSourceCursor,
@@ -157,4 +158,40 @@ test('a receipt falls back to the source digest only when a timestamp cannot dec
 		),
 		false
 	);
+});
+
+// The storage census is advisory: /api/v1/admin/migrations is the only in-app
+// way to run relocate-ci-control-telemetry and rebuild-things-indexes, so a
+// $collStats that cannot run must cost the numbers, not the endpoint.
+const censusDb = (result: { stats?: Record<string, unknown>; error?: Record<string, unknown> }) => ({
+	collection: () => ({
+		aggregate: () => ({
+			toArray: async () => {
+				if (result.error) throw Object.assign(new Error('collStats unavailable'), result.error);
+				return [{ storageStats: result.stats }];
+			}
+		})
+	})
+});
+
+test('the storage census reads $collStats and degrades to no census instead of failing the endpoint', async () => {
+	const taken = await collectionStorage(
+		censusDb({ stats: { count: 42, size: 118_784, storageSize: 61_440, totalIndexSize: 1_310_720, indexSizes: { _id_: 36_864, shareId_1: 1_273_856 } } }),
+		'things_v2'
+	);
+	assert.deepEqual(taken, {
+		docs: 42,
+		dataBytes: 118_784,
+		storageBytes: 61_440,
+		indexBytes: 1_310_720,
+		indexSizes: { _id_: 36_864, shareId_1: 1_273_856 }
+	});
+	// every way the stage can be refused, not just the dropped-namespace race:
+	// a view (166), a managed tier that withholds the stage, and a generation
+	// that vanished between listCollections and the census (26)
+	for (const error of [{ code: 166, codeName: 'CommandNotSupportedOnView' }, { code: 59, codeName: 'CommandNotFound' }, { code: 26, codeName: 'NamespaceNotFound' }]) {
+		assert.equal(await collectionStorage(censusDb({ error }), 'things_v2'), null, String(error.codeName));
+	}
+	// a server that answers without storageStats reports no census either
+	assert.equal(await collectionStorage(censusDb({ stats: undefined }), 'things_v2'), null);
 });

@@ -1,4 +1,4 @@
-import { getHomeThingsCollection } from '../mongodb/collections';
+import { getCiControlCollection } from '../mongodb/collections';
 import { FEATURE_STACK_USER_HELD_STATUSES } from './featureStackLifecycleCore';
 import { linkFeatureStackWorkflowRun } from './featureStackStore';
 import { recordCiEvent } from './store';
@@ -115,7 +115,7 @@ export const parseFeatureStackProgressRequest = (
 };
 
 export const recordFeatureStackProgress = async (input: FeatureStackProgressRequest) => {
-	const things = await getHomeThingsCollection();
+	const things = await getCiControlCollection();
 	const dispatch = await things.findOne({
 		thingtime: 'ci-dispatch',
 		parentId: input.stackId,

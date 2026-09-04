@@ -320,3 +320,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     app-ness as a view over an existing folder rather than overloading the
     client-identity control plane.
     Full spec: `claude-todo/21-app-composition-surface.md`.
+
+21. **🚨 P0: Keep all established functionality available across pending storage migrations.**
+
+    Deploying code to `develop`, production, or another running shared branch
+    must never make existing user-data reads or writes depend on an operator
+    having already run a migration. Use an expand/coexist/migrate/verify/contract
+    rollout with a centralized compatibility policy, dual-era read/write paths,
+    idempotent reconciliation, and explicit tests against unmigrated, partially
+    migrated, mixed, and fully migrated storage. Feature flags may gate only new
+    behavior; they must never disable existing create, comment, update, react,
+    save, share, or other established capabilities. If compatibility cannot be
+    preserved, block the deployment in CI rather than rejecting live user work.
+    Full spec: `claude-todo/24-migration-safe-continuous-availability.md`.

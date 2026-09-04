@@ -485,8 +485,10 @@ export function Launcher({ state }: { state: CommanderState }) {
                 ) : null}
               </span>
             ) : (
-              <span className={state.searchPending ? 'result-count updating' : 'result-count'}>
-                {state.searchPending ? <RefreshCw aria-label="Updating results" /> : null}
+              <span className="result-count">
+                {state.searchPending ? (
+                  <RefreshCw className="search-spinner" aria-label="Updating results" />
+                ) : null}
                 {state.hits.length}
               </span>
             )}
@@ -595,7 +597,7 @@ export function Launcher({ state }: { state: CommanderState }) {
             ))}
             {!totalRows ? (
               <div className="empty-state">
-                {state.searchPending ? <RefreshCw className="search-spinner" /> : <Command />}
+                <Command />
                 <strong>{state.searchPending ? 'Searching…' : 'No results found'}</strong>
                 <span>
                   {state.searchPending

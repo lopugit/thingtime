@@ -1,5 +1,6 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -684,7 +685,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
-      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
+      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things on the ciControl satellite collection (never in things). Events, workflow job rows, and run/deployment/preview rows carry root expiresAt retention (THINGTIME_CI_EVENT_RETENTION_DAYS 14, THINGTIME_CI_JOB_RETENTION_DAYS 30, THINGTIME_CI_ACTIVITY_RETENTION_DAYS 90 by default; 0 keeps a class forever) and a delivery that changes nothing on the repository row records no event. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
@@ -798,19 +799,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-ci-previews',
+    contractVersion: '2.0.0',
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.0.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    featureVersion: '2.0.0',
+    summary: 'Store exact-SHA Develop and Production/Main preview choices and dispatch the protected github-actions publisher.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only endpoint validates a live, open, non-draft pull request from the configured repository, stores independent Develop and Production/Main switches, then sends the full selected set through the installed GitHub App to the protected github-actions branch. The product server never receives or uses a Vercel deployment credential. Protected controller code authenticates the App sender, revalidates the exact live ref and SHA, immediately writes one GitHub Actions-owned marker comment with every expected persistent URL and estimated ready time, and builds each selected environment on GitHub without environment secrets. Only validated prebuilt output reaches the credentialed publisher. The same comment receives each immutable snapshot URL and terminal status; READY receipts move only that environment\'s PR-scoped alias. Production enabling requires an explicit acknowledgement, automatic domain assignment stays disabled, primary domains never move, and disable/close cleanup is limited to controller-marked resources.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
       'Select a same-repository open pull request.',
       'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
-      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+      'Follow the immediate estimate and then each URL pair in the single updated PR comment and the signed webhook status in CI Control.'
     ],
     requestExamples: [
       {
@@ -829,10 +831,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored and the exact-SHA deployment created or reused.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+        description: 'Policy stored and its complete environment set dispatched to the protected github-actions controller.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, controller: { status: 'dispatched', controllerRef: 'github-actions', environments: ['develop', 'production'] }, expectedEnvironments: ['develop', 'production'] }
       },
-      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the GitHub App could not dispatch the protected controller.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]
   }),
   endpoint({
@@ -912,8 +914,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` maps @Thingtime login to the host’s OAuth browser and registered callback; `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, and static UI/contract resources are public metadata and never return account data. Account resources and every tool call require a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
-    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
+      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for account/data tools. tools/list and login_thingtime are public; unauthenticated login returns a tool-level MCP OAuth challenge without failing the HTTP transport.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
@@ -933,12 +935,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'login_thingtime', securitySchemes: [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }, { name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
       },
       {
-        status: 401,
-        description: 'MCP OAuth challenge.',
-        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"' },
+        status: 200,
+        description: 'Tool-level OAuth challenge returned by login_thingtime so the invoking host can authenticate without a transport error.',
         body: { jsonrpc: '2.0', id: 1, result: { isError: true, _meta: { 'mcp/www_authenticate': ['Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"'] } } }
       }
     ],
@@ -953,15 +954,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'ChatGPT OAuth authorization',
     endpoint: CHATGPT_AUTHORIZE_PATH,
-    summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
+    summary: 'First-party SSO connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to the approved callback. POST submits that form; credentials are never included in the redirect, OAuth code, or client transcript.',
-    auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The first-party page first uses the existing Thingtime SSO handoff: a signed-in account receives a generated, revocable, non-expiring personal access token with the `things` (read/write all) scope and unrestricted visibility. The generated token is returned only to the same-origin page, then encrypted before the connection bundle is persisted; it never enters ChatGPT, Codex, a redirect, OAuth code, or a chat transcript. Advanced settings can narrow scopes, regenerate the generated token (revoking the prior generated token), edit the primary token, or add a manually supplied scoped token for another approved endpoint. POST `intent=prepare` is the same-origin SSO preparation request; ordinary POST submits the encrypted account bundle and redirects only a five-minute single-use authorization code to the approved callback.',
+    auth: { mode: 'none', description: 'OAuth public-client request. The first-party page authenticates the account with Thingtime SSO and generates the default scoped credential server-side.' },
     methods: ['GET', 'POST'],
     steps: [
-      'Create least-privilege personal access tokens in each Thingtime account.',
-      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the first-party browser page.',
-      'The browser redirects to ChatGPT with a short-lived code and original state.'
+      'Let ChatGPT or Codex open this endpoint with its OAuth parameters and sign in with the existing Thingtime SSO page when prompted.',
+      'Review the default read/write-all connection or open Advanced settings to narrow scopes, regenerate the generated credential, or add another approved account.',
+      'The page sends an explicit completion request, reports any server-side error in place, then deliberately navigates to the registered callback with a short-lived code and original state.'
     ],
     requestExamples: [
       {
@@ -981,8 +982,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'First-party form requesting named endpoint/token pairs.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
+      { status: 200, description: 'First-party SSO connection page. It prepares the default encrypted read/write-all account without exposing a token in the client host or chat.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      { status: 200, description: 'The explicit completion request returns the exact registered callback URL only after validating and encrypting the selected account; the page then navigates there with code, state, and issuer.' },
+      { status: 302, description: 'Legacy form submission redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
     ]
   }),
@@ -3374,19 +3376,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'email-config',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'email',
     title: 'Email delivery config',
     endpoint: '/api/v1/email/config',
-    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    summary: 'Returns sanitized email delivery configuration in local development and Vercel previews.',
     detail:
-      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+      'Dev/preview-only helper for the /tests page. Use it to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved. Production and unknown production-like hosts return 403, and credentials are never included.',
     auth: {
       mode: 'none',
-      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the endpoint (POST behaves identically).',
+      'Use it only in local development or a Vercel preview; production returns 403.',
       'Read provider to confirm whether real SES delivery or console logging is active.',
       'Use sesSandbox and testRecipient to plan /tests email checks.'
     ],
@@ -3415,6 +3420,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             testRecipientDomain: 'thingtime.com'
           }
         }
+      },
+      {
+        status: 403,
+        description: 'Production and unknown production-like environments do not expose email diagnostics.',
+        body: { ok: false, error: 'Email config is available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -3525,11 +3535,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
-    summary: 'Reports Nitro API runtime readiness.',
-    detail: 'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
+    summary: 'Reports Nitro API runtime and critical storage-accounting readiness.',
+    detail:
+      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. It reports degraded while backfill-user-storage-accounting is required, because uploads and other positive storage writes intentionally fail closed in that state.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -3538,7 +3551,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
-      'Read service, state, runtime, nodeEnv, and responseMs.',
+      'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
+      'If state is degraded, run the named migration from the admin migrations console and recheck until ready.',
       'Use this before deeper API tests to separate server availability from endpoint behavior.'
     ],
     requestExamples: [
@@ -3552,7 +3566,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Nitro is ready.',
-        body: { ok: true, service: 'nitro', state: 'ready', runtime: 'nitro' }
+        body: {
+          ok: true,
+          service: 'nitro',
+          state: 'ready',
+          runtime: 'nitro',
+          storageAccounting: {
+            state: 'ready',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Nitro is reachable but positive storage writes are fenced until the migration completes.',
+        body: {
+          ok: false,
+          service: 'nitro',
+          state: 'degraded',
+          storageAccounting: {
+            state: 'migration-required',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
       }
     ]
   }),
@@ -4001,6 +4039,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'mongodb',
     title: 'MongoDB query workbench',
     endpoint: '/api/v1/mongodb/raw-results',
+    // 1.1.0: the collection allowlist gained `ciControl` (additive).
+    // contractVersion is what the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
       'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
@@ -10190,6 +10231,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
+    // 1.1.0: every generation row carries its storage census (dataBytes,
+    // storageBytes, indexBytes, indexes) — additive. contractVersion is what
+    // the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -10233,8 +10278,30 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             }
           ],
           generations: [
-            { collection: 'things', physical: 'things_v2', version: 2, docs: 42, current: true, stale: false },
-            { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
+            {
+              collection: 'things',
+              physical: 'things_v2',
+              version: 2,
+              docs: 42,
+              current: true,
+              stale: false,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 1_310_720,
+              indexes: 57
+            },
+            {
+              collection: 'things',
+              physical: 'things',
+              version: null,
+              docs: 42,
+              current: false,
+              stale: true,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 274_432,
+              indexes: 19
+            }
           ],
           adoptionIssues: [],
           migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }]
@@ -10385,7 +10452,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
       'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
       'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
-			'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
+      'is destructive and additionally requires confirm: true on the non-dry run. relocate-ci-control-telemetry moves ' +
+      'every ci-* Thing out of things into the ciControl satellite (applying CI retention; time-budgeted, re-run until ' +
+      'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
+      'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
 			'bounded redacted adminDetail inline.',
     auth: {
@@ -10413,6 +10483,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Migrate v1 posts to unified v2 things.',
         method: 'POST',
         body: { migration: 'things-v1-to-v2' }
+      },
+      {
+        name: 'Relocate CI telemetry, then reclaim index storage',
+        description:
+          'Drain ci-* rows from things into ciControl (repeat until the report stops saying more rows remain), then rebuild the things indexes.',
+        method: 'POST',
+        body: { migration: 'relocate-ci-control-telemetry', confirm: true }
       }
     ],
     responseExamples: [

@@ -2,13 +2,13 @@ import { json, readJsonBody } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import {
-  buildAdminPrPreview,
-  removeAdminPrPreviews,
+  dispatchAdminPrPreviewController,
+  enabledAdminPreviewEnvironments,
   validatedPreviewPullRequest
-} from '~/api/utils/ciControl/adminPreviewDeployments';
+} from '~/api/utils/ciControl/adminPreviewController';
 import { repositoryName } from '~/api/utils/ciControl/githubClient';
 import { isCiPreviewEnvironment } from '~/api/utils/ciControl/previewPolicyCore';
-import { setCiPreviewPolicy } from '~/api/utils/ciControl/store';
+import { listCiPreviewPolicies, setCiPreviewPolicy } from '~/api/utils/ciControl/store';
 
 export const action = ({ request }: { request: Request }) =>
   withAdminPrivateResponse(async () => {
@@ -27,19 +27,36 @@ export const action = ({ request }: { request: Request }) =>
     }
     try {
       const pr = await validatedPreviewPullRequest(prNumber);
-      const deployment = body.enabled
-        ? await buildAdminPrPreview(pr, body.environment, gate.user.id)
-        : await removeAdminPrPreviews(prNumber, body.environment);
-      const policy = await setCiPreviewPolicy({
-        repository: repositoryName(),
-        prNumber,
-        environment: body.environment,
-        enabled: body.enabled,
-        headSha: String(pr.head?.sha),
-        headRef: String(pr.head?.ref),
-        actorId: gate.user.id
-      });
-      return json({ ok: true, policy, deployment });
+      const repository = repositoryName();
+      const previousPolicy = (await listCiPreviewPolicies(repository)).find((candidate) => candidate.prNumber === prNumber);
+      const updatePolicy = (enabled = body.enabled) =>
+        setCiPreviewPolicy({
+          repository,
+          prNumber,
+          environment: body.environment,
+          enabled,
+          headSha: String(pr.head?.sha),
+          headRef: String(pr.head?.ref),
+          actorId: gate.user.id
+        });
+      const policy = await updatePolicy();
+      try {
+        const controller = await dispatchAdminPrPreviewController({
+          pr,
+          policy,
+          action: 'configure',
+          actorId: gate.user.id
+        });
+        return json({
+          ok: true,
+          policy,
+          controller,
+          expectedEnvironments: enabledAdminPreviewEnvironments(policy)
+        });
+      } catch (error) {
+        await updatePolicy(previousPolicy?.[body.environment] === true);
+        throw error;
+      }
     } catch (error) {
       return json(
         { ok: false, error: error instanceof Error ? error.message : 'Preview policy could not be updated' },

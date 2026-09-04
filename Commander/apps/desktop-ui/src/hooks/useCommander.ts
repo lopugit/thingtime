@@ -12,6 +12,11 @@ import { addRecentSearch } from '@commander/protocol';
 import { api } from '../lib/api.js';
 import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 
+// Give ordinary typing a brief chance to settle before it enters the native
+// search pipeline. This prevents one request per keystroke without making the
+// launcher feel like it is waiting after a completed query.
+const SEARCH_DEBOUNCE_MS = 100;
+
 export interface CommanderState {
   bootstrap: BootstrapResponse | null;
   query: string;
@@ -59,7 +64,14 @@ export function useCommander(): CommanderState {
   const indexTimeoutsHydrated = useRef(false);
 
   const setQuery = useCallback((value: string) => {
-    if (value !== queryRef.current) setResultsStale(true);
+    if (value !== queryRef.current) {
+      // Results describe the previous query. Keeping them visible under new
+      // input makes a correct search look wrong while the next frame arrives.
+      // Clear synchronously; cached or live results for *this* query replace
+      // the empty state as soon as they stream in.
+      setHits([]);
+      setResultsStale(true);
+    }
     queryRef.current = value;
     setQueryState(value);
     setSelectedIndex(0);
@@ -183,7 +195,7 @@ export function useCommander(): CommanderState {
             setError(reason instanceof Error ? reason.message : 'Search failed');
           },
         );
-    }, 35);
+    }, SEARCH_DEBOUNCE_MS);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
