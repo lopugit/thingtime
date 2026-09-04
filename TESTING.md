@@ -765,6 +765,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
+      FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
+      `/thing/<attachment-id>` detail view shows native controls instead of a
+      download-only row; the content response is `inline` with its detected
+      audio MIME; a multi-audio post advances through its queue in attachment
+      order; and "Save full file offline" plays the complete same-account
+      IndexedDB copy after a reload. Check desktop and 390px mobile widths for
+      no overflow, then remove the offline copy and confirm streaming resumes.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a
