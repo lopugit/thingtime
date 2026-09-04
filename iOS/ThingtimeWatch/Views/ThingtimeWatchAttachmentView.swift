@@ -1,10 +1,10 @@
 import PhotosUI
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ThingtimeWatchAttachmentView: View {
     @EnvironmentObject private var store: ThingtimeWatchStore
     @StateObject private var recorder = ThingtimeWatchAudioRecorder()
+    @AppStorage("watch.attachments.autoUploadRecordings") private var autoUploadRecordings = true
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isImportingPhotos = false
 
@@ -18,20 +18,46 @@ struct ThingtimeWatchAttachmentView: View {
                 ) {
                     Label("Photos & screenshots", systemImage: "photo.on.rectangle.angled")
                 }
-                .disabled(store.attachmentIsBusy || isImportingPhotos || recorder.isRecording)
+                .disabled(isBusy)
 
                 Button {
-                    Task { await recorder.toggle() }
+                    recorder.record()
                 } label: {
-                    Label(
-                        recorder.isRecording ? "Stop \(formattedDuration)" : "Record audio",
-                        systemImage: recorder.isRecording ? "stop.circle.fill" : "mic.circle"
-                    )
-                    .foregroundStyle(recorder.isRecording ? .red : .primary)
+                    Label("Record with Apple", systemImage: "mic.circle")
                 }
-                .disabled(store.attachmentIsBusy || isImportingPhotos)
+                .disabled(isBusy)
+
             } header: {
                 Text("Add attachment")
+            }
+
+            Section("Recording") {
+                Toggle("Upload after saving", isOn: $autoUploadRecordings)
+            }
+
+            if !recorder.recordings.isEmpty {
+                Section("Saved on this Watch") {
+                    ForEach(recorder.recordings) { recording in
+                        Button {
+                            Task { await upload(recording) }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Label("Upload recording", systemImage: "arrow.up.circle")
+                                Text("\(recording.displayDate) · \(recording.displaySize)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(isBusy)
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                recorder.delete(recording)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
             }
 
             if let message = recorder.errorMessage ?? store.attachmentStatusMessage {
@@ -47,7 +73,7 @@ struct ThingtimeWatchAttachmentView: View {
             }
 
             Section {
-                Text("Each attachment becomes a private Thing visible only to you. watchOS exposes your Photos library here; files inside other apps aren’t available to pick.")
+                Text("Each upload becomes a private Thing. Apple keeps Voice Memos inside its app, so an existing memo can’t be imported directly on Watch; sync it to iPhone and upload it in Thingtime there.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -59,24 +85,23 @@ struct ThingtimeWatchAttachmentView: View {
         }
         .onAppear {
             recorder.completedRecording = { recording in
-                Task {
-                    await store.queueAttachment(
-                        fileURL: recording.url,
-                        filename: recording.filename,
-                        contentType: recording.contentType
-                    )
-                    try? FileManager.default.removeItem(at: recording.url)
-                }
+                guard autoUploadRecordings else { return }
+                Task { await upload(recording) }
             }
-        }
-        .onDisappear {
-            if recorder.isRecording { recorder.stop() }
+            recorder.refresh()
         }
     }
 
-    private var formattedDuration: String {
-        let seconds = Int(recorder.duration.rounded(.down))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    private var isBusy: Bool {
+        store.attachmentIsBusy || isImportingPhotos || recorder.isPresenting
+    }
+
+    private func upload(_ recording: ThingtimeWatchAudioRecorder.Recording) async {
+        await store.queueAttachment(
+            fileURL: recording.url,
+            filename: recording.filename,
+            contentType: recording.contentType
+        )
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) async {

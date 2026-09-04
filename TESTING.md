@@ -613,10 +613,18 @@ email whose link points at the attacker.
       request resumes without duplicate attachment Things; repeat while signed
       out and confirm the Watch explains that Thingtime must be opened and
       signed in, without losing the queued bytes.
-- [ ] Deny microphone access on the Watch and confirm the recorder shows an
-      actionable status instead of crashing. Grant access, record for several
-      seconds, stop, and confirm an `.m4a` attachment uploads. Pick a file over
-      32 MB and confirm it is rejected locally without beginning a transfer.
+- [ ] Tap **Record with Apple**, deny microphone access, and confirm Apple's
+      native recorder returns safely without crashing. Grant access, save a
+      several-second recording, and confirm the `.m4a` remains under **Saved on
+      this Watch** after relaunch. With **Upload after saving** enabled, confirm
+      it queues automatically; disable that preference, save another recording,
+      and confirm it waits for the manual **Upload recording** action.
+- [ ] Re-upload one saved Watch recording and confirm it creates a new private
+      Thing without altering the retained original. Swipe-delete another saved
+      recording and confirm only that on-watch copy disappears. Confirm the
+      explanatory copy does not claim third-party access to Apple's sandboxed
+      Voice Memos library and directs existing Watch Voice Memos to the synced
+      iPhone Thingtime upload flow.
 - [ ] Against an origin missing or breaking any required attachment/Things
       capability, confirm the iPhone fails closed before reserving storage and
       the Watch shows the compatibility error. Verify normal uploads use the

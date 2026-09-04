@@ -5,6 +5,12 @@ Native iOS shell for Thingtime.
 The project also includes a native watchOS companion. It pairs with the signed-in
 iPhone app, mirrors the newest Thingtime notifications, shows the unread count,
 marks individual rows read, and registers its own APNs token for watch alerts.
+The Watch can also open Apple's native high-quality audio recorder, keep saved
+recordings locally for later upload or re-upload, and transfer them through the
+paired signed-in iPhone as owner-only attachment Things. Apple does not expose
+the Voice Memos app's private recording library to third-party watchOS apps;
+existing Watch Voice Memos must sync to iPhone and be uploaded in Thingtime
+there.
 Authentication remains on the iPhone WebView session so passwords and reusable
 session credentials are not copied to the watch.
 

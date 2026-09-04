@@ -1,5 +1,24 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 19 — Apple-native recorder and saved recordings
+
+- Replaced the in-app recording controls with Apple's native Watch audio
+  recorder using its high-quality `.m4a` preset and ten-minute safety limit.
+- Saved recordings now remain in Thingtime's Application Support container on
+  the Watch, survive relaunches, and appear under **Saved on this Watch** for
+  manual upload or re-upload. Swipe-to-delete removes only the selected local
+  copy.
+- Added a persistent **Upload after saving** toggle, enabled by default, so the
+  user can choose immediate queueing or save-first/manual-upload behavior.
+- watchOS does not expose Apple Voice Memos' private app container or a document
+  importer to third-party Watch apps. The screen states that limitation and
+  directs existing Watch Voice Memos to sync to iPhone for upload in Thingtime.
+- The Watch target builds and renders on a Series 10 simulator. All 24 iOS and
+  shared contract tests pass on a matching Xcode 27 / iOS 27 simulator. Native
+  recorder presentation and microphone capture remain physical-Watch
+  acceptance checks because the Watch simulator does not present that system
+  recording controller.
+
 ## TestFlight build 18 — notification history and offline downloads
 
 - The Watch inbox now requests the newest 10 notifications and can append

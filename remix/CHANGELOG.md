@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Apple-native Watch recordings and upload-later library — Codex (AI)
+
+- Replaced the custom Watch recording controls with Apple's native high-quality
+  recorder, retained saved `.m4a` recordings in Thingtime's on-watch library,
+  added manual re-upload and swipe-to-delete actions, and added a persistent
+  **Upload after saving** preference. Existing Apple Voice Memos remain isolated
+  by watchOS and are directed to the synced iPhone Thingtime upload path.
+
 ### 2026-09-04 — Apple Watch notification history and offline archives — Codex (AI)
 
 - Added stable opaque notification cursors, 10-at-a-time Watch inbox/history
