@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-04 — Rich public link previews — Codex (AI)
+
+- Shared public pages now publish route-aware Open Graph/Twitter metadata and
+  colourful 1200×630 Thingtime PNG cards. Posts carry author/excerpt/context;
+  image posts safely render up to four stored images as a collage; polls,
+  listings, shares, profiles, media, Things, published pages, feeds and public
+  catalogue/docs routes each have their own preview treatment.
+
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
 - `@Thingtime login` is now callable before authentication and returns its

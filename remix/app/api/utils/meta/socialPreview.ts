@@ -1,0 +1,469 @@
+// Shared, crawler-safe preview model for Thingtime URLs. The same anonymous
+// projection powers both the Open Graph text tags and the image-card renderer,
+// so a social preview cannot reveal anything the public page does not reveal.
+
+import { getRequestOrigin } from '../health/statusTarget';
+
+export type SocialPreviewKind =
+	| 'home'
+	| 'feed'
+	| 'explore'
+	| 'docs'
+	| 'collection'
+	| 'post'
+	| 'gallery'
+	| 'poll'
+	| 'listing'
+	| 'share'
+	| 'media'
+	| 'webpage'
+	| 'profile'
+	| 'thing';
+
+export type SocialPreviewImage = {
+	attachmentId: string;
+	label: string;
+};
+
+export type SocialPreview = {
+	kind: SocialPreviewKind;
+	path: string;
+	title: string;
+	description: string;
+	eyebrow: string;
+	article: boolean;
+	author?: string;
+	initial?: string;
+	badges: string[];
+	options: string[];
+	images: SocialPreviewImage[];
+	imageCount: number;
+	revision?: string;
+};
+
+export const SOCIAL_PREVIEW_WIDTH = 1200;
+export const SOCIAL_PREVIEW_HEIGHT = 630;
+
+const SITE_NAME = 'Thingtime';
+const DESCRIPTION_MAX = 200;
+const TITLE_MAX = 70;
+
+export const cleanSocialText = (value: unknown): string =>
+	typeof value === 'string'
+		? value
+				.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ')
+				.replace(/\s+/g, ' ')
+				.trim()
+		: '';
+
+export const truncateSocialText = (value: string, max: number): string => {
+	const codePoints = Array.from(value);
+	return codePoints.length <= max
+		? value
+		: `${codePoints
+				.slice(0, max - 1)
+				.join('')
+				.trimEnd()}…`;
+};
+
+const cleanList = (values: unknown, limit: number): string[] =>
+	Array.isArray(values) ? values.map(cleanSocialText).filter(Boolean).slice(0, limit) : [];
+
+const initialOf = (value: string): string => Array.from(value.trim())[0]?.toUpperCase() || 'T';
+
+export const normaliseSocialPreviewPath = (value: unknown): string => {
+	if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || value.length > 2048) {
+		return '/';
+	}
+	const path = value.split('?')[0]?.split('#')[0] || '/';
+	return path.startsWith('/') && !path.startsWith('//') ? path : '/';
+};
+
+export const socialPreviewCardUrl = (origin: string, path: string, revision?: string): string => {
+	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path) });
+	if (revision) query.set('v', truncateSocialText(revision, 80));
+	return `${origin}/social-card?${query.toString()}`;
+};
+
+export const staticSocialPreview = (pathInput: string): SocialPreview => {
+	const path = normaliseSocialPreviewPath(pathInput);
+	const segments = path.split('/').filter(Boolean);
+	const segment = segments[0] || '';
+	const label = (value: string): string => value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+	const detail = (() => {
+		switch (segment) {
+			case 'feed':
+				return {
+					kind: 'feed' as const,
+					title: 'Your Thingtime feed',
+					description: 'Posts, photos, polls, finds and little moments from your people.',
+					eyebrow: 'THINGTIME · FEED',
+					badges: ['Fresh things', 'People you follow']
+				};
+			case 'explore':
+				return {
+					kind: 'explore' as const,
+					title: 'Explore Thingtime',
+					description: 'Discover conversations, photos, polls and useful things worth keeping.',
+					eyebrow: 'THINGTIME · EXPLORE',
+					badges: ['Trending now', 'Made by people']
+				};
+			case 'docs':
+				return {
+					kind: 'docs' as const,
+					title: 'Thingtime docs',
+					description: 'The product, API and design system behind a world where everything is a thing.',
+					eyebrow: 'THINGTIME · DOCS',
+					badges: ['Build with Thingtime', 'API + SDK']
+				};
+			case 'design-system':
+				return {
+					kind: 'docs' as const,
+					title: 'Thingtime design system',
+					description: 'The colourful, flexible building blocks behind the Thingtime experience.',
+					eyebrow: 'THINGTIME · DESIGN SYSTEM',
+					badges: ['Components', 'Themes']
+				};
+			case 'schemas':
+				return {
+					kind: 'collection' as const,
+					title: 'Thingtime schemas',
+					description: 'Browse the building blocks that make every kind of thing understandable.',
+					eyebrow: 'THINGTIME · SCHEMAS',
+					badges: ['Open building blocks', 'Make it yours']
+				};
+			case 'themes':
+				return {
+					kind: 'collection' as const,
+					title: 'Thingtime themes',
+					description: 'A colourful collection of ways to make Thingtime feel like yours.',
+					eyebrow: 'THINGTIME · THEMES',
+					badges: ['Colour your space', 'Made to share']
+				};
+			case 'components':
+				return {
+					kind: 'collection' as const,
+					title: 'Thingtime components',
+					description: 'Reusable interface pieces, ready to explore and make your own.',
+					eyebrow: 'THINGTIME · COMPONENTS',
+					badges: ['Composable', 'Shareable']
+				};
+			case 'actions':
+				return {
+					kind: 'collection' as const,
+					title: 'Thingtime actions',
+					description: 'Small, clear actions that turn your things into useful little workflows.',
+					eyebrow: 'THINGTIME · ACTIONS',
+					badges: ['Do more', 'Keep context']
+				};
+			case 'search':
+				return {
+					kind: 'collection' as const,
+					title: 'Search Thingtime',
+					description: 'Find the people, posts and things that matter to you.',
+					eyebrow: 'THINGTIME · SEARCH',
+					badges: ['People', 'Posts', 'Things']
+				};
+			case 'things':
+				return {
+					kind: 'collection' as const,
+					title: 'Your Things',
+					description: 'A place for the files, notes, ideas and tiny details you want to keep close.',
+					eyebrow: 'THINGTIME · THINGS',
+					badges: ['Everything is a thing', 'Made for keeping']
+				};
+			default:
+				return {
+					kind: 'home' as const,
+					title: 'Thingtime',
+					description: 'Everything is a thing — share posts, run polls and build a home for the things you care about.',
+					eyebrow: 'THINGTIME · EVERYDAY MAGIC',
+					badges: ['Posts', 'Photos', 'Polls']
+				};
+		}
+	})();
+	// Named catalogue and documentation pages deserve a useful title too, even
+	// though they have no user-authored database record to resolve. That makes
+	// a copied /components/button or /docs/api/things URL distinguishable in a
+	// chat thread at a glance.
+	const leaf = segments.at(-1) || '';
+	if (segments.length > 1 && ['docs', 'schemas', 'themes', 'components', 'actions'].includes(segment)) {
+		const category = segment === 'docs' ? 'docs' : segment.slice(0, -1);
+		return {
+			...detail,
+			path,
+			title: `Thingtime ${category}: ${label(leaf)}`,
+			description: `${detail.description} Open ${label(leaf)} on Thingtime.`,
+			article: false,
+			options: [],
+			images: [],
+			imageCount: 0
+		};
+	}
+	return { ...detail, path, article: false, options: [], images: [], imageCount: 0 };
+};
+
+const postImages = (post: any): SocialPreviewImage[] =>
+	(Array.isArray(post?.attachments) ? post.attachments : [])
+		.filter((attachment: any) => attachment?.mediaKind === 'image' && typeof attachment?.id === 'string' && !attachment?.url && !attachment?.pending)
+		.slice(0, 4)
+		.map((attachment: any) => ({
+			attachmentId: attachment.id,
+			label: cleanSocialText(attachment.title) || cleanSocialText(attachment.filenamePreview) || cleanSocialText(attachment.name) || 'Photo'
+		}));
+
+const pollOptions = (post: any): string[] => {
+	const raw = post?.thing?.options;
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.map((option) => (typeof option === 'string' ? cleanSocialText(option) : cleanSocialText(option?.text)))
+		.filter(Boolean)
+		.slice(0, 3);
+};
+
+const formatPrice = (listing: any): string => {
+	const price = typeof listing?.price === 'number' && Number.isFinite(listing.price) ? listing.price : null;
+	const currency = cleanSocialText(listing?.currency);
+	if (price === null) return '';
+	try {
+		return new Intl.NumberFormat('en', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 2 }).format(price);
+	} catch {
+		return `${currency || '$'}${price.toLocaleString('en')}`;
+	}
+};
+
+const webpageCopy = (blocks: unknown, result: string[] = []): string[] => {
+	if (!Array.isArray(blocks) || result.length >= 12) return result;
+	for (const block of blocks) {
+		if (!block || typeof block !== 'object') continue;
+		const item = block as Record<string, unknown>;
+		const text = cleanSocialText(item.text);
+		if (text) result.push(text);
+		// Rich text is rendered through the page renderer's sanitising allowlist.
+		// The card is plainer still: it keeps only readable text, never markup.
+		const html = cleanSocialText(typeof item.html === 'string' ? item.html.replace(/<[^>]*>/g, ' ') : '');
+		if (html) result.push(html);
+		const alt = cleanSocialText(item.alt);
+		if (alt) result.push(alt);
+		webpageCopy(item.children, result);
+		if (result.length >= 12) break;
+	}
+	return result;
+};
+
+const webpageBlockCount = (blocks: unknown): number => {
+	if (!Array.isArray(blocks)) return 0;
+	return blocks.reduce((count, block) => {
+		if (!block || typeof block !== 'object') return count;
+		return count + 1 + webpageBlockCount((block as Record<string, unknown>).children);
+	}, 0);
+};
+
+const webpagePreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { resolveWebpage } = await import('../webpages/webpages');
+	const { viewerOf } = await import('../things/things');
+	const result = await resolveWebpage(viewerOf(null), { id });
+	if (!result.ok || !result.page) return fallback;
+	const page: any = result.page;
+	const crystal = page.crystal || {};
+	const name = cleanSocialText(crystal.name) || 'A page';
+	const pageText = webpageCopy(crystal.blocks).join(' ');
+	const description = cleanSocialText(crystal.description) || pageText || 'A published page made with Thingtime.';
+	const author = cleanSocialText(page.author?.displayName) || cleanSocialText(page.author?.username);
+	const blockCount = webpageBlockCount(crystal.blocks);
+	return {
+		kind: 'webpage',
+		path,
+		title: `${truncateSocialText(name, TITLE_MAX)} on ${SITE_NAME}`,
+		description: truncateSocialText(description, DESCRIPTION_MAX),
+		eyebrow: 'THINGTIME · PAGE',
+		article: true,
+		author: author || undefined,
+		initial: author ? initialOf(author.replace(/^@/, '')) : undefined,
+		badges: ['Published page', blockCount ? `${blockCount} content block${blockCount === 1 ? '' : 's'}` : 'Made with Thingtime'],
+		options: [],
+		images: [],
+		imageCount: 0,
+		revision: cleanSocialText(page.updatedAt) || cleanSocialText(page.createdAt)
+	};
+};
+
+const postPreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
+	const { getThing, viewerOf } = await import('../things/things');
+	const result = await getThing(viewerOf(null), id);
+	if (result.ok === false || !result.post) return fallback;
+	const post: any = result.post;
+	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return fallback;
+
+	const authorName =
+		cleanSocialText(post.author?.displayName) || (cleanSocialText(post.author?.username) ? `@${cleanSocialText(post.author.username)}` : 'Someone');
+	const original = post.isShare && post.shareOf ? post.shareOf : null;
+	const source = original || post;
+	const question = cleanSocialText(source.thing?.question);
+	const listing = source.listing;
+	const options = question ? pollOptions(source) : [];
+	const images = postImages(source);
+	const attachmentCount = Array.isArray(source.attachments) ? source.attachments.length : 0;
+	const attachmentImageCount = Array.isArray(source.attachments)
+		? source.attachments.filter((attachment: any) => attachment?.mediaKind === 'image').length
+		: 0;
+	const legacyImageCount = Array.isArray(source.images) ? source.images.filter((image: unknown) => typeof image === 'string' && image).length : 0;
+	// Render the first four safe stored images, while keeping the true photo
+	// count in the card's badge (a six-photo post is still a six-photo post).
+	// Legacy image URLs contribute their count, but never become a server-side
+	// fetch — their tiles intentionally use the branded fallback treatment.
+	const imageCount = Math.max(attachmentImageCount, legacyImageCount);
+	const plainText = question || cleanSocialText(source.text);
+	const listingTitle = cleanSocialText(listing?.title);
+	const summary =
+		listingTitle ||
+		plainText ||
+		(attachmentCount ? `${attachmentCount} shared attachment${attachmentCount === 1 ? '' : 's'}` : 'A post on Thingtime');
+	const kind: SocialPreviewKind = original ? 'share' : listing ? 'listing' : question ? 'poll' : imageCount > 1 ? 'gallery' : 'post';
+	const listingBits = listing
+		? [
+				formatPrice(listing),
+				cleanSocialText(listing.category),
+				cleanSocialText(listing.condition),
+				cleanSocialText(listing.location),
+				listing.sold ? 'Sold' : ''
+		  ].filter(Boolean)
+		: [];
+	const badges = [
+		...(original ? ['Shared post'] : []),
+		...(listingBits.length ? listingBits : []),
+		...cleanList(source.tags, 3).map((tag) => `#${tag.replace(/^#/, '')}`),
+		...(imageCount > 1 ? [`${imageCount} photos`] : imageCount === 1 ? ['Photo post'] : [])
+	].slice(0, 4);
+	const description = question
+		? truncateSocialText(['Poll:', question, options.length ? `· ${options.join(' / ')}` : ''].filter(Boolean).join(' '), DESCRIPTION_MAX)
+		: truncateSocialText(summary, DESCRIPTION_MAX) || `A post by ${authorName} on ${SITE_NAME}.`;
+	const titleLead = original ? `${authorName} shared` : authorName;
+	return {
+		kind,
+		path,
+		title: `${titleLead}: ${truncateSocialText(summary, TITLE_MAX)}`,
+		description,
+		eyebrow: `THINGTIME · ${kind === 'gallery' ? 'PHOTO SET' : kind.toUpperCase()}`,
+		article: true,
+		author: authorName,
+		initial: initialOf(authorName.replace(/^@/, '')),
+		badges,
+		options,
+		images,
+		imageCount,
+		revision: cleanSocialText((result as any).thing?.updatedAt) || cleanSocialText((result as any).thing?.createdAt)
+	};
+};
+
+const profilePreview = async (path: string, username: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { findUserByUsername, toPublicProfile } = await import('../auth/users');
+	const user = await findUserByUsername(username);
+	if (!user) return fallback;
+	const profile: any = toPublicProfile(user);
+	const displayName = cleanSocialText(profile.displayName) || cleanSocialText(profile.username);
+	const handle = cleanSocialText(profile.username);
+	return {
+		kind: 'profile',
+		path,
+		title: `${displayName} (@${handle}) on ${SITE_NAME}`,
+		description: truncateSocialText(cleanSocialText(profile.bio), DESCRIPTION_MAX) || `@${handle} is on ${SITE_NAME}.`,
+		eyebrow: 'THINGTIME · PROFILE',
+		article: false,
+		author: displayName,
+		initial: initialOf(displayName),
+		badges: handle ? [`@${handle}`, 'On Thingtime'] : ['On Thingtime'],
+		options: [],
+		images: [],
+		imageCount: 0,
+		revision: cleanSocialText(profile.updatedAt)
+	};
+};
+
+const mediaPreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { getThing, viewerOf } = await import('../things/things');
+	const result = await getThing(viewerOf(null), id);
+	if (result.ok === false || !(result as any).thing?.thingtime?.includes?.('attachment')) return fallback;
+	const thing: any = (result as any).thing;
+	const media = thing.crystal || {};
+	const label = cleanSocialText(media.title) || cleanSocialText(media.filenamePreview) || cleanSocialText(media.name) || 'Shared media';
+	const mediaKind = cleanSocialText(media.mediaKind) || 'file';
+	return {
+		kind: 'media',
+		path,
+		title: `${label} on ${SITE_NAME}`,
+		description:
+			truncateSocialText(cleanSocialText(media.description), DESCRIPTION_MAX) ||
+			`${mediaKind[0]?.toUpperCase() || 'M'}${mediaKind.slice(1)} shared on Thingtime.`,
+		eyebrow: `THINGTIME · ${mediaKind.toUpperCase()}`,
+		article: true,
+		badges: [mediaKind, cleanSocialText(media.contentType), typeof media.size === 'number' ? `${Math.max(0, Math.round(media.size / 1024))} KB` : '']
+			.filter(Boolean)
+			.slice(0, 3),
+		options: [],
+		images: mediaKind === 'image' && !media.url ? [{ attachmentId: thing.id, label }] : [],
+		imageCount: mediaKind === 'image' ? 1 : 0,
+		revision: cleanSocialText(thing.updatedAt) || cleanSocialText(thing.createdAt)
+	};
+};
+
+const thingPreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const fallback = staticSocialPreview(path);
+	const { getThing, viewerOf } = await import('../things/things');
+	const result = await getThing(viewerOf(null), id);
+	if (result.ok === false) return fallback;
+	if (result.post) return postPreview(path, id);
+	const thing: any = result.thing;
+	const crystal = thing?.crystal || {};
+	const kind = cleanList(thing?.thingtime, 3).join(' · ') || 'Thing';
+	const title = cleanSocialText(crystal.title) || cleanSocialText(crystal.name) || kind;
+	const description = cleanSocialText(crystal.description) || cleanSocialText(crystal.text) || `A ${kind.toLowerCase()} on ${SITE_NAME}.`;
+	return {
+		kind: 'thing',
+		path,
+		title: `${truncateSocialText(title, TITLE_MAX)} on ${SITE_NAME}`,
+		description: truncateSocialText(description, DESCRIPTION_MAX),
+		eyebrow: `THINGTIME · ${kind.toUpperCase()}`,
+		article: false,
+		badges: cleanList(thing?.tags, 3).map((tag) => `#${tag.replace(/^#/, '')}`),
+		options: [],
+		images: [],
+		imageCount: 0,
+		revision: cleanSocialText(thing?.updatedAt) || cleanSocialText(thing?.createdAt)
+	};
+};
+
+export const resolveSocialPreview = async (origin: string, pathInput: string): Promise<SocialPreview> => {
+	const path = normaliseSocialPreviewPath(pathInput);
+	try {
+		const postMatch = path.match(/^\/post\/([^/]+)\/?$/);
+		if (postMatch) return await postPreview(path, decodeURIComponent(postMatch[1]));
+		const profileMatch = path.match(/^\/profile\/([^/]+)\/?$/);
+		if (profileMatch) return await profilePreview(path, decodeURIComponent(profileMatch[1]));
+		const mediaMatch = path.match(/^\/media\/([^/]+)\/?$/);
+		if (mediaMatch) return await mediaPreview(path, decodeURIComponent(mediaMatch[1]));
+		const webpageMatch = path.match(/^\/p\/([^/]+)\/?$/);
+		if (webpageMatch) return await webpagePreview(path, decodeURIComponent(webpageMatch[1]));
+		const thingMatch = path.match(/^\/thing\/([^/]+)\/?$/);
+		if (thingMatch) return await thingPreview(path, decodeURIComponent(thingMatch[1]));
+	} catch {
+		// A malformed or unavailable public target receives the safe generic card.
+	}
+	return staticSocialPreview(path);
+};
+
+export const socialPreviewFromRequest = async (request: Request): Promise<{ origin: string; preview: SocialPreview }> => {
+	const origin = getRequestOrigin(request);
+	let path = '/';
+	try {
+		path = new URL(request.url, origin).pathname || '/';
+	} catch {
+		// keep the generic root card
+	}
+	return { origin, preview: await resolveSocialPreview(origin, path) };
+};

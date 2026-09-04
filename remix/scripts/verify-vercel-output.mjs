@@ -15,6 +15,7 @@ const embedBridge = readFileSync('.vercel/output/static/embed/bridge.html', 'utf
 const embedDemo = readFileSync('.vercel/output/static/embed/demo.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
 const serverFunctionDir = '.vercel/output/functions/__server.func';
+const tracedServerPackage = readJson(join(serverFunctionDir, 'package.json'));
 
 const filesBelow = (dir) =>
 	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -40,6 +41,16 @@ if (unresolvedEmojiLookup && !existsSync(tracedEmojiAsset)) {
 	throw new Error(
 		`Vercel server output leaves ${emojiRuntimeSpecifier} as a runtime lookup without tracing the JSON asset (${unresolvedEmojiLookup}).`
 	);
+}
+
+// @resvg/resvg-js chooses an OS/architecture-specific N-API package at
+// runtime. Nitro may leave that package external, which is fine only when the
+// Vercel trace declares the platform package beside the renderer itself.
+const tracedResvgNativePackage = Object.keys(tracedServerPackage.dependencies || {}).find((dependency) =>
+	dependency.startsWith('@resvg/resvg-js-')
+);
+if (!tracedServerPackage.dependencies?.['@resvg/resvg-js'] || !tracedResvgNativePackage) {
+	throw new Error('Vercel server output does not trace the native @resvg/resvg-js renderer required by social cards.');
 }
 
 const getDirectiveSources = (policy, name) => {
@@ -137,21 +148,21 @@ if (!hasFilesystemRoute) {
 const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
-const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
+const rootIndex = routes.findIndex((route) => route.src === '^/$');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
-// the social-permalink and well-known discovery routes share the /__server dest,
-// so the final Nitro fallback is the one that is neither of those rewrites
-const isPermalinkSrc = (src) => typeof src === 'string' && /^\^\/(?:post|profile)\//.test(src);
-const postPermalinkIndex = routes.findIndex((route) => route.src === '^/post/[^/]+/?$' && route.dest === '/__server');
-const profilePermalinkIndex = routes.findIndex((route) => route.src === '^/profile/[^/]+/?$' && route.dest === '/__server');
 const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
 		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
+const socialCardIndex = routes.findIndex((route) => route.src === '^/social-card$' && route.dest === '/__server');
+const socialMetaIndex = routes.findIndex(
+	(route) => route.dest === '/__server' && typeof route.src === 'string' && route.src.includes('post/[^/]+') && route.src.includes('media/[^/]+')
+);
+const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex]);
 const serverFallbackIndex = routes.findIndex(
-	(route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex && !isPermalinkSrc(route.src)
+	(route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex && !socialRouteIndexes.has(index)
 );
 
 if (spaIndex === -1) {
@@ -159,7 +170,7 @@ if (spaIndex === -1) {
 }
 
 if (rootIndex === -1) {
-	throw new Error('Vercel output config does not route / to /index.html.');
+	throw new Error('Vercel output config does not route /.');
 }
 
 if (directIndex === -1) {
@@ -206,26 +217,29 @@ if (serverFallbackIndex !== -1 && serverFallbackIndex < spaIndex) {
 	throw new Error('Vercel output checks the Nitro server fallback before the SPA shell.');
 }
 
-// Social permalinks must reach the Nitro shell handler (crawler-visible Open
-// Graph tags — server/routes/[...].ts) instead of the meta-less static shell.
+// Every shareable page and its PNG card must arrive at the Nitro social
+// controller after static/API handling but before the generic SPA shell.
 if (serverFallbackIndex !== -1) {
+	if (routes[rootIndex]?.dest !== '/__server' || socialMetaIndex === -1 || socialCardIndex === -1) {
+		throw new Error('Vercel output does not route the public social surfaces to the Nitro social controller.');
+	}
 	for (const [name, index] of [
-		['post permalink', postPermalinkIndex],
-		['profile permalink', profilePermalinkIndex]
+		['public social route', socialMetaIndex],
+		['social card', socialCardIndex]
 	]) {
-		if (index === -1) {
-			throw new Error(`Vercel output config does not route the ${name} pages to the Nitro social-meta handler.`);
+		if (index > spaIndex || index < apiIndex || index < filesystemIndex) {
+			throw new Error(`Vercel output orders the ${name} route outside the static/API and SPA boundaries.`);
 		}
-		if (index > spaIndex) {
-			throw new Error(`Vercel output checks the SPA fallback before the ${name} social-meta route.`);
-		}
-		if (index < apiIndex || index < filesystemIndex) {
-			throw new Error(`Vercel output routes ${name} pages to the Nitro social-meta handler before filesystem/API routes.`);
-		}
-		const headers = routes[index]?.headers;
-		if (headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
-			throw new Error(`Vercel output ${name} route does not disable browser caching for the HTML shell.`);
-		}
+	}
+	if (routes[socialMetaIndex]?.headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
+		throw new Error('Vercel output does not disable browser caching for public social HTML.');
+	}
+	const cardHeaders = routes[socialCardIndex]?.headers;
+	if (
+		cardHeaders?.['Cache-Control'] !== 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' ||
+		cardHeaders?.['X-Content-Type-Options'] !== 'nosniff'
+	) {
+		throw new Error('Vercel output does not preserve safe caching headers for social-card PNGs.');
 	}
 }
 
