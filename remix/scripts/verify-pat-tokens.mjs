@@ -550,6 +550,54 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
     privFeed.status === 200 && !(privFeed.body?.posts || []).some((p) => p.id === publicPostId),
     `${privFeed.status}`
   );
+  // anon=1 asks the feed/search loaders for the logged-out, edge-cacheable
+  // view. It ignores cookies by design, but must NOT ignore a Bearer token:
+  // skipping actor resolution would hand a fenced token the whole public
+  // sphere its fence exists to keep it out of, one query parameter deep.
+  const privFeedAnon = await api('/api/v1/things/feed?anon=1', { token: priv.token });
+  check(
+    'private-only cannot reach public posts through the anon feed view',
+    privFeedAnon.status === 200 && !(privFeedAnon.body?.posts || []).some((p) => p.id === publicPostId),
+    `${privFeedAnon.status}`
+  );
+  const privSearchAnon = await api('/api/v1/things/search?anon=1&q=public%20fixture', { token: priv.token });
+  check(
+    'private-only cannot reach public posts through the anon search view',
+    privSearchAnon.status === 200 &&
+      ![...(privSearchAnon.body?.posts || []), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
+    `${privSearchAnon.status}`
+  );
+  // a genuinely credential-less anon=1 call still gets the cacheable public
+  // view — the fence must not have cost logged-out traffic its edge cache
+  const anonFeed = await api('/api/v1/things/feed?anon=1');
+  check(
+    'anon=1 without a credential still serves the public feed',
+    anonFeed.status === 200 && (anonFeed.body?.posts || []).some((p) => p.id === publicPostId),
+    `${anonFeed.status}`
+  );
+  // …and that cacheable entry must be keyed on Authorization. The two checks
+  // above only prove the ORIGIN fences a Bearer credential; `public, s-maxage`
+  // is precisely what licenses a shared cache to replay a stored response to
+  // an Authorization-carrying request, so without this the warm anon body
+  // reaches a fenced token without the origin ever being asked.
+  const varies = (headers) =>
+    (headers.get('vary') || '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .includes('authorization');
+  check('the cacheable anon feed varies on Authorization', varies(anonFeed.headers), anonFeed.headers.get('vary') || '(none)');
+  const anonSearch = await api('/api/v1/things/search?anon=1&q=public%20fixture');
+  check(
+    'the cacheable anon search varies on Authorization',
+    anonSearch.status === 200 && varies(anonSearch.headers),
+    `${anonSearch.status} ${anonSearch.headers.get('vary') || '(none)'}`
+  );
+  // the fenced answers must stay uncacheable rather than sharing that key
+  check(
+    'a fenced anon=1 feed answer carries no shared-cache policy',
+    !(privFeedAnon.headers.get('cache-control') || '').includes('s-maxage'),
+    privFeedAnon.headers.get('cache-control') || '(none)'
+  );
 
   const privCreate = await api('/api/v1/things', {
     token: priv.token,

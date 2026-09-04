@@ -3,7 +3,7 @@ import React from 'react';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { drawerItemClosesOnClick } from './drawerMenu';
 
-// z-index ladder for the app chrome, above the fixed nav (9999) and below
+// z-index ladder for the app chrome, above the web nav (9999) and below
 // DevKit (99999+). Floating editor windows layer AROUND the drawer (bands
 // 9900+ and 10040+, see EditorSplit) — so everything transient or blocking
 // (popups, the trigger, modals, context menus) sits ABOVE the window bands
@@ -12,6 +12,7 @@ import { drawerItemClosesOnClick } from './drawerMenu';
 //   10000   drawer panel
 //   10040+  editor windows above the drawer (their default)
 //   10120   drawer panel while hovered (takes the front, hands it back)
+//   10130   Electron titlebar (keeps its controls above the hovered drawer)
 //   10190   window drag ghosts / drop previews
 //   10220   dropdowns & popups   10230 drawer trigger
 //   10240/10250   modal overlay / modal
@@ -177,10 +178,11 @@ export const useDrawer = () => {
 	// Drawer chrome state is UI preference, not content — keep it out of the
 	// undo/redo timeline.
 	const setDrawerSetting = React.useCallback(
-		(path: string, value: any) => {
+		(path: string, value: any, options?: { tabLocal?: boolean }) => {
 			setThingtime?.(`settings.drawer.${path}`, value, {
 				ignoreUndoRedo: true,
-				namespace: 'drawer'
+				namespace: 'drawer',
+				...options
 			});
 		},
 		[setThingtime]
@@ -188,7 +190,11 @@ export const useDrawer = () => {
 
 	const setOpen = React.useCallback(
 		(value: boolean) => {
-			setDrawerSetting('open', !!value);
+			// Whether the drawer is open describes this viewport, not the user's
+			// preferences: width/direction/ordering are worth sharing between tabs,
+			// but a second window sliding its drawer open because you opened this
+			// one is not. Persisted as before, so a reload still restores it.
+			setDrawerSetting('open', !!value, { tabLocal: true });
 		},
 		[setDrawerSetting]
 	);
@@ -229,9 +235,17 @@ export const useDrawer = () => {
 		[setDrawerSetting]
 	);
 
+	// Which top-level section the drawer shows tracks THIS tab's route:
+	// DrawerContent writes it from `pathname`, so two tabs on two routes hold two
+	// legitimately different selections. Broadcasting it would swap a peer's
+	// submenu to a section that peer is not even on, and nothing there would put
+	// it back — the pathname-sync effect only re-runs on `pathname`/`open`/
+	// `variant`/`loading`, none of which a remote write touches, and it returns
+	// early while that peer's drawer is closed. Persisted as before, so a reload
+	// still restores the last section; only the broadcast is suppressed.
 	const setSelectedItem = React.useCallback(
 		(id: string) => {
-			setDrawerSetting('selectedItem', id);
+			setDrawerSetting('selectedItem', id, { tabLocal: true });
 		},
 		[setDrawerSetting]
 	);
@@ -285,7 +299,10 @@ export const useDrawer = () => {
 	const openSearch = React.useCallback(() => {
 		setThingtime?.('settings.commander.nav.commanderActive', true, {
 			ignoreUndoRedo: true,
-			namespace: 'drawer'
+			namespace: 'drawer',
+			// Opening the palette here must not open and focus it in every other
+			// open tab — see the tabLocal note in ThingtimeProvider.
+			tabLocal: true
 		});
 
 		if (searchClosesDrawer && open) {

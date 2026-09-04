@@ -24,30 +24,38 @@ const smarts = s()
 import thingtime from 'thingtime'
 import { Server } from 'socket.io';
 
-// Cross-origin callers come from an explicit allowlist, never '*' (CodeQL
-// js/cors-permissive-configuration). A wildcard let ANY site on the web read
-// every response this server produces, including authenticated ones; the
-// reflected form below echoes only origins that were configured on purpose,
-// so an unlisted site gets no Access-Control-Allow-Origin header at all.
-// Set CORS_ORIGINS to a comma-separated list to widen it, e.g.
-// CORS_ORIGINS="https://thingtime.app,http://localhost:3000"; unset it and
-// only the local dev origins are allowed. A wildcard is deliberately not the
-// fallback.
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:9999')
+// Cross-origin access is an explicit allowlist, never '*'.
+//
+// Comma-separated, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
+// Defaults to the local dev origin. A wildcard origin would let any website read this API's
+// authenticated cross-origin responses from a visitor's browser, so it is deliberately not
+// the fallback. An explicitly empty value grants no cross-origin access at all, which is the
+// safe setting for a service that is no longer deployed.
+//
+// Nothing builds or runs this package any more — it moved under deprecated/ in
+// the repo consolidation, its pm2 entry is commented out in
+// ecosystem.config.js, the root `npm run api` script points at a directory that
+// no longer exists, and Vercel only ever builds remix/. That makes the wildcard
+// unexploitable TODAY, but it is still a genuinely permissive configuration
+// sitting in the tree: it re-flags on every scan, and it would be a live
+// world-readable API the moment anyone revived the server. A closed default is
+// the honest resolution — set CORS_ORIGINS to whatever a revival actually needs,
+// or to the empty string to keep it closed.
+const configuredOrigins = (
+	process.env.CORS_ORIGINS ??
+	process.env.THINGTIME_API_ALLOWED_ORIGINS ??
+	'http://localhost:3000'
+)
 	.split(',')
 	.map(origin => origin.trim())
 	.filter(Boolean)
 
-// `origin` is undefined for same-origin/non-browser callers (curl, server to
-// server) — those were never subject to CORS, so they keep working.
-const corsOrigin = (origin, callback) => {
-	if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
-	callback(null, false)
-}
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : false
 
 const io = new Server(server, {
 	cors: {
-		origin: corsOrigin,
+		origin: corsOrigins,
 		methods: ['GET', 'POST'],
 	},
 })
@@ -58,9 +66,9 @@ import { v4 as uuidv4 } from 'uuid'
 
 	await thingtime.init()
 
-	// Express middleware
+	// Express middleware — same allowlist as the socket.io server above
 	app.use(cors({
-		origin: corsOrigin,
+		origin: corsOrigins,
 	}))
 
 	app.get('/', (req, res) => {

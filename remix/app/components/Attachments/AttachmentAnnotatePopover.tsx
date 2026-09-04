@@ -17,7 +17,7 @@ import { Check, Pencil, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { normalizePublicAttachment } from './attachmentUiCore';
+import { attachmentDisplayName, normalizePublicAttachment } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -43,26 +43,26 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 	const [isOpen, setIsOpen] = React.useState(false);
 	const [titleDraft, setTitleDraft] = React.useState('');
 	const [descriptionDraft, setDescriptionDraft] = React.useState('');
+	const [filenamePreviewDraft, setFilenamePreviewDraft] = React.useState('');
 
 	const close = () => setIsOpen(false);
 
 	const save = () => {
 		const title = titleDraft.trim();
 		const description = descriptionDraft.trim();
+		const filenamePreview = filenamePreviewDraft.trim();
 		const previous = attachment;
-		const optimistic: PublicAttachment = {
-			id: attachment.id,
-			name: attachment.name,
-			size: attachment.size,
-			contentType: attachment.contentType,
-			mediaKind: attachment.mediaKind,
-			...(title ? { title } : {}),
-			...(description ? { description } : {})
-		};
+		const optimistic: PublicAttachment = { ...attachment };
+		if (filenamePreview) optimistic.filenamePreview = filenamePreview;
+		else delete optimistic.filenamePreview;
+		if (title) optimistic.title = title;
+		else delete optimistic.title;
+		if (description) optimistic.description = description;
+		else delete optimistic.description;
 		close();
 		onApply(optimistic);
 		api.v1.attachments
-			.annotate({ id: attachment.id, title: title || null, description: description || null })
+			.annotate({ id: attachment.id, filenamePreview: filenamePreview || null, title: title || null, description: description || null })
 			.then((response: any) => {
 				const confirmed = normalizePublicAttachment(response?.attachment);
 				if (confirmed) onApply(confirmed);
@@ -77,8 +77,8 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 		<Popover isOpen={isOpen} onClose={close} placement="bottom-end" isLazy>
 			<PopoverTrigger>
 				<IconButton
-					aria-label={`Edit title and description for ${attachment.name}`}
-					title="Edit title & description"
+					aria-label={`Edit display filename, title and description for ${attachmentDisplayName(attachment)}`}
+					title="Edit filename preview, title & description"
 					icon={<Pencil size={14} />}
 					size="sm"
 					variant="ghost"
@@ -97,6 +97,7 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 						}
 						setTitleDraft(attachment.title || '');
 						setDescriptionDraft(attachment.description || '');
+						setFilenamePreviewDraft(attachment.filenamePreview || '');
 						setIsOpen(true);
 					}}
 					{...triggerProps}
@@ -114,6 +115,19 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 				>
 					<PopoverBody padding={3}>
 						<Flex flexDirection="column" rowGap={2}>
+							<FormControl>
+								<FormLabel fontSize="11px" fontWeight={600} color={MUTED} marginBottom={1}>
+									Filename preview
+								</FormLabel>
+								<Input
+									size="sm"
+									borderRadius={RADIUS_SM}
+									placeholder={attachment.name}
+									maxLength={255}
+									value={filenamePreviewDraft}
+									onChange={(event) => setFilenamePreviewDraft(event.target.value)}
+								/>
+							</FormControl>
 							<FormControl>
 								<FormLabel fontSize="11px" fontWeight={600} color={MUTED} marginBottom={1}>
 									Title

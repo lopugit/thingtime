@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0%" y1="0%" x2="86%" y2="100%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.58" stop-color="#fefefe"/>
+      <stop offset="1" stop-color="#f8f8f8"/>
+    </linearGradient>
+    <linearGradient id="greenNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="#b7ef25"/>
+      <stop offset="0.48" stop-color="#98dc12"/>
+      <stop offset="1" stop-color="#79c900"/>
+    </linearGradient>
+    <linearGradient id="brownNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="#b96645"/>
+      <stop offset="0.52" stop-color="#9c5739"/>
+      <stop offset="1" stop-color="#7d3f2c"/>
+    </linearGradient>
+    <linearGradient id="hub" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="#ff68bb"/>
+      <stop offset="0.44" stop-color="#ff3f8f"/>
+      <stop offset="1" stop-color="#ef3854"/>
+    </linearGradient>
+    <linearGradient id="greenToHub" gradientUnits="userSpaceOnUse" x1="217" y1="512" x2="498" y2="512">
+      <stop offset="0" stop-color="#8fd50b"/>
+      <stop offset="0.42" stop-color="#a9d31b"/>
+      <stop offset="0.7" stop-color="#ee9b63"/>
+      <stop offset="1" stop-color="#ff477f"/>
+    </linearGradient>
+    <linearGradient id="hubToGreen" gradientUnits="userSpaceOnUse" x1="526" y1="512" x2="807" y2="512">
+      <stop offset="0" stop-color="#ff477f"/>
+      <stop offset="0.3" stop-color="#ee9b63"/>
+      <stop offset="0.58" stop-color="#a9d31b"/>
+      <stop offset="1" stop-color="#8fd50b"/>
+    </linearGradient>
+    <linearGradient id="greenToHubVertical" gradientUnits="userSpaceOnUse" x1="512" y1="217" x2="512" y2="498">
+      <stop offset="0" stop-color="#8fd50b"/>
+      <stop offset="0.42" stop-color="#a9d31b"/>
+      <stop offset="0.7" stop-color="#ee9b63"/>
+      <stop offset="1" stop-color="#ff477f"/>
+    </linearGradient>
+    <linearGradient id="hubToBrown" gradientUnits="userSpaceOnUse" x1="512" y1="526" x2="512" y2="807">
+      <stop offset="0" stop-color="#ff477f"/>
+      <stop offset="0.36" stop-color="#ed7664"/>
+      <stop offset="0.68" stop-color="#b85e42"/>
+      <stop offset="1" stop-color="#8b482f"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-24%" y="-22%" width="148%" height="154%">
+      <feGaussianBlur stdDeviation="17"/>
+    </filter>
+    <filter id="nodeShadow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="hubGlow" x="-130%" y="-130%" width="360%" height="360%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+  </defs>
+
+  <!-- The app consumes the pre-rendered PNG/ICNS; this SVG is the deterministic source. -->
+  <rect x="98" y="100" width="828" height="838" rx="190" fill="#8f8f8f" opacity="0.22" filter="url(#tileShadow)"/>
+  <rect x="94" y="82" width="836" height="844" rx="194" fill="url(#tile)" stroke="#dedede" stroke-width="1.5"/>
+  <path d="M288 95 H736 C834 95 913 174 913 272" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.72"/>
+
+  <!-- Connector shadows keep the thin joins legible without turning them into rails. -->
+  <path d="M217 512 H498 M526 512 H807 M512 217 V498 M512 526 V807" stroke="#7f7f7f" stroke-width="10" opacity="0.13" filter="url(#nodeShadow)"/>
+
+  <!-- Four colour-transition stems, kept behind all primary and relay squares. -->
+  <path d="M217 512 H498" stroke="url(#greenToHub)" stroke-width="7"/>
+  <path d="M526 512 H807" stroke="url(#hubToGreen)" stroke-width="7"/>
+  <path d="M512 217 V498" stroke="url(#greenToHubVertical)" stroke-width="7"/>
+  <path d="M512 526 V807" stroke="url(#hubToBrown)" stroke-width="7"/>
+
+  <!-- Tiny relay pixels make the mesh relationship visible while preserving the five-node silhouette. -->
+  <g stroke="#ffffff" stroke-width="4">
+    <rect x="286" y="501" width="22" height="22" fill="#a7d91a"/>
+    <rect x="394" y="504" width="16" height="16" fill="#f08069"/>
+    <rect x="614" y="504" width="16" height="16" fill="#ef8c65"/>
+    <rect x="730" y="501" width="22" height="22" fill="#a6d919"/>
+    <rect x="501" y="286" width="22" height="22" fill="#a4d919"/>
+    <rect x="504" y="394" width="16" height="16" fill="#ee8c68"/>
+    <rect x="504" y="614" width="16" height="16" fill="#ef7168"/>
+    <rect x="501" y="730" width="22" height="22" fill="#ad5b40"/>
+  </g>
+
+  <!-- Soft shadows and one-pixel highlights give the primary blocks native-app depth. -->
+  <g fill="#555555" opacity="0.18" filter="url(#nodeShadow)">
+    <rect x="479" y="148" width="72" height="72"/>
+    <rect x="148" y="479" width="72" height="72"/>
+    <rect x="810" y="479" width="72" height="72"/>
+    <rect x="479" y="810" width="72" height="72"/>
+  </g>
+  <rect x="476" y="145" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="145" y="476" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="807" y="476" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="476" y="807" width="72" height="72" fill="url(#brownNode)" stroke="#8d4932" stroke-width="2"/>
+  <path d="M482 151 H542 V157 H482 Z M151 482 H211 V488 H151 Z M813 482 H873 V488 H813 Z M482 813 H542 V819 H482 Z" fill="#ffffff" opacity="0.22"/>
+
+  <!-- Active center node. -->
+  <rect x="494" y="494" width="36" height="36" fill="#ff3f8f" opacity="0.16" filter="url(#hubGlow)"/>
+  <rect x="496" y="496" width="32" height="32" fill="#6d1636" opacity="0.2" filter="url(#nodeShadow)"/>
+  <rect x="498" y="498" width="28" height="28" fill="url(#hub)" stroke="#ffffff" stroke-width="3"/>
+  <path d="M502 502 H522 V505 H502 Z" fill="#ffffff" opacity="0.28"/>
+</svg>

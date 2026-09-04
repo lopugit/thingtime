@@ -4,8 +4,9 @@ import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { sharePost, viewerOf, withLinkKeys } from '~/api/utils/things/things';
 
-// POST /api/v1/things/share — { id, text?, visibility? } — repost a public
-// post (or one of your own) as a new share post.
+// POST /api/v1/things/share — { id, text?, tags?, visibility? } — repost a
+// public post (or one of your own) as a new share post. tags carry the quote
+// caption's harvested inline #hashtags; they merge with the original's tags.
 export const action = async ({ request }: { request: Request }) => {
   const auth = await resolveThingsActor(request, 'things.share');
   if (auth.ok === false) {
@@ -33,7 +34,7 @@ export const action = async ({ request }: { request: Request }) => {
   const result = await sharePost(
     withLinkKeys(viewerOf(user, auth.actor.pat), [typeof body?.key === 'string' ? body.key : '']),
     body.id,
-    { text: body.text, acl: body.acl, visibility: body.visibility }
+    { text: body.text, tags: body.tags, acl: body.acl, visibility: body.visibility }
   );
 
   if (result.ok === false) {

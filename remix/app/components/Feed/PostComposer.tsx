@@ -1,47 +1,63 @@
 import React from 'react';
 import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
-import { PictureInPicture2, X } from 'lucide-react';
+import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
-import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
-import { MediaLayoutCanvas, MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
+import {
+	MediaLayoutCanvas,
+	MediaLayoutFinalPreview,
+	MediaLayoutPicker,
+	SpanCycleButton,
+	type ComposerLayoutMode
+} from '~/components/Attachments/MediaLayoutControls';
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
 	canonicalPostTags,
 	matchesCommittedPostCreate,
+	MAX_POST_ATTACHMENTS,
 	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
-import { LongTextEditor } from '~/components/Editor/LongTextEditor';
+import { LongTextEditor, textToBlocks, type LongTextEditorHandle } from '~/components/Editor/LongTextEditor';
+import { blocksToText, isEditorJsDoc, type EditorJsDoc } from '~/components/Editor/editorJsValue';
+import { capturePostEditorValue } from '~/components/Editor/postEditorSubmission';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
-import { canonicalLinkedImageUrls, createLinkedImageItem, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
+import { isLegacyLinkedSeedId } from '~/components/Attachments/useAttachmentUploads';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
+import { extractInlineHashtags } from './hashtags';
+import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import { CustomAudienceModal } from './CustomAudienceModal';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
-// the viewer's avatar; expanded it grows type tabs (text/photos/marketplace/
-// thingtime), a block editor for the body (Editor.js — headings, lists,
-// quotes, checklists serialise to a plain string), image URL rows, listing
-// fields, tag chips and a circle picker. The thingtime tab mounts the real
-// things editor (an embedded single-window EditorSplit) over the "New Thing"
-// draft branch of the global thingtime store (localforage-persisted, so
-// half-built things survive reloads) — height-draggable, and poppable into a
-// floating, resizable, splittable editor window that stays live-synced with
-// the in-post one. Thingtime posts can toggle on the Photos and Marketplace
-// field groups too. Posts through api.v1.things.create and hands the
-// returned post to onPosted for prepending.
+// the viewer's avatar; expanded it grows type TOGGLES (Text is the always-on
+// base; Photos, Marketplace and Things each switch their field group on top
+// without deselecting the others), a block editor for the body (Editor.js —
+// headings, lists, quotes, checklists, inline marks, whitespace, and style
+// tunes), the
+// secure media uploader + linked image URLs (under the Photos toggle),
+// listing fields, tag chips and a circle picker. The stored crystal type is
+// DERIVED from the live toggles (things > marketplace > photos-with-visual-
+// media > text) so the server vocabulary is unchanged. The Things toggle
+// mounts the real things editor (an embedded single-window EditorSplit) over
+// the "New Thing" draft branch of the global thingtime store
+// (localforage-persisted, so half-built things survive reloads) —
+// height-draggable, and poppable into a floating, resizable, splittable
+// editor window that stays live-synced with the in-post one. Posts through
+// api.v1.things.create and hands the returned post to onPosted for
+// prepending; edits save through api.v1.things.update, where the media panel
+// stays live — new uploads ride the PATCH attachment sync into the existing
+// post.
 
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -98,11 +114,27 @@ const thingHasContent = (value: unknown): boolean => {
   return value !== undefined;
 };
 
-const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
+// The tabs cover the post types plus the Poll mode — a poll publishes as a
+// thingtime post whose thing is { kind: 'poll', question, options }, so it
+// rides the existing publish path and renders through the poll kind renderer
+// (with live vote bars once the server aggregates vote things onto it).
+type ComposeMode = PostType | 'poll';
+
+const COMPOSE_MODE_META: Record<ComposeMode, { label: string; emoji: string }> = {
+	...POST_TYPE_META,
+	poll: { label: 'Poll', emoji: '🗳️' }
+};
+
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 6;
+const MAX_POLL_OPTION_CHARS = 80;
+
+const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
   text: "What's on your mind? ✨",
   image: 'Say something about these photos… 🖼️',
   marketplace: 'Describe your listing… 🏪',
-  thingtime: 'Say something about this thing… 🌀 (optional)'
+  thingtime: 'Say something about this thing… 📦 (optional)',
+  poll: 'Ask your question… 🗳️'
 };
 
 export type PostComposerProps = {
@@ -132,6 +164,10 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const isComment = !!parentId;
   const isEdit = !!editPost;
+	// New uploads must mint the purpose their target's bound set carries: the
+	// PATCH attachment sync binds purpose 'comment' drafts when editing a rich
+	// comment (comments-are-posts), and purpose 'post' everywhere else.
+	const attachmentPurpose = isComment || (isEdit && (editPost?.thingtime || []).includes('comment')) ? 'comment' : 'post';
 
   const api = useApi();
 	const user = useCurrentUser();
@@ -139,12 +175,26 @@ export const PostComposer = (props: PostComposerProps) => {
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(isComment || isEdit);
-  const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
-  const [text, setText] = React.useState(editPost?.text || '');
-	// edit mode pre-fills the linked-image rows from the post's saved URLs
-	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>(() =>
-		(editPost?.images || []).map((url) => createLinkedImageItem(url))
-	);
+	// Post-type badges are additive TOGGLES, not exclusive tabs: Text is the
+	// always-on base and each toggle switches its field group on top. Edit mode
+	// seeds them from whatever the post already carries.
+	const [photosOn, setPhotosOn] = React.useState(
+		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
+  );
+  const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
+  const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
+  // Poll is the one EXCLUSIVE badge: a poll post's thing IS the poll, so it
+  // owns the thing slot the other groups build into. Compose-only — an
+  // existing poll edits through the Things badge, as its thing.
+  const [pollOn, setPollOn] = React.useState(false);
+  // poll mode: the main text box is the question; these are the option rows
+  const [pollOptions, setPollOptions] = React.useState<string[]>(['', '']);
+  const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
+    isEditorJsDoc(editPost?.richText)
+      ? editPost.richText
+      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
+  );
+  const text = blocksToText(postEditorValue.blocks);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
   const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
   const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
@@ -166,8 +216,8 @@ export const PostComposer = (props: PostComposerProps) => {
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
 	);
-	const [layoutPattern, setLayoutPattern] = React.useState(
-		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? editPost.mediaLayout.pattern.join('-') : '1-2'
+	const [layoutPattern, setLayoutPattern] = React.useState<number[]>(
+		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? [...editPost.mediaLayout.pattern] : [1, 2]
 	);
 	const [layoutColumns, setLayoutColumns] = React.useState(
 		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.columns ? editPost.mediaLayout.columns : 3
@@ -179,16 +229,15 @@ export const PostComposer = (props: PostComposerProps) => {
 	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
 
-  // thingtime-tab extras: toggleable photos/marketplace field groups, the
-  // in-post editor's draggable height, and its imperative API (the pop-out
-  // button duplicates the window into one of the editor's own floating frames)
-  const [thingPhotos, setThingPhotos] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.images?.length);
-  const [thingListing, setThingListing] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.listing);
   // the thing edits in a bottom-sheet modal (nested comment composers can't
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
+	// the Box around the body editor — MentionAutocomplete watches typing inside
+	// it and inserts `@username ` at the caret (posts and comments both)
+	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
+	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
 	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(null);
@@ -208,9 +257,10 @@ export const PostComposer = (props: PostComposerProps) => {
   // the seed effect's deps stay constant
   const editSeedRef = React.useRef(editPost?.thing || null);
 
-	// edit mode: the post's existing attachments, reorderable in place. Binding
-	// is create-only, so edits can only re-sequence — saving sends the ordered
-	// ids exactly when the order actually changed.
+	// edit mode: the post's existing attachments, reorderable in place. Saving
+	// sends the full desired id list (this ordered set plus any new uploads)
+	// whenever the order changed or new media joined — the PATCH attachment
+	// sync re-stamps order and binds the additions.
 	const editAttachmentsSeedRef = React.useRef<PublicAttachment[]>(
 		(editPost?.attachments || []).flatMap((attachment) => {
 			const normalized = normalizePublicAttachment(attachment);
@@ -218,14 +268,44 @@ export const PostComposer = (props: PostComposerProps) => {
 		})
 	);
 	const [editAttachments, setEditAttachments] = React.useState<PublicAttachment[]>(editAttachmentsSeedRef.current);
+	const removeExistingAttachment = React.useCallback(
+		(attachment: PublicAttachment) => {
+			const originalIndex = editAttachments.findIndex((entry) => entry.id === attachment.id);
+			const originalSpan = layoutSpans[attachment.id];
+			setEditAttachments((current) => current.filter((entry) => entry.id !== attachment.id));
+			setLayoutSpans(
+				(current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== attachment.id)) as Record<string, MediaLayoutSpan>
+			);
+			api.v1.attachments.remove({ id: attachment.id, targetId: editPost?.id }).catch((error: any) => {
+				setEditAttachments((current) => {
+					if (current.some((entry) => entry.id === attachment.id)) return current;
+					const restored = [...current];
+					restored.splice(Math.max(0, Math.min(originalIndex, restored.length)), 0, attachment);
+					return restored;
+				});
+				if (originalSpan) setLayoutSpans((current) => ({ ...current, [attachment.id]: originalSpan }));
+				lopu({ title: error?.error || `Could not delete ${attachment.filenamePreview || attachment.name} 😞`, status: 'error' });
+			});
+		},
+		[api, editAttachments, editPost?.id, layoutSpans, lopu]
+	);
+	const remainingSeedAttachments = editAttachmentsSeedRef.current.filter((seed) =>
+		editAttachments.some((attachment) => attachment.id === seed.id)
+	);
 	const editAttachmentOrderChanged =
 		isEdit &&
-		editAttachments.length === editAttachmentsSeedRef.current.length &&
-		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
+		editAttachments.length === remainingSeedAttachments.length &&
+		editAttachments.some((attachment, index) => attachment.id !== remainingSeedAttachments[index].id);
 
-	const parsedTags = canonicalPostTags(tagsInput.split(','));
+	// explicit comma-separated tags first, then #hashtags typed inline in the
+	// body (the literal #text stays in the post — PostCard linkifies it);
+	// canonicalPostTags dedupes the merge and enforces the 12-tag/40-char caps.
+	// Poll questions keep their hashtags too — the question renders on the card.
+	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
 
-	const validImages = canonicalLinkedImageUrls(linkedImages);
+	// poll mode: trimmed, bounded, non-empty option labels in row order
+	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
+
 
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
@@ -243,9 +323,9 @@ export const PostComposer = (props: PostComposerProps) => {
     };
   }, [events]);
 
-  // read the draft only when the tab is active (this render path runs per
-  // keystroke)
-  const draftThing = type === 'thingtime' ? getThingtime(draftPath) : null;
+  // read the draft only when the Things toggle is on (this render path runs
+  // per keystroke)
+  const draftThing = thingOn ? getThingtime(draftPath) : null;
   const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
 
   // Seed ONCE per mount, post-hydration: rewrite the tmp branch keeping any
@@ -256,7 +336,7 @@ export const PostComposer = (props: PostComposerProps) => {
   // action turned it into a non-object (string/boolean/…).
   const seededRef = React.useRef(false);
   React.useEffect(() => {
-    if (seededRef.current || thingtimeLoading || type !== 'thingtime' || !expanded) return;
+    if (seededRef.current || thingtimeLoading || !thingOn || !expanded) return;
     seededRef.current = true;
     const currentTmp = getThingtime(DRAFT_TMP_KEY);
     const preserved: Record<string, unknown> = {};
@@ -269,37 +349,51 @@ export const PostComposer = (props: PostComposerProps) => {
     // so the editor opens on a truly blank "Imagine.." slate instead of an
     // empty object rendering as {} chrome. Editing an existing thingtime post
     // seeds the draft with the post's thing as of mount (editSeedRef).
-    setThingtime(DRAFT_TMP_KEY, {
-      ...preserved,
-      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
-    });
-  }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
+    //
+    // tabLocal because this REPLACES the whole `tmp` branch and the pruning
+    // above cannot tell an abandoned persisted session from another tab's live
+    // one — every `s<hex>` key is dropped. Broadcast, that lands on a peer as
+    // "your composer session no longer exists" and destroys a post someone is
+    // part-way through typing there. Pruning stale sessions out of the
+    // persisted blob is this tab's own housekeeping; `preserved` only copies
+    // user-authored `tmp` keys through unchanged, so nothing a peer needs is
+    // withheld by keeping it off the wire.
+    setThingtime(
+      DRAFT_TMP_KEY,
+      {
+        ...preserved,
+        [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+      },
+      // Passing options replaces setThingtime's default object, so restate the
+      // namespace this write has always used rather than silently dropping it.
+      { namespace: 'default', tabLocal: true }
+    );
+    // `thingOn` (not `type`): this branch's guard above reads `thingOn`, and the
+    // derived `type` const is declared further down, so naming it here would be
+    // a TDZ ReferenceError during render.
+  }, [thingOn, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
-  // which optional field groups are in play (marketplace always has both;
-  // thingtime opts in per toggle)
-  const showPhotos = type === 'image' || type === 'marketplace' || (type === 'thingtime' && thingPhotos);
-  const showListing = type === 'marketplace' || (type === 'thingtime' && thingListing);
+  // which optional field groups are in play — exactly the live toggles
+  const showPhotos = photosOn;
+  const showListing = marketOn;
 
   const listingValid =
 		title.trim().length > 0 && price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) >= 0 && !!currency && !!category;
 
-	// edit mode has no upload snapshot — the post's existing bound attachments
-	// are the content (an attachment-only post must stay saveable while its
-	// media is being reordered)
-	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0 || (isEdit && editAttachments.length > 0);
-	const hasReadyVisualAttachment =
-		attachmentSnapshot.attachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video') ||
-		(isEdit && editAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'));
+	// every attachment going out with this post: in edit mode the existing
+	// bound set (reorderable) plus any NEW uploads from the live panel — an
+	// attachment-only post must stay saveable while its media is reordered
+	const composerAttachments = isEdit ? [...editAttachments, ...attachmentSnapshot.attachments] : attachmentSnapshot.attachments;
+	const hasReadyAttachment = composerAttachments.length > 0;
+	const hasReadyVisualAttachment = composerAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
 
 	// gallery-layout picker visibility + the tier-2 per-tile size badge (grid)
-	const visualLayoutCount = (isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
-		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-	).length;
+	const visualLayoutCount = composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video').length;
 	const layoutSpanBadge = React.useCallback(
 		(attachment: PublicAttachment) =>
 			attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? (
 				<SpanCycleButton
-					name={attachment.name}
+					name={attachment.filenamePreview || attachment.name}
 					span={layoutSpans[attachment.id] || 'normal'}
 					onChange={(next) => setLayoutSpans((current) => ({ ...current, [attachment.id]: next }))}
 				/>
@@ -307,30 +401,43 @@ export const PostComposer = (props: PostComposerProps) => {
 		[layoutSpans]
 	);
 
+	// The stored crystal type, derived from the live toggles. Photos alone
+	// counts only once visual media actually exists (uploaded OR linked) — a
+	// files-only or empty media panel stays a valid text post. Poll wins
+	// outright: it owns the thing slot, so its badge switches the others off.
+	const type: ComposeMode = pollOn
+		? 'poll'
+		: thingOn
+		? 'thingtime'
+		: marketOn
+		? 'marketplace'
+		: photosOn && hasReadyVisualAttachment
+		? 'image'
+		: 'text';
+
 	const contentValid =
     type === 'text'
 			? text.trim().length > 0 || hasReadyAttachment
       : type === 'image'
-			? validImages.length > 0 || hasReadyVisualAttachment
+			? hasReadyVisualAttachment
         : type === 'thingtime'
-          ? draftReady &&
-            Object.keys(draftThing).length > 0 &&
-            thingHasContent(draftThing) &&
-            (!thingListing || listingValid) &&
-			  // A toggled-on Photos group accepts either the existing URL flow
-			  // or a securely uploaded image/video attachment.
-			  (!thingPhotos || validImages.length > 0 || hasReadyVisualAttachment)
-          : listingValid;
+			? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing) && (!marketOn || listingValid)
+			: type === 'poll'
+				? text.trim().length > 0 && parsedPollOptions.length >= MIN_POLL_OPTIONS
+				: listingValid;
 	const valid = contentValid && !attachmentSnapshot.blocking;
 
   const reset = () => {
 		pendingPostSubmissionRef.current = null;
 		setSubmissionUncertain(false);
     setExpanded(isComment);
-    setType('text');
-    setText('');
+    setPhotosOn(false);
+    setMarketOn(false);
+    setThingOn(false);
+    setPollOn(false);
+    setPollOptions(['', '']);
+    setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
     setComposerSession((session) => session + 1);
-		setLinkedImages([]);
     setTitle('');
     setPrice('');
     setCurrency('AUD');
@@ -339,17 +446,34 @@ export const PostComposer = (props: PostComposerProps) => {
     setListingLocation('');
     setTagsInput('');
     setVisibility('public');
-    setThingPhotos(false);
-    setThingListing(false);
 		setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
   };
 
   const handlePost = async () => {
 		if (!valid || posting || attachmentSnapshot.blocking) return;
+		setPosting(true);
 		setThingModalOpen(false);
+		let submittedEditorValue = postEditorValue;
+		if (!pendingPostSubmissionRef.current) {
+			try {
+				submittedEditorValue = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
+				setPostEditorValue(submittedEditorValue);
+			} catch {
+				setPosting(false);
+				lopu({ title: 'Rich text is still saving — please try again ✍️', status: 'error' });
+				return;
+			}
+		}
 
 		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
+		// polls publish as thingtime posts; the question lives on the thing (the
+		// poll card renders it), so the post text stays empty — no double render
+		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
+		// the captured snapshot, not the last-rendered `text` — capture flushes
+		// keystrokes Editor.js had not committed yet
+		const submittedText = blocksToText(submittedEditorValue.blocks).trim();
+		const canonicalText = type === 'poll' ? '' : submittedText;
 		const canonicalListing = showListing
 			? {
 					title: title.trim().slice(0, 120),
@@ -361,11 +485,29 @@ export const PostComposer = (props: PostComposerProps) => {
 					sold: false
 			  }
 			: null;
-		const canonicalImages = showPhotos ? validImages : [];
-		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		// URL media is linked ATTACHMENTS now — new posts never write
+		// crystal.images, and saving an edit clears the legacy list (its URLs
+		// migrate into linked attachments via the seed mints below).
+		const canonicalImages: string[] = [];
+		// a poll's thing IS the poll: the question rides the thing (the poll
+		// kind renderer draws it above the live tally), which is why the post
+		// text stays empty for polls
+		const canonicalThing =
+			type === 'thingtime'
+				? draftThing
+				: type === 'poll'
+					? { kind: 'poll', question: submittedText, options: parsedPollOptions }
+					: null;
+		const canonicalRichText: EditorJsDoc | null = canonicalText
+			? { ...submittedEditorValue, kind: 'rich-text' }
+			: null;
+		if (!pendingPostSubmissionRef.current && type === 'text' && !canonicalText && !hasReadyAttachment) {
+			setPosting(false);
+			return;
+		}
 		// gallery layout: auto stores null; spans are pruned to the visual
 		// attachments actually going out with this post
-		const visualIdsForLayout = (isEdit ? editAttachments : attachmentSnapshot.attachments)
+		const visualIdsForLayout = composerAttachments
 			.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')
 			.map((attachment) => attachment.id);
 		const prunedSpans = Object.fromEntries(
@@ -375,7 +517,7 @@ export const PostComposer = (props: PostComposerProps) => {
 			visualIdsForLayout.length < 2 || layoutMode === 'auto'
 				? null
 				: layoutMode === 'rows'
-				? { mode: 'rows', pattern: parseLayoutPattern(layoutPattern) || [1, 2] }
+				? { mode: 'rows', pattern: layoutPattern }
 				: { mode: 'grid', columns: layoutColumns, ...(Object.keys(prunedSpans).length ? { spans: prunedSpans } : {}) };
 		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
 			(tag, index, all) => all.indexOf(tag) === index
@@ -386,8 +528,9 @@ export const PostComposer = (props: PostComposerProps) => {
 						shareId: currentPostShareId,
 						ownerId: user.id,
 						crystal: {
-							type,
-							text: text.trim(),
+							type: apiType,
+							text: canonicalText,
+							richText: canonicalRichText,
 							images: canonicalImages,
 							listing: canonicalListing,
 							thing: canonicalThing,
@@ -399,10 +542,11 @@ export const PostComposer = (props: PostComposerProps) => {
 				  }
 				: null;
 		const currentPayload: Record<string, unknown> = {
-        type,
-        text: text.trim(),
-        tags: parsedTags
-      };
+			type: apiType,
+			text: canonicalText,
+			richText: canonicalRichText,
+			tags: parsedTags
+		};
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
@@ -411,7 +555,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
-		if (type === 'thingtime') currentPayload.thing = canonicalThing;
+		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
 		if (showListing) currentPayload.listing = canonicalListing;
 		if (canonicalMediaLayout) currentPayload.mediaLayout = canonicalMediaLayout;
 
@@ -423,7 +567,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				payload: clonePostJson(currentPayload),
 				expectation: clonePostJson(currentCommittedExpectation),
 				attachmentIds: currentAttachmentIds,
-				postType: type,
+				postType: apiType,
 				unknownOutcome: false
         };
       }
@@ -435,10 +579,11 @@ export const PostComposer = (props: PostComposerProps) => {
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
 		const finishPost = (created: PublicPost) => {
-			if (!isEdit && attachmentIds.length > 0) {
-				// A successful or exactly reconciled post means the server atomically
-				// claimed these drafts. Mark them before reset unmounts the uploader.
-				// An edit saves through things.update, which claims no drafts.
+			if (attachmentIds.length > 0) {
+				// A successful or exactly reconciled save means the server claimed
+				// these drafts (create binds in the insert transaction; an edit binds
+				// through the PATCH attachment sync). Mark them before reset/close
+				// unmounts the uploader so cleanup never deletes now-bound media.
 				attachmentComposerRef.current?.markCommitted(attachmentIds);
 			}
       lopu({
@@ -449,24 +594,52 @@ export const PostComposer = (props: PostComposerProps) => {
       // the posted thing draft is spent — next thingtime tab starts fresh
       // (reset the whole session branch so the draft value is undefined again,
       // not an empty {} that would render as an object)
-			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
+      //
+      // tabLocal for the same reason the seed above is: `draftSessionId` is
+      // minted per mount, so this key names THIS composer's session and no peer
+      // has one. Broadcast, it lands in every other tab as a foreign `s<hex>`
+      // branch — inert, but persisted into that tab's next full-tree autosave
+      // and visible under `tt.tmp` in its tree editor until its own next
+      // composer mount happens to prune it. Local clear and persistence are
+      // unchanged; only the broadcast is suppressed. Passing options replaces
+      // setThingtime's default object, so restate the namespace this write has
+      // always used.
+			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {}, { namespace: 'default', tabLocal: true });
       // an edit keeps its pre-filled draft — the parent closes the composer
       if (!isEdit) reset();
 			onPosted(created);
 		};
 
-		setPosting(true);
 		try {
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
-				// fields that no longer apply. A changed attachment order rides along
-				// as the reordered id list (a pure permutation of the bound set).
+				// fields that no longer apply. Attachment changes ride along as the
+				// full desired id list — the reordered bound set plus the media
+				// panel's entries — which the PATCH attachment sync binds/orders.
+				// Legacy crystal.images URLs sat in the panel as LOCAL seed entries;
+				// mint them into real linked attachments now, in panel order (a
+				// failed PATCH afterwards just leaves 24h-TTL drafts behind).
+				const resolvedPanelIds = await Promise.all(
+					attachmentSnapshot.attachments.map(async (attachment) => {
+						if (!isLegacyLinkedSeedId(attachment.id)) return attachment.id;
+						if (!attachment.url) throw new Error('linked media url missing');
+						const minted = await api.v1.attachments.link({
+							url: attachment.url,
+							...(attachmentPurpose === 'comment' ? { purpose: 'comment' as const } : {})
+						});
+						const mintedId = typeof minted?.attachment?.id === 'string' ? minted.attachment.id : '';
+						if (!mintedId) throw new Error('linked media mint failed');
+						return mintedId;
+					})
+				);
+				const editAttachmentsChanged = resolvedPanelIds.length > 0 || editAttachmentOrderChanged;
 				const updated = await api.v1.things.update({
 					id: editPost!.id,
 					crystal: {
 						type,
-						text: text.trim(),
+						text: canonicalText,
+						richText: canonicalRichText,
 						images: canonicalImages,
 						listing: canonicalListing,
 						thing: canonicalThing,
@@ -475,7 +648,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					tags: parsedTags,
 					visibility,
 					...(visibility === 'custom' && customAcl ? { acl: customAcl } : {}),
-					...(editAttachmentOrderChanged ? { attachmentIds: editAttachments.map((attachment) => attachment.id) } : {})
+					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
 				});
 				finishPost(updated.post);
 			} else {
@@ -597,13 +770,87 @@ export const PostComposer = (props: PostComposerProps) => {
 				</Flex>
 			)}
 			<Box display="contents" {...((posting || submissionUncertain ? { inert: '' } : {}) as any)}>
-      {/* type tabs — wrap on narrow screens so labels never overlap */}
+      {/* type badges — additive toggles that wrap on narrow screens. Text is
+      the always-on base; Photos/Marketplace/Things each switch their field
+      group on without deselecting the others, and clicking Text switches
+      every extra group off again. Poll is the exception: its thing IS the
+      poll, so it is mutually exclusive with the other groups, and it is
+      compose-only — an existing poll edits through the Things badge. */}
       <Flex columnGap={1} rowGap={1} alignItems="center" flexWrap="wrap">
-        {(Object.keys(POST_TYPE_META) as PostType[]).map((key) => (
-						<Button key={key} size="xs" variant={type === key ? 'solid' : 'ghost'} borderRadius={RADIUS_SM} onClick={() => setType(key)}>
-            {POST_TYPE_META[key].emoji} {POST_TYPE_META[key].label}
-          </Button>
-        ))}
+					<Button
+						size="xs"
+						variant="solid"
+						borderRadius={RADIUS_SM}
+						title="Plain text post — switches the other groups off"
+						onClick={() => {
+							setPhotosOn(false);
+							setMarketOn(false);
+							setThingOn(false);
+							setPollOn(false);
+						}}
+					>
+						{POST_TYPE_META.text.emoji} {POST_TYPE_META.text.label}
+					</Button>
+					<Button
+						size="xs"
+						variant={photosOn ? 'solid' : 'ghost'}
+						borderRadius={RADIUS_SM}
+						aria-pressed={photosOn}
+						title="Add photos, videos and files to this post"
+						onClick={() => {
+							setPollOn(false);
+							setPhotosOn((on) => !on);
+						}}
+					>
+						{POST_TYPE_META.image.emoji} {POST_TYPE_META.image.label}
+					</Button>
+					<Button
+						size="xs"
+						variant={marketOn ? 'solid' : 'ghost'}
+						borderRadius={RADIUS_SM}
+						aria-pressed={marketOn}
+						title="Add marketplace listing fields to this post"
+						onClick={() => {
+							setPollOn(false);
+							setMarketOn((on) => !on);
+						}}
+					>
+						{POST_TYPE_META.marketplace.emoji} {POST_TYPE_META.marketplace.label}
+					</Button>
+					<Button
+						size="xs"
+						variant={thingOn ? 'solid' : 'ghost'}
+						borderRadius={RADIUS_SM}
+						aria-pressed={thingOn}
+						title="Build a structured thing into this post"
+						onClick={() => {
+							setPollOn(false);
+							setThingOn((on) => !on);
+						}}
+					>
+						{POST_TYPE_META.thingtime.emoji} {POST_TYPE_META.thingtime.label}
+					</Button>
+					{!isEdit && (
+						<Button
+							size="xs"
+							variant={pollOn ? 'solid' : 'ghost'}
+							borderRadius={RADIUS_SM}
+							aria-pressed={pollOn}
+							title="Ask a question with a poll — the poll is the post's thing"
+							onClick={() =>
+								setPollOn((on) => {
+									if (!on) {
+										setPhotosOn(false);
+										setMarketOn(false);
+										setThingOn(false);
+									}
+									return !on;
+								})
+							}
+						>
+							{COMPOSE_MODE_META.poll.emoji} {COMPOSE_MODE_META.poll.label}
+						</Button>
+					)}
         <IconButton
           aria-label="Close composer"
           icon={<X size={14} />}
@@ -625,43 +872,29 @@ export const PostComposer = (props: PostComposerProps) => {
 
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
-        <Box flex="1" minWidth={0}>
+        <Box flex="1" minWidth={0} ref={editorBoxRef}>
           <LongTextEditor
-            key={composerSession}
-            value={text}
-            onValueChange={(next) => setText(typeof next === 'string' ? next : '')}
+            ref={postTextEditorRef}
+            // Editor.js reads its placeholder once at init, so entering/leaving
+            // poll mode remounts the editor (the value prop reseeds it) — the
+            // question prompt must actually show for polls
+            key={`${composerSession}-${type === 'poll' ? 'poll' : 'post'}`}
+						value={postEditorValue}
+						onValueChange={(next) => {
+							if (isEditorJsDoc(next)) setPostEditorValue(next);
+						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
           />
+          <MentionAutocomplete containerRef={editorBoxRef} />
         </Box>
       </Flex>
 
-      {/* the thing itself — the real things editor over the draft branch */}
-      {type === 'thingtime' && (
+      {/* the thing itself — the real things editor over the draft branch
+      (photos and listing field groups toggle on via the type badges above) */}
+      {thingOn && (
         <Flex flexDirection="column" rowGap={2}>
-          <Flex alignItems="center" columnGap={1}>
-            <Eyebrow>Thing 🌀</Eyebrow>
-            <Flex marginLeft="auto" columnGap={1} alignItems="center">
-              <Button
-                size="xs"
-                variant={thingPhotos ? 'solid' : 'ghost'}
-                borderRadius={RADIUS_SM}
-                onClick={() => setThingPhotos((on) => !on)}
-                title="Add photos to this thing post"
-              >
-                {POST_TYPE_META.image.emoji} Photos
-              </Button>
-              <Button
-                size="xs"
-                variant={thingListing ? 'solid' : 'ghost'}
-                borderRadius={RADIUS_SM}
-                onClick={() => setThingListing((on) => !on)}
-                title="Add marketplace listing fields to this thing post"
-              >
-                {POST_TYPE_META.marketplace.emoji} Marketplace
-              </Button>
-            </Flex>
-          </Flex>
+          <Eyebrow>Thing 📦</Eyebrow>
 
           {/* tappable preview — the real editing happens in the bottom-sheet
           modal (nested comment composers can't host a full editor inline, and
@@ -721,7 +954,7 @@ export const PostComposer = (props: PostComposerProps) => {
               background="var(--tt-card, #ffffff)"
             >
 								<Flex alignItems="center" columnGap={2} paddingX={4} paddingY={3} borderBottom={BORDER} flexShrink={0}>
-                <Eyebrow>Thing 🌀</Eyebrow>
+                <Eyebrow>Thing 📦</Eyebrow>
                 <Flex marginLeft="auto" columnGap={1} alignItems="center">
                   <IconButton
                     aria-label="Pop the editor out"
@@ -748,16 +981,124 @@ export const PostComposer = (props: PostComposerProps) => {
         </Flex>
       )}
 
-      {/* photos */}
+      {/* poll options — the main text box above is the question */}
+      {type === 'poll' && (
+        <Flex flexDirection="column" rowGap={2}>
+          <Eyebrow>Options 🗳️</Eyebrow>
+          {pollOptions.map((option, idx) => (
+            <Flex key={idx} columnGap={2} alignItems="center">
+              <Input
+                size="sm"
+                borderRadius={RADIUS_SM}
+                placeholder={`Option ${idx + 1}`}
+                maxLength={MAX_POLL_OPTION_CHARS}
+                value={option}
+                onChange={(event) => {
+                  const next = [...pollOptions];
+                  next[idx] = event.target.value;
+                  setPollOptions(next);
+                }}
+              />
+              {pollOptions.length > MIN_POLL_OPTIONS && (
+                <IconButton
+                  aria-label={`Remove option ${idx + 1}`}
+                  icon={<X size={13} />}
+                  size="xs"
+                  variant="ghost"
+                  color={MUTED}
+                  borderRadius="8px"
+                  flexShrink={0}
+                  onClick={() => setPollOptions(pollOptions.filter((_entry, index) => index !== idx))}
+                />
+              )}
+            </Flex>
+          ))}
+          {pollOptions.length < MAX_POLL_OPTIONS && (
+            <Button
+              size="xs"
+              variant="ghost"
+              alignSelf="flex-start"
+              borderRadius={RADIUS_SM}
+              leftIcon={<Plus size={13} />}
+              onClick={() => setPollOptions([...pollOptions, ''])}
+            >
+              Add option
+            </Button>
+          )}
+          <Text fontSize="10px" color={MUTED}>
+            {MIN_POLL_OPTIONS}–{MAX_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
+          </Text>
+        </Flex>
+      )}
+
+      {/* photos + media — the whole media suite lives under the Photos
+      toggle: the post's existing bound media (edit mode, reorderable), the
+      secure uploader (live in edit mode too — new uploads bind through the
+      PATCH attachment sync), the gallery layout controls, and the linked
+      image URL adder BELOW the uploader grid (type a URL, hit Add, tile
+      lands in the grid, field clears for the next one). */}
       {showPhotos && (
         <Flex flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
-						<LinkedImageGallery
-							items={linkedImages}
-							onChange={setLinkedImages}
+
+					{user && (
+						<AttachmentComposer
+							ref={attachmentComposerRef}
+							key={`attachments-${user.id}-${composerSession}`}
+							ownerId={user.id}
 							disabled={posting || submissionUncertain}
-							helperText="One URL per line. Linked images stay on the original site and don't use your private file-storage quota."
-              />
+							purpose={attachmentPurpose}
+							ariaLabel={attachmentPurpose === 'comment' ? 'Comment attachments' : 'Post attachments'}
+							remainingBytes={user.storage.remainingBytes}
+							storageStatus={user.storage.status}
+							onChange={setAttachmentSnapshot}
+							allowLinkedUrls
+							// legacy URL-images seed as linked tiles, capped so bound
+							// attachments + seeds can never exceed the server's per-post
+							// limit (a pathological >25-media legacy post drops overflow
+							// URLs, matching the old composer's silent client-side filter)
+							initialLinkedSeeds={
+								isEdit ? (editPost?.images || []).slice(0, Math.max(0, MAX_POST_ATTACHMENTS - editAttachmentsSeedRef.current.length)) : undefined
+							}
+							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
+								existingAttachments={isEdit ? editAttachments : undefined}
+								onExistingChange={isEdit ? setEditAttachments : undefined}
+								onExistingRemove={isEdit ? removeExistingAttachment : undefined}
+						/>
+					)}
+
+					{/* gallery layout (crystal.mediaLayout) — meaningful from 2 visual
+					attachments; Auto keeps the masonry default (stored null) */}
+					{visualLayoutCount >= 2 && (
+						<MediaLayoutPicker
+							mode={layoutMode}
+							onMode={setLayoutMode}
+							pattern={layoutPattern}
+							onPattern={setLayoutPattern}
+							columns={layoutColumns}
+							onColumns={setLayoutColumns}
+							imageCount={visualLayoutCount}
+						/>
+					)}
+
+					{/* tier 3: the grid canvas — live preview with drag-resize handles */}
+					{visualLayoutCount >= 2 && layoutMode === 'grid' && (
+						<MediaLayoutCanvas
+								attachments={composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')}
+							columns={layoutColumns}
+							onColumns={setLayoutColumns}
+							spans={layoutSpans}
+							onSpanChange={(id, span) => setLayoutSpans((current) => ({ ...current, [id]: span }))}
+							disabled={posting || submissionUncertain}
+						/>
+					)}
+						{visualLayoutCount >= 2 && layoutMode !== 'grid' && (
+							<MediaLayoutFinalPreview
+								attachments={composerAttachments.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')}
+								mode={layoutMode}
+								pattern={layoutPattern}
+							/>
+						)}
             </Flex>
       )}
 
@@ -825,62 +1166,6 @@ export const PostComposer = (props: PostComposerProps) => {
           />
         </Flex>
       )}
-
-				{user && !isEdit && (
-					<AttachmentComposer
-						ref={attachmentComposerRef}
-						key={`attachments-${user.id}-${composerSession}`}
-						ownerId={user.id}
-						disabled={posting || submissionUncertain}
-						purpose={isComment ? 'comment' : 'post'}
-						ariaLabel={isComment ? 'Comment attachments' : 'Post attachments'}
-						remainingBytes={user.storage.remainingBytes}
-						storageStatus={user.storage.status}
-						onChange={setAttachmentSnapshot}
-						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
-					/>
-				)}
-
-				{/* gallery layout (crystal.mediaLayout) — meaningful from 2 visual
-				attachments; Auto keeps the masonry default (stored null) */}
-				{visualLayoutCount >= 2 && (
-					<MediaLayoutPicker
-						mode={layoutMode}
-						onMode={setLayoutMode}
-						pattern={layoutPattern}
-						onPattern={setLayoutPattern}
-						columns={layoutColumns}
-						onColumns={setLayoutColumns}
-						imageCount={visualLayoutCount}
-					/>
-				)}
-
-				{/* tier 3: the grid canvas — live preview with drag-resize handles */}
-				{visualLayoutCount >= 2 && layoutMode === 'grid' && (
-					<MediaLayoutCanvas
-						attachments={(isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
-							(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-						)}
-						columns={layoutColumns}
-						onColumns={setLayoutColumns}
-						spans={layoutSpans}
-						onSpanChange={(id, span) => setLayoutSpans((current) => ({ ...current, [id]: span }))}
-						disabled={posting || submissionUncertain}
-					/>
-				)}
-
-				{/* edit mode: attachments bound at create time can only be
-				re-sequenced — the upload panel (which could never save its files
-				into an existing post) is replaced by the reorderable gallery */}
-				{isEdit && editAttachments.length > 0 && (
-					<AttachmentReorderGallery
-						attachments={editAttachments}
-						onChange={setEditAttachments}
-						disabled={posting || submissionUncertain}
-						ariaLabel="Reorder this post's attachments"
-						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
-					/>
-				)}
 
       {/* tags */}
       <Flex flexDirection="column" rowGap={2}>

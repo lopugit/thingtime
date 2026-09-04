@@ -35,9 +35,15 @@ export const isSafeCssText = (value: unknown): boolean => {
 export const isEventHandlerProp = (key: string): boolean => /^on/i.test(key);
 
 // External links must drop the opener (reverse-tabnabbing): mutates the given
-// already-sanitized props object in place when target === '_blank'.
+// already-sanitized props object in place for any non-self target. Browsers
+// match target names case-insensitively ("_BLANK" still opens a new window),
+// and any NAMED target window also receives an opener, so everything except
+// the same-tab targets gets the rel.
 export const applyNoOpener = (props: Record<string, unknown>): void => {
-	if (props.target === '_blank') props.rel = 'noopener noreferrer';
+	if (typeof props.target !== 'string') return;
+	const target = props.target.toLowerCase();
+	if (target === '_self' || target === '_top' || target === '_parent' || target === '') return;
+	props.rel = 'noopener noreferrer';
 };
 
 // CSS `url("…")` value for backgroundImage, or undefined. Scheme-checked like

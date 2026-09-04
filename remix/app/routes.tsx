@@ -8,18 +8,22 @@ import type { RootLoaderData } from './root-data.server';
 // catch-all tree viewer. These are either the first paint or one click from
 // it, so a separate chunk fetch would cost more than it saves.
 import Authorize from './routes/authorize';
+import Explore from './routes/explore';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
 import MediaPage from './routes/media';
 import PostPage from './routes/post';
+import DeploymentPeersRoute from './routes/peers';
 import Profile from './routes/profile';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
+import SavedRoute from './routes/saved';
 import ThingtimeUrl from './routes/$';
 import ThingPage from './routes/thing';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
+import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 
 // Everything else is code-split. Statically importing every route put the
@@ -31,8 +35,13 @@ import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 // module, so a screen costs one chunk fetch on first visit and nothing after.
 // Routes that declare a `loader` here keep it static — the loader fetch and
 // the chunk fetch then overlap instead of queueing.
+// Chunk fetches fail with "Failed to fetch dynamically imported module" when
+// a redeploy replaced the hashed assets an already-open tab's HTML points at.
+// One hard reload fetches the fresh HTML + chunk graph; a session guard
+// (cleared after 10 healthy seconds in entry.client) prevents reload loops
+// when the network itself is down.
 const lazyRoute = (load: () => Promise<{ default: ComponentType<any> }>) => async () => ({
-  Component: (await load()).default
+  Component: (await load().catch(recoverStaleChunk)).default
 });
 
 // Rendered while the router resolves the initial navigation — the root
@@ -50,6 +59,11 @@ const HydrateFallback = () => (
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
     ...init,
+    // Account/root responses are explicitly current-state reads. Electron's
+    // loopback origin can reuse a prior ephemeral port after relaunch, so a
+    // browser cache entry from a different endpoint must never determine the
+    // active account, branch label, or device pairing surface.
+    cache: init.cache || 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -125,18 +139,27 @@ export const router = createBrowserRouter([
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
       { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },
+      { path: 'admin/:section', lazy: lazyRoute(() => import('./routes/admin')) },
       // browse everything each connected app stores for you — no guard: it
       // renders its own signed-out quiet state, like /settings
       { path: 'apps', lazy: lazyRoute(() => import('./routes/apps')) },
       { path: 'apps/manage', lazy: lazyRoute(() => import('./routes/apps-manage')) },
       { path: 'branding', lazy: lazyRoute(() => import('./routes/branding/_index')) },
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
+      // the block-based site builder — create webpages from component things;
+      // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // published block-based webpages (reserved prefix — outranks the * catch-all)
+      { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      // the storybook-style design-system docs own the canonical short URL too
+      { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',
         lazy: lazyRoute(() => import('./routes/docs/DocsLayout')),
         children: [
           { index: true, lazy: lazyRoute(() => import('./routes/docs/index')) },
+          { path: 'mcp', lazy: lazyRoute(() => import('./routes/docs/mcp')) },
           { path: 'embed', lazy: lazyRoute(() => import('./routes/docs/embed')) },
           { path: 'api', lazy: lazyRoute(() => import('./routes/docs/api')) },
           { path: 'api/:group', lazy: lazyRoute(() => import('./routes/docs/api')) },
@@ -147,20 +170,23 @@ export const router = createBrowserRouter([
           { path: 'schemas', lazy: lazyRoute(() => import('./routes/docs/schemas')) }
         ]
       },
+      // public trending board — guest-visible like /feed
+      { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
       { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
-      {
-        path: 'mongodb-status',
-        lazy: lazyRoute(() => import('./routes/mongodb-status')),
-        loader: () => fetchJson('/api/v1/mongodb/status-data')
-      },
+      // mongodb-status renders from its native-section registry list; the
+      // sections' shared hook fetches — no navigation-blocking loader
+      { path: 'mongodb-status', lazy: lazyRoute(() => import('./routes/mongodb-status')) },
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// Developer-only, admin-gated deployment mesh diagnostics. The page
+			// itself renders the same shareable quiet gate as /admin.
+			{ path: 'peers', element: <DeploymentPeersRoute /> },
 			// every attachment is a Thing — its own page with comments/reactions
 			// (post lightbox + file rows deeplink here)
 			{ path: 'media/:id', element: <MediaPage /> },
@@ -176,15 +202,28 @@ export const router = createBrowserRouter([
       // (the emailed token/link is the credential, not the session)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
+      // the viewer's Saved library — no loader guard: it renders its own
+      // signed-out quiet state, like /apps
+      { path: 'saved', element: <SavedRoute /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
-      { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
+      // Actions: declarative capability-bounded programs — browse + the
+      // per-action inspector (inputs, effects, limits, run panel, history)
+      { path: 'actions', lazy: lazyRoute(() => import('./routes/actions')) },
+      { path: 'actions/:key', lazy: lazyRoute(() => import('./routes/action-detail')) },
+      // UI component library: /schemas' UI-first sibling; every component
+      // family gets its own deep-linked page + /docs twin
+      { path: 'components', lazy: lazyRoute(() => import('./routes/components')) },
+      { path: 'components/:key', lazy: lazyRoute(() => import('./routes/component-detail')) },
       {
-        path: 'status',
-        lazy: lazyRoute(() => import('./routes/status')),
-        loader: () => fetchJson('/api/v1/vercel/status')
+        path: 'components/:key/docs',
+        lazy: async () => ({ Component: (await import('./routes/component-detail')).ComponentDetailDocs })
       },
+      { path: 'search', lazy: lazyRoute(() => import('./routes/search')) },
+      // status renders from its native-section registry list; the sections'
+      // shared hook fetches — no navigation-blocking loader
+      { path: 'status', lazy: lazyRoute(() => import('./routes/status')) },
       {
         path: 'vercel',
         lazy: lazyRoute(() => import('./routes/vercel')),
@@ -193,6 +232,7 @@ export const router = createBrowserRouter([
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
+      { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },

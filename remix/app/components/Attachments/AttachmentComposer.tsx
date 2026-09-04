@@ -1,14 +1,26 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Progress, Text } from '@chakra-ui/react';
-import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
+import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
+import {
+	CheckCircle2,
+	File as FileIcon,
+	GripVertical,
+	Image as ImageIcon,
+	Link2,
+	RotateCcw,
+	Trash2,
+	UploadCloud,
+	Video as VideoIcon
+} from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
+import { AttachmentReorderGallery } from './AttachmentReorderGallery';
 import { nudgeTargetId, useMediaReorder, type MediaReorderNudge, type MediaReorderTileProps } from '~/components/Media/useMediaReorder';
 import {
 	attachmentUploadScopeForPurpose,
+	attachmentDisplayName,
 	formatAttachmentBytes,
 	localFileMediaKind,
 	MAX_POST_ATTACHMENTS,
@@ -33,10 +45,22 @@ export type AttachmentComposerProps = {
 	allowedContentTypes?: readonly string[];
 	ariaLabel?: string;
 	helperText?: string;
+	// show the add-by-URL row below the grid: each valid URL mints a linked
+	// attachment straight into this panel (image tile or file row, duplicates
+	// allowed). Available even while uploads await approval — linked media
+	// consumes no Thingtime storage.
+	allowLinkedUrls?: boolean;
+	// edit mode: the post's legacy crystal.images URLs, shown as linked tiles
+	// in this panel; the composer mints them into real linked attachments when
+	// the edit saves
+	initialLinkedSeeds?: readonly string[];
 	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
 	// on READY visual tiles only, bottom-left (grip top-left, X top-right,
 	// pencil bottom-right)
 	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
+	existingAttachments?: PublicAttachment[];
+	onExistingChange?: (attachments: PublicAttachment[]) => void;
+	onExistingRemove?: (attachment: PublicAttachment) => void;
 };
 
 export type AttachmentComposerHandle = {
@@ -45,12 +69,21 @@ export type AttachmentComposerHandle = {
 
 const statusLabel = (upload: ComposerAttachmentUpload) => {
 	if (upload.status === 'queued') return 'Waiting…';
-	if (upload.status === 'preparing') return 'Preparing secure upload…';
+	if (upload.status === 'preparing') return upload.linked ? 'Linking…' : 'Preparing secure upload…';
 	if (upload.status === 'uploading') return `Uploading · ${upload.progress}%`;
 	if (upload.status === 'finalizing') return 'Verifying upload…';
 	if (upload.status === 'ready') return 'Ready';
-	return upload.error || 'Upload failed.';
+	return upload.error || (upload.linked ? 'Link failed.' : 'Upload failed.');
 };
+
+// Linked entries carry an empty synthetic File — bytes/kind live on the
+// attachment (or, mid-mint, on the optimistic preview); uploads keep the
+// original file.type bucketing.
+const uploadMediaKind = (upload: ComposerAttachmentUpload) =>
+	upload.linked ? upload.attachment?.mediaKind ?? (upload.previewUrl ? 'image' : 'file') : localFileMediaKind(upload.file);
+
+const uploadSizeLabel = (upload: ComposerAttachmentUpload) => (upload.linked ? 'Linked' : formatAttachmentBytes(upload.file.size));
+const uploadDisplayName = (upload: ComposerAttachmentUpload) => (upload.attachment ? attachmentDisplayName(upload.attachment) : upload.file.name);
 
 const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' | undefined => {
 	if (upload.status === 'error') return 'alert';
@@ -59,9 +92,19 @@ const uploadStatusRole = (upload: ComposerAttachmentUpload): 'alert' | 'status' 
 };
 
 const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) => {
-	const kind = localFileMediaKind(upload.file);
+	const kind = uploadMediaKind(upload);
 	if (kind === 'image' && upload.previewUrl) {
-		return <Image src={upload.previewUrl} alt="" width="100%" height="100%" objectFit="cover" background="var(--tt-surface-alt, #f5f5f7)" />;
+		return (
+			<Image
+				src={upload.previewUrl}
+				alt=""
+				width="100%"
+				height="100%"
+				objectFit="cover"
+				background="var(--tt-surface-alt, #f5f5f7)"
+				{...(upload.linked ? { referrerPolicy: 'no-referrer' as const, loading: 'lazy' as const } : {})}
+			/>
+		);
 	}
 	if (kind === 'video' && upload.previewUrl) {
 		return (
@@ -103,21 +146,36 @@ const uploadGripLabel = (name: string, position?: number, count?: number) =>
 	`Reorder ${name} — position ${position} of ${count}. Drag, or use arrow keys to move.`;
 
 const UploadVisualTile = React.memo(
-	(props: {
+	(
+		props: {
 		upload: ComposerAttachmentUpload;
 		disabled?: boolean;
 		onRetry: (localId: string) => void;
 		onRemove: (localId: string) => void;
 		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
 		tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
-	} & UploadReorderProps) => {
-		const { upload, disabled, onRetry, onRemove, onAnnotated, tileExtras, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
-			props;
+		} & UploadReorderProps
+	) => {
+		const {
+			upload,
+			disabled,
+			onRetry,
+			onRemove,
+			onAnnotated,
+			tileExtras,
+			reorderGroup,
+			reorderPosition,
+			reorderCount,
+			dragging,
+			dropTarget,
+			gripProps,
+			tileProps
+		} = props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
 		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
 			<MediaGalleryTile
-				ariaLabel={upload.file.name}
+				ariaLabel={uploadDisplayName(upload)}
 				invalid={upload.status === 'error'}
 				dragging={dragging}
 				dropTarget={dropTarget}
@@ -166,8 +224,8 @@ const UploadVisualTile = React.memo(
 							</Box>
 						) : null}
 						<IconButton
-							aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
-							icon={<X size={14} />}
+							aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Delete ${uploadDisplayName(upload)}`}
+							icon={<Trash2 size={14} />}
 							size="sm"
 							minWidth="44px"
 							height="44px"
@@ -184,8 +242,8 @@ const UploadVisualTile = React.memo(
 					</>
 				}
 			>
-				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
-					{upload.file.name}
+				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={uploadDisplayName(upload)}>
+					{uploadDisplayName(upload)}
 				</Text>
 				<Flex alignItems="flex-start" columnGap={1.5} minWidth={0} paddingTop={0.5}>
 					{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
@@ -195,7 +253,7 @@ const UploadVisualTile = React.memo(
 						role={uploadStatusRole(upload)}
 						whiteSpace="normal"
 					>
-						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+						{uploadSizeLabel(upload)} · {statusLabel(upload)}
 					</Text>
 				</Flex>
 				{busy ? (
@@ -231,15 +289,29 @@ const UploadVisualTile = React.memo(
 UploadVisualTile.displayName = 'UploadVisualTile';
 
 const UploadFileRow = React.memo(
-	(props: {
+	(
+		props: {
 		upload: ComposerAttachmentUpload;
 		disabled?: boolean;
 		onRetry: (localId: string) => void;
 		onRemove: (localId: string) => void;
 		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
-	} & UploadReorderProps) => {
-		const { upload, disabled, onRetry, onRemove, onAnnotated, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
-			props;
+		} & UploadReorderProps
+	) => {
+		const {
+			upload,
+			disabled,
+			onRetry,
+			onRemove,
+			onAnnotated,
+			reorderGroup,
+			reorderPosition,
+			reorderCount,
+			dragging,
+			dropTarget,
+			gripProps,
+			tileProps
+		} = props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
 		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
@@ -284,14 +356,14 @@ const UploadFileRow = React.memo(
 						<FileIcon size={20} aria-hidden />
 					</Flex>
 					<Box flex="1" minWidth={0}>
-						<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
-							{upload.file.name}
+						<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={uploadDisplayName(upload)}>
+							{uploadDisplayName(upload)}
 						</Text>
 						{upload.status !== 'error' ? (
 							<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
 								{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
 								<Text fontSize="11px" color={MUTED} role={uploadStatusRole(upload)} whiteSpace="normal">
-									{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+									{uploadSizeLabel(upload)} · {statusLabel(upload)}
 								</Text>
 							</Flex>
 						) : null}
@@ -328,8 +400,8 @@ const UploadFileRow = React.memo(
 						/>
 					) : null}
 					<IconButton
-						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
-						icon={<X size={14} />}
+						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Delete ${upload.file.name}`}
+						icon={<Trash2 size={14} />}
 						size="sm"
 						minWidth="44px"
 						height="44px"
@@ -342,7 +414,7 @@ const UploadFileRow = React.memo(
 				</Flex>
 				{upload.status === 'error' ? (
 					<Text fontSize="11px" lineHeight="1.5" color="var(--tt-danger, #e5484d)" role="alert" marginTop={2} whiteSpace="normal">
-						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+						{uploadSizeLabel(upload)} · {statusLabel(upload)}
 					</Text>
 				) : null}
 			</Box>
@@ -366,17 +438,18 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		allowedContentTypes,
 		ariaLabel = 'Post attachments',
 		helperText,
-		tileExtras
+		allowLinkedUrls = false,
+		initialLinkedSeeds,
+		tileExtras,
+		existingAttachments = [],
+		onExistingChange,
+		onExistingRemove
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
 	const currentUser = useCurrentUser();
 	const uploadScope = attachmentUploadScopeForPurpose(purpose);
-	const scopeEnabled = currentUser
-		? uploadScope === 'private'
-			? currentUser.privateUploadsEnabled
-			: currentUser.publicUploadsEnabled
-		: undefined;
+	const scopeEnabled = currentUser ? (uploadScope === 'private' ? currentUser.privateUploadsEnabled : currentUser.publicUploadsEnabled) : undefined;
 	const uploadsNotGranted = scopeEnabled === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -393,23 +466,36 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles, addLinkedUrl, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
 		disabled === true,
 		onCleanupDeferred,
-		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus }
+		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus, initialLinkedSeeds }
 	);
+	// the add-by-URL field below the grid — clears after each accepted Add so
+	// the next link goes straight in
+	const [linkUrl, setLinkUrl] = React.useState('');
+	const submitLinkedUrl = React.useCallback(() => {
+		const value = linkUrl.trim();
+		if (!value) return;
+		if (addLinkedUrl(value)) setLinkUrl('');
+	}, [addLinkedUrl, linkUrl]);
 	// Revocation stops new starts without hiding cleanup/retry controls for a
 	// draft already in progress. Server lifecycle routes remain independently
 	// usable after a scope is withheld.
-	const pickerDisabled = disabled || uploadsNotGranted || uploads.length >= boundedMaxFiles;
+	const totalCount = existingAttachments.length + uploads.length;
+	const pickerDisabled = disabled || uploadsNotGranted || totalCount >= boundedMaxFiles;
+	// linked mints stay available while uploads await approval — they consume
+	// no Thingtime object storage
+	const linkAddDisabled = disabled || totalCount >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
-		if (localFileMediaKind(upload.file) === 'file') fileUploads.push(upload);
-		else visualUploads.push(upload);
+		const kind = uploadMediaKind(upload);
+		if (kind === 'image' || kind === 'video') visualUploads.push(upload);
+		else fileUploads.push(upload);
 	}
 
 	// Reordering moves within a section (media grid or file list) — matching
@@ -449,7 +535,9 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		[addFiles]
 	);
 
-	if (uploadsNotGranted && uploads.length === 0) {
+	// With the URL adder available, the panel stays useful before upload
+	// approval — file picking is disabled with the note, linked media works.
+	if (uploadsNotGranted && uploads.length === 0 && !allowLinkedUrls) {
 		return (
 			<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
@@ -457,8 +545,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				</Text>
 				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
 					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
-						🔐 {uploadScope === 'private' ? 'Private' : 'Public'} media uploads need admin approval during the beta. After email
-						verification, an admin is notified; uploads unlock as soon as this scope is approved.
+						🔐 {uploadScope === 'private' ? 'Private' : 'Public'} media uploads need admin approval during the beta. After email verification, an
+						admin is notified; uploads unlock as soon as this scope is approved.
 					</Text>
 				</Box>
 			</Flex>
@@ -479,7 +567,11 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			{uploadsNotGranted ? (
 				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
 					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
-						🔐 This upload scope was withheld. New files are disabled; you can still finish, retry, or remove the current draft safely.
+						{uploads.some((upload) => !upload.linked)
+							? '🔐 This upload scope was withheld. New files are disabled; you can still finish, retry, or remove the current draft safely.'
+							: `🔐 ${
+									uploadScope === 'private' ? 'Private' : 'Public'
+							  } media uploads need admin approval during the beta — an admin is notified after email verification. Linked media by URL works right away.`}
 					</Text>
 				</Box>
 			) : null}
@@ -532,10 +624,24 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 										boundedMaxFiles === 1 ? 'it' : 'them'
 								  } anywhere in this panel`
 								: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`
-						}${uploads.length > 1 ? ' · drag the ⠿ handle to set the order' : ''}`}
+						}${totalCount > 1 ? ' · drag the ⠿ handle to set the order' : ''}`}
 				</Text>
 
-				{visualUploads.length > 0 || uploads.length < boundedMaxFiles ? (
+				{existingAttachments.length > 0 && onExistingChange ? (
+					<Box paddingBottom={uploads.length > 0 || totalCount < boundedMaxFiles ? 2 : 0}>
+						<AttachmentReorderGallery
+							attachments={existingAttachments}
+							onChange={onExistingChange}
+							onRemove={onExistingRemove}
+							disabled={disabled}
+							embedded
+							tileExtras={tileExtras}
+							ariaLabel="Existing media and files"
+						/>
+					</Box>
+				) : null}
+
+				{visualUploads.length > 0 || totalCount < boundedMaxFiles ? (
 					<MediaGalleryGrid ariaLabel="Selected media uploads">
 						{visualUploads.map((upload, index) => (
 							<UploadVisualTile
@@ -555,7 +661,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								tileProps={tileProps}
 							/>
 						))}
-						{uploads.length < boundedMaxFiles ? (
+						{totalCount < boundedMaxFiles ? (
 							<MediaAddTile ariaLabel="Add media files" disabled={pickerDisabled} onClick={() => inputRef.current?.click()}>
 								<Flex flexDirection="column" alignItems="center" rowGap={2}>
 									<UploadCloud size={22} aria-hidden />
@@ -585,6 +691,43 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								tileProps={tileProps}
 							/>
 						))}
+					</Flex>
+				) : null}
+
+				{allowLinkedUrls ? (
+					<Flex flexDirection="column" rowGap={1} paddingTop={2}>
+						<Flex columnGap={2} alignItems="center">
+							<Input
+								size="sm"
+								value={linkUrl}
+								placeholder="https://example.com/photo.jpg"
+								aria-label="Add media by URL"
+								borderRadius="var(--tt-radius-sm, 9px)"
+								background="var(--tt-card, #ffffff)"
+								isDisabled={linkAddDisabled}
+								onChange={(event) => setLinkUrl(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key !== 'Enter') return;
+									event.preventDefault();
+									submitLinkedUrl();
+								}}
+							/>
+							<Button
+								type="button"
+								size="sm"
+								minHeight="44px"
+								flexShrink={0}
+								borderRadius="var(--tt-radius-md, 12px)"
+								leftIcon={<Link2 size={14} />}
+								isDisabled={linkAddDisabled || !linkUrl.trim()}
+								onClick={submitLinkedUrl}
+							>
+								Add
+							</Button>
+						</Flex>
+						<Text fontSize="11px" color={MUTED} whiteSpace="normal">
+							Linked media stays on the original site and doesn&apos;t use your file-storage quota. Same URL twice adds it twice.
+						</Text>
 					</Flex>
 				) : null}
 			</Box>

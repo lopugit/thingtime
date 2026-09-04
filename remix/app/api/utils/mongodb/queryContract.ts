@@ -9,7 +9,10 @@ export const MONGO_QUERY_COLLECTIONS = [
   'feedAlgorithms',
   'lopuMusingRateLimits',
   'settings',
-  'rateLimits'
+  'rateLimits',
+  // CI control-plane satellite (ci-* Things + ci-event history) — see
+  // FUNDAMENTALS §3; queryable so admins can inspect retention/TTL behaviour
+  'ciControl'
 ] as const;
 
 export type MongoQueryCollection = (typeof MONGO_QUERY_COLLECTIONS)[number];

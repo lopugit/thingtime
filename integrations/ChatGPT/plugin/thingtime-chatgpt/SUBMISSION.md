@@ -38,7 +38,8 @@ bundled Thingtime streamable-HTTP server in **Settings → MCP servers**. Codex
 uses a callback-specific ChatGPT Client ID Metadata Document and a bounded
 `127.0.0.1` loopback callback. Confirm the authorization page accepts the
 matching callback, shows the encrypted multi-account form, and that Codex
-discovers all thirteen tools before entering a least-privilege reviewer PAT.
+discovers all 32 tools, five prompts, resource templates, and the embedded UI
+before entering a least-privilege reviewer PAT.
 This validates the shared local Codex-host configuration; it does not enable
 custom MCP apps in ChatGPT iOS chats.
 
@@ -60,11 +61,14 @@ custom MCP apps in ChatGPT iOS chats.
 
 ## MCP metadata justification
 
-All thirteen tools require the `thingtime` OAuth bridge scope and are scoped to
+All 32 tools require the `thingtime` OAuth bridge scope and are scoped to
 one selected Thingtime connection. The server does not proxy arbitrary URLs.
 
-- **Read-only:** account listing, profile lookup, list, and search only
-  retrieve data.
+- **Read-only:** login/status, account listing, profile lookup, exact single/batch reads,
+  targeted comments, browse/search, schemas, validation, relationships,
+  changes, history, and undo preview only retrieve or calculate data.
+  Exact retrieval and targeted comment listing also advertise
+  `idempotentHint: true`.
 - **Private mutable:** selecting a default account and saving a Thing change
   only the connected account or its private library; neither is irreversible
   or open-world.
@@ -76,6 +80,11 @@ one selected Thingtime connection. The server does not proxy arbitrary URLs.
   can affect public Thingtime content, so they advertise `openWorldHint: true`.
   Every write-tool description tells ChatGPT to obtain the user's confirmation
   first.
+- **Composed writes:** preview is read-only; apply is destructive and consumes
+  only an unexpired signed plan plus an explicit `confirmed: true`. Capability workflows compile into the same
+  registered grammar and remain awaiting confirmation until that exact receipt
+  is applied. The UI cannot enable Apply until the reviewer checks its explicit
+  confirmation control.
 
 ## Reviewer test cases
 
@@ -85,13 +94,27 @@ Positive cases:
    endpoint origins, and opaque account IDs return from `list_thingtime_accounts`.
 2. Select the second account and verify future reads use it without exposing a
    PAT.
-3. Search a known Thing and verify the selected account is returned with a
-   minimal, relevant result.
-4. Create a private draft after explicit confirmation, then update it after a
+3. Call `get_thingtime_thing` with a known ID and verify the exact object is
+   returned without pagination; retry a missing ID and expect
+   `thing_not_found`.
+4. Call `list_thingtime_comments` with that target ID and verify only directly
+   attached comments are returned, with cursor pagination when needed.
+5. Browse/search without a known ID and verify the selected account is returned
+   with a minimal, relevant result.
+6. Batch three exact IDs including one missing ID; verify order is preserved
+   and only that row reports `thing_not_found`.
+7. Discover a schema, validate typed data, traverse a target thread, and poll
+   changed Things from an ISO timestamp.
+8. Preview a multi-Thing change, inspect Result/Diff/Raw in the embedded UI,
+   explicitly confirm, apply the exact receipt with `confirmed: true`, and generate an undo preview
+   from encrypted history.
+9. Start a valid Capability workflow and verify its persisted run accepts only
+   the matching signed preview.
+10. Create a private draft after explicit confirmation, then update it after a
    second explicit confirmation.
-5. Add a comment or share a test post after confirmation and verify the action
+11. Add a comment or share a test post after confirmation and verify the action
    card reflects the write-oriented metadata.
-6. Request `thingtime offline_access`, exchange the returned refresh token
+12. Request `thingtime offline_access`, exchange the returned refresh token
    once, then confirm the replacement token works and the original does not.
 
 Negative cases:
@@ -104,6 +127,12 @@ Negative cases:
    validation to fail without returning the token.
 4. After the final account is removed, retry both a previously issued bridge
    token and refresh token; expect neither to recover the connection.
+5. Alter a signed preview, reuse a stale expectedUpdatedAt value, attach the
+   receipt to another account or workflow run, or supply an expired receipt;
+   expect a failure before mutation.
+6. Submit a Capability Thing containing an arbitrary route, URL, query/operator
+   object, executable code, missing input, duplicate target, or 26 operations;
+   expect compilation to fail closed.
 
 ## Submission sequence
 

@@ -3,12 +3,15 @@ import test from 'node:test';
 
 import {
   CHATGPT_MCP_PATH,
+  CHATGPT_MCP_METHOD_FEATURES,
+  CHATGPT_MCP_TOOL_FEATURES,
   CHATGPT_PLUGIN_FEATURES,
   CHATGPT_PLUGIN_ROUTES,
   applyUpstreamQuery,
   isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
   normalizeDynamicClientRedirectUri,
+  normalizeRegisteredClientRedirectUri,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
@@ -79,12 +82,15 @@ test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () 
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
 });
 
-test('dynamic OAuth clients are bound to registered loopback callbacks only', () => {
+test('dynamic OAuth clients are bound to registered loopback or exact ChatGPT callbacks only', () => {
   const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
   assert.equal(normalizeDynamicClientRedirectUri(redirectUri), redirectUri);
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chatgpt.com/connector_platform_oauth_redirect'), 'https://chatgpt.com/connector_platform_oauth_redirect');
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chat.openai.com/connector_platform_oauth_redirect'), 'https://chat.openai.com/connector_platform_oauth_redirect');
   assert.equal(normalizeDynamicClientRedirectUri('http://localhost:49152/callback/thingtime_mcp_AbC123'), null);
   assert.equal(normalizeDynamicClientRedirectUri('https://127.0.0.1:49152/callback/thingtime_mcp_AbC123'), null);
   assert.equal(normalizeDynamicClientRedirectUri('http://127.0.0.1:49152/callback/thingtime_mcp_AbC123?next=https://attacker.invalid'), null);
+  assert.equal(normalizeRegisteredClientRedirectUri('https://chatgpt.com/connector_platform_oauth_redirect/attacker'), null);
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -100,6 +106,12 @@ test('dynamic OAuth clients are bound to registered loopback callbacks only', ()
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, true);
   params.set('redirect_uri', 'http://127.0.0.1:49152/callback/other');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', dynamicClient).ok, false);
+
+  const chatGptRedirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  params.set('redirect_uri', chatGptRedirectUri);
+  const chatGptDynamicClient = { clientId: 'ttdcr-chatgpt-client-id', redirectUris: [chatGptRedirectUri] };
+  params.set('client_id', chatGptDynamicClient.clientId);
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com', chatGptDynamicClient).ok, true);
 });
 
 test('Thingtime endpoint and encrypted-bundle parsing fail closed', () => {
@@ -164,14 +176,19 @@ test('omitted tool filters stay omitted upstream instead of becoming the string 
 });
 
 test('the connection page escapes every HTML-significant character it interpolates', () => {
-  const page = renderConnectionPage('tok"><script>alert(1)</script>', ['https://thingtime.com']);
+  const page = renderConnectionPage(
+    'tok"><script>alert(1)</script>',
+    ['https://thingtime.com'],
+    'https://thingtime.com',
+    [{ id: 'things', title: 'Full things access', description: 'Read/write', emoji: '🗝️' }]
+  );
   // The request token lands in a double-quoted attribute: an unescaped quote
   // would close it and an unescaped angle bracket would open a real element.
   assert.equal(page.includes('<script>alert(1)</script>'), false);
   assert.equal(page.includes('tok"><script>'), false);
   assert.ok(page.includes('tok&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;'));
   // The page's own trusted markup and inline bootstrap must survive intact.
-  assert.ok(page.includes('<option value="https://thingtime.com">https://thingtime.com</option>'));
+  assert.ok(page.includes('<option value="https://thingtime.com" selected>https://thingtime.com</option>'));
   assert.ok(page.includes("document.getElementById('add')"));
 });
 
@@ -186,5 +203,15 @@ test('capability discovery is origin scoped and every registered route has a sem
   assert.deepEqual(discovery.capabilityManifest.features, CHATGPT_PLUGIN_FEATURES);
   for (const route of CHATGPT_PLUGIN_ROUTES) {
     assert.ok(route.feature in CHATGPT_PLUGIN_FEATURES, `${route.method} ${route.path} lacks a known capability feature`);
+  }
+  assert.deepEqual(
+    discovery.capabilityManifest.operations,
+    [
+      ...Object.entries(CHATGPT_MCP_TOOL_FEATURES).map(([name, feature]) => ({ transport: 'mcp-tool', name, feature })),
+      ...Object.entries(CHATGPT_MCP_METHOD_FEATURES).map(([name, feature]) => ({ transport: 'mcp-method', name, feature }))
+    ]
+  );
+  for (const operation of discovery.capabilityManifest.operations) {
+    assert.ok(operation.feature in CHATGPT_PLUGIN_FEATURES, `${operation.name} lacks a known capability feature`);
   }
 });

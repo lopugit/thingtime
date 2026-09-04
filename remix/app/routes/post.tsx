@@ -76,9 +76,9 @@ export const PostPage = () => {
   const parentId = data?.parent?.id ?? null;
   const rootId = data?.root?.id ?? null;
 
-  const handleChanged = (change: PostChange) => {
+  const handleChanged = (id: string, change: PostChange) => {
     setData((prev) => {
-      if (!prev?.post) return prev;
+      if (!prev?.post || prev.post.id !== id) return prev;
       const next = typeof change === 'function' ? change(prev.post) : change;
       if (!next) {
         // the thing was deleted from its own page — go somewhere sensible

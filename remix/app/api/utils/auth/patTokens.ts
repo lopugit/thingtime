@@ -1,4 +1,5 @@
 import { getAuthToken } from './authCookie';
+import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
@@ -114,6 +115,9 @@ export type MintPatInput = {
   onlyCreatedThings?: unknown;
   visibility?: unknown;
   allowGet?: unknown;
+  // Internal mint sites can identify a generated credential without exposing
+  // the provenance knob on the public token-minter API.
+  createdVia?: 'chatgpt-oauth';
 };
 
 export type MintPatResult =
@@ -172,7 +176,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   // free mirrors MAX_PAT_TOKENS_PER_USER.
   const maxPats = (await getSubscription('user', userId)).effective.maxPats;
   if (maxPats !== null) {
-    const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
+    // Revoked credentials are no longer usable and already have a bounded
+    // reap date, so they must not prevent a user from replacing a token.
+    const existing = await sessions.countDocuments({ userId, purpose: 'pat', revokedAt: null });
     if (existing >= maxPats) {
       return {
         ok: false,
@@ -199,7 +205,7 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       // opt-in only: GET URLs put the credential in logs/history, so the
       // holder must have chosen that trade at mint time
       ...(input.allowGet === true ? { allowGet: true } : {}),
-      createdVia: 'token-minter'
+      createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
   });
 
@@ -403,18 +409,6 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   if (!session) return anonymous;
   if (String(session.userId) !== claims.sub) return anonymous;
 
-  // App-scoped tokens only work through their dedicated path (apps/appTokens)
-  // — same rejection as resolveSessionUser.
-  if (
-    session.purpose === 'app' ||
-    session.purpose === 'app-sandbox' ||
-    session.purpose === 'oauth-code' ||
-    session.purpose === 'chatgpt-oauth-code' ||
-    session.purpose === 'chatgpt-mcp' ||
-    session.purpose === 'chatgpt-mcp-refresh' ||
-    session.purpose === 'chatgpt-mcp-connection'
-  ) return anonymous;
-
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
     // so a cross-site request can't replay one as an ambient credential.
@@ -425,6 +419,11 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
     const resolved = await resolvePatSessionActor(session, claims.sub, scope);
     return resolved ?? anonymous;
   }
+
+  // Every other scoped credential (app, sandbox app, one-time OAuth code, and
+  // future purpose values) only works through its dedicated resolver. Keep the
+  // full things surface aligned with resolveSessionUser's fail-closed gate.
+  if (!sessionPurposeCanActAsAccount(session.purpose)) return anonymous;
 
   // Full browser/service session — the normal path, no scope limits.
   const userDoc = await findUserById(claims.sub);

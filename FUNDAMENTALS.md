@@ -1,7 +1,8 @@
 # 🏛️ Thingtime Fundamentals
 
 Core engineering principles for this codebase. These are deliberately short and
-non-negotiable — read before adding features. (Roadmap lives in `claude-todo/`.)
+non-negotiable — read before adding features. (Roadmap lives in
+`TODO/claude-todo/`.)
 
 ## 1. The API is the only gateway to data
 
@@ -33,7 +34,7 @@ Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
-`app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
+`app/schemas/registry.ts` and `TODO/claude-todo/22-everything-is-a-thing-collections.md`).
 
 **Physical collections are versioned.** The names below are _logical_ — the
 vocabulary of code, docs, and the admin query API. On the MongoDB server each
@@ -52,7 +53,8 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 | Collection                                                                                                                                 | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `things`                                                                                                                                   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `attachment`, `data`; messenger kinds (dedicated endpoints only, membership-gated, invisible to generic reads: see `api/utils/messenger/`): `chat`, `chat-member`, `chat-message`, `chat-section`, `community`, `community-member`, `community-invite`, `custom-emoji`, `follow`; control-plane kinds: `app` (registered client identity, origin allowlist, and aggregate app-byte ledger), `subscription-tier` (immutable versioned catalog revisions with live/draft/archived lifecycle, pricing, inclusions, and quota defaults), `subscription` (an exact tier-revision/quota snapshot plus the authoritative account-byte ledger per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `service-quota` (protected operational admission state), `account-link` (owned accounts + app co-managers, many-to-many), `migration-diagnostic` (short-lived, private admin migration error reports), `moderationFlag` (system-owned NSFW/TOS review records keyed `modflag-<attachmentId>`, `targetId` = the flagged attachment; paired with the protected `moderation` root stamp on attachment things written only by `api/utils/moderation/`), and the protected CI family (`ci-repository`, `ci-feature`, `ci-branch`, `ci-pull-request`, `ci-workflow-run`, `ci-deployment`, `ci-preview`, `ci-dispatch`, `ci-event`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `things`                                                                                                                                   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `attachment`, `data`, `embed` (cross-site embedded things — see `docs/THINGTIME_EMBED.md`), `component` (a UI component: arg-templated render tree + arg descriptors, browsed on /components; the platform library is seeded system-owned from the repo `components-db/` via `POST /api/v1/admin/components/seed`, shareId `component-<slug>`, and user "Save version" instances ride the same kind), `action` (a declarative capability-bounded program: typed inputs, a closed step vocabulary — things.create/get/search/update, actions.invoke, return — author-declared capabilities that only NARROW the invoker's own access, and a limits envelope; inspected and run on /actions via `POST /api/v1/actions/run`), `webpage` (a block-based page from the /builder: a bounded ordered block tree — component references with per-block arg overrides, containers, text, and native app-screen slots — resolved with its referenced components via `GET /api/v1/webpages/resolve`; standalone pages publish at `/p/<shareId>`, and the seeded site docs `webpage-route-<key>`/`webpage-site-global` make every built-in route a block site that viewers personalise with an owned twin); messenger kinds (dedicated endpoints only, membership-gated, invisible to generic reads: see `api/utils/messenger/`): `chat`, `chat-member`, `chat-message`, `chat-section`, `community`, `community-member`, `community-invite`, `custom-emoji`, `follow`; control-plane kinds: `app` (registered client identity, origin allowlist, and aggregate app-byte ledger), `subscription-tier` (immutable versioned catalog revisions with live/draft/archived lifecycle, pricing, inclusions, and quota defaults), `subscription` (an exact tier-revision/quota snapshot plus the authoritative account-byte ledger per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `service-quota` (protected operational admission state), `account-link` (owned accounts + app co-managers, many-to-many), `migration-diagnostic` (short-lived, private admin migration error reports), `moderationFlag` (system-owned NSFW/TOS review records keyed `modflag-<attachmentId>`, `targetId` = the flagged attachment; paired with the protected `moderation` root stamp on attachment things written only by `api/utils/moderation/`), the protected CI family (`ci-*` — see the `ciControl` satellite row below: those kinds are NOT stored in `things`), and `action-run` (protected, executor-minted run records — `targetId` = the action, owner-private, `storageClass: "control"`, size-capped inputs/result echo + per-step trace, listed via `GET /api/v1/actions/runs`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `ciControl`                                                                                                                                | The CI control plane (`api/utils/ciControl/`): EVERY protected `ci-*` Thing — current-state projections (`ci-repository`, `ci-automation`, `ci-feature`, `ci-feature-stack`, `ci-feature-stack-entry`, `ci-branch`, `ci-pull-request`, `ci-workflow-run`, `ci-deployment`, `ci-preview`, `ci-preview-policy`, `ci-dispatch`) and the append-only `ci-event` history. Same Thing envelope, same deterministic shareIds, but its own home-pinned physical collection (`ciControl_v1`) with a six-index plan and a TTL on root `expiresAt` (`ciControl/retentionCore.ts`: events 14d, `job:` workflow rows 30d, runs/deployments/previews 90d, entities never). Why a satellite: this is machine-written webhook telemetry at ~200k events + ~70k job rows per day (measured 2026-09-02, when it was 99.75% of `things_v2` and paid an entry in each of its 64 indexes — 3.1 GB of index for ~4.5k content docs). Written only by signed webhooks, admin reconcile/dispatch, and the relocation migration; never searched, never billable. Legacy rows still in `things` move via the `relocate-ci-control-telemetry` migration. |
 | `sessions`                                                                                                                                 | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `rosters`                                                                                                                                  | account-switcher rosters (TTL-reaped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `emailVerifications`                                                                                                                       | pending email-verification tokens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -95,7 +97,25 @@ System-kind rules (never bypass):
   `storageClass: "control"` so operational telemetry is not customer content.
   The `schema` kind is NOT protected: anyone may publish a schema thing. Builtin
   schemas are reserved system-owned seeds with root `storageClass: "control"`;
-  community/user schemas remain ordinary billable content.
+  community/user schemas remain ordinary billable content. The `component` kind
+  follows the same posture: user "Save version" components are ordinary content,
+  while the seeded platform library (`component-<slug>` shareIds — the prefix is
+  reserved in `sanitizeShareId`) is system-owned `storageClass: "control"`. The
+  `action` kind is likewise user-creatable through the unified things path
+  (save-time validation requires every step to be covered by a declared
+  capability), while `action-run` records are PROTECTED: only the executor
+  (`api/utils/actions/execute.ts`) mints them, so the audit trail cannot be
+  forged. The `action-` shareId prefix is reserved. The `webpage` kind follows
+  the schema/component posture: user pages are ordinary billable content
+  written through the unified things path (the crystal sanitizer bounds the
+  embedded block tree — 120 blocks / depth 8 / 48KB, the component precedent
+  for bounded replace-on-write documents, NOT an accumulating list), while the
+  seeded site pages (`webpage-route-<key>` + `webpage-site-global`, prefix
+  `webpage-` reserved in `sanitizeShareId`) are system-owned
+  `storageClass: "control"` docs upserted by `POST /api/v1/admin/webpages/seed`.
+  Blocks never carry raw markup: component blocks reference `component` things
+  and draw client-side through the sanitising allowlist renderers with one
+  render budget per block.
 - Private state lives under root `secure` as a single **BinData blob** (the
   search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
@@ -183,6 +203,17 @@ crystal or hide them from the account ledger. An external profile image URL is
 only bounded metadata and never causes Thingtime to fetch or store the remote
 image bytes.
 
+All user-owned product content is billable, regardless of which dedicated API
+writes it. That includes posts, comments, reactions, shares, Messenger chats,
+messages, communities, memberships, sections, invites, custom emoji, follows,
+AI connection records, and every project/chat/message imported from a desktop
+AI source. Relational plumbing is still content: each row is charged to its
+root `ownerId`, so a membership or follow consumes the account that owns that
+edge. Replaying an idempotent import updates the same stamped rows and must not
+charge the bytes twice. A message or emoji row bills its bounded JSON payload;
+any uploaded object remains separately and exactly billed by its protected
+`attachment` Thing, so object bytes are neither omitted nor duplicated.
+
 `currentContentStorageSizeBytes()` is the shared proof used by every
 incremental writer: current schema + array `thingtime` + current content stamp
 
@@ -258,7 +289,7 @@ ephemeral namespace plus the global windowed brake. The end user owns
 every namespace doc and can browse (`GET /api/v1/things?appId=`,
 `/api/v1/apps/data-summary`) and delete
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
-`claude-todo/16-full-power-app-namespaces.md`.
+`TODO/claude-todo/16-full-power-app-namespaces.md`.
 
 ## 4. One MongoDB connection source
 
@@ -309,7 +340,7 @@ JWTs stored anywhere). `tt_auth` stays the single ACTIVE credential; switching
 mints a fresh JWT from the chosen live session. Every roster account is
 independently revocable and validated by the same session→user path as
 `tt_auth`, and raw tokens never reach the client (the switcher API returns
-public users only). See `claude-todo/11-account-switcher.md`.
+public users only). See `TODO/claude-todo/11-account-switcher.md`.
 
 ## 6. Never leak secrets
 

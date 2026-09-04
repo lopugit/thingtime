@@ -7,7 +7,10 @@ import {
 	attachmentSnapshot,
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
+	canonicalLinkedMediaUrl,
 	dedupeSelectedFiles,
+	linkedMediaKindForUrl,
+	linkedMediaNameForUrl,
 	localFileMediaKind,
 	MAX_POST_ATTACHMENTS,
 	multipartPartRange,
@@ -23,6 +26,67 @@ const localUploadId = () =>
 	typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
 		? crypto.randomUUID()
 		: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+// Legacy-image seed ids are LOCAL placeholders (never known to the server) —
+// the composer swaps them for freshly minted linked-attachment ids at save.
+export const LEGACY_LINKED_SEED_ID_PREFIX = 'legacyurl-';
+export const isLegacyLinkedSeedId = (id: string): boolean => id.startsWith(LEGACY_LINKED_SEED_ID_PREFIX);
+
+// Best-effort browser probe for extensionless URLs: an <img> load/error tells
+// image-vs-not without CORS (pixels stay unreadable, events still fire).
+const probeLinkedImage = (url: string): Promise<boolean> =>
+	new Promise((resolve) => {
+		if (typeof Image === 'undefined') {
+			resolve(true);
+			return;
+		}
+		const img = new Image();
+		let settled = false;
+		const settle = (loaded: boolean) => {
+			if (settled) return;
+			settled = true;
+			resolve(loaded);
+		};
+		const timer = setTimeout(() => settle(true), 8000); // slow hosts stay images (legacy default)
+		img.onload = () => {
+			clearTimeout(timer);
+			settle(true);
+		};
+		img.onerror = () => {
+			clearTimeout(timer);
+			settle(false);
+		};
+		img.referrerPolicy = 'no-referrer';
+		img.src = url;
+	});
+
+const linkedSeedEntry = (url: string): ComposerAttachmentUpload | null => {
+	const canonical = canonicalLinkedMediaUrl(url);
+	if (!canonical) return null;
+	const name = linkedMediaNameForUrl(canonical);
+	const detected = linkedMediaKindForUrl(canonical);
+	const mediaKind = detected === 'file' ? 'file' : 'image'; // legacy crystal.images were images
+	const localId = localUploadId();
+	return {
+		localId,
+		file: new File([], name),
+		previewUrl: mediaKind === 'file' ? null : canonical,
+		status: 'ready',
+		progress: 100,
+		uploadId: null,
+		attachment: {
+			id: `${LEGACY_LINKED_SEED_ID_PREFIX}${localId}`,
+			name,
+			size: 0,
+			contentType: 'application/octet-stream',
+			mediaKind,
+			url: canonical
+		},
+		error: null,
+		failedAt: null,
+		linked: { url: canonical, legacySeed: true }
+	};
+};
 
 const sha256Base64 = async (blob: Blob): Promise<string> => {
 	const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
@@ -106,15 +170,24 @@ export const useAttachmentUploads = (
 	const apiRef = React.useRef(api.v1.attachments);
 	apiRef.current = api.v1.attachments;
 
-	const [uploads, setUploads] = React.useState<ComposerAttachmentUpload[]>([]);
+	// Legacy crystal.images seeds mount as READY local linked entries whose
+	// synthetic ids are pre-committed — cleanup must never fire a server delete
+	// for an id the server has never seen.
+	const [seedEntries] = React.useState<ComposerAttachmentUpload[]>(() =>
+		(options.initialLinkedSeeds || []).flatMap((url) => {
+			const entry = linkedSeedEntry(url);
+			return entry ? [entry] : [];
+		})
+	);
+	const [uploads, setUploads] = React.useState<ComposerAttachmentUpload[]>(seedEntries);
 	const uploadsRef = React.useRef(uploads);
 	uploadsRef.current = uploads;
 	const mountedRef = React.useRef(true);
 	const ownerRef = React.useRef(ownerId ?? null);
-	const attemptsRef = React.useRef(new Map<string, number>());
+	const attemptsRef = React.useRef(new Map<string, number>(seedEntries.map((entry) => [entry.localId, 1])));
 	const activeXhrsRef = React.useRef(new Map<string, XMLHttpRequest>());
 	const activeRequestsRef = React.useRef(new Map<string, AbortController>());
-	const committedAttachmentIdsRef = React.useRef(new Set<string>());
+	const committedAttachmentIdsRef = React.useRef(new Set<string>(seedEntries.flatMap((entry) => (entry.attachment ? [entry.attachment.id] : []))));
 	const uploadPlansRef = React.useRef(new Map<string, UploadPlan>());
 	const preserveReadyOnUnmountRef = React.useRef(preserveReadyOnUnmount);
 	preserveReadyOnUnmountRef.current = preserveReadyOnUnmount;
@@ -339,7 +412,8 @@ export const useAttachmentUploads = (
 			}
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
-				const previewUrl = localFileMediaKind(file) === 'file' ? null : URL.createObjectURL(file);
+				const mediaKind = localFileMediaKind(file);
+				const previewUrl = mediaKind === 'image' || mediaKind === 'video' ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
 					localId,
@@ -363,6 +437,83 @@ export const useAttachmentUploads = (
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);
 	const replaceFiles = React.useCallback((files: File[]) => addFilesInternal(files, true), [addFilesInternal]);
+
+	// Add media by external URL: append a linked entry, probe extensionless
+	// URLs (image-or-file), mint through /api/v1/attachments/link, and land it
+	// READY in the same list uploads use — so reorder, snapshot ordering,
+	// markCommitted, and remove all treat it exactly like an uploaded file.
+	// Duplicate URLs are allowed on purpose: each Add is its own attachment.
+	// Returns synchronously (true = entry appended, mint continues async) so
+	// the URL field can clear for the next link right away.
+	const addLinkedUrl = React.useCallback(
+		(rawUrl: string): boolean => {
+			const url = canonicalLinkedMediaUrl(rawUrl);
+			if (!url) {
+				onSelectionError?.('Use a full http(s) media URL without spaces.');
+				return false;
+			}
+			if (imageOnly || (uploadPurpose !== 'post' && uploadPurpose !== 'comment')) {
+				onSelectionError?.('Linked media is not available here.');
+				return false;
+			}
+			if (uploadsRef.current.length >= maxFiles) {
+				onSelectionError?.(`Posts can include up to ${maxFiles} attachments.`);
+				return false;
+			}
+			const localId = localUploadId();
+			attemptsRef.current.set(localId, 1);
+			const name = linkedMediaNameForUrl(url);
+			const detected = linkedMediaKindForUrl(url);
+			const entry: ComposerAttachmentUpload = {
+				localId,
+				file: new File([], name),
+				previewUrl: detected === 'image' || detected === 'video' ? url : null,
+				status: 'preparing',
+				progress: 100,
+				uploadId: null,
+				attachment: null,
+				error: null,
+				failedAt: null,
+				linked: { url }
+			};
+			const nextUploads = [...uploadsRef.current, entry];
+			uploadsRef.current = nextUploads;
+			setUploads(nextUploads);
+			void (async () => {
+				try {
+					const demoteToFile = detected === 'probe' ? !(await probeLinkedImage(url)) : false;
+					if (!isCurrent(localId, 1)) return;
+					const response = await apiRef.current.link({
+						url,
+						...(uploadPurpose === 'comment' ? { purpose: 'comment' as const } : {}),
+						...(demoteToFile ? { mediaKind: 'file' as const } : {})
+					});
+					const attachment = normalizePublicAttachment(response?.attachment);
+					if (!attachment) throw new Error('invalid attachment projection');
+					if (!isCurrent(localId, 1)) {
+						// the tile was removed (or the composer torn down) while the mint
+						// was in flight — compensate so the just-minted draft doesn't sit
+						// orphaned until the TTL reap
+						void apiRef.current.remove({ id: attachment.id }).catch(() => {});
+						return;
+					}
+					patchUpload(localId, 1, {
+						status: 'ready',
+						attachment,
+						previewUrl: attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? url : null,
+						error: null,
+						failedAt: null
+					});
+				} catch (error) {
+					if (!isCurrent(localId, 1)) return;
+					// no resumable server state — remove and re-add is the retry
+					patchUpload(localId, 1, { status: 'error', error: attachmentUploadError(error, 'prepare'), failedAt: 'terminal' });
+				}
+			})();
+			return true;
+		},
+		[imageOnly, isCurrent, maxFiles, onSelectionError, patchUpload, uploadPurpose]
+	);
 
 	const retry = React.useCallback(
 		async (localId: string) => {
@@ -530,6 +681,7 @@ export const useAttachmentUploads = (
 		uploads,
 		addFiles,
 		replaceFiles,
+		addLinkedUrl,
 		retry,
 		remove,
 		reorder,

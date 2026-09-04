@@ -27,7 +27,11 @@ test('the repository-root Vercel config owns the product build', async () => {
 	assert.equal(config.buildCommand, 'node scripts/vercel-build.mjs');
 	assert.equal(config.outputDirectory, null);
 	assert.equal(config.ignoreCommand, 'node scripts/vercel-ignore-build.mjs');
-	assert.equal(config.git?.deploymentEnabled?.['github-actions'], false);
+	assert.deepEqual(config.git?.deploymentEnabled, {
+		'**': false,
+		main: true,
+		develop: true
+	});
 	assert.equal(existsSync(resolve(repositoryRoot, 'remix/vercel.json')), false);
 });
 

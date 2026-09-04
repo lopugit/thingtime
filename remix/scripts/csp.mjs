@@ -77,6 +77,18 @@ export const buildCsp = (opts = {}) => serialize(directives(opts));
 export const prodCsp = buildCsp();
 export const devCsp = buildCsp({ dev: true });
 
+// The Limitless MCP Lab embeds the exact, server-served MCP App HTML in a
+// sandboxed srcdoc iframe. srcdoc inherits the parent document's CSP, so the
+// review app's one inline module needs an exact hash on this route. Keep the
+// exception hash-only: never broaden the application policy with
+// 'unsafe-inline'. pluginLimitlessCore.test.ts proves this hash still matches
+// renderThingtimeMcpUi() whenever the embedded app changes.
+export const mcpLabScriptHash = "'sha256-InujfRsBJ3VWJN0FJ9O1huZAeiHmJtIQbhm2Q3ZHwxE='";
+export const mcpLabCsp = serialize({
+	...directives(),
+	'script-src': [...directives()['script-src'], mcpLabScriptHash]
+});
+
 // The static prototype bundles under /docs/design-bundles are repo-controlled
 // generated pages. Their Design Components runtime compiles templates with
 // Function and loads pinned React/Babel UMD assets from unpkg, so this path gets

@@ -8,12 +8,38 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Embed Thingtime on any website
+
+Thingtime now builds as a single minified browser file with shared state,
+Shadow DOM mounts, an injected popup, and a first-party secure editor/save
+window:
+
+```html
+<div data-thingtime-mount></div>
+<script src="https://thingtime.com/embed/thingtime.min.js"></script>
+```
+
+See [the Thingtime Embed SDK guide](docs/THINGTIME_EMBED.md) for declarative and
+JavaScript APIs, public persistence, conflict handling, security boundaries,
+local development, and build verification.
+
 ## AI agent instructions
 
 Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 `AGENTS.md` and `CLAUDE.md` are relative symlinks to that file so Codex,
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
+
+## Thingtime MCP
+
+The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
+normalizers. As a standalone MCP server it supports explicit current-chat
+handoff, private local staging, ChatGPT/Claude exports, and a portable connector
+manifest. The Electron app also bundles its read-only desktop connector: it can
+discover local ChatGPT Work/Codex history plus Claude sessions from the main and
+Thingtime desktop profiles, then import projects, chats, and visible messages
+through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
+for both workflows and their privacy boundaries.
 
 ## Conflict-free Graphify snapshots
 
@@ -22,13 +48,19 @@ files. `scripts/graphify` stores portable output under the immutable,
 content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
 snapshot through ignored compatibility aliases at the conventional root
 paths. Independent branches therefore add different files instead of
-line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`. After a
+successful activation, the wrapper keeps one current portable snapshot by
+default and removes superseded snapshots from the checked-out tree, so merged
+branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
 writers, validates each atomic output set, deduplicates identical artifacts,
 regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. See
+coexisting immutable variants. `scripts/graphify prune` applies the bounded
+retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer only when a local workflow deliberately needs more than one
+portable snapshot. See
 [`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
 for the rationale, layout, migration path, and retention model.
 
@@ -130,6 +162,29 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
+CI Control also supports **Feature Stacks**. An admin checks one or more open feature
+PRs in the exact order they should be combined, chooses one or two live target
+branches (for example `develop` and `main`), confirms the batch, and dispatches
+it once. The server snapshots every selected same-repository PR head SHA. The
+protected controller builds an isolated integration history for each target,
+lets Lopu resolve only Git-reported conflict paths, mechanically verifies every
+merge parent and clean-merge byte, then opens a target-specific PR with
+auto-merge enabled. Required checks and branch protection remain the final gate;
+the batch never pushes directly to a target branch.
+
+The same page owns Lopu’s **Claude credential waterfall**. Admins add a named
+Claude Code OAuth token once, enable or disable it, rotate it, and reorder up to
+eight accounts. Only redacted labels and timestamps return to the browser. The
+values are AES-256-GCM encrypted in Thingtime with
+`THINGTIME_ADMIN_VAULT_KEY`. A protected workflow fetches the ordered enabled
+bundle just in time through `/api/v1/integrations/ci/credentials`, using the
+same stable `THINGTIME_CI_ROUTER_SECRET` HMAC boundary and a fresh single-use
+nonce. It masks the values immediately, keeps the bundle at mode `0600` for the
+current run only, and advances accounts only for classified capacity or
+credential failures. The first controller run can import the old OAuth slots
+into an empty vault; after that proof, delete the account-specific GitHub
+secrets and retain only `THINGTIME_CI_ROUTER_SECRET`.
+
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
 router on GitHub. A GitHub selection continues normally. A Vercel selection
@@ -156,6 +211,28 @@ THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
 THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
+CI control-plane rows (every `ci-*` Thing, including the append-only
+`ci-event` history) live in their own `ciControl` satellite collection, never
+in `things`, and are TTL-reaped by a root `expiresAt` stamp. The retention
+windows are optional, in days; `0` keeps that class forever, and unset means
+the default:
+
+```sh
+# append-only ci-event history (default 14)
+THINGTIME_CI_EVENT_RETENTION_DAYS="14"
+# per-job workflow rows — ci-workflow-run with a job: external id (default 30)
+THINGTIME_CI_JOB_RETENTION_DAYS="30"
+# top-level workflow runs, deployments, and previews (default 90)
+THINGTIME_CI_ACTIVITY_RETENTION_DAYS="90"
+```
+
+Repository, feature, branch, pull-request, policy, dispatch, and feature-stack
+projections never expire. A GitHub delivery that changes nothing on the
+repository row records no `ci-event` for it. Deployments that predate the
+satellite still hold their CI rows in `things`: run the admin migration
+`relocate-ci-control-telemetry` (repeat until it reports nothing left) and then
+`rebuild-things-indexes` from **/migrations** — see the MongoDB section.
+
 Create a repository-installed GitHub App with repository metadata read,
 Actions read/write (workflow dispatch and run/job observation), Administration
 read/write (short-lived self-hosted runner registration and deletion), Contents
@@ -181,6 +258,24 @@ The signed compute-provider route is:
 https://<your-thingtime-origin>/api/v1/integrations/ci/route
 ```
 
+The signed Lopu credential delivery route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/credentials
+```
+
+The signed Feature Stack progress route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/progress
+```
+
+The protected controller posts an initial snapshot, phase changes, a heartbeat
+every ten minutes, and one terminal snapshot. The route uses the same
+`THINGTIME_CI_ROUTER_SECRET`, attaches each immutable event only to its exact
+stored stack/run identity, and never accepts browser sessions or arbitrary
+workflow log text.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
@@ -196,12 +291,53 @@ all available; its API refuses to select Vercel before that complete capability
 is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
 
+The selected-PR detail panel also has independent, durable **Develop** and
+**Production / main** preview switches. The product backend validates the live
+same-repository PR, stores the full policy, and sends only that bounded policy
+through the installed `thingtime-ci-control[bot]` GitHub App. It does not build,
+publish, alias, clean up, or hold a Vercel deployment credential. The protected
+`github-actions` controller revalidates the exact ref/SHA and writes one PR
+comment immediately with every selected environment's expected persistent URL
+and estimated ready time. Each selected environment is compiled on GitHub
+without environment secrets; only the validated prebuilt output enters the
+credentialed publisher. The same comment gains each immutable `*.vercel.app`
+snapshot URL and terminal status. A READY deployment moves only its PR-scoped
+alias and never replaces `thingtime.com` or `dev.thingtime.com`.
+
+Production access still requires an explicit admin acknowledgement. Later
+`synchronize`, reopen, and ready-for-review webhooks redispatch every enabled
+environment; disable and close dispatch marker-scoped cleanup. The backend
+therefore needs only the existing GitHub App credentials. Configure the
+following non-secret values and dedicated deployment token on the protected
+`vercel-develop-pr-control` GitHub Environment (placeholders only):
+
+```sh
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
+```
+
+Never expose these as `PUBLIC_*` or copy them into the product deployment.
+`VERCEL_CUSTOM_ENVIRONMENT_ID` is required only for the Develop switch. The
+alias suffixes default to Thingtime's two preview namespaces, so forks must set
+both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
+The GitHub App needs Contents write permission to create the repository
+dispatch. GitHub Actions owns and updates the marker comment.
+
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
 open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
 projection current. Until that first successful reconcile, an empty dashboard
 with zero counts is expected.
-
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -316,6 +452,14 @@ Actions secrets:
 
 - `ANTHROPIC_API_KEY`, or
 - `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+To prefer a separate Claude Max/Pro account for all Lopu agent work without
+replacing either existing slot, run `claude setup-token` while signed into that
+account and save the result as the repository Actions secret
+`CLAUDE_CODE_OAUTH_TOKEN_THINGTIME`. Lopu tries this preferred OAuth account
+first, then the existing primary credentials above, then the existing fallback
+credentials below. Never paste the token into a file, command argument, log, or
+commit; pipe it directly into the GitHub secret prompt or API.
 
 Optional ordered fallback credentials are `ANTHROPIC_API_KEY_FALLBACK` or
 `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK`. Lopu changes slots only for provider
@@ -437,6 +581,41 @@ The local Electron shell reads `remix/.env`, `remix/.env.local`, and
 tokens in ignored env files or the launch environment only; commit placeholder
 examples in docs, not secrets.
 
+### Connect desktop AI history to Messenger
+
+In the signed-in Thingtime desktop app, open `/messages`, choose either Spaces
+or Chats, and select **✦ AI**. The connector presents three independent sources
+when present on the Mac: ChatGPT, the main Claude profile, and Claude Thingtime.
+
+- **Sync local chats** reads only visible local Work/Codex or Cowork/Claude Code
+  conversation records. It never reads provider cookies, passwords, hidden
+  reasoning, tool traffic, or browser storage, and raw local paths are not sent
+  to Thingtime.
+- **Import full export…** opens a native file chooser for an official ChatGPT
+  or Claude JSON/ZIP export. Cloud-only history is unavailable to the local
+  reader, so use the provider's official export when a conversation is not
+  stored on the Mac.
+- Projects/workspaces become Messenger Spaces, conversations become chats or
+  channels, and provider messages are read-only. Reactions, threads, and new
+  Thingtime replies remain local to Thingtime; they are not posted back to the
+  provider.
+- Sync runs in bounded batches and is idempotent. Repeating the same import
+  updates the same owner-scoped records without duplicating chats, messages, or
+  quota usage.
+
+Imported history is user-owned content and consumes the signed-in account's
+storage allowance just like posts and native Messenger rows. Message JSON is
+metered on the Messenger row; any Thingtime-hosted attachment object remains
+separately metered by its protected attachment record. A quota failure rolls
+back the current transactional unit and returns a storage error rather than
+silently importing unaccounted data.
+
+No connector-specific environment variable is required in the packaged app.
+For a fork/local build, keep the normal authenticated Thingtime origin and
+database configuration in ignored Electron/Remix env files; do not grant the
+web browser filesystem access. The browser version intentionally shows the
+desktop-app requirement instead of attempting local discovery.
+
 ## API self-documentation
 
 Every registered Thingtime API endpoint exposes a JSON documentation endpoint
@@ -472,6 +651,17 @@ entire connection. Do not paste a PAT into a chat. The public `tools/list`
 response exposes only tool metadata and its per-tool OAuth requirements; all
 account data and tool calls require the bridge token and are origin-bound to
 this MCP URL.
+
+The MCP publishes 31 bounded tools plus prompts, account-scoped resources, and
+an embedded review UI. Exact batch reads preserve requested IDs and report
+missing Things independently; schema discovery/validation, relationship and
+thread traversal, and ACL-aware change polling cover richer read workflows.
+For writes, composed operations produce a signed before/after preview first,
+then apply with scope checks and optimistic `updatedAt` preconditions only
+after the call explicitly supplies `confirmed: true`. Encrypted MCP history records partial outcomes and can
+produce a fresh undo preview. Reusable `Thingtime Capability` data Things may
+compose only the same registered create/update/delete grammar: arbitrary URLs,
+database queries, API routes, and executable payloads are rejected.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
@@ -558,12 +748,173 @@ MONGO_PASS="<password>"
 literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
 placeholder using URL encoding so special characters in the password are safe.
 
+### Public data-environment identity
+
+Every deployed API must publish a safe identifier for its **database and
+authentication authority**. It is not a MongoDB host, database name, or
+credential; it lets browser bundles, Electron, account federation, and peer
+discovery distinguish deployments that share data from deployments that only
+look similar by URL. Set one public value for each Vercel target:
+
+```sh
+# Production target
+THINGTIME_DATA_ENV="production"
+
+# Preview + development targets that share the development database
+THINGTIME_DATA_ENV="development"
+
+# A separate named database/authentication authority
+THINGTIME_DATA_ENV="custom:demo"
+THINGTIME_DATA_AUTHORITY_ORIGIN="https://demo.thingtime.com"
+# Optional when multiple ids deliberately share one authority/database
+THINGTIME_FEDERATION_ID="demo"
+```
+
+`/api/v1/capabilities` (feature `api.capabilities` `1.1.0`) and root data
+publish only `{ id, kind, federationId, authorityOrigin }`. Clients must use
+that identity for sign-in and federation; `VERCEL_ENV`, branch names, URLs, and
+commit SHAs are diagnostics, never the data-authority contract.
+
+### Deployment peer discovery
+
+First-party production, preview, and development deployments can converge on a
+small mesh of live peers through `/api/v1/peers`. Configure the same discovery
+secret and a distinct persistent signing key on every participating deployment
+(never `PUBLIC_*`, never a browser variable):
+
+```sh
+THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
+# Base64url PKCS#8 Ed25519 private key; create and store it in the deployment's secret manager.
+THINGTIME_PEER_SIGNING_PRIVATE_KEY="replace-with-base64url-ed25519-pkcs8-private-key"
+THINGTIME_PUBLIC_ORIGIN="https://this-deployment.example.thingtime.com"
+# Required public data/authentication authority: production, development, or custom:<id>
+THINGTIME_DATA_ENV="development"
+# Optional; defaults to the authority origin for THINGTIME_DATA_ENV
+THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://dev.thingtime.com"
+# Optional comma-separated first-party host suffixes; defaults to thingtime.com,vercel.app
+THINGTIME_PEER_ALLOWED_HOST_SUFFIXES="thingtime.com,vercel.app"
+```
+
+Peers sign exact request method, path, timestamp, raw body, and federation id using HMAC, then
+also add an Ed25519 signature derived from that deployment's private key. The
+receiver verifies the public signature and pins the public key to the canonical
+origin after first HMAC-authenticated contact; a later key change fails closed.
+Every NDJSON peer event is independently Ed25519-signed too. The protocol
+rejects anonymous requests, expired or tampered signatures, non-first-party
+origins, credentials in URLs, and arbitrary outbound targets. Each origin is a
+separate `deploymentPeers` control-plane row with a ten-minute TTL lease. Only
+deployments with the same public federation id may discover one another. A
+signed `POST {"op":"sync"}` first announces to that data environment's authority,
+then probes a bounded breadth-first set of known peers; `GET` is capped,
+cursor-paginated NDJSON rather than an all-peers array. Run self-sync from a
+trusted deployment scheduler or deploy hook at a modest cadence (for example
+every five minutes). The checked-in Vercel cron advances the production
+bootstrap every five minutes using its existing `CRON_SECRET`; preview and
+non-Vercel deployments need the equivalent trusted deploy hook or scheduler.
+Do not expose either peer credential to clients or forks.
+
+Administrators can inspect the locally known lease projection at **Dev →
+Deployment peers** (`/peers`). The page calls a separate private,
+cursor-paginated admin endpoint—not the mesh protocol—and can filter every
+displayed public lease property in grid, card, or list form. It never returns
+HMAC material, private keys, signed request envelopes, or the persisted gossip
+cursor to a browser.
+
 For a local MongoDB instance you can instead use a complete URI with no password
 placeholder:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+### Index and storage hygiene
+
+The boot-time `ensureIndexes` converges every collection to the index plan in
+`remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
+`RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass
+delete (for example relocating CI telemetry out of `things`), each index keeps
+its old on-disk size until it is dropped and recreated. The admin migrations
+page (**/migrations**) shows a storage census per physical collection —
+document bytes, on-disk bytes, index bytes, and index count — and flags a
+generation whose index total is far above its document bytes. Reclaim it with
+the `rebuild-things-indexes` migration (unique constraints stay enforced by a
+twin index throughout). The audit that produced this runbook, with the
+production measurements, is in `docs/architecture/mongodb-index-storage-audit.md`.
+
+Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
+root `vercel.json`). For how that becomes region-local latency worldwide without
+splitting the database or the URL, see
+`docs/architecture/geo-distribution.md` — a proposal, not shipped behaviour.
+
+### Hosted `develop` and Preview data plane
+
+`https://dev.thingtime.com` and generic Vercel Preview deployments deliberately
+share one development data/auth plane. Assign the current development MongoDB,
+JWT, `APP_URL`, cron, and private-S3 values to both the `develop` Custom
+Environment and generic Preview. Keep Production MongoDB, JWT, and S3 values
+separately scoped; never reuse or document their secrets. Treat every branch
+that Vercel may build for this project as trusted development code with access
+to shared, disposable development data.
+
+For Atlas, the username inside `MONGODB_CONNECTION_STRING` is authoritative.
+The runtime reads `MONGO_PASS` only when replacing the literal
+`<db_password>` placeholder; `MONGO_USER` may remain operator metadata but is
+not read by the application. The home API explicitly selects the canonical
+`thingtime` database, so the hosted URI may leave its database path empty.
+
+After changing the hosted database configuration, redeploy `develop` and check
+`GET https://dev.thingtime.com/api/v1/health/mongodb`. It must return HTTP 200,
+`connected: true`, the expected development Atlas host, `dbName: "thingtime"`,
+and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
+`https://thingtime.com` and confirm that Production reports a different Atlas
+host. The current Thingtime hostnames and deployment state are recorded in
+`VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
+
+## Components library (`/components` + the external catalog)
+## Components library (`/components` + `components-db/`)
+
+`/components` is the UI-first sibling of `/schemas`: component things
+(thingtime `["component"]`) carry an arg-templated render tree (drawn only
+through the sanitising allowlist renderers) plus arg descriptors the page
+turns into a live tester. "Save version" stores the current tester state as a
+user-owned component thing in your Things.
+
+The platform component catalog (styled after Ant Design, Bootstrap, MUI,
+shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
+lives in its own public repository —
+[lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+— as a folder database (one JSON per component + manifest) alongside the
+deterministic generator/validator/seeder pipeline. This app repo ships only
+the component runtime and the Thingtime-required components; catalog
+components live in MongoDB as system `component` things and the frontend
+fetches them from there (`GET /api/v1/components/browse`).
+
+Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
+
+```sh
+# 1. Start the dev stack and register a throwaway user, then restart with
+#    that user on the admin allowlist:
+ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
+
+# 2. Clone the catalog repo and put credentials where the seeder finds them:
+git clone https://github.com/lopugit/thingtime-components.git
+cd thingtime-components
+cat > scripts/components-db/.seed-env <<'ENV'
+TT_SEED_BASE=http://127.0.0.1:<nitro-port>
+TT_SEED_ADMIN_USER=<your-seed-user>
+TT_SEED_ADMIN_PASS=<your-seed-password>
+ENV
+
+# 3. Validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs --check
+node scripts/components-db/seed.mjs
+```
+
+The seed endpoint (`POST /api/v1/admin/components/seed`) upserts system-owned
+public things with deterministic `component-<slug>` shareIds (the prefix is
+reserved against squatters), refreshes drifted crystals in place, and never
+touches foreign docs. `GET` on the same path returns the census.
+Verification: `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`.
 
 ## Admin access
 
@@ -700,6 +1051,34 @@ verified email — toggle lives in Settings → Security). With it on,
 sha256 hash is stored, 10-minute TTL, atomically attempt-capped at 5); a second
 `POST /api/v1/login { challenge, code }` completes login with a constant-time
 comparison. Login attempts are rate-limited per IP (`auth.login`).
+
+### Admin integration vault and policy proxy
+
+The **/admin → External integrations** tab stores a write-only external
+credential and binds it to a saved endpoint policy. The browser never receives
+the credential again—not masked, decrypted, or through an audit record.
+Provision this distinct server-only value before creating any secret:
+
+```sh
+# Generate once with a secure secret manager / CSPRNG. It must decode to exactly 32 bytes.
+THINGTIME_ADMIN_VAULT_KEY="<base64url-32-byte-aes-256-gcm-key>"
+# Optional: exact comma-separated hosts allowed for Generic endpoint policies.
+# Vercel is built in as https://api.vercel.com; localhost/private/IP hosts are always refused.
+THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS="api.example.com"
+```
+
+This key also encrypts the dedicated Lopu credential collection. Keep the key
+stable across deploys: rotating the environment value without re-encrypting
+stored entries intentionally makes them undecryptable. For a fork, create a
+new random 32-byte base64url key and add Claude accounts through Admin → CI
+Control; never copy Thingtime’s encrypted rows or production tokens.
+
+Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
+accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
+origins, closed path prefixes, byte bounds, no redirects, and selected read /
+create-only / write permissions. The initial Vercel adapter checks for an
+existing environment variable before a create-only POST; it never PATCHes or
+simulates generic upstream conditional writes.
 
 ### Email delivery (owned email layer)
 
@@ -1135,6 +1514,17 @@ CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
 APP_URL="https://your-deployment.com"   # absolute links in emails
 ```
 
+**Set `APP_URL` on every deployment that sends email.** Verification and
+password-reset links carry single-use auth tokens, so their origin is never
+taken from the request `Host` header. `resolveTrustedOrigin`
+(`remix/app/api/utils/auth/appOrigin.ts`) resolves, in order: `APP_URL`; then
+the hostname the platform reports for this deployment (`VERCEL_BRANCH_URL` /
+`VERCEL_URL`, or `VERCEL_PROJECT_PRODUCTION_URL` on a production target — all
+server-injected, never caller-supplied); then, only off-platform, a narrow Host
+allowlist for local development (`localhost`, `127.0.0.1`, `[::1]`,
+`*.thingtime.com`, `*.ts.net`); otherwise the canonical production origin.
+Forks should point `APP_URL` and the canonical origin at their own domain.
+
 The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
 `GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
 `Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
@@ -1183,6 +1573,24 @@ claim, and the account starts with a `storageAllowanceBytes` value of
 session document.
 
 See `docs/api/service-accounts.md` for the complete request and response shape.
+
+## Email Delivery And Owned SMTP
+
+Thingtime's long-term email plan lives in
+`docs/email-owned-architecture.md`. It covers the migration from provider-backed
+sending toward an owned SMTP stack, including Mongo-backed queues/events,
+transactional versus newsletter stream separation, inbound/reply handling,
+DNS/authentication records, sender reputation warm-up, bounce/complaint
+processing, one-click unsubscribe, abuse contacts, and compliance requirements.
+
+Do not send production email directly from feature code. App routes and auth
+flows should enqueue mail through the Thingtime email service boundary —
+`sendEmail()` in `remix/app/api/utils/email/service.ts`, backed by the
+`email_messages` outbox and its deliverability satellites in `FUNDAMENTALS.md`
+§3 — so SES, other bridge providers, and the future owned MTA can share the same
+templates, events, suppression list, and audit trail. That boundary and its
+collections already exist; the plan extends them rather than introducing a
+second email path.
 
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.
@@ -1296,8 +1704,8 @@ change, and the hourly backstop. There is no second product-branch workflow:
   `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
   powers). If a rebuild still trips GitHub's workflow-file push restriction,
   the builder re-pins `.github` to the previous `all` state and retries.
-- Vercel builds `all` like any other product branch, so it doubles as a living
-  everything-preview.
+- Vercel no longer auto-builds `all`; use an explicitly requested
+  GitHub-built preview when the aggregate needs browser validation.
 
 ## Vercel deployment status
 
@@ -1336,6 +1744,48 @@ VERCEL_DASHBOARD_TEAM_SLUG="<team-or-scope-slug>"
 Use `VERCEL_DASHBOARD_TEAM_SLUG` when tokenless dashboard links need to point to
 a Vercel team slug that differs from the GitHub repository owner.
 
+Deployment status can additionally be fed by a Vercel webhook instead of polling
+the Vercel REST API. This is optional and off by default:
+
+```sh
+VERCEL_WEBHOOK_SECRET="<signing-secret-shown-once-when-the-webhook-is-created>"
+```
+
+Create a project-scoped Vercel webhook for deployment created/succeeded/
+promoted/error/canceled events pointing at:
+
+```text
+https://<your-thingtime-origin>/api/v1/vercel/webhook
+```
+
+Forks: the helper script `remix/scripts/vercel/create-webhook.mjs` registers
+that webhook against `VERCEL_PROJECT_ID` / `VERCEL_TEAM_ID` (documented above).
+It falls back to this repository's own upstream project and team when those are
+unset, so set both to your own values before running it — otherwise the call is
+aimed at an account your token does not own. Creating the webhook by hand in the
+Vercel dashboard needs neither variable.
+
+While `VERCEL_WEBHOOK_SECRET` is unset the endpoint answers `404` and
+`/api/v1/vercel/status` behaves exactly as before (live API polling). Once it is
+set, the latest event per git branch is persisted server-side and a `ready`
+state is served from that record with no Vercel API calls; mid-build states
+still poll for phase and progress.
+
+A recorded `error`/`canceled` is only served when the record demonstrably
+belongs to the deployment answering the request (matched on `VERCEL_URL`, or on
+`VERCEL_GIT_COMMIT_SHA` when no URL is available). One branch can have several
+concurrent deployments sharing that single record — Thingtime builds one head
+SHA into both generic Preview and the `develop` Custom Environment — and a
+sibling's failure must not mark a healthy deployment as failed, since this also
+backs `/api/v1/health/vercel`. Unattributable failures fall back to polling.
+
+This is a **separate** webhook from the CI Control receiver at
+`/api/v1/integrations/vercel/webhook` (`THINGTIME_VERCEL_WEBHOOK_SECRET`)
+documented above, which ingests the same Vercel deployment events into the CI
+Control event log for a different purpose. Configuring one does not configure
+the other, and the two secrets are independent. If you only want deployment
+status in the footer, you only need this one.
+
 Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
@@ -1352,19 +1802,27 @@ the controller. The controller remains responsible for the stable
 `pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
 comment, and marker-scoped cleanup.
 
-The workflow deliberately uses two stages. The product branches retain only a
+The workflow deliberately separates authorization, compilation, and
+publication. Product branches retain only a
 thin event listener pinned to the reusable implementation on the protected
 `github-actions` branch. Its `pull_request_target` job has no environment or
 Vercel secret, checks out no code, and emits only a bounded
-`repository_dispatch` payload. The privileged dispatch job runs in the trusted
-default-branch event context behind the `vercel-develop-pr-control` environment
-while checking out the controller from `github-actions`. It proves the
-source workflow path/run, repository, same-repository PR, head SHA, action, and
-triggering actor through GitHub's API, then re-reads the live PR. Both the PR
-author and triggering actor must be explicitly allowlisted, currently hold
-write/admin permission, and the non-draft PR must still target `develop`.
-Neither GitHub job checks out or executes PR-head code; Vercel performs the
-remote build only after those gates pass.
+`repository_dispatch` payload. The protected authorizer checks out only
+`github-actions`, proves the source workflow path/run, repository,
+same-repository PR, head SHA, action, and triggering actor through GitHub's API,
+then re-reads the live PR. Both the PR author and triggering actor must be
+explicitly allowlisted, currently hold write/admin permission, and the
+non-draft PR must still target `develop`.
+
+A separate environment-free GitHub job checks out exactly that authorized SHA,
+installs locked dependencies, and generates `.vercel/output` without any
+repository or Environment secrets. The protected publisher never executes the
+product checkout: it validates the short-lived archive's paths, links, size,
+routes, and Vite shell, then uses a pinned Vercel CLI with `--prebuilt` and
+`--target=develop`. Only that controller process receives the Vercel token and S3
+CORS probe URL. Root `vercel.json` disables automatic Git deployments for
+every branch except exact `main` and `develop`, so feature pushes cannot create
+a second native Vercel build for the same SHA.
 
 The reusable implementation and controller script must first merge to the
 protected `github-actions` branch. The thin listener must then reach the
@@ -1421,13 +1879,10 @@ only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
 `https://pr-<number>.previews.dev.thingtime.com`.
 
-Generic Preview intentionally receives every runtime variable currently
-assigned to the `develop` Custom Environment, while retaining its existing
-Preview-only filesystem, CI, repository, webhook, and workflow variables. This
-includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
-the AI, SES/email, and Vercel API values that `develop` intentionally shares
-with Production. Production MongoDB, JWT, and S3 settings remain separate and
-are not assigned to Preview.
+Generic Preview retains the development runtime variables required by manual
+or prebuilt preview publication, but ordinary feature pushes no longer trigger
+automatic Vercel builds. Production MongoDB, JWT, and S3 settings remain
+separate and are not assigned to Preview.
 
 For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
@@ -1447,6 +1902,10 @@ delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
+When verifying the delegation, query either authoritative Cloudflare nameserver
+with `+norecurse +authority`: delegation NS records are returned in the DNS
+referral's authority section, so a recursive `dig +short NS` can misleadingly
+print no answer even while the delegation is healthy.
 Vercel may still label this externally managed arrangement `DNS Change
 Recommended` or return `misconfigured: true`; that advisory asks to move the
 apex nameservers and is not the publication gate. The controller instead
@@ -1478,17 +1937,33 @@ bucket stays private:
 ]
 ```
 
-Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Activation status as of 2026-08-12: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for `*.previews.dev.thingtime.com`. The first live dispatch
-authenticated successfully and exposed the external-DNS advisory mismatch.
-The corrected implementation must merge to `github-actions`, and this thin
-listener must reach `main` through `develop`; a successful post-fix exact-SHA
-deployment, alias publication, CORS probe, and attachment upload/removal check
-then complete the activation checklist.
+are complete for `*.previews.dev.thingtime.com`. The protected controller from
+#239 is now on `github-actions`, and the thin listener from #233 is on
+`develop`.
+
+Live Vercel inspection on 2026-08-12 confirms the intended stable-domain
+invariant: `dev.thingtime.com` is verified with `gitBranch: develop` and
+`customEnvironmentId: null`; the `develop` Custom Environment retains its
+literal branch matcher and has an empty domain list. This resolves the earlier
+stable-domain configuration-gate failure.
+
+Because `pull_request_target` loads its workflow from the default branch, the
+thin listener had to reach `main` before a live run could exercise the
+protected implementation. **That promotion has since landed** (#188 merged
+2026-08-17): `.github/workflows/develop-pr-preview.yml` on `main` is now the
+thin listener delegating to
+`lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`, so
+`main`'s previous direct controller — whose obsolete requirement for a literal
+`misconfigured: false` could reject healthy externally managed wildcard DNS
+before deployment — is no longer in the path. The remaining step is a fresh
+eligible develop-target PR run as final live proof, exercising the protected
+#239 implementation's exact-SHA deployment, alias publication, CORS probe, and
+attachment upload/removal checks.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and
@@ -1498,13 +1973,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` is reserved for a separate future production-preview
-controller. Do not point the develop controller at that suffix, copy the
-production S3 role into generic Preview, or let ordinary Vercel feature/fork
-previews assume the production AWS role. A production-preview controller must have its
-own trusted actors, protected control environment, exact production OIDC trust,
-deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
-activated.
+`*.previews.thingtime.com` remains detached from the production branch and
+primary domains. Admin CI Control may assign only the exact
+`pr-<number>.previews.thingtime.com` alias to an owned, marker-verified READY
+production-environment preview. Its immutable `*.vercel.app` snapshot remains
+available beside that persistent URL. Do not point the develop controller at
+the production suffix, copy the production S3 role into generic Preview, or let
+ordinary Vercel feature/fork previews assume the production AWS role. The
+production-preview wildcard, exact production OIDC trust, cleanup, and bucket
+CORS rules must remain independently protected.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as

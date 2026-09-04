@@ -4,7 +4,13 @@
 
 import type { ThingMode } from '../../Thingtime/thingRoute';
 
-export interface DrawerSubItem {
+export interface DrawerItemVisibility {
+	authOnly?: boolean;
+	guestOnly?: boolean;
+	adminOnly?: boolean;
+}
+
+export interface DrawerSubItem extends DrawerItemVisibility {
 	id: string;
 	label: string;
 	icon?: string;
@@ -14,13 +20,9 @@ export interface DrawerSubItem {
 	mode?: ThingMode;
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
-	// visibility filters against the current user
-	authOnly?: boolean;
-	guestOnly?: boolean;
-	adminOnly?: boolean;
 }
 
-export interface DrawerTopItem {
+export interface DrawerTopItem extends DrawerItemVisibility {
 	id: string;
 	label: string;
 	icon: string;
@@ -47,6 +49,8 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/feed',
 		children: [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
+			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
+			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
 		]
@@ -66,9 +70,48 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		label: 'Search',
 		icon: '🔍',
 		to: '/search',
+		children: [{ id: 'search-home', label: 'Search', icon: '🔍', to: '/search' }]
+	},
+	{
+		id: 'schemas',
+		label: 'Schemas',
+		icon: '💎',
+		to: '/schemas',
 		children: [
-			{ id: 'search-home', label: 'Search', icon: '🔍', to: '/search' },
-			{ id: 'search-schemas', label: 'Schemas', icon: '💎', to: '/schemas' }
+			{ id: 'schemas-browse', label: 'Browse', icon: '💎', to: '/schemas' },
+			{ id: 'schemas-docs', label: 'Reference docs', icon: '📚', to: '/docs/schemas' }
+		]
+	},
+	{
+		id: 'components',
+		label: 'Components',
+		icon: '🧩',
+		to: '/components',
+		children: [
+			{ id: 'components-browse', label: 'Browse', icon: '🧩', to: '/components' },
+			{ id: 'components-schemas', label: 'Schemas', icon: '💎', to: '/schemas' }
+		]
+	},
+	{
+		id: 'actions',
+		label: 'Actions',
+		icon: '⚡',
+		to: '/actions',
+		children: [
+			{ id: 'actions-browse', label: 'Browse', icon: '⚡', to: '/actions' },
+			{ id: 'actions-docs', label: 'API reference', icon: '📚', to: '/docs/api/actions' }
+		]
+	},
+	{
+		id: 'builder',
+		label: 'Builder',
+		icon: '🧱',
+		to: '/builder',
+		children: [
+			{ id: 'builder-pages', label: 'My pages', icon: '📄', to: '/builder' },
+			{ id: 'builder-components', label: 'Components', icon: '🧩', to: '/components' },
+			{ id: 'builder-actions', label: 'Actions', icon: '⚡', to: '/actions' },
+			{ id: 'builder-design-system', label: 'Design system', icon: '🎨', to: '/docs/design-system' }
 		]
 	},
 	{
@@ -119,6 +162,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/tests',
 		children: [
 			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
+			{ id: 'dev-peers', label: 'Deployment peers', icon: '🕸️', to: '/peers', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
@@ -156,10 +200,7 @@ export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'brandin
 // The one resolver for "does clicking this item close the drawer?" — shared
 // by the click handlers (useDrawer.closesOnClick) and the settings toggles so
 // the checkboxes always show the behavior that will actually happen.
-export const drawerItemClosesOnClick = (
-	closeOnClick: Record<string, boolean> | undefined,
-	itemId: string
-): boolean => {
+export const drawerItemClosesOnClick = (closeOnClick: Record<string, boolean> | undefined, itemId: string): boolean => {
 	const saved = closeOnClick?.[itemId];
 	if (typeof saved === 'boolean') {
 		return saved;

@@ -11,8 +11,12 @@ import { viewerOf } from '~/api/utils/things/things';
 const MAX_BODY_BYTES = 32 * 1024;
 
 // Matches the feed's anon edge-cache policy: one minute fresh, five minutes
-// serve-stale-while-revalidating at the nearest Vercel PoP.
+// serve-stale-while-revalidating at the nearest Vercel PoP — and, for the same
+// reason spelled out there, keyed on Authorization so a warm anon entry can
+// never be replayed to the Bearer credential the loader below would have
+// resolved and fenced.
 const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
+const ANON_CACHE_VARY = 'Authorization';
 
 const respond = async (request: Request, actor: Actor, query: SearchQuery, anonCacheable = false) => {
   const user = actorUser(actor);
@@ -55,7 +59,12 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
       totalCapped: result.totalCapped,
       ranked: result.ranked
     },
-    anonCacheable ? { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL } } : { headers: cors }
+    anonCacheable
+      ? // cors is {} on this path (the loader hands `respond` an anonymous
+        // actor), but compose rather than clobber so an app actor ever
+        // reaching it keeps its Vary: Origin
+        { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL, Vary: [cors.Vary, ANON_CACHE_VARY].filter(Boolean).join(', ') } }
+      : { headers: cors }
   );
 };
 
@@ -63,13 +72,18 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
 // simple shareable-URL form: ranked text search plus csv filters. `anon=1`
 // forces the logged-out view regardless of cookies so the response depends
 // only on the URL and can be cached at Vercel's edge (see feed loader for the
-// full safety argument). Clients send it only when no viewer is present.
+// full safety argument). Clients send it only when no viewer is present; a
+// Bearer credential is answered as itself rather than anonymously.
 export const loader = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
-  // anon=1 forces the logged-out view regardless of cookies/tokens, so the
-  // response depends only on the URL and can be edge-cached; otherwise resolve
-  // the acting credential (cookie session, first-party Bearer, or app token).
-  const anonCacheable = params.get('anon') === '1';
+  // anon=1 forces the logged-out view regardless of cookies, so the response
+  // depends only on the URL and can be edge-cached; otherwise resolve the
+  // acting credential (cookie session, first-party Bearer, or app token). A
+  // BEARER credential opts out of the shortcut (same rule as the feed loader):
+  // skipping actor resolution would hand a visibility-fenced token the public
+  // sphere its audience fence exists to keep it out of, and a fenced body must
+  // never carry the shared anon URL's cache policy.
+  const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
   // Non-anon calls resolve the acting credential: cookie session, first-party
   // Bearer, app token, or a scoped PAT (things.read) — unknown/stale
   // credentials degrade to anonymous; PAT-specific failures (missing scope,

@@ -299,8 +299,11 @@ export type ModerationSweepResult = {
 	failed: number;
 };
 
-const SWEEP_BATCH = 10;
-const TEXT_SWEEP_BATCH = 25;
+// One pass remains deliberately small so a single cron request stays bounded.
+// The durable workflow uses these exact limits to decide whether this pass
+// exhausted a surface and should immediately continue with a fresh run.
+export const ATTACHMENT_SWEEP_BATCH = 10;
+export const TEXT_SWEEP_BATCH = 25;
 
 export type TextSweepResult = {
 	scanned: number;
@@ -392,7 +395,7 @@ export const sweepUnanalyzedAttachments = async (
 		} as any)
 		.project({ shareId: 1 })
 		.sort({ createdAt: 1 })
-		.limit(SWEEP_BATCH)
+		.limit(ATTACHMENT_SWEEP_BATCH)
 		.toArray()) as any[];
 
 	const result: ModerationSweepResult = { scanned: candidates.length, analyzed: 0, flagged: 0, skipped: 0, failed: 0 };
@@ -407,4 +410,22 @@ export const sweepUnanalyzedAttachments = async (
 		if (outcome.status === 'nsfw' || outcome.status === 'blocked') result.flagged += 1;
 	}
 	return result;
+};
+
+export type ModerationSweepBatchResult = {
+	text: TextSweepResult;
+	attachments: ModerationSweepResult;
+	// Each full, failure-free surface is safe to continue immediately. A
+	// provider failure deliberately breaks that surface's chain: its candidate
+	// remains unstamped/pending and the hourly cron is the conservative retry.
+	hasMore: boolean;
+};
+
+export const shouldContinueModerationSweep = (text: TextSweepResult, attachments: ModerationSweepResult): boolean =>
+	(text.scanned === TEXT_SWEEP_BATCH && text.failed === 0) ||
+	(attachments.scanned === ATTACHMENT_SWEEP_BATCH && attachments.failed === 0);
+
+export const runModerationSweepBatch = async (): Promise<ModerationSweepBatchResult> => {
+	const [text, attachments] = await Promise.all([sweepUnmoderatedTextThings(), sweepUnanalyzedAttachments()]);
+	return { text, attachments, hasMore: shouldContinueModerationSweep(text, attachments) };
 };
