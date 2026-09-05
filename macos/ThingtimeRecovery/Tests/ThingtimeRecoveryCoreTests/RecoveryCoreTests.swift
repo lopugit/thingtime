@@ -320,3 +320,124 @@ func installNoticeRoundTrip() throws {
     #expect(notice.message == "The app was preserved")
     #expect(RecoveryInstallNotice.consume(paths: paths) == nil)
 }
+
+@Test("withdrawn release components stay visible without disabling other archives in that release")
+func withdrawnReleaseComponents() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases")!
+    func catalog(body: String) throws -> GitHubReleaseCatalog {
+        let assets = ["Thingtime-Electron-App-Release-", "Thingtime-Recovery-App-Release-"].map { prefix in
+            ["name": "\(prefix)1.2.3-macos-arm64.zip", "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/v1.2.3/\(prefix)1.2.3-macos-arm64.zip"]
+        }
+        let data = try JSONSerialization.data(withJSONObject: [["id": 42, "tag_name": "v1.2.3", "body": body, "assets": assets]])
+        return GitHubReleaseCatalog(endpoint: endpoint) { url in
+            (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    let withdrawn = try await catalog(body: "Release history\n<!-- thingtime-recovery-unavailable:v1:desktop:missing-resource-seal -->\n").fetchAll()
+    #expect(withdrawn.publishedReleaseCount == 1)
+    #expect(withdrawn.desktop.count == 1)
+    #expect(withdrawn.desktop.first?.unavailableReason != nil)
+    #expect(withdrawn.recovery.count == 1)
+    #expect(withdrawn.recovery.first?.unavailableReason == nil)
+    let ordinary = try await catalog(body: "The phrase missing-resource-seal alone is not a withdrawal marker.").fetchAll()
+    #expect(ordinary.desktop.first?.unavailableReason == nil)
+}
+
+@Test("a withdrawn release cannot start a download through the store")
+@MainActor
+func withdrawnReleaseDoesNotDownload() async {
+    let reason = "This release archive was withdrawn. Choose a newer release."
+    let release = RecoveryRelease(asset: RecoveryReleaseAsset(downloadURL: URL(string: "https://example.invalid/never-download.zip")!, name: "never-download.zip", size: nil), id: "withdrawn", isPrerelease: false, name: "withdrawn", publishedAt: nil, releaseURL: nil, tag: "v1.2.3", version: "1.2.3", unavailableReason: reason)
+    let store = RecoveryStore()
+    await store.cache(release, component: .desktop)
+    #expect(store.notice == reason)
+    #expect(!store.isCaching)
+}
+
+@Test("legacy cached bundles expose their embedded build ID without changing the manifest")
+func legacyBuildMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let contents = root.appendingPathComponent("Contents")
+    try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+    let info = ["CFBundleShortVersionString": "2.3.4", "CFBundleVersion": "6789"]
+    try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
+    let oldJSON = Data(#"{"key":"old-abcdef123456","name":"Thingtime Desktop wrong recovery name"}"#.utf8)
+    let entry = try JSONDecoder().decode(CacheManifestEntry.self, from: oldJSON)
+    let bundle = CachedBundle(entry: entry, appURL: root, component: .recovery)
+    #expect(bundle.metadata.buildNumber == "6789")
+    #expect(bundle.displayName == "Thingtime Recovery 2.3.4")
+    #expect(RecoveryBuildMetadata(tag: "electron-v0.1.0+build.42.gabcdef123456").buildNumber == "42")
+    #expect(RecoveryBuildMetadata(tag: "electron-v0.1.0-pr.627.feature.gabcdef123456.unsigned").pullRequest == "627")
+    #expect(RecoveryBuildMetadata(tag: "electron-v0.1.0-pr.627.feature.gabcdef123456.unsigned").shortCommit == "abcdef123456")
+    #expect(RecoveryBuildMetadata().buildLabel == "Build ID unavailable")
+}
+
+@Test("Commander catalog assets and handoff plans cannot select or replace Electron bundles")
+func commanderRecoveryIsolation() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let names = ["Commander-App-Release-1.2.3-macos-arm64.zip", "Thingtime-Electron-App-Release-1.2.3-macos-arm64.zip"]
+    let data = try JSONSerialization.data(withJSONObject: [["id": 101, "tag_name": "commander-v1.2.3+build.99.gabcdef123456", "body": "- Branch: `main`\n- Commit: `abcdef123456abcdef123456abcdef123456abcdef`", "assets": names.map { ["name": $0, "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/v1/\($0)"] }]])
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint) { _ in (data, HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
+    let snapshot = try await catalog.fetchAll()
+    #expect(snapshot.commander.count == 1)
+    #expect(snapshot.commander[0].asset.name.hasPrefix("Commander-"))
+    #expect(snapshot.commander[0].branch == "main")
+    #expect(snapshot.commander[0].metadata.buildNumber == "99")
+    #expect(snapshot.desktop.count == 1)
+    let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let paths = RecoveryPaths(homeDirectory: home)
+    let commanderRoot = paths.cacheRoot(for: .commander)
+    #expect(commanderRoot != paths.desktopCacheRoot)
+    #expect(paths.installedApp(for: .commander).lastPathComponent == "Commander.app")
+    let source = commanderRoot.appendingPathComponent("bundles/test-abcdef123456/Commander.app")
+    try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+    let good = RecoveryInstallPlan(action: .installCommander, cacheRoot: commanderRoot, sourceApp: source, waitForPID: .max)
+    #expect(try good.validate(paths: paths) == .commander)
+    let crossApp = RecoveryInstallPlan(action: .installDesktop, cacheRoot: commanderRoot, sourceApp: source, waitForPID: .max)
+    #expect(throws: RecoveryError.self) { try crossApp.validate(paths: paths) }
+    let mismatchedBundle = RecoveryInstallPlan(action: .installCommander, cacheRoot: commanderRoot, sourceApp: source.deletingLastPathComponent().appendingPathComponent("Thingtime.app"), waitForPID: .max)
+    #expect(throws: RecoveryError.self) { try mismatchedBundle.validate(paths: paths) }
+}
+
+
+@Test("Commander and Recovery retain cloud provenance in cached bundles without a network catalog")
+func nativeCloudBuildMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let contents = root.appendingPathComponent("Contents")
+    try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+    let info = ["CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "103",
+                "ThingtimeReleaseVersion": "0.1.0+build.103.gabcdef123456",
+                "ThingtimeReleaseTag": "commander-v0.1.0+build.103.gabcdef123456",
+                "ThingtimeGitCommit": "abcdef123456abcdef123456abcdef123456abcdef",
+                "ThingtimeGitBranch": "main"]
+    try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
+    for component in [RecoveryComponent.commander, .recovery] {
+        let entry = try JSONDecoder().decode(CacheManifestEntry.self, from: Data(#"{"key":"saved-abcdef123456","name":"Previously installed"}"#.utf8))
+        let cached = CachedBundle(entry: entry, appURL: root, component: component)
+        #expect(cached.metadata.buildLabel == "Build 103")
+        #expect(cached.metadata.shortCommit == "abcdef123456")
+        #expect(cached.metadata.commit == "abcdef123456abcdef123456abcdef123456abcdef")
+        #expect(cached.metadata.branch == "main")
+        #expect(cached.metadata.version == "0.1.0+build.103.gabcdef123456")
+    }
+}
+
+@Test("a signed Commander cloud release exposes Commander and matching Recovery but no Electron asset")
+func commanderCloudReleasePair() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let version = "0.1.0+build.103.gabcdef123456"
+    let tag = "commander-v\(version)"
+    let names = ["Commander-App-Release-\(version)-macos-arm64.zip", "Thingtime-Recovery-App-Release-\(version)-macos-arm64.zip", "SHA256SUMS.txt"]
+    let data = try JSONSerialization.data(withJSONObject: [["id": 103, "tag_name": tag, "name": "Commander \(version)", "published_at": "2026-09-05T12:00:00Z", "body": "- Branch: `main`\n- Commit: `abcdef123456abcdef123456abcdef123456abcdef`", "assets": names.map { ["name": $0, "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/\(tag)/\($0)"] }]])
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint, architecture: "arm64") { _ in (data, HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
+    let snapshot = try await catalog.fetchAll()
+    #expect(snapshot.commander.count == 1)
+    #expect(snapshot.recovery.count == 1)
+    #expect(snapshot.desktop.isEmpty)
+    #expect(snapshot.commander.first?.metadata.buildNumber == "103")
+    #expect(snapshot.commander.first?.isUnsigned == false)
+    #expect(snapshot.recovery.first?.metadata.shortCommit == "abcdef123456")
+}
