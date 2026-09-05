@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { linkFeatureStackWorkflowRun } from './featureStackStore';
-import { recordCiEvent, upsertCiEntity, type CiEntityInput } from './store';
+import { recordCiEvent, upsertCiEntity, type CiEntityInput, type UpsertCiEntityOptions } from './store';
 
 const DEFAULT_REPOSITORY = 'lopugit/thingtime';
 
@@ -105,8 +105,12 @@ const eventBase = (provider: 'github' | 'vercel', repository: string, deliveryId
     new Date()
 });
 
-const upsert = async (entity: CiEntityInput, event: ReturnType<typeof eventBase>, data?: Record<string, unknown>) =>
-  upsertCiEntity(entity, { ...event, data });
+const upsert = async (
+  entity: CiEntityInput,
+  event: ReturnType<typeof eventBase>,
+  data?: Record<string, unknown>,
+  options?: UpsertCiEntityOptions
+) => upsertCiEntity(entity, { ...event, data }, options);
 
 export const ingestGitHubWebhook = async (input: {
   eventType: string;
@@ -126,6 +130,9 @@ export const ingestGitHubWebhook = async (input: {
   const touched: string[] = [];
   const remember = (result: { id: string }) => touched.push(result.id);
   const repo = payload.repository;
+  // Every delivery refreshes the repository header row, but only an insert
+  // or an active/archived transition is HISTORY — measured live, the
+  // per-delivery "active → active" event here was half of all ci-events.
   remember(
     await upsert(
       {
@@ -144,7 +151,9 @@ export const ingestGitHubWebhook = async (input: {
           installationId: safeNumber(payload?.installation?.id)
         }
       },
-      event
+      event,
+      undefined,
+      { eventPolicy: 'on-change' }
     )
   );
 

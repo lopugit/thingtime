@@ -412,7 +412,8 @@ export const useAttachmentUploads = (
 			}
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
-				const previewUrl = localFileMediaKind(file) === 'file' ? null : URL.createObjectURL(file);
+				const mediaKind = localFileMediaKind(file);
+				const previewUrl = mediaKind === 'image' || mediaKind === 'video' ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
 					localId,
@@ -466,7 +467,7 @@ export const useAttachmentUploads = (
 			const entry: ComposerAttachmentUpload = {
 				localId,
 				file: new File([], name),
-				previewUrl: detected === 'file' ? null : url,
+				previewUrl: detected === 'image' || detected === 'video' ? url : null,
 				status: 'preparing',
 				progress: 100,
 				uploadId: null,
@@ -499,7 +500,7 @@ export const useAttachmentUploads = (
 					patchUpload(localId, 1, {
 						status: 'ready',
 						attachment,
-						previewUrl: attachment.mediaKind === 'file' ? null : url,
+						previewUrl: attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? url : null,
 						error: null,
 						failedAt: null
 					});

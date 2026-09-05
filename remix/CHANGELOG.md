@@ -17,6 +17,68 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview settings now dispatch only
+  their bounded full policy to the protected `github-actions` controller; the
+  product backend no longer creates, aliases, deletes, or comments on Vercel
+  deployments. GitHub Actions maintains one PR comment, posted before build
+  launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  Each exact-SHA environment build runs without deployment credentials and only
+  its validated prebuilt artifact reaches the protected publisher.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
+
+### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
+
+- `@Thingtime login` is now callable before authentication and returns its
+  OAuth challenge as a successful MCP tool response, allowing the invoking
+  ChatGPT/Codex task to own PKCE, browser launch, callback, and subsequent
+  authenticated requests without a separate CLI transport.
+- Account and data tools remain OAuth-only and continue to fail closed at the
+  HTTP authorization boundary.
+
+### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/583-claude-thingtime-mongodb-index-storage-dffe19--ci-control-satellite-index-storage.md`)
+  and the audit report (`docs/architecture/mongodb-index-storage-audit.md`).
+- **Production audit**: `things_v2` was 1.82 M docs / 3.15 GB of index at the
+  64-index cap, 99.75 % of it `ci-*` webhook telemetry with no retention.
+- **New `ciControl` satellite collection** (`ciControl_v1`) for every `ci-*`
+  Thing, six-index plan, TTL retention on root `expiresAt`
+  (`THINGTIME_CI_{EVENT,JOB,ACTIVITY}_RETENTION_DAYS`, defaults 14/30/90,
+  `0` = forever); the repository row records events only on real transitions.
+- **`things` index plan**: seven dead/moved indexes retired at boot, `kind_*`
+  and the sandbox TTL made partial, cap-safe swaps, leftover rebuild twins
+  pruned.
+- **Admin migrations** `relocate-ci-control-telemetry` and
+  `rebuild-things-indexes`; `/migrations` shows a per-collection storage
+  census (`api.admin-migrations` 1.1.0); `ciControl` queryable in the
+  workbench (`api.mongodb-raw-results` 1.1.0).
+- **Deployment note**: after deploying, run the two migrations from
+  `/migrations` (dry run, then confirm) to move existing rows and reclaim the
+  index files; boot alone only frees the retired indexes.
+
+
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/485-…`, round 8).

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { getHomeThingsCollection } from '../mongodb/collections';
+import { getCiControlCollection } from '../mongodb/collections';
 import { FEATURE_STACK_USER_HELD_STATUSES } from './featureStackLifecycleCore';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -72,7 +72,7 @@ const validateTargets = (value: unknown) => {
 };
 
 export const listFeatureStacks = async (): Promise<SavedFeatureStack[]> => {
-	const things = await getHomeThingsCollection();
+	const things = await getCiControlCollection();
 	const repository = REPOSITORY();
 	const roots = await things
 		.find({ thingtime: STACK_KIND, 'crystal.repository': repository, 'crystal.archived': { $ne: true } })
@@ -149,7 +149,7 @@ export const saveFeatureStack = async (
 	},
 	actorId: string
 ): Promise<SavedFeatureStack> => {
-	const things = await getHomeThingsCollection();
+	const things = await getCiControlCollection();
 	const id = typeof input.id === 'string' && /^ci-feature-stack-[0-9a-f-]{36}$/.test(input.id) ? input.id : `ci-feature-stack-${randomUUID()}`;
 	const current = await things.findOne({ shareId: id, thingtime: STACK_KIND });
 	if (input.id && !current) throw new Error('Saved Feature Stack not found.');
@@ -168,7 +168,7 @@ export const saveFeatureStack = async (
 	if (entries.length) {
 		await things.insertMany(
 			entries.map((entry, index) => ({
-				schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+				schemaVersion: COLLECTION_SCHEMA_VERSIONS.ciControl,
 				shareId: `${id}-entry-${index}-${randomUUID()}`,
 				thingtime: [ENTRY_KIND],
 				crystal: { repository, revision, ...entry },
@@ -197,7 +197,7 @@ export const saveFeatureStack = async (
 				updatedAt: now
 			},
 			$setOnInsert: {
-				schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+				schemaVersion: COLLECTION_SCHEMA_VERSIONS.ciControl,
 				shareId: id,
 				thingtime: [STACK_KIND],
 				ownerId: 'system',
@@ -227,7 +227,7 @@ export const getFeatureStack = async (id: unknown) => {
 
 export const markFeatureStackRun = async (id: string, dispatchId: string, runId: string, requestedAt: Date) => {
 	const result = await (
-		await getHomeThingsCollection()
+		await getCiControlCollection()
 	).updateOne(
 		{ shareId: id, thingtime: STACK_KIND },
 		{
@@ -250,7 +250,7 @@ export const markFeatureStackLifecycleStatus = async (
 	actionAt = new Date()
 ) => {
 	const result = await (
-		await getHomeThingsCollection()
+		await getCiControlCollection()
 	).updateOne(
 		{ shareId: id, thingtime: STACK_KIND },
 		{
@@ -277,7 +277,7 @@ type WorkflowRunLink = {
 
 const linkDispatchWorkflowRun = async (dispatch: any, input: WorkflowRunLink) => {
 	if (!Number.isSafeInteger(input.workflowRunId)) return false;
-	const things = await getHomeThingsCollection();
+	const things = await getCiControlCollection();
 	const now = new Date();
 	await things.updateOne(
 		{ shareId: dispatch.shareId, thingtime: 'ci-dispatch' },
@@ -331,7 +331,7 @@ export const linkFeatureStackWorkflowRun = async (input: {
 	completedAt?: string | Date | null;
 }) => {
 	if (!/^feature-stack-run-[0-9a-f-]{36}$/.test(input.runId)) return false;
-	const dispatch = await (await getHomeThingsCollection()).findOne({
+	const dispatch = await (await getCiControlCollection()).findOne({
 		thingtime: 'ci-dispatch',
 		'crystal.featureStackRunId': input.runId,
 		...(input.stackId ? { parentId: input.stackId } : {}),
@@ -344,13 +344,13 @@ export const reconcileLegacyFeatureStackRun = async (
 	dispatchId: string,
 	input: WorkflowRunLink
 ) => {
-	const things = await getHomeThingsCollection();
+	const things = await getCiControlCollection();
 	const dispatch = await things.findOne({ shareId: dispatchId, thingtime: 'ci-dispatch' });
 	return dispatch ? linkDispatchWorkflowRun(dispatch, input) : false;
 };
 
 export const markFeatureStackRunLinkChecked = async (dispatchId: string) => {
-	await (await getHomeThingsCollection()).updateOne(
+	await (await getCiControlCollection()).updateOne(
 		{ shareId: dispatchId, thingtime: 'ci-dispatch' },
 		{ $set: { 'crystal.linkCheckedAt': new Date(), updatedAt: new Date() } }
 	);
@@ -359,7 +359,7 @@ export const markFeatureStackRunLinkChecked = async (dispatchId: string) => {
 export const archiveFeatureStack = async (id: unknown) => {
 	if (typeof id !== 'string') throw new Error('Choose a saved Feature Stack.');
 	const result = await (
-		await getHomeThingsCollection()
+		await getCiControlCollection()
 	).updateOne({ shareId: id, thingtime: STACK_KIND }, { $set: { 'crystal.archived': true, 'crystal.status': 'archived', updatedAt: new Date() } });
 	if (!result.matchedCount) throw new Error('Saved Feature Stack not found.');
 };
