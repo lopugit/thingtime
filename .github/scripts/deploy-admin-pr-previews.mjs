@@ -354,7 +354,7 @@ const assertPrebuiltOutput = async (directory) => {
 	return outputDirectory;
 };
 
-const prebuiltDeploymentArgs = ({ config, environment, prebuiltDirectory, metadata }) => {
+const prebuiltDeploymentArgs = ({ config, environment, prebuiltDirectory, metadata, runtimeEnvironment }) => {
 	const args = [
 		'deploy',
 		'--prebuilt',
@@ -367,6 +367,9 @@ const prebuiltDeploymentArgs = ({ config, environment, prebuiltDirectory, metada
 		'--cwd',
 		prebuiltDirectory
 	];
+	for (const [key, value] of Object.entries(runtimeEnvironment).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--env', `${key}=${value}`);
+	}
 	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
 		args.push('--meta', `${key}=${value}`);
 	}
@@ -384,7 +387,11 @@ const deployPrebuiltOutput = async (config, pullRequest, environment) => {
 		config,
 		environment,
 		prebuiltDirectory,
-		metadata: deploymentMetadata(config, pullRequest, environment)
+		metadata: deploymentMetadata(config, pullRequest, environment),
+		runtimeEnvironment: {
+			THINGTIME_BRANCH_NAME: pullRequest.head.ref,
+			THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha
+		}
 	});
 	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
 		env: {
@@ -688,10 +695,29 @@ const runSelfTest = () => {
 	);
 	assert.equal(previewAlias(505, 'develop', config), 'pr-505.previews.dev.thingtime.com');
 	assert.equal(previewAlias(505, 'production', config), 'pr-505.previews.thingtime.com');
-	const developArgs = prebuiltDeploymentArgs({ config, environment: 'develop', prebuiltDirectory: '/tmp/prebuilt/develop', metadata: {} });
+	const runtimeEnvironment = {
+		THINGTIME_BRANCH_NAME: 'codex/example',
+		THINGTIME_GIT_COMMIT_SHA: 'a'.repeat(40)
+	};
+	const developArgs = prebuiltDeploymentArgs({
+		config,
+		environment: 'develop',
+		prebuiltDirectory: '/tmp/prebuilt/develop',
+		metadata: {},
+		runtimeEnvironment
+	});
 	assert.ok(developArgs.includes('--target=develop'));
 	assert.ok(developArgs.includes('--skip-domain'));
-	const productionArgs = prebuiltDeploymentArgs({ config, environment: 'production', prebuiltDirectory: '/tmp/prebuilt/production', metadata: {} });
+	assert.ok(developArgs.includes('--env'));
+	assert.ok(developArgs.includes('THINGTIME_BRANCH_NAME=codex/example'));
+	assert.ok(developArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${'a'.repeat(40)}`));
+	const productionArgs = prebuiltDeploymentArgs({
+		config,
+		environment: 'production',
+		prebuiltDirectory: '/tmp/prebuilt/production',
+		metadata: {},
+		runtimeEnvironment
+	});
 	assert.ok(productionArgs.includes('--target=production'));
 	assert.ok(productionArgs.includes('--skip-domain'));
 	const pullRequest = {

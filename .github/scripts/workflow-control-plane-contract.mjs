@@ -1179,6 +1179,16 @@ export function assertControlPlaneContract() {
     /const expectedReady = expectedReadyAt\(\);[\s\S]*await upsertComment\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
     "develop preview publishes its expected URL and estimate before releasing the build plan",
   );
+  assert.match(
+    developPreviewController,
+    /THINGTIME_BRANCH_NAME:\s*pullRequest\.head\.ref/u,
+    "develop previews publish the exact PR branch into the runtime",
+  );
+  assert.match(
+    developPreviewController,
+    /THINGTIME_GIT_COMMIT_SHA:\s*pullRequest\.head\.sha/u,
+    "develop previews publish the exact PR SHA into the runtime",
+  );
   const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
   const adminPreviewBuildJob = developPreview.match(/\n  admin_build:\n[\s\S]*?\n  admin_controller:\n/u)?.[0] ?? "";
   const adminPreviewControllerJob = developPreview.match(/\n  admin_controller:\n[\s\S]*$/u)?.[0] ?? "";
@@ -1227,6 +1237,8 @@ export function assertControlPlaneContract() {
   assert.match(adminPreviewController, /thingtimeAdminPrPreview/u, "admin deployments carry a marker-scoped ownership fence");
   assert.match(adminPreviewController, /--prebuilt/u, "admin deployments publish only GitHub-built prebuilt output");
   assert.match(adminPreviewController, /--skip-domain/u, "admin production deploys never auto-assign production domains");
+  assert.match(adminPreviewController, /THINGTIME_BRANCH_NAME/u, "admin previews publish the exact PR branch into the runtime");
+  assert.match(adminPreviewController, /THINGTIME_GIT_COMMIT_SHA/u, "admin previews publish the exact PR SHA into the runtime");
   assert.match(adminPreviewController, /Expected-ready times are estimates/u, "admin comments disclose estimated readiness");
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
