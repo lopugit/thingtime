@@ -400,3 +400,44 @@ func commanderRecoveryIsolation() async throws {
     let mismatchedBundle = RecoveryInstallPlan(action: .installCommander, cacheRoot: commanderRoot, sourceApp: source.deletingLastPathComponent().appendingPathComponent("Thingtime.app"), waitForPID: .max)
     #expect(throws: RecoveryError.self) { try mismatchedBundle.validate(paths: paths) }
 }
+
+
+@Test("Commander and Recovery retain cloud provenance in cached bundles without a network catalog")
+func nativeCloudBuildMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let contents = root.appendingPathComponent("Contents")
+    try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+    let info = ["CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "103",
+                "ThingtimeReleaseVersion": "0.1.0+build.103.gabcdef123456",
+                "ThingtimeReleaseTag": "commander-v0.1.0+build.103.gabcdef123456",
+                "ThingtimeGitCommit": "abcdef123456abcdef123456abcdef123456abcdef",
+                "ThingtimeGitBranch": "main"]
+    try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: contents.appendingPathComponent("Info.plist"))
+    for component in [RecoveryComponent.commander, .recovery] {
+        let entry = try JSONDecoder().decode(CacheManifestEntry.self, from: Data(#"{"key":"saved-abcdef123456","name":"Previously installed"}"#.utf8))
+        let cached = CachedBundle(entry: entry, appURL: root, component: component)
+        #expect(cached.metadata.buildLabel == "Build 103")
+        #expect(cached.metadata.shortCommit == "abcdef123456")
+        #expect(cached.metadata.commit == "abcdef123456abcdef123456abcdef123456abcdef")
+        #expect(cached.metadata.branch == "main")
+        #expect(cached.metadata.version == "0.1.0+build.103.gabcdef123456")
+    }
+}
+
+@Test("a signed Commander cloud release exposes Commander and matching Recovery but no Electron asset")
+func commanderCloudReleasePair() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let version = "0.1.0+build.103.gabcdef123456"
+    let tag = "commander-v\(version)"
+    let names = ["Commander-App-Release-\(version)-macos-arm64.zip", "Thingtime-Recovery-App-Release-\(version)-macos-arm64.zip", "SHA256SUMS.txt"]
+    let data = try JSONSerialization.data(withJSONObject: [["id": 103, "tag_name": tag, "name": "Commander \(version)", "published_at": "2026-09-05T12:00:00Z", "body": "- Branch: `main`\n- Commit: `abcdef123456abcdef123456abcdef123456abcdef`", "assets": names.map { ["name": $0, "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/\(tag)/\($0)"] }]])
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint, architecture: "arm64") { _ in (data, HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
+    let snapshot = try await catalog.fetchAll()
+    #expect(snapshot.commander.count == 1)
+    #expect(snapshot.recovery.count == 1)
+    #expect(snapshot.desktop.isEmpty)
+    #expect(snapshot.commander.first?.metadata.buildNumber == "103")
+    #expect(snapshot.commander.first?.isUnsigned == false)
+    #expect(snapshot.recovery.first?.metadata.shortCommit == "abcdef123456")
+}

@@ -2076,3 +2076,13 @@ identity. **This Mac** cards read build numbers from cache metadata and bundled
 `Info.plist`, with embedded Electron commit metadata as a fallback for old apps.
 Unknown IDs remain explicitly unknown. The cloud workflow passes its numeric
 build number to both apps, and Electron writes it to `CFBundleVersion`.
+
+
+### Commander signed GitHub releases
+
+Commander main releases use the protected GitHub Actions controller and the same
+approved Developer ID / notarization secrets as Electron. See
+[Commander release setup](Commander/README.md#github-releases) for the complete
+fork-safe secret names, supported Apple silicon platform, checks, and Recovery
+installation flow. Neither the source checkout nor PR builds receive a persisted
+publication token. No unsigned release is substituted when credentials are missing.

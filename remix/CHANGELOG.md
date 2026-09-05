@@ -11,6 +11,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
+
+- 2026-09-05: Repair Commander GitHub release packaging, preserve build/commit metadata in Recovery, and keep build-only checks from stopping the installed Commander app.
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
