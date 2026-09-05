@@ -1,59 +1,70 @@
+import { createHash } from 'node:crypto';
 import { createCookie } from '~/api/cookies';
-
 import { signPurposeToken, verifyPurposeToken } from './jwt';
 
-// WebAuthn ceremony challenges ride a short-lived signed cookie instead of a
-// server-side store: the options endpoint signs { challenge, rpID, … } into a
-// purpose-fenced JWT (jwt.ts), the verify endpoint checks the signature + TTL
-// and then EXPIRES the cookie, so a challenge can't be replayed from a browser
-// that no longer holds it. Stateless by design — challenges survive serverless
-// instance churn because every deployment shares the JWT key material.
-//
-// Registration and login use separate cookies so an in-flight "add a passkey"
-// ceremony can't be consumed by a login (or vice versa), and the purpose claim
-// fences both off from every other token this server signs.
+const MAX_AGE = 60 * 10;
+const MAX_PENDING = 3;
+type Ceremony = 'reg' | 'auth';
+const purpose = (kind: Ceremony) => (kind === 'reg' ? 'webauthn-reg' : 'webauthn-auth');
+const prefix = (kind: Ceremony) => `tt_webauthn_${kind}`;
+const cookie = (name: string) =>
+	createCookie(name, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: MAX_AGE });
 
-const CHALLENGE_MAX_AGE_SECONDS = 60 * 10;
-const CHALLENGE_TTL = '10m';
-
-const challengeCookieOptions = {
-	httpOnly: true,
-	secure: process.env.NODE_ENV === 'production',
-	sameSite: 'lax' as const,
-	path: '/',
-	maxAge: CHALLENGE_MAX_AGE_SECONDS
-};
-
-const registrationCookie = createCookie('tt_webauthn_reg', challengeCookieOptions);
-const loginCookie = createCookie('tt_webauthn_auth', challengeCookieOptions);
-
-export type RegistrationChallenge = { challenge: string; userId: string; rpID: string };
-export type LoginChallenge = { challenge: string; rpID: string };
-
-export const serializeRegistrationChallengeCookie = async (payload: RegistrationChallenge) =>
-	registrationCookie.serialize(await signPurposeToken('webauthn-reg', payload, CHALLENGE_TTL));
-
-export const readRegistrationChallengeCookie = async (request: Request): Promise<RegistrationChallenge | null> => {
-	const raw = await registrationCookie.parse(request.headers.get('Cookie'));
-	if (typeof raw !== 'string' || !raw) return null;
-	const payload = await verifyPurposeToken(raw, 'webauthn-reg');
-	if (!payload || typeof payload.challenge !== 'string' || typeof payload.userId !== 'string' || typeof payload.rpID !== 'string') {
+// Read the assertion's challenge only to select a signed cookie. It is NEVER
+// trusted as an expected challenge until the cookie signature is verified.
+export const responseChallenge = (response: any): string | null => {
+	try {
+		const encoded = response?.response?.clientDataJSON;
+		if (typeof encoded !== 'string' || encoded.length > 8192) return null;
+		const value = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')).challenge;
+		return typeof value === 'string' && /^[A-Za-z0-9_-]{16,256}$/.test(value) ? value : null;
+	} catch {
 		return null;
 	}
-	return { challenge: payload.challenge, userId: payload.userId, rpID: payload.rpID };
 };
+export const challengeCookieName = (kind: Ceremony, challenge: string) =>
+	`${prefix(kind)}_${createHash('sha256').update(challenge).digest('hex').slice(0, 24)}`;
+export type LoginChallenge = { challenge: string; rpID: string; origin?: string; cookieName?: string };
+export type RegistrationChallenge = LoginChallenge & { userId: string };
 
-export const clearRegistrationChallengeCookie = () => registrationCookie.serialize('', { maxAge: 0 });
-
-export const serializeLoginChallengeCookie = async (payload: LoginChallenge) =>
-	loginCookie.serialize(await signPurposeToken('webauthn-auth', payload, CHALLENGE_TTL));
-
-export const readLoginChallengeCookie = async (request: Request): Promise<LoginChallenge | null> => {
-	const raw = await loginCookie.parse(request.headers.get('Cookie'));
-	if (typeof raw !== 'string' || !raw) return null;
-	const payload = await verifyPurposeToken(raw, 'webauthn-auth');
-	if (!payload || typeof payload.challenge !== 'string' || typeof payload.rpID !== 'string') return null;
-	return { challenge: payload.challenge, rpID: payload.rpID };
+// Independent cookies prevent one tab, autofill or a repeated click replacing
+// another request's expected challenge. Keep at most three per ceremony kind.
+const serializeChallenge = async (kind: Ceremony, payload: LoginChallenge, request: Request): Promise<string[]> => {
+	const name = challengeCookieName(kind, payload.challenge);
+	const names = (request.headers.get('Cookie') || '')
+		.split(';')
+		.map((part) => part.trim().split('=')[0])
+		.filter((key) => new RegExp(`^${prefix(kind)}_[a-f0-9]{24}$`).test(key) && key !== name);
+	const stale = names.slice(0, Math.max(0, names.length - MAX_PENDING + 1));
+	return [
+		...(await Promise.all(stale.map((key) => cookie(key).serialize('', { maxAge: 0 })))),
+		await cookie(name).serialize(await signPurposeToken(purpose(kind), payload, '10m'))
+	];
 };
-
-export const clearLoginChallengeCookie = () => loginCookie.serialize('', { maxAge: 0 });
+const readChallenge = async (kind: Ceremony, request: Request, response: unknown): Promise<LoginChallenge | null> => {
+	const challenge = responseChallenge(response);
+	if (!challenge) return null;
+	// A bounded rollout fallback accepts existing in-flight legacy cookies.
+	for (const name of [challengeCookieName(kind, challenge), prefix(kind)]) {
+		try {
+			const raw = await cookie(name).parse(request.headers.get('Cookie'));
+			if (typeof raw !== 'string' || !raw) continue;
+			const payload = await verifyPurposeToken(raw, purpose(kind));
+			if (!payload || payload.challenge !== challenge || typeof payload.rpID !== 'string') continue;
+			if (kind === 'reg' && typeof payload.userId !== 'string') continue;
+			if (payload.origin !== undefined && typeof payload.origin !== 'string') continue;
+			return { ...payload, cookieName: name } as LoginChallenge;
+		} catch {
+			/* Malformed cookie is an expired ceremony, never a 500. */
+		}
+	}
+	return null;
+};
+export const serializeRegistrationChallengeCookie = (payload: RegistrationChallenge, request: Request) => serializeChallenge('reg', payload, request);
+export const serializeLoginChallengeCookie = (payload: LoginChallenge, request: Request) => serializeChallenge('auth', payload, request);
+export const readRegistrationChallengeCookie = (request: Request, response: unknown) =>
+	readChallenge('reg', request, response) as Promise<RegistrationChallenge | null>;
+export const readLoginChallengeCookie = (request: Request, response: unknown) => readChallenge('auth', request, response);
+export const clearRegistrationChallengeCookie = (challenge: RegistrationChallenge) =>
+	cookie(challenge.cookieName || prefix('reg')).serialize('', { maxAge: 0 });
+export const clearLoginChallengeCookie = (challenge: LoginChallenge) => cookie(challenge.cookieName || prefix('auth')).serialize('', { maxAge: 0 });

@@ -668,6 +668,14 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       const headers = { 'x-commander-session': server.token };
       const first = await fetch(`${server.url}/api/search/stream?q=comm`, { headers });
+      // Fresh indexes no longer rescan at startup. Explicitly revise the
+      // catalogue while the first streamed query is still in flight.
+      const refresh = await fetch(`${server.url}/api/index`, {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ scope: 'commands' }),
+      });
+      expect(refresh.ok).toBe(true);
       expect((await streamEvents(first)).at(-1)).toMatchObject({
         phase: 'filesystem',
         complete: true,
@@ -766,7 +774,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   }
   const query = request.request?.query ?? '';
   const records = query ? [file] : [application];
-  setTimeout(() => reply({ records }), query ? 60 : 0);
+  setTimeout(() => reply({ records }), query ? 200 : 0);
 });
 `;
 }

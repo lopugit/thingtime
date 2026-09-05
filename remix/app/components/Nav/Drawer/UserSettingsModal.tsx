@@ -7,6 +7,7 @@ import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT,
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
+import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
@@ -752,6 +753,8 @@ export const UserSettingsModal = () => {
 					<Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>,
 					'Rainbow + decorative animation'
 				)}
+
+				{settingRow('Lopu messages 🦄', <LopuPositionSelect />, 'Where notifications pop up on screen')}
 
 				{settingRow(
 					'Theme Studio',

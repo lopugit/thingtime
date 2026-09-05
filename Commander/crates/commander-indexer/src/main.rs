@@ -29,7 +29,7 @@ const HELP: &str = "commander-indexer
 Usage:
   commander-indexer serve --database <path>
   commander-indexer index --database <path> --config <configuration.json>
-  commander-indexer query --database <path> --query <text> [--kind <kind>] [--limit <count>]
+  commander-indexer query --database <path> --query <text> [--kind <kind>] [--limit <count|all>]
   commander-indexer status --database <path>
 
 Kinds: application, file, directory
@@ -79,12 +79,19 @@ fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
             let query = optional_value(&arguments, "--query").unwrap_or_default();
             let limit = optional_value(&arguments, "--limit")
                 .map(|value| {
-                    value.parse::<usize>().map_err(|_| {
-                        IndexerError::new("invalid_argument", "--limit must be a positive integer")
-                    })
+                    if value == "all" {
+                        Ok(None)
+                    } else {
+                        value.parse::<usize>().map(Some).map_err(|_| {
+                            IndexerError::new(
+                                "invalid_argument",
+                                "--limit must be a nonnegative integer or all",
+                            )
+                        })
+                    }
                 })
                 .transpose()?
-                .unwrap_or(50);
+                .unwrap_or(Some(50));
             let kinds = repeated_values(&arguments, "--kind")
                 .into_iter()
                 .map(parse_kind)

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type CommanderSettings } from '@commander/protocol';
 import { ThingtimeService } from './thingtime.js';
+import { NETWORK_PROBE_REQUIREMENTS } from './networkProbe.js';
 
 const configuredSettings = (overrides: Partial<CommanderSettings> = {}): CommanderSettings => ({
   ...DEFAULT_SETTINGS,
@@ -124,13 +125,24 @@ describe('ThingtimeService OAuth', () => {
 });
 
 describe('ThingtimeService network probe', () => {
+  const manifest = () =>
+    jsonResponse({
+      schemaVersion: 1,
+      origin: 'https://thingtime.test',
+      features: Object.fromEntries(
+        Object.entries(NETWORK_PROBE_REQUIREMENTS).map(([key, version]) => [key, { version }]),
+      ),
+    });
   it('measures the fixed packet ladder without accepting arbitrary remote URLs or sizes', async () => {
     const fetchMock = vi.fn(async (input: URL, init?: RequestInit) => {
       const url = new URL(input);
+      if (url.pathname.endsWith('thingtime-capabilities.json')) return manifest();
       if (url.pathname.endsWith('/ping')) return new Response(new Uint8Array(256));
       const bytes = Number(url.searchParams.get('bytes'));
       if (url.pathname.endsWith('/download')) return new Response(new Uint8Array(bytes));
       expect(init?.method).toBe('POST');
+      expect(bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
+      expect((init?.body as Uint8Array).byteLength).toBe(bytes);
       expect(init?.headers).toMatchObject({
         'content-type': 'application/octet-stream',
         'content-length': String(bytes),
@@ -151,13 +163,87 @@ describe('ThingtimeService network probe', () => {
     ]);
     expect(result.speed?.downloads).toHaveLength(5);
     expect(result.speed?.uploads).toHaveLength(5);
-    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect(result.speed?.errors).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(18);
     expect((fetchMock.mock.calls[0]?.[0] as URL).toString()).toBe(
-      'https://thingtime.test/api/v1/network-probe/ping',
+      'https://thingtime.test/.well-known/thingtime-capabilities.json',
     );
-    expect((fetchMock.mock.calls[1]?.[0] as URL).toString()).toBe(
+    expect((fetchMock.mock.calls[2]?.[0] as URL).toString()).toBe(
       'https://thingtime.test/api/v1/network-probe/download?bytes=57344',
     );
+  });
+
+  it.each(['download', 'upload'] as const)(
+    'preserves successful samples when %s fails and does not retry its rate limit',
+    async (direction) => {
+      let failedCalls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: URL) => {
+          const url = new URL(input);
+          if (url.pathname.endsWith('thingtime-capabilities.json')) return manifest();
+          if (url.pathname.endsWith('/ping')) return new Response(new Uint8Array(256));
+          const bytes = Number(url.searchParams.get('bytes'));
+          if (url.pathname.endsWith(`/${direction}`) && ++failedCalls > 1) {
+            return new Response(JSON.stringify({ error: 'Rate limited' }), {
+              status: 429,
+              headers: { 'retry-after': '120' },
+            });
+          }
+          return url.pathname.endsWith('/download')
+            ? new Response(new Uint8Array(bytes))
+            : jsonResponse({ ok: true, bytes });
+        }),
+      );
+      const result = await new ThingtimeService().networkProbe(configuredSettings(), true);
+      expect(result.speed?.[direction === 'download' ? 'downloads' : 'uploads']).toHaveLength(1);
+      expect(result.speed?.[direction === 'download' ? 'uploads' : 'downloads']).toHaveLength(5);
+      expect(result.speed?.errors).toEqual([
+        { direction, message: 'Speed-test cooldown; retry in 2 minute(s) (429)' },
+      ]);
+      expect(failedCalls).toBe(2);
+    },
+  );
+
+  it('coalesces simultaneous windows into one speed test and releases the guard afterward', async () => {
+    const fetchMock = vi.fn(async (input: URL) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith('thingtime-capabilities.json')) return manifest();
+      if (url.pathname.endsWith('/ping')) return new Response(new Uint8Array(256));
+      const bytes = Number(url.searchParams.get('bytes'));
+      return url.pathname.endsWith('/download')
+        ? new Response(new Uint8Array(bytes))
+        : jsonResponse({ ok: true, bytes });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new ThingtimeService();
+    const [first, second] = await Promise.all([
+      service.networkProbe(configuredSettings(), true),
+      service.networkProbe(configuredSettings(), true),
+    ]);
+    expect(first).toBe(second);
+    expect(fetchMock).toHaveBeenCalledTimes(18);
+    await service.networkProbe(configuredSettings(), true);
+    expect(fetchMock).toHaveBeenCalledTimes(35);
+  });
+
+  it('fails closed on an old server before spending any speed-test bandwidth', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        schemaVersion: 1,
+        origin: 'https://thingtime.test',
+        features: {
+          'api.network-probe-ping': { version: '1.0.0' },
+          'api.network-probe-download': { version: '1.0.0' },
+          'api.network-probe-upload': { version: '1.0.0' },
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(new ThingtimeService().networkProbe(configuredSettings(), true)).rejects.toThrow(
+      'api.network-probe-upload 2.0.0',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
