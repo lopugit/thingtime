@@ -50,6 +50,10 @@ export const action = async ({ request }: { request: Request }) => {
     /^[0-9a-f]{40}$/.test(sha) &&
     ['ready', 'error', 'failed', 'canceled', 'cancelled'].includes(status)
   ) {
+    // The delivery is already ingested and durable at this point, so refreshing
+    // the PR comment is best effort: a transient Vercel/GitHub failure must not
+    // turn an accepted delivery into a 5xx that Vercel retries and eventually
+    // disables. Every other publication call site is guarded the same way.
     await refreshAdminPrPreviewPublicationForDeployment({
       prNumber,
       environment,
@@ -58,7 +62,7 @@ export const action = async ({ request }: { request: Request }) => {
       status,
       snapshotUrl: adminPreviewSnapshotUrl(deployment?.url ?? data?.url),
       createdAt: deployment?.createdAt ?? deployment?.created ?? data?.createdAt ?? data?.created
-    });
+    }).catch(() => undefined);
   }
   return json({ ok: true, ...result }, { status: result.accepted ? 202 : 200 });
 };
