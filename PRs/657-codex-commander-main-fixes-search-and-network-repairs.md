@@ -36,6 +36,8 @@ Implementation and earlier installed catalogue/menu evidence are recorded in
   but interrupted after the local service timed out; changed documentation was
   read manually and is not claimed as fully semantically indexed.
 
-This is a local Apple Development-signed installation, not a new notarized
-public distribution release. Existing `main` archive and signing fixes remain
-intact.
+Final signing follows the installed copy's identity. A pre-install check found
+the newer installed Commander uses Developer ID signing, and the matching local
+identity and notarization profile are available. The rebuilt copy will preserve
+that designated requirement; final signing and installation evidence is recorded
+on the PR. Existing `main` archive and signing fixes remain intact.
