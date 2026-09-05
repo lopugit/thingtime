@@ -62,6 +62,11 @@ experiment by itself.
   local-footprint controls, and environmental evidence. Adoption experiments
   must not exclude constrained users, paywall essential access, or turn logical
   storage bytes into an impact claim.
+- [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
+  roles, provider-neutral transaction truth, receipts, entitlements,
+  fulfilment, remedies, private settlement, and operating stop conditions.
+  Adoption experiments must not treat listing price, checkout, gross volume, or
+  payment as proof of usefulness, fulfilment, trust, or fair creator value.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

@@ -34,6 +34,7 @@ turns these observations into phases. The executable backlog lives in
 | Strong app/OAuth primitives do not yet form a general release, review, incident, and discovery lifecycle.                                                       | The [trusted developer ecosystem baseline](./trusted-developer-ecosystem-baseline.md) connects app identity, scopes, revocation, user-owned namespace data, sandbox, capability manifests, and the one-off ChatGPT submission handoff to the missing publisher declaration, immutable release, review receipt, permission-diff, containment, and abandonment contracts.               | High for the 2026-09-03 repository snapshot. Re-run the dedicated baseline before launching public app or artifact discovery.           |
 | Account-bound authorship and update timestamps do not yet explain material edits, source assertions, derivation, platform assistance, corrections, or disputes. | The [content provenance and correction baseline](./content-provenance-and-correction-baseline.md) distinguishes current post projection and edit behavior from the missing revision-evidence and assertion-authority contracts.                                                                                                                                                       | High for the 2026-09-04 repository snapshot. Re-run the dedicated baseline before widening public sharing, reuse, or provenance claims. |
 | Point optimizations do not yet form a constrained-device, low-bandwidth, or environmental-evidence contract.                                                    | The [resource-conscious reach baseline](./resource-conscious-reach-baseline.md) connects current route splitting, immutable assets, lazy media, exact byte ledgers, and opt-in offline audio to the missing journey budgets, data-saver, local-footprint, backend-work, and claims boundaries.                                                                                        | High for the 2026-09-05 repository snapshot. Rebuild and rerun the dedicated baseline before quoting current budgets or impact.         |
+| Tier and marketplace price metadata do not yet form a creator-commerce, payment, entitlement, remedy, or settlement contract.                                   | The [creator sustainability and fair-value baseline](./creator-sustainability-and-fair-value-baseline.md) separates existing subscription/quota and marketplace metadata from the missing seller/merchant roles, provider-event boundary, canonical transaction truth, private payout ledger, remedies, and operating capacity.                                                       | High for the 2026-09-05 repository snapshot. Re-run the dedicated baseline before selecting a provider or moving real money.            |
 
 ## What the evidence suggests
 
@@ -134,6 +135,9 @@ Any later measurement design should fail closed unless all of these are true:
     can responsibly widen adoption?
 11. Which public artifact family should first make material edits, source and
     derivation assertions, corrections, disputes, and evidence limits legible?
+12. Which single creator value exchange, responsibility model, country/currency,
+    provider boundary, remedy path, private data contract, and stop authority
+    could be piloted without selling reach, trust, safety, access, or exit?
 
 ## Refresh checklist
 

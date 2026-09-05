@@ -18,6 +18,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Service continuity and recovery baseline](./service-continuity-and-recovery-baseline.md)                         | Evidence on health signals, dependency failure, degraded operation, backup/restore proof, incident ownership, and recovery objectives                   | 2026-09-04    |
 | [Content provenance and correction baseline](./content-provenance-and-correction-baseline.md)                     | Evidence on authorship, edits, source assertions, derivation, verification limits, corrections, disputes, privacy, and interoperability                 | 2026-09-04    |
 | [Resource-conscious reach baseline](./resource-conscious-reach-baseline.md)                                       | Evidence on constrained-device and low-bandwidth journeys, delivery/media/offline primitives, resource budgets, privacy, and environmental-claim limits | 2026-09-05    |
+| [Creator sustainability and fair-value baseline](./creator-sustainability-and-fair-value-baseline.md)             | Evidence on tiers, marketplace metadata, payment-role gaps, product truth, privacy, remedies, creator safety, and fair value exchange                   | 2026-09-05    |
 
 ## Conventions
 

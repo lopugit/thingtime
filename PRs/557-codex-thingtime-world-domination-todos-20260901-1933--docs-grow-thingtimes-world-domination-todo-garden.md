@@ -252,3 +252,34 @@ not the individual files — and is the concrete case behind this PR's earlier
 note that historical numeric prefixes can repeat, so a full filename and link
 is canonical rather than a number. No other TODO, NOTES, PLAN, or runtime
 content changed.
+
+## 2026-09-05 — creator sustainability and fair value
+
+This run distinguishes subscription-tier and marketplace price metadata from a
+real creator value-exchange contract. It adds:
+
+- `NOTES/creator-sustainability-and-fair-value-baseline.md`, a dated evidence
+  ledger covering current tier/quota and marketplace primitives, missing role
+  and transaction contracts, provider responsibilities, consumer remedies,
+  privacy, creator safety, and a deliberately narrow pilot boundary;
+- `PLAN/creator-sustainability-and-fair-value-roadmap.md`, a gated path from one
+  responsibility charter through provider-neutral product truth, synthetic
+  proof, one test-mode payment rail, a bounded invited pilot, and separately
+  approved future capabilities; and
+- `TODO/claude-todo/31-creator-sustainability-and-fair-value.md`, an
+  implementation epic with dependencies, protected API and capability-manifest
+  obligations, provider-event invariants, accessibility/privacy/fairness gates,
+  acceptance criteria, stop conditions, and a concrete first decision packet.
+
+The proposal requires roles before rails and keeps provider events as evidence
+rather than canonical authority. It rejects paid reach, paid trust, public
+earnings by default, hidden recurrence, callback-granted entitlements, and
+commerce paths that weaken safety, accessibility, portability, or remedies. It
+recommends only a fixed-price, non-recurring digital artifact as the first
+candidate; even that waits for owner and qualified legal, tax, privacy,
+financial-risk, accessibility, and operational review.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
+TODO 22 dependency list. No runtime, API, schema, provider, payment, entitlement,
+marketplace, telemetry, or production behavior changed.

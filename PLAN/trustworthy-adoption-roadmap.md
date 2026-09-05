@@ -23,6 +23,9 @@
 **Resource-conscious reach dependency:**
 [Resource-conscious reach](./resource-conscious-reach-roadmap.md)
 
+**Creator sustainability dependency:**
+[Creator sustainability and fair value](./creator-sustainability-and-fair-value-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -217,6 +220,12 @@ Evaluate separately:
 - Creator packs or marketplaces with transparent terms and attribution.
 - Sponsorship, grants, and paid support for public-interest deployments.
 
+Use the [creator sustainability and fair-value roadmap](./creator-sustainability-and-fair-value-roadmap.md)
+before any creator payment pilot. It owns the seller/merchant responsibility
+matrix, provider-neutral transaction truth, receipt and entitlement lifecycle,
+fee/proceeds clarity, fulfilment, remedies, private settlement, and operational
+stop gate. Listing or tier prices are not evidence that payments are supported.
+
 Use the [resource-conscious reach roadmap](./resource-conscious-reach-roadmap.md)
 to measure cost and bounded resource work per useful outcome. Do not turn
 logical storage bytes into an emissions claim, exclude constrained users to
@@ -247,17 +256,18 @@ Every experiment copied into `TODO/` should contain:
 
 ## Risks and contingency paths
 
-| Risk                                            | Early signal                                                                                                 | Response                                                                                                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Instrumentation becomes surveillance            | Requests for raw content, queries, URLs, or person-level dashboards                                          | Stop collection; answer the product question with local testing, aggregate counters, or sampled research.                                                  |
-| PR volume outruns review capacity               | Long-lived open PRs, stale bases, repeated conflict automation                                               | Pause new experiments; reconcile statuses and land or close prerequisites first.                                                                           |
-| Sharing drives abuse faster than value          | Spam, impersonation, report backlog, revoked-link access                                                     | Disable the experiment flag, preserve evidence, and fix controls before resuming.                                                                          |
-| Accessibility or language quality lags          | Journey fails keyboard, screen reader, reduced motion, touch, or target locales                              | Do not broaden acquisition; fix the blocker and rerun the same journey.                                                                                    |
-| Availability hides unrecoverable state          | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work             | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming.                                 |
-| Provenance becomes a deceptive truth badge      | A source declaration, signature, or credential is presented as proof that a claim is accurate                | Remove the claim, show assertion authority and evidence limits, preserve correction/dispute paths, and satisfy the content-integrity gate before resuming. |
-| Growth excludes constrained devices or networks | Core-journey completion, transfer, long-task, or local-footprint evidence crosses an approved profile budget | Stop expansion; preserve complete meaning and satisfy the resource-conscious reach gate before resuming.                                                   |
-| Costs grow faster than usefulness               | Storage, compute, email, moderation, or support cost per useful return rises                                 | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |
-| Metrics optimize the proxy                      | Page views/time rise while useful outcomes or trust fall                                                     | Retire the proxy and return to outcome-based evaluation.                                                                                                   |
+| Risk                                                              | Early signal                                                                                                                             | Response                                                                                                                                                   |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instrumentation becomes surveillance                              | Requests for raw content, queries, URLs, or person-level dashboards                                                                      | Stop collection; answer the product question with local testing, aggregate counters, or sampled research.                                                  |
+| PR volume outruns review capacity                                 | Long-lived open PRs, stale bases, repeated conflict automation                                                                           | Pause new experiments; reconcile statuses and land or close prerequisites first.                                                                           |
+| Sharing drives abuse faster than value                            | Spam, impersonation, report backlog, revoked-link access                                                                                 | Disable the experiment flag, preserve evidence, and fix controls before resuming.                                                                          |
+| Accessibility or language quality lags                            | Journey fails keyboard, screen reader, reduced motion, touch, or target locales                                                          | Do not broaden acquisition; fix the blocker and rerun the same journey.                                                                                    |
+| Availability hides unrecoverable state                            | Health checks stay green while a critical journey loses, duplicates, or cannot restore user work                                         | Stop expansion; exercise the journey, preserve evidence, and satisfy the service continuity recovery gate before resuming.                                 |
+| Provenance becomes a deceptive truth badge                        | A source declaration, signature, or credential is presented as proof that a claim is accurate                                            | Remove the claim, show assertion authority and evidence limits, preserve correction/dispute paths, and satisfy the content-integrity gate before resuming. |
+| Growth excludes constrained devices or networks                   | Core-journey completion, transfer, long-task, or local-footprint evidence crosses an approved profile budget                             | Stop expansion; preserve complete meaning and satisfy the resource-conscious reach gate before resuming.                                                   |
+| Creator commerce creates unfair influence or unresolved liability | Payment affects reach/trust/safety, or seller, merchant, fulfilment, refund, dispute, loss, payout, or support responsibility is unclear | Stop transaction intake; preserve receipts, entitlements, remedies, and support, then satisfy the creator fair-value gate before resuming.                 |
+| Costs grow faster than usefulness                                 | Storage, compute, email, moderation, or support cost per useful return rises                                                             | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |
+| Metrics optimize the proxy                                        | Page views/time rise while useful outcomes or trust fall                                                                                 | Retire the proxy and return to outcome-based evaluation.                                                                                                   |
 
 ## First decision packet
 

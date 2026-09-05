@@ -452,3 +452,19 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     after the owner approves journeys, test profiles, resource envelopes,
     tier-neutral meaning, offline scope, signal boundaries, and accountable
     owners.
+
+31. **🌻 Make creator sustainability and fair value a product contract.**
+
+    Preserve Thingtime's provider-independent subscription tiers, quota
+    accounting, marketplace metadata, authorship, provenance, and portability
+    foundations while defining one honest creator value exchange. Decide the
+    seller, merchant, fulfilment, tax, refund, dispute, loss, payout, and support
+    roles before choosing payment rails; keep signed provider events separate
+    from canonical offers, orders, receipts, entitlements, remedies, and private
+    ledgers. Money must never buy reach, trust, safety, identity disclosure,
+    accessibility, export, or deletion. Start with the evidence note and phased
+    roadmap, then execute
+    `claude-todo/31-creator-sustainability-and-fair-value.md` only after the owner
+    and qualified reviewers approve the fixed-artifact pilot, country/currency,
+    responsibilities, terms, data boundary, provider criteria, operating
+    capacity, guardrails, and stop authority.

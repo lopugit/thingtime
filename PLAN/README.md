@@ -18,6 +18,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Service continuity and recovery roadmap](./service-continuity-and-recovery-roadmap.md)                         | Journey-level service objectives through safe degradation, restore drills, incident operations, and sustainable release gates                   | Proposed |
 | [Content provenance and correction roadmap](./content-provenance-and-correction-roadmap.md)                     | Honest edit state through revision evidence, source/derivation context, bounded credentials, corrections, disputes, and portable receipts       | Proposed |
 | [Resource-conscious reach roadmap](./resource-conscious-reach-roadmap.md)                                       | Constrained-journey baselines through client, media, offline, backend, impact-evidence, and continuous resource gates                           | Proposed |
+| [Creator sustainability and fair-value roadmap](./creator-sustainability-and-fair-value-roadmap.md)             | Role and terms approval through provider-neutral truth, synthetic proof, one payment rail, and a bounded invited pilot                          | Proposed |
 
 ## Conventions
 
