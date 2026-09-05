@@ -17,13 +17,15 @@ The iOS target gains its missing webcredentials entitlement. A public Apple asso
 - Both capability manifest suites: 10 passed.
 - Vite/Nitro production build and Vercel output verification passed. Built server fetch smoke confirms the Apple JSON association and origin-scoped passkey 1.1.0 manifest.
 - Chrome with 1Password enabled: reproduced ignored cancellation, verified Cancel restores the button, and checked login and test-account settings at desktop 1440x1000 and mobile 390x844, including the expanded registration form and footer. Closing registration cancels the request and clears its password field.
-- XcodeGen plus generic iOS Simulator Debug build passed with the associated-domain entitlement.
+- XcodeGen plus generic iOS Simulator Debug build passed with the associated-domain entitlement. A signed Release archive and IPA also built with Xcode 26.6 and an existing matching App Store distribution profile. The exported IPA passes strict signature verification and contains the correct application identifier and webcredentials entitlement.
 - TypeScript ratchet reports 109 errors against a 108-error nonblocking baseline; no errors point to the passkey changes. This is not a clean full-project typecheck.
 
 ## Rollout and remaining acceptance
 
-Deploy the web change, configure THINGTIME_APPLE_APP_IDS with the actual signed application's public application identifier, enable Associated Domains for the Apple App ID/profile, and install a rebuilt signed iOS app. This branch does not change Apple Developer or production settings. The current production association URL was checked and returns HTML, confirming that the website-side association is not yet live. Verify Face ID/Touch ID, iCloud Passwords, and 1Password sign-in/registration on real devices after rollout; software cryptographic coverage and an unsigned simulator build do not establish that acceptance.
+The existing installed profiles already permit Associated Domains. THINGTIME_APPLE_APP_IDS is now configured and read-back verified in the Thingtime Vercel project for production, preview and custom develop; its public identifier was checked against the signed IPA. Existing deployments do not acquire changed environment values, so a fresh deployment is required. The final pre-configuration preview at 39fbbe82d and its origin-scoped manifest/docs routes were verified, and Web CI passed.
+
+Remaining: merge and deploy the web change to production, then distribute/install the signed iOS build. Production still returns HTML at the Apple association URL until the code is released. Apple Developer permissions were not changed. Verify Face ID/Touch ID, iCloud Passwords, and 1Password sign-in/registration on real devices after rollout; software cryptographic coverage and an unsigned simulator build do not establish that acceptance.
 
 Local web: http://localhost:19040 (Nitro 19042, HMR 19041). Tailscale/Funnel could not be verified: the local launcher points to a missing /Applications/Tailscale.app executable.
 
-Graphify semantic refresh retained successful chunks; two image/document chunks exceeded the local proxy body limit (413). Structural refresh and portable report/HTML generation completed; semantic coverage is partial.
+Graphify retains earlier successful semantic chunks. The latest semantic refresh had two image/document requests rejected by the proxy body limit (413), and a remaining slow request was stopped after five minutes. Structural refresh and portable report/HTML generation completed instead; the latest rollout notes are not fully semantically indexed.
