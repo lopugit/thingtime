@@ -139,6 +139,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
   private var pasteTarget: NSRunningApplication?
+  private let isAccessibilityTrusted: () -> Bool
   private var fileDragInProgress = false
   private var isPresented = false
   private var commandPresentationItemID: String?
@@ -152,7 +153,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     ready: DaemonReady,
     bridge: CommanderNativeBridge,
     pinned: Bool = false,
-    pinningEnabled: Bool = true
+    pinningEnabled: Bool = true,
+    isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
   ) {
     let panel = CommanderPanel(
       contentRect: NSRect(origin: .zero, size: LauncherWindowMode.standard.size),
@@ -165,6 +167,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     self.webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
     self.isPinned = pinningEnabled && pinned
     self.pinningEnabled = pinningEnabled
+    self.isAccessibilityTrusted = isAccessibilityTrusted
     super.init()
     panel.delegate = self
     panel.level = .statusBar
@@ -275,20 +278,27 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func paste(_ text: String, preserveClipboard: Bool) async -> [String: Any] {
+    let trusted = isAccessibilityTrusted()
+    var result: [String: Any] = [
+      "copied": false,
+      "pasted": false,
+      "requiresAccessibility": !trusted,
+    ]
+    if let pasteTargetName { result["targetApplication"] = pasteTargetName }
+    // A denied keep-clipboard action must not write even transiently: clipboard
+    // observers can retain a failed emoji paste despite a later restoration.
+    if preserveClipboard, !trusted || pasteTarget == nil || pasteTarget?.isTerminated == true {
+      return result
+    }
     let previousClipboard = preserveClipboard ? PasteboardSnapshot.capture() : nil
     NSPasteboard.general.clearContents()
     let wrotePasteValue = NSPasteboard.general.setString(text, forType: .string)
-    var result: [String: Any] = [
-      "copied": wrotePasteValue && !preserveClipboard,
-      "pasted": false,
-      "requiresAccessibility": false,
-    ]
-    if let pasteTargetName { result["targetApplication"] = pasteTargetName }
+    result["copied"] = wrotePasteValue && !preserveClipboard
     guard wrotePasteValue else {
       previousClipboard?.restore()
       return result
     }
-    guard AXIsProcessTrusted() else {
+    guard trusted else {
       result["requiresAccessibility"] = true
       previousClipboard?.restore()
       return result

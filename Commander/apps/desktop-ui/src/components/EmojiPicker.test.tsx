@@ -152,9 +152,9 @@ describe('EmojiPicker', () => {
     );
   });
 
-  it('keeps the picker open and explains the accessibility copy fallback', async () => {
+  it('keeps denied paste selection and history stable and offers explicit recovery', async () => {
     vi.mocked(nativeRequest).mockImplementation(async (method) => {
-      if (method === 'clipboard.paste') return { copied: true, pasted: false, requiresAccessibility: true };
+      if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
       return method === 'application.pasteTarget' ? { name: 'ChatGPT' } : undefined;
     });
     render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
@@ -165,7 +165,72 @@ describe('EmojiPicker', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Allow Commander in Accessibility to paste');
+    expect(await screen.findByRole('status')).toHaveTextContent('Your clipboard is unchanged');
+    expect(window.localStorage.getItem('commander-emoji-recents-v1')).toBeNull();
+    expect(window.localStorage.getItem('commander-emoji-learning-v1')).not.toContain('emoji:2764');
+    expect(screen.getByRole('option', { name: /^red heart,/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText(/If it is already enabled/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Accessibility Settings' }));
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('application.open', {
+        path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Emoji' }));
+    await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('clipboard.write', { text: '❤️' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('❤️ copied to the clipboard');
+    expect(screen.queryByRole('button', { name: 'Open Accessibility Settings' })).not.toBeInTheDocument();
+  });
+
+  it('does not reorder the unfiltered grid after repeated denied double clicks', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
+      return undefined;
+    });
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
+    const grid = screen.getByRole('listbox');
+    const order = () =>
+      within(grid)
+        .getAllByRole('option')
+        .map((option) => option.getAttribute('aria-label'));
+    const initialOrder = order();
+    const emoji = within(grid).getAllByRole('option')[5];
+    if (!emoji) throw new Error('Expected a non-leading emoji');
+    const label = emoji.getAttribute('aria-label');
+    fireEvent.click(emoji);
+    fireEvent.doubleClick(emoji);
+    await screen.findByRole('status');
+    fireEvent.doubleClick(emoji);
+    await screen.findByRole('status');
+    expect(order()).toEqual(initialOrder);
+    expect(emoji).toHaveAttribute('aria-selected', 'true');
+    expect(emoji).toHaveAttribute('aria-label', label);
+    expect(window.localStorage.getItem('commander-emoji-recents-v1')).toBeNull();
+  });
+
+  it('serializes repeated Return while a paste is pending and permits a retry after failure', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'clipboard.paste')
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      return undefined;
+    });
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
+    fireEvent.keyDown(window, { key: 'Enter' });
+    fireEvent.keyDown(window, { key: 'Enter', repeat: true });
+    expect(
+      vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'clipboard.paste'),
+    ).toHaveLength(1);
+    finish({ copied: false, pasted: false, requiresAccessibility: true });
+    await screen.findByRole('status');
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(
+      vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'clipboard.paste'),
+    ).toHaveLength(2);
+    finish({ copied: false, pasted: false, requiresAccessibility: true });
+    await screen.findByRole('status');
   });
 
   it('returns to Commander with Escape', () => {

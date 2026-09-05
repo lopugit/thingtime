@@ -594,9 +594,13 @@
 }
 
 .emoji-picker-panel {
+  /* The implicit auto column otherwise grows to a feedback row's min-content
+     width, stretching every emoji cell beyond the native window's fixed mask. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .emoji-toolbar {
+  min-width: 0;
   min-height: 62px;
   display: flex;
   align-items: center;
@@ -685,6 +689,7 @@
   min-width: 92px;
 }
 .emoji-results {
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -770,6 +775,10 @@
   font-size: 0.78rem;
 }
 .emoji-footer {
+  max-height: 50vh;
+  overflow-y: auto;
+  min-width: 0;
+  flex-wrap: wrap;
   min-height: 42px;
   display: flex;
   align-items: center;
@@ -794,6 +803,7 @@
   width: 12px;
 }
 .emoji-footer-selection {
+  min-width: 0;
   max-width: 245px;
   overflow: hidden;
   color: var(--text);
@@ -801,13 +811,55 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.emoji-status {
+.emoji-feedback {
+  flex: 0 0 100%;
   min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: grid;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.emoji-status,
+.emoji-permission-help {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.emoji-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.emoji-recovery-actions button {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font: inherit;
+}
+@media (max-width: 650px) {
+  .emoji-search {
+    min-width: 0;
+  }
+  .emoji-select-wrap {
+    min-width: 110px;
+  }
+  .tone-select-wrap {
+    min-width: 78px;
+  }
+  .emoji-footer-selection {
+    max-width: 135px;
+  }
+}
+@media (max-width: 440px) {
+  .emoji-toolbar {
+    flex-wrap: wrap;
+  }
+  .emoji-search {
+    flex-basis: calc(100% - 50px);
+  }
+  .emoji-select-wrap {
+    flex: 1;
+  }
 }
 .emoji-primary-action {
   display: inline-flex;

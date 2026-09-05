@@ -4592,3 +4592,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+
+## Commander emoji paste recovery
+
+- [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
