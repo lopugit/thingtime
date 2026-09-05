@@ -12,6 +12,7 @@ import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
+import { LopuPositionSelect } from '~/components/Lopu/LopuPositionSelect';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
@@ -604,6 +605,10 @@ export const SettingsPage = () => {
 
             <SettingRow label="Motion" hint="Rainbow + decorative animation">
               <Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>
+            </SettingRow>
+
+            <SettingRow label="Lopu messages 🦄" hint="Where notifications pop up on screen">
+              <LopuPositionSelect />
             </SettingRow>
 
             <SettingRow label="Theme Studio" hint="Full editor: colours, fonts, save + share themes">
