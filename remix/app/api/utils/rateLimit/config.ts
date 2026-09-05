@@ -1,4 +1,5 @@
 import { getSettingsCollection } from '../mongodb/collections';
+import { NETWORK_PROBE_UPLOAD_REQUESTS } from '../networkProbe';
 
 // Global, admin-editable rate-limit config. The endpoints below are the ones we
 // throttle, with their DEFAULT limits; an admin overrides them via the admin
@@ -265,7 +266,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // rejects traffic if the shared limiter is unavailable.
   'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
   'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
-  'networkProbe.upload': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  // One v2 run has 11 chunks, each at most 2 MiB (22 MiB ceiling per window,
+  // below the previous five 10 MiB requests). Downloads still use five packets.
+  // Versioned because persisted v1 rules count logical packets, not chunks.
+  'networkProbe.upload.v2': { limit: NETWORK_PROBE_UPLOAD_REQUESTS, windowMs: 15 * 60_000, enabled: true },
   // token introspection (POST /api/v1/auth/introspect) — read-only status
   // checks by external platforms; two cheap DB reads per call, keyed by IP for
   // anonymous callers, bounded like the other public reads

@@ -122,6 +122,82 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `api.notifications-devices` capability contract, token-based APNs delivery,
   invalid-token cleanup, configuration docs, and focused contract tests.
 
+- 2026-09-05: Add bounded persistent media caching with access revalidation,
+  responsive low-resolution image previews, and cache controls in Settings.
+  Preserve restorable non-secret AWS S3 and SES customizations under
+  `configurations/`, with live observations separated from templates. See the
+  [PR #650 note](../PRs/650-codex-persistent-media-cache-responsive-previews-and-aws-configurations.md).
+  Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
+
+- 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
+
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
+
+
+- 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
+- 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
+
+- 2026-09-05: Repair native Commander speed tests with proxy-safe exact-byte
+  validation, upload v2 chunks below Vercel's request limit, explicit capability
+  negotiation, single-flight execution, and retained/labelled partial results.
+  Latency refreshes no longer erase throughput readings. See the
+  [main release note](../PRs/657-codex-commander-main-fixes-search-and-network-repairs.md). — Codex (AI)
+
+- 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
+  indexes, improve matching app-name ranking, and add the pin menu's new-window
+  default toggle. See the [PR #652 verification note](../PRs/652-codex-commander-app-name-ranking-complete-search-catalogues-and-pin-toggle.md). — Codex (AI)
+
+- 2026-09-05: Repair Commander GitHub release packaging, preserve build/commit metadata in Recovery, and keep build-only checks from stopping the installed Commander app.
+
+- 2026-09-05: Fix the signed Electron builder's certificate selector: give
+  electron-builder the unprefixed name while preserving the exact Developer ID
+  identity for native code signing. — Codex (AI)
+
+- 2026-09-05: Add Recovery release cards, readable cached build IDs, and an app
+  selector with isolated Commander recovery. Pass cloud build numbers into
+  Electron and reuse the approved CI Apple API key for macOS notarization.
+  Remove the confirmed damaged legacy downloads. — Codex (AI)
+
+- 2026-09-05: Repair Recovery catalogue refresh and architecture selection,
+  malformed archive handling, background verification, damaged app replacement,
+  rollback preservation, installer failure notices, and cold cloud packaging.
+  Share the protected main/PR release builder and correct its caller-event gate
+  so desktop and Recovery publish together. Withdraw damaged legacy archives
+  from installation while keeping their history visible. See the
+  [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
+- 2026-09-05: Publish Graphify lock ownership atomically and remove only the
+  releasing owner's record. Concurrent queries retain their snapshot lock
+  through completion; regression tests cover stale cleanup, writer death,
+  contention, malformed ownership, and timeout cleanup. — Codex (AI)
+
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
@@ -422,6 +498,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
 
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the

@@ -16,6 +16,7 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
 import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
@@ -127,6 +128,8 @@ export default function App() {
       <ThingtimeProvider>
         <VisualSettingsHost />
         <ThemeHost />
+        {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
+        <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* /authorize is the "Login with Thingtime" popup — a focused embed

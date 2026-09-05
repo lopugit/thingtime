@@ -6,10 +6,22 @@ import { ObjectId } from 'mongodb';
 // home-pinned — same rationale as users.ts.
 import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { getUserNotificationPrefs } from '../auth/users';
-import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, normalizeNotificationPrefs } from '~/schemas/registry';
-import type { NotificationType } from '~/schemas/registry';
+import {
+  ACL_OWNER,
+  COLLECTION_SCHEMA_VERSIONS,
+  SYSTEM_NOTIFICATION_ACTOR_ID,
+  normalizeNotificationPrefs,
+  notificationCategoryOf
+} from '~/schemas/registry';
+import type { NotificationCategory, NotificationType } from '~/schemas/registry';
 import { emailNotificationsBulk, maybeEmailNotification } from './emails';
 import { sendNotificationPush } from './apns';
+import {
+  buildNotificationListFilters,
+  resolveNotificationListQuery,
+  type NotificationListOptions as NotificationListQueryOptions,
+  type ResolvedNotificationListQuery
+} from './listQuery';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
@@ -21,10 +33,15 @@ import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 // flip retroactively hides already-written notifications of that type.
 
 const MAX_PREVIEW_CHARS = 140;
-const MAX_NOTIFICATIONS_PER_USER = 500;
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 50;
+const MAX_HREF_CHARS = 300;
 const MAX_CURSOR_CHARS = 512;
+// The /notifications history page promises "everything you've received", so
+// the per-recipient tail is generous; it is still bounded so an account that
+// scripts an action sixty times a minute cannot accumulate forever.
+export const MAX_NOTIFICATIONS_PER_USER = 10_000;
+// The page-size bounds live in listQuery.ts — normalizeNotificationListOptions
+// delegates the limit to resolveNotificationListQuery so both entry points
+// clamp identically.
 
 export type NotificationActor = {
   id: string;
@@ -41,11 +58,16 @@ export type EmitNotificationInput = {
   // post for click-through when targetId is a comment/reaction subject
   postId?: string | null;
   preview?: string | null;
+  // system notes only — see emitSystemNotification
+  title?: string | null;
+  href?: string | null;
+  outcome?: 'ok' | 'error' | null;
 };
 
 export type PublicNotification = {
   id: string;
   type: NotificationType;
+  category: NotificationCategory;
   actorId: string;
   actorUsername: string | null;
   actorName: string | null;
@@ -53,6 +75,9 @@ export type PublicNotification = {
   targetId: string | null;
   postId: string | null;
   preview: string | null;
+  title: string | null;
+  href: string | null;
+  outcome: 'ok' | 'error' | null;
   readAt: string | null;
   createdAt: string;
 };
@@ -64,6 +89,18 @@ export const clampPreview = (value: unknown): string | null => {
   return text.length > MAX_PREVIEW_CHARS ? `${text.slice(0, MAX_PREVIEW_CHARS - 1)}…` : text;
 };
 
+// A click-through for a system note is always an in-app path: rooted, not
+// protocol-relative, no whitespace/control characters, bounded. Anything else
+// is dropped rather than rendered.
+export const safeInternalHref = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const href = value.trim();
+  if (!href.startsWith('/') || href.startsWith('//') || href.length > MAX_HREF_CHARS) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[\s\u0000-\u001f\u007f]/.test(href)) return null;
+  return href;
+};
+
 const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   shareId: randomUUID(),
   schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
@@ -72,8 +109,12 @@ const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
     type: input.type,
     actorId: input.actor.id,
     actorName: input.actor.displayName || input.actor.username || null,
+    ...(input.actor.username ? { actorUsername: input.actor.username } : {}),
     ...(input.postId ? { postId: input.postId } : {}),
-    ...(clampPreview(input.preview) ? { preview: clampPreview(input.preview) } : {})
+    ...(clampPreview(input.preview) ? { preview: clampPreview(input.preview) } : {}),
+    ...(clampPreview(input.title) ? { title: clampPreview(input.title) } : {}),
+    ...(safeInternalHref(input.href) ? { href: safeInternalHref(input.href) } : {}),
+    ...(input.outcome === 'ok' || input.outcome === 'error' ? { outcome: input.outcome } : {})
   },
   ownerId: input.recipientId,
   acl: [ACL_OWNER],
@@ -126,6 +167,41 @@ export const emitNotification = async (input: EmitNotificationInput): Promise<vo
     console.error('[notifications] emit failed:', err?.message || err);
   }
 };
+
+// System notes: the platform speaking through Lopu — an action you ran
+// finished, and whatever comes next. Same protected doc, same prefs gate
+// (the recipient's 'action-run' switch), same bounded tail; the synthetic
+// actor id never collides with a user, so the "never notify yourself" guard
+// in emitNotification stays intact for people while letting Lopu address you.
+// The headline replaces "<actor> <verb>" in every row; href is the in-app
+// click-through. Never throws.
+export const SYSTEM_NOTIFICATION_ACTOR: NotificationActor = {
+  id: SYSTEM_NOTIFICATION_ACTOR_ID,
+  username: null,
+  displayName: 'Lopu'
+};
+
+export type EmitSystemNotificationInput = {
+  recipientId: string;
+  type: NotificationType;
+  title: string;
+  preview?: string | null;
+  href?: string | null;
+  targetId?: string | null;
+  outcome?: 'ok' | 'error' | null;
+};
+
+export const emitSystemNotification = (input: EmitSystemNotificationInput): Promise<void> =>
+  emitNotification({
+    recipientId: input.recipientId,
+    type: input.type,
+    actor: SYSTEM_NOTIFICATION_ACTOR,
+    targetId: input.targetId ?? null,
+    preview: input.preview ?? null,
+    title: input.title,
+    href: input.href ?? null,
+    outcome: input.outcome ?? null
+  });
 
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
 // at write (reads filter). recipients map lets followers and friends of the
@@ -202,17 +278,23 @@ const loadActors = async (
 export type ListNotificationsResult = {
   ok: true;
   notifications: PublicNotification[];
+  // unread across ALL enabled types — the bell badge, regardless of filters
   unreadCount: number;
+  // how many rows match the filters in full (cursor ignored); only computed
+  // for withTotal callers so the bell's 90s poll stays a single query
+  total: number | null;
   nextBefore: string | null;
   nextCursor: string | null;
 };
 
-export type NotificationListOptions = {
-  limit?: unknown;
-  before?: unknown;
+// The history page's filter grammar (category / types / unread / q / since /
+// until) comes from listQuery; the Watch client adds stable cursor pagination
+// and its own inclusive-from / exclusive-to window on top.
+export type NotificationListOptions = NotificationListQueryOptions & {
   cursor?: unknown;
   from?: unknown;
   to?: unknown;
+  withTotal?: unknown;
 };
 
 type NormalizedNotificationListOptions = {
@@ -221,6 +303,8 @@ type NormalizedNotificationListOptions = {
   cursor: { createdAt: Date; shareId: string } | null;
   from: Date | null;
   to: Date | null;
+  query: ResolvedNotificationListQuery;
+  withTotal: boolean;
 };
 
 const parseOptionalDate = (value: unknown): Date | null | undefined => {
@@ -258,8 +342,7 @@ export const notificationCursorClauseFor = (cursor: { createdAt: Date; shareId: 
 export const normalizeNotificationListOptions = (
   options: NotificationListOptions = {}
 ): { ok: true; value: NormalizedNotificationListOptions } | { ok: false; error: string } => {
-  const limitRaw = Number(options.limit);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_LIST_LIMIT) : DEFAULT_LIST_LIMIT;
+  const query = resolveNotificationListQuery(options);
   const before = parseOptionalDate(options.before);
   const from = parseOptionalDate(options.from);
   const to = parseOptionalDate(options.to);
@@ -270,7 +353,34 @@ export const normalizeNotificationListOptions = (
   if (cursor === undefined) return { ok: false, error: 'cursor is invalid' };
   if (before && cursor) return { ok: false, error: 'Pass before or cursor, not both' };
   if (from && to && from.getTime() >= to.getTime()) return { ok: false, error: 'from must be earlier than to' };
-  return { ok: true, value: { limit, before, cursor, from, to } };
+  const withTotal = options.withTotal === true || options.withTotal === '1' || options.withTotal === 'true';
+  return { ok: true, value: { limit: query.limit, before, cursor, from, to, query, withTotal } };
+};
+
+const publicNotification = (
+  doc: any,
+  actors: Map<string, { username: string | null; displayName: string | null; avatarUrl: string | null }>
+): PublicNotification => {
+  const actorId = String(doc.crystal?.actorId || '');
+  const live = actors.get(actorId);
+  const outcome = doc.crystal?.outcome;
+  return {
+    id: String(doc.shareId),
+    type: doc.crystal?.type,
+    category: notificationCategoryOf(doc.crystal?.type),
+    actorId,
+    actorUsername: live?.username || (typeof doc.crystal?.actorUsername === 'string' ? doc.crystal.actorUsername : null),
+    actorName: live?.displayName || live?.username || doc.crystal?.actorName || null,
+    actorAvatarUrl: live?.avatarUrl || null,
+    targetId: doc.targetId ? String(doc.targetId) : null,
+    postId: doc.crystal?.postId ? String(doc.crystal.postId) : null,
+    preview: typeof doc.crystal?.preview === 'string' ? doc.crystal.preview : null,
+    title: typeof doc.crystal?.title === 'string' ? doc.crystal.title : null,
+    href: safeInternalHref(doc.crystal?.href),
+    outcome: outcome === 'ok' || outcome === 'error' ? outcome : null,
+    readAt: doc.readAt ? new Date(doc.readAt).toISOString() : null,
+    createdAt: new Date(doc.createdAt).toISOString()
+  };
 };
 
 export const listNotifications = async (
@@ -279,68 +389,58 @@ export const listNotifications = async (
 ): Promise<ListNotificationsResult | { ok: false; status: 400; error: string }> => {
   const normalized = normalizeNotificationListOptions(options);
   if (normalized.ok === false) return { ok: false, status: 400, error: normalized.error };
-  const { limit, before, cursor, from, to } = normalized.value;
+  const { cursor, from, to, query, withTotal } = normalized.value;
 
   const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(userId));
   // Push master off = the bell goes quiet entirely (list AND badge), without
-  // touching the stored per-type switches.
-  if (!prefs.masters.push) {
-    return { ok: true, notifications: [], unreadCount: 0, nextBefore: null, nextCursor: null };
+  // touching the stored per-type switches. The same short-circuit covers a
+  // filter that asks only for disabled or unknown types.
+  const filters = buildNotificationListFilters(userId, prefs, query);
+  if (!filters) {
+    return { ok: true, notifications: [], unreadCount: 0, total: withTotal ? 0 : null, nextBefore: null, nextCursor: null };
   }
-  const disabled = Object.entries(prefs.push)
-    .filter(([, enabled]) => enabled === false)
-    .map(([type]) => type);
 
-  const base: Record<string, any> = { thingtime: 'notification', ownerId: userId };
-  if (disabled.length) base['crystal.type'] = { $nin: disabled };
+  // The badge count is filter-agnostic: everything enabled and unread.
+  const unreadFilter = buildNotificationListFilters(userId, prefs, resolveNotificationListQuery({ unread: '1' }));
 
-  const clauses: Record<string, any>[] = [base];
+  // `before`, `since` and `until` are already folded into filters.base/.page.
+  // The Watch's inclusive `from` / exclusive `to` window rides alongside as its
+  // own clause so the two createdAt bounds never collide on a single key. It is
+  // a filter, so it narrows `total` too; the cursor is pagination, so it
+  // narrows the page only.
+  const rangeClauses: Record<string, any>[] = [];
   if (from || to) {
-    clauses.push({
+    rangeClauses.push({
       createdAt: {
         ...(from ? { $gte: from } : {}),
         ...(to ? { $lt: to } : {})
       }
     });
   }
-  if (before) clauses.push({ createdAt: { $lt: before } });
-  if (cursor) clauses.push(notificationCursorClauseFor(cursor));
-  const pageFilter = clauses.length === 1 ? base : { $and: clauses };
+  const baseFilter = rangeClauses.length ? { $and: [filters.base, ...rangeClauses] } : filters.base;
+  const pageClauses: Record<string, any>[] = [filters.page, ...rangeClauses];
+  if (cursor) pageClauses.push(notificationCursorClauseFor(cursor));
+  const pageFilter = pageClauses.length === 1 ? filters.page : { $and: pageClauses };
 
   const things = await getThingsCollection();
-  const [docs, unreadCount] = await Promise.all([
+  const [docs, unreadCount, total] = await Promise.all([
     things
       .find(pageFilter as any)
       .sort({ createdAt: -1, shareId: 1 })
-      .limit(limit)
+      .limit(query.limit)
       .toArray(),
-    things.countDocuments({ ...base, readAt: null } as any)
+    unreadFilter ? things.countDocuments(unreadFilter.base as any) : Promise.resolve(0),
+    withTotal ? things.countDocuments(baseFilter as any) : Promise.resolve(null)
   ]);
 
   const actors = await loadActors(docs.map((doc: any) => String(doc.crystal?.actorId || '')));
-  const notifications: PublicNotification[] = (docs as any[]).map((doc) => {
-    const actorId = String(doc.crystal?.actorId || '');
-    const live = actors.get(actorId);
-    return {
-      id: String(doc.shareId),
-      type: doc.crystal?.type,
-      actorId,
-      actorUsername: live?.username || null,
-      actorName: live?.displayName || live?.username || doc.crystal?.actorName || null,
-      actorAvatarUrl: live?.avatarUrl || null,
-      targetId: doc.targetId ? String(doc.targetId) : null,
-      postId: doc.crystal?.postId ? String(doc.crystal.postId) : null,
-      preview: typeof doc.crystal?.preview === 'string' ? doc.crystal.preview : null,
-      readAt: doc.readAt ? new Date(doc.readAt).toISOString() : null,
-      createdAt: new Date(doc.createdAt).toISOString()
-    };
-  });
+  const notifications = (docs as any[]).map((doc) => publicNotification(doc, actors));
 
-	const nextBefore = docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
-  const nextCursor = docs.length === limit
+	const nextBefore = docs.length === query.limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
+  const nextCursor = docs.length === query.limit
     ? notificationCursorFor(new Date((docs as any[])[docs.length - 1].createdAt), String((docs as any[])[docs.length - 1].shareId))
     : null;
-  return { ok: true, notifications, unreadCount, nextBefore, nextCursor };
+  return { ok: true, notifications, unreadCount, total, nextBefore, nextCursor };
 };
 
 export const markNotificationsRead = async (

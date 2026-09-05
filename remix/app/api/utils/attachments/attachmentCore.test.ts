@@ -64,6 +64,8 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 	assert.equal(attachmentMediaKindForContentType('video/x-matroska'), 'video');
 	assert.equal(attachmentMediaKindForContentType('video/x-msvideo'), 'file');
 	assert.equal(attachmentMediaKindForContentType('audio/mpeg'), 'audio');
+	assert.equal(attachmentMediaKindForContentType('audio/x-m4a'), 'audio');
+	assert.equal(attachmentMediaKindForContentType('audio/x-custom-recorder'), 'audio');
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\0name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\ud800name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'safe\u202Egnp.exe', size: 1, contentType: 'text/plain' }).ok, false);
@@ -443,6 +445,8 @@ test('linked URLs are plain bounded http(s) with no credentials or control chara
 test('linked media types derive from the extension; unknown defaults to an image hint', () => {
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/a.JPG'), { contentType: 'image/jpeg', mediaKind: 'image' });
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/clip.mp4'), { contentType: 'video/mp4', mediaKind: 'video' });
+	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/voice.m4a'), { contentType: 'audio/mp4', mediaKind: 'audio' });
+	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/voice.flac'), { contentType: 'audio/flac', mediaKind: 'audio' });
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/spec.pdf'), { contentType: 'application/pdf', mediaKind: 'file' });
 	// svg never gets a visual hint — it is a file row, not an inline image
 	assert.equal(linkedMediaTypeForUrl('https://example.com/art.svg').mediaKind, 'file');
@@ -493,7 +497,7 @@ test('a linked crystal is canonical only as the exact closed shape', () => {
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ size: 12 })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ url: 'ftp://x' })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ url: ' https://example.com/a.jpg' })), null);
-	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ mediaKind: 'audio' })), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ mediaKind: 'audio' }))?.mediaKind, 'audio');
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ detectedContentType: 'image/png' })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', { ...linkedCrystal(), extra: true }), null);
 });

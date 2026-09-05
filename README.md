@@ -55,9 +55,10 @@ branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
-writers, validates each atomic output set, deduplicates identical artifacts,
-regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. `scripts/graphify prune` applies the bounded
+writers, holds query snapshots until their reader exits, validates each atomic
+output set, deduplicates identical artifacts, regenerates the report/HTML, and
+converts Graphify's mutable semantic cache into coexisting immutable
+variants. `scripts/graphify prune` applies the bounded
 retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
 positive integer only when a local workflow deliberately needs more than one
 portable snapshot. See
@@ -2088,6 +2089,53 @@ iOS/scripts/testflight-beta.sh
 future web changes on the same Vercel branch URL do not require a new iOS
 binary.
 
+### Recovery release catalogue and cloud publishing
+
+Recovery reads all published GitHub release pages (including prereleases) in one
+refresh, then selects desktop and companion Recovery ZIPs for the current Mac.
+Its sidebar reports GitHub's published count separately from compatible archives;
+Actions runs and source commits are not downloadable releases. The legacy build 4
+archive has no resource seal and must not be installed or re-signed by the client.
+A failed download, verification, or refresh preserves the installed app and caches.
+Publishers can withdraw a damaged component without removing release history by
+placing `<!-- thingtime-recovery-unavailable:v1:desktop:missing-resource-seal -->`
+on its own line in that GitHub release's notes (`recovery` replaces `desktop` for
+the companion app). Recovery labels that component unavailable and disables its
+download before transferring the archive. Other components remain available.
+Installing a valid replacement can repair a damaged current app: when the old app
+cannot enter the verified cache, Recovery preserves it separately and reports its
+backup path. Installer failures reopen Recovery with a persistent explanation.
+
+Main and approved PR release builds use the protected `github-actions` pipeline.
+The main listener requires `contents: write` and `pull-requests: read` so its nested
+worker can run; product changes reach it through the normal main promotion process.
+The macOS signing inputs are `MAC_CSC_LINK` (base64 encrypted Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, and `APPLE_TEAM_ID`, stored in GitHub Actions secrets.
+Notarization uses `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`, or the already configured `ASC_KEY_CONTENT`, `ASC_KEY_ID`,
+and `ASC_ISSUER_ID` equivalents. API-key content is base64 encoded. The ASC
+fallback is considered only after macOS signing is explicitly configured, so an
+unrelated iOS setup does not change the unsigned lane. An entirely absent macOS
+secret set produces clearly marked `.unsigned` prereleases containing both
+apps; partial configuration fails closed. Unsigned archives never become the latest trusted release. Forks
+must configure their own release origin and signing setup rather than reusing
+Thingtime's account credentials.
+
+
+Recovery's app selector switches between Thingtime Electron and Commander, with
+separate cache roots and fixed bundle identifiers. The shared Recovery launcher
+can update itself from either view. Commander archives use
+`Commander-App-Release-<version>-macos-<arch>.zip` (or the explicit
+`Commander-App-UNSIGNED-Release-` prefix and `.unsigned` tag). A Commander view
+with no published compatible archive says so; **Save installed build** verifies
+and caches `~/Applications/Commander.app` for offline recovery.
+
+GitHub cards show component, channel, date, architecture, size and release/build
+identity. **This Mac** cards read build numbers from cache metadata and bundled
+`Info.plist`, with embedded Electron commit metadata as a fallback for old apps.
+Unknown IDs remain explicitly unknown. The cloud workflow passes its numeric
+build number to both apps, and Electron writes it to `CFBundleVersion`.
+
 ### Passkey deployment and Apple app setup
 
 Passkeys use the `thingtime.com` relying-party ID on its subdomains, but the
@@ -2123,3 +2171,47 @@ Passkey repair worktree validation: local web port **19040**, HMR **19041**, Nit
 **19042**. Local URL: `http://localhost:19040`. Tailscale/Funnel was unavailable on
 2026-09-05 because its CLI points to a missing `/Applications/Tailscale.app`;
 no public Funnel mapping was changed.
+
+
+### Commander signed GitHub releases
+
+Commander main releases use the protected GitHub Actions controller and the same
+approved Developer ID / notarization secrets as Electron. See
+[Commander release setup](Commander/README.md#github-releases) for the complete
+fork-safe secret names, supported Apple silicon platform, checks, and Recovery
+installation flow. Neither the source checkout nor PR builds receive a persisted
+publication token. No unsigned release is substituted when credentials are missing.
+
+## Dependency configuration recovery
+
+[configurations/](configurations/README.md) holds non-secret service customizations
+and environment-specific restoration instructions. AWS S3 snapshots distinguish
+development and production; SES documents verified domain settings and clearly
+labelled deployment templates. Forks must substitute their own bucket/domain
+names and provision credentials through their secret store.
+
+### Persistent media and responsive images
+
+Media settings let users disable persistence, clear downloaded bytes, or disable
+low-resolution previews. A service worker stores binary files in IndexedDB, then
+Cache Storage or memory when unavailable (128 MiB per backend, 256 entries, seven
+days, at most 16 MiB per file). Browser eviction remains possible. Large files,
+opaque third-party responses and unsupported environments use native HTTP
+loading; HTML and general API responses are never captured by this worker.
+Managed private media requires an online access check before every worker cache
+read, including ranges, so cached content cannot bypass revoked access.
+
+The protected attachment-content feature is version 1.1.0. Image variants use
+Sharp at widths 64/320/640/1280/1920 with bounded decoding and concurrency. GIFs,
+animated/unsupported images and oversized sources fall back to the original.
+No resizing infrastructure or extra secret is required. New upload and signed
+download Cache-Control metadata permits private storage/revalidation; signed
+redirects and authorization receipts retain no-store.
+
+Local validation in the `thingtime-persistent-media-cache` worktree uses
+http://localhost:13540 (Vite), 13541 (HMR), 13542 (Nitro). The browser fixture
+at http://localhost:13543/tests/media-cache.html is served by
+`node remix/scripts/serve-media-cache-qa.mjs`; it uses real UI/worker code with
+synthetic media and access revocation, without writing application data.
+Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
+missing Tailscale.app executable. No public mapping was created or changed.

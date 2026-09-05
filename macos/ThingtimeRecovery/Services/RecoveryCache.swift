@@ -52,7 +52,10 @@ public final class RecoveryCache {
     public func cacheBundle(sourceApp: URL, descriptor: CacheReleaseDescriptor, verify: (URL) throws -> Void) throws -> CachedBundle {
         try ensureRoot()
         let key = cacheKey(for: descriptor)
-        if let existing = try listBundles().first(where: { $0.entry.key == key }) { return existing }
+        if let existing = try listBundles().first(where: { $0.entry.key == key }) {
+            try verify(existing.appURL)
+            return existing
+        }
         let recoverableEntries = try listBundles().map(\.entry)
         guard recoverableEntries.count < maximumBundles else {
             throw RecoveryError.operationFailed("Thingtime keeps up to \(maximumBundles) verified \(component.title) recovery bundles. Remove one before adding another.")
@@ -71,6 +74,7 @@ public final class RecoveryCache {
             let entry = CacheManifestEntry(
                 assetName: descriptor.assetName,
                 branch: descriptor.branch,
+                buildNumber: RecoveryBuildMetadata(bundleURL: sourceApp).buildNumber,
                 cachedAt: ISO8601DateFormatter().string(from: Date()),
                 commit: descriptor.commit,
                 key: key,
