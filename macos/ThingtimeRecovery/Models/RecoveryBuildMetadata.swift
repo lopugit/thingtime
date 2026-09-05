@@ -24,16 +24,16 @@ public struct RecoveryBuildMetadata {
         let web = bundleURL.flatMap { try? Data(contentsOf: $0.appendingPathComponent("Contents/Resources/web/metadata.json")) }
             .flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
         let desktopRelease = web?["desktopRelease"] as? [String: Any]
-        self.version = version ?? desktopRelease?["version"] as? String ?? info?["CFBundleShortVersionString"] as? String
-        let releaseTag = tag ?? desktopRelease?["tag"] as? String
+        self.version = version ?? info?["ThingtimeReleaseVersion"] as? String ?? desktopRelease?["version"] as? String ?? info?["CFBundleShortVersionString"] as? String
+        let releaseTag = tag ?? info?["ThingtimeReleaseTag"] as? String ?? desktopRelease?["tag"] as? String
         let embeddedBuild = buildNumber ?? desktopRelease?["buildNumber"] as? String ?? info?["CFBundleVersion"] as? String
         // Older Electron bundles put the entire SemVer in CFBundleVersion.
         // Do not turn that unbounded string into a graphical build badge.
         self.buildNumber = Self.capture("(?:^|[.+-])build[.]([0-9]+)", in: releaseTag)
             ?? embeddedBuild.flatMap { $0.range(of: "^[0-9]{1,20}$", options: .regularExpression) != nil ? $0 : nil }
-        self.commit = commit ?? Self.capture("(?:^|[.])g([a-f0-9]{7,40})(?:[.]|$)", in: releaseTag) ?? web?["gitCommit"] as? String
+        self.commit = commit ?? info?["ThingtimeGitCommit"] as? String ?? Self.capture("(?:^|[.])g([a-f0-9]{7,40})(?:[.]|$)", in: releaseTag) ?? web?["gitCommit"] as? String
         self.pullRequest = Self.capture("(?:^|[.-])pr[.]([0-9]+)[.]", in: releaseTag)
-        self.branch = branch ?? web?["gitBranch"] as? String
+        self.branch = branch ?? info?["ThingtimeGitBranch"] as? String ?? web?["gitBranch"] as? String
     }
 
     public var shortCommit: String? { commit.map { String($0.prefix(12)) } }

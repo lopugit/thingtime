@@ -4469,3 +4469,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       packager passes its unprefixed name and team to electron-builder, while
       native helpers keep the full certificate name. Missing or development-only
       identities fail before building; no unsigned fallback is allowed.
+
+- [ ] Dispatch Commander on the protected controller; confirm its exact main SHA,
+      signed Commander and Recovery ZIPs, checksums, and `latest=false`. Switch
+      Recovery to Commander, download/verify both cards, install with rollback
+      preserved, and verify build number, commit and branch still appear offline.
+- [ ] Run Commander `--prepare` and `--build-only` with an installed app running;
+      its PID/daemon remain unchanged. A failed notarization must not stop or
+      replace the installed app. Run `node --test Commander/script/release-packaging.test.mjs`.

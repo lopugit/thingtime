@@ -2112,3 +2112,13 @@ Passkey repair worktree validation: local web port **19040**, HMR **19041**, Nit
 **19042**. Local URL: `http://localhost:19040`. Tailscale/Funnel was unavailable on
 2026-09-05 because its CLI points to a missing `/Applications/Tailscale.app`;
 no public Funnel mapping was changed.
+
+
+### Commander signed GitHub releases
+
+Commander main releases use the protected GitHub Actions controller and the same
+approved Developer ID / notarization secrets as Electron. See
+[Commander release setup](Commander/README.md#github-releases) for the complete
+fork-safe secret names, supported Apple silicon platform, checks, and Recovery
+installation flow. Neither the source checkout nor PR builds receive a persisted
+publication token. No unsigned release is substituted when credentials are missing.
