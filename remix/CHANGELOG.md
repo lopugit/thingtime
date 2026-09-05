@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Add bounded persistent media caching with access revalidation,
+  responsive low-resolution image previews, and cache controls in Settings.
+  Preserve restorable non-secret AWS S3 and SES customizations under
+  `configurations/`, with live observations separated from templates. See the
+  [PR #650 note](../PRs/650-codex-persistent-media-cache-responsive-previews-and-aws-configurations.md).
+  Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
+
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
