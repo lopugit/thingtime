@@ -33,6 +33,7 @@ import {
 	type Fail,
 	type Viewer
 } from '../things/things';
+import { emitSystemNotification } from '../notifications/notifications';
 import { bindPacks } from './packs/index';
 
 // The Action Thing executor — the run-time half of the bounded-execution
@@ -949,6 +950,27 @@ export const runAction = async (
 		result: capBytes(result, budget.maxResultBytes),
 		trace: budget.trace
 	});
+
+	// System notification (category system, type action-run): every explicit
+	// run lands in the invoker's bell + /notifications history; a delegated
+	// component click (source 'component' — a button on a page can fire this
+	// dozens of times a minute) only reports when it FAILS. Fire-and-forget
+	// like the run record: a notification hiccup never touches the run result,
+	// and the recipient's 'action-run' switch can silence it entirely.
+	if (!ownedOnly || status === 'error') {
+		const actionKey =
+			typeof program.crystal.actionKey === 'string' && program.crystal.actionKey.trim() ? program.crystal.actionKey.trim() : program.id;
+		const opsLabel = `${budget.opsUsed} op${budget.opsUsed === 1 ? '' : 's'}`;
+		void emitSystemNotification({
+			recipientId: viewer.id,
+			type: 'action-run',
+			title: status === 'ok' ? `Action “${program.name}” finished ✅` : `Action “${program.name}” failed 🌧️`,
+			preview: status === 'ok' ? `${durationMs} ms · ${opsLabel}` : errorMessage || 'The run stopped with an error.',
+			href: `/actions/${encodeURIComponent(actionKey)}`,
+			targetId: runId,
+			outcome: status
+		}).catch(() => {});
+	}
 
 	return {
 		ok: true,

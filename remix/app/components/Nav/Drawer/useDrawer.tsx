@@ -21,6 +21,7 @@ import { drawerItemClosesOnClick } from './drawerMenu';
 //           the drawer and every window, below popups/modals/DevKit)
 //   10220   dropdowns & popups   10230 drawer trigger
 //   10240/10250   modal overlay / modal
+//   10260   Lopu toasts (--toast-z-index in GlobalStyles) — always visible
 export const DRAWER_Z = 10000;
 export const LOPU_WINDOW_Z = DRAWER_Z + 60;
 export const LOPU_LAUNCHER_Z = DRAWER_Z + 200;

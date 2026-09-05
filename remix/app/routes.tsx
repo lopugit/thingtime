@@ -216,6 +216,9 @@ export const router = createBrowserRouter([
       // the viewer's Saved library — no loader guard: it renders its own
       // signed-out quiet state, like /apps
       { path: 'saved', element: <SavedRoute /> },
+      // the viewer's full notification history (search + category/type/
+      // unread/date filters in the URL) — same signed-out quiet state posture
+      { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },

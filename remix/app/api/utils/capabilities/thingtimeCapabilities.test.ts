@@ -77,3 +77,12 @@ test('both manifests publish passkey concurrency and Apple association contracts
   assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association'));
   assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association-docs'));
 });
+
+test('both manifests publish notification history and system notification contracts', () => {
+  const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
+  const apiManifest = createApiCapabilitiesManifest();
+  for (const feature of ['api.notifications-list', 'api.notifications-settings']) {
+    assert.equal(originManifest.features[feature]?.version, '1.1.0');
+    assert.equal(apiManifest.features[feature], '1.1.0');
+  }
+});
