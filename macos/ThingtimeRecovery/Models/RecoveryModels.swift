@@ -185,3 +185,9 @@ public enum RecoveryError: LocalizedError {
         }
     }
 }
+
+public struct RecoveryCatalogSnapshot {
+    public let publishedReleaseCount: Int
+    public let desktop: [RecoveryRelease]
+    public let recovery: [RecoveryRelease]
+}

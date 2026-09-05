@@ -57,6 +57,7 @@ public enum RecoveryInstaller {
         let trust = verificationTrust(for: cachedBundle)
         try verify(plan.sourceApp, component: component, trust: trust, signingContext: signingContext)
         try waitForExit(plan.waitForPID)
+        try verify(plan.sourceApp, component: component, trust: trust, signingContext: signingContext)
         switch plan.action {
         case .launchDesktop:
             try ProcessExecution.launchApplication(plan.sourceApp)
@@ -101,7 +102,6 @@ public enum RecoveryInstaller {
         let backup = parent.appendingPathComponent(".\(component.rawValue)-backup-\(UUID().uuidString).app")
         defer {
             try? manager.removeItem(at: staging)
-            try? manager.removeItem(at: backup)
         }
         try ProcessExecution.run("/usr/bin/ditto", arguments: ["--rsrc", "--extattr", source.path, staging.path], label: "\(component.title) installation copy")
         try verify(staging, component: component, trust: trust, signingContext: signingContext)
@@ -111,9 +111,15 @@ public enum RecoveryInstaller {
             try verify(target, component: component, trust: trust, signingContext: signingContext)
         } catch {
             if manager.fileExists(atPath: target.path) { try? manager.removeItem(at: target) }
-            if manager.fileExists(atPath: backup.path) { try? manager.moveItem(at: backup, to: target) }
+            if manager.fileExists(atPath: backup.path) {
+                do { try manager.moveItem(at: backup, to: target) }
+                catch {
+                    throw RecoveryError.operationFailed("Installation rollback could not restore the previous app. Its backup is preserved at \(backup.path).")
+                }
+            }
             throw error
         }
+        try? manager.removeItem(at: backup)
     }
 
     private static func closeRunningApplications(bundleIdentifier: String) throws {

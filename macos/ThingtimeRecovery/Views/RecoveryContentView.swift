@@ -22,6 +22,9 @@ struct RecoveryContentView: View {
                         .tag(RecoverySelection.recoveryCache)
                 }
                 Section("Available releases") {
+                    if let status = store.catalogStatus {
+                        Text(status).font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(store.desktopReleases) { release in
                         Label(release.isUnsigned ? "UNSIGNED \(release.version ?? release.tag)" : release.version ?? release.tag, systemImage: release.isUnsigned ? "exclamationmark.triangle.fill" : "arrow.down.circle")
                             .foregroundStyle(release.isUnsigned ? .orange : .primary)
@@ -46,7 +49,7 @@ struct RecoveryContentView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help("Refresh GitHub releases")
-                .disabled(store.isRefreshing)
+                .disabled(store.isRefreshing || store.isCaching)
             }
         }
         .alert("Thingtime Recovery", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
@@ -112,6 +115,7 @@ private struct CacheListView: View {
                     }
                 }
                 .frame(minHeight: 250)
+                .disabled(store.isCaching)
             }
             HStack {
                 Button("Show in Finder") { store.reveal(component) }
@@ -162,7 +166,7 @@ private struct ReleaseDetailView: View {
                 Text(published, style: .date).font(.caption).foregroundStyle(.secondary)
             }
             HStack {
-                Button(release.isUnsigned ? "Cache unsigned bundle" : "Cache verified bundle") {
+                Button(release.isUnsigned ? "Cache unsigned bundle" : "Download and verify") {
                     if release.isUnsigned {
                         showingUnsignedAcknowledgement = true
                     } else {
@@ -170,11 +174,12 @@ private struct ReleaseDetailView: View {
                     }
                 }
                     .buttonStyle(.borderedProminent)
-                    .disabled(store.isRefreshing)
+                    .disabled(store.isRefreshing || store.isCaching)
                 if let releaseURL = release.releaseURL {
                     Link("Open on GitHub", destination: releaseURL)
                 }
             }
+            if let notice = store.notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
             Text(release.isUnsigned
                 ? "Unsigned archives receive only bundle-ID and ad-hoc integrity checks. They remain visibly marked UNSIGNED in the cache and are available for manual launch or installation."
                 : (component == .desktop ? "The archive is checked for the stable Thingtime bundle ID, team signature, and—on production builds—Developer ID notarization before it enters the shared cache." : "A cached Recovery release can replace this app through its signed helper, so the recovery UI remains independently updateable."))

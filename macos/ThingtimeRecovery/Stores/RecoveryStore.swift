@@ -10,6 +10,8 @@ final class RecoveryStore: ObservableObject {
     @Published private(set) var desktopReleases: [RecoveryRelease] = []
     @Published private(set) var recoveryReleases: [RecoveryRelease] = []
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isCaching = false
+    @Published private(set) var catalogStatus: String?
     @Published var errorMessage: String?
     @Published var notice: String?
 
@@ -30,13 +32,15 @@ final class RecoveryStore: ObservableObject {
     }
 
     func refresh() async {
+        guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            async let desktop = catalog.fetch(component: .desktop)
-            async let recovery = catalog.fetch(component: .recovery)
-            desktopReleases = try await desktop
-            recoveryReleases = try await recovery
+            let snapshot = try await catalog.fetchAll()
+            desktopReleases = snapshot.desktop
+            recoveryReleases = snapshot.recovery
+            catalogStatus = "GitHub: \(snapshot.publishedReleaseCount) published releases · \(snapshot.desktop.count) desktop · \(snapshot.recovery.count) Recovery for this Mac"
+            errorMessage = nil
             reloadCaches()
             notice = "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
         } catch {
@@ -46,31 +50,27 @@ final class RecoveryStore: ObservableObject {
     }
 
     func cache(_ release: RecoveryRelease, component: RecoveryComponent) async {
+        guard !isCaching else { return }
+        isCaching = true
+        notice = "Downloading \(component.title) \(release.version ?? release.tag)…"
+        defer { isCaching = false }
         do {
             let cache = cache(for: component)
             let archive = try await catalog.download(release.asset, into: cache.root.appendingPathComponent("downloads", isDirectory: true))
             defer { try? FileManager.default.removeItem(at: archive) }
-            let staging = try extractArchive(archive, component: component, cacheRoot: cache.root)
-            defer { try? FileManager.default.removeItem(at: staging.deletingLastPathComponent()) }
-            if release.isUnsigned {
-                _ = try cache.cacheBundle(
-                    sourceApp: staging,
-                    descriptor: CacheReleaseDescriptor(release: release),
-                    verify: { try BundleVerifier.verifyUnsigned($0, component: component) }
-                )
-            } else {
-                let context = try BundleVerifier.signingContext(for: Bundle.main.bundleURL)
-                _ = try cache.cacheBundle(
-                    sourceApp: staging,
-                    descriptor: CacheReleaseDescriptor(release: release),
-                    verify: { try BundleVerifier.verify($0, component: component, signingContext: context) }
-                )
-            }
+            notice = "Checking archive integrity…"
+            let recoveryApp = Bundle.main.bundleURL
+            let cacheRoot = cache.root
+            _ = try await Task.detached(priority: .userInitiated) {
+                let context = release.isUnsigned ? nil : try BundleVerifier.signingContext(for: recoveryApp)
+                return try RecoveryArchive.cache(archive, release: release, component: component, cacheRoot: cacheRoot, signingContext: context)
+            }.value
             reloadCaches()
             notice = release.isUnsigned
                 ? "Cached UNSIGNED \(component.title) \(release.version ?? release.tag). macOS may require Open Anyway before first launch."
                 : "Cached verified \(component.title) \(release.version ?? release.tag)."
         } catch {
+            notice = "Download was not cached. Installed apps and existing cached versions are unchanged."
             errorMessage = error.localizedDescription
         }
     }
@@ -130,14 +130,4 @@ final class RecoveryStore: ObservableObject {
         RecoveryCache(component: component, root: paths.cacheRoot(for: component))
     }
 
-    private func extractArchive(_ archive: URL, component: RecoveryComponent, cacheRoot: URL) throws -> URL {
-        let stagingRoot = cacheRoot.appendingPathComponent(".extract-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-        try ProcessExecution.run("/usr/bin/ditto", arguments: ["-x", "-k", archive.path, stagingRoot.path], label: "Thingtime Recovery archive extraction")
-        let app = stagingRoot.appendingPathComponent(component.appName, isDirectory: true)
-        guard FileManager.default.fileExists(atPath: app.path) else {
-            throw RecoveryError.operationFailed("The GitHub release archive does not contain \(component.appName).")
-        }
-        return app
-    }
 }
