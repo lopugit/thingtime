@@ -93,6 +93,54 @@ path instead of entering dependency installation. Only a contents 404 means the
 file is missing; authentication, rate-limit, and server errors remain errors.
 See [.github/TESTING.md](.github/TESTING.md) for regression and rollout checks.
 
+### Missing-build wildcard page
+
+Preview wildcards must not impersonate the live application when an exact PR
+alias is absent. The control plane can stage a fixed-HTML missing-build page
+and assign only `*.previews.dev.<domain>` and `*.previews.<domain>` to it.
+It returns `x-thingtime-preview: missing` with `Cache-Control: no-store`,
+links to the matching PR, and reloads only when the user clicks
+**Try again**. Real PR aliases remain more specific and continue to point at
+their exact READY deployments. The public root domains are never changed.
+
+Fork-safe rollout (all identifiers below come from your own Vercel project):
+
+1. Set `GITHUB_REPOSITORY`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`,
+   `VERCEL_TEAM_SLUG`, `PREVIEW_ALIAS_SUFFIX`, and
+   `PRODUCTION_PREVIEW_ALIAS_SUFFIX` in the operator environment. Supply
+   `VERCEL_API_TOKEN` through your approved secret store, never a command-line
+   argument, checked-in file or PR message.
+2. Run `node .github/scripts/provision-preview-fallback.mjs --stage`. The pinned
+   publisher uploads only generated static output to a Preview deployment.
+   Staging never assigns either wildcard; inspect the returned URL in a browser
+   and verify root, nested paths and the manual retry control.
+3. Once the updated controller is merged and older preview publishers have
+   finished, run `--install <STAGED_DEPLOYMENT_ID>` with the same environment.
+   Both exact project/wildcard identities and the staged content digest are
+   checked before any mutation. Ambiguous writes are reconciled by read-back.
+4. Set the protected `vercel-develop-pr-control` environment variable
+   `PREVIEW_MISSING_BUILD_PAGE=true`. Future publishing and scheduled checks now
+   require the marked missing-build page instead of the legacy live-site fallback.
+5. Verify an unused PR hostname in both namespaces, root and nested paths, plus
+   existing exact PR aliases and both live root domains. Rerun a real preview.
+
+Both wildcard domain records are bound to the non-product `github-actions`
+branch, whose checked-in Vercel kill-switch prevents automatic Git deployments.
+The static deployment is explicitly assigned; future main/develop releases
+cannot silently move those wildcard domains back to the live application.
+Leave this branch's kill-switch enabled. To update the page, stage the new
+digest and reinstall the verified deployment. The fallback has no application
+code, functions, API endpoints, environment reads or automatic polling.
+
+Vercel's existing project-wide directory-listing setting replaces any 404 at
+`/`, even a function response, with a file list. To leave that setting and the
+live app unchanged, the default root is an explicitly marked HTTP 200
+"soft 404"; all other paths return HTTP 404. The publisher checks the missing
+marker before accepting any HTTP status, so neither response can count as a
+valid preview. Projects without directory listings can stage with
+`PREVIEW_FALLBACK_ROOT_STATUS=404` for a true root 404. This tool never changes
+the project-wide directory-listing setting.
+
 ### Discoverable preview status and recovery
 
 Both publishers post expected persistent URLs and a ready-time estimate before
