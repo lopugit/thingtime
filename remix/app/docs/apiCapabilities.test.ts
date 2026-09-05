@@ -379,3 +379,11 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });
+
+test('marketing publishing publishes its public read and admin write contracts', () => {
+	const manifest = createApiCapabilitiesManifest(Object.keys(routeModules));
+	assert.equal(manifest.features['api.marketing-publications'], '1.0.0');
+	assert.equal(manifest.features['api.admin-marketing-publications'], '1.0.0');
+	assert.match(manifest.features[apiRouteCapabilityId('v1/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+	assert.match(manifest.features[apiRouteCapabilityId('v1/admin/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+});
