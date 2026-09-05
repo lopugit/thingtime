@@ -860,7 +860,12 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	if (!('subspaceMod.status' in set) && !current.status) set['subspaceMod.status'] = 'approved';
 	const update: Record<string, unknown> = { $set: set };
 	if (Object.keys(unset).length) update.$unset = unset;
-	await things.updateOne({ shareId: post.shareId } as any, update as any);
+	// accounted update: a flair change edits the post's crystal, and the
+	// storage ledger keeps a byte-exact stamp per content row — a raw updateOne
+	// would leave sizeBytes stale and lock the AUTHOR out of their next PATCH
+	// ("requires the current storage migration"). Root subspaceMod fields are
+	// outside the stamp, so this is a no-op delta for the other actions.
+	await updateAccountedThing(things, { shareId: post.shareId }, update);
 	await writeModlog(subspaceId, actorId, `post.${action}`, { postId: post.shareId, reason, detail });
 	const fresh = (await things.findOne({ shareId: post.shareId } as any)) as any as ThingDoc;
 	const [projected] = await toPublicPosts([fresh], auth.viewer);
