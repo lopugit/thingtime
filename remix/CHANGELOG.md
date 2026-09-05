@@ -11,11 +11,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
+
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
 
 ## [Unreleased]
+
+- 2026-09-05: Backport the released passkey repair to the PR #635 editor preview shown in the reported screenshots. Preserve its editor changes while adding cancellation, independent replay-safe challenges, account-scoped settings and passkey capability 1.1.0. — Codex (AI)
 
 - 2026-09-05: Coordinate builder labels, history and selection controls using
   measured free space; adapt to narrow blocks, viewport/inspector edges and
