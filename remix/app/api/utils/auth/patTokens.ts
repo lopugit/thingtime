@@ -4,7 +4,7 @@ import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
-import { createSession, getLiveSession } from './sessions';
+import { createSession, getLiveSession, REVOKED_SESSION_REAP_MS } from './sessions';
 import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
@@ -44,7 +44,10 @@ export const PAT_MIN_EXPIRY_MS = 1;
 export const PAT_MAX_EXPIRY_MS = 1000 * 60 * 60 * 24 * 365 * 100; // 100 years ≈ never, but finite
 export const PAT_MIN_USES = 1;
 export const PAT_MAX_USES = 1_000_000_000;
-const REVOKED_PAT_REAP_MS = 1000 * 60 * 60 * 24 * 30;
+// One reap window for every revoked never-expiring session, owned by
+// sessions.ts. PATs and the bridge/service purposes are the same TTL problem —
+// two copies of the same 30 days could drift apart silently, and the drift
+// would only ever show up as rows lingering in Mongo.
 
 export type PublicPatToken = {
   id: string; // the session jti — what list/revoke exchange
@@ -246,7 +249,7 @@ export const revokePatToken = async (userId: string, id: unknown): Promise<Revok
   if (!session.revokedAt) {
     const revokedAt = new Date();
     const patch: Record<string, any> = { revokedAt };
-    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_PAT_REAP_MS);
+    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS);
     await sessions.updateOne({ jti: session.jti }, { $set: patch });
     Object.assign(session, patch);
   }

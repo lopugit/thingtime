@@ -133,6 +133,9 @@ export function useApi() {
           // the Saved library cache can carry private/circle posts the
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
+          clearLocalCachePrefix('tt-passkeys');
+          // Notification history can include private posts and action runs.
+          clearLocalCachePrefix('tt-notif-history-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -191,25 +194,25 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options' }),
+          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
-          async (args: { response: unknown; nickname?: string; description?: string }) =>
+          async (args: { response: unknown; nickname?: string; description?: string; signal?: AbortSignal }) =>
             asyncFetcher.submit(
               { response: args?.response, nickname: args?.nickname, description: args?.description },
-              { action: '/api/v1/auth/passkeys/register' }
+              { action: '/api/v1/auth/passkeys/register', signal: args.signal }
             ),
           [asyncFetcher]
         ),
-        loginOptions: useCallback(async () => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options' }), [asyncFetcher]),
+        loginOptions: useCallback(async (args?: { signal?: AbortSignal }) => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options', signal: args?.signal }), [asyncFetcher]),
         // Finishing a passkey login changes the active user — refresh root data
         // exactly like password login does.
         login: useCallback(
-          async (args: { response: unknown; clientId?: string }) => {
+          async (args: { response: unknown; clientId?: string; signal?: AbortSignal }) => {
             const ret = asyncFetcher.submit(
               { response: args?.response, ...(args?.clientId ? { clientId: args.clientId } : {}) },
-              { action: '/api/v1/auth/passkeys/login' }
+              { action: '/api/v1/auth/passkeys/login', signal: args.signal }
             );
             ret.then(refreshRootData).catch(() => {});
             return ret;

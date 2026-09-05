@@ -246,7 +246,7 @@ export const toastsStories: DesignSystemStory[] = [
 		id: 'lopu-anatomy',
 		title: 'Anatomy of a Lopu toast',
 		description:
-			'A 2px animated RAINBOW gradient frame ("unicorn vomit border") around a clean --tt-card message card: the 🦄 + gradient-clipped "Lopu" wordmark + mono THINGTIME AI eyebrow header, a faint ✕ close, the ink title, muted description, and the rainbow countdown ring bottom-right that drains over the toast’s remaining lifetime. Toasts render at position top, pushed below the fixed nav by a translateY(70px) full-viewport flex container that centres by flow (immune to ancestor-transform quirks) and eats no clicks.',
+			'A 2px animated RAINBOW gradient frame ("unicorn vomit border") around a clean --tt-card message card: the 🦄 + gradient-clipped "Lopu" wordmark + mono THINGTIME AI eyebrow header, a faint ✕ close, the ink title, muted description, and the rainbow countdown ring bottom-right that drains over the toast’s remaining lifetime. Toasts pop up bottom-left by default — Settings → Appearance → "Lopu messages" moves them to any corner; centre positions use a full-viewport flex container that centres by flow (immune to ancestor-transform quirks), the top row adds translateY(70px) to clear the fixed nav, and every container eats no clicks.',
 		render: AnatomyStory,
 		note: 'Static replica — LopuToast itself is module-private and renders through Chakra’s toast manager. The tokens and geometry here match useLopu.tsx line for line.'
 	},

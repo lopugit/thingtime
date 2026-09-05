@@ -2049,6 +2049,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'apple-app-association',
+    contractVersion: '1.0.0',
+    group: 'auth',
+    featureVersion: '1.0.0',
+    title: 'Apple passkey app association',
+    endpoint: '/.well-known/apple-app-site-association',
+    summary: 'Public association allowing explicitly configured Apple apps to use this domain’s passkeys.',
+    detail: 'Returns only validated public application identifiers from THINGTIME_APPLE_APP_IDS. The signed app must also contain webcredentials:thingtime.com in its Associated Domains entitlement. No signing credentials or account data are published.',
+    auth: { mode: 'none', description: 'Apple fetches this publicly over HTTPS.' },
+    methods: ['GET'],
+    steps: ['Configure your signed Apple application identifier and enable Associated Domains before distributing the app.'],
+    requestExamples: [{ name: 'Read association', description: 'Apple domain verification.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Explicitly associated applications.', body: { webcredentials: { apps: ['ABCDEFGHIJ.com.example.app'] } } }]
+  }),
+  endpoint({
     id: 'auth-passkeys-list',
     group: 'auth',
     title: 'List passkeys',
@@ -2097,23 +2112,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-register-options',
+    contractVersion: '1.1.0',
     group: 'auth',
+    featureVersion: '1.1.0',
     title: 'Start passkey registration',
     endpoint: '/api/v1/auth/passkeys/register-options',
-    featureVersion: '1.0.1',
     summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
     detail:
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
-      'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
+      'then returns navigator.credentials.create options and sets a signed, origin-bound 10-minute cookie unique to this ceremony. ' +
       'Options request a DISCOVERABLE credential (residentKey required) with user verification required, matching ' +
       'the verification policy used when the response returns. Discoverability is what makes usernameless ' +
       'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
       'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
-      'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
-      'previews alike.',
+      'thingtime.com for every *.thingtime.com deployment, but credentials are stored in the deployment account environment. Production and development ' +
+      'may have separate accounts and passkeys; sharing the rpID alone does not share credential records.',
     auth: { mode: 'session', description: 'Requires a signed-in session; the body re-confirms the password.' },
     methods: ['POST'],
     steps: [
+      'Each ceremony has an independent httpOnly cookie (up to three pending per kind). Finishing one does not clear another tab’s challenge.',
       'POST { password } with credentials.',
       'Pass the returned options to navigator.credentials.create (via @simplewebauthn/browser startRegistration).',
       'POST the attestation to /api/v1/auth/passkeys/register within 10 minutes.',
@@ -2131,7 +2148,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-register',
+    contractVersion: '1.1.0',
     group: 'auth',
+    featureVersion: '1.1.0',
     title: 'Finish passkey registration',
     endpoint: '/api/v1/auth/passkeys/register',
     summary: 'Verify the attestation from the browser and store the new passkey.',
@@ -2145,6 +2164,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires the same signed-in session that started the ceremony.' },
     methods: ['POST'],
     steps: [
+      'The signed challenge is bound to this origin; a verified ceremony is consumed atomically and cannot be replayed, even with its saved cookie.',
       'Run startRegistration(options) in the browser (the platform sheet offers Save to iCloud Keychain / 1Password).',
       'POST { response, nickname?, description? } with credentials.',
       'Render the returned passkey in the manager; the challenge cookie is cleared.',
@@ -2165,14 +2185,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login-options',
+    contractVersion: '1.1.0',
     group: 'auth',
+    featureVersion: '1.1.0',
     title: 'Start passkey login',
     endpoint: '/api/v1/auth/passkeys/login-options',
-    featureVersion: '1.0.1',
     summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
     detail:
       'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
-      'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
+      'and sets a signed, origin-bound 10-minute cookie unique to this ceremony. Empty allowCredentials means the authenticator lists ' +
       'whatever Thingtime passkeys it holds (no username, no enumeration surface). User verification is required ' +
       'in the browser because the assertion verifier requires it too. This is also the ' +
       'options payload for conditional-UI autofill: request it on login-form mount with ' +
@@ -2181,6 +2202,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Anonymous — this begins a login.' },
     methods: ['POST'],
     steps: [
+      'Each ceremony has an independent httpOnly cookie (up to three pending per kind). Finishing one does not clear another tab’s challenge.',
       'POST once when the login surface mounts (conditional) or on "Sign in with a passkey" (modal).',
       'Pass options to startAuthentication (useBrowserAutofill for conditional UI).',
       'POST the assertion to /api/v1/auth/passkeys/login within 10 minutes.'
@@ -2192,7 +2214,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
+    contractVersion: '1.1.0',
     group: 'auth',
+    featureVersion: '1.1.0',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
@@ -2207,6 +2231,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
+      'The signed challenge is bound to this origin; a verified ceremony is consumed atomically and cannot be replayed, even with its saved cookie.',
       'Run startAuthentication(options) in the browser.',
       'POST { response } with credentials; include clientId when the login serves an SSO/app flow.',
       'On 200 the session cookies are set — treat it like a successful /api/v1/login.',
@@ -2222,7 +2247,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' }, passkeyId: 'a1b2c3d4-…' } },
-      { status: 401, description: 'Unknown, revoked, or unverifiable credential.', body: { ok: false, error: 'This passkey is not registered here' } }
+      { status: 401, description: 'Unknown, revoked, or unverifiable credential.', body: { ok: false, error: 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.' } }
     ]
   }),
   endpoint({
@@ -4549,6 +4574,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
@@ -4563,7 +4590,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET'],
 		steps: [
-			'GET with id; optionally add download=1.',
+			'GET with id; optionally add download=1. width=64,320,640,1280,1920 returns a bounded WebP preview for verified raster images up to 20 MiB; unsupported images return 415 so clients can use the original.',
+			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. Larger files return 413; omit cache to use native range streaming.',
+			'cache=validate performs the same live authorization and returns {ok,cacheKey,size} without file bytes. Cache keys are opaque, viewer/version scoped and include the requested width. Revalidate before EVERY local cache read; never serve cached private bytes after a failed check or offline. Never persist signed URLs.',
 			'Follow the 302 to the short-lived private object URL.',
 			'Use the same stable endpoint again after expiry; never persist the presigned target.',
 			'Treat 404 uniformly for missing and unauthorized attachments.'
@@ -9305,16 +9334,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
-    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
-      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
-      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
-      'pagination via before=<nextBefore>.',
+      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out) plus SYSTEM ' +
+      'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
+      'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
+      'carries its category: social (friend-request, friend-accepted, new-follower, groups), ' +
+      'engagement (comment, reply, reaction, share, mention), feed (post-from-followed, ' +
+      'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
+      'notification settings, so disabling a type hides even already-written notifications of that ' +
+      'type. Optional filters back the /notifications history page: category=<one>, ' +
+      'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
+      'unread=1, q=<text ≤100 chars, literal case-insensitive match over preview / actor name / ' +
+      'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
+      'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
+      'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
+      'pagination via before=<nextBefore>. A recipient keeps their newest 10,000 notifications.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9323,7 +9364,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?limit=&before= — newest first.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
+      'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -9332,18 +9374,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'First page for the notifications popover.',
         method: 'GET',
         query: { limit: 20 }
+      },
+      {
+        name: 'History — unread system notes this month',
+        description: 'The /notifications page filtered to system notes (action runs) that are still unread, with a total.',
+        method: 'GET',
+        query: { limit: 30, category: 'system', unread: 1, since: '2026-08-01T00:00:00.000Z', withTotal: 1 }
+      },
+      {
+        name: 'History — search',
+        description: 'Everything mentioning "deckard" across previews, actor names and system titles.',
+        method: 'GET',
+        query: { limit: 30, q: 'deckard', withTotal: 1 }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Notifications + unread count.',
+        description: 'Notifications + unread count (a person row and a system note).',
         body: {
           ok: true,
           notifications: [
             {
               id: 'a1b2…',
               type: 'new-follower',
+              category: 'social',
               actorId: '664f…',
               actorUsername: 'rick',
               actorName: 'Rick Deckard',
@@ -9351,11 +9406,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               targetId: '664f…',
               postId: null,
               preview: null,
+              title: null,
+              href: null,
+              outcome: null,
               readAt: null,
               createdAt: '2026-08-01T12:00:00.000Z'
+            },
+            {
+              id: 'c3d4…',
+              type: 'action-run',
+              category: 'system',
+              actorId: 'thingtime',
+              actorUsername: null,
+              actorName: 'Lopu',
+              actorAvatarUrl: null,
+              targetId: 'tt-action-run-…',
+              postId: null,
+              preview: '42 ms · 3 ops',
+              title: 'Action “Daily digest” finished ✅',
+              href: '/actions/daily-digest',
+              outcome: 'ok',
+              readAt: null,
+              createdAt: '2026-08-01T11:58:00.000Z'
             }
           ],
-          unreadCount: 1,
+          unreadCount: 2,
+          total: 2,
           nextBefore: null
         }
       }
@@ -9398,6 +9474,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -9406,8 +9484,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
-      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      '(reserved), action-run (system notes from Lopu about actions you run), plus the email-only ' +
+      'weekly-summary digest. Defaults ON, except email for the high-volume types (post-from-followed / ' +
+      'post-from-friend / action-run), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
@@ -9457,7 +9536,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               reply: true,
               reaction: true,
               share: true,
-              groups: true
+              mention: true,
+              groups: true,
+              'action-run': true
             },
             email: {
               'friend-request': true,
@@ -9469,7 +9550,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               reply: true,
               reaction: true,
               share: true,
+              mention: true,
               groups: true,
+              'action-run': false,
               'weekly-summary': true
             },
             masters: { push: true, email: true }
@@ -9882,17 +9965,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
     auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',
-      'Send binary data with exactly that Content-Length.',
+      'Send exactly that many binary bytes; Content-Length is optional but must be correct when present.',
+      'Split 5 MiB into 2 + 2 + 1 MiB, and 10 MiB into five 2 MiB requests. Respect Retry-After on HTTP 429.',
       'Use the small JSON acknowledgement only after a 200.'
     ],
     requestExamples: [

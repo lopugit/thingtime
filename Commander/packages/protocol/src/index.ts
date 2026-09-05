@@ -1215,9 +1215,11 @@ export interface ThingtimeNetworkProbe {
     responseMs: number;
   };
   speed?: {
+    sampledAtMs?: number;
     packetBytes: number[];
     downloads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
     uploads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
+    errors?: Array<{ direction: 'download' | 'upload'; message: string }>;
   };
 }
 
