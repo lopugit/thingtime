@@ -707,7 +707,9 @@ jobs:
     # The public Lopu manager owns every external scan. Exact resolver and
     # promotion handoffs must not recursively launch another rebase detector.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -1030,7 +1032,9 @@ jobs:
     # repository events have one owner: merge cascades enter this detector,
     # while exact rebase workers stay exclusively in manage_rebases.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -1762,7 +1766,7 @@ jobs:
               -f query='query($owner: String!, $name: String!, $endCursor: String) {
                 repository(owner: $owner, name: $name) {
                   pullRequests(
-                    first: 100,
+                    first: 10,
                     states: OPEN,
                     after: $endCursor,
                     orderBy: {field: CREATED_AT, direction: ASC}
@@ -1776,10 +1780,6 @@ jobs:
                       mergeable
                       mergeStateStatus
                       labels(first: 100) { nodes { name } }
-                      files(first: 100) {
-                        totalCount
-                        nodes { path }
-                      }
                     }
                     pageInfo { hasNextPage endCursor }
                   }
@@ -1804,29 +1804,16 @@ jobs:
               | {number, headRefName, baseRefName, isCrossRepository,
                  isDraft, mergeable, mergeStateStatus,
                  labels:(.labels.nodes // []),
-                 files:[.files.nodes[]?.path],
-                 filesTotal:(.files.totalCount // 0)}]' "$response")"
+                 files:[], filesTotal:0, filesIncomplete:true}]' "$response")"
             rm -f "$response"
             printf '%s\n' "$inventory"
           }
 
-          # GraphQL provides the first 100 changed paths per PR in the shared
-          # inventory. Fetch the uncommon larger diffs once, after mergeability
-          # polling settles, so overlap labels never silently miss path 101+.
-          # This function's stdout IS the completed inventory document, so its
-          # diagnostics go to stderr like gh_read_retry's: a notice printed on
-          # stdout is captured as the first line of `$all_open`, and every later
-          # `jq` over that variable dies on it. A PR big enough for GitHub to
-          # refuse the file list (HTTP 422, "this diff is taking too long to
-          # generate") is the case that reaches this branch. That 422 is not
-          # always permanent for a given diff: #291's 2896-file list answered in
-          # full, all 29 pages, on a replay of the identical paginated read
-          # minutes after run 33565992797 lost the scan to it. gh_read_retry
-          # classifies it as non-transient all the same -- its retry set is
-          # 408/429/500/502/503/504 and deliberately excludes 422 -- so this
-          # branch is the only handler a 422 ever reaches, and one such PR must
-          # degrade to its first 100 paths instead of taking the whole
-          # repository-wide scan down for every open PR.
+          # Keep expensive diff generation out of the shared GraphQL query:
+          # one large PR can time out every otherwise healthy PR in the page.
+          # Hydrate changed paths independently after mergeability settles.
+          # Failure preserves explicit incomplete state and does not abort the
+          # repository scan. Diagnostics must stay on stderr, never JSON stdout.
           complete_large_pr_files() {
             local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
@@ -1837,7 +1824,7 @@ jobs:
               if ! gh_read_retry --paginate \
                   "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
                 rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels fall back to its first 100 changed paths." >&2
+                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels use only its available changed paths (inventory incomplete)." >&2
                 continue
               fi
               inventory="$(jq -c \
@@ -1845,10 +1832,10 @@ jobs:
                 --slurpfile response "$pages" \
                 '($response[0] | add // [] | map(.filename) | unique) as $files
                  | map(if .number == $number
-                       then . + {files:$files, filesTotal:($files | length)}
+                       then . + {files:$files, filesTotal:($files | length), filesIncomplete:false}
                        else . end)' <<<"$inventory")"
               rm -f "$pages"
-            done < <(jq -r '.[] | select(.filesTotal > (.files | length)) | @base64' <<<"$inventory")
+            done < <(jq -r '.[] | select(.filesIncomplete == true or .filesTotal > (.files | length)) | @base64' <<<"$inventory")
             printf '%s\n' "$inventory"
           }
 
@@ -2563,7 +2550,10 @@ jobs:
     name: Hand off the selected PR batch to the github-actions resolver control plane
     needs: [route, detect]
     if: >-
-      needs.detect.outputs.any == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.any == 'true'
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
@@ -2903,7 +2893,9 @@ jobs:
     # owner, and the scheduled conflict backstop deliberately does not re-review
     # unchanged clean PRs over and over.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -3160,7 +3152,10 @@ jobs:
     name: Hand off one Lopu repository review session
     needs: [route, review_detect]
     if: >-
-      needs.review_detect.outputs.any == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.review_detect.result == 'success'
+      && needs.review_detect.outputs.any == 'true'
       && (github.ref_name == 'github-actions'
           || github.workflow_ref
           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
@@ -9262,16 +9257,25 @@ jobs:
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
           fi
 
+      - name: Recheck target after publication
+        id: post_publish
+        if: steps.push.outputs.remote_state == 'published'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_SHA: ${{ steps.push.outputs.remote_sha }}
+        run: node trusted/.github/scripts/post-publish-ref-race.mjs
+
       - name: Requeue after a moving-ref race
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
-          && steps.push.outputs.remote_state == 'retry'
+          && (steps.push.outputs.remote_state == 'retry' || steps.post_publish.outputs.retry == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           RACE_RETRY_ATTEMPT: ${{ inputs.ref_race_retry || '0' }}
-          RACE_REASON: ${{ steps.push.outputs.retry_reason }}
-          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha }}
+          RACE_REASON: ${{ steps.push.outputs.retry_reason || 'base' }}
+          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha || steps.post_publish.outputs.live_sha }}
+          POST_PUBLISH_RETRY: ${{ steps.post_publish.outputs.retry }}
           DEPTH: ${{ inputs.depth || '0' }}
         run: |
           set -euo pipefail
@@ -9336,7 +9340,11 @@ jobs:
           {
             echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside publication, then queued retry $next_attempt/3 from fresh PR refs."
             echo
-            echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            if [ "$POST_PUBLISH_RETRY" = true ]; then
+              echo "The selected merge was published, then the target advanced again. Delivery remains pending until the new target is reconciled. [View this attempt]($RUN_URL)."
+            else
+              echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            fi
             echo
             echo "$RUN_STATUS_MARKER"
           } > "$body"
@@ -9370,6 +9378,7 @@ jobs:
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
           && steps.push.outputs.remote_state == 'published'
+          && steps.post_publish.outputs.retry != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}

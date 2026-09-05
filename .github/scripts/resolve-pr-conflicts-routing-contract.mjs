@@ -1057,8 +1057,8 @@ function assertWorkflowSource() {
   );
   assert.match(
     detectBlock,
-    /files\(first: 100\)[\s\S]*totalCount[\s\S]*nodes \{ path \}/u,
-    "one open-PR inventory includes changed paths for overlap classification",
+    /files:\[\], filesTotal:0, filesIncomplete:true/u,
+    "metadata inventory defers expensive changed paths to isolated per-PR reads",
   );
   assert.match(
     detectBlock,

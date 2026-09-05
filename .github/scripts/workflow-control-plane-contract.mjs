@@ -1080,8 +1080,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /^    if: github\.event_name == 'pull_request_target'$/mu,
-    "develop preview dispatches every PR event so the protected controller can resolve a bounded stack",
+    /^    if: github\.event_name == 'pull_request_target' && \(github\.event\.action != 'edited' \|\| github\.event\.changes\.base\)$/mu,
+    "develop preview dispatches source and eligibility events but cannot recurse on its own description edits",
   );
   assert.match(
     developPreview,
@@ -1849,8 +1849,8 @@ export function assertControlPlaneContract() {
   );
   assert.equal(
     resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
-    3,
-    "only a live-ref-proven publication may post success, merge the standing sync PR, or cascade a stack",
+    4,
+    "only a live-ref-proven publication may recheck the target, post success, merge the standing sync PR, or cascade a stack",
   );
 
   assertUserControlledMergePause(resolver, rebase);

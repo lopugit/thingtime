@@ -28,7 +28,9 @@ jobs:
     # The protected controller revalidates the exact current same-repository PR
     # and its actor. The PR may target develop, main, or another branch; the
     # deployment target remains the isolated develop environment.
-    if: github.event_name == 'pull_request_target'
+    # Description/status edits do not change the build input. In particular,
+    # our own summary must not enqueue another preview which edits it again.
+    if: github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

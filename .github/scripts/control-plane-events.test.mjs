@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { classifyConversation, classifyQueuedConversation, hasAutomationMarker } from './lopu-conversation-gate.mjs';
@@ -21,7 +24,7 @@ function evaluate(expression, eventName, payload, eligible = 'true', result = 's
   return runInNewContext(expression, {
     github: { event_name: eventName, event: payload, actor: 'lopugit', ref_name: 'main' },
     inputs: { promotion_source_pr: '', promotion_plan_b64: '', maintenance_operation: '', control_dispatch_id: '', ref_race_handoff: false },
-    needs: { conversation_gate: { result, outputs: { eligible } }, route: { outputs: { execute: 'true' } } },
+    needs: { conversation_gate: { result, outputs: { eligible } }, route: { result: 'success', outputs: { execute: 'true' } } },
     cancelled: () => false,
     startsWith: (value, prefix) => String(value ?? '').toLowerCase().startsWith(prefix.toLowerCase()),
   });
@@ -118,4 +121,60 @@ test('queued legacy signals recheck the live comment before spending on a model'
     await assert.rejects(classifyQueuedConversation({ ...args, readComment: async () => { throw new Error('transport'); } }));
     await assert.rejects(classifyQueuedConversation({ ...args, prNumber: '625', readComment }));
   }
+});
+
+test('every routing descendant handles an intentionally skipped conversation ancestor', () => {
+  // Actions injects success() when no status function is present. A skipped
+  // conversation_gate propagates through a successful route to its descendants.
+  // Test the dependency graph, not only route's own expression (PR #592).
+  const blocks = [...workflow.matchAll(/^  ([a-z_]+):\n([\s\S]*?)(?=^  [a-z_]+:\n|$(?![\s\S]))/gm)];
+  const descendants = new Set(['conversation_gate']);
+  const pending = blocks.map(([,name,block]) => ({name,block}));
+  for (let pass = 0; pass < pending.length; pass++) {
+    for (const {name,block} of pending) {
+      const needs = block.match(/^    needs: (.+)$/m)?.[1]?.match(/[a-z_]+/g) ?? [];
+      if (!needs.some(name => descendants.has(name))) continue;
+      descendants.add(name);
+      assert.match(gateExpression(name), /\b(?:always|cancelled)\s*\(/,
+        `${name} silently skips after the non-comment admission job`);
+    }
+  }
+  assert.ok(descendants.has('detect') && descendants.has('handoff') && descendants.has('resolve'));
+});
+
+// Large PR file inventories made the 100-PR GraphQL page repeatedly time out.
+test('detector bounds GraphQL work per page without truncating the inventory', () => {
+  const query = workflow.slice(workflow.indexOf('          all_open_prs() {'));
+  assert.match(query, /gh_read_retry graphql --paginate --slurp/);
+  assert.match(query, /pullRequests\(\s*first: 10,\s*states: OPEN,\s*after: \$endCursor/);
+  assert.match(query, /pageInfo \{ hasNextPage endCursor \}/);
+});
+
+test('expensive diffs cannot poison the shared PR metadata inventory', () => {
+  const inventory = workflow.split('          all_open_prs() {')[1].split('          complete_large_pr_files()')[0];
+  assert.doesNotMatch(inventory, /files\(first:|changedFiles/);
+  assert.match(inventory, /filesIncomplete:true/);
+  assert.match(workflow, /select\(\.filesIncomplete == true or/);
+  assert.match(workflow, /filesIncomplete:false/);
+});
+
+test('an unavailable diff preserves incomplete state while another PR hydrates', () => {
+  const helper = workflow.slice(workflow.indexOf('          complete_large_pr_files() {'), workflow.indexOf('          query() {')).replace(/^          /gm, '');
+  const temp = mkdtempSync(join(tmpdir(), 'pr-inventory-'));
+  try {
+    const script = `set -euo pipefail
+    gh_read_retry() {
+      case "$*" in *pulls/1/files*) return 1;; esac
+      echo '[[{"filename":"app.ts"}]]'
+    }
+    ${helper}
+    complete_large_pr_files '[{"number":1,"files":[],"filesTotal":0,"filesIncomplete":true},{"number":2,"files":[],"filesTotal":0,"filesIncomplete":true}]'`;
+    const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,REPO:'owner/repo'}});
+    assert.equal(result.status,0,result.stderr);
+    const rows = JSON.parse(result.stdout);
+    assert.equal(rows[0].filesIncomplete,true);
+    assert.deepEqual(rows[1].files,['app.ts']);
+    assert.equal(rows[1].filesIncomplete,false);
+    assert.match(result.stderr,/inventory incomplete/);
+  } finally { rmSync(temp,{recursive:true,force:true}); }
 });

@@ -568,3 +568,24 @@ temporary Keychain and deleted by the always-run cleanup step.
 Run `node --test .github/scripts/commander-release.test.mjs` for caller admission,
 main-SHA selection, API-error handling, credential timing and asset publication
 regressions. The product source owns Commander packaging and Recovery behavior.
+
+## PR delivery regression checks
+
+The preview publisher maintains a marked summary at the top of each product PR
+description as well as its detailed comment and labels. It refreshes building,
+failed and ready states for the current head, preserves author prose, and refuses
+ambiguous markers. A preview being ready does not mean CI or mergeability is green.
+
+The conversation filter is intentionally skipped for non-comment events. Every
+routing descendant needs an explicit status predicate plus successful direct
+dependency guards, or Actions can silently skip conflict detection after a
+successful route. The event tests traverse the actual job graph to enforce this.
+
+After publication the resolver checks the live target ref, rather than GitHub's
+cached PR base SHA. A moved target reuses the existing three-retry detector queue;
+it preserves pause and ownership rules and cannot overwrite a newer head.
+
+Manual acceptance: verify a push and a scheduled non-comment run execute
+conflict detection, a repaired PR reports live mergeability, and its current-SHA
+preview is visible without expanding comments. A moving target must leave a
+requeue notice rather than overwrite it with a resolved claim.
