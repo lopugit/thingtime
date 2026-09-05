@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ThingtimeWatchAttachmentView: View {
     @EnvironmentObject private var store: ThingtimeWatchStore
-    @StateObject private var recorder = ThingtimeWatchAudioRecorder()
+    @ObservedObject var recorder: ThingtimeWatchAudioRecorder
     @AppStorage("watch.attachments.autoUploadRecordings") private var autoUploadRecordings = true
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isImportingPhotos = false
@@ -23,7 +23,7 @@ struct ThingtimeWatchAttachmentView: View {
                 Button {
                     recorder.record()
                 } label: {
-                    Label("Record with Apple", systemImage: "mic.circle")
+                    Label("Record", systemImage: "mic.circle")
                 }
                 .disabled(isBusy)
 
@@ -125,6 +125,6 @@ struct ThingtimeWatchAttachmentView: View {
 }
 
 #Preview {
-    NavigationStack { ThingtimeWatchAttachmentView() }
+    NavigationStack { ThingtimeWatchAttachmentView(recorder: ThingtimeWatchStore.shared.audioRecorder) }
         .environmentObject(ThingtimeWatchStore.shared)
 }

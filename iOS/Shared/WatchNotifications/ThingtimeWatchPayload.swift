@@ -74,7 +74,7 @@ struct ThingtimeWatchSnapshot: Codable, Equatable {
         notifications: [],
         nextCursor: nil,
         syncedAt: ISO8601DateFormatter().string(from: Date()),
-        message: "Open Thingtime on your iPhone and sign in to pair this watch."
+        message: "Connect this Watch directly to your Thingtime account."
     )
 }
 

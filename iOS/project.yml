@@ -14,7 +14,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "22"
+    CURRENT_PROJECT_VERSION: "23"
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
   configs:
@@ -87,6 +87,7 @@ targets:
         CFBundleDisplayName: Thingtime
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: $(THINGTIME_IOS_BUNDLE_IDENTIFIER)

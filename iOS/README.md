@@ -2,20 +2,19 @@
 
 Native iOS shell for Thingtime.
 
-The project also includes a native watchOS companion. It pairs with the signed-in
-iPhone app, mirrors the newest Thingtime notifications, shows the unread count,
-marks individual rows read, and registers its own APNs token for watch alerts.
-The Watch can also open Apple's native high-quality audio recorder, keep saved
-recordings locally for later upload or re-upload, and transfer them through the
-paired signed-in iPhone as owner-only attachment Things. Apple does not expose
-the Voice Memos app's private recording library to third-party watchOS apps;
-existing Watch Voice Memos must sync to iPhone and be uploaded in Thingtime
-there.
-Authentication remains on the iPhone WebView session so passwords and reusable
-session credentials are not copied to the watch. The Watch shows whether that
-connection is activating, checking, connected, waiting for the iPhone, signed
-out, or failed; missed refreshes are queued and retried with a visible manual
-retry action.
+The project also includes a native watchOS companion. It pairs directly with a
+signed-in Thingtime account through a short browser approval code and stores
+only a Watch-scoped credential in the Watch Keychain. It can switch between
+multiple production, development, and build-preview accounts; refresh and mark
+notifications read; register its APNs token; and show live server health without
+requiring the iPhone app to be reachable.
+
+The Watch can create owner-only attachment Things directly, open Apple's native
+high-quality audio recorder, keep Thingtime recordings locally for later upload
+or re-upload, and retry interrupted transfers idempotently. Apple does not
+expose the Voice Memos app's private recording library to third-party watchOS
+apps; existing Watch Voice Memos must sync to iPhone and be uploaded in
+Thingtime there.
 
 The first version is intentionally small: a SwiftUI app that embeds Thingtime
 in a native `WKWebView`. It defaults to `https://thingtime.com` and can be
@@ -86,7 +85,8 @@ bundle install
 
 Omit `THINGTIME_WEB_URL` to build against `https://thingtime.com`. Set it to a
 public `https://*.vercel.app` preview or branch deployment when a TestFlight
-build should include that deployment as a selectable drawer option. The script
+build should include that deployment as a selectable iPhone drawer destination
+and **Build preview** Watch account origin. The script
 loads `iOS/.env` when present and then runs `bundle exec fastlane beta`. Keep
 `.p8` keys, Apple IDs, team IDs, API key contents, and private preview URLs out
 of git unless they are intended public examples. App Store Connect accepts

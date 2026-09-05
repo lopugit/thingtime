@@ -864,6 +864,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // and 10,000 docs examined to return 3, down to 3 keys and 3 docs.
     col.createIndex({ tags: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+		col.createIndex(
+			{ ownerId: 1, sourceDeviceId: 1, createdAt: -1, shareId: 1 },
+			{ partialFilterExpression: { sourceDeviceId: { $exists: true } } }
+		),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
     col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),

@@ -66,7 +66,7 @@ struct ThingtimeWatchNotificationHistoryView: View {
                         Button {
                             store.retryHistoryRequest()
                         } label: {
-                            Label("Retry with iPhone", systemImage: "arrow.clockwise")
+                            Label("Retry direct fetch", systemImage: "arrow.clockwise")
                         }
                     }
                 }

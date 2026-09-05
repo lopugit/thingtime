@@ -6,11 +6,16 @@ struct ThingtimeWatchRootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
-            if store.snapshot.authenticated {
-                notificationsView
-            } else {
-                signedOutView
+        NavigationStack {
+            Group {
+                if store.selectedAccount == nil {
+                    signedOutView
+                } else {
+                    notificationsView
+                }
+            }
+            .navigationDestination(for: ThingtimeWatchFavorite.self) { favorite in
+                destination(for: favorite)
             }
         }
         .containerBackground(.black.gradient, for: .navigation)
@@ -20,158 +25,238 @@ struct ThingtimeWatchRootView: View {
     }
 
     private var signedOutView: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                Text("🦄")
-                    .font(.system(size: 40))
-                    .accessibilityHidden(true)
-
-                Text("Pair Thingtime")
-                    .font(.headline)
-
-                Label(store.phoneConnectionState.title, systemImage: store.phoneConnectionState.systemImage)
-                    .font(.caption.bold())
-
-                Text(store.connectionMessage ?? store.snapshot.message ?? "Open Thingtime on your iPhone and sign in.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button {
-                    store.requestPairing()
-                } label: {
-                    HStack(spacing: 8) {
-                        if store.isCheckingPhoneConnection {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Text(store.isCheckingPhoneConnection ? "Checking…" : "Check & refresh")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.purple)
-                .disabled(store.isCheckingPhoneConnection)
-
-                if let lastCheck = store.lastConnectionCheckAt {
-                    Text("Last check \(lastCheck.formatted(.relative(presentation: .named)))")
+        List {
+            Section {
+                VStack(spacing: 7) {
+                    Text("🦄")
+                        .font(.system(size: 36))
+                        .accessibilityHidden(true)
+                    Text("Connect Thingtime")
+                        .font(.headline)
+                    Label(store.connectionState.title, systemImage: store.connectionState.systemImage)
+                        .font(.caption.bold())
+                    Text(store.connectionMessage ?? store.snapshot.message ?? "Connect directly from this Watch.")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-
-                if let lastContact = store.lastPhoneContactAt {
-                    Text("Last reply \(lastContact.formatted(.relative(presentation: .named)))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-
-                Text(signedOutBuildSummary)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                if let origin = store.snapshot.phoneOrigin {
-                    Text("Origin: \(URL(string: origin)?.host ?? origin)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-
-                notificationPermissionButton
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 8)
-        }
-    }
 
-    private var signedOutBuildSummary: String {
-        let watchBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        guard let phoneBuild = store.snapshot.phoneBuild else {
-            return "Watch build \(watchBuild) · iPhone build unknown"
+            Section("Domain") {
+                Picker("Thingtime", selection: Binding(
+                    get: { store.pairingDomain },
+                    set: { store.setPairingDomain($0) }
+                )) {
+                    ForEach(ThingtimeWatchDomain.availableCases) { domain in
+                        Text(domain.title).tag(domain)
+                    }
+                }
+            }
+
+            if let pairing = store.pendingPairing {
+                Section("Approval code") {
+                    Text(pairing.userCode)
+                        .font(.title2.monospaced().bold())
+                        .frame(maxWidth: .infinity)
+                    Button {
+                        store.openPairingPage()
+                    } label: {
+                        Label("Open Thingtime", systemImage: "safari")
+                    }
+                    Text("Sign in and approve this Watch. Pairing continues automatically.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Section {
+                    Button {
+                        store.requestPairing()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if store.isPairing { ProgressView() }
+                            else { Image(systemName: "link.badge.plus") }
+                            Text(store.isPairing ? "Creating code…" : "Connect account")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .disabled(store.isPairing)
+                }
+            }
+
+            if !store.accounts.isEmpty {
+                Section("Already on this Watch") {
+                    NavigationLink { ThingtimeWatchAccountSwitcherView() } label: {
+                        Label("Choose an account", systemImage: "person.2.circle")
+                    }
+                }
+            }
+
+            Section { notificationPermissionButton }
         }
-        return "Watch build \(watchBuild) · iPhone build \(phoneBuild)"
+        .navigationTitle("Thingtime")
     }
 
     private var notificationsView: some View {
-        NavigationStack {
-            List {
+        List {
+            if let account = store.selectedAccount {
                 Section {
-                    HStack {
-                        Label("Thingtime", systemImage: "sparkles")
-                            .font(.headline)
-                        Spacer()
-                        if store.snapshot.unreadCount > 0 {
-                            Text("\(store.snapshot.unreadCount)")
-                                .font(.caption.bold())
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(.purple, in: Capsule())
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-
-                Section("Create") {
                     NavigationLink {
-                        ThingtimeWatchAttachmentView()
+                        ThingtimeWatchAccountSwitcherView()
                     } label: {
-                        Label("Add private Thing", systemImage: "paperclip.circle.fill")
+                        ThingtimeWatchAccountLabel(account: account, connectionState: store.connectionState)
                     }
-                }
-
-                Section("Notifications") {
-                    NavigationLink {
-                        ThingtimeWatchNotificationHistoryView()
-                    } label: {
-                        Label("Notification history", systemImage: "calendar.badge.clock")
-                    }
-                }
-
-                if store.snapshot.notifications.isEmpty {
-                    ContentUnavailableView("All caught up", systemImage: "rainbow", description: Text("New Thingtime notifications will appear here."))
-                } else {
-                    ForEach(store.snapshot.notifications) { notification in
-                        Button {
-                            store.markRead(id: notification.id)
-                        } label: {
-                            NotificationRow(notification: notification)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if store.canLoadOlderInbox {
-                        Button("Load previous 10") {
-                            store.requestOlderNotifications()
-                        }
-                        .disabled(store.historyIsLoading)
-                    }
-                }
-
-                ThingtimeWatchConnectionSection()
-
-                if store.notificationAuthorization != .authorized && store.notificationAuthorization != .provisional {
-                    Section { notificationPermissionButton }
                 }
             }
-            .listStyle(.carousel)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { store.requestRefresh() } label: { Image(systemName: "arrow.clockwise") }
-                        .accessibilityLabel("Refresh notifications")
+
+            Section("Create") {
+                NavigationLink {
+                    ThingtimeWatchAttachmentView(recorder: store.audioRecorder)
+                } label: {
+                    Label("Add private Thing", systemImage: "paperclip.circle.fill")
+                }
+
+                ForEach(store.favorites) { favorite in
+                    if favorite == .record {
+                        Button {
+                            store.audioRecorder.record()
+                        } label: {
+                            Label(favorite.title, systemImage: favorite.systemImage)
+                        }
+                        .disabled(store.audioRecorder.isPresenting || store.attachmentIsBusy)
+                    } else {
+                        NavigationLink(value: favorite) {
+                            Label(favorite.title, systemImage: favorite.systemImage)
+                        }
+                    }
+                }
+            }
+
+            Section("Notifications") {
+                HStack {
+                    Label("Latest", systemImage: "bell.fill")
+                    Spacer()
+                    if store.snapshot.unreadCount > 0 {
+                        Text("\(store.snapshot.unreadCount)")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(.purple, in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                }
+                NavigationLink {
+                    ThingtimeWatchNotificationHistoryView()
+                } label: {
+                    Label("Notification history", systemImage: "calendar.badge.clock")
+                }
+            }
+
+            if store.snapshot.notifications.isEmpty {
+                ContentUnavailableView("All caught up", systemImage: "rainbow", description: Text("New Thingtime notifications will appear here."))
+            } else {
+                ForEach(store.snapshot.notifications) { notification in
+                    Button {
+                        store.markRead(id: notification.id)
+                    } label: {
+                        NotificationRow(notification: notification)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if store.canLoadOlderInbox {
+                    Button("Load previous 10") { store.requestOlderNotifications() }
+                        .disabled(store.historyIsLoading)
+                }
+            }
+
+            ThingtimeWatchConnectionSection()
+
+            Section {
+                NavigationLink { ThingtimeWatchSettingsView() } label: {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
+            }
+
+            if store.notificationAuthorization != .authorized && store.notificationAuthorization != .provisional {
+                Section { notificationPermissionButton }
+            }
+        }
+        .listStyle(.carousel)
+        .navigationTitle("Thingtime")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { store.requestRefresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .accessibilityLabel("Refresh Thingtime connection")
+                    .disabled(store.isCheckingConnection)
+            }
+        }
+        .onAppear {
+            store.audioRecorder.completedRecording = { recording in
+                Task {
+                    await store.queueAttachment(fileURL: recording.url, filename: recording.filename, contentType: recording.contentType)
                 }
             }
         }
     }
 
     @ViewBuilder
+    private func destination(for favorite: ThingtimeWatchFavorite) -> some View {
+        switch favorite {
+        case .record:
+            ThingtimeWatchAttachmentView(recorder: store.audioRecorder)
+        case .savedRecordings:
+            ThingtimeWatchSavedRecordingsView(recorder: store.audioRecorder)
+        case .photos:
+            ThingtimeWatchAttachmentView(recorder: store.audioRecorder)
+        case .history:
+            ThingtimeWatchNotificationHistoryView()
+        }
+    }
+
+    @ViewBuilder
     private var notificationPermissionButton: some View {
         if store.notificationAuthorization == .notDetermined {
-            Button("Enable alerts") {
-                Task { await store.enableAlerts() }
-            }
+            Button("Enable alerts") { Task { await store.enableAlerts() } }
         } else if store.notificationAuthorization == .denied {
             Text("Alerts are off in Watch Settings.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+        }
+    }
+}
+
+struct ThingtimeWatchAccountLabel: View {
+    let account: ThingtimeWatchAccount
+    let connectionState: ThingtimeWatchStore.ConnectionState
+
+    var body: some View {
+        HStack(spacing: 9) {
+            AsyncImage(url: account.resolvedAvatarURL()) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .foregroundStyle(.purple)
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.displayUsername)
+                    .font(.caption.bold())
+                    .lineLimit(1)
+                Text(account.domain)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 3)
+            Image(systemName: connectionState.systemImage)
+                .foregroundStyle(connectionState == .connected ? .green : .secondary)
+                .accessibilityLabel(connectionState.title)
         }
     }
 }

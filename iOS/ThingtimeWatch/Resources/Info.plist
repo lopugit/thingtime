@@ -24,6 +24,8 @@
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Thingtime uses the microphone so you can record audio as a private Thing.</string>
+	<key>ThingtimeWebURL</key>
+	<string>$(THINGTIME_WEB_URL)</string>
 	<key>WKApplication</key>
 	<true/>
 	<key>WKCompanionAppBundleIdentifier</key>

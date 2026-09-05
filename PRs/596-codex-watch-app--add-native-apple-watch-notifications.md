@@ -1,5 +1,28 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 23 — direct Watch accounts and private Things
+
+- The Watch now pairs directly to Thingtime over HTTPS with a short browser
+  approval code and a device-scoped credential. Notification refresh, read
+  receipts, push registration, and private attachment Thing uploads no longer
+  depend on the iPhone app being reachable.
+- Added multiple production/development accounts with on-Watch switching,
+  username/avatar identity, live connection state, last check/reply times, and
+  both toolbar and **Check & refresh** actions.
+- **Add private Thing** now has configurable favourites immediately below it;
+  **Record** is the default and existing Thingtime recordings remain selectable
+  for direct upload.
+- Paired Watches are first-class `/things` devices with sync, battery,
+  low-power, and error health plus an owner-only list of recent Things created
+  by that Watch.
+- New versioned `api.watch-pairing`, `api.watch-sync`, and `api.watch-things`
+  contracts are registered in the capability manifest. Existing attachment and
+  push-registration contracts gained additive Watch device authentication.
+- Focused API/device/index tests and a Watch simulator build pass. The Watch SE
+  40 mm simulator renders `@lopu`, direct connected state, live check success,
+  last reply/check timestamps, and the refresh control through the bottom of
+  the screen without clipping.
+
 ## TestFlight build 22 — visible account and live status checks
 
 - The Watch connection section now names the authenticated account as

@@ -17,6 +17,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-05 — Direct Apple Watch accounts, sync, and private Things — Codex (AI)
+
+- Replaced the Watch's iPhone-relay session dependency with direct HTTPS device
+  pairing, capability negotiation, notification sync, read receipts, push
+  registration, and idempotent private attachment Thing creation.
+- Added on-Watch production/development account pairing, account switching,
+  username/avatar identity, live connection health, last-check/last-reply
+  timestamps, and a manual **Check & refresh** action.
+- Added configurable **Add private Thing** favourites with **Record** enabled by
+  default, retained Thingtime recordings, and direct retryable uploads.
+- Apple Watches now appear in `/things` as devices with sync/battery/error
+  health, a created-Thing count, and an owner-only recent-Things list.
+
 ### 2026-09-04 — Visible Watch account and live connection checks — Codex (AI)
 
 - The Apple Watch connection card now shows the authenticated Thingtime

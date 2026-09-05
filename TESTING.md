@@ -589,6 +589,29 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] Pair a fresh Watch directly against both `thingtime.com` and
+      `dev.thingtime.com`. Approve the eight-character browser code while
+      signed in, confirm the Watch receives only its device credential, and
+      verify notification refresh/read state works with the iPhone app closed.
+      A second account must remain independently selectable after relaunch.
+- [ ] On the smallest supported Watch, confirm the signed-in header shows the
+      selected account's avatar, **@username**, domain, and live status. Scroll
+      through the whole screen, tap the toolbar refresh and **Check & refresh**,
+      and verify checking/success/error states plus Last check and Last live
+      reply remain readable without clipping.
+- [ ] Open Settings, switch between production and development accounts, add
+      another account, and remove only the selected account. Confirm no account
+      reuses another origin's credential, snapshots, upload outbox, or inbox.
+- [ ] Under **Add private Thing**, confirm **Record** is the default first
+      favourite and that Settings can enable/disable the available favourites
+      while preserving their stable system order and the main Add action.
+- [ ] Create a private audio or photo Thing directly from the Watch, interrupt
+      the upload at each stage, and confirm retry uses the same request/Thing
+      identity without duplicate Things. The created record remains owner-only
+      and the Watch retains its local source until completion.
+- [ ] In `/things`, open the paired Apple Watch device. Confirm last sync,
+      status, battery/low-power health, last error, created-Thing count, and the
+      owner-only recent Things created by that exact Watch update after refresh.
 - [ ] On a signed-in paired Watch, confirm the connection section identifies
       the active account as **@username**, keeps the current connection state
       visible, and always shows **Check & refresh**. Tap it and confirm the
@@ -644,15 +667,15 @@ email whose link points at the attacker.
       request resumes without duplicate attachment Things; repeat while signed
       out and confirm the Watch explains that Thingtime must be opened and
       signed in, without losing the queued bytes.
-- [ ] Tap **Record with Apple**, deny microphone access, and confirm Apple's
+- [ ] Tap **Record**, deny microphone access, and confirm Apple's
       native recorder returns safely without crashing. Grant access, save a
       several-second recording, and confirm the completion callback does not
       falsely report that Thingtime could not prepare it while the file is still
-      finalizing. Confirm the `.m4a` appears under **Choose saved recording**
+      finalizing. Confirm the `.m4a` appears under **Saved recordings**
       after relaunch. With **Upload after saving** enabled, confirm it queues
       automatically; disable that preference, save another recording, and
       confirm it waits for selection in the saved-recording screen.
-- [ ] Open **Choose saved recording**, tap one retained Watch recording, and
+- [ ] Open **Saved recordings**, tap one retained Watch recording, and
       confirm it creates a new private Thing without altering the retained
       original. Swipe-delete another saved
       recording and confirm only that on-watch copy disappears. Confirm the

@@ -136,6 +136,7 @@ export const router = createBrowserRouter([
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
       { path: 'authorize', element: <Authorize /> },
+			{ path: 'watch/pair', lazy: lazyRoute(() => import('./routes/watch.pair')) },
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
       { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },

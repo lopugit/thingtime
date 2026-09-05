@@ -159,6 +159,9 @@ export type ThingDoc = {
   // Legacy single-value form of the same grant (round-2 stamp) — read as an
   // implicit tt:token/<id> entry by tokenAclOf; never written anymore.
   createdByTokenId?: string;
+	// Server-stamped provenance for Things created by a scoped paired device.
+	// Generic callers cannot write this root field.
+	sourceDeviceId?: string;
   createdAt: Date;
   updatedAt: Date;
   // App namespace (apps/namespace.ts): things written through an app token
@@ -941,6 +944,7 @@ type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
 export type CreateThingHooks = {
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
 	afterInsert?: (doc: ThingDoc, session: any) => Promise<void>;
+	sourceDeviceId?: string;
 };
 
 // audience for a new thing: explicit acl > legacy visibility name > default
@@ -1174,7 +1178,8 @@ export const createThing = async (
     ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
     createdAt: now,
     updatedAt: now,
-		...(app ? appNamespaceStamp(app, sizeBytes) : {})
+		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
+		...(hooks?.sourceDeviceId ? { sourceDeviceId: hooks.sourceDeviceId } : {})
 	};
 	// Account storage meters HOME-hosted bytes only. With a data-plane endpoint
 	// override active this content lands on the user's own MongoDB: it consumes

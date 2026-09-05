@@ -66,13 +66,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.8.0',
+		contractVersion: '1.9.0',
+		featureVersion: '1.9.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-computer summaries or one detailed mirror.',
+		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
 		detail:
-			'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
+			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -84,6 +85,75 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
 			}
 		]
+	}),
+	endpoint({
+		id: 'watch-pairing',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Pair Apple Watch directly',
+		endpoint: '/api/v1/watch/pairing',
+		summary: 'Starts, approves, inspects, and claims a short-lived direct Apple Watch pairing.',
+		detail:
+			'The Watch starts anonymously and receives a high-entropy device code plus a short human code. The user opens the returned same-origin verification path, signs in, and explicitly approves the named Watch. The Watch then claims the approval with its locally generated ttnode_ credential. Thingtime stores only domain-separated hashes and creates a revocable watchOS device session.',
+		auth: { mode: 'none', description: 'Start, inspect, and claim are code-bound and fail-closed rate limited. Approval requires a same-origin full user session.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'POST { op: "start", device } from the Watch.',
+			'Open verificationPath on a signed-in browser and POST { op: "approve", pairingId, userCode }.',
+			'Poll POST { op: "claim", pairingId, deviceCode, credential } until approved, then store the credential in Watch Keychain.'
+		],
+		requestExamples: [
+			{
+				name: 'Start Watch pairing',
+				description: 'Create a ten-minute direct pairing request.',
+				method: 'POST',
+				body: { op: 'start', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '23' } }
+			},
+			{
+				name: 'Claim approved Watch',
+				description: 'The secret values are generated and retained by the Watch.',
+				method: 'POST',
+				body: { op: 'claim', pairingId: 'pairing-jti', deviceCode: 'ttwatch_…', credential: 'ttnode_…' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 201,
+				description: 'Pairing started.',
+				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: 'THING123', verificationPath: '/watch/pair?pairing=…&code=…', expiresAt: '2026-09-05T01:00:00.000Z' } }
+			},
+			{ status: 428, description: 'Awaiting user approval.', body: { ok: false, code: 'authorization_pending', error: 'Approve this Watch in Thingtime first' } }
+		]
+	}),
+	endpoint({
+		id: 'watch-sync',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Sync Apple Watch directly',
+		endpoint: '/api/v1/watch/sync',
+		summary: 'Refreshes account identity and notifications directly from a paired Apple Watch.',
+		detail:
+			'Returns the paired account username, display name, avatar URL, paginated notifications, unread count, server time, and Watch device id. A successful call stamps live last-seen, last-sync, status, battery, and low-power health on the server-visible device.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.notifications.read capability.' },
+		methods: ['POST'],
+		steps: ['POST current battery and low-power state.', 'Render cached data immediately and reconcile with the response.', 'Use op mark-read for bounded ids or all notifications.'],
+		requestExamples: [{ name: 'Refresh Watch', description: 'Fetch the newest notifications and account identity.', method: 'POST', body: { limit: 25, batteryLevel: 0.72, lowPowerMode: false } }],
+		responseExamples: [{ status: 200, description: 'Watch is healthy and current.', body: { ok: true, account: { username: 'lopu', displayName: 'Lopu', avatarUrl: '/api/v1/attachments/content?id=…' }, device: { id: 'watch-device-id' }, notifications: [], unreadCount: 0, serverTime: '2026-09-05T01:00:00.000Z' } }]
+	}),
+	endpoint({
+		id: 'watch-things',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Create a private Thing from Apple Watch',
+		endpoint: '/api/v1/watch/things',
+		summary: 'Binds completed Watch uploads into a private Thing with server-owned device provenance.',
+		detail:
+			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.things.create capability.' },
+		methods: ['POST'],
+		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
+		requestExamples: [{ name: 'Create recording Thing', description: 'Bind one completed Watch recording.', method: 'POST', body: { shareId: 'watch-upload-uuid', attachmentIds: ['attachment-id'], filenames: ['Recording.m4a'] } }],
+		responseExamples: [{ status: 201, description: 'Private Thing created.', body: { ok: true, post: { id: 'thing-id', attachments: [{ id: 'attachment-id', name: 'Recording.m4a' }] } } }]
 	}),
 	endpoint({
 		id: 'devices-permissions',
@@ -4202,6 +4272,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -4212,7 +4284,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: {
 			mode: 'session-or-bearer',
 			description:
-				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT), or a paired Watch credential with watch.things.create for post-purpose uploads. PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4270,6 +4342,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
@@ -4278,7 +4352,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4321,6 +4395,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
@@ -4331,7 +4407,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4377,6 +4453,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
@@ -4385,7 +4463,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -9309,7 +9387,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-devices',
-    contractVersion: '1.0.0',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'Register notification devices',
     endpoint: '/api/v1/notifications/devices',
@@ -9321,7 +9400,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
     },
     methods: ['POST', 'DELETE'],
     steps: [

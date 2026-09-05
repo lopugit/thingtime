@@ -433,6 +433,13 @@ const rootThingSchema: ThingtimeSchema = {
       description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.`
     },
     { name: 'ownerId', type: 'id', required: true, system: true, description: 'The owning user id.' },
+		{
+			name: 'sourceDeviceId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Paired device that created this Thing. Server-stamped and never accepted from generic Thing input.'
+		},
     {
       name: 'acl',
       type: 'string[]',
@@ -2758,7 +2765,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },

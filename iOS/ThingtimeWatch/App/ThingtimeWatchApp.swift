@@ -20,7 +20,7 @@ struct ThingtimeWatchApp: App {
                 }
                 .environmentObject(store)
             } else if ProcessInfo.processInfo.environment["THINGTIME_WATCH_ATTACHMENT_PREVIEW"] == "1" {
-                NavigationStack { ThingtimeWatchAttachmentView() }
+                NavigationStack { ThingtimeWatchAttachmentView(recorder: store.audioRecorder) }
                     .environmentObject(store)
             } else {
                 ThingtimeWatchRootView()

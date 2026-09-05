@@ -14,9 +14,9 @@ export type SessionDoc = {
   // 'deployment-link' — minted by /api/v1/deployment-links/token for another
   // Thingtime deployment to sync with; full-credential like 'service', and
   // revocable the same way
-  // 'device-pairing'/'device' — the desktop mesh handshake and the long-lived
+  // 'device-pairing'/'watch-pairing'/'device' — native device handshakes and the long-lived
   // credential it upgrades into, revocable the same way
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
   meta?: Record<string, any>;
 };
 

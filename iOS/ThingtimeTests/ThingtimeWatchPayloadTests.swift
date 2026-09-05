@@ -48,7 +48,8 @@ final class ThingtimeWatchPayloadTests: XCTestCase {
     func testSignedOutSnapshotCarriesPairingGuidance() {
         XCTAssertFalse(ThingtimeWatchSnapshot.signedOut.authenticated)
         XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.notifications.isEmpty)
-        XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.message?.contains("iPhone") == true)
+        XCTAssertTrue(ThingtimeWatchSnapshot.signedOut.message?.contains("directly") == true)
+        XCTAssertFalse(ThingtimeWatchSnapshot.signedOut.message?.contains("iPhone") == true)
     }
 
     func testConnectionFailureRoundTripsWithBoundedMessage() {

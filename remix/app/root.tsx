@@ -52,7 +52,7 @@ export default function App() {
   const rootData = useLoaderData() as RootLoaderData;
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/authorize';
+  const isAuthorizePopup = pathname === '/authorize' || pathname === '/watch/pair';
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
 
