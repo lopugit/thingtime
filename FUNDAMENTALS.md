@@ -368,3 +368,10 @@ Two hooks, same look:
 Don't pass Chakra-native toast props (e.g. `isClosable`, `render`) to `lopu()` —
 the component owns presentation. `console.error`/logging is for developers and is
 not a user notification; surface anything the user should see through Lopu.
+
+
+Passkey challenge replay protection uses the existing home `authOtps` satellite:
+server-only `webauthn:<ceremony>:<challenge SHA-256>` spent markers, unique by
+`challenge`, expire after ten minutes. They contain no private key, credential
+response, account data or browser cookie. Only a cryptographically verified
+ceremony can consume a marker, before any session is issued.

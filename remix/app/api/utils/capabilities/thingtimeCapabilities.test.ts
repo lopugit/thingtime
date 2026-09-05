@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys } from '../../../docs/apiDocs';
+import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilitiesManifest } from '../../../docs/apiDocs';
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
@@ -14,8 +14,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '2.0.0');
-  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.0.1');
-  assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.0.1');
+  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
+  assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
   assert.equal(manifest.features['api.health-nitro']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
@@ -62,4 +62,18 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.1.1');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.1.1');
   assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.2.0');
+});
+
+test('both manifests publish passkey concurrency and Apple association contracts', () => {
+  const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
+  const apiManifest = createApiCapabilitiesManifest();
+  for (const operation of ['login-options', 'login', 'register-options', 'register']) {
+    const feature = `api.auth-passkeys-${operation}`;
+    assert.equal(originManifest.features[feature]?.version, '1.1.0');
+    assert.equal(apiManifest.features[feature], '1.1.0');
+  }
+  assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
+  assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');
+  assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association'));
+  assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association-docs'));
 });
