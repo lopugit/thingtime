@@ -3,10 +3,12 @@
 // objects (ttArg / ttMap / ttIf / ttMerge / ttRepeat) and '{argName}' string
 // tokens, resolved here against the tester's current args BEFORE the tree is
 // drawn through the sanitising allowlist renderers. The canonical semantics
-// twin lives at scripts/components-db/lib/resolve.mjs — keep the resolver and
-// BOTH expansion budgets below identical there. The ttAction binding at the
-// bottom is the one deliberate exception: it is a runtime-only interactive
-// marker, and the catalog generator never emits one.
+// twin lives in the catalog repo (lopugit/thingtime-components) at
+// scripts/components-db/lib/resolve.mjs — it ships separately from this
+// runtime, so keep the resolver and BOTH expansion budgets below identical
+// there whenever either side changes. The ttAction binding at the bottom is the
+// one deliberate exception: it is a runtime-only interactive marker, and the
+// catalog generator never emits one.
 
 export const REPEAT_HARD_CAP = 24;
 
@@ -16,7 +18,8 @@ export const REPEAT_HARD_CAP = 24;
 // 24^11 output nodes from a few hundred stored bytes. The renderers' own
 // 600-node budgets cannot help either: this resolver materialises the whole
 // tree BEFORE they ever see it. The catalog generator already caps RESOLVED
-// nodes (scripts/components-db/lib/validate.mjs), but `component` is
+// nodes (scripts/components-db/lib/validate.mjs in the catalog repo above), but
+// that only covers what IT emits: `component` is
 // deliberately NOT in PROTECTED_THINGTIME — any signed-in user can publish one,
 // and /components, the detail page, and the `component` kind renderer
 // (feed/search/things) all resolve whatever they are handed. So the live

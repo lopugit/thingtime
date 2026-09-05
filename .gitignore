@@ -104,7 +104,3 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
-
-# components-db seeding (machine-local admin credentials)
-scripts/components-db/.seed-env
-scripts/components-db/.batch-in-flight

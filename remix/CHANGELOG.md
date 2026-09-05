@@ -1750,7 +1750,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the tester snapshot as a user-owned component thing). The platform catalog —
   2800 components styled after Ant Design, Bootstrap, MUI, shadcn/ui,
   Untitled UI, daisyUI, React Flow, and the Thingtime house style — lives in
-  the repo `components-db/` folder database (deterministic generator under
+  its own public repo
+  [lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+  as a `components-db/` folder database (deterministic generator under
   `scripts/components-db/`) and seeds into the dev DB as system things via the
   admin `POST /api/v1/admin/components/seed` endpoint (idempotent,
   self-healing, `component-` shareId prefix reserved). Drawer: Schemas moved

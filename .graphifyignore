@@ -17,15 +17,6 @@
 /macos/ThingtimeNode/.build/
 /macos/ThingtimeNode/.build/**
 
-# Emitted component catalog: one JSON per component, produced by
-# scripts/components-db/generate.mjs and kept honest by catalog.test.mjs. The
-# generator, archetypes and validator stay indexed — they are the source. The
-# definitions they emit carry no code structure: in the snapshot committed on
-# this branch they supplied 2,792 of 4,938 manifest entries (57%) and 0 nodes
-# in graph.json. index.json stays indexed as the catalog's summary.
-/components-db/components/
-/components-db/components/**
-
 # Root agent aliases resolve to AI_ALL.md; index the canonical file once.
 /AGENTS.md
 /CLAUDE.md

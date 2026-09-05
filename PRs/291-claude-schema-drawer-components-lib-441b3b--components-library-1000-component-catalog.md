@@ -3,6 +3,23 @@
 Branch: `claude/schema-drawer-components-lib-441b3b` → `develop`
 PR: https://github.com/lopugit/thingtime/pull/291
 
+> **Status note (kept for archaeology).** This document describes the PR as
+> originally shaped, when the catalog was committed into this repo. Since then
+> the split below happened, so read it with that in mind:
+>
+> - The **runtime** (component kind, `/components` + `/components/:key`, browse
+>   and admin-seed APIs, kind renderer, drawer entries, docs) landed on
+>   `develop` in `34096584`, explicitly *without* the catalog.
+> - The **catalog and its generator/validator/seeder** (`components-db/`,
+>   `scripts/components-db/`) moved to the public repo
+>   [lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+>   (`3f7af2af` pointed the docs there). It has since grown past the
+>   1000 components in this title to 70 archetypes / 350 families / 2800
+>   components; that repo's `components-db/index.json` is the source of truth.
+> - What remains unique to this PR is the resolver hardening described under
+>   the expansion budgets: `MAX_RESOLVED_NODES` **and** `MAX_RESOLVED_CHARS` in
+>   `componentTemplate.ts`, plus its regression tests.
+
 ## Shape of the change
 
 Three layers, one new first-class thing kind:
