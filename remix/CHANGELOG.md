@@ -60,6 +60,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
 - 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
 
+- 2026-09-05: Repair native Commander speed tests with proxy-safe exact-byte
+  validation, upload v2 chunks below Vercel's request limit, explicit capability
+  negotiation, single-flight execution, and retained/labelled partial results.
+  Latency refreshes no longer erase throughput readings. See the
+  [main release note](../PRs/657-codex-commander-main-fixes-search-and-network-repairs.md). — Codex (AI)
+
+- 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
+  indexes, improve matching app-name ranking, and add the pin menu's new-window
+  default toggle. See the [PR #652 verification note](../PRs/652-codex-commander-app-name-ranking-complete-search-catalogues-and-pin-toggle.md). — Codex (AI)
+
 - 2026-09-05: Repair Commander GitHub release packaging, preserve build/commit metadata in Recovery, and keep build-only checks from stopping the installed Commander app.
 
 - 2026-09-05: Fix the signed Electron builder's certificate selector: give

@@ -1,13 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { CommanderAccount, CommanderSettings, ThingtimeNetworkProbe } from '@commander/protocol';
-
-const NETWORK_PROBE_PACKET_BYTES = [
-  56 * 1024,
-  500 * 1024,
-  2 * 1024 * 1024,
-  5 * 1024 * 1024,
-  10 * 1024 * 1024,
-] as const;
+import {
+  assertNetworkProbeCapabilities,
+  fetchNetworkProbeCapabilities,
+  NETWORK_PROBE_PACKET_BYTES,
+  networkProbeUploadChunks,
+} from './networkProbe.js';
 const NETWORK_PROBE_TIMEOUT_MS = 90_000;
 
 interface LoginStart {
@@ -18,6 +16,8 @@ interface LoginStart {
 
 export class ThingtimeService {
   #pending = new Map<string, { verifier: string; createdAt: number }>();
+  #networkCapabilities: { origin: string; expiresAt: number; manifest: unknown } | undefined;
+  #speedProbe: { origin: string; result: Promise<ThingtimeNetworkProbe> } | undefined;
 
   beginLogin(settings: CommanderSettings, redirectUri: string): LoginStart {
     if (!settings.thingtimeClientId)
@@ -166,19 +166,68 @@ export class ThingtimeService {
 
   async networkProbe(settings: CommanderSettings, includeSpeed = false): Promise<ThingtimeNetworkProbe> {
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
+    if (!includeSpeed) return this.#runNetworkProbe(baseUrl, false);
+    // All windows share this service: overlapping clicks join one run instead
+    // of multiplying traffic, consuming the quota, and skewing measurements.
+    if (this.#speedProbe) {
+      if (this.#speedProbe.origin !== baseUrl.origin)
+        throw new Error('A speed test is already running for another Thingtime server');
+      return this.#speedProbe.result;
+    }
+    const result = this.#runNetworkProbe(baseUrl, true);
+    this.#speedProbe = { origin: baseUrl.origin, result };
+    try {
+      return await result;
+    } finally {
+      this.#speedProbe = undefined;
+    }
+  }
+
+  async #runNetworkProbe(baseUrl: URL, includeSpeed: boolean): Promise<ThingtimeNetworkProbe> {
+    let cached = this.#networkCapabilities;
+    if (!cached || cached.origin !== baseUrl.origin || cached.expiresAt <= Date.now()) {
+      cached = {
+        origin: baseUrl.origin,
+        expiresAt: Date.now() + 5 * 60_000,
+        manifest: await fetchNetworkProbeCapabilities(baseUrl),
+      };
+    }
+    try {
+      assertNetworkProbeCapabilities(cached.manifest, baseUrl.origin, includeSpeed);
+    } catch (error) {
+      this.#networkCapabilities = undefined;
+      throw error;
+    }
+    this.#networkCapabilities = cached;
     const ping = await this.#ping(baseUrl);
     if (!includeSpeed) return { sampledAtMs: Date.now(), ping };
 
     const downloads: NonNullable<ThingtimeNetworkProbe['speed']>['downloads'] = [];
     const uploads: NonNullable<ThingtimeNetworkProbe['speed']>['uploads'] = [];
+    const errors: NonNullable<ThingtimeNetworkProbe['speed']>['errors'] = [];
     // Keep each transfer serial and bounded: one full run is exactly the
     // documented five-packet ladder in each direction (17.6 MiB each way).
-    for (const bytes of NETWORK_PROBE_PACKET_BYTES) downloads.push(await this.#download(baseUrl, bytes));
-    for (const bytes of NETWORK_PROBE_PACKET_BYTES) uploads.push(await this.#upload(baseUrl, bytes));
+    for (const direction of ['download', 'upload'] as const) {
+      const samples = direction === 'download' ? downloads : uploads;
+      try {
+        for (const bytes of NETWORK_PROBE_PACKET_BYTES) {
+          samples.push(
+            await (direction === 'download'
+              ? this.#download(baseUrl, bytes)
+              : this.#uploadSample(baseUrl, bytes)),
+          );
+        }
+      } catch (error) {
+        // Stop this direction on its first failure, including 429. Keep its
+        // completed samples and still measure the independently limited other direction.
+        errors.push({ direction, message: error instanceof Error ? error.message : 'Transfer failed' });
+      }
+    }
+    const sampledAtMs = Date.now();
     return {
-      sampledAtMs: Date.now(),
+      sampledAtMs,
       ping,
-      speed: { packetBytes: [...NETWORK_PROBE_PACKET_BYTES], downloads, uploads },
+      speed: { sampledAtMs, packetBytes: [...NETWORK_PROBE_PACKET_BYTES], downloads, uploads, errors },
     };
   }
 
@@ -241,6 +290,16 @@ export class ThingtimeService {
       throw new Error(`Thingtime upload probe did not acknowledge ${bytes} bytes`);
     return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
   }
+
+  async #uploadSample(
+    baseUrl: URL,
+    bytes: number,
+  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
+    const started = performance.now();
+    for (const chunkBytes of networkProbeUploadChunks(bytes)) await this.#upload(baseUrl, chunkBytes);
+    const durationMs = Math.max(1, performance.now() - started);
+    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
+  }
 }
 
 function megabitsPerSecond(bytes: number, durationMs: number): number {
@@ -251,6 +310,14 @@ async function networkProbeError(response: Response, fallback: string): Promise<
   const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
   if (response.status === 404)
     return new Error('This Thingtime deployment has not enabled Commander network probes yet (404)');
+  if (response.status === 429) {
+    const seconds = Number(response.headers.get('retry-after'));
+    return new Error(
+      Number.isFinite(seconds) && seconds > 0
+        ? `Speed-test cooldown; retry in ${Math.ceil(seconds / 60)} minute(s) (429)`
+        : 'Speed-test cooldown; please retry later (429)',
+    );
+  }
   const detail = typeof body?.error === 'string' ? body.error : fallback;
   return new Error(`${detail} (${response.status})`);
 }
