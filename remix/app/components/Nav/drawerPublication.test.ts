@@ -44,3 +44,20 @@ test('the marketing section itself follows its children for visitors', () => {
 	const messages = drawerMenuItems.find((item) => item.id === 'messages')!;
 	assert.deepEqual(filterDrawerItemsByAuth(messages.children, false, false, nothing), []);
 });
+
+// UserSettingsModal's "Close after click" list mirrors the drawer, so it must
+// use the SAME pair of filters. Gating a top-level section on its own key
+// (filterDrawerItemsByAuth over drawerMenuItems) would hide Marketing from the
+// settings list while DrawerContent still renders it.
+test('a section is listed by its children, not by its own key', () => {
+	const ids = (items: { id: string }[]) => items.map((item) => item.id);
+	// a published category with an unpublished hub: the section IS reachable,
+	// so both the drawer and the settings mirror must list it
+	const live = only('category:landing');
+	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, false, live)).includes('marketing'));
+	// filtering the top level on its own key would drop it — the two helpers
+	// genuinely disagree here, which is why both call sites use the same one
+	assert.ok(!ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, live)).includes('marketing'));
+	// and they agree once the hub itself is published
+	assert.ok(ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, only('hub'))).includes('marketing'));
+});
