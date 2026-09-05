@@ -1329,6 +1329,30 @@ email whose link points at the attacker.
       member list never include pending rows; `viewer.pending` /
       `viewer.approvalRequested` ride every subspace projection and mods
       get `pendingCount` / `approvalRequestCount` on the detail.
+- [ ] Request edge cases (S2 review): the server's posting gate IS
+      `viewer.canPost` (`canPostIn`) — kicking an approved poster of a
+      restricted subspace clears `approved`, so `POST /api/v1/things` answers
+      403 for them and a rejoin does not restore approval; a private
+      re-request starts from a clean row (never approved); a post card's
+      `subspace.viewerRole` is `null` for anyone who is not an active member
+      (kicked, pending). A pending join request takes only Accept / Deny /
+      Add / Ban / Make mod: approve, unapprove and demote answer 400 ("accept
+      the join request first"), kick answers 404, and the requester never
+      gets a stray "no longer a moderator" bell. Accept / Deny / Add on a
+      request that was cancelled meanwhile answer 409 ("withdrawn — reload
+      the queue"; the Requests tab refreshes instead of restoring the row)
+      and write no `member.accept` log / 🎉 bell — a cancelled request
+      answers 404 outright. Switching a private subspace to public or
+      restricted activates every open join request (requesters become
+      members, get a "s/<slug> · opened up — your request to join went
+      through 🎉" bell; modlog `settings.update` detail `acceptedRequests`);
+      switching away from restricted clears open posting-approval requests.
+      A member whose temporary ban has expired can request posting approval
+      and the request shows in the queue + count (the row heals). A request
+      cancelled and filed again (`/join` → `/leave` → `/join`) does not
+      ring the mods again while their earlier 🙋 bell is unread (it rings
+      once more after they read it); `/join` has its own rate key
+      (`subspaces.join`, 20/min → 429).
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

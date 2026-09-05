@@ -50,7 +50,12 @@ reactions untouched.
   + `approvalRequestCount`; mod notifications (`subspace-join-request`
   "wants to join / wants to post") + `subspace-join-accepted`; subspace page
   "Request to join 🔒 → Requested ✓ · cancel" + "Request posting approval ✋",
-  mod page **Requests** tab with badges; verify section N.
+  mod page **Requests** tab with badges; verify section N. Review fixes:
+  the posting gate consumes `canPostIn` (kicked/pending rows never post;
+  `remove` clears `approved`), pending rows take only decisions (400/404),
+  guarded accept/deny/add (409 on a withdrawn request), access flips resolve
+  the queues, expired bans heal on `request-approval`, deduped mod bells +
+  a `subspaces.join` rate key.
 
 ## Follow-ups (not in this PR)
 - User flairs; per-subspace wiki +

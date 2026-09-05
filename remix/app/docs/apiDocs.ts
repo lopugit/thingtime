@@ -8626,6 +8626,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-update',
+    // 1.1.0: changing access resolves the request queues — leaving private
+    // activates every pending join request (and notifies them,
+    // subspace-join-accepted), leaving restricted clears open posting-approval
+    // requests; the settings.update mod-log detail reports the counts (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
@@ -8633,7 +8639,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'POST { id|slug, name?, description?, rules?, flairs?, branding? } as a moderator, plus access? and nsfw? ' +
       'as the owner. Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
-      'correctly. Every change writes a settings.update mod-log entry.',
+      'correctly. The request queues follow the access mode: switching AWAY from private turns every open join ' +
+      'request into an active membership (the doors are open to everyone now; the requesters are notified with ' +
+      'subspace-join-accepted, the first 200 of them), and switching away from restricted clears open ' +
+      'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
+      'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
+      'an access change resolved any.',
     auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
     methods: ['POST'],
     steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
@@ -8647,8 +8658,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'subspaces-join',
     // 1.1.0: joining a PRIVATE subspace files a join request (200, pending:
     // true) instead of answering 403; the response gained `pending` (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.1.1: a re-request starts from a clean row (a kicked approved poster's
+    // old approval no longer rides through the queue), the moderators' bell
+    // is deduped against an unread copy, and join has its own rate key
+    // (subspaces.join, 20/min) — compatible corrections
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
@@ -8658,10 +8673,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
       'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
       'not counted) — answers { joined: false, pending: true } and notifies the moderators (subspace-join-request, ' +
-      'preview "s/<slug> · wants to join 🙋"); a moderator accepts or denies it from the Requests queue ' +
-      '(POST /api/v1/subspaces/members action accept | deny — a moderator’s `add` accepts too), and ' +
-      'POST /api/v1/subspaces/leave cancels it. Banned users receive 403 with the ban reason. Joining (or ' +
-      'requesting) twice is a friendly no-op (joined: false, and pending: true while the request is open).',
+      'preview "s/<slug> · wants to join 🙋"; each moderator’s bell rings once per open request — a request ' +
+      'cancelled and filed again is deduped against their unread copy); a moderator accepts or denies it from ' +
+      'the Requests queue (POST /api/v1/subspaces/members action accept | deny — a moderator’s `add` accepts ' +
+      'too), and POST /api/v1/subspaces/leave cancels it. A re-request starts from a clean row (never an ' +
+      'approved poster). Banned users receive 403 with the ban reason. Joining (or requesting) twice is a ' +
+      'friendly no-op (joined: false, and pending: true while the request is open). Rate-limited per user ' +
+      '(subspaces.join, 20/min → 429).',
     auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
     methods: ['POST'],
     steps: ['POST the subspace slug or id.', 'Read joined / pending and the returned subspace.viewer for your new state.'],
@@ -8706,8 +8724,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // POST actions accept / deny / request-approval (self), rows carry
     // pending + approvalRequested, `add` on a pending row accepts it, approve /
     // unapprove settle an approval request (additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.2.1: a decision on a request that was withdrawn meanwhile answers 409
+    // (accept / deny / add-on-pending are guarded writes — no accept mod-log
+    // entry or "welcome in" bell for a non-member); approve / unapprove /
+    // role member on a pending row answer 400, remove on one 404; `remove`
+    // clears restricted posting approval; request-approval heals an expired
+    // temporary ban so the request reaches the queue — compatible corrections
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -8720,16 +8744,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'moderator. Every row carries pending + approvalRequested. POST { id|slug, userId|username, action, role?, ' +
       'reason?, banDays? } with action add (also accepts a pending join request), accept (pending → active member; ' +
       'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
-      'posting-approval request; optional reason; 404 without one), remove (kick), approve/unapprove (restricted ' +
-      'posting rights — both settle an open approval request), ban/unban (banDays for a temporary ban; bans on ' +
-      'non-members are pre-emptive; banning a pending requester removes the request), role (owner only: moderator ' +
-      '| member), or request-approval — the one SELF action: an active, unapproved member of a RESTRICTED subspace ' +
-      'asks the mods for posting rights (approvalRequested: true; notifies the mods with subspace-join-request ' +
-      '"s/<slug> · wants to post ✋"; 400 unless the subspace is restricted, 403 for non-members / for someone ' +
-      'else). role, ban, unban and accept notify the affected user (bell types subspace-role / subspace-ban / ' +
-      'subspace-join-accepted, preview "s/<slug> · …", targetId = the subspace); join and approval requests notify ' +
-      'the moderators (subspace-join-request). Moderators can’t moderate other moderators or the owner; every ' +
-      'moderator action writes a member.<action> mod-log entry (request-approval writes none).',
+      'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
+      'posting approval), approve/unapprove (restricted posting rights — both settle an open approval request), ' +
+      'ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning a pending requester ' +
+      'removes the request), role (owner only: moderator | member), or request-approval — the one SELF action: ' +
+      'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
+      'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
+      'mod’s unread copy; 400 unless the subspace is restricted, 403 for non-members / for someone else; an ' +
+      'expired temporary ban is healed on the row so the request reaches the queue). A pending join request is ' +
+      'not a membership: only accept, deny, add, ban and role moderator apply to one — approve, unapprove and ' +
+      'role member answer 400 ("accept the join request first"), remove answers 404. accept, deny and add on a ' +
+      'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
+      '("withdrawn — reload the queue") and logs / notifies nothing. role, ban, unban and accept notify the ' +
+      'affected user (bell types subspace-role / subspace-ban / subspace-join-accepted, preview "s/<slug> · …", ' +
+      'targetId = the subspace); join and approval requests notify the moderators (subspace-join-request). ' +
+      'Moderators can’t moderate other moderators or the owner; every moderator action writes a member.<action> ' +
+      'mod-log entry (request-approval writes none).',
     auth: { mode: 'optional', description: 'GET of the mod roster works logged out; request-approval needs the member’s own session; everything else needs a moderator session.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -8749,7 +8779,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
       { status: 200, description: 'Accepted — the requester is a member now.', body: { ok: true, member: { userId: '664f…', profile: { username: 'newcomer' }, role: 'member', pending: false, left: false } } },
       { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
-      { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } }
+      { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } },
+      { status: 400, description: 'approve / unapprove / role member on a pending join request.', body: { ok: false, error: 'Accept the join request first — they are not a member yet' } },
+      { status: 409, description: 'The request was cancelled (or re-filed) between the queue read and the decision.', body: { ok: false, error: 'That request was withdrawn — reload the queue' } }
     ]
   }),
   endpoint({

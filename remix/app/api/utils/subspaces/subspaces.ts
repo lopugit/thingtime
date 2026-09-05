@@ -106,6 +106,9 @@ const MAX_QUERY_CHARS = 60;
 const MAX_BAN_DAYS = 3650;
 // "the mods" as notification recipients = active owner + moderators, bounded
 const MAX_NOTIFIED_MODERATORS = 200;
+// requesters told their join request went through when a private subspace
+// opens up (every pending row is activated; the first N hear about it)
+const MAX_NOTIFIED_REQUESTERS = 200;
 // deleting a subspace releases its posts in bounded accounted batches (each
 // batch is one storage transaction); the pass cap only guards against a
 // pathological loop, real subspaces drain in a handful of passes — and a
@@ -600,6 +603,23 @@ export const getSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef
 // ---------------------------------------------------------------------------
 // Settings (branding / rules / flairs / access)
 
+// A private subspace opening up (→ public / restricted) resolves its open
+// join requests: every pending row becomes an active membership (they asked
+// to be in; now anyone may be), and the first MAX_NOTIFIED_REQUESTERS of them
+// hear about it. Returns how many rows flipped.
+const activatePendingRequests = async (subspaceId: string, slug: string, actor: NonNullable<Viewer>, now: Date): Promise<number> => {
+	const things = await getThingsCollection();
+	const match = { thingtime: 'subspace-member', targetId: subspaceId, ...PENDING_REQUEST_MATCH };
+	const rows = (await things.find(match as any).project({ ownerId: 1 }).limit(MAX_NOTIFIED_REQUESTERS).toArray()) as any[];
+	if (!rows.length) return 0;
+	const result = await things.updateMany(match as any, { $set: { 'crystal.pending': false, updatedAt: now } });
+	await emitNotificationsBulk(
+		rows.map((row) => ({ recipientId: String(row.ownerId), type: 'subspace-join-accepted' as const })),
+		{ actor: notificationActorOf(actor), targetId: subspaceId, preview: subspaceNotificationPreview(slug, 'opened up — your request to join went through 🎉') }
+	);
+	return Number(result?.modifiedCount) || 0;
+};
+
 export type UpdateSubspaceInput = SubspaceRef & {
 	name?: unknown;
 	description?: unknown;
@@ -670,15 +690,31 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 	const things = await getThingsCollection();
 	const now = new Date();
 	await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } });
-	await writeModlog(id, auth.viewer.id, 'settings.update', { detail: { fields: changed } });
-	// private ⇄ public flips re-stamp existing posts so feed clauses stay exact
+	const detail: Record<string, unknown> = { fields: changed };
 	if (set['crystal.access'] !== undefined) {
-		const makePrivate = set['crystal.access'] === 'private';
+		const previousAccess = accessOf(subspace);
+		const nextAccess = set['crystal.access'] as SubspaceAccessMode;
+		// private ⇄ public flips re-stamp existing posts so feed clauses stay exact
 		await things.updateMany(
 			withMatch(postMatch(), { 'crystal.subspaceId': id }) as any,
-			makePrivate ? ({ $set: { subspacePrivate: true } } as any) : ({ $unset: { subspacePrivate: '' } } as any)
+			nextAccess === 'private' ? ({ $set: { subspacePrivate: true } } as any) : ({ $unset: { subspacePrivate: '' } } as any)
 		);
+		// the request queues follow the access mode. Leaving PRIVATE: whoever
+		// was waiting to join is simply in — the doors are open to everyone
+		// now, and a queue of requests the subspace no longer takes would
+		// strand both sides (a "Requested ✓ · cancel" button on a public
+		// subspace, a Requests tab the panel says is closed). They are told
+		// (subspace-join-accepted). Leaving RESTRICTED: open posting-approval
+		// requests are moot (anyone / every member may post now) and clear.
+		if (previousAccess === 'private' && nextAccess !== 'private') {
+			detail.acceptedRequests = await activatePendingRequests(id, String(subspace.crystal?.slug || id), auth.viewer, now);
+		}
+		if (previousAccess === 'restricted' && nextAccess !== 'restricted') {
+			const cleared = await things.updateMany({ thingtime: 'subspace-member', targetId: id, 'crystal.approvalRequested': true } as any, { $set: { 'crystal.approvalRequested': false, updatedAt: now } });
+			detail.clearedApprovalRequests = Number(cleared?.modifiedCount) || 0;
+		}
 	}
+	await writeModlog(id, auth.viewer.id, 'settings.update', { detail });
 	const fresh = await findSubspace({ id });
 	const counts = await memberCountsFor([id]);
 	return { ok: true, subspace: toPublicSubspace(fresh, { memberCount: counts.get(id) || 0, membership: gate.membership }) };
@@ -697,13 +733,18 @@ export type JoinSubspaceResult = { ok: true; subspace: PublicSubspace; joined: b
 
 // the "notify the mods" emit every request shares (join request / posting
 // approval request): bounded recipients, never throws, preview leads with the
-// slug so the bell deep-links to /s/<slug> — the mod page's Requests tab
+// slug so the bell deep-links to /s/<slug> — the mod page's Requests tab.
+// Deduped against each moderator's UNREAD bell: a request filed, cancelled
+// (/leave) and filed again — or asked again after a deny — rings once until
+// the mod has looked, so the request → cancel → request loop can't turn into
+// a per-mod fan-out amplifier.
 const notifyModsOfRequest = async (subspaceId: string, slug: string, actor: NonNullable<Viewer>, detail: string) => {
 	const recipientIds = await moderatorRecipientIds(subspaceId, actor.id);
 	if (!recipientIds.length) return;
 	await emitNotificationsBulk(
 		recipientIds.map((recipientId) => ({ recipientId, type: 'subspace-join-request' as const })),
-		{ actor: notificationActorOf(actor), targetId: subspaceId, preview: subspaceNotificationPreview(slug, detail) }
+		{ actor: notificationActorOf(actor), targetId: subspaceId, preview: subspaceNotificationPreview(slug, detail) },
+		{ dedupeUnread: true }
 	);
 };
 
@@ -734,10 +775,24 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 			return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
 		}
 		if (existing) {
-			// a re-request restarts the row's clock so the queue lists it as new
+			// a re-request restarts the row's clock so the queue lists it as
+			// new — and starts from a clean slate: a request is never an
+			// approved poster (a kicked approved poster asking back in would
+			// otherwise carry their old approval through the queue)
 			await things.updateOne(
 				{ _id: existing._id } as any,
-				{ $set: { 'crystal.pending': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.approvalRequested': false, 'crystal.role': 'member', createdAt: now, updatedAt: now } }
+				{
+					$set: {
+						'crystal.pending': true,
+						'crystal.left': false,
+						'crystal.banned': false,
+						'crystal.approved': false,
+						'crystal.approvalRequested': false,
+						'crystal.role': 'member',
+						createdAt: now,
+						updatedAt: now
+					}
+				}
 			);
 		} else {
 			try {
@@ -885,9 +940,15 @@ const requestPostingApproval = async (
 	if (!isActiveMember(membership)) return fail(403, `Join s/${slug} first, then ask for posting approval ✋`);
 	if (membership!.approved || canModerate(membership)) return fail(400, `You can already post in s/${slug} ✅`);
 	const things = await getThingsCollection();
+	// an expired temporary ban reads as lifted (membershipOfDoc) but its raw
+	// flags would keep this row out of the Requests queue and its count
+	// (they match on crystal.banned) — heal the row as the request lands
+	const heal: Record<string, unknown> = existing.crystal?.banned === true ? { 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null } : {};
 	if (!membership!.approvalRequested) {
-		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.approvalRequested': true, updatedAt: new Date() } });
+		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.approvalRequested': true, ...heal, updatedAt: new Date() } });
 		await notifyModsOfRequest(id, slug, viewer, 'wants to post ✋');
+	} else if (Object.keys(heal).length) {
+		await things.updateOne({ _id: existing._id } as any, { $set: { ...heal, updatedAt: new Date() } });
 	}
 	const [fresh, profiles] = await Promise.all([findSubspaceMemberDoc(id, userId), resolveProfiles([userId])]);
 	return { ok: true, member: toPublicMember(fresh, profiles.get(userId) || null) };
@@ -920,34 +981,59 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	}
 	const targetPending = !!target && target.pending && !target.left && !target.banned;
 	const targetAskedForApproval = !!target && target.approvalRequested && !target.approved && isActiveMember(target);
+	// a pending join request is not a membership: a moderator can decide it
+	// (accept / deny / add), ban the requester, or let them straight in as a
+	// moderator — nothing else. Posting rights or the member role on a row
+	// that is still waiting would leave it half-in (approved but pending, or
+	// a "no longer a moderator" bell for someone who never was one).
+	if (targetPending && (action === 'approve' || action === 'unapprove' || (action === 'role' && input.role === 'member'))) {
+		return fail(400, 'Accept the join request first — they are not a member yet');
+	}
 	const reason = sanitizeReason(input.reason);
 	const now = new Date();
 	let set: Record<string, unknown> = {};
 	let detail: Record<string, unknown> | null = null;
 	// a denied join request drops its row entirely (the user may ask again)
 	let deleteRow = false;
+	// the request state the write must still find (accept / deny / add on a
+	// pending row): a requester who cancelled (row gone) or re-requested (new
+	// row) between the read above and this write matches nothing, and the
+	// decision answers 409 instead of logging an accept + ringing "welcome
+	// in" for someone who is not a member
+	let guard: Record<string, unknown> | null = null;
 
 	switch (action) {
 		case 'add':
 			// also accepts a pending join request (activates the same row)
 			set = { 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, 'crystal.pending': false };
-			if (targetPending) detail = { acceptedRequest: true };
+			if (targetPending) {
+				detail = { acceptedRequest: true };
+				guard = PENDING_REQUEST_MATCH;
+			}
 			break;
 		case 'accept':
 			if (!targetPending) return fail(404, 'No pending join request from that user');
 			set = { 'crystal.pending': false, 'crystal.left': false, 'crystal.banned': false };
+			guard = PENDING_REQUEST_MATCH;
 			break;
 		case 'deny':
 			// a pending JOIN request is dropped; a posting-approval request is
 			// cleared (the member stays a member)
-			if (targetPending) deleteRow = true;
-			else if (targetAskedForApproval) set = { 'crystal.approvalRequested': false };
-			else return fail(404, 'No pending request from that user');
+			if (targetPending) {
+				deleteRow = true;
+				guard = PENDING_REQUEST_MATCH;
+			} else if (targetAskedForApproval) {
+				set = { 'crystal.approvalRequested': false };
+				guard = APPROVAL_REQUEST_MATCH;
+			} else return fail(404, 'No pending request from that user');
 			detail = { request: targetPending ? 'join' : 'approval' };
 			break;
 		case 'remove':
 			if (!existing || target?.left) return fail(404, 'Not a member');
-			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.pending': false, 'crystal.approvalRequested': false };
+			if (targetPending) return fail(404, 'Not a member yet — deny the join request instead');
+			// a kick revokes restricted posting rights too: the row that is
+			// left behind must never read as an approved poster
+			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.approved': false, 'crystal.pending': false, 'crystal.approvalRequested': false };
 			break;
 		case 'approve':
 			// grants posting rights and settles any open approval request
@@ -993,10 +1079,13 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 		}
 	}
 
+	const WITHDRAWN = 'That request was withdrawn — reload the queue';
 	if (deleteRow) {
-		await things.deleteOne({ _id: existing._id } as any);
+		const dropped = await things.deleteOne({ _id: existing._id, ...(guard || {}) } as any);
+		if (guard && !Number(dropped?.deletedCount)) return fail(409, WITHDRAWN);
 	} else if (existing) {
-		await things.updateOne({ _id: existing._id } as any, { $set: { ...set, updatedAt: now } });
+		const written = await things.updateOne({ _id: existing._id, ...(guard || {}) } as any, { $set: { ...set, updatedAt: now } });
+		if (guard && !Number(written?.matchedCount)) return fail(409, WITHDRAWN);
 	} else {
 		if (action === 'remove' || action === 'unban' || action === 'unapprove') return fail(404, 'Not a member');
 		// add/approve/ban/role on a non-member mints the row (bans on

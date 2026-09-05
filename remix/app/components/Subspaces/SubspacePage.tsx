@@ -272,7 +272,12 @@ export const SubspacePage = () => {
 		if (membershipBusy) return;
 		setMembershipBusy(true);
 		const { viewer } = subspace;
-		const leaving = viewer.member || viewer.pending; // an active membership ends, a pending request is cancelled
+		// an active membership ends, a pending request is cancelled. A request
+		// only exists on a PRIVATE subspace (the server resolves them when the
+		// access mode changes); a stray pending flag anywhere else is a plain
+		// "Join" — the same call activates the row.
+		const pendingRequest = viewer.pending && subspace.access === 'private';
+		const leaving = viewer.member || pendingRequest;
 		const requesting = !leaving && subspace.access === 'private';
 		const before = subspace;
 		setSubspace({
@@ -292,7 +297,7 @@ export const SubspacePage = () => {
 			const pendingNow = !leaving && 'pending' in resp && resp.pending;
 			lopu({
 				title: leaving
-					? viewer.pending
+					? pendingRequest
 						? `Join request to s/${subspace.slug} cancelled`
 						: `Left s/${subspace.slug}`
 					: pendingNow
@@ -338,6 +343,8 @@ export const SubspacePage = () => {
 	const isOwner = subspace?.viewer.role === 'owner';
 	const viewer = subspace?.viewer;
 	const openRequests = openRequestCount(subspace);
+	// a join request is a private-subspace state only (see toggleMembership)
+	const viewerPending = !!viewer?.pending && subspace?.access === 'private';
 	// join button copy per state (private subspaces request instead of join)
 	const joinLabel = !viewer
 		? 'Join'
@@ -345,7 +352,7 @@ export const SubspacePage = () => {
 			? 'Banned 🚫'
 			: viewer.member
 				? 'Joined ✓'
-				: viewer.pending
+				: viewerPending
 					? 'Requested ✓ · cancel'
 					: subspace!.access === 'private'
 						? 'Request to join 🔒'
@@ -441,17 +448,17 @@ export const SubspacePage = () => {
 								<Button
 									size="sm"
 									borderRadius="999px"
-									variant={viewer.member || viewer.pending ? 'outline' : 'solid'}
-									background={viewer.member || viewer.pending ? 'transparent' : accent}
-									color={viewer.member || viewer.pending ? INK : 'white'}
+									variant={viewer.member || viewerPending ? 'outline' : 'solid'}
+									background={viewer.member || viewerPending ? 'transparent' : accent}
+									color={viewer.member || viewerPending ? INK : 'white'}
 									borderColor="var(--tt-border, #ececef)"
 									_hover={{ opacity: 0.85 }}
 									isLoading={membershipBusy}
 									isDisabled={viewer.banned}
 									onClick={toggleMembership}
-									title={viewer.pending ? 'Your join request is waiting for a moderator — click to cancel it' : undefined}
+									title={viewerPending ? 'Your join request is waiting for a moderator — click to cancel it' : undefined}
 									data-testid="subspace-join"
-									data-membership={viewer.member ? 'member' : viewer.pending ? 'pending' : 'none'}
+									data-membership={viewer.member ? 'member' : viewerPending ? 'pending' : 'none'}
 								>
 									{joinLabel}
 								</Button>

@@ -79,9 +79,14 @@ test('subspace join requests + posting-approval requests publish their contract 
 	// S2: private join → pending request (join), leave cancels it, list/detail
 	// carry viewer.pending/approvalRequested (+ mods' queue counts), members
 	// grew pending=1 / approvalRequests=1 + accept / deny / request-approval
-	assert.equal(manifest.features['api.subspaces-join'], '1.1.0');
 	assert.equal(manifest.features['api.subspaces-leave'], '1.1.0');
 	assert.equal(manifest.features['api.subspaces'], '1.1.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.1.0');
-	assert.equal(manifest.features['api.subspaces-members'], '1.2.0');
+	// S2 review: join re-requests start clean + deduped mod bells + own rate
+	// key (1.1.1), decisions on a withdrawn request answer 409 / pending-row
+	// walls / remove revokes approval (members 1.2.1), an access change
+	// resolves the queues (update 1.1.0)
+	assert.equal(manifest.features['api.subspaces-join'], '1.1.1');
+	assert.equal(manifest.features['api.subspaces-members'], '1.2.1');
+	assert.equal(manifest.features['api.subspaces-update'], '1.1.0');
 });

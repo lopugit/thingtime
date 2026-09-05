@@ -10,7 +10,7 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { MAX_SUBSPACE_MEMBERSHIPS_PER_USER, type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
-import { flairById, isActiveMembershipState, isModeratorRole, type SubspaceFlair } from './subspaceCore';
+import { canPostIn, flairById, isActiveMembershipState, isModeratorRole, type SubspaceFlair } from './subspaceCore';
 
 export type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -137,9 +137,12 @@ export type PostingGateResult =
 // May `ownerId` publish a post into `subspaceId` carrying `flairId`? Runs on
 // every post create AND every PATCH that touches subspaceId/flairId so the
 // generic things route can never smuggle a post past a ban or a private
-// wall. Owners and moderators always may; the access mode decides for the
-// rest: public → anyone not banned, restricted → approved posters, private →
-// members only.
+// wall. The decision is subspaceCore's canPostIn — the SAME predicate the
+// subspace detail advertises as viewer.canPost — so the server and the UI
+// can never disagree: owners and moderators always may; the access mode
+// decides for the rest: public → anyone not banned, restricted → approved
+// ACTIVE members, private → active members. A kicked (left) or pending row
+// is not a member whatever its approved flag says.
 export const assertSubspacePosting = async (
 	ownerId: string,
 	subspaceId: string,
@@ -153,9 +156,10 @@ export const assertSubspacePosting = async (
 	if (membership?.banned) return fail(403, banMessage(slug, membership));
 	const moderator = canModerate(membership);
 	const access = accessOf(subspace);
-	if (!moderator) {
-		if (access === 'private' && !isActiveMember(membership)) return fail(403, `s/${slug} is private — only members can post there 🔒`);
-		if (access === 'restricted' && !membership?.approved) return fail(403, `Only approved posters can post in s/${slug} — ask a moderator ✋`);
+	if (!canPostIn(access, membership)) {
+		if (access === 'private') return fail(403, `s/${slug} is private — only members can post there 🔒`);
+		if (access === 'restricted') return fail(403, `Only approved posters can post in s/${slug} — ask a moderator ✋`);
+		return fail(403, `You can’t post in s/${slug} right now`);
 	}
 	let resolvedFlairId: string | null = null;
 	if (flairId) {

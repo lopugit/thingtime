@@ -241,6 +241,14 @@ const RequestsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCou
 				duration: 4000
 			});
 		} catch (err: any) {
+			if (err?.status === 409) {
+				// the requester withdrew (or re-filed) while the row sat in the
+				// queue — the server refused to decide a request that is gone;
+				// the optimistic removal was right, the queue just needs a fresh read
+				lopu({ title: err?.error || 'That request was withdrawn — refreshing the queue', status: 'info', duration: 4000 });
+				load(queue);
+				return;
+			}
 			// put the row (and the count) back exactly where it was
 			setList((prev) => (prev.some((entry) => entry.userId === member.userId) ? prev : [member, ...prev]));
 			onCounts({ [countKey]: countBefore });

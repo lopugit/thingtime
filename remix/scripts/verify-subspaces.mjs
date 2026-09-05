@@ -10,7 +10,10 @@
 // lifecycle: role/ban notifications, ownership transfer and deletion with
 // every 4xx wall, and (section N) join requests to private subspaces +
 // posting-approval requests in restricted ones — request/cancel/accept/deny,
-// the mod-only queues and counts, and every 4xx wall.
+// the mod-only queues and counts, every 4xx wall, and the S2 review fixes
+// (a kicked approved poster can't post, a pending row takes only decisions,
+// withdrawn requests can't be decided, access flips resolve the queues, an
+// expired ban heals, the mods' bell is deduped).
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -430,8 +433,8 @@ const run = async () => {
 	check('refused deletes leave the subspace intact', stillThere.status === 200);
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.2.0, S2 queues) / notifications contracts (1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.2.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.2.1, S2 queues + review fixes) / notifications contracts (1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.2.1' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
@@ -764,9 +767,136 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (join/leave/get/list 1.1.0, members 1.2.0)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.1.0' && manifest3.body.features['api.subspaces-leave'] === '1.1.0' && manifest3.body.features['api.subspaces-get'] === '1.1.0' && manifest3.body.features['api.subspaces'] === '1.1.0' && manifest3.body.features['api.subspaces-members'] === '1.2.0',
-		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'] })
+		'capability manifest advertises the request contracts (leave/get/list 1.1.0, join 1.1.1, members 1.2.1, update 1.1.0)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.1.1' && manifest3.body.features['api.subspaces-leave'] === '1.1.0' && manifest3.body.features['api.subspaces-get'] === '1.1.0' && manifest3.body.features['api.subspaces'] === '1.1.0' && manifest3.body.features['api.subspaces-members'] === '1.2.1' && manifest3.body.features['api.subspaces-update'] === '1.1.0',
+		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
+	);
+
+	// ── S2 review fixes: one posting predicate (server = viewer.canPost), a
+	// pending row takes only decisions, guarded decisions, the queues follow
+	// the access mode, an expired ban heals, the mods' bell is deduped ──
+	console.log('\n   N (review fixes). kicked posters, pending-row walls, queue resolution on access flips, bell dedupe');
+	const postAs = (cookie, text) => api('/api/v1/things', { method: 'POST', cookie, body: { type: 'text', text, title: 'r', subspaceId: reqSpace.id } });
+	const setAccess = (access) => api('/api/v1/subspaces/update', { method: 'POST', cookie: owner.cookie, body: { slug: reqSlug, access } });
+	const memberAction = (userId, action, extra = {}) => api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: reqSlug, userId, action, ...extra } });
+	const modlogOf = async () => (await api(`/api/v1/subspaces/modlog?slug=${reqSlug}&limit=50`, { cookie: owner.cookie })).body?.entries || [];
+	// (state: public; member is an approved poster, stranger + mod are plain members)
+	const backToRestricted = await setAccess('restricted');
+	const approvedPostsFirst = await postAs(member.cookie, 'still approved');
+	check('(setup) restricted again; the approved member posts (200)', backToRestricted.status === 200 && approvedPostsFirst.status === 200, `${backToRestricted.status}/${approvedPostsFirst.status}`);
+	const approvedPostId = approvedPostsFirst.body?.post?.id;
+	const kick = await memberAction(member.id, 'remove');
+	const kickedDetail = await detailOf(member.cookie);
+	const kickedPost = await postAs(member.cookie, 'kicked but approved?');
+	check(
+		'a kicked approved poster can’t post: remove clears approved, viewer.canPost false, POST /things 403 (server and UI share canPostIn)',
+		kick.status === 200 && kick.body.member?.left === true && kick.body.member.approved === false && kickedDetail.body.subspace.viewer.canPost === false && kickedDetail.body.subspace.viewer.approved === false && kickedDetail.body.subspace.viewer.member === false && kickedPost.status === 403,
+		`${kick.status}/${kickedPost.status} ${JSON.stringify(kick.body?.member)} viewer=${JSON.stringify(kickedDetail.body?.subspace?.viewer)}`
+	);
+	const kickedCard = await api(`/api/v1/things?id=${approvedPostId}`, { cookie: member.cookie });
+	const memberCard = await api(`/api/v1/things?id=${approvedPostId}`, { cookie: stranger.cookie });
+	check(
+		'post cards: subspace.viewerRole is null for a non-member (kicked) and "member" for an active member',
+		kickedCard.status === 200 && kickedCard.body.post?.subspace?.viewerRole === null && memberCard.status === 200 && memberCard.body.post?.subspace?.viewerRole === 'member',
+		`${kickedCard.status}/${memberCard.status} ${JSON.stringify([kickedCard.body?.post?.subspace?.viewerRole, memberCard.body?.post?.subspace?.viewerRole])}`
+	);
+	const rejoinKicked = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: reqSlug } });
+	const rejoinedPost = await postAs(member.cookie, 'back, still not approved');
+	check('rejoining after a kick does not restore posting approval (joined, canPost false, post 403)', rejoinKicked.status === 200 && rejoinKicked.body.joined === true && rejoinKicked.body.subspace.viewer.canPost === false && rejoinedPost.status === 403, `${rejoinKicked.status}/${rejoinedPost.status} ${JSON.stringify(rejoinKicked.body?.subspace?.viewer)}`);
+
+	// an expired temporary ban must not hide a posting-approval request from the queue
+	const shortBan = await memberAction(mod.id, 'ban', { reason: 'blink', banDays: 0.00002 }); // ≈1.7 s
+	await new Promise((resolve) => setTimeout(resolve, 2500));
+	const afterExpiry = await detailOf(mod.cookie);
+	const expiredAsk = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: reqSlug, action: 'request-approval' } });
+	const expiredQueue = await memberOf(owner.cookie, '&approvalRequests=1');
+	const expiredCounts = await detailOf(owner.cookie);
+	check(
+		'a member whose temporary ban expired can ask for posting approval and the request reaches the queue + count (row healed)',
+		shortBan.status === 200 && afterExpiry.body.subspace.viewer.banned === false && expiredAsk.status === 200 && expiredAsk.body.member?.approvalRequested === true && expiredAsk.body.member.banned === false && expiredQueue.body.members.some((entry) => entry.userId === mod.id) && expiredCounts.body.subspace.approvalRequestCount === 1,
+		`${shortBan.status}/${expiredAsk.status} banned=${afterExpiry.body?.subspace?.viewer?.banned} queue=${JSON.stringify(expiredQueue.body?.members?.map((entry) => entry.userId))} count=${expiredCounts.body?.subspace?.approvalRequestCount}`
+	);
+
+	// the queues follow the access mode: leaving restricted clears approval requests
+	const openUp = await setAccess('public');
+	const modAfterOpen = await detailOf(mod.cookie);
+	const ownerAfterOpen = await detailOf(owner.cookie);
+	check(
+		'leaving restricted clears open posting-approval requests (viewer.approvalRequested false, canPost true, approvalRequestCount 0)',
+		openUp.status === 200 && modAfterOpen.body.subspace.viewer.approvalRequested === false && modAfterOpen.body.subspace.viewer.canPost === true && ownerAfterOpen.body.subspace.approvalRequestCount === 0,
+		`${openUp.status} ${JSON.stringify(modAfterOpen.body?.subspace?.viewer)} count=${ownerAfterOpen.body?.subspace?.approvalRequestCount}`
+	);
+
+	// private again: a kicked user files a join request; a pending row takes only decisions
+	const goPrivate = await setAccess('private');
+	const kickStranger = await memberAction(stranger.id, 'remove');
+	const strangerAsks = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: reqSlug } });
+	check('(setup) private again; a kicked user files a join request (pending, not approved)', goPrivate.status === 200 && kickStranger.status === 200 && strangerAsks.status === 200 && strangerAsks.body.pending === true && strangerAsks.body.subspace.viewer.approved === false, `${goPrivate.status}/${kickStranger.status}/${strangerAsks.status}`);
+	const approvePending = await memberAction(stranger.id, 'approve');
+	const unapprovePending = await memberAction(stranger.id, 'unapprove');
+	const demotePending = await memberAction(stranger.id, 'role', { role: 'member' });
+	const removePending = await memberAction(stranger.id, 'remove');
+	const pendingStillQueued = await memberOf(owner.cookie, '&pending=1');
+	const pendingStillWalled = await postAs(stranger.cookie, 'approved while pending?');
+	const strangerBellsPending = await notifsOf(stranger.cookie);
+	check(
+		'a pending row takes only accept/deny/add/ban/promote: approve 400, unapprove 400, role member 400, remove 404 — the request stays queued, still can’t post, no stray "no longer a moderator" bell',
+		approvePending.status === 400 && unapprovePending.status === 400 && demotePending.status === 400 && removePending.status === 404 && pendingStillQueued.body.members.some((entry) => entry.userId === stranger.id && entry.pending === true && entry.approved === false) && pendingStillWalled.status === 403 && !strangerBellsPending.items.some((n) => n.type === 'subspace-role' && n.targetId === reqSpace.id && /no longer/.test(n.preview || '')),
+		`${approvePending.status}/${unapprovePending.status}/${demotePending.status}/${removePending.status}/${pendingStillWalled.status} ${JSON.stringify(approvePending.body)}`
+	);
+
+	// the mods' bell is deduped against their unread copy of the same request
+	const joinBells = (items) => items.filter((n) => n.type === 'subspace-join-request' && n.targetId === reqSpace.id && n.actorId === stranger.id && /wants to join/.test(n.preview || ''));
+	const ownerJoinBells = async () => joinBells((await notifsOf(owner.cookie)).items);
+	const cancelAndReRequest = async (cookie) => {
+		const cancelled = await api('/api/v1/subspaces/leave', { method: 'POST', cookie, body: { slug: reqSlug } });
+		const filed = await api('/api/v1/subspaces/join', { method: 'POST', cookie, body: { slug: reqSlug } });
+		return cancelled.status === 200 && filed.status === 200 && filed.body.pending === true;
+	};
+	const bellsBefore = await ownerJoinBells();
+	const loopedOnce = await cancelAndReRequest(stranger.cookie);
+	const bellsAfterLoop = await ownerJoinBells();
+	check(
+		'a request cancelled and filed again does not ring the mods again while their earlier bell is unread',
+		loopedOnce && bellsBefore.length >= 1 && bellsBefore.some((n) => !n.readAt) && bellsAfterLoop.length === bellsBefore.length,
+		`before=${bellsBefore.length} after=${bellsAfterLoop.length} unread=${bellsBefore.filter((n) => !n.readAt).length}`
+	);
+	const markRead = await api('/api/v1/notifications/read', { method: 'POST', cookie: owner.cookie, body: { all: true } });
+	const loopedAgain = await cancelAndReRequest(stranger.cookie);
+	const bellsAfterRead = await ownerJoinBells();
+	check(
+		'once the mod has read it, a fresh request rings again (exactly one new, unread bell)',
+		markRead.status === 200 && loopedAgain && bellsAfterRead.length === bellsBefore.length + 1 && bellsAfterRead.filter((n) => !n.readAt).length === 1,
+		`${markRead.status} before=${bellsBefore.length} after=${bellsAfterRead.length} unread=${bellsAfterRead.filter((n) => !n.readAt).length}`
+	);
+
+	// a decision on a withdrawn request never logs an accept or rings "welcome in"
+	const acceptLogsForStranger = async () => (await modlogOf()).filter((entry) => entry.action === 'member.accept' && entry.userId === stranger.id).length;
+	const welcomesFor = async (cookie) => (await notifsOf(cookie)).items.filter((n) => n.type === 'subspace-join-accepted' && n.targetId === reqSpace.id).length;
+	const acceptsBefore = await acceptLogsForStranger();
+	const welcomesBefore = await welcomesFor(stranger.cookie);
+	const withdraw = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: stranger.cookie, body: { slug: reqSlug } });
+	const staleAccept = await memberAction(stranger.id, 'accept');
+	const staleDeny = await memberAction(stranger.id, 'deny');
+	const staleDetail = await detailOf(stranger.cookie);
+	check(
+		'a decision on a withdrawn request is refused (accept 404, deny 404 after the cancel; the write itself is guarded → 409 in the race) and logs / rings nothing',
+		withdraw.status === 200 && staleAccept.status === 404 && staleDeny.status === 404 && staleDetail.body.subspace.viewer.member === false && (await acceptLogsForStranger()) === acceptsBefore && (await welcomesFor(stranger.cookie)) === welcomesBefore,
+		`${withdraw.status}/${staleAccept.status}/${staleDeny.status} accepts=${acceptsBefore} welcomes=${welcomesBefore}`
+	);
+
+	// switching a private subspace to public resolves its join requests
+	const finalRequest = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: reqSlug } });
+	const ownerBeforeDoors = await detailOf(owner.cookie);
+	const openDoors = await setAccess('public');
+	const strangerOpened = await detailOf(stranger.cookie);
+	const ownerOpened = await detailOf(owner.cookie);
+	const strangerMine = await api('/api/v1/subspaces?mine=1', { cookie: stranger.cookie });
+	const openedLog = (await modlogOf()).find((entry) => entry.action === 'settings.update' && entry.detail?.acceptedRequests === 1);
+	check(
+		'switching a private subspace to public resolves its join requests: the requester is a member (viewer.member, pending false, role member, mine=1), pendingCount 1 → 0, a subspace-join-accepted "opened up" bell, modlog detail acceptedRequests 1',
+		finalRequest.status === 200 && finalRequest.body.pending === true && ownerBeforeDoors.body.subspace.pendingCount === 1 && openDoors.status === 200 && strangerOpened.body.subspace.viewer.member === true && strangerOpened.body.subspace.viewer.pending === false && strangerOpened.body.subspace.viewer.role === 'member' && ownerOpened.body.subspace.pendingCount === 0 && strangerMine.body.subspaces.some((entry) => entry.slug === reqSlug) && (await welcomesFor(stranger.cookie)) === welcomesBefore + 1 && (await notifsOf(stranger.cookie)).items.some((n) => n.type === 'subspace-join-accepted' && n.targetId === reqSpace.id && /opened up/.test(n.preview || '')) && !!openedLog,
+		`${finalRequest.status}/${openDoors.status} viewer=${JSON.stringify(strangerOpened.body?.subspace?.viewer)} pending=${ownerBeforeDoors.body?.subspace?.pendingCount}→${ownerOpened.body?.subspace?.pendingCount} log=${JSON.stringify(openedLog?.detail)}`
 	);
 	const cleanupN = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: reqSlug, confirmSlug: reqSlug } });
 	check('(cleanup) owner deletes the request subspace', cleanupN.status === 200, `${cleanupN.status} ${JSON.stringify(cleanupN.body).slice(0, 200)}`);

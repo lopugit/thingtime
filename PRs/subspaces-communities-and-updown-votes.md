@@ -94,6 +94,29 @@ score field.
   Pure helpers `isActiveMembershipState` / `canPostIn` / `requestKindOf`
   in `subspaceCore.ts` are unit-tested. Contracts: `subspaces-join`,
   `-leave`, `-get`, `subspaces` → 1.1.0, `subspaces-members` → 1.2.0.
+- S2 review fixes (same branch): `gate.ts`'s `assertSubspacePosting` now
+  consumes `canPostIn` — the same predicate the detail advertises as
+  `viewer.canPost` — so a kicked (`left`) or pending row can never post
+  whatever its `approved` flag says; `remove` clears `approved`, a private
+  re-request resets it, and the post projection's `subspace.viewerRole`
+  uses `isActiveMember`. A pending row takes only accept / deny / add / ban
+  / role moderator (approve, unapprove, role member → 400; remove → 404).
+  accept / deny / add-on-pending are guarded writes (`PENDING_REQUEST_MATCH`
+  / `APPROVAL_REQUEST_MATCH` in the filter) → 409 "withdrawn — reload the
+  queue" when the requester cancelled or re-filed between the read and the
+  write, and the mod log / 🎉 bell never fire for a non-member (the Requests
+  tab refreshes on 409 instead of restoring the row). `updateSubspace`
+  resolves the queues on an access change: leaving private activates every
+  pending row (`subspace-join-accepted` "opened up", first 200 notified;
+  modlog detail `acceptedRequests`), leaving restricted clears
+  `approvalRequested` (`clearedApprovalRequests`). `request-approval` heals
+  an expired temporary ban on the row so the request reaches the queue.
+  `emitNotificationsBulk` gained `{ dedupeUnread }` (one query on the
+  partial unread index): the mods' `subspace-join-request` bell rings once
+  per (actor, subspace, preview) until read, so `/join` → `/leave` →
+  `/join` is not an amplifier; `/join` moved to its own rate key
+  `subspaces.join` (20/min). Contracts: `subspaces-join` 1.1.1,
+  `subspaces-members` 1.2.1, `subspaces-update` 1.1.0.
 - `api/utils/things/updownCore.ts` + `updown.ts` — tally + vote toggle
   (same/other-direction/clear semantics as poll votes), batched tallies.
 - `things.ts` — `Viewer.subspaceRoles` loaded beside `friendIds`; `canView`
@@ -172,7 +195,14 @@ score field.
   counts, accept/deny walls (403/404) and success, re-request after deny,
   `add` accepting, ban removing a request, unban → request → accept,
   request-approval walls (401/403/403/400/400/400) and success, deny /
-  approve / unapprove clearing, manifest versions, cleanup delete).
+  approve / unapprove clearing, manifest versions, then the S2 review fixes:
+  a kicked approved poster → post 403 + `viewerRole` null + rejoin not
+  approved, an expired ban's approval request reaching the queue, leaving
+  restricted clearing approval requests, pending-row walls (400/400/400/404,
+  no stray bell), bell dedupe across cancel → re-request (and ringing again
+  once read), a withdrawn request refusing accept / deny with no log / bell,
+  and private → public activating the request (member, `pendingCount` 0,
+  "opened up" bell, modlog `acceptedRequests` 1); cleanup delete).
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger

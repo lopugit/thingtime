@@ -6,14 +6,15 @@ import { joinSubspace } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/subspaces/join — { id | slug } — become a member. Public and
-// restricted subspaces accept anyone who isn't banned; private ones need a
-// moderator to add you (403). Joining twice is a friendly no-op.
+// restricted subspaces accept anyone who isn't banned; private ones file a
+// join request with the moderators (200, pending: true). Joining twice is a
+// friendly no-op. Its own rate key: a join request rings every moderator.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
-  const limit = await enforceRateLimit(request, 'subspaces.write', `user:${user.id}`);
+  const limit = await enforceRateLimit(request, 'subspaces.join', `user:${user.id}`);
   if (!limit.allowed) {
     return json({ ok: false, error: 'Slow down a little 🌸' }, rateLimitedResponseInit(limit));
   }

@@ -2266,7 +2266,9 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
             accent: subspaceEmbed.accent,
             access: subspaceEmbed.access,
             nsfw: subspaceEmbed.nsfw,
-            viewerRole: subspaceMembership && !subspaceMembership.left && !subspaceMembership.banned ? subspaceMembership.role : null
+            // a pending join request holds no role (same predicate as the
+            // subspace detail's viewer.role — never 'member' for a requester)
+            viewerRole: isActiveSubspaceMember(subspaceMembership) ? subspaceMembership!.role : null
           }
         : null,
       flair: flairEntry ? { id: flairEntry.id, label: flairEntry.label, emoji: flairEntry.emoji, color: flairEntry.color } : null,
