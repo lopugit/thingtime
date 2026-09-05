@@ -502,6 +502,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -747,6 +751,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
+      FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
+      `/thing/<attachment-id>` detail view shows native controls instead of a
+      download-only row; the content response is `inline` with its detected
+      audio MIME; a multi-audio post advances through its queue in attachment
+      order; and "Save full file offline" plays the complete same-account
+      IndexedDB copy after a reload. Check desktop and 390px mobile widths for
+      no overflow, then remove the offline copy and confirm streaming resumes.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a
@@ -3486,6 +3498,27 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Refresh Recovery and compare its published-release count with GitHub, including
+      prereleases and older pages. Desktop and Recovery rows must arrive as one
+      snapshot; a later-page rate limit keeps the previous complete list visible.
+      Intel Macs must never select arm64-only archives.
+- [ ] Publish desktop and Recovery assets in the same GitHub release, then select
+      each row. Exactly one row must select, and its title and download filename
+      must match that component even though the GitHub release ID is shared.
+- [ ] Download the legacy build 4 ZIP: its missing code-signature resource seal
+      must produce an actionable error, remove extraction staging, and preserve
+      installed apps and caches. During valid ZIP extraction the window remains
+      responsive and duplicate cache/install actions stay disabled.
+- [ ] Run Recovery unsigned packaging with an absent cache root. It must build
+      and verify the archive round-trip on a fresh machine, without requiring a
+      previous local build. Corrupt an existing cached app and repeat the cache
+      request: verification must reject it rather than reusing the stale entry.
+- [ ] Replace a damaged installed app with a valid cached bundle. Preserve the
+      damaged bundle separately, never add it to the verified cache, and report
+      its backup path. An invalid replacement must leave the current app intact.
+      A detached installer failure must reopen Recovery with a visible error;
+      the automatic catalogue refresh must not erase that explanation.
 
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery

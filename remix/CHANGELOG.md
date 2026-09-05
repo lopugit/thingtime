@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
+  archive handling, background verification, rollback preservation, and cold
+  cloud packaging. Share the protected main/PR release builder and correct its
+  caller-event gate; legacy malformed archives remain blocked. Valid replacements
+  can repair damaged installs, and detached installer errors reopen Recovery.
+  See the [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
@@ -45,8 +54,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
   Query resolution lives in `api/utils/notifications/listQuery.ts`
   (`npm run test:notifications`).
-
-- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
@@ -346,6 +353,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
 
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the
