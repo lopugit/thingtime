@@ -145,6 +145,13 @@ export function useApi() {
           // paint the permalink without a spinner. Same viewer-id keying and so
           // the same shared-browser rule as the four caches above.
           clearLocalCachePrefix('tt-thing-');
+          // /components/:key caches the ACL-gated browse projection of a
+          // component family — including the viewer's own unpublished designs
+          // and their author block. Same viewer-id keying, same rule.
+          clearLocalCachePrefix('tt-component-family-');
+          // /schemas/:key caches "your things with this shape": the viewer's
+          // OWN data things, crystal and all. The most private of the set.
+          clearLocalCachePrefix('tt-schema-things-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

@@ -51,11 +51,16 @@ const REFERRERS: Record<ThingsReferrer, { to: string; label: string }> = {
 // The trust ladder for the live surfaces below (component + webpage):
 // - the viewer's OWN thing → live, no confirm (they composed it);
 // - a SEEDED platform thing → live for a signed-in viewer behind the confirm
-//   gate, run-or-install on an unowned action. System-owned is exactly the
-//   reserved id prefixes (user creates refuse them); a part that looks like a
-//   suite part (`component-demo-<suite>-…`, `action-app-<suite>-…`) must
-//   also resolve through the suite catalog, a keyed page through its
-//   crystal (installSuite.suiteKeyOfPage);
+//   gate, run-or-install on an unowned action. System-owned is a NULL author
+//   (ownerId 'system' is never a real user, so the things projection resolves
+//   no profile) AND a reserved id prefix, the same two-part test
+//   componentBrowseTypes.componentTrustFor uses. The prefix alone is not
+//   enough: the executor mints `action-run-<uuid>` run records under the
+//   reserved `action-` prefix owned by the viewer who ran them, so the author
+//   check is what keeps a user's thing from ever reading as platform-curated.
+//   A part that looks like a suite part (`component-demo-<suite>-…`,
+//   `action-app-<suite>-…`) must also resolve through the suite catalog, a
+//   keyed page through its crystal (installSuite.suiteKeyOfPage);
 // - anyone else's thing → inert, with a visible label saying why.
 // Nothing in the thing's markup can widen this: the decision reads only the
 // id, the author and the catalog.
@@ -411,6 +416,7 @@ export default function ThingPage() {
 	const seeded =
 		!!thing &&
 		!isThingOwner &&
+		!thing.author?.id &&
 		RESERVED_ID.test(thing.id) &&
 		(isWebpage ? suiteResolves && webpage.resolved?.source !== 'user' : !SUITE_PART_ID.test(thing.id) || suiteResolves);
 	const interactive = isThingOwner || seeded;
