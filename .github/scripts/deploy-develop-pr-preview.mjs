@@ -582,9 +582,16 @@ const runSelfTest = async () => {
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
 	equal(Object.keys(metadata).length, 9);
-	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata });
+	const runtimeEnvironment = {
+		THINGTIME_BRANCH_NAME: base.head.ref,
+		THINGTIME_GIT_COMMIT_SHA: base.head.sha
+	};
+	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata, runtimeEnvironment });
 	truthy(prebuiltArgs.includes('--target=develop'));
 	truthy(!prebuiltArgs.includes('--skip-domain'));
+	truthy(prebuiltArgs.includes('--env'));
+	truthy(prebuiltArgs.includes(`THINGTIME_BRANCH_NAME=${base.head.ref}`));
+	truthy(prebuiltArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${base.head.sha}`));
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
@@ -1647,7 +1654,7 @@ const assertPrebuiltOutput = async (directory) => {
 	return outputDirectory;
 };
 
-const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata }) => {
+const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEnvironment }) => {
 	const args = [
 		'deploy',
 		'--prebuilt',
@@ -1659,6 +1666,9 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata }) => {
 		'--cwd',
 		prebuiltDirectory
 	];
+	for (const [key, value] of Object.entries(runtimeEnvironment).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--env', `${key}=${value}`);
+	}
 	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
 		args.push('--meta', `${key}=${value}`);
 	}
@@ -1676,7 +1686,11 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 	);
 
 	const metadata = deploymentMetadata({ pullRequest, config });
-	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata });
+	const runtimeEnvironment = {
+		THINGTIME_BRANCH_NAME: pullRequest.head.ref,
+		THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha
+	};
+	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
 	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
 		env: {
