@@ -3,6 +3,8 @@ import { expectJson, type ApiTestDefinition } from './apiTestRunner';
 // Real HTTP fixtures, never a seeded session/DB record. Each run owns its accounts.
 const suffix = crypto.randomUUID().replace(/-/g, '');
 const username = `tt-watch-test-${suffix.slice(0, 12)}`;
+// Generate a fresh fixture credential; never embed or reuse an account password.
+const password = crypto.randomUUID();
 const credential = `ttnode_${suffix}${crypto.randomUUID().replace(/-/g, '')}`;
 const ip = `2001:db8:${suffix.slice(0, 4)}:${suffix.slice(4, 8)}::24`;
 let pairing: { pairingId: string; deviceCode: string; userCode: string };
@@ -66,7 +68,7 @@ export const watchPairingTests: ApiTestDefinition[] = [
 		name: 'Create isolated Watch test account',
 		path: '/api/v1/auth/register',
 		description: 'Establish a real browser session via the registration API with a reserved, undeliverable example.invalid address.',
-		body: { username, password: `Watch-test-${suffix}!`, email: `${username}@example.invalid`, displayName: 'Watch pairing test' },
+		body: { username, password, email: `${username}@example.invalid`, displayName: 'Watch pairing test' },
 		expect: expectJson([200, 201], (body) => body?.ok && body?.user?.username === username, 'Created the test owner through the public API.')
 	},
 	// Browsers forbid overriding Origin; the headless runner checks this boundary.
@@ -131,7 +133,7 @@ export const watchPairingTests: ApiTestDefinition[] = [
 		name: 'Create isolated second account',
 		path: '/api/v1/auth/register',
 		description: 'Switch the browser session to exercise cross-account takeover protection.',
-		body: { username: `${username}-other`, password: `Watch-test-${suffix}!`, email: `${username}-other@example.invalid` },
+		body: { username: `${username}-other`, password, email: `${username}-other@example.invalid` },
 		expect: expectJson([200, 201], (body) => body?.ok && body?.user?.username === `${username}-other`, 'Established the second test account.')
 	},
 	{
