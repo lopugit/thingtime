@@ -25,11 +25,16 @@ test('static fallback uses a marked root soft-404, real nested 404s and no crede
 });
 
 test('page links only an exact preview hostname to its PR and retries only on a user click', () => {
+  // Extract our generated inline-script fixture; this is not an HTML sanitizer.
+  const scriptStart = page.html.indexOf('<script>');
+  const scriptEnd = page.html.indexOf('</script>', scriptStart);
+  assert.ok(scriptStart >= 0 && scriptEnd > scriptStart);
+  const generatedScript = page.html.slice(scriptStart + '<script>'.length, scriptEnd);
   for (const [hostname, expected] of [['pr-596.previews.dev.example.com', '596'], ['pr-611.previews.example.com', '611'],
     ['pr-596.previews.dev.example.com.attacker.test', null], ['pr-0.previews.example.com', null], ['controller-fallback-probe.previews.example.com', null]]) {
     const elements = { context: {}, 'pull-request': {}, retry: { addEventListener: (name, fn) => { assert.equal(name, 'click'); elements.click = fn; } } };
     let reloads = 0;
-    vm.runInNewContext(page.html.match(/<script>([\s\S]+)<\/script>/)[1], {
+    vm.runInNewContext(generatedScript, {
       window: { location: { hostname, reload: () => reloads++ } }, document: { getElementById: (id) => elements[id] }
     });
     assert.equal(elements['pull-request'].href, expected ? `https://github.com/example/project/pull/${expected}` : undefined);
