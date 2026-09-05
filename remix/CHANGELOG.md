@@ -11,6 +11,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
+
+- 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
@@ -29,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   viewport. Add live previews with Save/Cancel, conversion style preferences,
   branching Undo/Redo and a Changes timeline, larger resizable panels, and
   floating controls that preserve the document width. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
+- 2026-09-05: Publish Graphify lock ownership atomically and remove only the
+  releasing owner's record. Concurrent queries retain their snapshot lock
+  through completion; regression tests cover stale cleanup, writer death,
+  contention, malformed ownership, and timeout cleanup. — Codex (AI)
 
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
