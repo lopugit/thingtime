@@ -22,6 +22,26 @@ do not merge it into the permanently separate product branches to test it.
   corrected protected controller, not by editing product code or loosening the
   secretless build boundary. Verify the final exact-SHA comment and both URLs.
 
+## Missing-build wildcard fallback
+
+- Run `node --test .github/scripts/preview-fallback.test.mjs`. Verify root
+  soft-404/nested 404 and no-store routing, marked HTML, hashed CSP, exact-host PR links,
+  no automatic polling, target scoping and accepted-but-lost write recovery.
+- Stage before assigning: check both `/` and a nested route on the immutable
+  URL. A Vercel directory listing or app shell is a failure, even if the API
+  calls say READY. Root HTTP 200 requires the missing-build header, no-store and
+  the exact marked page; nested paths remain HTTP 404.
+- In a live browser, check desktop/mobile layout, scroll to the bottom, activate
+  Try again and Open pull request, and check the page/URL afterwards. No reload
+  loop, overflow, clipped controls, CSP errors or unexpected redirects.
+- Only the two verified preview wildcards may change. Production deployment
+  targets, foreign marker/content metadata and unexpected domain bindings fail
+  before mutation. Keep exact PR aliases and main/develop root domains intact.
+- After rollout enable the protected mode variable, test unused hostnames in
+  both environments (including nested/API paths), and verify exact existing
+  preview aliases still serve their recorded SHA. Missing pages and arbitrary
+  HTTP 404 responses must never count as a successful preview publication.
+
 ## Preview labels and missed-build recovery
 
 - Run `node --test .github/scripts/preview-*.test.mjs` and both preview

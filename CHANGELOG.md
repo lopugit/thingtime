@@ -43,6 +43,13 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
 
 ## [Unreleased]
 
+- Added a fixed-response missing-build page for unused PR-preview hostnames, with a
+  marked root soft-404, nested HTTP 404, a PR link, manual retry and no-store caching. Two-phase
+  wildcard installation verifies staged content before changing only preview
+  domains; protected runtime checks distinguish this page from a real build.
+  Details: [PR #643](PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md).
+  — Codex (AI), 2026-09-05
+
 - Added PR-scoped last-success preview timestamp labels (Melbourne time),
   independent current-state and admin-environment labels, bounded retry-safe
   comment/label writes, and scheduled recovery for eligible PRs without builds.
