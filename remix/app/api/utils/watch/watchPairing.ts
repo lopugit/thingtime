@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 
 import { createSession } from '../auth/sessions';
 import { findUserById, toPublicUserWithStorage, type PublicUser } from '../auth/users';
@@ -17,21 +17,30 @@ import { insertAccountedThing } from '../storage/accountedThings';
 const WATCH_PAIRING_LIFETIME_MS = 10 * 60 * 1000;
 const WATCH_PAIRING_PENDING_USER = 'watch-pairing:pending';
 const WATCH_USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const WATCH_USER_CODE_CHARS = 8;
 const WATCH_CAPABILITIES = ['watch.notifications.read', 'watch.notifications.write', 'watch.things.create', 'watch.push'] as const;
 const HOME_ACCOUNTING = { accountedPlane: 'home' as const };
 
 const hash = (namespace: string, value: string): string =>
 	createHash('sha256').update(`thingtime-watch:${namespace}:v1\0`).update(value).digest('hex');
 
+// randomInt rejection-samples, so every alphabet position stays equally
+// likely whatever the alphabet length is. `byte % length` was only unbiased
+// here because the alphabet happens to be exactly 32 long — adding or
+// dropping a single character would have silently skewed the code the user
+// reads off their Watch. Matches crypto/passwordHasher.server.ts.
 const randomWatchCode = (): string => {
-	const bytes = randomBytes(8);
-	return [...bytes].map((byte) => WATCH_USER_CODE_ALPHABET[byte % WATCH_USER_CODE_ALPHABET.length]).join('');
+	let code = '';
+	for (let index = 0; index < WATCH_USER_CODE_CHARS; index++) {
+		code += WATCH_USER_CODE_ALPHABET[randomInt(WATCH_USER_CODE_ALPHABET.length)];
+	}
+	return code;
 };
 
 const normalizeUserCode = (value: unknown): string | null => {
 	if (typeof value !== 'string') return null;
 	const code = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-	return code.length === 8 ? code : null;
+	return code.length === WATCH_USER_CODE_CHARS ? code : null;
 };
 
 const normalizePairingId = (value: unknown): string | null => {
