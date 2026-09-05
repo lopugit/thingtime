@@ -88,7 +88,7 @@ jobs:
       actions: read
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
       pr_number: ${{ steps.plan.outputs.pr_number }}
@@ -195,7 +195,8 @@ jobs:
     environment: vercel-develop-pr-control
     permissions:
       actions: read
-      contents: read
+      # Scheduled recovery emits only the existing repository-dispatch event.
+      contents: write
       deployments: write
       issues: write
       pull-requests: write
@@ -251,6 +252,7 @@ jobs:
         if: needs.prepare.outputs.should_build != 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          RECOVERY_GH_TOKEN: ${{ github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
@@ -276,7 +278,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
       environments: ${{ steps.plan.outputs.environments }}

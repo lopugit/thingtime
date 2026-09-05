@@ -43,6 +43,14 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
 
 ## [Unreleased]
 
+- Added PR-scoped last-success preview timestamp labels (Melbourne time),
+  independent current-state and admin-environment labels, bounded retry-safe
+  comment/label writes, and scheduled recovery for eligible PRs without builds.
+  Reused deployments keep their actual READY time; recovery skips active work,
+  caps attempts per commit, and preserves the protected secretless build split.
+  See [PR #642](PRs/642-preview-status-recovery--discoverable-status-and-missed-build-repair.md).
+  — Codex (AI), 2026-09-05
+
 - Prevented owner-PAT preview status comments from recursively waking Lopu,
   preserved human quote replies, and revalidated queued comments before model
   work. Added markers to all rebase result paths and made both preview comment

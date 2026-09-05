@@ -1176,7 +1176,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreviewController,
-    /const expectedReady = expectedReadyAt\(\);[\s\S]*await upsertComment\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
     "develop preview publishes its expected URL and estimate before releasing the build plan",
   );
   assert.match(
