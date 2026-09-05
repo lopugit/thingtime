@@ -9776,17 +9776,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
     auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',
-      'Send binary data with exactly that Content-Length.',
+      'Send exactly that many binary bytes; Content-Length is optional but must be correct when present.',
+      'Split 5 MiB into 2 + 2 + 1 MiB, and 10 MiB into five 2 MiB requests. Respect Retry-After on HTTP 429.',
       'Use the small JSON acknowledgement only after a 200.'
     ],
     requestExamples: [
