@@ -283,3 +283,36 @@ The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
 indexes, plus the ethical-adoption evidence, trustworthy-adoption roadmap, and
 TODO 22 dependency list. No runtime, API, schema, provider, payment, entitlement,
 marketplace, telemetry, or production behavior changed.
+
+## 2026-09-06 — learning agency and knowledge stewardship
+
+This run separates knowledge storage, saves, anniversary resurfacing, course or
+certificate presentation, and proposed experience history from an honest
+learning contract. It adds:
+
+- `NOTES/learning-agency-and-knowledge-stewardship-baseline.md`, a dated
+  evidence ledger covering current knowledge surfaces, private saved-post and
+  “On this day” primitives, source/version dependencies, learning-science
+  references, reflection privacy, claim limits, and a bounded adult pilot;
+- `PLAN/learning-agency-and-knowledge-stewardship-roadmap.md`, a gated path from
+  a learning-agency charter through canonical private state, one-shot in-app
+  revisit, surveillance-free evaluation, optional active reflection, reusable
+  knowledge stewardship, and separately approved AI or institutional use; and
+- `TODO/claude-todo/32-learning-agency-and-knowledge-stewardship.md`, an
+  implementation epic with dependencies, protected API and capability-manifest
+  obligations, source-authorization and scheduling invariants, complete-journey
+  acceptance criteria, stop conditions, and a first decision packet.
+
+The recommended first experiment is intentionally small: a consenting adult
+asks to revisit one owned or currently visible saved Thing at a chosen time,
+receives one quiet in-app card explaining “You asked to revisit this”, and may
+write a private reflection before or after revealing the authorized source.
+Saving does not schedule, opening does not prove learning, and reflection does
+not grade or publish. The proposal excludes recurrence, external notifications,
+inferred topics, generated questions, streaks, mastery, schools, minors,
+credentials, institutional analytics, AI tutoring, and efficacy claims.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes,
+plus the ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22
+dependency list. No runtime, API, schema, worker, scheduler, notification,
+analytics, course, certificate, AI, or production behavior changed.

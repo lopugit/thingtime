@@ -468,3 +468,19 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     and qualified reviewers approve the fixed-artifact pilot, country/currency,
     responsibilities, terms, data boundary, provider criteria, operating
     capacity, guardrails, and stop authority.
+
+32. **📚 Make learning agency and knowledge stewardship a product contract.**
+
+    Preserve Thingtime's knowledge-oriented Things, private relational saves,
+    calm anniversary memories, search, and proposed history/provenance
+    foundations while proving one user-chosen knowledge revisit. Keep saving,
+    scheduling, opening, reflecting, and sharing separate; bind private
+    reflection to authorized source/version context; and never label opens,
+    completions, confidence, streaks, or time spent as learning. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/32-learning-agency-and-knowledge-stewardship.md` only after the
+    owner and qualified reviewers approve the adult cohort, artifact family,
+    one-shot in-app journey, data boundary, evaluation, accessibility profiles,
+    exclusions, owners, and stop authority. AI, minors, schools, assessment,
+    credentials, institutional dashboards, and efficacy claims remain
+    separately gated.

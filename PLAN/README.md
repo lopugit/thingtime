@@ -19,6 +19,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Content provenance and correction roadmap](./content-provenance-and-correction-roadmap.md)                     | Honest edit state through revision evidence, source/derivation context, bounded credentials, corrections, disputes, and portable receipts       | Proposed |
 | [Resource-conscious reach roadmap](./resource-conscious-reach-roadmap.md)                                       | Constrained-journey baselines through client, media, offline, backend, impact-evidence, and continuous resource gates                           | Proposed |
 | [Creator sustainability and fair-value roadmap](./creator-sustainability-and-fair-value-roadmap.md)             | Role and terms approval through provider-neutral truth, synthetic proof, one payment rail, and a bounded invited pilot                          | Proposed |
+| [Learning agency and knowledge-stewardship roadmap](./learning-agency-and-knowledge-stewardship-roadmap.md)       | User-approved one-shot revisit through private reflection, honest evaluation, reusable knowledge, and separately gated AI or institutional use | Proposed |
 
 ## Conventions
 

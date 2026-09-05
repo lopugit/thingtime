@@ -19,6 +19,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Content provenance and correction baseline](./content-provenance-and-correction-baseline.md)                     | Evidence on authorship, edits, source assertions, derivation, verification limits, corrections, disputes, privacy, and interoperability                 | 2026-09-04    |
 | [Resource-conscious reach baseline](./resource-conscious-reach-baseline.md)                                       | Evidence on constrained-device and low-bandwidth journeys, delivery/media/offline primitives, resource budgets, privacy, and environmental-claim limits | 2026-09-05    |
 | [Creator sustainability and fair-value baseline](./creator-sustainability-and-fair-value-baseline.md)             | Evidence on tiers, marketplace metadata, payment-role gaps, product truth, privacy, remedies, creator safety, and fair value exchange                   | 2026-09-05    |
+| [Learning agency and knowledge-stewardship baseline](./learning-agency-and-knowledge-stewardship-baseline.md)       | Evidence on knowledge surfaces, private saves, calm resurfacing, source versions, learning claims, reflection privacy, and a bounded adult pilot         | 2026-09-06    |
 
 ## Conventions
 

@@ -67,6 +67,10 @@ experiment by itself.
   fulfilment, remedies, private settlement, and operating stop conditions.
   Adoption experiments must not treat listing price, checkout, gross volume, or
   payment as proof of usefulness, fulfilment, trust, or fair creator value.
+- [TODO 32](./32-learning-agency-and-knowledge-stewardship.md) owns deliberate
+  knowledge revisits, private reflection, source-version context, and honest
+  learning-evidence limits. Adoption experiments must not label saves, opens,
+  completions, confidence, streaks, or time spent as learning.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite
