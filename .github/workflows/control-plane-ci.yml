@@ -101,6 +101,9 @@ jobs:
           node .github/scripts/electron-pr-release-contract.mjs
           node --test .github/scripts/electron-release-gates.test.mjs
 
+      - name: Validate signed Commander release gates
+        run: node --test .github/scripts/commander-release.test.mjs
+
   contract-advisories:
     name: Contract advisories (non-blocking)
     runs-on: ubuntu-latest

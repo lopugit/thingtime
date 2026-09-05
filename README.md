@@ -529,3 +529,26 @@ key-content forms are base64 encoded. An iOS-only setup retains the explicit
 unsigned fallback; partial macOS signing still fails closed. No credential
 material belongs in this branch. Regression coverage executes the actual
 selection and version shell in `.github/scripts/electron-release-gates.test.mjs`.
+
+
+## Commander signed releases
+
+`commander-release.yml` admits main pushes and owner dispatches on main or
+`github-actions`, resolves the immutable main commit, and builds Commander plus
+Thingtime Recovery for Apple silicon. Source TypeScript/Rust/Swift tests run
+before credential import. ZIPs use Recovery-compatible `Commander-App-Release-`
+and `Thingtime-Recovery-App-Release-` names and include `SHA256SUMS.txt`.
+Each archive is notarized, stapled, extracted and verified before one publication;
+Commander uses `--latest=false` to preserve Electron's latest release.
+
+Configure encrypted `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and
+`APPLE_API_KEY_BASE64` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER`. The notarization
+key also accepts the existing `ASC_KEY_CONTENT` / `ASC_KEY_ID` / `ASC_ISSUER_ID`
+secrets. Missing credentials fail closed; no unsigned fallback is published.
+Fork maintainers must deliberately configure their own repository guard, protected
+controller reference and signing secrets. Private material is imported into a
+temporary Keychain and deleted by the always-run cleanup step.
+
+Run `node --test .github/scripts/commander-release.test.mjs` for caller admission,
+main-SHA selection, API-error handling, credential timing and asset publication
+regressions. The product source owns Commander packaging and Recovery behavior.
