@@ -256,6 +256,32 @@ on:
   # A Lopu conversation is part of PR management too. Only human-authored
   # events reach the review handoff below, so Lopu's own comments cannot loop
   # back into another model session.
+  #
+  # Author identity alone does NOT establish that. Deterministic controller
+  # comments are posted with CONFLICT_RESOLVER_PAT, so GitHub reports them as
+  # `comment.user.type == 'User'` under the repository owner — exactly what the
+  # identity gate admits. The develop-preview status comment
+  # (`<!-- thingtime-develop-pr-preview -->`) is rewritten on every preview
+  # refresh, and `edited` is a trigger type, so each refresh woke a full,
+  # non-coalescible Lopu review session on an unchanged head.
+  #
+  # Every control-plane comment carries a hidden `<!-- thingtime-…` marker, and
+  # a human comment does not normally contain one, so the route/review_detect
+  # gates below require BOTH a `User` author AND the absence of that marker
+  # prefix. Keep the marker on every controller-authored comment — that
+  # convention is what makes this gate work.
+  #
+  # Known limitation, accepted deliberately: `contains()` matches the marker
+  # anywhere in the body, so a human comment that merely reproduces the marker
+  # text is dropped too, and silently. The likeliest way to hit that is
+  # GitHub's "Quote reply", which copies the quoted comment's raw Markdown
+  # including its hidden marker — i.e. replying to Lopu is exactly the case
+  # that can be swallowed. Narrowing it is not expressible here: Actions
+  # expressions have no regex and no newline literal, so the test cannot be
+  # anchored to the start of a line, and anchoring to the start of the body
+  # instead would leak every controller comment that carries a trailing
+  # marker (the promotion attestation is written that way). If a question to
+  # Lopu goes unanswered, post it as a new comment rather than a quoted reply.
   issue_comment:
     types: [created, edited]
   pull_request_review_comment:
@@ -616,9 +642,11 @@ jobs:
            && inputs.branch == 'lopu-internal-all-branch')
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
-              && github.event.comment.user.type == 'User'))
+              && github.event.comment.user.type == 'User'
+              && !contains(github.event.comment.body, '<!-- thingtime-')))
       && (github.event_name != 'pull_request_review_comment'
-          || github.event.comment.user.type == 'User')
+          || (github.event.comment.user.type == 'User'
+              && !contains(github.event.comment.body, '<!-- thingtime-')))
       && (github.event_name != 'check_run'
           || (github.event.check_run.pull_requests[0].number
               && (github.event.check_run.conclusion == 'failure'
@@ -2881,9 +2909,11 @@ jobs:
       && (github.event_name != 'push' || github.event.deleted == false)
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
-              && github.event.comment.user.type == 'User'))
+              && github.event.comment.user.type == 'User'
+              && !contains(github.event.comment.body, '<!-- thingtime-')))
       && (github.event_name != 'pull_request_review_comment'
-          || github.event.comment.user.type == 'User')
+          || (github.event.comment.user.type == 'User'
+              && !contains(github.event.comment.body, '<!-- thingtime-')))
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
