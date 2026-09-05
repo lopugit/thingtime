@@ -61,3 +61,21 @@ test('builds portable APNs content with a safe Thingtime deep link', () => {
   assert.equal(payload.url, '/post/post%2F1');
   assert.equal(notificationURL(input), payload.url);
 });
+
+test('clamps a long preview so APNs cannot reject the push as too large', () => {
+  // emitNotification hands every channel the RAW input, and a comment preview
+  // is post text bounded only by MAX_TEXT_CHARS = 5000 — past the 4 KB APNs
+  // ceiling. A 413/PayloadTooLarge is not one of the reasons sendNotificationPush
+  // acts on, so an unclamped body dropped the push silently.
+  const payload = buildApnsPayload({
+    notificationId: 'notification-1',
+    recipientId: 'recipient-1',
+    type: 'comment' as const,
+    actor: { id: 'actor-1', username: 'lopu', displayName: 'Lopu' },
+    targetId: 'comment-1',
+    postId: 'post-1',
+    preview: 'a'.repeat(5000)
+  });
+  assert.ok(payload.aps.alert.body!.length < 5000, 'preview must be clamped, not passed through');
+  assert.ok(Buffer.byteLength(JSON.stringify(payload), 'utf8') < 4096, 'APNs alert payloads must stay under 4 KB');
+});

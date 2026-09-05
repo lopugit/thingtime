@@ -1,6 +1,7 @@
 import { connect } from 'node:http2';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
+import { clampPreview } from './notifications';
 import type { EmitNotificationInput } from './notifications';
 import { listPushDevicesForUser, removePushDeviceById, type PushDevice } from './pushDevices';
 
@@ -62,12 +63,20 @@ export const notificationURL = (notification: Pick<EmitNotificationInput, 'postI
   return '/notifications';
 };
 
+// Clamp at this channel's own boundary, exactly as emails.ts does for the mail
+// template. `emitNotification` hands every channel the RAW input, and a preview
+// is raw post/comment text (things.ts) bounded only by MAX_TEXT_CHARS = 5000 —
+// well past the 4 KB APNs payload ceiling. Unclamped, a long comment made APNs
+// reject the whole push with 413/PayloadTooLarge, and since only
+// 410/BadDeviceToken/Unregistered is actioned below it failed silently: the
+// bell and the email still arrived, the iPhone and Watch got nothing.
 export const buildApnsPayload = (notification: PushEnvelope) => {
   const actor = notification.actor.displayName || notification.actor.username || 'Someone';
   const action = ACTIONS[notification.type] || 'sent you a Thingtime notification';
+  const preview = clampPreview(notification.preview);
   return {
     aps: {
-      alert: { title: `${actor} ${action}`, ...(notification.preview ? { body: notification.preview } : {}) },
+      alert: { title: `${actor} ${action}`, ...(preview ? { body: preview } : {}) },
       sound: 'default',
       'thread-id': notification.postId || notification.targetId || notification.type
     },
