@@ -7576,8 +7576,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // things-user; things-search / -trending / -rss / -saved ride the same
     // projection without a bump of their own (round-1 precedent for
     // title / subspace / votes — see PRs/subspaces-communities-and-updown-votes.md)
-    featureVersion: '1.3.0',
-    contractVersion: '1.2.0',
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -8088,8 +8090,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-comment',
     // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
     // the author's USER flair in the post's subspace (additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.2.0',
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -8280,8 +8284,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-feed',
     // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
     // the author's USER flair in the post's subspace (additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.2.0',
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -8608,8 +8614,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // subspace and viewer.userFlair (the flair the caller wears here) — additive
     // 1.3.0: removalReasons — the subspace's canned removal reasons (S4,
     // additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.4.0: moderators get openReportCount — open reports waiting in the
+    // Reports queue (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
@@ -8623,8 +8631,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'approvalRequested (asked for posting rights in a restricted one) and userFlair (the flair they wear here: ' +
       '{ id (template id or null for custom text), label, emoji, color } | null) — so the /s/<slug> page can ' +
       'render its header, sidebar, Your flair card and post button from one call. Moderators additionally get ' +
-      'pendingCount and approvalRequestCount, the sizes of the two request queues (the badge on Mod tools 🎩 / ' +
-      'the Requests tab).',
+      'pendingCount and approvalRequestCount, the sizes of the two request queues, and openReportCount, the open ' +
+      'reports waiting in the Reports queue (together the badge on Mod tools 🎩 / the Requests and Reports tabs).',
     auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
     methods: ['GET'],
     steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
@@ -8641,8 +8649,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       },
       {
         status: 200,
-        description: 'As a moderator: the request queue sizes ride along.',
-        body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
+        description: 'As a moderator: the request queue sizes and the open report count ride along.',
+        body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, openReportCount: 2, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
       },
       { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
     ]
@@ -8889,8 +8897,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // (actorId = the subspace, actorName "s/<slug> mods") rather than the
     // individual moderator, and its preview carries the reason's HEADLINE
     // (title / rule citation / free text; previews clamp at 140 chars)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.4.0 (S5 reports): remove / approve settle every open report on the
+    // post (resolution removed / approved; the mod-log detail carries
+    // resolvedReports) and the re-projected post carries subspaceMod.reportCount
+    // for moderators (additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Moderate post',
     endpoint: '/api/v1/subspaces/moderate',
@@ -8913,7 +8925,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'reason and detail.reasonId / detail.ruleIndex, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
       'A remove on a post that is already removed is idempotent: 200 with the post as it is — its reason, removedAt, ' +
       'mod-log row and the author’s bell are left alone (approve first to remove it again with a different reason). ' +
-      'approve restores the post and notifies nothing. ' +
+      'approve restores the post and notifies nothing. remove and approve are also the mods’ verdict on every OPEN ' +
+      'report against the post (see /api/v1/subspaces/report): they are settled with resolution removed / approved, ' +
+      'the mod-log detail carries resolvedReports when any were, and the returned post’s subspaceMod.reportCount ' +
+      '(moderators only) reads 0 again. ' +
       'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
       'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
       'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
@@ -8952,12 +8967,101 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'subspaces-report',
+    group: 'subspaces',
+    title: 'Report a post to the moderators',
+    endpoint: '/api/v1/subspaces/report',
+    summary: 'A viewer flags a subspace post (or a comment under one) to the subspace’s moderators with a reason and an optional note.',
+    detail:
+      'POST { id (a post or comment shareId), reason (≤120 — a rule title, a removal-reason id, or free text), note? (≤500) }. ' +
+      'Any logged-in viewer who can SEE the target may report it (an invisible or unknown id answers 404, never ' +
+      'disclosing existence); a user banned in the subspace answers 403; a post outside any subspace 400. A ' +
+      'comment resolves to its ROOT post: the report hangs off the post (commentId remembers which comment). One ' +
+      'report per (post, reporter) — a repeat by the same reporter updates the reason / note on their row (and ' +
+      're-opens it when the mods had settled it) and answers { updated: true }. Every new or re-opened report ' +
+      'notifies the subspace’s active owner + moderators (subspace-report; preview "s/<slug> · <reason>", postId = ' +
+      'the post so the bell opens /post/<id>; deduped against each moderator’s unread bell, so one reporter cannot ' +
+      'ring the mods twice about one post). Reports are subspace-report things (targetId = the subspace, ownerId = ' +
+      'the reporter, control-plane storage) that the moderators’ Reports queue (GET /api/v1/subspaces/reports) ' +
+      'groups by post; moderate remove / approve settles them (resolution removed / approved), POST ' +
+      '/api/v1/subspaces/reports dismisses them. Rate-limited per user (subspaces.report, 30 / min).',
+    auth: { mode: 'session-or-bearer', description: 'Requires a logged-in viewer who can see the post; banned users are refused.' },
+    methods: ['POST'],
+    steps: ['POST the post (or comment) id with a reason.', 'A 200 with updated: true means you had already reported it — your reason was refreshed.'],
+    requestExamples: [
+      { name: 'Report a post', description: 'Cite a rule.', method: 'POST', body: { id: '4f6b2c1e-…', reason: 'Rule 2: No spam', note: 'Third ad from this account this week' } },
+      { name: 'Report a comment', description: 'The report lands on the root post; commentId names the comment.', method: 'POST', body: { id: '9a1c-comment-…', reason: 'Harassment' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Filed.', body: { ok: true, updated: false, report: { id: 'r3p0…', subspaceId: 'c0ffee12-…', postId: '4f6b2c1e-…', commentId: null, reason: 'Rule 2: No spam', note: 'Third ad from this account this week', status: 'open', resolution: null } } },
+      { status: 200, description: 'Reported again — the existing row was refreshed.', body: { ok: true, updated: true, report: { id: 'r3p0…', postId: '4f6b2c1e-…', reason: 'Spam, again', status: 'open' } } },
+      { status: 400, description: 'Not a subspace post.', body: { ok: false, error: 'Only posts in a subspace can be reported to its moderators 🚩' } },
+      { status: 403, description: 'Banned in the subspace.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } },
+      { status: 404, description: 'Unknown or invisible.', body: { ok: false, error: 'Post not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-reports',
+    group: 'subspaces',
+    title: 'Reports queue',
+    endpoint: '/api/v1/subspaces/reports',
+    summary: 'Moderators read the subspace’s reports grouped by post and dismiss the ones that need no action.',
+    detail:
+      'GET ?slug=|id=&status=open|resolved&cursor=&limit= (moderators only; others 403). Answers { reports: [{ postId, ' +
+      'post (the PublicPost projection as the moderator sees it — removed content included, subspaceMod.reportCount ' +
+      'set; null when the post is gone or left the subspace), reportCount, reasons: [{ reason, count }] most-cited ' +
+      'first, reporters: [{ userId, profile, reason, note, commentId, createdAt }] newest first (≤20; reportCount is ' +
+      'the exact total), latestAt, status, resolution }], nextCursor, status, openReportCount }. Groups are ordered ' +
+      'by latest activity and page by offset over a bounded newest-first window of 2,000 report rows (the ' +
+      'ranked-feed pattern — deterministic for a fixed dataset). ' +
+      'POST { postId, action: "dismiss", id|slug? } settles every OPEN report on the post with resolution dismissed ' +
+      '(the post stays), writes a report.dismiss mod-log entry (detail.count) and answers { dismissed, openReportCount }; ' +
+      'nothing open → 404. The subspace is the post’s; when the post is gone the reports’ own targetId names it, and an ' +
+      'explicit id | slug in the body wins over both. moderate remove / approve settle open reports implicitly.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the subspace.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET the open queue (status defaults to open).', 'Remove / approve the post through /moderate, or POST a dismiss when it may stay.', 'Feed nextCursor back until it is null.'],
+    requestExamples: [
+      { name: 'Open queue', description: 'What is waiting in s/rainbows.', method: 'GET', query: { slug: 'rainbows', status: 'open' } },
+      { name: 'Dismiss', description: 'The mods looked; the post stays.', method: 'POST', body: { postId: '4f6b2c1e-…', action: 'dismiss' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The open queue.',
+        body: {
+          ok: true,
+          status: 'open',
+          openReportCount: 3,
+          reports: [
+            {
+              postId: '4f6b2c1e-…',
+              post: { id: '4f6b2c1e-…', title: 'Buy my thing', subspaceMod: { status: 'approved', removed: false, reportCount: 3, viewerCanModerate: true } },
+              reportCount: 3,
+              reasons: [{ reason: 'Rule 2: No spam', count: 2 }, { reason: 'Other', count: 1 }],
+              reporters: [{ userId: '664f…', profile: { username: 'alice' }, reason: 'Rule 2: No spam', note: null, commentId: null, createdAt: '2026-09-05T10:00:00.000Z' }],
+              latestAt: '2026-09-05T10:00:00.000Z',
+              status: 'open',
+              resolution: null
+            }
+          ],
+          nextCursor: null
+        }
+      },
+      { status: 200, description: 'Dismissed.', body: { ok: true, postId: '4f6b2c1e-…', dismissed: 3, openReportCount: 0 } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'Nothing open on that post.', body: { ok: false, error: 'No open reports on that post' } }
+    ]
+  }),
+  endpoint({
     id: 'subspaces-feed',
     // 1.1.0: posts (and their comments) carry authorFlair; the subspace block
     // carries the user-flair settings — additive
     // 1.2.0: the subspace block carries removalReasons (S4, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
+    // against the post (S5, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
@@ -8969,7 +9073,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'HN-style rising) and page by offset — deterministic for a fixed dataset + timestamp. Removed posts are ' +
       'excluded (moderators may pass includeRemoved=1 to review them); private subspaces answer 403 to ' +
       'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod, votes and ' +
-      'authorFlair (the author’s user flair here — one batched member-row lookup per page, comments included).',
+      'authorFlair (the author’s user flair here — one batched member-row lookup per page, comments included); ' +
+      'for moderators subspaceMod.reportCount carries the open reports against each post (one $group per page).',
     auth: { mode: 'optional', description: 'Works logged out for public/restricted subspaces; votes/viewerVote need a session.' },
     methods: ['GET'],
     steps: ['GET with the slug and a sort.', 'Feed nextCursor back until it is null.', 'Handle 403 for private subspaces you have not joined.'],
@@ -9274,8 +9379,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-user',
     // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
     // the author's USER flair in the post's subspace (additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.2.0',
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',

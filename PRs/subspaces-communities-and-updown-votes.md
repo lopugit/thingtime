@@ -16,6 +16,7 @@ separate focused limited reactions type."
 | `subspace` | `crystal { slug, name, description, access: public\|restricted\|private, nsfw, rules[], flairs[], branding{icon,iconUrl,bannerUrl,accent} }`, `acl ['tt:all']`, owner = creator | root `uniqueKeys` `subspaceSlug:<slug>` (no new index) |
 | `subspace-member` | `targetId` = subspace, `ownerId` = user, `crystal { memberKey, role owner\|moderator\|member, approved, banned, banReason, banUntil, left, pending (join request), approvalRequested (posting request) }` | `uniqueKeys` `subspaceMemberKey:<subspaceId>:<userId>`; control-plane storage (unbilled) |
 | `subspace-modlog` | `targetId` = subspace, `ownerId` = acting mod, `crystal { action, postId, userId, reason, detail }` | control-plane storage |
+| `subspace-report` | `targetId` = subspace, `ownerId` = reporter, `crystal { postId (root post), commentId, reason (≤120), note (≤500), status open\|resolved, resolution removed\|approved\|dismissed\|null, resolvedById, resolvedAt, reportKey }` | `uniqueKeys` `subspaceReportKey:<postId>:<reporterId>` (one row per (post, reporter)); control-plane storage; deleted with the subspace and with the post |
 | `updown` | `targetId` = post **or comment**, `crystal { direction up\|down, updownKey }`, `acl ['tt:inherit']` | `uniqueKeys` `updownKey:<targetId>~<userId>`; cascades with its target |
 | post | `crystal.title` (≤300), `crystal.subspaceId`, `crystal.flairId`; root `subspaceMod { status, removedById, removedAt, reason, pinned, locked, nsfw, spoiler }` (server-only) and root `subspacePrivate` fence | **one** new partial index `things_subspace_posts` on `{ 'crystal.subspaceId', createdAt, shareId }` |
 
@@ -129,7 +130,8 @@ score field.
 - Endpoints (route + Nitro map + `apiDocs` + capability manifest):
   `/api/v1/subspaces` (GET/POST), `/get`, `/update`, `/join`, `/leave`,
   `/members` (GET/POST), `/moderate`, `/modlog`, `/feed`, `/transfer`,
-  `/delete`, `/api/v1/things/updown`. Rate-limit keys `subspaces.write`,
+  `/delete`, `/report`, `/reports` (GET/POST), `/api/v1/things/updown`.
+  Rate-limit keys `subspaces.write`, `subspaces.join`, `subspaces.report`,
   `things.updown`; PAT scope `things.updown`. Contracts `api.things`,
   `api.things-feed`, `api.things-comment`, `api.things-user` → 1.2.0
   (additive fields); `api.subspaces-members`, `api.notifications-list`,
@@ -144,7 +146,9 @@ score field.
   `/s/:slug/mod` (Queue, **Requests** — join requests + posting-approval
   requests with Accept/Approve ✓ / Deny per row, optimistic removal + badge
   counts on the tab and on the subspace page's "Mod tools 🎩" button —
-  Members, Banned, Settings + the owner's **Danger zone** — Transfer
+  **Reports** — reported posts grouped with reasons + reporters, Remove 🧹
+  (RemoveModal) / Dismiss ✓, an Open / Resolved toggle, a badge on the tab
+  and folded into Mod tools 🎩 — Members, Banned, Settings + the owner's **Danger zone** — Transfer
   ownership with a confirm modal, Delete subspace with a retype-the-slug
   modal that navigates to `/s` — Rules, Flairs, Log).
 - Subspace page + directory cards: a private subspace's button reads
@@ -153,7 +157,10 @@ score field.
   approval ✋" → "Approval requested ✓".
 - Bell + Settings → Notifications carry the six subspace types; subspace
   rows click through to `/s/<slug>`.
-- `PostCard`: `🪐 s/<slug>` chip + flair chip + 📌/🔒/18+/⚠️ badges, title h2,
+- `PostCard`: `🪐 s/<slug>` chip + flair chip + 📌/🔒/18+/⚠️ badges (+ the
+  mods' `🚩 N` open-report badge), **Report to moderators 🚩** in the ···
+  menu for logged-in non-mods (comment rows: a flag icon) → the
+  ReportModal, title h2,
   "Removed by moderators" notice, the ▲ score ▼ `UpdownControl` beside the
   react button on posts and (compact) comments with optimistic
   `applyUpdownVote`, moderator menu group + flair submenu.
@@ -320,12 +327,76 @@ score field.
   their own post ringing nobody, a renamed / deleted reason never rewriting
   a removed post's stored reason (deleted id → 400 afterwards), the ban
   note in the mod log only, the manifest).
+- Round 2 S5 — reports + the Reports queue 🚩: kind `subspace-report`
+  (above). `POST /api/v1/subspaces/report { id (post or comment), reason,
+  note }` — any logged-in viewer who can SEE the target (`canViewInherited`;
+  unknown and invisible both 404, existence never disclosed) and is not
+  banned in its subspace; a comment resolves to its ROOT post
+  (`resolveRootPost`; `commentId` remembers the comment); one row per
+  (post, reporter) on the root `uniqueKeys` namespace — a repeat refreshes
+  the reason / note (`updated: true`) and re-opens a settled row (its
+  `createdAt` restarts); only a new / re-opened report rings the mods
+  (`subspace-report`, actor = the reporter, `targetId` + `postId` = the
+  post, preview `s/<slug> · <reason>`, `dedupeUnread`). Rate key
+  `subspaces.report` 30/min. `GET /api/v1/subspaces/reports?slug&status=
+  open|resolved&cursor&limit` (mods): the rows grouped by post in ONE
+  aggregate over a bounded newest-first window of 2,000 rows (`$sort` →
+  `$limit` → `$group` → offset paging — the ranked-feed pattern) → `{
+  postId, post (PublicPost as the mod sees it — removed content included;
+  null when the post is gone / left the subspace), reportCount, reasons
+  [{ reason, count }] most-cited first (`tallyReportReasons`), reporters
+  [{ userId, profile, reason, note, commentId, createdAt }] newest first
+  (≤ `MAX_SUBSPACE_REPORT_REPORTERS_LISTED` = 20), latestAt, status,
+  resolution }` + `openReportCount`. `POST /api/v1/subspaces/reports {
+  postId, action: 'dismiss', id|slug? }` settles every open report on the
+  post (`dismissed`; modlog `report.dismiss` `detail.count`; nothing open →
+  404; the subspace is the post's, else the reports' own `targetId`, an
+  explicit slug wins). `moderate remove` / `approve` settle open reports
+  implicitly (`resolveOpenReports` → `removed` / `approved`; the idempotent
+  remove path settles too; `post.remove` / `post.approve` detail
+  `resolvedReports`). Projection: `subspaceMod.reportCount` for the
+  post's moderators ONLY (`loadOpenReportCounts` — ONE `$group` per page
+  over the (subspace, post) pairs the viewer can moderate; everyone else
+  never touches the report rows and gets no key), `openReportCount` on the
+  detail for mods. Deleting a post `deleteMany`s its reports (they hang off
+  `crystal.postId`, so the `targetId` cascade never sees them); deleting
+  the subspace already dropped the kind. UI: PostCard ··· menu **Report to
+  moderators 🚩** for logged-in non-author non-mods on subspace posts
+  (comment rows: a flag icon beside react/vote, `SubspaceReportContext`
+  hands them the root subspace) → **ReportModal** (`ModerationModals.tsx`:
+  rules + Other + note, first rule preselected while untouched; the same
+  cached subspace loader) — optimistic: close + toast "Reported — thanks,
+  the mods will look 🚩", a refusal toasts; mods see a `🚩 N` badge in the
+  subspace line linking to the Reports tab; mod page **Reports** tab
+  (Open · N / Resolved toggle; each group = the PostCard + reasons chips +
+  reporters + Remove 🧹 through the RemoveModal [+ lock] [+ ban] / Dismiss
+  ✓; optimistic with put-back on failure, a 404 refreshes), badge on the
+  tab and on Mod tools 🎩 (`modQueueCount` = requests + reports; the
+  button opens whichever queue has work). Capabilities: `subspaces-report`
+  + `subspaces-reports` 1.0.0, get 1.4.0, moderate 1.4.0, feed 1.3.0,
+  things / things-comment / things-feed / things-user feature 1.4.0 ·
+  contract 1.3.0. Verify section Q.
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger
   zone mounted through an in-flight transfer (`transferPending`) so the
   optimistic crown flip dims it instead of unmounting the open confirm
   modal, and a failed transfer lands back with the username intact.
+- Round 2 S5 — verify section Q: reports — defaults (mods' `reportCount` 0
+  / `openReportCount` 0, no keys for members), every report wall (401, no
+  reason 400, 501-char note 400, no id 400, unknown 404, invisible private
+  post 404, outside a subspace 400, banned 403 → unban), queue walls (GET
+  401 / 403 / 404, dismiss 401 / 403 / 400 / 404), the happy path (row shape,
+  the mods' deduped bell — never the reporter's or the author's, a repeat
+  refreshing the row without a second bell, a nested reply landing on the
+  root post with `commentId`, the grouped queue with reasons tally +
+  reporters + the projected post, mods-only `reportCount` on the post read
+  / subspace feed / home feed and `openReportCount` on the detail), dismiss
+  (+ `report.dismiss` mod log, resolved queue, 404 again), re-report after
+  a dismissal re-opening + ringing again, remove / approve settling open
+  reports (`resolvedReports`), a foreign-subspace dismiss 404, the author's
+  delete clearing the reports, the generic-things wall, docs routes and
+  the manifest.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)

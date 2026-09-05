@@ -180,6 +180,9 @@ export type PublicSubspaceMod = {
   nsfw: boolean;
   spoiler: boolean;
   viewerCanModerate: boolean;
+  // moderators only: open reports against the post (the 🚩 badge in the
+  // subspace line); absent for everyone else
+  reportCount?: number;
 };
 
 // Apply one up/down tap to a post or comment optimistically: same direction

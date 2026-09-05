@@ -661,6 +661,27 @@ export function useApi() {
         [asyncFetcher]
       ),
       modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), []),
+      // report a post (or a comment — resolved to its root post) to the
+      // subspace's mods: reason (a rule title / removal-reason id / free
+      // text, ≤120) + optional note (≤500); a repeat by the same reporter
+      // refreshes their row (updated: true)
+      report: useCallback(
+        async (body: { id: string; reason: string; note?: string | null }) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/report', errorContext: 'report the post' }),
+        [asyncFetcher]
+      ),
+      // the mods' Reports queue: reports grouped by post (status open |
+      // resolved, offset cursor); moderator-only
+      reports: useCallback(
+        async (args: { slug?: string; id?: string; status?: 'open' | 'resolved'; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/reports${toQuery(args)}`),
+        []
+      ),
+      // dismiss every open report on a post (the post stays); remove /
+      // approve through `moderate` settle them implicitly
+      dismissReports: useCallback(
+        async (body: { postId: string; slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...body, action: 'dismiss' }, { action: '/api/v1/subspaces/reports', errorContext: 'dismiss the reports' }),
+        [asyncFetcher]
+      ),
       feed: useCallback(
         async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
           getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),

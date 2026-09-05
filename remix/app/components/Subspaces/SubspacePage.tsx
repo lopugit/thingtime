@@ -16,6 +16,7 @@ import { useSubspacePrefs } from './useSubspacePrefs';
 import {
 	ACCESS_META,
 	composerContextOf,
+	modQueueCount,
 	openRequestCount,
 	subspaceAccent,
 	SUBSPACE_SORTS,
@@ -475,6 +476,9 @@ export const SubspacePage = () => {
 	const isOwner = subspace?.viewer.role === 'owner';
 	const viewer = subspace?.viewer;
 	const openRequests = openRequestCount(subspace);
+	// the Mod tools 🎩 badge counts everything waiting for a mod: requests +
+	// open reports; the button opens whichever queue has work (requests first)
+	const modQueue = modQueueCount(subspace);
 	// a join request is a private-subspace state only (see toggleMembership)
 	const viewerPending = !!viewer?.pending && subspace?.access === 'private';
 	// join button copy per state (private subspaces request instead of join)
@@ -559,7 +563,7 @@ export const SubspacePage = () => {
 							{subspace?.viewer.canModerate && (
 								<Button
 									as={Link}
-									to={openRequests > 0 ? `/s/${slug}/mod?tab=requests` : `/s/${slug}/mod`}
+									to={openRequests > 0 ? `/s/${slug}/mod?tab=requests` : modQueue > 0 ? `/s/${slug}/mod?tab=reports` : `/s/${slug}/mod`}
 									size="sm"
 									variant="outline"
 									borderRadius="999px"
@@ -567,11 +571,12 @@ export const SubspacePage = () => {
 									color={INK}
 									data-testid="subspace-mod-tools"
 									data-open-requests={openRequests}
+									data-open-reports={subspace.openReportCount || 0}
 								>
 									Mod tools 🎩
-									{openRequests > 0 && (
-										<Text as="span" marginLeft={2} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={accent} color="white" title={`${openRequests} open request${openRequests === 1 ? '' : 's'}`} data-testid="subspace-mod-tools-badge">
-											{openRequests}
+									{modQueue > 0 && (
+										<Text as="span" marginLeft={2} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={accent} color="white" title={`${openRequests} open request${openRequests === 1 ? '' : 's'} · ${subspace.openReportCount || 0} open report${(subspace.openReportCount || 0) === 1 ? '' : 's'}`} data-testid="subspace-mod-tools-badge">
+											{modQueue}
 										</Text>
 									)}
 								</Button>

@@ -22,6 +22,8 @@ import {
 	sanitizeBranding,
 	sanitizeFlairs,
 	sanitizeRemovalReasons,
+	sanitizeReportNote,
+	sanitizeReportReason,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeTopRange,
@@ -29,6 +31,7 @@ import {
 	slugHoldState,
 	slugifyFlairId,
 	SUBSPACE_SLUG_HOLD_MS,
+	tallyReportReasons,
 	toPublicUserFlair,
 	topRangeSince,
 	userFlairOfCrystal,
@@ -436,4 +439,39 @@ test('resolveRemovalReason: ruleIndex cites a rule server-side — "Rule N: titl
 	assert.ok(long.reason.startsWith('Rule 1: tttt'));
 	// the omitted list reads as no rules
 	assert.equal((resolveRemovalReason({ ruleIndex: 0 }, []) as any).status, 400);
+});
+
+// --- reports (round 2, S5) ---------------------------------------------------
+
+test('sanitizeReportReason requires a reason and bounds it at 120 collapsed chars', () => {
+	assert.equal(sanitizeReportReason('  Rule 2:   No spam '), 'Rule 2: No spam');
+	assert.equal(sanitizeReportReason('r'.repeat(200)), 'r'.repeat(120));
+	for (const bad of ['', '   ', null, undefined, 42, { reason: 'x' }]) {
+		const result = sanitizeReportReason(bad) as any;
+		assert.equal(result.ok, false, JSON.stringify(bad));
+		assert.equal(result.status, 400);
+	}
+});
+
+test('sanitizeReportNote is optional, collapses whitespace and refuses more than 500 chars', () => {
+	assert.equal(sanitizeReportNote(undefined), null);
+	assert.equal(sanitizeReportNote(null), null);
+	assert.equal(sanitizeReportNote(''), null);
+	assert.equal(sanitizeReportNote('   '), null);
+	assert.equal(sanitizeReportNote(' third   ad  this week '), 'third ad this week');
+	assert.equal(sanitizeReportNote('n'.repeat(500)), 'n'.repeat(500));
+	assert.equal((sanitizeReportNote('n'.repeat(501)) as any).status, 400);
+	assert.equal((sanitizeReportNote(12) as any).status, 400);
+});
+
+test('tallyReportReasons counts reasons most-cited first, ties alphabetical, blanks dropped', () => {
+	assert.deepEqual(tallyReportReasons([]), []);
+	assert.deepEqual(
+		tallyReportReasons([{ reason: 'Spam' }, { reason: 'Harassment' }, { reason: 'Spam' }, { reason: ' ' }, { reason: 'Abuse' }, { reason: 'Harassment' }]),
+		[
+			{ reason: 'Harassment', count: 2 },
+			{ reason: 'Spam', count: 2 },
+			{ reason: 'Abuse', count: 1 }
+		]
+	);
 });

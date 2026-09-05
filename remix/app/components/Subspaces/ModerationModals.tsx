@@ -18,9 +18,10 @@ import {
 	Textarea
 } from '@chakra-ui/react';
 
+import { MAX_SUBSPACE_REPORT_NOTE_CHARS } from '~/schemas/registry';
 import type { useApi } from '~/hooks/useApi';
 import { buildRemoveChoice, CUSTOM_PICK, noteMaxFor, reasonValue, ruleValue, type RemoveChoice } from './moderationModalsCore';
-import type { SubspaceFlair, SubspaceRemovalReason, SubspaceRule } from './subspaceTypes';
+import { REPORT_OTHER_REASON, type SubspaceFlair, type SubspaceRemovalReason, type SubspaceRule } from './subspaceTypes';
 
 // Moderation modals — Chakra modals replacing every window.prompt/confirm in
 // the subspace UI (round 2, S4):
@@ -31,6 +32,9 @@ import type { SubspaceFlair, SubspaceRemovalReason, SubspaceRule } from './subsp
 //   • BanModal — the mod page's Ban 🚫 (per member row and by username):
 //     reason (shown to the user), days (blank = permanent), a private note
 //     (mod log only).
+//   • ReportModal — the card menu's / comment row's Report to moderators 🚩
+//     (round 2, S5): a radio list of the subspace's rules + "Other", a note
+//     for the mods. The caller files POST /api/v1/subspaces/report.
 // The subspace detail the RemoveModal needs (rules, removal reasons — and the
 // post flairs the card menu's Flair submenu lists) is loaded lazily through
 // ONE cached loader, so opening the menu and then the modal costs one GET.
@@ -424,6 +428,169 @@ export const BanModal = ({
 					</Button>
 					<Button size="sm" colorScheme="red" borderRadius={RADIUS_MD} isLoading={saving} onClick={submit} data-testid="ban-confirm">
 						Ban {banDays ? `for ${banDays}d` : 'permanently'} 🚫
+					</Button>
+				</ModalFooter>
+			</ModalContent>
+		</Modal>
+	);
+};
+
+// ── ReportModal ────────────────────────────────────────────────────────────
+// A viewer flags a post / comment to the subspace's moderators: pick the rule
+// it breaks (the citation "Rule N: title" becomes the reason the queue groups
+// by) or "Other", add a note. Optimistic by contract: `onReport` is fired
+// and the modal closes at once — the caller toasts "Reported" immediately
+// and toasts the error if the API refuses (nothing on the card changes
+// either way, so there is nothing to revert).
+export type ReportChoice = { reason: string; note: string | null };
+const OTHER_PICK = 'other';
+
+export const ReportModal = ({
+	isOpen,
+	onClose,
+	api,
+	subspaceId,
+	subspaceSlug,
+	target,
+	onReport
+}: {
+	isOpen: boolean;
+	onClose: () => void;
+	api: ApiClient;
+	subspaceId: string;
+	subspaceSlug: string;
+	// what is being reported — copy only
+	target: 'post' | 'comment';
+	onReport: (choice: ReportChoice) => void;
+}) => {
+	const [detail, setDetail] = React.useState<ModerationSubspace | null>(null);
+	const [loadFailed, setLoadFailed] = React.useState(false);
+	const [pick, setPick] = React.useState<string>(OTHER_PICK);
+	const [note, setNote] = React.useState('');
+	const touchedRef = React.useRef(false);
+
+	// lazy: the rules load when the modal opens (the same cached GET the
+	// card menu and the Remove modal share); the form paints at once with
+	// Other selected, and the first rule takes over only while untouched
+	React.useEffect(() => {
+		if (!isOpen) return;
+		let cancelled = false;
+		setLoadFailed(false);
+		loadModerationSubspace(api, subspaceId)
+			.then((loaded) => {
+				if (cancelled) return;
+				setDetail(loaded);
+				setPick((current) => (!touchedRef.current && current === OTHER_PICK && loaded.rules.length ? ruleValue(0) : current));
+			})
+			.catch(() => {
+				if (!cancelled) setLoadFailed(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen, subspaceId]);
+
+	const reset = () => {
+		setPick(OTHER_PICK);
+		setNote('');
+		touchedRef.current = false;
+	};
+	const close = () => {
+		onClose();
+		reset();
+	};
+	const rules = detail?.rules || [];
+	const reasonOf = (): string => {
+		if (pick.startsWith('rule:')) {
+			const index = Number(pick.slice('rule:'.length));
+			const rule = Number.isInteger(index) && index >= 0 ? rules[index] : null;
+			if (rule) return `Rule ${index + 1}: ${rule.title}`;
+		}
+		return REPORT_OTHER_REASON;
+	};
+	const submit = () => {
+		const choice: ReportChoice = { reason: reasonOf(), note: note.replace(/\s+/g, ' ').trim() || null };
+		onClose();
+		reset();
+		onReport(choice);
+	};
+	const other = pick === OTHER_PICK;
+
+	return (
+		<Modal isOpen={isOpen} onClose={close} isCentered size="md" scrollBehavior="inside">
+			<ModalOverlay />
+			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="report-modal">
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+					Report this {target} to the s/{subspaceSlug} mods 🚩
+				</ModalHeader>
+				<ModalCloseButton />
+				<ModalBody>
+					<Flex flexDirection="column" rowGap={3}>
+						<Text fontSize="xs" color={MUTED}>
+							Only the moderators see reports. Pick the rule it breaks, or tell them what is wrong.
+						</Text>
+						<RadioGroup
+							value={pick}
+							onChange={(value) => {
+								touchedRef.current = true;
+								setPick(String(value));
+							}}
+						>
+							<Flex flexDirection="column" rowGap={1.5} data-testid="report-reason-list">
+								{rules.map((rule, index) => (
+									<Radio borderColor={CONTROL_BORDER} key={ruleValue(index)} value={ruleValue(index)} size="sm" alignItems="flex-start" data-testid="report-rule-option">
+										<Text fontSize="sm" color={INK} lineHeight="1.3">
+											<Text as="span" color={MUTED} fontFamily="mono" fontSize="xs">
+												Rule {index + 1}
+											</Text>{' '}
+											{rule.title}
+										</Text>
+									</Radio>
+								))}
+								<Radio borderColor={CONTROL_BORDER} value={OTHER_PICK} size="sm" data-testid="report-other-option">
+									<Text fontSize="sm" color={INK}>
+										{rules.length ? 'Other' : 'Something else is wrong'}
+									</Text>
+								</Radio>
+								{!detail && !loadFailed && (
+									<Text fontSize="xs" color={MUTED}>
+										Loading the rules…
+									</Text>
+								)}
+								{loadFailed && (
+									<Text fontSize="xs" color={DANGER}>
+										Couldn’t load the rules — describe the problem below.
+									</Text>
+								)}
+							</Flex>
+						</RadioGroup>
+						<Box>
+							<Textarea
+								size="sm"
+								borderRadius={RADIUS_MD}
+								rows={2}
+								placeholder={other ? 'What is wrong with it? — helps the mods' : 'Anything the mods should know — optional'}
+								value={note}
+								maxLength={MAX_SUBSPACE_REPORT_NOTE_CHARS}
+								onChange={(event) => {
+									touchedRef.current = true;
+									setNote(event.target.value.slice(0, MAX_SUBSPACE_REPORT_NOTE_CHARS));
+								}}
+								data-testid="report-note"
+							/>
+							<Text fontSize="10px" fontFamily="mono" color={MUTED} textAlign="right" marginTop={0.5}>
+								{note.length}/{MAX_SUBSPACE_REPORT_NOTE_CHARS}
+							</Text>
+						</Box>
+					</Flex>
+				</ModalBody>
+				<ModalFooter columnGap={2}>
+					<Button size="sm" variant="ghost" borderRadius={RADIUS_MD} onClick={close}>
+						Never mind
+					</Button>
+					<Button size="sm" colorScheme="red" borderRadius={RADIUS_MD} onClick={submit} data-testid="report-confirm">
+						Report 🚩
 					</Button>
 				</ModalFooter>
 			</ModalContent>

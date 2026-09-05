@@ -52,14 +52,55 @@ export type PublicSubspace = {
 	// moderators only (detail): sizes of the Requests queues
 	pendingCount?: number;
 	approvalRequestCount?: number;
+	// moderators only (detail): open reports waiting in the Reports queue
+	openReportCount?: number;
 	createdAt: string;
 	updatedAt: string;
 	viewer: PublicSubspaceViewer;
 };
 
-// open requests a moderator sees (badge on Mod tools 🎩 / the Requests tab)
+// open requests a moderator sees (badge on the Requests tab)
 export const openRequestCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount'> | null | undefined): number =>
 	(subspace?.pendingCount || 0) + (subspace?.approvalRequestCount || 0);
+// open reports a moderator sees (badge on the Reports tab)
+export const openReportCount = (subspace: Pick<PublicSubspace, 'openReportCount'> | null | undefined): number => subspace?.openReportCount || 0;
+// everything waiting for a moderator — requests + reports (the badge on Mod tools 🎩)
+export const modQueueCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount' | 'openReportCount'> | null | undefined): number =>
+	openRequestCount(subspace) + openReportCount(subspace);
+
+// --- reports (POST /api/v1/subspaces/report, GET+POST /api/v1/subspaces/reports)
+export type SubspaceReportStatus = 'open' | 'resolved';
+export type SubspaceReportResolution = 'removed' | 'approved' | 'dismissed';
+export type PublicSubspaceReport = {
+	id: string;
+	subspaceId: string;
+	postId: string;
+	commentId: string | null;
+	reason: string;
+	note: string | null;
+	status: SubspaceReportStatus;
+	resolution: SubspaceReportResolution | null;
+	createdAt: string;
+	updatedAt: string;
+};
+// POST /report — updated: true when the reporter had already reported the post
+export type SubspaceReportResponse = { ok: true; report: PublicSubspaceReport; updated: boolean };
+// one row of the mods' Reports queue: a post with every report against it
+export type PublicReportedPost = {
+	postId: string;
+	// the post as the mod sees it; null when it is gone / left the subspace
+	post: PublicPost | null;
+	reportCount: number;
+	reasons: { reason: string; count: number }[];
+	reporters: { userId: string; profile: FeedAuthor | null; reason: string; note: string | null; commentId: string | null; createdAt: string }[];
+	latestAt: string;
+	status: SubspaceReportStatus;
+	resolution: SubspaceReportResolution | null;
+};
+export type SubspaceReportsResponse = { ok: true; reports: PublicReportedPost[]; nextCursor: string | null; status: SubspaceReportStatus; openReportCount: number };
+export type SubspaceDismissReportsResponse = { ok: true; postId: string; dismissed: number; openReportCount: number };
+// the reason the ReportModal sends for its "Other" pick (server groups by it)
+export const REPORT_OTHER_REASON = 'Other';
 
 export type PublicSubspaceMember = {
 	userId: string;

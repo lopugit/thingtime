@@ -16,6 +16,8 @@ import {
 	MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS,
 	MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS,
 	MAX_SUBSPACE_REMOVAL_REASONS,
+	MAX_SUBSPACE_REPORT_NOTE_CHARS,
+	MAX_SUBSPACE_REPORT_REASON_CHARS,
 	MAX_SUBSPACE_RULE_TEXT_CHARS,
 	MAX_SUBSPACE_RULE_TITLE_CHARS,
 	MAX_SUBSPACE_RULES,
@@ -393,6 +395,38 @@ export const resolveUserFlair = (request: UserFlairRequest, settings: UserFlairS
 	if (!actor.moderator && !settings.allowCustomUserFlair) return fail(403, 'Custom flair text is off here — pick one of the templates');
 	if (text.length > MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS) return fail(400, `Flair text is too long (max ${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} characters)`);
 	return { id: null, text, emoji: sanitizeIcon(request.emoji), color: sanitizeColor(request.color) };
+};
+
+// ---------------------------------------------------------------------------
+// Reports — a viewer flags a post to the subspace's moderators. `reason` is
+// what the Reports queue groups by (a rule title, a removal-reason id, or
+// free text; required, whitespace-collapsed, ≤ MAX_SUBSPACE_REPORT_REASON_CHARS);
+// `note` is the reporter's optional context (≤ MAX_SUBSPACE_REPORT_NOTE_CHARS).
+export const sanitizeReportReason = (value: unknown): string | Fail => {
+	const reason = boundedText(value, MAX_SUBSPACE_REPORT_REASON_CHARS);
+	if (!reason) return fail(400, 'Say why you are reporting it — pick a rule or write a short reason 🚩');
+	return reason;
+};
+
+export const sanitizeReportNote = (value: unknown): string | null | Fail => {
+	if (value === undefined || value === null || value === '') return null;
+	if (typeof value !== 'string') return fail(400, 'note must be text');
+	const note = value.replace(/\s+/g, ' ').trim();
+	if (note.length > MAX_SUBSPACE_REPORT_NOTE_CHARS) return fail(400, `The note is too long (max ${MAX_SUBSPACE_REPORT_NOTE_CHARS} characters)`);
+	return note || null;
+};
+
+// The reasons tally of one reported post — { reason, count } most-cited
+// first (ties: alphabetical) — from its reporter rows.
+export type ReportReasonTally = { reason: string; count: number };
+export const tallyReportReasons = (reports: readonly { reason: string }[]): ReportReasonTally[] => {
+	const counts = new Map<string, number>();
+	for (const report of reports) {
+		const reason = String(report.reason || '').trim();
+		if (!reason) continue;
+		counts.set(reason, (counts.get(reason) || 0) + 1);
+	}
+	return [...counts.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 };
 
 export const sanitizeSort = (value: unknown): SubspaceFeedSort => ((SUBSPACE_FEED_SORTS as readonly string[]).includes(value as string) ? (value as SubspaceFeedSort) : 'hot');

@@ -26,10 +26,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // subspaceMod/votes and the feeds honour subspace fences (1.2.0, additive);
   // round 2 S3 — user flairs: posts + comments carry authorFlair, the
   // author's user flair in the post's subspace (1.3.0, additive)
+  // round 2 S5 — reports: a subspace post's subspaceMod.reportCount for its
+  // moderators (1.4.0, additive)
   for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
-    assert.equal(manifest.features[feature]?.version, '1.3.0', feature);
+    assert.equal(manifest.features[feature]?.version, '1.4.0', feature);
   }
-  for (const feature of ['api.subspaces-modlog', 'api.things-updown']) {
+  // S5: the report endpoint + the mods' Reports queue are new contracts
+  for (const feature of ['api.subspaces-modlog', 'api.things-updown', 'api.subspaces-report', 'api.subspaces-reports']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
   // S3 review: moderate's re-projected post carries authorFlair (1.1.0, additive)
@@ -38,7 +41,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S4 review: remove takes ruleIndex (a cited rule, composed server-side),
   // is idempotent on a removed post, and the author's bell comes from the
   // mod team with the reason's headline (1.3.0, additive)
-  assert.equal(manifest.features['api.subspaces-moderate']?.version, '1.3.0');
+  // S5: remove / approve settle the post's open reports; the re-projected
+  // post carries reportCount for mods (1.4.0, additive)
+  assert.equal(manifest.features['api.subspaces-moderate']?.version, '1.4.0');
   // round 2 S2 — join requests + posting-approval requests: private join
   // files a request (join 1.1.0), leave cancels it (1.1.0), the list rows /
   // detail carry viewer.pending + approvalRequested and mods get the queue
@@ -55,16 +60,20 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // authorFlair (1.1.0) — all additive
   // round 2 S4 — removal reasons: the subspace projection carries
   // removalReasons (list / get 1.3.0), update takes the list (1.3.0) — additive
-  for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update']) {
+  // round 2 S5 — reports: moderators get openReportCount on the detail (get
+  // 1.4.0, additive)
+  for (const feature of ['api.subspaces', 'api.subspaces-update']) {
     assert.equal(manifest.features[feature]?.version, '1.3.0', feature);
   }
+  assert.equal(manifest.features['api.subspaces-get']?.version, '1.4.0');
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)
   // S4: ban takes a private mod-log `note` (members 1.4.0, additive)
   // S4 review: the ban / unban bell comes from the mod team (1.4.1, correction)
   assert.equal(manifest.features['api.subspaces-members']?.version, '1.4.1');
   // S4: the feed's subspace block carries removalReasons (1.2.0, additive)
-  assert.equal(manifest.features['api.subspaces-feed']?.version, '1.2.0');
+  // S5: moderators' posts carry subspaceMod.reportCount (1.3.0, additive)
+  assert.equal(manifest.features['api.subspaces-feed']?.version, '1.3.0');
   // S2 review: a re-request starts from a clean row + the mods' bell is
   // deduped + join has its own rate key (join 1.1.1, corrections); decisions
   // on a withdrawn request answer 409, unrelated actions on a pending row

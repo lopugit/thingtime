@@ -21,16 +21,20 @@ import { emitNotification, emitNotificationsBulk } from '../notifications/notifi
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	MAX_SUBSPACE_MEMBERSHIPS_PER_USER,
+	MAX_SUBSPACE_REPORT_REPORTERS_LISTED,
 	MAX_SUBSPACES_PER_USER,
 	SUBSPACE_ROLES,
 	subspaceNotificationPreview,
 	type SubspaceAccessMode,
 	type SubspaceFeedSort,
+	type SubspaceReportResolution,
+	type SubspaceReportStatus,
 	type SubspaceRole
 } from '~/schemas/registry';
 import {
 	asViewer,
 	canView,
+	canViewInherited,
 	chronoCursorClause,
 	fail,
 	isFail,
@@ -54,15 +58,20 @@ import {
 	accessOf,
 	canModerate,
 	findSubspace,
+	findSubspaceById,
 	findSubspaceMemberDoc,
 	flairsOf,
 	isActiveMember,
 	loadViewerSubspaceRoles,
 	membershipOf,
 	membershipOfDoc,
+	resolveRootPost,
 	SUBSPACE_MEMBER_KEY_FIELD,
+	SUBSPACE_REPORT_KEY_FIELD,
 	SUBSPACE_SLUG_KEY_FIELD,
+	subspaceIdOfDoc,
 	subspaceMemberKeyOf,
+	subspaceReportKeyOf,
 	userFlairsOf,
 	type SubspaceMembership
 } from './gate';
@@ -86,18 +95,22 @@ import {
 	sanitizeName,
 	sanitizeReason,
 	sanitizeRemovalReasons,
+	sanitizeReportNote,
+	sanitizeReportReason,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeSort,
 	sanitizeTopRange,
 	sanitizeUserFlairs,
 	slugHoldState,
+	tallyReportReasons,
 	topRangeSince,
 	toPublicUserFlair,
 	userFlairSettingsOf,
 	userFlairSurvivesDemotion,
 	type PublicUserFlair,
 	type RankCandidate,
+	type ReportReasonTally,
 	type SubspaceBranding,
 	type SubspaceFlair,
 	type SubspaceRemovalReason,
@@ -131,6 +144,12 @@ const MAX_NOTIFIED_REQUESTERS = 200;
 const RELEASE_BATCH = 200;
 const MAX_RELEASE_PASSES = 2_000;
 const MAX_RELEASE_CONFLICTS = 5;
+// the Reports queue groups the subspace's report rows by post over a bounded
+// newest-first window (the ranked-feed pattern) and pages the groups by offset
+// — deterministic for a fixed dataset; a queue deeper than the window is a
+// subspace with thousands of unsettled reports, and its first pages are the
+// ones that matter
+const REPORT_WINDOW = 2_000;
 
 // ---------------------------------------------------------------------------
 // Projections
@@ -178,6 +197,8 @@ export type PublicSubspace = {
 	// requests waiting in the Requests queue
 	pendingCount?: number;
 	approvalRequestCount?: number;
+	// moderators only (subspace detail): open reports waiting in the Reports queue
+	openReportCount?: number;
 	createdAt: string;
 	updatedAt: string;
 	viewer: PublicSubspaceViewer;
@@ -239,7 +260,7 @@ const brandingOf = (doc: any): SubspaceBranding => ({
 
 export const toPublicSubspace = (
 	doc: any,
-	options: { memberCount: number; postCount?: number; membership: SubspaceMembership | null; requestCounts?: RequestCounts | null }
+	options: { memberCount: number; postCount?: number; membership: SubspaceMembership | null; requestCounts?: RequestCounts | null; openReportCount?: number | null }
 ): PublicSubspace => ({
 	id: String(doc.shareId),
 	slug: String(doc.crystal?.slug || ''),
@@ -256,6 +277,7 @@ export const toPublicSubspace = (
 	memberCount: options.memberCount,
 	...(options.postCount === undefined ? {} : { postCount: options.postCount }),
 	...(options.requestCounts ? { pendingCount: options.requestCounts.pending, approvalRequestCount: options.requestCounts.approvalRequests } : {}),
+	...(typeof options.openReportCount === 'number' ? { openReportCount: options.openReportCount } : {}),
 	createdAt: new Date(doc.createdAt).toISOString(),
 	updatedAt: new Date(doc.updatedAt || doc.createdAt).toISOString(),
 	viewer: viewerStateOf(doc, options.membership)
@@ -375,6 +397,25 @@ const requestCountsFor = async (subspaceId: string): Promise<RequestCounts> => {
 		])
 		.toArray()) as any[];
 	return { pending: Number(row?.pending) || 0, approvalRequests: Number(row?.approvalRequests) || 0 };
+};
+
+// open reports waiting in the subspace's Reports queue (the badge on Mod
+// tools 🎩 / the Reports tab) — one indexed count
+const OPEN_REPORT_MATCH = { thingtime: 'subspace-report', 'crystal.status': 'open' };
+const openReportCountFor = async (subspaceId: string): Promise<number> => {
+	const things = await getThingsCollection();
+	return things.countDocuments({ ...OPEN_REPORT_MATCH, targetId: subspaceId } as any);
+};
+
+// Settle every open report on one post: a moderator's remove / approve does
+// it implicitly (resolution removed / approved), dismiss explicitly. Answers
+// how many rows flipped (0 = nothing was open).
+const resolveOpenReports = async (things: any, subspaceId: string, postId: string, resolution: SubspaceReportResolution, actorId: string, now: Date): Promise<number> => {
+	const result = await things.updateMany(
+		{ ...OPEN_REPORT_MATCH, targetId: subspaceId, 'crystal.postId': postId } as any,
+		{ $set: { 'crystal.status': 'resolved', 'crystal.resolution': resolution, 'crystal.resolvedById': actorId, 'crystal.resolvedAt': now, updatedAt: now } }
+	);
+	return Number(result?.modifiedCount) || 0;
 };
 
 const livePostMatch = (subspaceId: string) => withMatch(postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
@@ -636,10 +677,14 @@ export const getSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef
 			.toArray() as Promise<any[]>
 	]);
 	// moderators also get the Requests queue sizes (badge on Mod tools 🎩)
-	const [profiles, requestCounts] = await Promise.all([resolveProfiles(modDocs.map((doc) => String(doc.ownerId))), canModerate(membership) ? requestCountsFor(id) : Promise.resolve(null)]);
+	const [profiles, requestCounts, openReportCount] = await Promise.all([
+		resolveProfiles(modDocs.map((doc) => String(doc.ownerId))),
+		canModerate(membership) ? requestCountsFor(id) : Promise.resolve(null),
+		canModerate(membership) ? openReportCountFor(id) : Promise.resolve(null)
+	]);
 	return {
 		ok: true,
-		subspace: toPublicSubspace(subspace, { memberCount: counts.get(id) || 0, postCount, membership, requestCounts }),
+		subspace: toPublicSubspace(subspace, { memberCount: counts.get(id) || 0, postCount, membership, requestCounts, openReportCount }),
 		moderators: modDocs.map((doc) => ({
 			userId: String(doc.ownerId),
 			profile: profiles.get(String(doc.ownerId)) || null,
@@ -1551,6 +1596,9 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 			// the same post, must not ring twice). Approve first to remove it
 			// again with a different reason.
 			if (current.status === 'removed') {
+				// …but reports filed against it since are settled (the queue must
+				// not keep asking about a post that is already down)
+				await resolveOpenReports(things, subspaceId, post.shareId, 'removed', actorId, now);
 				const [unchanged] = await toPublicPosts([post], auth.viewer);
 				return { ok: true, post: unchanged };
 			}
@@ -1625,6 +1673,13 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	// ("requires the current storage migration"). Root subspaceMod fields are
 	// outside the stamp, so this is a no-op delta for the other actions.
 	await updateAccountedThing(things, { shareId: post.shareId }, update);
+	// a removal / approval is the mods' verdict on every open report against
+	// the post: settle them (resolution removed / approved) so the Reports
+	// queue and the card's 🚩 badge clear with it; the mod log notes how many
+	if (action === 'remove' || action === 'approve') {
+		const resolvedReports = await resolveOpenReports(things, subspaceId, post.shareId, action === 'remove' ? 'removed' : 'approved', actorId, now);
+		if (resolvedReports > 0) detail = { ...(detail || {}), resolvedReports };
+	}
 	await writeModlog(subspaceId, actorId, `post.${action}`, { postId: post.shareId, reason, detail });
 	// the author hears about a removal (never throws; prefs gate delivery).
 	// Post-scoped: postId deep-links to /post/<id>; the preview leads with
@@ -1650,6 +1705,269 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	const fresh = (await things.findOne({ shareId: post.shareId } as any)) as any as ThingDoc;
 	const [projected] = await toPublicPosts([fresh], auth.viewer);
 	return { ok: true, post: projected };
+};
+
+// ---------------------------------------------------------------------------
+// Reports — a viewer flags a post (or a comment, resolved to its root post) to
+// the subspace's moderators. One subspace-report thing per (post, reporter):
+// targetId = the subspace, ownerId = the reporter, uniqueness on the root
+// uniqueKeys namespace (subspaceReportKey:<postId>:<reporterId>). The mods'
+// Reports queue groups the rows by post; moderate remove / approve settles
+// them implicitly, dismiss explicitly.
+
+export type PublicSubspaceReport = {
+	id: string;
+	subspaceId: string;
+	postId: string;
+	// the flagged comment when a comment was reported (null for the post)
+	commentId: string | null;
+	reason: string;
+	note: string | null;
+	status: SubspaceReportStatus;
+	resolution: SubspaceReportResolution | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+const toPublicReport = (doc: any): PublicSubspaceReport => ({
+	id: String(doc.shareId),
+	subspaceId: String(doc.targetId),
+	postId: String(doc.crystal?.postId || ''),
+	commentId: typeof doc.crystal?.commentId === 'string' && doc.crystal.commentId ? doc.crystal.commentId : null,
+	reason: String(doc.crystal?.reason || ''),
+	note: typeof doc.crystal?.note === 'string' && doc.crystal.note ? doc.crystal.note : null,
+	status: doc.crystal?.status === 'resolved' ? 'resolved' : 'open',
+	resolution: doc.crystal?.resolution === 'removed' || doc.crystal?.resolution === 'approved' || doc.crystal?.resolution === 'dismissed' ? doc.crystal.resolution : null,
+	createdAt: new Date(doc.createdAt).toISOString(),
+	updatedAt: new Date(doc.updatedAt || doc.createdAt).toISOString()
+});
+
+const newSubspaceReportDoc = (subspaceId: string, reporterId: string, crystal: { postId: string; commentId: string | null; reason: string; note: string | null }, now: Date) => {
+	const reportKey = subspaceReportKeyOf(crystal.postId, reporterId);
+	return {
+		shareId: randomUUID(),
+		schemaVersion: THINGS_SCHEMA_VERSION,
+		thingtime: ['subspace-report'],
+		crystal: { ...crystal, status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey },
+		uniqueKeys: [thingUniqueKey(SUBSPACE_REPORT_KEY_FIELD, reportKey)],
+		extended: null,
+		ownerId: reporterId,
+		acl: ['tt:user'],
+		targetId: subspaceId,
+		tags: [],
+		createdAt: now,
+		updatedAt: now
+	};
+};
+
+export type ReportPostInput = { id?: unknown; reason?: unknown; note?: unknown };
+export type ReportPostResult = { ok: true; report: PublicSubspaceReport; updated: boolean };
+
+// Any logged-in viewer who can SEE the target and is not banned in its
+// subspace may report it. A comment resolves to its root post (the report
+// hangs off the post; commentId remembers which comment). A repeat by the
+// same reporter updates the reason / note on their row — and re-opens it when
+// the mods had settled it — answering { updated: true }; only a NEW (or
+// re-opened) report rings the mods (subspace-report, preview = the reason,
+// postId = the post; deduped against each mod's unread bell).
+export const reportPost = async (viewerInput: string | Viewer, input: ReportPostInput): Promise<Fail | ReportPostResult> => {
+	const auth = requireViewer(viewerInput);
+	if (auth.ok === false) return auth;
+	if (typeof input.id !== 'string' || !input.id.trim()) return fail(400, 'Post id required');
+	const reason = sanitizeReportReason(input.reason);
+	if (isFail(reason)) return reason;
+	const note = sanitizeReportNote(input.note);
+	if (isFail(note)) return note;
+	const viewer = (await withFriendIds(auth.viewer)) as NonNullable<Viewer>;
+	const things = await getThingsCollection();
+	// a post or a comment (plain ['comment'] or rich ['post','comment'])
+	const target = (await things.findOne({ shareId: input.id.trim(), $or: [{ thingtime: 'post' }, { thingtime: 'comment' }, { kind: 'post' }] } as any)) as any as ThingDoc | null;
+	// never disclose what the viewer can't see: unknown and invisible read alike
+	if (!target || !(await canViewInherited(target, viewer))) return fail(404, 'Post not found');
+	const root = await resolveRootPost(target);
+	const subspaceId = subspaceIdOfDoc(root);
+	if (!root || !subspaceId) return fail(400, 'Only posts in a subspace can be reported to its moderators 🚩');
+	const subspace = await findSubspaceById(subspaceId);
+	if (!subspace) return fail(404, 'Subspace not found');
+	const slug = String(subspace.crystal?.slug || subspaceId);
+	const membership = viewer.subspaceRoles?.get(subspaceId) || (await membershipOf(subspaceId, viewer.id));
+	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
+	const postId = String(root.shareId);
+	const commentId = String(target.shareId) !== postId ? String(target.shareId) : null;
+	const now = new Date();
+	const keyFilter = { thingtime: 'subspace-report', ...thingUniqueKeyFilter(SUBSPACE_REPORT_KEY_FIELD, subspaceReportKeyOf(postId, viewer.id)) };
+	const reopenSet = { 'crystal.reason': reason, 'crystal.note': note, 'crystal.commentId': commentId, 'crystal.status': 'open', 'crystal.resolution': null, 'crystal.resolvedById': null, 'crystal.resolvedAt': null, updatedAt: now };
+	const existing = await things.findOne(keyFilter as any);
+	let updated = false;
+	// a brand-new or re-opened report rings the mods; a repeat on an open row
+	// only refreshes it (no second bell for the same reporter)
+	let rings = false;
+	if (existing) {
+		updated = true;
+		const reopened = existing.crystal?.status !== 'open';
+		rings = reopened;
+		// a re-opened row restarts its clock so the queue lists it as new
+		await things.updateOne({ _id: existing._id } as any, { $set: { ...reopenSet, ...(reopened ? { createdAt: now } : {}) } });
+	} else {
+		try {
+			await things.insertOne(newSubspaceReportDoc(subspaceId, viewer.id, { postId, commentId, reason, note }, now) as any);
+			rings = true;
+		} catch (err) {
+			if (!isDuplicateKey(err)) throw err; // raced ourselves — refresh the row instead
+			updated = true;
+			await things.updateOne(keyFilter as any, { $set: reopenSet });
+		}
+	}
+	if (rings) {
+		const recipientIds = await moderatorRecipientIds(subspaceId, viewer.id);
+		if (recipientIds.length) {
+			await emitNotificationsBulk(
+				recipientIds.map((recipientId) => ({ recipientId, type: 'subspace-report' as const })),
+				{ actor: notificationActorOf(viewer), targetId: postId, postId, preview: subspaceNotificationPreview(slug, reason) },
+				{ dedupeUnread: true }
+			);
+		}
+	}
+	const row = await things.findOne(keyFilter as any);
+	if (!row) return fail(409, 'That report vanished while it was being filed — try again');
+	return { ok: true, report: toPublicReport(row), updated };
+};
+
+export type ListReportsQuery = SubspaceRef & { status?: unknown; cursor?: unknown; limit?: unknown };
+
+export type PublicReportedPost = {
+	postId: string;
+	// the post as the moderator sees it (removed content included); null when
+	// the post is gone or left the subspace since — dismiss clears such rows
+	post: PublicPost | null;
+	reportCount: number;
+	reasons: ReportReasonTally[];
+	// the newest reporters first, bounded (reportCount is the exact total)
+	reporters: { userId: string; profile: FeedAuthor | null; reason: string; note: string | null; commentId: string | null; createdAt: string }[];
+	latestAt: string;
+	status: SubspaceReportStatus;
+	// resolved queue only: how the last report on the post was settled
+	resolution: SubspaceReportResolution | null;
+};
+
+export type ListReportsResult = { ok: true; reports: PublicReportedPost[]; nextCursor: string | null; status: SubspaceReportStatus; openReportCount: number };
+
+// The Reports queue (moderators): the subspace's report rows of one status,
+// grouped by post — newest activity first — with the reasons tally and the
+// reporters, plus the post re-projected for the mod (one toPublicPosts pass
+// for the page). Groups page by offset over a bounded newest-first window.
+export const listReports = async (viewerInput: string | Viewer, query: ListReportsQuery): Promise<Fail | ListReportsResult> => {
+	const auth = requireViewer(viewerInput);
+	if (auth.ok === false) return auth;
+	const found = await resolveSubspace(query);
+	if (found.ok === false) return found;
+	const id = String(found.subspace.shareId);
+	const gate = await requireModerator(id, auth.viewer.id);
+	if (gate.ok === false) return gate;
+	const status: SubspaceReportStatus = query.status === 'resolved' ? 'resolved' : 'open';
+	const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_PAGE), MAX_PAGE);
+	const offset = Math.max(0, Number(query.cursor) || 0);
+	const things = await getThingsCollection();
+	const groups = (await things
+		.aggregate([
+			{ $match: { thingtime: 'subspace-report', targetId: id, 'crystal.status': status } },
+			{ $sort: { updatedAt: -1, shareId: 1 } },
+			{ $limit: REPORT_WINDOW },
+			{
+				$group: {
+					_id: '$crystal.postId',
+					count: { $sum: 1 },
+					latestAt: { $max: '$updatedAt' },
+					// $push keeps the sorted order: newest report first per post
+					reports: { $push: { userId: '$ownerId', reason: '$crystal.reason', note: '$crystal.note', commentId: '$crystal.commentId', createdAt: '$createdAt', resolution: '$crystal.resolution' } }
+				}
+			},
+			{ $sort: { latestAt: -1, _id: 1 } },
+			{ $skip: offset },
+			{ $limit: limit + 1 }
+		])
+		.toArray()) as any[];
+	const page = groups.slice(0, limit);
+	const nextCursor = groups.length > limit ? String(offset + limit) : null;
+	const postIds = page.map((group) => String(group._id));
+	const viewer = await withFriendIds(auth.viewer);
+	const [postDocs, openReportCount] = await Promise.all([
+		postIds.length ? (things.find(withMatch(postThingMatch(), { shareId: { $in: postIds } }) as any).toArray() as Promise<any[]>) : Promise.resolve([] as any[]),
+		openReportCountFor(id)
+	]);
+	// a post that left the subspace (or was deleted) is no longer this queue's
+	// business as content — the group stays listed with post null so the mods
+	// can dismiss it
+	const visibleDocs = (postDocs as ThingDoc[]).filter((doc) => subspaceIdOfDoc(doc) === id && canView(doc, viewer));
+	const projected = await toPublicPosts(visibleDocs, viewer);
+	const postsById = new Map(projected.map((post) => [post.id, post]));
+	const reporterIds = page.flatMap((group) => (group.reports as any[]).slice(0, MAX_SUBSPACE_REPORT_REPORTERS_LISTED).map((report) => String(report.userId)));
+	const profiles = await resolveProfiles(reporterIds);
+	return {
+		ok: true,
+		reports: page.map((group) => {
+			const reports = (group.reports as any[]).map((report) => ({
+				userId: String(report.userId),
+				reason: String(report.reason || ''),
+				note: typeof report.note === 'string' && report.note ? report.note : null,
+				commentId: typeof report.commentId === 'string' && report.commentId ? report.commentId : null,
+				createdAt: new Date(report.createdAt).toISOString(),
+				resolution: report.resolution ?? null
+			}));
+			return {
+				postId: String(group._id),
+				post: postsById.get(String(group._id)) || null,
+				reportCount: Number(group.count) || reports.length,
+				reasons: tallyReportReasons(reports),
+				reporters: reports.slice(0, MAX_SUBSPACE_REPORT_REPORTERS_LISTED).map(({ userId, reason, note, commentId, createdAt }) => ({ userId, profile: profiles.get(userId) || null, reason, note, commentId, createdAt })),
+				latestAt: new Date(group.latestAt).toISOString(),
+				status,
+				resolution: status === 'resolved' ? reports[0]?.resolution || null : null
+			};
+		}),
+		nextCursor,
+		status,
+		openReportCount
+	};
+};
+
+export type MutateReportsInput = SubspaceRef & { postId?: unknown; action?: unknown };
+export type MutateReportsResult = { ok: true; postId: string; dismissed: number; openReportCount: number };
+
+// POST /reports { postId, action: 'dismiss' } — the mods looked and the post
+// stays: every open report on it is settled with resolution dismissed (mod
+// log report.dismiss). The subspace is the post's; when the post is gone (or
+// left the subspace) the reports' own targetId names it, and an explicit
+// id | slug in the body wins over both.
+export const mutateReports = async (viewerInput: string | Viewer, input: MutateReportsInput): Promise<Fail | MutateReportsResult> => {
+	const auth = requireViewer(viewerInput);
+	if (auth.ok === false) return auth;
+	const actorId = auth.viewer.id;
+	if (typeof input.postId !== 'string' || !input.postId.trim()) return fail(400, 'postId required');
+	if (input.action !== 'dismiss') return fail(400, 'action must be dismiss');
+	const postId = input.postId.trim();
+	const things = await getThingsCollection();
+	let subspaceId: string | null = null;
+	if ((typeof input.id === 'string' && input.id.trim()) || (typeof input.slug === 'string' && input.slug.trim())) {
+		const found = await resolveSubspace(input);
+		if (found.ok === false) return found;
+		subspaceId = String(found.subspace.shareId);
+	} else {
+		const post = (await things.findOne(withMatch(postThingMatch(), { shareId: postId }) as any)) as any;
+		subspaceId = subspaceIdOfDoc(post);
+		if (!subspaceId) {
+			const orphan = (await things.findOne({ ...OPEN_REPORT_MATCH, 'crystal.postId': postId } as any, { projection: { targetId: 1 } })) as any;
+			subspaceId = orphan?.targetId ? String(orphan.targetId) : null;
+		}
+	}
+	if (!subspaceId) return fail(404, 'No open reports on that post');
+	const gate = await requireModerator(subspaceId, actorId);
+	if (gate.ok === false) return gate;
+	const now = new Date();
+	const dismissed = await resolveOpenReports(things, subspaceId, postId, 'dismissed', actorId, now);
+	if (!dismissed) return fail(404, 'No open reports on that post');
+	await writeModlog(subspaceId, actorId, 'report.dismiss', { postId, detail: { count: dismissed } });
+	return { ok: true, postId, dismissed, openReportCount: await openReportCountFor(subspaceId) };
 };
 
 export type ListModlogQuery = SubspaceRef & { cursor?: unknown; limit?: unknown };

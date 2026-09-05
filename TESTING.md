@@ -1236,7 +1236,7 @@ email whose link points at the attacker.
       composer), private subspace 403 for non-members; PATCHing
       `crystal.flairId` re-runs the same gate (author may flair, but not with
       a mod-only flair). Generic `POST /api/v1/things` with
-      `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"updown"]`
+      `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"subspace-report"|"updown"]`
       answers 403.
 - [ ] Moderation (··· menu on a subspace post, mods only): Remove opens the
       **Remove modal** (`remove-modal`: a radio list of the subspace's removal
@@ -1426,6 +1426,40 @@ email whose link points at the attacker.
       `authorFlair` (the root post's subspace, resolved once by the
       interaction gate); the projection resolves every page in ONE
       member-row lookup (posts, shared originals, every comment level).
+- [ ] Reports 🚩: on a subspace post (or a comment under one) a logged-in
+      viewer who is neither the author nor a mod finds **Report to
+      moderators 🚩** in the card's ··· menu (`post-report`; comment rows
+      get a small flag icon, `comment-report`); the **Report modal**
+      (`report-modal`) lists the subspace's rules (Rule N: title — the first
+      one preselected while the form is untouched) + Other and a note (≤500).
+      Confirming closes the modal and toasts "Reported — thanks, the mods will
+      look 🚩" at once (optimistic — a refusal toasts on its own); a comment
+      report lands on the ROOT post (the queue row says "(a comment ↗)").
+      Reporting the same post again refreshes your row (`updated: true`,
+      still one report) and does not ring the mods again; after the mods
+      settled it a new report re-opens it and rings again. Mods get a 🚩
+      `subspace-report` bell entry ("s/<slug> · <reason>", from the reporter,
+      opens `/post/:id` — deduped against their unread bell), a `🚩 N` badge
+      in the post's subspace line (`post-report-badge`, links to the Reports
+      tab — only mods ever see `subspaceMod.reportCount`), the count on
+      **Mod tools 🎩** (requests + reports) and the mod page **Reports** tab
+      (badge = open reports): each reported post renders as its card with
+      the reasons tally (×N), the reporters (name · reason · note · when,
+      ≤20 listed, "…and N more"), **Remove 🧹** (the Remove modal — the
+      removal settles the reports: `post.remove` mod-log detail
+      `resolvedReports`) and **Dismiss ✓** (the post stays; mod-log
+      `report.dismiss` with `detail.count`); both paint first (group leaves,
+      badge drops) and come back on failure (a 404 = settled meanwhile →
+      the queue refreshes). The **Resolved** toggle shows how each post was
+      settled (Removed 🧹 / Approved ✅ / Dismissed ✓); approve settles open
+      reports as `approved` too. A post the author deletes takes its reports
+      with it. API walls: anonymous 401, no reason 400, a 501-char note 400,
+      an unknown OR invisible post 404 (never 400 — existence is not
+      disclosed), a post outside any subspace 400, a banned reporter 403;
+      `GET /api/v1/subspaces/reports` 401 / 403 for non-mods, dismiss 401 /
+      403 / 400 (no postId, bad action) / 404 (nothing open). Generic
+      `POST /api/v1/things` with `thingtime: ["subspace-report"]` answers
+      403. Rate key `subspaces.report` (30/min).
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

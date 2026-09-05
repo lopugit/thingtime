@@ -28,24 +28,28 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { clearLocalCachePrefix } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { SUBSPACE_SLUG_HOLD_DAYS } from '~/schemas/registry';
-import { AuthorFlairChip } from '~/components/Feed/PostCard';
+import { AuthorFlairChip, PostCard } from '~/components/Feed/PostCard';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
-import { BanModal, forgetModerationSubspace, type BanInput } from './ModerationModals';
+import { BanModal, RemoveModal, forgetModerationSubspace, type BanInput, type RemoveChoice } from './ModerationModals';
 import {
 	ACCESS_META,
+	openReportCount,
 	openRequestCount,
 	type PublicAuthorFlair,
 	type PublicModlogEntry,
+	type PublicReportedPost,
 	type PublicSubspace,
 	type PublicSubspaceMember,
 	type SubspaceAccess,
 	type SubspaceDeleteResponse,
+	type SubspaceDismissReportsResponse,
 	type SubspaceFeedResponse,
 	type SubspaceFlair,
 	type SubspaceMemberResponse,
 	type SubspaceRemovalReason,
+	type SubspaceReportsResponse,
 	type SubspaceRule,
 	type SubspaceTransferResponse
 } from './subspaceTypes';
@@ -53,6 +57,8 @@ import {
 // /s/:slug/mod — moderator tools: the queue (newest posts incl. removed ones,
 // every card carrying its mod menu), requests (join requests to a private
 // subspace + posting-approval requests in a restricted one: accept/deny),
+// reports (posts the viewers flagged, grouped with reasons + reporters:
+// Remove through the RemoveModal / Dismiss),
 // members (search + actions, incl. Set flair and Ban through the BanModal),
 // the ban list, settings (identity/branding/access + the owner's Danger zone:
 // transfer ownership / delete), rules (+ removal reasons), flairs (post
@@ -67,7 +73,7 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const RADIUS_LG = 'var(--tt-radius-lg, 16px)';
 
-const TABS = ['queue', 'requests', 'members', 'banned', 'settings', 'rules', 'flairs', 'log'] as const;
+const TABS = ['queue', 'requests', 'reports', 'members', 'banned', 'settings', 'rules', 'flairs', 'log'] as const;
 type ModTab = (typeof TABS)[number];
 
 const Label = ({ children }: { children: React.ReactNode }) => (
@@ -1430,6 +1436,262 @@ const LogPanel = ({ slug }: { slug: string }) => {
 	);
 };
 
+// ── Reports ────────────────────────────────────────────────────────────────
+// The reports viewers filed, grouped by post (GET /api/v1/subspaces/reports):
+// the post as the mod sees it, the reasons tally, who reported it and what
+// they said, then Remove 🧹 (the same RemoveModal as the card menu — the
+// removal settles the reports) or Dismiss ✓ (the post stays). Both paint the
+// decision first (the group leaves, the badge drops) and put it back on
+// failure; a Resolved view shows how each post was settled.
+const timeAgo = (iso: string): string => {
+	const ms = Date.now() - new Date(iso).getTime();
+	const minutes = Math.round(ms / 60_000);
+	if (minutes < 1) return 'just now';
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.round(minutes / 60);
+	if (hours < 48) return `${hours}h ago`;
+	return `${Math.round(hours / 24)}d ago`;
+};
+const RESOLUTION_LABEL: Record<string, string> = { removed: 'Removed 🧹', approved: 'Approved ✅', dismissed: 'Dismissed ✓' };
+
+const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCounts: (patch: { openReportCount?: number }) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const user = useCurrentUser();
+	const { slug } = subspace;
+	const [status, setStatus] = React.useState<'open' | 'resolved'>('open');
+	const [groups, setGroups] = React.useState<PublicReportedPost[]>([]);
+	const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+	const [loading, setLoading] = React.useState(true);
+	const [busyId, setBusyId] = React.useState<string | null>(null);
+	const [removeTarget, setRemoveTarget] = React.useState<PublicReportedPost | null>(null);
+	const onCountsRef = React.useRef(onCounts);
+	onCountsRef.current = onCounts;
+
+	const load = React.useCallback(
+		async (cursor?: string | null) => {
+			setLoading(true);
+			try {
+				const resp = (await api.v1.subspaces.reports({ slug, status, cursor: cursor || undefined, limit: 20 })) as SubspaceReportsResponse;
+				setGroups((prev) => (cursor ? [...prev, ...resp.reports.filter((entry) => !prev.some((known) => known.postId === entry.postId))] : resp.reports));
+				setNextCursor(resp.nextCursor ?? null);
+				// the server's count is the truth for the badges
+				onCountsRef.current({ openReportCount: resp.openReportCount });
+			} catch (err: any) {
+				lopu({ title: err?.error || 'Could not load the reports 😞', status: 'error' });
+			} finally {
+				setLoading(false);
+			}
+		},
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[slug, status]
+	);
+	React.useEffect(() => {
+		load();
+	}, [load]);
+
+	// a card's own optimistic changes (reactions, the ··· menu) land in place
+	const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
+		setGroups((prev) =>
+			prev.map((group) => {
+				if (group.postId !== id || !group.post) return group;
+				const resolved = typeof next === 'function' ? next(group.post) : next;
+				return { ...group, post: resolved };
+			})
+		);
+	}, []);
+
+	// optimistic: the group leaves and the badge drops now; on failure both come back
+	const takeOut = (group: PublicReportedPost) => {
+		setGroups((prev) => prev.filter((entry) => entry.postId !== group.postId));
+		onCounts({ openReportCount: Math.max(0, (subspace.openReportCount || 0) - 1) });
+	};
+	const putBack = (group: PublicReportedPost) => {
+		setGroups((prev) => (prev.some((entry) => entry.postId === group.postId) ? prev : [group, ...prev]));
+		onCounts({ openReportCount: subspace.openReportCount || 0 });
+	};
+
+	const dismiss = async (group: PublicReportedPost) => {
+		if (busyId) return;
+		setBusyId(group.postId);
+		takeOut(group);
+		try {
+			const resp = (await api.v1.subspaces.dismissReports({ postId: group.postId, slug })) as SubspaceDismissReportsResponse;
+			onCounts({ openReportCount: resp.openReportCount });
+			lopu({ title: `Dismissed ${resp.dismissed} report${resp.dismissed === 1 ? '' : 's'} — the post stays ✓`, status: 'success', duration: 4000 });
+		} catch (err: any) {
+			if (err?.status === 404) {
+				// settled meanwhile (another mod, or a removal) — the queue just needs a fresh read
+				lopu({ title: 'Those reports were already settled — refreshing the queue', status: 'info', duration: 4000 });
+				load();
+				return;
+			}
+			putBack(group);
+			lopu({ title: err?.error || 'Could not dismiss those reports 😞', status: 'error' });
+		} finally {
+			setBusyId(null);
+		}
+	};
+
+	// Remove 🧹 through the RemoveModal: moderate(remove) settles the reports
+	// server-side; [+ lock] [+ ban] follow like the card menu's flow. A refused
+	// REMOVE puts the group back and keeps the modal open (it rejects).
+	const removeReported = async (group: PublicReportedPost, choice: RemoveChoice) => {
+		takeOut(group);
+		let latest: PublicPost | null = null;
+		try {
+			const resp: any = await api.v1.subspaces.moderate({
+				id: group.postId,
+				action: 'remove',
+				...(choice.reason ? { reason: choice.reason } : {}),
+				...(choice.reasonId ? { reasonId: choice.reasonId } : {}),
+				...(choice.ruleIndex !== null ? { ruleIndex: choice.ruleIndex } : {})
+			});
+			latest = resp?.post || null;
+		} catch (err: any) {
+			putBack(group);
+			lopu({ title: err?.error || 'Could not remove that post 😞', status: 'error' });
+			throw err;
+		}
+		const followUps: string[] = [];
+		if (choice.lock && !latest?.subspaceMod?.locked) {
+			try {
+				await api.v1.subspaces.moderate({ id: group.postId, action: 'lock' });
+				followUps.push('locked 🔒');
+			} catch (err: any) {
+				lopu({ title: err?.error || 'Removed, but the comments did not lock 😞', status: 'error' });
+			}
+		}
+		const author = group.post?.author || null;
+		if (choice.ban && author) {
+			try {
+				await api.v1.subspaces.mutateMember({ slug, userId: author.id, action: 'ban', ...(choice.banReason ? { reason: choice.banReason } : {}), ...(choice.banDays ? { banDays: choice.banDays } : {}) });
+				followUps.push(`@${author.username} banned${choice.banDays ? ` for ${choice.banDays}d` : ''} 🚫`);
+			} catch (err: any) {
+				lopu({ title: err?.error || 'Removed, but the ban did not go through 😞', status: 'error' });
+			}
+		}
+		lopu({ title: `Removed 🧹 — ${group.reportCount} report${group.reportCount === 1 ? '' : 's'} settled${followUps.length ? ` · ${followUps.join(' · ')}` : ''}`, description: latest?.subspaceMod?.reason || undefined, status: 'success', duration: 5000 });
+	};
+
+	const empty = !loading && groups.length === 0;
+	return (
+		<Flex flexDirection="column" rowGap={3} data-testid="mod-reports">
+			<Flex alignItems="center" columnGap={2} flexWrap="wrap" rowGap={2}>
+				<Text fontSize="sm" color={TEXT} flex="1" minWidth="200px">
+					{status === 'open' ? 'Posts your members flagged, newest activity first — remove them or dismiss the reports.' : 'Reports that were settled — by a removal, an approval or a dismissal.'}
+				</Text>
+				<Flex columnGap={1} data-testid="mod-reports-status">
+					{(['open', 'resolved'] as const).map((entry) => (
+						<Button key={entry} size="xs" borderRadius="999px" variant={status === entry ? 'solid' : 'outline'} background={status === entry ? INK : 'transparent'} color={status === entry ? 'var(--tt-card, #ffffff)' : INK} borderColor="var(--tt-border, #ececef)" _hover={{ opacity: 0.85 }} onClick={() => setStatus(entry)} data-status={entry}>
+							{entry === 'open' ? `Open${subspace.openReportCount ? ` · ${subspace.openReportCount}` : ''}` : 'Resolved'}
+						</Button>
+					))}
+				</Flex>
+			</Flex>
+			{loading && groups.length === 0 && (
+				<Text fontSize="sm" color={MUTED}>
+					Loading…
+				</Text>
+			)}
+			{empty && (
+				<Flex border={BORDER} borderRadius={RADIUS_LG} padding={6} justifyContent="center" background="var(--tt-card, #ffffff)">
+					<Text fontSize="sm" color={MUTED}>
+						{status === 'open' ? 'Nothing reported — all quiet 🕊️' : 'No settled reports yet'}
+					</Text>
+				</Flex>
+			)}
+			{groups.map((group) => (
+				<Flex key={group.postId} flexDirection="column" rowGap={2} data-testid="reported-post" data-post-id={group.postId} data-report-count={group.reportCount}>
+					{group.post ? (
+						<PostCard post={group.post} onChanged={handlePostChanged} />
+					) : (
+						<Flex border={BORDER} borderRadius={RADIUS_LG} padding={4} background="var(--tt-card, #ffffff)">
+							<Text fontSize="sm" color={MUTED}>
+								This post is gone (deleted, or it left the subspace) — dismiss its reports to clear them.
+							</Text>
+						</Flex>
+					)}
+					<Card>
+						<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
+							<Text fontSize="sm" fontWeight={700} color="var(--tt-danger, #e5484d)">
+								🚩 {group.reportCount} report{group.reportCount === 1 ? '' : 's'}
+							</Text>
+							{group.reasons.map((entry) => (
+								<Text key={entry.reason} as="span" fontSize="xs" fontWeight={600} paddingX={2} paddingY="1px" borderRadius="999px" border={BORDER} color={TEXT} whiteSpace="normal" data-testid="report-reason-chip">
+									{entry.reason}
+									{entry.count > 1 ? ` ×${entry.count}` : ''}
+								</Text>
+							))}
+							<Text fontSize="xs" color={MUTED} marginLeft="auto">
+								{status === 'open' ? `latest ${timeAgo(group.latestAt)}` : RESOLUTION_LABEL[group.resolution || ''] || 'Settled'}
+							</Text>
+						</Flex>
+						<Flex flexDirection="column" rowGap={1}>
+							{group.reporters.map((reporter) => (
+								<Flex key={`${reporter.userId}-${reporter.createdAt}`} columnGap={2} rowGap={0.5} flexWrap="wrap" fontSize="xs" alignItems="baseline" data-testid="report-reporter">
+									<Text as={Link} to={reporter.profile?.username ? `/profile/${reporter.profile.username}` : '#'} fontWeight={600} color={INK} _hover={{ textDecoration: 'underline' }}>
+										{reporter.profile?.displayName || reporter.profile?.username || 'Someone'}
+									</Text>
+									<Text color={TEXT}>{reporter.reason}</Text>
+									{reporter.commentId && (
+										<Text as={Link} to={`/post/${reporter.commentId}`} color={MUTED} _hover={{ textDecoration: 'underline' }}>
+											(a comment ↗)
+										</Text>
+									)}
+									{reporter.note && (
+										<Text color={MUTED} whiteSpace="normal" flexBasis="100%">
+											“{reporter.note}”
+										</Text>
+									)}
+									<Text color={MUTED} marginLeft="auto">
+										{timeAgo(reporter.createdAt)}
+									</Text>
+								</Flex>
+							))}
+							{group.reportCount > group.reporters.length && (
+								<Text fontSize="xs" color={MUTED}>
+									…and {group.reportCount - group.reporters.length} more
+								</Text>
+							)}
+						</Flex>
+						{status === 'open' && (
+							<Flex columnGap={2} flexWrap="wrap" rowGap={1}>
+								{group.post && !group.post.subspaceMod?.removed && (
+									<Button size="xs" colorScheme="red" borderRadius="999px" isDisabled={busyId === group.postId} onClick={() => setRemoveTarget(group)} data-testid="report-remove">
+										Remove 🧹
+									</Button>
+								)}
+								<Button size="xs" variant="outline" borderRadius="999px" isDisabled={busyId === group.postId} onClick={() => dismiss(group)} data-testid="report-dismiss">
+									Dismiss ✓
+								</Button>
+							</Flex>
+						)}
+					</Card>
+				</Flex>
+			))}
+			{nextCursor && (
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load(nextCursor)}>
+					Load more ⬇️
+				</Button>
+			)}
+			{removeTarget && (
+				<RemoveModal
+					isOpen
+					onClose={() => setRemoveTarget(null)}
+					api={api}
+					subspaceId={subspace.id}
+					subspaceSlug={slug}
+					authorName={removeTarget.post?.author?.username || null}
+					canBanAuthor={!!removeTarget.post?.author && removeTarget.post.author.id !== user?.id}
+					alreadyLocked={removeTarget.post?.subspaceMod?.locked === true}
+					onRemove={(choice) => removeReported(removeTarget, choice)}
+				/>
+			)}
+		</Flex>
+	);
+};
+
 // ── Page ───────────────────────────────────────────────────────────────────
 export const SubspaceModPage = () => {
 	const { slug = '' } = useParams();
@@ -1502,7 +1764,7 @@ export const SubspaceModPage = () => {
 					<Tabs index={TABS.indexOf(tab)} onChange={(index) => setTab(TABS[index])} variant="soft-rounded" size="sm" colorScheme="gray" isLazy>
 						<TabList flexWrap="wrap" rowGap={1} data-testid="mod-tabs">
 							{TABS.map((entry) => {
-								const badge = entry === 'requests' ? openRequestCount(subspace) : 0;
+								const badge = entry === 'requests' ? openRequestCount(subspace) : entry === 'reports' ? openReportCount(subspace) : 0;
 								return (
 									<Tab
 										key={entry}
@@ -1518,7 +1780,7 @@ export const SubspaceModPage = () => {
 									>
 										{entry}
 										{badge > 0 && (
-											<Text as="span" data-count-pill marginLeft={1.5} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={INK} color="var(--tt-card, #ffffff)" data-testid="mod-requests-badge">
+											<Text as="span" data-count-pill marginLeft={1.5} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={INK} color="var(--tt-card, #ffffff)" data-testid={entry === 'reports' ? 'mod-reports-badge' : 'mod-requests-badge'}>
 												{badge}
 											</Text>
 										)}
@@ -1532,6 +1794,9 @@ export const SubspaceModPage = () => {
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<RequestsPanel subspace={subspace} onCounts={(patch) => setSubspace((prev) => (prev ? { ...prev, ...patch } : prev))} />
+							</TabPanel>
+							<TabPanel paddingX={0}>
+								<ReportsPanel subspace={subspace} onCounts={(patch) => setSubspace((prev) => (prev ? { ...prev, ...patch } : prev))} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<MembersPanel slug={slug} banned={false} isOwner={subspace.viewer.role === 'owner'} subspace={subspace} />

@@ -43,6 +43,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested', 'userFlair'],
   'subspace-modlog': ['action', 'postId', 'userId', 'reason'], // detail: record → dropped
   'subspace-tombstone': ['slug', 'subspaceId', 'previousOwnerId', 'deletedAt'],
+  'subspace-report': ['postId', 'commentId', 'reason', 'note', 'status', 'resolution', 'resolvedById', 'resolvedAt', 'reportKey'],
   folder: ['name', 'icon', 'description'],
   app: [
     'clientId',

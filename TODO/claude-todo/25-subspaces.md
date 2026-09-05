@@ -85,6 +85,19 @@ reactions untouched.
   only default pick, short ban reason, hashed ids for non-Latin titles,
   375px-safe reasons row (moderate 1.3.0, members 1.4.1, notifications-list
   1.2.0).
+- ✅ S5 — reports + the Reports queue: kind `subspace-report` (one row per
+  (post, reporter) on the root `uniqueKeys` namespace, control-plane
+  storage, deleted with the subspace and the post), `POST
+  /api/v1/subspaces/report` (any visible viewer, not banned; comments
+  resolve to the root post; a repeat refreshes / re-opens the row; mods
+  ring `subspace-report`, deduped), `GET /api/v1/subspaces/reports`
+  (grouped by post over a bounded window: reasons tally + reporters + the
+  post) and `POST … { action: 'dismiss' }`; `moderate remove` / `approve`
+  settle open reports; `subspaceMod.reportCount` (mods only, one `$group`
+  per page) + `openReportCount` on the detail; PostCard **Report to
+  moderators 🚩** + ReportModal (comment rows too), the mods' `🚩 N` badge,
+  mod page **Reports** tab (Remove via RemoveModal / Dismiss, Open /
+  Resolved), badges on the tab and Mod tools 🎩; verify section Q.
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

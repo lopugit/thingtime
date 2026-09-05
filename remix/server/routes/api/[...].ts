@@ -201,6 +201,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces/members': () => import('../../../app/routes/api/v1/subspaces/members/_members'),
   'v1/subspaces/moderate': () => import('../../../app/routes/api/v1/subspaces/moderate/_moderate'),
   'v1/subspaces/modlog': () => import('../../../app/routes/api/v1/subspaces/modlog/_modlog'),
+  'v1/subspaces/report': () => import('../../../app/routes/api/v1/subspaces/report/_report'),
+  'v1/subspaces/reports': () => import('../../../app/routes/api/v1/subspaces/reports/_reports'),
   'v1/subspaces/transfer': () => import('../../../app/routes/api/v1/subspaces/transfer/_transfer'),
   'v1/subspaces/update': () => import('../../../app/routes/api/v1/subspaces/update/_update'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),

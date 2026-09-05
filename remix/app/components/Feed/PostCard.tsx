@@ -28,7 +28,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Bookmark, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -51,7 +51,7 @@ import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
 import { UpdownControl } from './UpdownControl';
 import { useSubspacePrefs } from '~/components/Subspaces/useSubspacePrefs';
-import { RemoveModal, loadModerationSubspace, type RemoveChoice } from '~/components/Subspaces/ModerationModals';
+import { RemoveModal, ReportModal, loadModerationSubspace, type RemoveChoice, type ReportChoice } from '~/components/Subspaces/ModerationModals';
 import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
@@ -664,6 +664,17 @@ const AnchoredEmojiPicker = (props: {
 // themselves. Rows with a typed draft stay open — never lose user text.
 const ReplyFocusContext = React.createContext<{ openId: string | null; requestOpen: (id: string) => void } | null>(null);
 
+// The subspace a card's comment tree hangs under, for the comment rows'
+// "Report to moderators 🚩": a comment report resolves to the ROOT post
+// server-side, so rows only need the subspace identity and whether this
+// viewer is one of its moderators (mods remove instead of reporting). null
+// outside subspaces — no 🚩 anywhere else.
+const SubspaceReportContext = React.createContext<{ subspaceId: string; subspaceSlug: string; viewerCanModerate: boolean } | null>(null);
+
+// "Reported — thanks" is painted the instant the modal closes (optimistic:
+// there is nothing on the card to revert); a refusal toasts on its own
+const REPORTED_TOAST = { title: 'Reported — thanks, the mods will look 🚩', status: 'success' as const, duration: 4000 };
+
 // Thread depth is UNBOUNDED, but only this many levels ever indent at once.
 // Opening replies at the cap REFOCUSES the panel on that comment: it slides in
 // as the new top-level row (back arrow slides you out) and its replies restart
@@ -773,6 +784,19 @@ const CommentRow = (props: {
   const threadFocus = React.useContext(ThreadFocusContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
   const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
+  // Report to moderators 🚩 — logged-in non-mods on someone else's comment
+  // under a subspace post (the report lands on the root post)
+  const subspaceReport = React.useContext(SubspaceReportContext);
+  const canReportComment = !!subspaceReport && !subspaceReport.viewerCanModerate && !!user && (!comment.author || comment.author.id !== user.id) && !isPendingComment(comment);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const handleReportComment = async (choice: ReportChoice) => {
+    lopu(REPORTED_TOAST);
+    try {
+      await api.v1.subspaces.report({ id: comment.id, reason: choice.reason, note: choice.note });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'The report did not go through 😞', status: 'error' });
+    }
+  };
 
   // threads ship two levels deep — cached or preloaded replies render
   // immediately (the cache survives collapse/re-expand remounts and reloads)
@@ -1167,6 +1191,26 @@ const CommentRow = (props: {
               </Flex>
               {reactControl}
               {showVotesOnComments && commentUpdown}
+              {canReportComment && (
+                <Flex
+                  as="button"
+                  type="button"
+                  alignItems="center"
+                  padding={1}
+                  borderRadius="999px"
+                  color={MUTED}
+                  _hover={{ color: 'var(--tt-danger, #e5484d)' }}
+                  aria-label="Report this comment to the moderators"
+                  title="Report to moderators 🚩"
+                  onClick={() => setReportOpen(true)}
+                  data-testid="comment-report"
+                >
+                  <Flag size={12} strokeWidth={2.2} />
+                </Flex>
+              )}
+              {canReportComment && reportOpen && subspaceReport && (
+                <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={subspaceReport.subspaceId} subspaceSlug={subspaceReport.subspaceSlug} target="comment" onReport={handleReportComment} />
+              )}
             </Flex>
             {/* thread reveal lives BELOW the comment (FB/IG-style), left
             edge flush with the reply icon */}
@@ -1339,6 +1383,24 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // subspace moderation rights ride the projection (viewerCanModerate); the
   // vote pill is a per-browser preference (Settings → Subspaces)
   const canModerate = !!post.subspaceMod?.viewerCanModerate;
+  // Report to moderators 🚩: logged-in viewers who are neither the author nor
+  // a moderator, on a subspace post (mods remove instead; media cards defer
+  // to their parent post)
+  const canReport = !!user && !isOwner && !canModerate && !!post.subspace && !mediaThing;
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const handleReport = async (choice: ReportChoice) => {
+    lopu(REPORTED_TOAST);
+    try {
+      await api.v1.subspaces.report({ id: post.id, reason: choice.reason, note: choice.note });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'The report did not go through 😞', status: 'error' });
+    }
+  };
+  // the comment rows' 🚩 context (null outside subspaces)
+  const subspaceReportContext = React.useMemo(
+    () => (post.subspace ? { subspaceId: post.subspace.id, subspaceSlug: post.subspace.slug, viewerCanModerate: canModerate } : null),
+    [post.subspace, canModerate]
+  );
   const [subspacePrefs] = useSubspacePrefs();
   const showVotes = subspacePrefs.showVotes;
 
@@ -1941,8 +2003,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Tooltip>
             </Flex>
           </Box>
-          {(isOwner || canModerate) && (
-            <Menu placement="bottom-end" autoSelect={false} onOpen={loadFlairs}>
+          {(isOwner || canModerate || canReport) && (
+            <Menu placement="bottom-end" autoSelect={false} onOpen={isOwner || canModerate ? loadFlairs : undefined}>
               <MenuButton
                 as={IconButton}
 				aria-label={mediaThing ? 'Media options' : 'Post options'}
@@ -1982,7 +2044,15 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                     </MenuItem>
                   </>
                 )}
-                {!mediaThing && post.subspace && (
+                {canReport && post.subspace && (
+                  <>
+                    <MenuDivider />
+                    <MenuItem fontSize="sm" onClick={() => setReportOpen(true)} data-testid="post-report">
+                      Report to moderators 🚩
+                    </MenuItem>
+                  </>
+                )}
+                {!mediaThing && post.subspace && (isOwner || canModerate) && (
                   <>
                     <MenuDivider />
                     {canModerate && (
@@ -2055,6 +2125,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               onRemove={handleRemoveWithReason}
             />
           )}
+          {canReport && post.subspace && reportOpen && (
+            <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={post.subspace.id} subspaceSlug={post.subspace.slug} target="post" onReport={handleReport} />
+          )}
         </Flex>
 
         {/* subspace context — where the post lives, its flair, mod badges */}
@@ -2115,6 +2188,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             {post.subspaceMod?.spoiler && (
               <Text as="span" color={MUTED}>
                 ⚠️ Spoiler
+              </Text>
+            )}
+            {canModerate && post.subspace && (post.subspaceMod?.reportCount || 0) > 0 && (
+              <Text
+                as={Link}
+                to={`/s/${post.subspace.slug}/mod?tab=reports`}
+                fontWeight={700}
+                color="var(--tt-danger, #e5484d)"
+                title={`${post.subspaceMod!.reportCount} open report${post.subspaceMod!.reportCount === 1 ? '' : 's'} — open the Reports queue`}
+                onClick={(event: React.MouseEvent) => event.stopPropagation()}
+                data-testid="post-report-badge"
+                data-count={post.subspaceMod!.reportCount}
+              >
+                🚩 {post.subspaceMod!.reportCount}
               </Text>
             )}
           </Flex>
@@ -2441,16 +2528,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   Thread 🧵
                 </Text>
               </Flex>
-								<CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+								<SubspaceReportContext.Provider value={subspaceReportContext}>
+									<CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+								</SubspaceReportContext.Provider>
             </Flex>
           </ThreadFocusContext.Provider>
         )}
         {commentsOpen && !focusedComment && (
           <ThreadFocusContext.Provider value={threadFocusValue}>
 							<Flex flexDirection="column" rowGap={3} sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}>
-            {post.comments.slice(-visibleComments).map((comment) => (
-              <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
-            ))}
+            <SubspaceReportContext.Provider value={subspaceReportContext}>
+              {post.comments.slice(-visibleComments).map((comment) => (
+                <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
+              ))}
+            </SubspaceReportContext.Provider>
 
             {/* the reveal control sits BELOW the conversation (FB-style);
             the OLDER comments it reveals render above the visible list */}

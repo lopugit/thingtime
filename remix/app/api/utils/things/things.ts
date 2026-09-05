@@ -77,6 +77,7 @@ import {
 	canModerate as canModerateSubspace,
 	isActiveMember as isActiveSubspaceMember,
 	loadAuthorFlairs,
+	loadOpenReportCounts,
 	loadSubspaceEmbeds,
 	loadViewerSubspaceRoles,
 	membershipOf as subspaceMembershipOf,
@@ -396,6 +397,9 @@ export type PublicSubspaceMod = {
 	nsfw: boolean;
 	spoiler: boolean;
 	viewerCanModerate: boolean;
+	// moderators only: open reports against the post (the card's 🚩 badge, the
+	// mod page's Reports queue) — one $group per page; absent for everyone else
+	reportCount?: number;
 };
 
 // Generic projection for non-post things (and the unified read endpoint).
@@ -2236,9 +2240,17 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => flairPairs.push({ subspaceId, userId: comment.userId }));
     collectCommentAuthors(doc.shareId, subspaceId, 1);
   }
+  // open-report counts: only for the subspace posts this viewer MODERATES
+  // (the pairs are known from the roster already on the viewer), ONE $group
+  // for the page — everyone else's read never touches the report rows
+  const reportPairs: { subspaceId: string; postId: string }[] = [];
+  for (const doc of allDocs) {
+    const subspaceId = subspaceIdOfDoc(doc);
+    if (subspaceId && canModerateSubspace(viewer?.subspaceRoles?.get(subspaceId) || null)) reportPairs.push({ subspaceId, postId: doc.shareId });
+  }
   // Attachments and profiles both derive from `related`, but NOT from each
   // other — running them together keeps the second off the critical path.
-  const [attachmentsByTarget, profiles, subspaces, authorFlairs] = await Promise.all([
+  const [attachmentsByTarget, profiles, subspaces, authorFlairs, openReportCounts] = await Promise.all([
     resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
     resolveProfiles(userIds),
     // subspace embeds for the page — one $in over the subspace kind. Keyed by
@@ -2247,7 +2259,8 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // the live templates: a renamed template follows the wearer on the
     // thread drill-down too, not only on the post page.
     loadSubspaceEmbeds(allDocs.map((doc) => rootSubspaceOf(doc)).filter(Boolean) as string[]),
-    loadAuthorFlairs(flairPairs)
+    loadAuthorFlairs(flairPairs),
+    loadOpenReportCounts(reportPairs)
   ]);
   const authorFlairOf = (subspaceId: string | null, userId: string): PublicAuthorFlair | null =>
     subspaceId ? authorFlairFor(authorFlairs, subspaces.get(subspaceId) || null, subspaceId, userId) : null;
@@ -2329,7 +2342,9 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           locked: modState?.locked === true,
           nsfw: modState?.nsfw === true || subspaceEmbed?.nsfw === true,
           spoiler: modState?.spoiler === true,
-          viewerCanModerate
+          viewerCanModerate,
+          // the 🚩 count is the mods' business only
+          ...(viewerCanModerate ? { reportCount: openReportCounts.get(doc.shareId) || 0 } : {})
         }
       : null;
 
@@ -4294,6 +4309,13 @@ export const deleteThing = async (
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
+				// a subspace post takes its reports with it: they hang off the post by
+				// crystal.postId (targetId = the subspace), so the targetId cascade
+				// above never sees them — plumbing rows, no accounting to refund
+				const deletedSubspaceId = thingtimeOf(rootResult.doc).includes('post') ? subspaceIdOfDoc(rootResult.doc) : null;
+				if (deletedSubspaceId) {
+					await things.deleteMany({ thingtime: 'subspace-report', targetId: deletedSubspaceId, 'crystal.postId': rootResult.doc.shareId } as any);
+				}
 				// deleting a folder never deletes what's inside it — contents (and
 				// subfolders) re-parent to the deleted folder's own parent, so the
 				// worst a folder delete can do to your things is flatten them one level

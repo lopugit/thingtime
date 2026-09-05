@@ -31,7 +31,16 @@
 // server-side, every wall), the author's bell comes from the subspace's
 // mod team with the reason's headline (never the moderator the projection
 // hides), so does the ban bell, and a title with no Latin characters still
-// mints a (hashed) removal-reason id.
+// mints a (hashed) removal-reason id — and (section Q) reports: POST
+// /subspaces/report with every wall (401 / 400 / 404 never disclosing /
+// 403 banned), a comment resolving to its root post, one row per (post,
+// reporter) refreshed by a repeat, the mods' subspace-report bell (deduped,
+// never the reporter's), the moderator-only reportCount on the post
+// projection + openReportCount on the detail, the grouped Reports queue
+// (open / resolved, walls 401 / 403 / 400 / 404), dismiss + its mod-log
+// row, remove / approve settling open reports (detail.resolvedReports), a
+// deleted post taking its reports with it, the generic-things wall and the
+// manifest.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -360,7 +369,7 @@ const run = async () => {
 	const settings = await api('/api/v1/subspaces/update', { method: 'POST', cookie: mod.cookie, body: { slug, name: 'Verify Space ✨', description: 'Updated', branding: { accent: 'hotpink' }, rules: ['One'], flairs: [{ label: 'Meta' }] } });
 	check('mod edits identity/branding/rules/flairs', settings.status === 200 && settings.body.subspace.name === 'Verify Space ✨' && settings.body.subspace.branding.accent === 'hotpink' && settings.body.subspace.flairs[0].id === 'meta');
 	const manifest = await api('/api/v1/capabilities');
-	check('capability manifest advertises the new contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons, updown 1.0.0, things-feed 1.2.0 — authorFlair)', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.3.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.2.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
+	check('capability manifest advertises the new contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons, updown 1.0.0, things-feed 1.2.0 → 1.3.0 with S5 reportCount)', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.3.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.3.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
 	const docs = await api('/api/v1/subspaces/moderate-docs');
 	check('docs routes answer for the family', docs.status === 200 && docs.body.docs?.endpoint === '/api/v1/subspaces/moderate');
 
@@ -802,8 +811,8 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; get/list/update 1.3.0 + members 1.4.1 after the S3 user-flair bump + review + the S4 ban note + the S4 review mod-team ban bell)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.3.0' && manifest3.body.features['api.subspaces'] === '1.3.0' && manifest3.body.features['api.subspaces-members'] === '1.4.1' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
+		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; list/update 1.3.0, get 1.4.0 after the S5 openReportCount bump, members 1.4.1 after the S3 user-flair bump + review + the S4 ban note + the S4 review mod-team ban bell)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.4.0' && manifest3.body.features['api.subspaces'] === '1.3.0' && manifest3.body.features['api.subspaces-members'] === '1.4.1' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
 		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
 	);
 
@@ -1180,13 +1189,13 @@ const run = async () => {
 	check('authorFlair is never client-writable (a PATCH smuggling it changes nothing)', genericFlair.status !== 500 && genericRead.body?.post?.authorFlair?.id === 'prism' && genericRead.body.post.authorFlair.label === 'Prism', `${genericFlair.status} ${JSON.stringify(genericRead.body?.post?.authorFlair)}`);
 	const manifestO = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0 → 1.3.0 with S4 removalReasons, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.2.0, things / things-comment / things-feed / things-user 1.2.0)',
-		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.3.0' && manifestO.body.features['api.subspaces-get'] === '1.3.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.2.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
+		'capability manifest advertises the user-flair contracts (subspaces / update 1.2.0 → 1.3.0 with S4 removalReasons, get → 1.4.0 with S5 openReportCount, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.3.0 with S4 + S5 reportCount, things / things-comment / things-feed / things-user 1.2.0 → 1.3.0 with S5 reportCount)',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.3.0' && manifestO.body.features['api.subspaces-get'] === '1.4.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.3.0'),
 		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
 	);
 	check(
-		'S3 review: every other contract whose shape grew user flairs is bumped (join / leave 1.2.0 → 1.3.0 with S4 removalReasons — subspace block + viewer.userFlair; transfer 1.1.0 → 1.2.0 — newOwner.userFlair; moderate 1.1.0 → 1.3.0 — post.authorFlair + S4 reasonId + S4 review ruleIndex; members 1.3.1 → 1.4.1 — kick / ban / demotion strip + the owner dressable + S4 ban note + S4 review)',
-		manifestO.body?.features?.['api.subspaces-join'] === '1.3.0' && manifestO.body.features['api.subspaces-leave'] === '1.3.0' && manifestO.body.features['api.subspaces-transfer'] === '1.2.0' && manifestO.body.features['api.subspaces-moderate'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1',
+		'S3 review: every other contract whose shape grew user flairs is bumped (join / leave 1.2.0 → 1.3.0 with S4 removalReasons — subspace block + viewer.userFlair; transfer 1.1.0 → 1.2.0 — newOwner.userFlair; moderate 1.1.0 → 1.4.0 — post.authorFlair + S4 reasonId + S4 review ruleIndex + S5 report settlement; members 1.3.1 → 1.4.1 — kick / ban / demotion strip + the owner dressable + S4 ban note + S4 review)',
+		manifestO.body?.features?.['api.subspaces-join'] === '1.3.0' && manifestO.body.features['api.subspaces-leave'] === '1.3.0' && manifestO.body.features['api.subspaces-transfer'] === '1.2.0' && manifestO.body.features['api.subspaces-moderate'] === '1.4.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1',
 		JSON.stringify({ j: manifestO.body?.features?.['api.subspaces-join'], l: manifestO.body?.features?.['api.subspaces-leave'], t: manifestO.body?.features?.['api.subspaces-transfer'], mo: manifestO.body?.features?.['api.subspaces-moderate'], m: manifestO.body?.features?.['api.subspaces-members'] })
 	);
 	const cleanupO = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, confirmSlug: flairSlug } });
@@ -1393,12 +1402,233 @@ const run = async () => {
 	// the manifest
 	const manifestP = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the S4 contracts (subspaces / get / update / join / leave 1.3.0 — removalReasons; feed / transfer 1.2.0; moderate 1.3.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
-		manifestP.status === 200 && ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && ['api.subspaces-feed', 'api.subspaces-transfer'].every((feature) => manifestP.body.features[feature] === '1.2.0') && manifestP.body.features['api.subspaces-moderate'] === '1.3.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
+		'capability manifest advertises the S4 contracts (subspaces / update / join / leave 1.3.0 — removalReasons; get 1.4.0 with S5 openReportCount; transfer 1.2.0; feed 1.3.0 with S5 reportCount; moderate 1.4.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification + S5 report settlement; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
+		manifestP.status === 200 && ['api.subspaces', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && manifestP.body.features['api.subspaces-get'] === '1.4.0' && manifestP.body.features['api.subspaces-transfer'] === '1.2.0' && manifestP.body.features['api.subspaces-feed'] === '1.3.0' && manifestP.body.features['api.subspaces-moderate'] === '1.4.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
 		JSON.stringify({ s: manifestP.body?.features?.['api.subspaces'], u: manifestP.body?.features?.['api.subspaces-update'], mo: manifestP.body?.features?.['api.subspaces-moderate'], m: manifestP.body?.features?.['api.subspaces-members'], f: manifestP.body?.features?.['api.subspaces-feed'], t: manifestP.body?.features?.['api.subspaces-transfer'], n: manifestP.body?.features?.['api.notifications-list'] })
 	);
 	const cleanupP = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, confirmSlug: rrSlug } });
 	check('(cleanup) owner deletes the removal-reasons subspace', cleanupP.status === 200, `${cleanupP.status} ${JSON.stringify(cleanupP.body).slice(0, 200)}`);
+
+	console.log('\nQ. reports + the Reports queue');
+	// a fresh PUBLIC subspace with two rules: owner founds it, mod is
+	// promoted, member and stranger join
+	const rpSlug = `rp_${suffix}`.slice(0, 30);
+	const foundedRP = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: rpSlug, name: 'Report Park', access: 'public', rules: [{ title: 'Be kind' }, { title: 'No spam', text: 'Ads go elsewhere.' }] } });
+	check('(setup) owner founds a public subspace with two rules', foundedRP.status === 201 && foundedRP.body.subspace?.rules?.length === 2, `${foundedRP.status} ${JSON.stringify(foundedRP.body).slice(0, 200)}`);
+	const rpSpace = foundedRP.body.subspace;
+	const rpReport = (cookie, body) => api('/api/v1/subspaces/report', { method: 'POST', cookie, body });
+	const rpQueue = async (cookie, extra = '') => api(`/api/v1/subspaces/reports?slug=${rpSlug}${extra}`, { cookie });
+	const rpDismiss = (cookie, body) => api('/api/v1/subspaces/reports', { method: 'POST', cookie, body });
+	const rpModerate = (cookie, body) => api('/api/v1/subspaces/moderate', { method: 'POST', cookie, body });
+	const rpMembers = (cookie, body) => api('/api/v1/subspaces/members', { method: 'POST', cookie, body: { slug: rpSlug, ...body } });
+	const rpLog = async (cookie) => (await api(`/api/v1/subspaces/modlog?slug=${rpSlug}&limit=50`, { cookie })).body?.entries || [];
+	const rpDetail = (cookie) => api(`/api/v1/subspaces/get?slug=${rpSlug}`, { cookie });
+	const reportNotifsOf = async (cookie, postId) => (await notifsOf(cookie)).items.filter((n) => n.type === 'subspace-report' && n.postId === postId);
+	await api('/api/v1/subspaces/join', { method: 'POST', cookie: mod.cookie, body: { slug: rpSlug } });
+	const promoteRPMod = await rpMembers(owner.cookie, { userId: mod.id, action: 'role', role: 'moderator' });
+	const memberJoinsRP = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: rpSlug } });
+	const strangerJoinsRP = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: rpSlug } });
+	check('(setup) mod promoted, member + stranger joined', promoteRPMod.status === 200 && promoteRPMod.body.member?.role === 'moderator' && memberJoinsRP.status === 200 && strangerJoinsRP.status === 200, `${promoteRPMod.status}/${memberJoinsRP.status}/${strangerJoinsRP.status}`);
+	const rpPosted = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'buy my thing', title: 'Member post', subspaceId: rpSpace.id } });
+	const rpPost = rpPosted.body?.post;
+	const rpCommented = await api('/api/v1/things/comment', { method: 'POST', cookie: stranger.cookie, body: { id: rpPost?.id, text: 'no thanks' } });
+	const rpComment = rpCommented.body?.comment;
+	const rpReplied = await api('/api/v1/things/comment', { method: 'POST', cookie: member.cookie, body: { id: rpComment?.id, text: 'rude!' } });
+	const rpReply = rpReplied.body?.comment;
+	check('(setup) a post, a comment and a nested reply', rpPosted.status === 200 && !!rpPost?.id && rpCommented.status === 200 && !!rpComment?.id && rpReplied.status === 200 && !!rpReply?.id, `${rpPosted.status}/${rpCommented.status}/${rpReplied.status}`);
+	const privateOutside = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'my private note', visibility: 'private' } });
+	check('(setup) a private post outside any subspace', privateOutside.status === 200 && !!privateOutside.body?.post?.id, `${privateOutside.status}`);
+
+	// defaults
+	const rpModRead0 = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: mod.cookie });
+	const rpMemberRead0 = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: stranger.cookie });
+	const rpOwnerDetail0 = await rpDetail(owner.cookie);
+	const rpMemberDetail0 = await rpDetail(stranger.cookie);
+	check(
+		'defaults: a mod reads subspaceMod.reportCount 0, a member gets no reportCount key; the owner’s detail says openReportCount 0, a member’s detail has no such key',
+		rpModRead0.body?.post?.subspaceMod?.reportCount === 0 && rpMemberRead0.status === 200 && !('reportCount' in (rpMemberRead0.body?.post?.subspaceMod || {})) && rpOwnerDetail0.body?.subspace?.openReportCount === 0 && !('openReportCount' in (rpMemberDetail0.body?.subspace || {})),
+		JSON.stringify([rpModRead0.body?.post?.subspaceMod, rpMemberRead0.body?.post?.subspaceMod, rpOwnerDetail0.body?.subspace?.openReportCount, rpMemberDetail0.body?.subspace?.openReportCount])
+	);
+	const modReportBells0 = (await reportNotifsOf(mod.cookie, rpPost.id)).length;
+	const ownerReportBells0 = (await reportNotifsOf(owner.cookie, rpPost.id)).length;
+
+	// report walls
+	const rpAnon = await rpReport(null, { id: rpPost.id, reason: 'Spam' });
+	check('anonymous report → 401', rpAnon.status === 401);
+	const rpNoReason = await rpReport(stranger.cookie, { id: rpPost.id });
+	const rpBlankReason = await rpReport(stranger.cookie, { id: rpPost.id, reason: '   ' });
+	check('report without a reason (missing / blank) → 400', rpNoReason.status === 400 && rpBlankReason.status === 400, `${rpNoReason.status}/${rpBlankReason.status} ${JSON.stringify(rpNoReason.body)}`);
+	const rpLongNote = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam', note: 'n'.repeat(501) });
+	check('a 501-char note → 400', rpLongNote.status === 400, `${rpLongNote.status} ${JSON.stringify(rpLongNote.body)}`);
+	const rpNoId = await rpReport(stranger.cookie, { reason: 'Spam' });
+	check('report without an id → 400', rpNoId.status === 400);
+	const rpUnknown = await rpReport(stranger.cookie, { id: 'no-such-post', reason: 'Spam' });
+	check('report of an unknown id → 404', rpUnknown.status === 404, `${rpUnknown.status}`);
+	const rpInvisible = await rpReport(stranger.cookie, { id: privateOutside.body.post.id, reason: 'Spam' });
+	check('report of a post the reporter cannot see → 404 (never 400 — existence is not disclosed)', rpInvisible.status === 404, `${rpInvisible.status} ${JSON.stringify(rpInvisible.body)}`);
+	const rpOutside = await rpReport(stranger.cookie, { id: outsidePost.body.post.id, reason: 'Spam' });
+	check('report of a visible post outside any subspace → 400', rpOutside.status === 400, `${rpOutside.status} ${JSON.stringify(rpOutside.body)}`);
+	const rpBanStranger = await rpMembers(mod.cookie, { userId: stranger.id, action: 'ban', reason: 'timeout' });
+	const rpBannedReport = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
+	const rpUnbanStranger = await rpMembers(mod.cookie, { userId: stranger.id, action: 'unban' });
+	check('a user banned in the subspace reporting there → 403 (unban → allowed again)', rpBanStranger.status === 200 && rpBannedReport.status === 403 && rpUnbanStranger.status === 200, `${rpBanStranger.status}/${rpBannedReport.status}/${rpUnbanStranger.status} ${JSON.stringify(rpBannedReport.body)}`);
+	const rpQueueBefore = await rpQueue(mod.cookie);
+	check('nothing reached the queue through the walls (open queue empty, openReportCount 0)', rpQueueBefore.status === 200 && rpQueueBefore.body.reports?.length === 0 && rpQueueBefore.body.openReportCount === 0 && rpQueueBefore.body.status === 'open', `${rpQueueBefore.status} ${JSON.stringify(rpQueueBefore.body).slice(0, 200)}`);
+
+	// queue walls
+	const rpQueueAnon = await rpQueue(null);
+	check('anonymous GET /reports → 401', rpQueueAnon.status === 401);
+	const rpQueueMember = await rpQueue(stranger.cookie);
+	check('a plain member’s GET /reports → 403', rpQueueMember.status === 403, `${rpQueueMember.status}`);
+	const rpQueueMissing = await api('/api/v1/subspaces/reports?slug=no_such_space_here', { cookie: mod.cookie });
+	check('GET /reports for an unknown subspace → 404', rpQueueMissing.status === 404);
+	const rpDismissAnon = await rpDismiss(null, { postId: rpPost.id, action: 'dismiss' });
+	check('anonymous dismiss → 401', rpDismissAnon.status === 401);
+	const rpDismissMember = await rpDismiss(stranger.cookie, { postId: rpPost.id, action: 'dismiss' });
+	check('a plain member’s dismiss → 403', rpDismissMember.status === 403, `${rpDismissMember.status} ${JSON.stringify(rpDismissMember.body)}`);
+	const rpDismissNoPost = await rpDismiss(mod.cookie, { action: 'dismiss' });
+	const rpDismissBadAction = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'ignore' });
+	check('dismiss without a postId / with an unknown action → 400', rpDismissNoPost.status === 400 && rpDismissBadAction.status === 400, `${rpDismissNoPost.status}/${rpDismissBadAction.status}`);
+	const rpDismissNothing = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'dismiss' });
+	check('dismiss with nothing open on the post → 404', rpDismissNothing.status === 404, `${rpDismissNothing.status} ${JSON.stringify(rpDismissNothing.body)}`);
+
+	// happy path: the stranger reports the post
+	const rpFirst = await rpReport(stranger.cookie, { id: rpPost.id, reason: '  Rule 2:   No spam ', note: '  third   ad   this week ' });
+	check(
+		'stranger reports the post → 200, updated false; the row is open on the post with the collapsed reason + note and no commentId',
+		rpFirst.status === 200 && rpFirst.body.updated === false && rpFirst.body.report?.postId === rpPost.id && rpFirst.body.report.commentId === null && rpFirst.body.report.subspaceId === rpSpace.id && rpFirst.body.report.reason === 'Rule 2: No spam' && rpFirst.body.report.note === 'third ad this week' && rpFirst.body.report.status === 'open' && rpFirst.body.report.resolution === null,
+		`${rpFirst.status} ${JSON.stringify(rpFirst.body)}`
+	);
+	const modReportBells1 = await reportNotifsOf(mod.cookie, rpPost.id);
+	const ownerReportBells1 = await reportNotifsOf(owner.cookie, rpPost.id);
+	check(
+		'the mods (mod + owner) each get a subspace-report bell row: actor = the reporter, targetId + postId = the post, preview "s/<slug> · <reason>"',
+		modReportBells1.length === modReportBells0 + 1 && ownerReportBells1.length === ownerReportBells0 + 1 && [...modReportBells1, ...ownerReportBells1].every((n) => n.actorId === stranger.id && n.targetId === rpPost.id && n.postId === rpPost.id) && modReportBells1.some((n) => n.preview === `s/${rpSlug} · Rule 2: No spam`),
+		JSON.stringify([modReportBells1.map((n) => [n.actorId === stranger.id, n.targetId, n.preview]), ownerReportBells1.length - ownerReportBells0])
+	);
+	check('…the reporter and the author hear nothing (no subspace-report rows for them)', (await reportNotifsOf(stranger.cookie, rpPost.id)).length === 0 && (await reportNotifsOf(member.cookie, rpPost.id)).length === 0);
+	const rpAgain = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam, again' });
+	const rpQueueAfterAgain = await rpQueue(mod.cookie);
+	check(
+		'reporting the same post again → 200 updated true: still ONE row, the reason refreshed, the note cleared, and no second bell for the mods',
+		rpAgain.status === 200 && rpAgain.body.updated === true && rpAgain.body.report?.id === rpFirst.body.report.id && rpAgain.body.report.reason === 'Spam, again' && rpAgain.body.report.note === null && rpQueueAfterAgain.body.reports?.length === 1 && rpQueueAfterAgain.body.reports[0].reportCount === 1 && rpQueueAfterAgain.body.reports[0].reasons?.[0]?.reason === 'Spam, again' && (await reportNotifsOf(mod.cookie, rpPost.id)).length === modReportBells0 + 1,
+		`${rpAgain.status} ${JSON.stringify([rpAgain.body, rpQueueAfterAgain.body?.reports?.[0]?.reasons])}`
+	);
+
+	// a comment (nested reply, even) resolves to the root post
+	const rpOwnerReportsReply = await rpReport(owner.cookie, { id: rpReply.id, reason: 'Rule 1: Be kind', note: 'name-calling' });
+	check(
+		'reporting a nested reply → 200: the report lands on the ROOT post (postId = the post, commentId = the reply)',
+		rpOwnerReportsReply.status === 200 && rpOwnerReportsReply.body.updated === false && rpOwnerReportsReply.body.report?.postId === rpPost.id && rpOwnerReportsReply.body.report.commentId === rpReply.id,
+		`${rpOwnerReportsReply.status} ${JSON.stringify(rpOwnerReportsReply.body)}`
+	);
+	const rpQueue2 = await rpQueue(mod.cookie);
+	const rpGroup = rpQueue2.body?.reports?.find((group) => group.postId === rpPost.id);
+	check(
+		'the queue groups both by post: reportCount 2, reasons tally (each ×1, alphabetical), reporters newest first with the reply’s commentId + note, latestAt set, the post projected with subspaceMod.reportCount 2 + viewerCanModerate; openReportCount 2',
+		rpQueue2.status === 200 && rpQueue2.body.reports.length === 1 && rpGroup?.reportCount === 2 && JSON.stringify(rpGroup.reasons) === JSON.stringify([{ reason: 'Rule 1: Be kind', count: 1 }, { reason: 'Spam, again', count: 1 }]) && rpGroup.reporters?.length === 2 && rpGroup.reporters[0].userId === owner.id && rpGroup.reporters[0].commentId === rpReply.id && rpGroup.reporters[0].note === 'name-calling' && rpGroup.reporters[0].profile?.username === owner.username && rpGroup.reporters[1].userId === stranger.id && typeof rpGroup.latestAt === 'string' && rpGroup.post?.id === rpPost.id && rpGroup.post.subspaceMod?.reportCount === 2 && rpGroup.post.subspaceMod.viewerCanModerate === true && rpGroup.status === 'open' && rpQueue2.body.openReportCount === 2,
+		JSON.stringify({ n: rpQueue2.body?.reports?.length, group: rpGroup && { ...rpGroup, post: rpGroup.post && { id: rpGroup.post.id, subspaceMod: rpGroup.post.subspaceMod } } })
+	);
+	const rpOwnerQueue = await rpQueue(owner.cookie, '&limit=1');
+	check('the owner reads the same queue (limit honoured, no next page for one group)', rpOwnerQueue.status === 200 && rpOwnerQueue.body.reports?.length === 1 && rpOwnerQueue.body.nextCursor === null, `${rpOwnerQueue.status} ${JSON.stringify(rpOwnerQueue.body?.nextCursor)}`);
+
+	// projection: reportCount is the mods' business only
+	const rpModRead = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: mod.cookie });
+	const rpModFeed = await api(`/api/v1/subspaces/feed?slug=${rpSlug}&sort=new`, { cookie: mod.cookie });
+	const rpModHome = await api('/api/v1/things/feed?algorithm=latest&limit=20', { cookie: mod.cookie });
+	const rpStrangerRead = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: stranger.cookie });
+	const rpAuthorRead = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: member.cookie });
+	const rpAnonRead = await api(`/api/v1/things?id=${rpPost.id}`);
+	check(
+		'a moderator sees subspaceMod.reportCount 2 on the post read, the subspace feed and the home feed; the reporter, the author and an anonymous reader get no reportCount key at all',
+		rpModRead.body?.post?.subspaceMod?.reportCount === 2 && rpModFeed.body?.posts?.find((entry) => entry.id === rpPost.id)?.subspaceMod?.reportCount === 2 && (rpModHome.body?.posts?.find((entry) => entry.id === rpPost.id)?.subspaceMod?.reportCount ?? 2) === 2 && !('reportCount' in (rpStrangerRead.body?.post?.subspaceMod || {})) && !('reportCount' in (rpAuthorRead.body?.post?.subspaceMod || {})) && !('reportCount' in (rpAnonRead.body?.post?.subspaceMod || {})),
+		JSON.stringify([rpModRead.body?.post?.subspaceMod?.reportCount, rpModFeed.body?.posts?.find((entry) => entry.id === rpPost.id)?.subspaceMod?.reportCount, rpStrangerRead.body?.post?.subspaceMod, rpAnonRead.body?.post?.subspaceMod])
+	);
+	const rpOwnerDetail = await rpDetail(owner.cookie);
+	const rpStrangerDetail = await rpDetail(stranger.cookie);
+	check('detail: the owner sees openReportCount 2; a member still has no such key', rpOwnerDetail.body?.subspace?.openReportCount === 2 && !('openReportCount' in (rpStrangerDetail.body?.subspace || {})), JSON.stringify([rpOwnerDetail.body?.subspace?.openReportCount, rpStrangerDetail.body?.subspace?.openReportCount]));
+
+	// dismiss
+	const rpDismissed = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'dismiss' });
+	const rpQueueAfterDismiss = await rpQueue(mod.cookie);
+	const rpResolvedQueue = await rpQueue(mod.cookie, '&status=resolved');
+	const rpResolvedGroup = rpResolvedQueue.body?.reports?.find((group) => group.postId === rpPost.id);
+	const rpModReadAfterDismiss = await api(`/api/v1/things?id=${rpPost.id}`, { cookie: mod.cookie });
+	check(
+		'dismiss → 200 { dismissed 2, openReportCount 0 }: the open queue empties, the resolved queue lists the post with resolution dismissed + reportCount 2, the post’s reportCount reads 0 and the post stays up',
+		rpDismissed.status === 200 && rpDismissed.body.dismissed === 2 && rpDismissed.body.openReportCount === 0 && rpDismissed.body.postId === rpPost.id && rpQueueAfterDismiss.body?.reports?.length === 0 && rpQueueAfterDismiss.body.openReportCount === 0 && rpResolvedQueue.status === 200 && rpResolvedQueue.body.status === 'resolved' && rpResolvedGroup?.reportCount === 2 && rpResolvedGroup.resolution === 'dismissed' && rpResolvedGroup.status === 'resolved' && rpModReadAfterDismiss.body?.post?.subspaceMod?.reportCount === 0 && rpModReadAfterDismiss.body.post.subspaceMod.removed === false,
+		JSON.stringify([rpDismissed.body, rpQueueAfterDismiss.body?.reports?.length, rpResolvedGroup && { c: rpResolvedGroup.reportCount, r: rpResolvedGroup.resolution }, rpModReadAfterDismiss.body?.post?.subspaceMod])
+	);
+	const rpDismissLog = (await rpLog(mod.cookie)).filter((entry) => entry.action === 'report.dismiss');
+	check('the mod log has a report.dismiss entry (postId, detail.count 2, the acting mod)', rpDismissLog.length === 1 && rpDismissLog[0].postId === rpPost.id && rpDismissLog[0].detail?.count === 2 && rpDismissLog[0].actor?.id === mod.id, JSON.stringify(rpDismissLog));
+	const rpDismissAgain = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'dismiss' });
+	check('dismissing again → 404 (nothing open)', rpDismissAgain.status === 404);
+
+	// re-report after a dismissal re-opens the reporter's row and rings again
+	const modReportBells2 = (await reportNotifsOf(mod.cookie, rpPost.id)).length;
+	const rpReopen = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Still spam' });
+	const rpQueueReopened = await rpQueue(mod.cookie);
+	check(
+		'reporting again after the dismissal → 200 updated true: the row re-opens (status open, resolution null), the open queue shows the post with reportCount 1 and the mods ring again',
+		rpReopen.status === 200 && rpReopen.body.updated === true && rpReopen.body.report?.status === 'open' && rpReopen.body.report.resolution === null && rpReopen.body.report.reason === 'Still spam' && rpQueueReopened.body?.reports?.length === 1 && rpQueueReopened.body.reports[0].reportCount === 1 && rpQueueReopened.body.openReportCount === 1 && (await reportNotifsOf(mod.cookie, rpPost.id)).length === modReportBells2 + 1,
+		`${rpReopen.status} ${JSON.stringify([rpReopen.body?.report, rpQueueReopened.body?.reports?.[0]?.reportCount])}`
+	);
+
+	// remove settles the open reports (resolution removed)
+	const rpRemoved = await rpModerate(mod.cookie, { id: rpPost.id, action: 'remove', reason: 'Spam' });
+	const rpQueueAfterRemove = await rpQueue(mod.cookie);
+	const rpResolvedAfterRemove = (await rpQueue(mod.cookie, '&status=resolved')).body?.reports?.find((group) => group.postId === rpPost.id);
+	check(
+		'moderate remove → 200 with reportCount 0: the open reports are settled with resolution removed (queue empty, openReportCount 0; the resolved queue’s newest resolution reads removed)',
+		rpRemoved.status === 200 && rpRemoved.body.post?.subspaceMod?.removed === true && rpRemoved.body.post.subspaceMod.reportCount === 0 && rpQueueAfterRemove.body?.reports?.length === 0 && rpQueueAfterRemove.body.openReportCount === 0 && rpResolvedAfterRemove?.resolution === 'removed' && rpResolvedAfterRemove.reportCount === 2,
+		JSON.stringify([rpRemoved.body?.post?.subspaceMod, rpQueueAfterRemove.body?.reports?.length, rpResolvedAfterRemove && { c: rpResolvedAfterRemove.reportCount, r: rpResolvedAfterRemove.resolution }])
+	);
+	const rpRemoveLog = (await rpLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rpPost.id);
+	check('the post.remove mod-log entry carries detail.resolvedReports 1', rpRemoveLog.length === 1 && rpRemoveLog[0].detail?.resolvedReports === 1, JSON.stringify(rpRemoveLog.map((entry) => entry.detail)));
+	// approve settles them too (resolution approved)
+	const rpApproved = await rpModerate(mod.cookie, { id: rpPost.id, action: 'approve' });
+	const rpReopen2 = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
+	const rpApproved2 = await rpModerate(mod.cookie, { id: rpPost.id, action: 'approve' });
+	const rpResolvedAfterApprove = (await rpQueue(mod.cookie, '&status=resolved')).body?.reports?.find((group) => group.postId === rpPost.id);
+	const rpApproveLog = (await rpLog(mod.cookie)).filter((entry) => entry.action === 'post.approve' && entry.postId === rpPost.id);
+	check(
+		'approve settles open reports with resolution approved (a fresh report → approve → queue empty, resolved queue reads approved, post.approve detail.resolvedReports 1; the earlier approve with nothing open carries no such detail)',
+		rpApproved.status === 200 && rpReopen2.status === 200 && rpReopen2.body.report?.status === 'open' && rpApproved2.status === 200 && rpApproved2.body.post?.subspaceMod?.reportCount === 0 && (await rpQueue(mod.cookie)).body?.reports?.length === 0 && rpResolvedAfterApprove?.resolution === 'approved' && rpApproveLog.length === 2 && rpApproveLog.some((entry) => entry.detail?.resolvedReports === 1) && rpApproveLog.some((entry) => !entry.detail?.resolvedReports),
+		JSON.stringify([rpApproved.status, rpReopen2.body?.report?.status, rpApproved2.body?.post?.subspaceMod, rpResolvedAfterApprove?.resolution, rpApproveLog.map((entry) => entry.detail)])
+	);
+	// the reports' own subspace targetId: dismiss is refused for a mod of ANOTHER subspace
+	const rpReopen3 = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
+	const rpForeignDismiss = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'dismiss', slug });
+	check('dismiss naming a different subspace than the post’s (slug in the body wins) → 404 there, the report stays open here', rpReopen3.status === 200 && rpForeignDismiss.status === 404 && (await rpQueue(mod.cookie)).body?.openReportCount === 1, `${rpReopen3.status}/${rpForeignDismiss.status} ${JSON.stringify(rpForeignDismiss.body)}`);
+
+	// deleting the post takes its reports with it
+	const rpDeleted = await api(`/api/v1/things?id=${rpPost.id}`, { method: 'DELETE', cookie: member.cookie });
+	const rpQueueAfterDelete = await rpQueue(mod.cookie);
+	const rpDetailAfterDelete = await rpDetail(owner.cookie);
+	check(
+		'the author deleting the post clears its reports: open queue empty, openReportCount 0 on the queue and the detail, the resolved queue no longer lists it',
+		rpDeleted.status === 200 && rpQueueAfterDelete.body?.reports?.length === 0 && rpQueueAfterDelete.body.openReportCount === 0 && rpDetailAfterDelete.body?.subspace?.openReportCount === 0 && !(await rpQueue(mod.cookie, '&status=resolved')).body?.reports?.some((group) => group.postId === rpPost.id),
+		JSON.stringify([rpDeleted.status, rpQueueAfterDelete.body?.reports?.length, rpDetailAfterDelete.body?.subspace?.openReportCount])
+	);
+	const rpReportGone = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
+	check('reporting the deleted post → 404', rpReportGone.status === 404);
+
+	// generic escape hatches stay closed
+	const rpGeneric = await api('/api/v1/things', { method: 'POST', cookie: stranger.cookie, body: { thingtime: ['subspace-report'], crystal: { postId: 'x', reason: 'forged', status: 'open', reportKey: 'x:y' }, targetId: rpSpace.id } });
+	check('generic POST /things refuses the subspace-report kind', rpGeneric.status === 403, `${rpGeneric.status} ${JSON.stringify(rpGeneric.body)}`);
+	const rpDocs = await api('/api/v1/subspaces/report-docs');
+	const rpDocs2 = await api('/api/v1/subspaces/reports-docs');
+	check('docs routes answer for the report endpoints', rpDocs.status === 200 && rpDocs.body.docs?.endpoint === '/api/v1/subspaces/report' && rpDocs2.status === 200 && rpDocs2.body.docs?.endpoint === '/api/v1/subspaces/reports');
+
+	// the manifest
+	const manifestQ = await api('/api/v1/capabilities');
+	check(
+		'capability manifest advertises the S5 contracts (subspaces-report + subspaces-reports 1.0.0; get 1.4.0 — openReportCount; moderate 1.4.0 — report settlement; feed 1.3.0 and things / things-comment / things-feed / things-user 1.3.0 — subspaceMod.reportCount)',
+		manifestQ.status === 200 && manifestQ.body.features['api.subspaces-report'] === '1.0.0' && manifestQ.body.features['api.subspaces-reports'] === '1.0.0' && manifestQ.body.features['api.subspaces-get'] === '1.4.0' && manifestQ.body.features['api.subspaces-moderate'] === '1.4.0' && manifestQ.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestQ.body.features[feature] === '1.3.0'),
+		JSON.stringify({ r: manifestQ.body?.features?.['api.subspaces-report'], rs: manifestQ.body?.features?.['api.subspaces-reports'], g: manifestQ.body?.features?.['api.subspaces-get'], mo: manifestQ.body?.features?.['api.subspaces-moderate'], f: manifestQ.body?.features?.['api.subspaces-feed'], t: manifestQ.body?.features?.['api.things'] })
+	);
+	const cleanupQ = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rpSlug, confirmSlug: rpSlug } });
+	check('(cleanup) owner deletes the report subspace', cleanupQ.status === 200, `${cleanupQ.status} ${JSON.stringify(cleanupQ.body).slice(0, 200)}`);
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);
 	if (failures.length) {

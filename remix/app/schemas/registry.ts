@@ -344,6 +344,21 @@ export const MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS = 80;
 export const MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS = 500;
 // the composed stored reason on a removed post: title — message · note
 export const MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS = 900;
+// Reports (round 2, S5): a viewer flags a post (or a comment — resolved to its
+// root post) to the subspace's moderators. One `subspace-report` thing per
+// (post, reporter) — a repeat updates the reason / note; the mods' Reports
+// queue groups them by post. `reason` is a rule title, a removal-reason id or
+// free text; `note` is the reporter's optional context.
+export const MAX_SUBSPACE_REPORT_REASON_CHARS = 120;
+export const MAX_SUBSPACE_REPORT_NOTE_CHARS = 500;
+// how many reporters a grouped Reports-queue row lists (the count is exact)
+export const MAX_SUBSPACE_REPORT_REPORTERS_LISTED = 20;
+export const SUBSPACE_REPORT_STATUSES = ['open', 'resolved'] as const;
+export type SubspaceReportStatus = (typeof SUBSPACE_REPORT_STATUSES)[number];
+// how an open report was settled: the post was removed / approved by a mod
+// (auto-resolved by `moderate`), or the mods dismissed the reports outright
+export const SUBSPACE_REPORT_RESOLUTIONS = ['removed', 'approved', 'dismissed'] as const;
+export type SubspaceReportResolution = (typeof SUBSPACE_REPORT_RESOLUTIONS)[number];
 export const MAX_POST_TITLE_CHARS = 300;
 export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
 export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
@@ -361,7 +376,7 @@ export const SUBSPACE_SLUG_HOLD_DAYS = 30;
 // Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
 // /api/v1/things refuses them; excluded from own-things listings + generic
 // DELETE the way the messenger family is).
-export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone'] as const;
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report'] as const;
 export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
@@ -1773,6 +1788,38 @@ const subspaceTombstoneSchema: ThingtimeSchema = {
     { name: 'deletedAt', type: 'date', required: true, description: 'When the subspace was deleted (the hold counts from here).' }
   ],
   example: { slug: 'rainbows', subspaceId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', previousOwnerId: '5eed…', deletedAt: '2026-09-05T00:00:00.000Z' }
+};
+
+const subspaceReportSchema: ThingtimeSchema = {
+  id: 'subspace-report',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace report',
+  summary: 'One viewer’s report of a post to a subspace’s moderators (relational row; the Reports queue groups them by post).',
+  detail:
+    'targetId = the subspace shareId, ownerId = the reporter, acl ["tt:user"] (only the dedicated moderator ' +
+    'endpoints read it). One row per (post, reporter) — uniqueness rides the root uniqueKeys namespace ' +
+    '(`subspaceReportKey:<postId>:<reporterId>`): reporting the same post again updates the reason / note (and ' +
+    're-opens a resolved row). Reports of a COMMENT resolve to the root post (postId = the post; commentId keeps ' +
+    'which comment was flagged). status open → resolved with a resolution: removed / approved (a moderator’s ' +
+    '`moderate` remove / approve settles every open report on the post) or dismissed (POST ' +
+    '/api/v1/subspaces/reports { postId, action: "dismiss" }). Control-plane storage — never billable content. ' +
+    'Written only by POST /api/v1/subspaces/report and settled by /moderate and /reports; deleted with the ' +
+    'subspace and with the post.',
+  createdVia: 'POST /api/v1/subspaces/report',
+  fields: [
+    { name: 'postId', type: 'id', required: true, description: 'The reported (root) post’s shareId.' },
+    { name: 'commentId', type: 'id', required: false, description: 'The flagged comment’s shareId when a comment was reported (null for the post itself).' },
+    { name: 'reason', type: 'string', required: true, max: MAX_SUBSPACE_REPORT_REASON_CHARS, description: 'A rule title, a removal-reason id, or free text.' },
+    { name: 'note', type: 'string', required: false, max: MAX_SUBSPACE_REPORT_NOTE_CHARS, description: 'The reporter’s optional context (moderators only).' },
+    { name: 'status', type: 'enum', required: true, values: [...SUBSPACE_REPORT_STATUSES], description: 'open until a moderator settles it.' },
+    { name: 'resolution', type: 'enum', required: false, values: [...SUBSPACE_REPORT_RESOLUTIONS], description: 'How it was settled (null while open).' },
+    { name: 'resolvedById', type: 'id', required: false, description: 'The moderator who settled it (null while open).' },
+    { name: 'resolvedAt', type: 'date', required: false, description: 'When it was settled (null while open).' },
+    { name: 'reportKey', type: 'string', required: true, description: 'Unique `<postId>:<reporterId>` pair key.' }
+  ],
+  example: { postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', commentId: null, reason: 'No spam', note: 'Third ad this week from the same account', status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey: '4f6b2c1e…:5eed…' }
 };
 
 const subscriptionSchema: ThingtimeSchema = {
@@ -3667,6 +3714,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceMemberSchema,
   subspaceModlogSchema,
   subspaceTombstoneSchema,
+  subspaceReportSchema,
   folderSchema,
   appSchema,
   appDataSchema,

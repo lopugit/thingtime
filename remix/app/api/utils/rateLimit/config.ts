@@ -42,6 +42,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // key (the emit is also deduped against each mod's unread bell); nobody
   // joins 20 subspaces a minute by hand
   'subspaces.join': { limit: 20, windowMs: 60_000, enabled: true },
+  // reporting a post to the mods (POST /api/v1/subspaces/report) — each
+  // NEW report fans a (deduped) bell out to every moderator; a repeat on the
+  // same post only updates the row. Nobody files 30 honest reports a minute.
+  'subspaces.report': { limit: 30, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // embed SDK reads (GET /api/v1/embed/things) — the only anonymous

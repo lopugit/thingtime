@@ -20,8 +20,11 @@ const fail = (status: number, error: string): Fail => ({ ok: false, status, erro
 export const SUBSPACE_SLUG_KEY_FIELD = 'subspaceSlug';
 export const SUBSPACE_MEMBER_KEY_FIELD = 'subspaceMemberKey';
 export const UPDOWN_KEY_FIELD = 'updownKey';
+export const SUBSPACE_REPORT_KEY_FIELD = 'subspaceReportKey';
 
 export const subspaceMemberKeyOf = (subspaceId: string, userId: string): string => `${subspaceId}:${userId}`;
+// one report per (post, reporter) — the root post's id, never a comment's
+export const subspaceReportKeyOf = (postId: string, reporterId: string): string => `${postId}:${reporterId}`;
 
 export type SubspaceMembership = {
 	subspaceId: string;
@@ -153,6 +156,29 @@ export const loadAuthorFlairs = async (pairs: readonly { subspaceId: string; use
 		flairs.set(subspaceMemberKeyOf(membership.subspaceId, String(doc.ownerId)), membership.userFlair);
 	}
 	return flairs;
+};
+
+// Open-report counts for the posts a projected page's viewer MODERATES — ONE
+// $group per page over the subspace-report kind, keyed by the root post id
+// (never per doc). Only moderators are ever asked for (the projection passes
+// the (subspace, post) pairs it already knows the viewer can moderate), so a
+// plain member's read never touches the report rows. The filter carries the
+// subspace ids too so the (thingtime, targetId) shape stays index-friendly.
+export type OpenReportCounts = ReadonlyMap<string, number>;
+export const loadOpenReportCounts = async (pairs: readonly { subspaceId: string; postId: string }[]): Promise<OpenReportCounts> => {
+	const counts = new Map<string, number>();
+	const subspaceIds = [...new Set(pairs.map((pair) => pair.subspaceId).filter(Boolean))];
+	const postIds = [...new Set(pairs.map((pair) => pair.postId).filter(Boolean))];
+	if (!subspaceIds.length || !postIds.length) return counts;
+	const things = await getThingsCollection();
+	const rows = (await things
+		.aggregate([
+			{ $match: { thingtime: 'subspace-report', targetId: { $in: subspaceIds }, 'crystal.postId': { $in: postIds }, 'crystal.status': 'open' } },
+			{ $group: { _id: '$crystal.postId', count: { $sum: 1 } } }
+		])
+		.toArray()) as any[];
+	for (const row of rows) counts.set(String(row._id), Number(row.count) || 0);
+	return counts;
 };
 
 const banMessage = (slug: string, membership: SubspaceMembership): string => {
