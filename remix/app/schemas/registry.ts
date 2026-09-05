@@ -225,6 +225,7 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
     // Anything deeper is ambiguous — "tt:user/a/b" could mean "user a with
     // capability b" or "user a/b, read" — so refuse it instead of guessing.
     const positive = entry.startsWith('-') ? entry.slice(1) : entry;
+    let normalized = entry;
     for (const prefix of [ACL_USER_PREFIX, ACL_GROUP_PREFIX]) {
       if (!positive.startsWith(prefix)) continue;
       const subject = positive.slice(prefix.length).replace(/\/(comment|write)$/, '');
@@ -235,8 +236,21 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
           error: `${prefix}… entries take one name plus an optional /comment or /write (got ${entry.slice(0, 80)})`
         };
       }
+      // Canonicalize the USERNAME to lower case. aclEntryMatches compares it
+      // case-insensitively, but the feed/search grant clause (things.ts
+      // visibilityQueryFor) matches acl strings EXACTLY, against a lower-cased
+      // `tt:user/<username>` built from the viewer. Storing 'tt:user/Bob/write'
+      // verbatim therefore honours the grant on direct access (canView) while
+      // the grantee's own feed never surfaces it — a grant that half-works.
+      // Usernames are already stored lower case (auth/registerUser), so this
+      // only canonicalizes hand-authored acls and changes no view decision.
+      // Group ids are NOT folded: they are opaque and compared exactly
+      // (viewer.groupIds.has), so lower-casing one could break a real match.
+      if (prefix === ACL_USER_PREFIX) {
+        normalized = `${entry.startsWith('-') ? '-' : ''}${prefix}${subject.toLowerCase()}${positive.slice(prefix.length + subject.length)}`;
+      }
     }
-    if (!entries.includes(entry)) entries.push(entry);
+    if (!entries.includes(normalized)) entries.push(normalized);
     if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
   }
   if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };

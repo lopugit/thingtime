@@ -134,6 +134,36 @@ test('sanitizeAcl: capability suffixes are accepted, deeper paths are refused', 
 	assert.deepEqual(entries(sanitizeAcl(['tt:user', 'tt:userFriends'])), ['tt:user', 'tt:userFriends']);
 });
 
+test('sanitizeAcl: usernames are canonicalized to lower case, group ids are not', () => {
+	// aclEntryMatches compares usernames case-insensitively, but the feed/search
+	// grant clause (things.ts visibilityQueryFor) matches acl strings EXACTLY
+	// against a lower-cased tt:user/<username>. An un-normalized 'tt:user/Bob'
+	// is therefore honoured by canView yet invisible in Bob's own feed — the
+	// grant half-works. Canonicalizing here keeps both paths on one spelling.
+	assert.deepEqual(entries(sanitizeAcl(['tt:custom', 'tt:user', 'tt:user/Bob/write'])), [
+		'tt:custom',
+		'tt:user',
+		'tt:user/bob/write'
+	]);
+	assert.deepEqual(entries(sanitizeAcl(['tt:all', '-tt:user/BOB'])), ['tt:all', '-tt:user/bob']);
+	// the fold is what the feed clause builds, so the two now agree
+	const stored = entries(sanitizeAcl(['tt:custom', 'tt:user', 'tt:user/Bob/write']));
+	const feedEntries = ['tt:user/bob', 'tt:user/bob/comment', 'tt:user/bob/write'];
+	assert.equal(
+		stored.some((entry) => feedEntries.includes(entry)),
+		true
+	);
+	assert.equal(aclAllows(stored, bob, OWNER), true);
+	assert.equal(aclCapabilityFor(stored, bob, OWNER), 'write');
+	// case folding collapses what are otherwise duplicate grants
+	assert.deepEqual(entries(sanitizeAcl(['tt:user/bob', 'tt:user/BOB'])), ['tt:user/bob']);
+	// group ids are opaque and compared exactly (viewer.groupIds.has) — folding
+	// one would break a real membership match, so their case is preserved
+	assert.deepEqual(entries(sanitizeAcl(['tt:custom', 'tt:group/G1/comment'])), ['tt:custom', 'tt:group/G1/comment']);
+	const member = { ...carol, groupIds: new Set(['G1']) };
+	assert.equal(aclAllows(entries(sanitizeAcl(['tt:custom', 'tt:user', 'tt:group/G1'])), member, OWNER), true);
+});
+
 test('a capability word is still a usable username', () => {
 	// "write" and "comment" are ordinary, registerable usernames (only '/' and
 	// the env-admin allowlist are reserved), and the picker composes
