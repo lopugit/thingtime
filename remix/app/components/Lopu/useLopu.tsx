@@ -104,7 +104,7 @@ const LopuToast = ({
     background={RAINBOW}
     boxShadow="var(--tt-shadow-toast, 0 14px 38px rgba(20,20,40,0.18))"
     width="360px"
-    maxWidth="calc(100vw - 24px)"
+    maxWidth="min(100%, calc(100vw - 24px))"
   >
 		<Box bg="var(--tt-card, #ffffff)" borderRadius="calc(var(--tt-radius-xl, 20px) - 2px)" px={4} py={3} position="relative">
       <Flex align="center" gap={2} mb={title || description || loading ? 1.5 : 0}>

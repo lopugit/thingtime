@@ -17,6 +17,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Align Lopu notifications with the desktop content area as the drawer opens, closes, or resizes; keep mobile messages readable. — Codex (AI)
+
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
   cloud packaging. Share the protected main/PR release builder and correct its

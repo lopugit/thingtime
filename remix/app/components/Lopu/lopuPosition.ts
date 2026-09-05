@@ -48,17 +48,17 @@ export type LopuContainerStyle = {
 	pointerEvents: 'none';
 };
 
-// Chakra anchors one fixed list per position (its own safe-area insets) and
-// wraps each toast in a flex container we style here. Centre positions get a
-// full-viewport flex container so the card centres by flow (immune to the
-// ancestor-transform quirk that broke translateX(-50%)); corners shrink to the
-// card and lean on the list's own edge. pointerEvents none keeps the wide
-// invisible container from eating clicks (the card re-enables them).
+// DrawerSystem anchors the portal lists to the visible desktop content area.
+// Every toast spans that list (minus Chakra's 8px margins) and aligns its card
+// by flex flow, preserving corner/centre placement as the drawer changes.
+// pointerEvents none leaves the empty area clickable; the card re-enables it.
 export const lopuContainerStyle = (position: LopuPosition): LopuContainerStyle => {
 	const edge = position.endsWith('-left') ? 'left' : position.endsWith('-right') ? 'right' : 'centre';
 	return {
 		...(position.startsWith('top') ? { transform: NAV_OFFSET } : {}),
-		...(edge === 'centre' ? { width: '100vw', maxWidth: '100vw' } : { minWidth: 0 }),
+		width: 'calc(100% - 16px)',
+		maxWidth: '100%',
+		minWidth: 0,
 		display: 'flex',
 		justifyContent: edge === 'left' ? 'flex-start' : edge === 'right' ? 'flex-end' : 'center',
 		pointerEvents: 'none'

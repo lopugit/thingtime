@@ -30,18 +30,18 @@ test('every Chakra corner is accepted verbatim and has a dropdown label', () => 
 	assert.equal(new Set(Object.values(LOPU_POSITION_LABELS)).size, LOPU_POSITIONS.length, 'labels must be distinct');
 });
 
-test('only the top row clears the fixed nav, only centre positions span the viewport', () => {
+test('only the top row clears the fixed nav, all positions fit the available content width', () => {
 	for (const position of LOPU_POSITIONS) {
 		const style = lopuContainerStyle(position);
 		assert.equal(style.pointerEvents, 'none', `${position} container must not eat clicks`);
 		assert.equal(style.display, 'flex');
 		assert.equal(style.transform, position.startsWith('top') ? 'translateY(70px)' : undefined, position);
+		assert.equal(style.width, 'calc(100% - 16px)', position);
+		assert.equal(style.maxWidth, '100%', position);
+		assert.equal(style.minWidth, 0, position);
 		if (position === 'top' || position === 'bottom') {
-			assert.equal(style.width, '100vw', position);
 			assert.equal(style.justifyContent, 'center', position);
 		} else {
-			assert.equal(style.width, undefined, position);
-			assert.equal(style.minWidth, 0, position);
 			assert.equal(style.justifyContent, position.endsWith('-left') ? 'flex-start' : 'flex-end', position);
 		}
 	}

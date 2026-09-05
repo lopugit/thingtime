@@ -3430,6 +3430,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       nav-right controls rendered under the absolutely-positioned commander
       host and were untappable on mobile (2026-08).
 
+- [ ] Lopu drawer alignment: at desktop widths, open/close and resize the left
+      and right drawer with a notification visible. All six placements stay
+      within the page content; centred messages use the remaining content centre.
+      At 390px, the temporary drawer leaves notifications readable and dismissible
+      without horizontal overflow. Check both page top and bottom.
+
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
 - [ ] `/notifications` (auth) lists every notification the viewer has received

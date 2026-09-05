@@ -42,3 +42,25 @@ publishes it unchanged apart from one stale test expectation and a merge of
 ## Notes
 
 - graphify snapshots were left untouched (source-only commits).
+
+## Drawer-relative notification placement (2026-09-05)
+
+Lopu's portal lists now follow the desktop page content inset, including live
+resize and drawers opening from either side. All six positions align within
+that content area; the card keeps its 8px edge gap. Existing streaming messages
+move with the list. Mobile keeps the card readable across the viewport while
+the temporary drawer shifts the page.
+
+Validation: four placement tests pass; targeted ESLint has no errors (one
+pre-existing display-name warning). Chrome checks at desktop and 390px cover
+open/closed drawers, all six positions, both drawer edges, resize, and scrolling
+the landing/settings pages to the bottom. Desktop measurements: content x=300,
+left toast x=308; closed content x=0, toast x=8. With a right drawer, content
+ends at x=1245 and the right toast at x=1237. Mobile has no horizontal overflow.
+
+Local verification: http://localhost:15020 (Nitro 15022, HMR 15021), managed by
+PM2 with autorestart disabled. Tailscale/Funnel is unavailable: the installed
+CLI wrapper points to a missing /Applications/Tailscale.app executable.
+Graphify's installed incremental command supports code extraction only; the
+semantic backend option was rejected, so documentation changes were not
+semantically re-indexed. The available structural graph was refreshed.
