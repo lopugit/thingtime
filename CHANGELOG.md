@@ -43,6 +43,11 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
 
 ## [Unreleased]
 
+- 2026-09-05: Publish Graphify writer ownership atomically, preserve replacement
+  locks during delayed cleanup, and retain query snapshot locks through child
+  completion. Add deterministic stale-reaper, six-process contention, writer
+  death, malformed-owner, timeout, and query-lifetime tests. — Codex (AI)
+
 - Added a fixed-response missing-build page for unused PR-preview hostnames, with a
   marked root soft-404, nested HTTP 404, a PR link, manual retry and no-store caching. Two-phase
   wildcard installation verifies staged content before changing only preview
