@@ -45,6 +45,15 @@ the whole suite with the publishing controls in place. The model lives in
 shape — safe for the drawer's eager bundle) and `publishing.ts` (catalog
 validation, visibility, summaries, bulk helpers).
 
+**What the gate is.** It is enforced in the client: no `/marketing` route has a
+server loader, and the generated catalog ships in the browser bundle. So the
+gate is a navigation and indexing control — it decides what a visitor is
+offered, linked to, counted and shown, and keeps unpublished surfaces out of
+search engines — not a confidentiality boundary. The only thing the server
+withholds is admin state (the per-key `audit` trail); page copy is not
+withheld. Write the copy as if it were already public, and do not stage
+genuinely confidential material behind an unpublished key.
+
 | Key | Surface | Accepted state |
 | --- | --- | --- |
 | `hub` | `/marketing` (also gates `/marketing/search`) | `published` |
