@@ -596,7 +596,8 @@ export const SubspaceModPage = () => {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<Flex flexDirection="column" rowGap={4} width={['100%', '760px']} maxWidth="100%" paddingX={4} paddingTop={[4, 6]}>
+			{/* full-width like the subspace page; panels stretch with the viewport */}
+			<Flex flexDirection="column" rowGap={4} width="100%" paddingX={[3, 4, 6, 8]} paddingTop={[3, 4, 5]}>
 				<Flex alignItems="center" columnGap={3}>
 					{subspace && <SubspaceIcon subspace={subspace} size="44px" fontSize="xl" />}
 					<Box>

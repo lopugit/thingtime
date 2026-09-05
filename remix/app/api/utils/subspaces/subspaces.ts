@@ -578,7 +578,10 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 	const membership = existing ? membershipOfDoc(existing) : null;
 	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
 	if (isActiveMember(membership)) return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false };
-	if (accessOf(subspace) === 'private' && !membership) {
+	// private subspaces never self-serve a membership: a moderator's `add` is
+	// what flips the row active (a member who left or was kicked can't walk
+	// back in either — their stale row is not an invitation)
+	if (accessOf(subspace) === 'private') {
 		return fail(403, `s/${slug} is private — a moderator has to add you 🔒`);
 	}
 	if ((await membershipCount(userId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {

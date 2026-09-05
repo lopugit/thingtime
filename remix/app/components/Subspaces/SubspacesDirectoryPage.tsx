@@ -128,7 +128,10 @@ export const SubspacesDirectoryPage = () => {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<Flex flexDirection="column" rowGap={4} width={['100%', '680px']} maxWidth="100%" paddingX={4} paddingTop={[4, 6]}>
+			{/* full-width, Reddit-style: header + search span the viewport and the
+			cards flow in a responsive grid (one column on phones, as many
+			~340px columns as fit on wide screens) */}
+			<Flex flexDirection="column" rowGap={4} width="100%" paddingX={[3, 4, 6, 8]} paddingTop={[3, 4, 5]}>
 				<Flex flexDirection="column" rowGap={1}>
 					<Box fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 						Thingtime · communities you can join, run and moderate 🪐
@@ -212,10 +215,12 @@ export const SubspacesDirectoryPage = () => {
 					)}
 				</Flex>
 
-				<Flex flexDirection="column" rowGap={2}>
-					{subspaces.map((subspace) => (
-						<SubspaceCard key={subspace.id} subspace={subspace} onToggleMembership={toggleMembership} busy={busyId === subspace.id} />
-					))}
+				<Flex flexDirection="column" rowGap={3}>
+					<Box display="grid" gridTemplateColumns={['1fr', '1fr', 'repeat(auto-fill, minmax(340px, 1fr))']} gap={3} data-testid="subspaces-grid">
+						{subspaces.map((subspace) => (
+							<SubspaceCard key={subspace.id} subspace={subspace} onToggleMembership={toggleMembership} busy={busyId === subspace.id} />
+						))}
+					</Box>
 					{!loading && subspaces.length === 0 && (
 						<Flex
 							flexDirection="column"

@@ -286,7 +286,7 @@ export const SubspacePage = () => {
 	if (notFound) {
 		return (
 			<Flex justifyContent="center" width="100%" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">
-				<Flex flexDirection="column" alignItems="center" rowGap={3} paddingTop={24} paddingX={4}>
+				<Flex flexDirection="column" alignItems="center" rowGap={3} paddingTop={24} paddingX={4} width="100%">
 					<Text fontSize="4xl">🌫️</Text>
 					<Text fontSize="lg" fontWeight={700} color={INK}>
 						s/{slug} doesn’t exist
@@ -308,7 +308,11 @@ export const SubspacePage = () => {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<Flex flexDirection="column" rowGap={4} width={['100%', '100%', '1000px']} maxWidth="100%" paddingX={4} paddingTop={[4, 6]}>
+			{/* Reddit-style full-width layout: no fixed container — the header spans
+			the viewport, the post column takes every pixel the sidebar leaves, and
+			the sidebar is a fixed-width sticky rail on wide screens (stacked below
+			the posts under the `lg` breakpoint). Gutters scale with the viewport. */}
+			<Flex flexDirection="column" rowGap={4} width="100%" paddingX={[3, 4, 6, 8]} paddingTop={[3, 4, 5]}>
 				{/* banner + identity */}
 				<Box background="var(--tt-card, #ffffff)" border={BORDER} borderRadius={RADIUS_LG} overflow="hidden" data-testid="subspace-header">
 					<Box
@@ -371,8 +375,8 @@ export const SubspacePage = () => {
 					</Flex>
 				</Box>
 
-				<Flex columnGap={4} rowGap={4} alignItems="flex-start" flexDirection={['column', 'column', 'row']}>
-					{/* main column */}
+				<Flex columnGap={[4, 4, 6, 8]} rowGap={4} alignItems="flex-start" flexDirection={['column', 'column', 'column', 'row']}>
+					{/* main column — full width, no max */}
 					<Flex flexDirection="column" rowGap={3} flex="1" minWidth={0} width="100%">
 						{/* sort tabs */}
 						<Flex alignItems="center" columnGap={1} rowGap={1} flexWrap="wrap" data-testid="subspace-sorts">
@@ -439,8 +443,16 @@ export const SubspacePage = () => {
 						)}
 					</Flex>
 
-					{/* sidebar */}
-					<Box width={['100%', '100%', '300px']} flexShrink={0}>
+					{/* sidebar — fixed rail, sticky under the nav on wide screens */}
+					<Box
+						width={['100%', '100%', '100%', '320px', '340px']}
+						flexShrink={0}
+						position={['static', 'static', 'static', 'sticky']}
+						top="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 16px)"
+						maxHeight={['none', 'none', 'none', 'calc(100vh - var(--tt-nav-clearance, 54px) - 32px)']}
+						overflowY={['visible', 'visible', 'visible', 'auto']}
+						data-testid="subspace-sidebar"
+					>
 						{subspace && <SubspaceSidebar subspace={subspace} moderators={moderators} />}
 					</Box>
 				</Flex>
