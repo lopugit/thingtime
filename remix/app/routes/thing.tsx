@@ -26,7 +26,7 @@ import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type * as InstallSuite from '~/components/Builder/installSuite';
@@ -74,29 +74,13 @@ const SUITE_PART_ID = /^(component|webpage|schema|action)-(demo|app)-/;
 // run keys the executor always rejects.
 const MAX_CACHED_THING_CHARS = 256 * 1024;
 
-// One cache entry per viewed thing, so this namespace is bounded and stamped.
-// Past the cap the oldest entries go: otherwise a long browsing session fills
-// localStorage and every OTHER tt-* optimistic cache starts losing its write
-// silently, because writeLocalCache swallows the quota error by design.
+// One cache entry per viewed thing, so this namespace is bounded and stamped
+// through the shared localCache helpers (pruneCacheNamespace): past the cap
+// the oldest entries go, otherwise a long browsing session fills localStorage
+// and every OTHER tt-* optimistic cache starts losing its write silently,
+// because writeLocalCache swallows the quota error by design.
 const THING_CACHE_PREFIX = 'tt-thing-';
 const MAX_CACHED_THINGS = 40;
-
-const pruneThingCache = (keep: string): void => {
-	if (typeof window === 'undefined') return;
-	try {
-		const cached: { key: string; at: number }[] = [];
-		for (let index = 0; index < window.localStorage.length; index += 1) {
-			const key = window.localStorage.key(index);
-			if (!key || !key.startsWith(THING_CACHE_PREFIX) || key === keep) continue;
-			const at = Number(readLocalCache<{ at?: unknown }>(key)?.at);
-			cached.push({ key, at: Number.isFinite(at) ? at : 0 });
-		}
-		cached.sort((a, b) => a.at - b.at);
-		for (const entry of cached.slice(0, Math.max(0, cached.length - (MAX_CACHED_THINGS - 1)))) clearLocalCache(entry.key);
-	} catch {
-		// storage disabled — nothing to prune
-	}
-};
 
 // The suite catalog + installer are the whole demo/app library (behaviourSuites
 // pulls the 300-page demo catalog with it). This route ships in the eager
@@ -278,8 +262,8 @@ export default function ThingPage() {
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
-			const cached = readLocalCache<{ data?: ThingViewData }>(cacheKey);
-			const data = cached?.data?.kind === 'thing' && cached.data.thing?.id === id ? cached.data : null;
+			const cached = readStampedCache<ThingViewData>(cacheKey);
+			const data = cached?.kind === 'thing' && cached.thing?.id === id ? cached : null;
 			return { key, loading: true, data, error: null };
 		},
 		[cacheKey, diagnosticRoute, id]
@@ -334,8 +318,8 @@ export default function ThingPage() {
 				if (next.kind === 'thing') {
 					try {
 						if (JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) {
-							pruneThingCache(cacheKey);
-							writeLocalCache(cacheKey, { at: Date.now(), data: next });
+							pruneCacheNamespace(THING_CACHE_PREFIX, cacheKey, MAX_CACHED_THINGS);
+							writeStampedCache(cacheKey, next);
 						}
 					} catch {
 						// unserialisable — the live fetch still painted

@@ -13,7 +13,7 @@ import { ChakraThingRenderer, HtmlThingRenderer, isChakraThingNode } from '~/com
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { isSafeCssText } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 // the REGISTRY module (not just the lookups): importing it registers the app
@@ -166,8 +166,17 @@ const resolveActionName = (action: string): string | null => {
   return part ? part.name : null;
 };
 
+// One entry per family the viewer opens, and each entry is a WHOLE family:
+// up to MAX_FAMILY_DESIGNS (16) component things with their render trees. The
+// namespace is bounded and stamped for the same reason /thing/:id's is —
+// writeLocalCache swallows the quota error by design, so an unbounded
+// namespace degrades every other tt-* cache silently. 12 families is a deep
+// browse session; the rest reload from the API, which is what they did before
+// this cache existed.
+const FAMILY_CACHE_PREFIX = 'tt-component-family-';
+const MAX_CACHED_FAMILIES = 12;
 const familyCacheKeyFor = (viewerId: string | null, key: string): string | null =>
-  viewerId && key ? `tt-component-family-${viewerId}:${key}` : null;
+  viewerId && key ? `${FAMILY_CACHE_PREFIX}${viewerId}:${key}` : null;
 
 const TRUST_LABELS: Record<ComponentTrust, string> = {
   owner: 'yours · live',
@@ -454,7 +463,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   // nothing — and only then a loading state.
   const seedRef = React.useRef<'cache' | 'catalog' | null>(null);
   const seedEntries = React.useCallback((): BrowseComponentEntry[] | null => {
-    const cached = familyCacheKeyRef.current ? readLocalCache<BrowseComponentEntry[]>(familyCacheKeyRef.current) : null;
+    const cached = familyCacheKeyRef.current ? readStampedCache<BrowseComponentEntry[]>(familyCacheKeyRef.current) : null;
     if (Array.isArray(cached) && cached.length) {
       seedRef.current = 'cache';
       return cached;
@@ -479,7 +488,10 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
         if (resp?.ok && resp.components.length) {
           setEntries(resp.components);
           setNotFound(false);
-          if (familyCacheKeyRef.current) writeLocalCache(familyCacheKeyRef.current, resp.components);
+          if (familyCacheKeyRef.current) {
+            pruneCacheNamespace(FAMILY_CACHE_PREFIX, familyCacheKeyRef.current, MAX_CACHED_FAMILIES);
+            writeStampedCache(familyCacheKeyRef.current, resp.components);
+          }
           return;
         }
       } catch {

@@ -10,7 +10,7 @@ import { thingDetailPath } from '~/components/Search/commanderSearch';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { getThingtimeSchema } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay } from '~/schemas/tools';
 import { CARD_STYLES } from '~/theme/card';
@@ -57,7 +57,14 @@ const OWN_THINGS_LIMIT = 24;
 // Per-viewer, per-schema last-known list of their own things — the flash-free
 // tier for a revisit (house rule: never a spinner when a last-known value
 // exists). Keyed by user so no other account can paint from it.
-const ownThingsCacheKey = (userId: string, schemaKey: string) => `tt-schema-things-${userId}:${schemaKey}`;
+// Bounded and stamped like the other per-entity namespaces (localCache
+// pruneCacheNamespace): one key per schema the viewer opens, each holding up
+// to OWN_THINGS_LIMIT of their things, would otherwise grow for the life of
+// the browser — and writeLocalCache swallows the quota error by design, so a
+// full store would silently stop seeding every other tt-* cache.
+const OWN_THINGS_CACHE_PREFIX = 'tt-schema-things-';
+const MAX_CACHED_OWN_THING_LISTS = 16;
+const ownThingsCacheKey = (userId: string, schemaKey: string) => `${OWN_THINGS_CACHE_PREFIX}${userId}:${schemaKey}`;
 
 type OwnThing = {
   id: string;
@@ -273,7 +280,7 @@ export const SchemaDetailPage = () => {
 
   const ownCacheKey = user?.id && source ? ownThingsCacheKey(user.id, schemaKey) : null;
   const [ownThings, setOwnThings] = React.useState<OwnThing[] | null>(() =>
-    ownCacheKey ? readLocalCache<OwnThing[]>(ownCacheKey) : null
+    ownCacheKey ? readStampedCache<OwnThing[]>(ownCacheKey) : null
   );
   const [ownLoading, setOwnLoading] = React.useState(false);
   const ownSeqRef = React.useRef(0);
@@ -287,7 +294,7 @@ export const SchemaDetailPage = () => {
       return;
     }
     // paint the last-known list for this viewer + schema before refetching
-    setOwnThings(ownCacheKey ? readLocalCache<OwnThing[]>(ownCacheKey) : null);
+    setOwnThings(ownCacheKey ? readStampedCache<OwnThing[]>(ownCacheKey) : null);
     const seq = ++ownSeqRef.current;
     let cancelled = false;
     setOwnLoading(true);
@@ -311,7 +318,10 @@ export const SchemaDetailPage = () => {
         if (!resp?.ok) throw resp;
         const things = (Array.isArray(resp.things) ? resp.things : []).map(asOwnThing).filter(Boolean) as OwnThing[];
         setOwnThings(things);
-        if (ownCacheKey) writeLocalCache(ownCacheKey, things.slice(0, OWN_THINGS_LIMIT));
+        if (ownCacheKey) {
+          pruneCacheNamespace(OWN_THINGS_CACHE_PREFIX, ownCacheKey, MAX_CACHED_OWN_THING_LISTS);
+          writeStampedCache(ownCacheKey, things.slice(0, OWN_THINGS_LIMIT));
+        }
       } catch (err: any) {
         if (cancelled || seq !== ownSeqRef.current) return;
         setOwnThings((prev) => prev || []);

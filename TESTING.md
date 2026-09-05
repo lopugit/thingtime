@@ -4598,6 +4598,19 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       Sign out and confirm every `tt-thing-*` key is gone — the projections are
       ACL-gated (private posts, circle data) and must not outlive the session,
       the same bar as `tt-activity-` / `tt-saved-` / `tt-page-source:`.
+- [ ] Every per-entity localStorage namespace is bounded, not just
+      `tt-thing-*`. Open 20+ different component families
+      (`/components/<key>`) and 20+ schemas (`/schemas/<key>`), then in
+      DevTools → Application → Local Storage confirm at most 12
+      `tt-component-family-*` and 16 `tt-schema-things-*` keys survive, oldest
+      dropped first, and the page you are ON still paints instantly from cache
+      on reload. These namespaces grow one key per entity visited and each
+      entry is large (a family is up to 16 component crystals with their
+      render trees), so unbounded they fill the origin quota — and because
+      `writeLocalCache` swallows the quota error by design, the symptom is not
+      an error but every OTHER `tt-*` optimistic cache silently going cold.
+      Regression covered by `remix/app/hooks/localCache.test.ts`
+      (`pnpm --dir remix run test:hooks`).
 - [ ] `remix/app/routes/thing.tsx` contains no raw NUL byte. Check with
       `python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(bytes([0])))" remix/app/routes/thing.tsx`
       — it must print 0, and the two requestKey separators must stay written as
