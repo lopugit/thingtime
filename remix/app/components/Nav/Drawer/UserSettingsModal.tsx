@@ -12,9 +12,11 @@ import { useLopu } from '../../Lopu/useLopu';
 import { LopuSettingsRows } from '../../Lopu/LopuHost';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
+import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
+import { isKeyPublished } from '~/marketing/publishingCore';
 import { getUserMention } from '~/utils/userIdentity';
 import {
 	electronAutoUpdateSettingPath,
@@ -47,6 +49,12 @@ export const UserSettingsModal = () => {
 
 	const isMobile = useIsMobileViewport();
 	const user = useCurrentUser();
+	// the "Close after click" list mirrors the drawer, so it needs the same
+	// publish state DrawerContent reads — without it every publication-gated
+	// item (Marketing) fails closed here and a visitor can no longer configure
+	// a section they can actually see
+	const { publications } = useMarketingPublications();
+	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
@@ -670,7 +678,7 @@ export const UserSettingsModal = () => {
 						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
-						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin).map((top) => (
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin, isPublished).map((top) => (
 							<React.Fragment key={top.id}>
 								<Flex alignItems="center" columnGap={4} paddingY={1}>
 									<Text fontSize="sm">
@@ -683,7 +691,7 @@ export const UserSettingsModal = () => {
 										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
 									></Switch>
 								</Flex>
-								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin).map((child) => (
+								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin, isPublished).map((child) => (
 									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
 										<Text fontSize="xs" opacity={0.8}>
 											{child.icon} {child.label}
