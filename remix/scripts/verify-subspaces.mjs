@@ -17,7 +17,10 @@
 // the settings, every self / moderator wall, template + custom + clear, the
 // batched authorFlair projection on posts, fresh comments, nested replies and
 // both feeds, live template renames, the mod-log rule, kicked / banned
-// wearers hidden, the manifest.
+// wearers hidden, the manifest — plus the S3 review fixes: comment-as-root
+// reads follow a template rename, mods may dress the owner, kick / ban /
+// demotion strip the pick, and the join / leave / transfer / moderate /
+// members contract bumps.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -54,19 +57,36 @@ const check = (name, condition, detail = '') => {
 	}
 };
 
+// The per-user write budget (`subspaces.write`, 60 / min — a sliding window
+// kept in Mongo, so it outlives a stack restart) is a product limit, not a
+// subject of this walk: the owner fires a long burst of writes across
+// sections M → O and can legitimately reach it. A 429 is PACED — wait out
+// Retry-After (bounded) and retry, a few times at most — so the walk stays
+// honest about behaviour while never reporting the budget itself as a
+// failure. No check in this file asserts a 429.
+const MAX_429_RETRIES = 3;
 const api = async (path, { cookie, method = 'GET', body } = {}) => {
-	const response = await fetch(`${BASE}${path}`, {
-		method,
-		headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
-		...(body !== undefined ? { body: JSON.stringify(body) } : {})
-	});
-	let json = null;
-	try {
-		json = await response.json();
-	} catch {
-		// non-JSON — callers assert on status
+	for (let attempt = 0; ; attempt++) {
+		const response = await fetch(`${BASE}${path}`, {
+			method,
+			headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+			...(body !== undefined ? { body: JSON.stringify(body) } : {})
+		});
+		let json = null;
+		try {
+			json = await response.json();
+		} catch {
+			// non-JSON — callers assert on status
+		}
+		if (response.status === 429 && attempt < MAX_429_RETRIES) {
+			const retryAfter = Number(response.headers.get('retry-after'));
+			const waitMs = Math.min(65_000, Math.max(1_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5) * 1000));
+			console.log(`  ⏳ ${method} ${path} → 429 (per-user write budget) — pacing ${Math.ceil(waitMs / 1000)}s, then retrying`);
+			await new Promise((resolve) => setTimeout(resolve, waitMs));
+			continue;
+		}
+		return { status: response.status, body: json };
 	}
-	return { status: response.status, body: json };
 };
 
 const suffix = `${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
@@ -437,8 +457,8 @@ const run = async () => {
 	check('refused deletes leave the subspace intact', stillThere.status === 200);
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.3.0, S2 queues + review fixes + S3 user flairs) / notifications contracts (1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.3.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		'capability manifest advertises transfer (1.1.0, guarded writes + newOwner.userFlair) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.3.1, S2 queues + review fixes + S3 user flairs + S3 review) / notifications contracts (1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.1.0' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.3.1' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
@@ -771,8 +791,8 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (leave 1.1.0, join 1.1.1; get/list/update 1.2.0 + members 1.3.0 after the S3 user-flair bump)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.1.1' && manifest3.body.features['api.subspaces-leave'] === '1.1.0' && manifest3.body.features['api.subspaces-get'] === '1.2.0' && manifest3.body.features['api.subspaces'] === '1.2.0' && manifest3.body.features['api.subspaces-members'] === '1.3.0' && manifest3.body.features['api.subspaces-update'] === '1.2.0',
+		'capability manifest advertises the request contracts (leave / join 1.2.0 after the S3 review bump; get/list/update 1.2.0 + members 1.3.1 after the S3 user-flair bump + review)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.2.0' && manifest3.body.features['api.subspaces-leave'] === '1.2.0' && manifest3.body.features['api.subspaces-get'] === '1.2.0' && manifest3.body.features['api.subspaces'] === '1.2.0' && manifest3.body.features['api.subspaces-members'] === '1.3.1' && manifest3.body.features['api.subspaces-update'] === '1.2.0',
 		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
 	);
 
@@ -1020,6 +1040,16 @@ const run = async () => {
 	const renamed = await flairUpdate(mod.cookie, { userFlairs: [{ id: 'prism', label: 'Prism ✨', emoji: '🔮', color: 'hotpink' }, { id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true }] });
 	const afterRename = await api(`/api/v1/things?id=${flairPost.id}`);
 	check('renaming a template updates the wearer’s chip (label + color follow)', renamed.status === 200 && afterRename.body?.post?.authorFlair?.label === 'Prism ✨' && afterRename.body.post.authorFlair.color === 'hotpink' && afterRename.body.post.authorFlair.id === 'prism', JSON.stringify(afterRename.body?.post?.authorFlair));
+	// S3 review: the rename reaches the comment-as-root read too — the embed is
+	// loaded for the ROOT subspace, not only for docs carrying their own pointer
+	const renamedCommentRoot = await api(`/api/v1/things?id=${memberComment.body.comment.id}`);
+	const renamedThread = await api(`/api/v1/things?id=${strangerComment.body.comment.id}`);
+	const renamedNested = (renamedThread.body?.post?.comments || []).find((entry) => entry.id === nestedReply.body.comment.id);
+	check(
+		'GET /things?id=<comment> follows the rename too: the wearer’s comment as root and the nested reply under a stranger’s comment read the live label + color',
+		renamedCommentRoot.status === 200 && renamedCommentRoot.body.post?.authorFlair?.label === 'Prism ✨' && renamedCommentRoot.body.post.authorFlair.color === 'hotpink' && renamedNested?.authorFlair?.label === 'Prism ✨' && renamedNested.authorFlair.color === 'hotpink',
+		JSON.stringify({ root: renamedCommentRoot.body?.post?.authorFlair, nested: renamedNested?.authorFlair })
+	);
 	const dropped = await flairUpdate(mod.cookie, { userFlairs: [{ id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true }] });
 	const afterDrop = await api(`/api/v1/things?id=${flairPost.id}`);
 	check('deleting a template keeps the wearer’s snapshot (the last label they were given)', dropped.status === 200 && afterDrop.body?.post?.authorFlair?.id === 'prism' && afterDrop.body.post.authorFlair.label === 'Prism', JSON.stringify(afterDrop.body?.post?.authorFlair));
@@ -1034,15 +1064,18 @@ const run = async () => {
 	check('a mod sets custom text while allowCustomUserFlair is off → 200 (mods are bound by neither switch)', dressCustom.status === 200 && dressCustom.body.member?.userFlair?.id === null && dressCustom.body.member.userFlair.label === 'Verified bee' && dressCustom.body.member.userFlair.emoji === '🐝', `${dressCustom.status} ${JSON.stringify(dressCustom.body).slice(0, 200)}`);
 	const dressLong = await flairOf(mod.cookie, { userId: stranger.id, text: 'x'.repeat(41) });
 	check('custom text over 40 chars → 400 (mods too)', dressLong.status === 400);
+	// S3 review: the spec says moderators dress ANYONE — the owner included
+	// (who can always override their own pick)
 	const dressOwner = await flairOf(mod.cookie, { userId: owner.id, flairId: 'prism' });
-	check('a mod dressing the owner → 403', dressOwner.status === 403, `${dressOwner.status} ${JSON.stringify(dressOwner.body)}`);
+	check('a mod dressing the owner → 200 (the owner’s row wears it)', dressOwner.status === 200 && dressOwner.body.member?.role === 'owner' && dressOwner.body.member.userFlair?.id === 'prism', `${dressOwner.status} ${JSON.stringify(dressOwner.body).slice(0, 200)}`);
 	const ownerSelf = await flairOf(owner.cookie, { flairId: 'staff' });
-	check('the owner dresses themselves, mod-only template included → 200', ownerSelf.status === 200 && ownerSelf.body.member?.userFlair?.id === 'staff');
+	check('…and the owner overrides it themselves, mod-only template included → 200', ownerSelf.status === 200 && ownerSelf.body.member?.userFlair?.id === 'staff');
 	const flairLog = await api(`/api/v1/subspaces/modlog?slug=${flairSlug}&limit=50`, { cookie: mod.cookie });
 	const flairLogRows = (flairLog.body?.entries || []).filter((entry) => entry.action === 'member.userFlair');
+	const strangerLogRows = flairLogRows.filter((entry) => entry.userId === stranger.id);
 	check(
-		'mod log: member.userFlair only when a mod dresses someone ELSE (stranger ×2 by the mod; nothing for the member’s or the owner’s own picks)',
-		flairLogRows.length === 2 && flairLogRows.every((entry) => entry.userId === stranger.id && entry.actor?.id === mod.id) && flairLogRows.some((entry) => entry.detail?.flairId === 'staff') && flairLogRows.some((entry) => entry.detail?.flairId === null && entry.detail?.text === 'Verified bee'),
+		'mod log: member.userFlair only when a mod dresses someone ELSE (stranger ×2 + the owner ×1, all by the mod; nothing for the member’s or the owner’s own picks)',
+		flairLogRows.length === 3 && flairLogRows.every((entry) => entry.actor?.id === mod.id) && strangerLogRows.length === 2 && strangerLogRows.some((entry) => entry.detail?.flairId === 'staff') && strangerLogRows.some((entry) => entry.detail?.flairId === null && entry.detail?.text === 'Verified bee') && flairLogRows.some((entry) => entry.userId === owner.id && entry.detail?.flairId === 'prism'),
 		JSON.stringify(flairLogRows.map((entry) => [entry.userId, entry.detail]))
 	);
 	const memberRows = await api(`/api/v1/subspaces/members?slug=${flairSlug}`, { cookie: mod.cookie });
@@ -1084,24 +1117,66 @@ const run = async () => {
 	check('a kicked wearer’s chip disappears (authorFlair null while not a member)', redress.status === 200 && kickWearer.status === 200 && kickedRead.body?.post?.authorFlair === null, `${redress.status}/${kickWearer.status} ${JSON.stringify(kickedRead.body?.post?.authorFlair)}`);
 	const kickedSelf = await flairOf(member.cookie, { flairId: 'prism' });
 	check('…and they can’t set one while out → 403', kickedSelf.status === 403);
+	// S3 review: a kick STRIPS the pick (as it revokes approval) — a rejoin
+	// wears nothing until they pick again; the mod log says so
+	const kickLog = await api(`/api/v1/subspaces/modlog?slug=${flairSlug}&limit=50`, { cookie: mod.cookie });
+	check('the member.remove mod-log entry records userFlairCleared', (kickLog.body?.entries || []).some((entry) => entry.action === 'member.remove' && entry.userId === member.id && entry.detail?.userFlairCleared === true), JSON.stringify((kickLog.body?.entries || []).filter((entry) => entry.action === 'member.remove').map((entry) => entry.detail)));
 	const rejoinWearer = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: flairSlug } });
 	const rejoinedRead = await api(`/api/v1/things?id=${flairPost.id}`);
-	check('rejoining brings the flair back (the pick was kept on the row)', rejoinWearer.status === 200 && rejoinWearer.body.joined === true && rejoinWearer.body.subspace.viewer.userFlair?.id === 'prism' && rejoinedRead.body?.post?.authorFlair?.id === 'prism', JSON.stringify([rejoinWearer.body?.subspace?.viewer?.userFlair, rejoinedRead.body?.post?.authorFlair]));
+	check('rejoining after a kick wears NO flair (the kick stripped the pick): viewer.userFlair null, authorFlair null', rejoinWearer.status === 200 && rejoinWearer.body.joined === true && rejoinWearer.body.subspace.viewer.userFlair === null && rejoinedRead.body?.post?.authorFlair === null, JSON.stringify([rejoinWearer.body?.subspace?.viewer?.userFlair, rejoinedRead.body?.post?.authorFlair]));
+	const repick = await flairOf(member.cookie, { flairId: 'prism' });
+	const repickedRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('…and picking again works (the post wears it again)', repick.status === 200 && repick.body.member?.userFlair?.id === 'prism' && repickedRead.body?.post?.authorFlair?.id === 'prism', `${repick.status} ${JSON.stringify(repickedRead.body?.post?.authorFlair)}`);
 	const banWearer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: stranger.id, action: 'ban', reason: 'flair test' } });
 	const bannedRead = await api(`/api/v1/things?id=${plainPosted.body.post.id}`);
 	const dressBanned = await flairOf(mod.cookie, { userId: stranger.id, flairId: 'prism' });
 	check('a banned wearer’s chip disappears and a mod dressing a banned user → 400', banWearer.status === 200 && bannedRead.body?.post?.authorFlair === null && dressBanned.status === 400, `${banWearer.status}/${dressBanned.status} ${JSON.stringify(bannedRead.body?.post?.authorFlair)}`);
 	const bannedSelf = await flairOf(stranger.cookie, { flairId: 'prism' });
 	check('a banned member setting their own → 403', bannedSelf.status === 403);
-	await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: stranger.id, action: 'unban' } });
+	// S3 review: the ban stripped the pick — lifting it restores the
+	// membership, not the badge
+	const unbanWearer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: stranger.id, action: 'unban' } });
+	const unbannedRead = await api(`/api/v1/things?id=${plainPosted.body.post.id}`);
+	check('unban brings the membership back without the flair (the ban stripped it: member.userFlair null, authorFlair null)', unbanWearer.status === 200 && unbanWearer.body.member?.banned === false && unbanWearer.body.member.userFlair === null && unbannedRead.body?.post?.authorFlair === null, `${unbanWearer.status} ${JSON.stringify([unbanWearer.body?.member?.userFlair, unbannedRead.body?.post?.authorFlair])}`);
+	// S3 review: a demotion takes a MOD-ONLY flair off with the hat; an
+	// ordinary pick stays (the mod wears prism from the self-assign-off run)
+	const demoteKeeps = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, userId: mod.id, action: 'role', role: 'member' } });
+	check('demoting a moderator who wears an ordinary template keeps it', demoteKeeps.status === 200 && demoteKeeps.body.member?.role === 'member' && demoteKeeps.body.member.userFlair?.id === 'prism', `${demoteKeeps.status} ${JSON.stringify(demoteKeeps.body?.member?.userFlair)}`);
+	const repromote = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, userId: mod.id, action: 'role', role: 'moderator' } });
+	const modWearsStaff = await flairOf(mod.cookie, { flairId: 'staff' });
+	const demoteStrips = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, userId: mod.id, action: 'role', role: 'member' } });
+	check(
+		'demoting a moderator who wears a MOD-ONLY template strips it (member.userFlair null)',
+		repromote.status === 200 && modWearsStaff.status === 200 && modWearsStaff.body.member?.userFlair?.id === 'staff' && demoteStrips.status === 200 && demoteStrips.body.member?.role === 'member' && demoteStrips.body.member.userFlair === null,
+		`${repromote.status}/${modWearsStaff.status}/${demoteStrips.status} ${JSON.stringify(demoteStrips.body?.member?.userFlair)}`
+	);
+	const repromote2 = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, userId: mod.id, action: 'role', role: 'moderator' } });
+	check('(setup) the mod hat is back', repromote2.status === 200 && repromote2.body.member?.role === 'moderator');
+	const stripLog = await api(`/api/v1/subspaces/modlog?slug=${flairSlug}&limit=50`, { cookie: mod.cookie });
+	const stripRows = stripLog.body?.entries || [];
+	check(
+		'mod log: member.ban and the stripping member.role entry carry userFlairCleared: true; the demotion that kept the pick does not',
+		stripRows.some((entry) => entry.action === 'member.ban' && entry.userId === stranger.id && entry.detail?.userFlairCleared === true) &&
+			stripRows
+				.filter((entry) => entry.action === 'member.role' && entry.userId === mod.id && entry.detail?.role === 'member')
+				.map((entry) => entry.detail?.userFlairCleared === true)
+				.sort()
+				.join() === 'false,true',
+		JSON.stringify(stripRows.filter((entry) => entry.action === 'member.role' || entry.action === 'member.ban').map((entry) => [entry.action, entry.userId, entry.detail]))
+	);
 	const genericFlair = await api('/api/v1/things', { method: 'PATCH', cookie: member.cookie, body: { id: flairPost.id, crystal: { authorFlair: { label: 'sneaky' } } } });
 	const genericRead = await api(`/api/v1/things?id=${flairPost.id}`);
 	check('authorFlair is never client-writable (a PATCH smuggling it changes nothing)', genericFlair.status !== 500 && genericRead.body?.post?.authorFlair?.id === 'prism' && genericRead.body.post.authorFlair.label === 'Prism', `${genericFlair.status} ${JSON.stringify(genericRead.body?.post?.authorFlair)}`);
 	const manifestO = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0, members 1.3.0, subspaces-feed 1.1.0, things / things-comment / things-feed / things-user 1.2.0)',
-		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.2.0' && manifestO.body.features['api.subspaces-get'] === '1.2.0' && manifestO.body.features['api.subspaces-update'] === '1.2.0' && manifestO.body.features['api.subspaces-members'] === '1.3.0' && manifestO.body.features['api.subspaces-feed'] === '1.1.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
+		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0, members 1.3.1, subspaces-feed 1.1.0, things / things-comment / things-feed / things-user 1.2.0)',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.2.0' && manifestO.body.features['api.subspaces-get'] === '1.2.0' && manifestO.body.features['api.subspaces-update'] === '1.2.0' && manifestO.body.features['api.subspaces-members'] === '1.3.1' && manifestO.body.features['api.subspaces-feed'] === '1.1.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
 		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
+	);
+	check(
+		'S3 review: every other contract whose shape grew user flairs is bumped (join / leave 1.2.0 — subspace block + viewer.userFlair; transfer 1.1.0 — newOwner.userFlair; moderate 1.1.0 — post.authorFlair; members 1.3.1 — kick / ban / demotion strip + the owner dressable)',
+		manifestO.body?.features?.['api.subspaces-join'] === '1.2.0' && manifestO.body.features['api.subspaces-leave'] === '1.2.0' && manifestO.body.features['api.subspaces-transfer'] === '1.1.0' && manifestO.body.features['api.subspaces-moderate'] === '1.1.0' && manifestO.body.features['api.subspaces-members'] === '1.3.1',
+		JSON.stringify({ j: manifestO.body?.features?.['api.subspaces-join'], l: manifestO.body?.features?.['api.subspaces-leave'], t: manifestO.body?.features?.['api.subspaces-transfer'], mo: manifestO.body?.features?.['api.subspaces-moderate'], m: manifestO.body?.features?.['api.subspaces-members'] })
 	);
 	const cleanupO = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, confirmSlug: flairSlug } });
 	check('(cleanup) owner deletes the flair subspace', cleanupO.status === 200, `${cleanupO.status} ${JSON.stringify(cleanupO.body).slice(0, 200)}`);

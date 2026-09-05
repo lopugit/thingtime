@@ -35,6 +35,7 @@ import { SubspaceIcon } from './SubspaceCard';
 import {
 	ACCESS_META,
 	openRequestCount,
+	type PublicAuthorFlair,
 	type PublicModlogEntry,
 	type PublicSubspace,
 	type PublicSubspaceMember,
@@ -327,37 +328,61 @@ const RequestsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCou
 // ── Set flair (moderator → member) ─────────────────────────────────────────
 // A moderator dresses one member: a template (mod-only ones included), custom
 // text (+ optional emoji), or none. Chakra modal — no window.prompt anywhere.
+// The "Custom text…" option's value sits OUTSIDE the flair-id grammar
+// ([a-z0-9_-]), so a template a mod labelled "Custom" (id "custom") can never
+// be mistaken for it.
+const CUSTOM_FLAIR_OPTION = '~custom';
+type FlairFormSeed = { flairId: string; text: string; emoji: string; removedTemplate: string | null };
+// What the form opens on: the worn template while it still exists; custom
+// text — or a template the mods deleted since (the row keeps its snapshot,
+// the Select has no option for it) — as editable custom text, so Save never
+// posts a dead template id.
+const seedFlairForm = (flair: PublicAuthorFlair | null, templates: readonly SubspaceFlair[]): FlairFormSeed => {
+	if (!flair) return { flairId: '', text: '', emoji: '', removedTemplate: null };
+	if (flair.id && templates.some((template) => template.id === flair.id)) return { flairId: flair.id, text: '', emoji: '', removedTemplate: null };
+	return { flairId: CUSTOM_FLAIR_OPTION, text: flair.label, emoji: flair.emoji || '', removedTemplate: flair.id };
+};
 const MemberFlairModal = ({
 	member,
 	subspace,
+	busy,
 	onClose,
 	onApply
 }: {
 	member: PublicSubspaceMember | null;
 	subspace: PublicSubspace;
+	// another member action is still saving — Save waits for it
+	busy: boolean;
 	onClose: () => void;
+	// resolves once the API accepted the change; rejects when it refused (the
+	// caller has already put the row back + toasted) so the form stays open
 	onApply: (member: PublicSubspaceMember, request: { flairId: string | null; text: string; emoji: string | null }) => Promise<void>;
 }) => {
 	const current = member?.userFlair || null;
-	const [flairId, setFlairId] = React.useState<string>(current?.id || (current ? 'custom' : ''));
-	const [text, setText] = React.useState(current && !current.id ? current.label : '');
-	const [emoji, setEmoji] = React.useState(current && !current.id ? current.emoji || '' : '');
+	const seed = seedFlairForm(current, subspace.userFlairs);
+	const [flairId, setFlairId] = React.useState<string>(seed.flairId);
+	const [text, setText] = React.useState(seed.text);
+	const [emoji, setEmoji] = React.useState(seed.emoji);
 	const [saving, setSaving] = React.useState(false);
 	// a different member (or a fresh row for the same one) reseeds the form
 	React.useEffect(() => {
-		const flair = member?.userFlair || null;
-		setFlairId(flair?.id || (flair ? 'custom' : ''));
-		setText(flair && !flair.id ? flair.label : '');
-		setEmoji(flair && !flair.id ? flair.emoji || '' : '');
-	}, [member]);
-	const custom = flairId === 'custom';
+		const next = seedFlairForm(member?.userFlair || null, subspace.userFlairs);
+		setFlairId(next.flairId);
+		setText(next.text);
+		setEmoji(next.emoji);
+	}, [member]); // eslint-disable-line react-hooks/exhaustive-deps
+	const custom = flairId === CUSTOM_FLAIR_OPTION;
 	const canSave = !!member && (!custom || !!text.trim());
 	const submit = async () => {
-		if (!member || !canSave || saving) return;
+		if (!member || !canSave || saving || busy) return;
 		setSaving(true);
 		try {
 			await onApply(member, custom ? { flairId: null, text: text.trim(), emoji: emoji.trim() || null } : { flairId: flairId || null, text: '', emoji: null });
 			onClose();
+		} catch {
+			// refused (or another action was still saving): the row is already
+			// back to what it was and the toast said why — keep the form and
+			// its typed text so the mod can adjust and retry
 		} finally {
 			setSaving(false);
 		}
@@ -387,8 +412,13 @@ const MemberFlairModal = ({
 										{flair.modOnly ? ' 🎩' : ''}
 									</option>
 								))}
-								<option value="custom">Custom text…</option>
+								<option value={CUSTOM_FLAIR_OPTION}>Custom text…</option>
 							</Select>
+							{seed.removedTemplate && custom && (
+								<Text fontSize="xs" color={MUTED} marginTop={1} data-testid="member-flair-removed-template">
+									The “{seed.removedTemplate}” template was removed since — saving keeps “{current?.label}” as custom text.
+								</Text>
+							)}
 						</Box>
 						{custom && (
 							<Flex columnGap={2} rowGap={2} flexWrap="wrap">
@@ -421,7 +451,7 @@ const MemberFlairModal = ({
 					<Button size="sm" variant="ghost" borderRadius={RADIUS_MD} onClick={onClose} isDisabled={saving}>
 						Cancel
 					</Button>
-					<Button size="sm" borderRadius={RADIUS_MD} isDisabled={!canSave} isLoading={saving} onClick={submit} data-testid="member-flair-save">
+					<Button size="sm" borderRadius={RADIUS_MD} isDisabled={!canSave || busy} isLoading={saving} onClick={submit} data-testid="member-flair-save">
 						{flairId ? 'Set flair 🏷️' : 'Remove flair'}
 					</Button>
 				</ModalFooter>
@@ -450,7 +480,17 @@ const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAc
 					{new Date(member.joinedAt).toLocaleDateString()}
 				</Text>
 			</Box>
-			{member.role !== 'owner' && (
+			{member.role === 'owner' ? (
+				// the owner is never moderated, but a moderator may dress them —
+				// the owner can always override their own flair
+				onFlair && (
+					<Flex columnGap={1} flexWrap="wrap">
+						<Button size="xs" borderRadius="999px" variant="outline" onClick={() => onFlair(member)} data-testid="member-set-flair">
+							{member.userFlair ? 'Flair 🏷️' : 'Set flair'}
+						</Button>
+					</Flex>
+				)
+			) : (
 				<Flex columnGap={1} flexWrap="wrap">
 					{member.banned ? (
 						<Button size="xs" borderRadius="999px" onClick={() => onAction(member, 'unban')}>
@@ -530,8 +570,16 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 		load();
 	}, [load]);
 
-	const mutate = async (target: { userId?: string; username?: string }, act: string, extra: Record<string, unknown> = {}) => {
-		if (busy) return;
+	// One member action at a time. The busy guard is OBSERVABLE: a second call
+	// while one is in flight rejects (after a gentle toast) instead of
+	// resolving as if it had run — an optimistic caller must never keep a
+	// paint the server never saw. Thrown BEFORE the try, so the in-flight
+	// action's busy flag is not cleared by this call's finally.
+	const mutate = async (target: { userId?: string; username?: string }, act: string, extra: Record<string, unknown> = {}): Promise<PublicSubspaceMember> => {
+		if (busy) {
+			lopu({ title: 'One member action at a time — the last one is still saving ⏳', status: 'info', duration: 2500 });
+			throw new Error('member action still in flight');
+		}
 		setBusy(true);
 		try {
 			const resp: any = await api.v1.subspaces.mutateMember({ slug, ...target, action: act, ...extra });
@@ -544,6 +592,7 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 				return next.filter((entry) => (banned ? entry.banned : !entry.banned && !entry.left));
 			});
 			lopu({ title: act === 'userFlair' ? (member.userFlair ? `${memberName(member)} now wears ${member.userFlair.emoji ? `${member.userFlair.emoji} ` : ''}${member.userFlair.label} 🏷️` : `Flair removed from ${memberName(member)}`) : `${act} → ${memberName(member)} ✓`, status: 'success', duration: 4000 });
+			return member;
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Member action failed 😞', status: 'error' });
 			throw err;
@@ -551,8 +600,15 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 			setBusy(false);
 		}
 	};
-	// the flair modal paints the row first and puts it back if the API says no
+	// the flair modal paints the row first and puts it back if the API says
+	// no — and rethrows, so the modal stays open on a refusal. While another
+	// action is still saving nothing is painted at all: mutate's busy guard
+	// rejects and the modal keeps the form.
 	const applyFlair = async (member: PublicSubspaceMember, request: { flairId: string | null; text: string; emoji: string | null }) => {
+		if (busy) {
+			await mutate({ userId: member.userId }, 'userFlair', request);
+			return;
+		}
 		const optimistic = request.flairId
 			? (() => {
 					const template = subspace.userFlairs.find((flair) => flair.id === request.flairId);
@@ -564,8 +620,9 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 		setMembers((prev) => prev.map((entry) => (entry.userId === member.userId ? { ...entry, userFlair: optimistic } : entry)));
 		try {
 			await mutate({ userId: member.userId }, 'userFlair', request);
-		} catch {
+		} catch (err) {
 			setMembers((prev) => prev.map((entry) => (entry.userId === member.userId ? { ...entry, userFlair: member.userFlair } : entry)));
+			throw err;
 		}
 	};
 
@@ -630,7 +687,7 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 					</Button>
 				)}
 			</Card>
-			{!banned && <MemberFlairModal member={flairTarget} subspace={subspace} onClose={() => setFlairTarget(null)} onApply={applyFlair} />}
+			{!banned && <MemberFlairModal member={flairTarget} subspace={subspace} busy={busy} onClose={() => setFlairTarget(null)} onApply={applyFlair} />}
 		</Flex>
 	);
 };

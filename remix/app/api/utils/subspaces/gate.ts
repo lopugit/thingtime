@@ -221,16 +221,18 @@ export const resolveRootPost = async (doc: any, maxHops = 64): Promise<any | nul
 
 // Comment/vote gate for things attached to subspace posts: banned users may
 // not comment or vote there, and locked posts accept no new comments from
-// anyone but moderators.
+// anyone but moderators. Answers the ROOT post's subspace it resolved (null
+// outside subspaces) so the caller never walks the reply chain a second time
+// — addComment reuses it for the fresh comment's authorFlair.
 export const assertSubspaceInteraction = async (
 	actorId: string,
 	target: any,
 	kind: 'comment' | 'vote',
 	preloaded: { roles?: ViewerSubspaceRoles } = {}
-): Promise<Fail | { ok: true }> => {
+): Promise<Fail | { ok: true; rootSubspaceId: string | null }> => {
 	const root = await resolveRootPost(target);
 	const subspaceId = subspaceIdOfDoc(root);
-	if (!root || !subspaceId) return { ok: true };
+	if (!root || !subspaceId) return { ok: true, rootSubspaceId: null };
 	const membership = preloaded.roles ? preloaded.roles.get(subspaceId) || null : await membershipOf(subspaceId, actorId);
 	if (membership?.banned) {
 		const subspace = await findSubspaceById(subspaceId);
@@ -239,7 +241,7 @@ export const assertSubspaceInteraction = async (
 	if (kind === 'comment' && root.subspaceMod?.locked === true && !canModerate(membership)) {
 		return fail(423, 'This post is locked — moderators have closed the comments 🔒');
 	}
-	return { ok: true };
+	return { ok: true, rootSubspaceId: subspaceId };
 };
 
 // Feed-level clauses (sync, given an enriched viewer): removed posts stay out

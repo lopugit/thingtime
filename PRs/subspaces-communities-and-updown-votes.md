@@ -209,9 +209,10 @@ score field.
   (any moderator); member row `crystal.userFlair { id | null, text, emoji,
   color }` via `POST /api/v1/subspaces/members action: 'userFlair'` —
   self (active member; template not modOnly while self-assign is on, custom
-  text while allowed, clearing always) or, as a moderator, anyone but the
-  owner (any template incl. modOnly, custom text, bound by neither switch;
-  `member.userFlair` mod-log only when dressing someone else). Projection:
+  text while allowed, clearing always) or, as a moderator, anyone — the
+  owner included, who can always override it (any template incl. modOnly,
+  custom text, bound by neither switch; `member.userFlair` mod-log only when
+  dressing someone else). Projection:
   `authorFlair` on posts AND comments (the root post's subspace) from ONE
   `uniqueKeys $in` over the page's (subspace, author) pairs — page docs,
   shared originals, every shipped comment level — resolved against the live
@@ -224,12 +225,31 @@ score field.
   / take it off; optimistic across the page's own posts + comments), mod
   page Flairs → **User flairs** editor + the two switches, Members → **Set
   flair** modal. Capabilities: subspaces / get / update 1.2.0, members
-  1.3.0, subspaces-feed 1.1.0, things / things-comment / things-feed /
-  things-user feature 1.3.0 · contract 1.2.0. Verify section O (defaults,
-  every 4xx wall, template + custom + clear, batched authorFlair on posts /
-  fresh comments / nested replies / home + subspace feeds, live template
-  rename, mod dressing + mod-log rule, self-assign off, kicked / banned
-  wearers hidden + rejoin, manifest).
+  1.3.0 (→ 1.3.1 with the review fixes), subspaces-feed 1.1.0, join / leave
+  1.2.0, transfer 1.1.0, moderate 1.1.0 (their response shapes grew the
+  flair fields), things / things-comment / things-feed / things-user feature
+  1.3.0 · contract 1.2.0 — the shared post projection is versioned on those
+  four things ids only; things-search / -trending / -rss / -saved ride the
+  same projection unbumped (the round-1 precedent for title / subspace /
+  votes). Verify section O (defaults, every 4xx wall, template + custom +
+  clear, batched authorFlair on posts / fresh comments / nested replies /
+  home + subspace feeds, live template rename, mod dressing + mod-log rule,
+  self-assign off, kicked / banned wearers stripped, manifest).
+- S3 review fixes (same branch): comment-as-root reads
+  (`GET /api/v1/things?id=<comment>`, thread drill-downs) load the ROOT
+  subspace's embed, so a renamed template follows the wearer there too;
+  `addComment` reuses the root the interaction gate already resolved
+  (`createThing` answers `rootSubspaceId`) instead of walking the reply
+  chain twice; kick and ban `$set crystal.userFlair: null` and a demotion
+  strips a mod-only pick (`userFlairSurvivesDemotion`; mod-log detail
+  `userFlairCleared: true`) so no badge walks back in un-granted; the owner
+  wall on `userFlair` is gone (spec: mods dress anyone — the owner overrides
+  at will; the mod page shows Set flair on the owner's row); the Set-flair
+  modal's custom sentinel sits outside the flair-id grammar (`~custom`), a
+  worn-but-deleted template opens as editable custom text with a hint, Save
+  waits while another member action is in flight (the busy guard rejects
+  instead of resolving silently) and the modal stays open when the API
+  refuses; join / leave 1.2.0, transfer 1.1.0, moderate 1.1.0, members 1.3.1.
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger

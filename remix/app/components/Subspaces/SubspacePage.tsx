@@ -106,7 +106,7 @@ const UserFlairCard = ({ subspace, onViewerFlair }: { subspace: PublicSubspace; 
 
 	return (
 		<SidebarCard title="Your flair">
-			<Flex alignItems="center" columnGap={2} flexWrap="wrap" minHeight="22px" data-testid="user-flair-current" data-flair-id={current?.id || (current ? 'custom' : 'none')}>
+			<Flex alignItems="center" columnGap={2} flexWrap="wrap" minHeight="22px" data-testid="user-flair-current" data-flair-id={current ? current.id || '~custom' : '~none'}>
 				<Text fontSize="xs" color={MUTED}>
 					{current ? 'You wear' : 'You wear no flair here yet'}
 				</Text>

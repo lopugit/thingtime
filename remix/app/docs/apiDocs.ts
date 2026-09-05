@@ -7571,7 +7571,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things',
     // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
-    // the author's USER flair in the post's subspace (additive)
+    // the author's USER flair in the post's subspace (additive). The shared
+    // post projection is versioned HERE and on things-comment / things-feed /
+    // things-user; things-search / -trending / -rss / -saved ride the same
+    // projection without a bump of their own (round-1 precedent for
+    // title / subspace / votes — see PRs/subspaces-communities-and-updown-votes.md)
     featureVersion: '1.3.0',
     contractVersion: '1.2.0',
     group: 'things',
@@ -8689,8 +8693,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // old approval no longer rides through the queue), the moderators' bell
     // is deduped against an unread copy, and join has its own rate key
     // (subspaces.join, 20/min) — compatible corrections
-    featureVersion: '1.1.1',
-    contractVersion: '1.1.1',
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
@@ -8724,8 +8730,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'subspaces-leave',
     // 1.1.0: leaving with an open join request cancels the request (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Leave subspace',
     endpoint: '/api/v1/subspaces/leave',
@@ -8760,8 +8768,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.3.0: user flairs — rows carry userFlair; POST action userFlair
     // (self, or any member as a moderator) picks a template / sets custom
     // text / clears (additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.3.1: remove and ban strip the user flair (the mod-log detail reads
+    // userFlairCleared: true), role member strips a mod-only pick, and
+    // moderators may dress the owner too (403 → 200, per the round-2 spec:
+    // "mods may set anyone's") — compatible corrections
+    featureVersion: '1.3.1',
+    contractVersion: '1.3.1',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -8776,9 +8788,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'text?, emoji?, color? } with action add (also accepts a pending join request), accept (pending → active member; ' +
       'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
       'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
-      'posting approval), approve/unapprove (restricted posting rights — both settle an open approval request), ' +
-      'ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning a pending requester ' +
-      'removes the request), role (owner only: moderator | member), or request-approval — the one SELF action: ' +
+      'posting approval and strips the user flair), approve/unapprove (restricted posting rights — both settle an ' +
+      'open approval request), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning ' +
+      'a pending requester removes the request; a ban strips the user flair too), role (owner only: moderator | ' +
+      'member — demoting strips a mod-only user flair, ordinary picks stay), or request-approval — the one SELF action: ' +
       'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
       'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
       'mod’s unread copy; 400 unless the subspace is restricted, 403 for non-members / for someone else; an ' +
@@ -8787,10 +8800,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(flairId; not a modOnly one → 403) while the subspace’s userFlairSelfAssign is on, types custom text ' +
       '(text ≤40 chars, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
       'always clear their own (flairId null + empty text); a non-member answers 403, an unknown template 400. ' +
-      'Moderators set anyone’s (the owner’s excepted → 403), any template incl. modOnly or custom text, bound by ' +
-      'neither switch — a banned target answers 400, a pending requester / non-member 404 — and only a moderator ' +
-      'dressing someone ELSE writes a member.userFlair mod-log entry. Posts and comments project the flair as ' +
-      'authorFlair while the wearer is an active member. A pending join request is ' +
+      'Moderators set anyone’s — the owner’s included (who can always override it) — any template incl. modOnly ' +
+      'or custom text, bound by neither switch — a banned target answers 400, a pending requester / non-member ' +
+      '404 — and only a moderator dressing someone ELSE writes a member.userFlair mod-log entry. Posts and comments ' +
+      'project the flair as authorFlair while the wearer is an active member; a kick or ban clears the pick and a ' +
+      'demotion clears a mod-only one (that entry’s mod-log detail reads userFlairCleared: true), so no badge walks ' +
+      'back in with a rejoin or an unban that nobody re-granted. A pending join request is ' +
       'not a membership: only accept, deny, add, ban and role moderator apply to one — approve, unapprove and ' +
       'role member answer 400 ("accept the join request first"), remove answers 404. accept, deny and add on a ' +
       'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
@@ -8831,6 +8846,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-moderate',
+    // 1.1.0: the re-projected post carries authorFlair — the author's user
+    // flair in the subspace (S3 user flairs, additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Moderate post',
     endpoint: '/api/v1/subspaces/moderate',
@@ -8904,8 +8923,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.0.1: every write inside the transfer transaction is guarded by the
     // ownership/membership the gate saw — a concurrent transfer commits at most
     // once, the loser answers 409 (compatible correction)
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    // 1.1.0: newOwner carries userFlair and the returned subspace the
+    // user-flair settings + viewer.userFlair (S3 user flairs, additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',

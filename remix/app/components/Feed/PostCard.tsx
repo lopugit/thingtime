@@ -244,7 +244,7 @@ export const AuthorFlairChip = ({ flair, size = 'sm' }: { flair: PublicAuthorFla
       textOverflow="ellipsis"
       title={label}
       data-testid="author-flair"
-      data-flair-id={flair.id || 'custom'}
+      data-flair-id={flair.id || '~custom'}
     >
       {label}
     </Text>

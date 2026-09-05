@@ -1366,21 +1366,31 @@ email whose link points at the attacker.
       appears right after the author name on post cards, comment rows (all
       shipped levels), the shared-post sub-card and the mod page's member
       rows — only inside subspaces (`authorFlair` is null elsewhere), and
-      only while the author is an active member (a kicked / banned / pending
-      wearer's chip disappears, a rejoin brings it back). Renaming a template
-      updates every wearer's chip; deleting one keeps their snapshot. Mod
-      page → Members → **Set flair** opens a Chakra modal (template select
-      incl. 🎩 mod-only ones / Custom text… + emoji / No flair) — a mod may
-      dress anyone but the owner, bound by neither switch, and only dressing
+      only while the author is an active member (a pending wearer's chip is
+      hidden; a kick or ban STRIPS the pick — a rejoin / unban wears nothing
+      until it is picked or granted again — and demoting a moderator strips
+      a mod-only pick while ordinary ones stay; the `member.remove` /
+      `member.ban` / `member.role` mod-log detail reads
+      `userFlairCleared: true`). Renaming a template updates every wearer's
+      chip — on the post page AND on a comment's own `/post/<commentId>`
+      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
+      ones / Custom text… + emoji / No flair; a worn template the mods
+      deleted since opens as editable custom text with a "removed" hint;
+      Save waits while another member action is saving, and the modal stays
+      open with the typed text when the API refuses) — a mod may dress
+      anyone, the owner included (who can always override it; the owner's
+      row shows Set flair too), bound by neither switch, and only dressing
       someone ELSE writes a `member.userFlair` mod-log entry. API walls:
       anonymous 401, a non-member setting their own 403, someone else's
       without a mod hat 403, unknown template 400, mod-only template as a
       member 403, custom text while it is off 403 / over 40 chars 400,
       self-assign off → a member's pick 403 but clearing still 200, a mod
-      dressing the owner 403 / a non-member 404 / a banned user 400. The
-      fresh comment `POST /api/v1/things/comment` answers with already carries
-      `authorFlair`; the projection resolves every page in ONE member-row
-      lookup (posts, shared originals, every comment level).
+      dressing a non-member 404 / a banned user 400. The fresh comment
+      `POST /api/v1/things/comment` answers with already carries
+      `authorFlair` (the root post's subspace, resolved once by the
+      interaction gate); the projection resolves every page in ONE
+      member-row lookup (posts, shared originals, every comment level).
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

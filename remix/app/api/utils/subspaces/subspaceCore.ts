@@ -237,6 +237,17 @@ export const liveUserFlair = (stored: SubspaceUserFlair | null, templates: reado
 export const toPublicUserFlair = (flair: SubspaceUserFlair | null): PublicUserFlair | null =>
 	flair ? { id: flair.id, label: flair.text, emoji: flair.emoji, color: flair.color } : null;
 
+// Does a member's pick survive losing the mod hat? A MOD-ONLY template is
+// handed out by moderators and worn by moderators — a demoted moderator (or
+// a member a mod once dressed) does not keep it. Ordinary templates and
+// custom text stay: the member could have picked those themselves. A pick
+// whose template was deleted meanwhile is a plain snapshot and stays too.
+export const userFlairSurvivesDemotion = (stored: SubspaceUserFlair | null, templates: readonly SubspaceFlair[] | null | undefined): boolean => {
+	if (!stored?.id) return true;
+	const template = flairById(templates, stored.id);
+	return !template?.modOnly;
+};
+
 export type UserFlairRequest = { flairId?: unknown; text?: unknown; emoji?: unknown; color?: unknown };
 export type UserFlairActor = { moderator: boolean; self: boolean };
 

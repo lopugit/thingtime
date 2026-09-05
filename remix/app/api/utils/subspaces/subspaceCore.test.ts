@@ -26,7 +26,8 @@ import {
 	toPublicUserFlair,
 	topRangeSince,
 	userFlairOfCrystal,
-	userFlairSettingsOf
+	userFlairSettingsOf,
+	userFlairSurvivesDemotion
 } from './subspaceCore.ts';
 
 test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
@@ -291,4 +292,13 @@ test('userFlairOfCrystal normalizes the stored pick and liveUserFlair follows th
 	// the wire shape renames text → label
 	assert.deepEqual(toPublicUserFlair(stored), { id: 'prism', label: 'Old label', emoji: '🔮', color: '#7c5cff' });
 	assert.equal(toPublicUserFlair(null), null);
+});
+
+test('userFlairSurvivesDemotion: a mod-only template comes off with the hat; ordinary templates, custom text and orphaned snapshots stay', () => {
+	assert.equal(userFlairSurvivesDemotion({ id: 'staff', text: 'Staff', emoji: '🎩', color: null }, templates), false, 'mod-only → stripped');
+	assert.equal(userFlairSurvivesDemotion({ id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' }, templates), true, 'an ordinary template stays');
+	assert.equal(userFlairSurvivesDemotion({ id: null, text: 'Verified bee', emoji: '🐝', color: null }, templates), true, 'custom text stays');
+	// the template was deleted meanwhile — the pick is a plain snapshot now
+	assert.equal(userFlairSurvivesDemotion({ id: 'staff', text: 'Staff', emoji: '🎩', color: null }, []), true);
+	assert.equal(userFlairSurvivesDemotion(null, templates), true);
 });

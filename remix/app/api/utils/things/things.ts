@@ -1032,7 +1032,11 @@ export type CreateThingInput = {
   createdAt?: Date;
 };
 
-type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
+// rootSubspaceId: for a comment / reaction the interaction gate judged, the
+// ROOT post's subspace it resolved on the way (null outside subspaces) — the
+// caller reuses it instead of walking the reply chain again; absent when the
+// gate did not run (standalone things)
+type CreateThingResult = Fail | { ok: true; doc: ThingDoc; rootSubspaceId?: string | null };
 
 // Dedicated server features may extend the atomic Thing insert without
 // opening their protected fields to generic client input. Hooks run after the
@@ -1247,12 +1251,16 @@ export const createThing = async (
   if (isFail(folderAssignment)) return folderAssignment;
 
   // subspace rules on attached things: banned users can't comment or react
-  // inside the subspace, and locked posts take no new comments (mods excepted)
+  // inside the subspace, and locked posts take no new comments (mods excepted).
+  // The gate walks to the root post once; its subspace rides the result so
+  // addComment never repeats the walk for the fresh comment's authorFlair.
+  let rootSubspaceId: string | null | undefined;
   if (target && (validated.thingtime.includes('comment') || validated.thingtime.includes('reaction'))) {
     const interaction = await assertSubspaceInteraction(ownerId, target, validated.thingtime.includes('comment') ? 'comment' : 'vote', {
       roles: asOwner.subspaceRoles
     });
     if (isFail(interaction)) return interaction;
+    rootSubspaceId = interaction.rootSubspaceId;
   }
 
   if (validated.thingtime.includes('comment') && target) {
@@ -1428,7 +1436,7 @@ export const createThing = async (
 	} else if (moderationPlan.queueAsync) {
 		queueTextModeration(doc.shareId);
 	}
-  return { ok: true, doc };
+  return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
 };
 
 // Posts land in followers'/friends' notification feeds, capped — big accounts
@@ -2233,8 +2241,12 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const [attachmentsByTarget, profiles, subspaces, authorFlairs] = await Promise.all([
     resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
     resolveProfiles(userIds),
-    // subspace embeds for the page — one $in over the subspace kind
-    loadSubspaceEmbeds(allDocs.map((doc) => subspaceIdOfDoc(doc)).filter(Boolean) as string[]),
+    // subspace embeds for the page — one $in over the subspace kind. Keyed by
+    // the ROOT subspace (rootSubspaceOf, not the doc's own pointer) so a
+    // comment projected as the root still resolves its authorFlair against
+    // the live templates: a renamed template follows the wearer on the
+    // thread drill-down too, not only on the post page.
+    loadSubspaceEmbeds(allDocs.map((doc) => rootSubspaceOf(doc)).filter(Boolean) as string[]),
     loadAuthorFlairs(flairPairs)
   ]);
   const authorFlairOf = (subspaceId: string | null, userId: string): PublicAuthorFlair | null =>
@@ -3725,8 +3737,11 @@ export const addComment = async (
   const doc = created.doc;
   const crystal = crystalOf(doc);
   // the fresh comment wears the author's user flair in the ROOT post's
-  // subspace (the same resolution the page projection runs)
-  const rootSubspaceId = subspaceIdOfDoc(await resolveRootPost(target));
+  // subspace (the same resolution the page projection runs). createThing's
+  // interaction gate already walked to the root — reuse its answer; only a
+  // comment reconciled after an unknown transaction outcome (no gate result
+  // on that path) walks again.
+  const rootSubspaceId = created.rootSubspaceId !== undefined ? created.rootSubspaceId : subspaceIdOfDoc(await resolveRootPost(target));
   const [profiles, authorFlair] = await Promise.all([resolveProfiles([viewerId]), freshCommentAuthorFlair(viewer, rootSubspaceId)]);
   const comment: PublicComment = {
     id: doc.shareId,

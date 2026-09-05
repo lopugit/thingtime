@@ -68,7 +68,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	// S1 review fixes: guarded transfer writes (409 on a race — patch), and a
 	// delete that keeps private/removed posts author-only, holds the slug and
 	// answers { privatePosts } (additive → minor)
-	assert.equal(manifest.features['api.subspaces-transfer'], '1.0.1');
+	// S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.1.0');
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
 	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
@@ -79,12 +80,14 @@ test('subspace join requests + posting-approval requests publish their contract 
 	// S2: private join → pending request (join), leave cancels it, list/detail
 	// carry viewer.pending/approvalRequested (+ mods' queue counts), members
 	// grew pending=1 / approvalRequests=1 + accept / deny / request-approval
-	assert.equal(manifest.features['api.subspaces-leave'], '1.1.0');
+	// (S3 review: join / leave answer the subspace block with the user-flair
+	// settings + viewer.userFlair — both 1.2.0, additive)
+	assert.equal(manifest.features['api.subspaces-leave'], '1.2.0');
 	// S2 review: join re-requests start clean + deduped mod bells + own rate
 	// key (1.1.1), decisions on a withdrawn request answer 409 / pending-row
 	// walls / remove revokes approval (members 1.2.1), an access change
 	// resolves the queues (update 1.1.0)
-	assert.equal(manifest.features['api.subspaces-join'], '1.1.1');
+	assert.equal(manifest.features['api.subspaces-join'], '1.2.0');
 });
 
 test('subspace user flairs publish their contract versions', () => {
@@ -98,7 +101,11 @@ test('subspace user flairs publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces'], '1.2.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.2.0');
 	assert.equal(manifest.features['api.subspaces-update'], '1.2.0');
-	assert.equal(manifest.features['api.subspaces-members'], '1.3.0');
+	// S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
+	// mods may dress the owner (members 1.3.1, corrections); moderate's
+	// re-projected post carries authorFlair (1.1.0, additive)
+	assert.equal(manifest.features['api.subspaces-members'], '1.3.1');
+	assert.equal(manifest.features['api.subspaces-moderate'], '1.1.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.1.0');
 	for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.2.0', feature);

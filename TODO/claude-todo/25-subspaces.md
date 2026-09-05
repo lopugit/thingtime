@@ -59,8 +59,9 @@ reactions untouched.
 
 - ✅ S3 — user flairs: `userFlairs` templates + `userFlairSelfAssign` /
   `allowCustomUserFlair` on `/update` (mods), member action `userFlair`
-  (self under the two switches, mods dress anyone but the owner; modlog
-  `member.userFlair` only for someone else's), `authorFlair` on posts +
+  (self under the two switches, mods dress anyone — the owner included;
+  modlog `member.userFlair` only for someone else's; kick / ban strip the
+  pick, a demotion strips a mod-only one), `authorFlair` on posts +
   comments from ONE batched member-row lookup per page (live template
   resolution, active members only), `viewer.userFlair` / `member.userFlair`;
   chip after the author name everywhere inside subspaces, sidebar **Your

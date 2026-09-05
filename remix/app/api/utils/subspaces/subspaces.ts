@@ -91,6 +91,7 @@ import {
 	topRangeSince,
 	toPublicUserFlair,
 	userFlairSettingsOf,
+	userFlairSurvivesDemotion,
 	type PublicUserFlair,
 	type RankCandidate,
 	type SubspaceBranding,
@@ -1009,10 +1010,11 @@ const requestPostingApproval = async (
 // username, or your own): an ACTIVE member picks a template (not modOnly)
 // while userFlairSelfAssign is on, types custom text while
 // allowCustomUserFlair is on, and may always clear their own. Moderators
-// dress anyone (the owner excepted, unless it is themselves) with any
-// template, modOnly included, or custom text — and only THAT (a mod setting
-// someone else's) writes a member.userFlair mod-log entry. The decision is
-// subspaceCore's resolveUserFlair, so the UI and the server agree.
+// dress ANYONE — the owner included (the round-2 spec says anyone, and the
+// owner can always override their own pick) — with any template, modOnly
+// included, or custom text; only THAT (a mod setting someone else's) writes
+// a member.userFlair mod-log entry. The decision is subspaceCore's
+// resolveUserFlair, so the UI and the server agree.
 const setUserFlair = async (viewer: NonNullable<Viewer>, subspace: any, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
 	const id = String(subspace.shareId);
 	const slug = String(subspace.crystal?.slug || id);
@@ -1030,7 +1032,6 @@ const setUserFlair = async (viewer: NonNullable<Viewer>, subspace: any, input: M
 		if (target?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
 		if (!isActiveMember(target)) return fail(403, `Join s/${slug} first to wear a flair there`);
 	} else {
-		if (target?.role === 'owner') return fail(403, 'The owner picks their own flair 👑');
 		if (target?.banned) return fail(400, 'Lift the ban first — a banned user wears no flair');
 		if (!isActiveMember(target)) return fail(404, target?.pending ? 'Accept the join request first — they are not a member yet' : 'Not a member');
 	}
@@ -1127,9 +1128,12 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 		case 'remove':
 			if (!existing || target?.left) return fail(404, 'Not a member');
 			if (targetPending) return fail(404, 'Not a member yet — deny the join request instead');
-			// a kick revokes restricted posting rights too: the row that is
-			// left behind must never read as an approved poster
-			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.approved': false, 'crystal.pending': false, 'crystal.approvalRequested': false };
+			// a kick revokes restricted posting rights AND the flair: the row
+			// that is left behind must never read as an approved poster, and a
+			// badge a mod handed out must not walk back in with a rejoin — once
+			// back they pick again (or a mod dresses them again)
+			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.approved': false, 'crystal.pending': false, 'crystal.approvalRequested': false, 'crystal.userFlair': null };
+			if (target?.userFlair) detail = { userFlairCleared: true };
 			break;
 		case 'approve':
 			// grants posting rights and settles any open approval request
@@ -1152,9 +1156,12 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 				'crystal.approved': false,
 				'crystal.pending': false,
 				'crystal.approvalRequested': false,
+				// a ban strips the flair too — unban (or an expired ban) restores
+				// the membership, never a badge nobody re-granted
+				'crystal.userFlair': null,
 				...(targetPending ? { 'crystal.left': true } : {})
 			};
-			detail = { banUntil: banUntil ? banUntil.toISOString() : null };
+			detail = { banUntil: banUntil ? banUntil.toISOString() : null, ...(target?.userFlair ? { userFlairCleared: true } : {}) };
 			break;
 		}
 		case 'unban':
@@ -1164,13 +1171,17 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 			if (!actorIsOwner) return fail(403, 'Only the owner can promote or demote moderators 👑');
 			const role = input.role === 'moderator' || input.role === 'member' ? input.role : null;
 			if (!role) return fail(400, 'role must be moderator or member');
-			// promoting a pending requester lets them in as a moderator
+			// promoting a pending requester lets them in as a moderator; a
+			// demotion takes a MOD-ONLY flair off with the hat (ordinary
+			// templates and custom text stay — the member could have picked those)
+			const stripFlair = role === 'member' && !!target?.userFlair && !userFlairSurvivesDemotion(target.userFlair, userFlairSettingsOf(subspace.crystal).userFlairs);
 			set = {
 				'crystal.role': role,
 				'crystal.left': false,
-				...(role === 'moderator' ? { 'crystal.approved': true, 'crystal.banned': false, 'crystal.pending': false, 'crystal.approvalRequested': false } : {})
+				...(role === 'moderator' ? { 'crystal.approved': true, 'crystal.banned': false, 'crystal.pending': false, 'crystal.approvalRequested': false } : {}),
+				...(stripFlair ? { 'crystal.userFlair': null } : {})
 			};
-			detail = { role };
+			detail = { role, ...(stripFlair ? { userFlairCleared: true } : {}) };
 			break;
 		}
 	}

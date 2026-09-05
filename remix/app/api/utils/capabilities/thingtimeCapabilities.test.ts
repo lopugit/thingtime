@@ -29,15 +29,19 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
     assert.equal(manifest.features[feature]?.version, '1.3.0', feature);
   }
-  for (const feature of ['api.subspaces-moderate', 'api.subspaces-modlog', 'api.things-updown']) {
+  for (const feature of ['api.subspaces-modlog', 'api.things-updown']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
+  // S3 review: moderate's re-projected post carries authorFlair (1.1.0, additive)
+  assert.equal(manifest.features['api.subspaces-moderate']?.version, '1.1.0');
   // round 2 S2 — join requests + posting-approval requests: private join
   // files a request (join 1.1.0), leave cancels it (1.1.0), the list rows /
   // detail carry viewer.pending + approvalRequested and mods get the queue
   // sizes (subspaces + get 1.1.0), and members grew the two queues + accept /
   // deny / request-approval (1.1.0 → 1.2.0; 1.1.0 was the role/ban notify)
-  assert.equal(manifest.features['api.subspaces-leave']?.version, '1.1.0');
+  // S3 review: join / leave answer the subspace block with the user-flair
+  // settings + viewer.userFlair (1.2.0, additive)
+  assert.equal(manifest.features['api.subspaces-leave']?.version, '1.2.0');
   // round 2 S3 — user flairs: the subspace projection carries userFlairs /
   // userFlairSelfAssign / allowCustomUserFlair + viewer.userFlair (list + get
   // 1.2.0), update takes the three settings (1.2.0), members rows carry
@@ -46,7 +50,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update']) {
     assert.equal(manifest.features[feature]?.version, '1.2.0', feature);
   }
-  assert.equal(manifest.features['api.subspaces-members']?.version, '1.3.0');
+  // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
+  // mods may dress the owner (members 1.3.1, corrections)
+  assert.equal(manifest.features['api.subspaces-members']?.version, '1.3.1');
   assert.equal(manifest.features['api.subspaces-feed']?.version, '1.1.0');
   // S2 review: a re-request starts from a clean row + the mods' bell is
   // deduped + join has its own rate key (join 1.1.1, corrections); decisions
@@ -54,12 +60,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // 400/404, remove revokes approval (members 1.2.1, corrections); an access
   // change resolves the request queues and tells the requesters (update
   // 1.1.0, additive side effect)
-  assert.equal(manifest.features['api.subspaces-join']?.version, '1.1.1');
+  assert.equal(manifest.features['api.subspaces-join']?.version, '1.2.0');
   // S1 review: transfer's writes are guarded (a racing transfer answers 409 —
   // compatible correction); delete answers { privatePosts } beside
   // releasedPosts, holds the slug for its previous owner and refuses (409)
   // rather than strand posts behind a missing doc (additive)
-  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.0.1');
+  // S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
+  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.1.0');
   assert.equal(manifest.features['api.subspaces-delete']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-list']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.1.0');
