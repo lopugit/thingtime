@@ -285,8 +285,15 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	} catch {
 		throw new Error('The selected AI provider could not be reached.');
 	}
+	// Status BEFORE body: a rejection's body is not always JSON (an edge/CDN
+	// 429/502/504 answers with HTML or nothing at all), and parsing first made
+	// readBoundedJson throw "unreadable response" over the one fact the caller
+	// needs — the status. Nothing reads `result` on the failure path anyway.
+	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`The selected AI provider rejected the request (${response.status}).`);
+	}
 	const result = await readBoundedJson(response);
-	if (!response.ok) throw new Error(`The selected AI provider rejected the request (${response.status}).`);
 	const text = extractPlainCompletionText(provider.provider, result);
 	if (typeof text !== 'string' || !text.trim()) throw new Error('The selected AI provider returned no text.');
 	return text.trim();
@@ -338,8 +345,12 @@ export const mintVaultProviderRealtimeSession = async (provider: LopuVaultProvid
 	} catch {
 		throw new Error('The selected realtime AI provider could not be reached.');
 	}
+	// Status before body, same reason as the plain completion above.
+	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`The realtime AI provider rejected the session request (${response.status}).`);
+	}
 	const result = await readBoundedJson(response);
-	if (!response.ok) throw new Error(`The realtime AI provider rejected the session request (${response.status}).`);
 	const token = typeof result?.value === 'string' ? result.value.trim() : '';
 	if (!token || token.length > MAX_REALTIME_TOKEN_CHARS || token === provider.token || token.includes(provider.token)) {
 		throw new Error('The realtime AI provider returned an invalid session credential.');

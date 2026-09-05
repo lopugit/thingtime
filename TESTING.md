@@ -147,6 +147,13 @@ is fixed, and cite the checklist you ran in the PR description.
       private DNS resolutions, redirects, oversized provider responses, and
       rate-limit-store failures. Error responses must not echo provider
       bodies or credentials; `/voice/session` refusals carry no `session`.
+- [ ] Make the provider answer a **non-JSON rejection** — an HTML or empty-body
+      429/502/504, the shape an edge/CDN returns before the API is reached —
+      for both the voice turn and `/voice/session`. The Lopu toast must name
+      the status ("rejected the request (429)"), never "unreadable response":
+      the status is the only thing telling the user whether to wait, re-key,
+      or pick another model. Covered by `npm run test:lopu`
+      (`app/api/utils/lopu/voice.test.ts`).
 - [ ] In the iOS app, grant microphone and speech access from the user action,
       start Lopu, lock the device, and verify recognition/replies continue and
       the Live Activity moves through listening, thinking/transcribing, and

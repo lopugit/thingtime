@@ -186,6 +186,24 @@ test('a rejected or empty provider answer is a user-facing error, never the raw 
 		callVaultProviderPlainCompletion(provider('openai', 'gpt-5.5'), { system: 's', history: [], prompt: 'p', fetchImpl: empty.fetchImpl, assertEndpoint: passEndpoint }),
 		/returned no text/
 	);
+	// A rejection's body is not always JSON. An edge/CDN 429 or 502 answers
+	// with HTML or nothing at all, and reading the body before the status
+	// reported "unreadable response" — hiding the one fact that tells the user
+	// whether to wait, re-key, or pick another model. Status first, both calls.
+	for (const [body, contentType] of [
+		['<html><body>429 Too Many Requests</body></html>', 'text/html'],
+		['', 'text/plain']
+	] as const) {
+		const nonJson = async () => new Response(body, { status: 429, headers: { 'Content-Type': contentType } });
+		await assert.rejects(
+			callVaultProviderPlainCompletion(provider('openai', 'gpt-5.5'), { system: 's', history: [], prompt: 'p', fetchImpl: nonJson, assertEndpoint: passEndpoint }),
+			/rejected the request \(429\)/
+		);
+		await assert.rejects(
+			mintVaultProviderRealtimeSession(provider('xai'), { model: 'grok-voice-latest', fetchImpl: nonJson, assertEndpoint: passEndpoint }),
+			/rejected the session request \(429\)/
+		);
+	}
 });
 
 test('buildPlainCompletionRequest keeps effort "none" out of Anthropic and Gemini bodies', () => {
