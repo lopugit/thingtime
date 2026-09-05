@@ -1,13 +1,8 @@
 name: Commander App Release
 
+# Executable control plane. Product branches only forward main push/dispatch.
 on:
   workflow_call:
-  push:
-    branches:
-      - main
-    paths:
-      - Commander/**
-      - .github/workflows/commander-release.yml
   workflow_dispatch:
 
 permissions:
@@ -19,15 +14,39 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish Commander release
+    name: Build and publish signed Commander and Recovery
+    if: >-
+      github.repository == 'lopugit/thingtime' && (
+        (github.event_name == 'push' && github.ref_name == 'main') ||
+        (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner &&
+          (github.ref_name == 'main' || github.ref_name == 'github-actions')))
     runs-on: macos-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
+    timeout-minutes: 120
     steps:
-      - name: Check out main
+      - name: Resolve protected main source
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = lopugit/thingtime
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF_NAME" in
+            push:main) head_sha="$GITHUB_SHA" ;;
+            workflow_dispatch:main|workflow_dispatch:github-actions)
+              test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+              head_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" ;;
+            *) echo '::error::Only a main push or owner dispatch can publish Commander.'; exit 1 ;;
+          esac
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact main commit without publication credentials
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ steps.source.outputs.head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -42,57 +61,60 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.12.1 --activate
 
-      - name: Resolve release metadata version
-        id: version
+      - name: Resolve release identity
         shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.head_sha }}
         run: |
           set -euo pipefail
-
           base_version="$(node Commander/script/release-version.mjs check)"
-          build_number="${GITHUB_RUN_NUMBER}"
-          release_version="${base_version}+build.${build_number}"
-          release_tag="commander-v${release_version}"
-
+          release_version="${base_version}+build.${GITHUB_RUN_NUMBER}.g${SOURCE_SHA:0:12}"
           {
-            echo "THINGTIME_COMMANDER_BASE_VERSION=${base_version}"
-            echo "THINGTIME_COMMANDER_BUILD_NUMBER=${build_number}"
-            echo "THINGTIME_COMMANDER_RELEASE_VERSION=${release_version}"
-            echo "THINGTIME_COMMANDER_RELEASE_TAG=${release_tag}"
-          } >> "${GITHUB_ENV}"
-
-          {
-            echo "base_version=${base_version}"
-            echo "build_number=${build_number}"
-            echo "release_version=${release_version}"
-            echo "release_tag=${release_tag}"
-          } >> "${GITHUB_OUTPUT}"
+            echo "COMMANDER_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+            echo "COMMANDER_RELEASE_VERSION=$release_version"
+            echo "COMMANDER_RELEASE_TAG=commander-v$release_version"
+            echo "COMMANDER_GIT_COMMIT=$SOURCE_SHA"
+            echo "COMMANDER_GIT_BRANCH=main"
+            echo "THINGTIME_RECOVERY_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+            echo "THINGTIME_RECOVERY_VERSION=$release_version"
+            echo "THINGTIME_RECOVERY_RELEASE_TAG=commander-v$release_version"
+            echo "THINGTIME_RECOVERY_GIT_COMMIT=$SOURCE_SHA"
+            echo "THINGTIME_RECOVERY_GIT_BRANCH=main"
+          } >> "$GITHUB_ENV"
 
       - name: Stop if this release already exists
         id: existing_release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          if gh release view "${THINGTIME_COMMANDER_RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-            echo "::notice::${THINGTIME_COMMANDER_RELEASE_TAG} already exists; skipping duplicate publish."
+          # Authentication/network failures are errors, never proof of absence.
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')"
+          if printf '%s\n' "$tags" | grep -Fxq -- "$COMMANDER_RELEASE_TAG"; then
+            echo exists=true >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
+            echo exists=false >> "$GITHUB_OUTPUT"
           fi
 
-      # Signing credentials are imported last, only once a publishable release
-      # is known to be missing: the same ordering electron-pr-release.yml uses,
-      # so a duplicate-tag re-run never unlocks the Developer ID key or the
-      # App Store Connect key it has no artifact to sign.
+      - name: Compile and test source before importing signing credentials
+        if: steps.existing_release.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          Commander/script/build_and_run.sh --prepare
+          node --test Commander/script/release-packaging.test.mjs
+          swift test --package-path macos/ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release
+
       - name: Import Developer ID and notarization credentials
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
         env:
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 || secrets.ASC_KEY_CONTENT }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID || secrets.ASC_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || secrets.ASC_ISSUER_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
@@ -102,7 +124,6 @@ jobs:
           : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"
           : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"
           : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
-
           keychain_path="${RUNNER_TEMP}/commander-signing.keychain-db"
           certificate_path="${RUNNER_TEMP}/commander-developer-id.p12"
           api_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
@@ -120,122 +141,68 @@ jobs:
           identity="$(security find-identity -v -p codesigning "${keychain_path}" | sed -nE 's/.*"(Developer ID Application:[^"]+)".*/\1/p' | head -n 1)"
           test -n "${identity}"
           {
+            echo "CSC_KEYCHAIN=${keychain_path}"
+            echo "CSC_NAME=${identity}"
             echo "COMMANDER_SIGNING_IDENTITY=${identity}"
-            echo "COMMANDER_SIGNING_MODE=distribution"
-            echo "COMMANDER_NOTARY_KEY=${api_key_path}"
-            echo "COMMANDER_NOTARY_KEY_ID=${APPLE_API_KEY_ID}"
-            echo "COMMANDER_NOTARY_ISSUER=${APPLE_API_ISSUER}"
-            echo "COMMANDER_NOTARY_TEAM_ID=${APPLE_TEAM_ID}"
+            echo "THINGTIME_RECOVERY_SIGNING_IDENTITY=${identity}"
+            echo "APPLE_API_KEY=${api_key_path}"
+            echo "APPLE_API_KEY_ID=${APPLE_API_KEY_ID}"
+            echo "APPLE_API_ISSUER=${APPLE_API_ISSUER}"
+            echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}"
           } >> "${GITHUB_ENV}"
 
-      - name: Build Commander bundle
+      - name: Build signed notarized Commander archive and verify extraction
         if: steps.existing_release.outputs.exists != 'true'
-        working-directory: Commander
-        env:
-          COMMANDER_BUILD_NUMBER: ${{ env.THINGTIME_COMMANDER_BUILD_NUMBER }}
-          COMMANDER_NOTARIZATION_MODE: external
-        run: ./script/build_and_run.sh --build-only
-
-      - name: Notarize and staple Commander bundle
-        if: steps.existing_release.outputs.exists != 'true'
-        shell: bash
-        # `notarytool --wait` blocks on an Apple-side queue with no bound of its
-        # own, and this job has no timeout, so a stalled submission would hold a
-        # 10x-billed macOS runner for GitHub's 6-hour default. Notarizing this
-        # bundle takes minutes; cap the wait so a stall fails fast and retries.
         timeout-minutes: 45
-        run: |
-          set -euo pipefail
-          app_bundle="Commander/dist/Commander.app"
-          submission_archive="${RUNNER_TEMP}/Commander-notarization.zip"
-          test -d "${app_bundle}"
-          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${app_bundle}" "${submission_archive}"
-          xcrun notarytool submit "${submission_archive}" --wait \
-            --key "${COMMANDER_NOTARY_KEY}" \
-            --key-id "${COMMANDER_NOTARY_KEY_ID}" \
-            --issuer "${COMMANDER_NOTARY_ISSUER}"
-          xcrun stapler staple "${app_bundle}"
-          xcrun stapler validate "${app_bundle}"
-          spctl -a -vv --type execute "${app_bundle}"
+        run: Commander/script/build-production-release.sh
 
-      - name: Collect release assets
+      - name: Build matching signed Recovery archive and verify extraction
+        if: steps.existing_release.outputs.exists != 'true'
+        timeout-minutes: 45
+        run: macos/ThingtimeRecovery/script/build-production-release.sh
+
+      - name: Collect verified assets and notes
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
         run: |
           set -euo pipefail
-
-          app_bundle="Commander/dist/Commander.app"
-          if [[ ! -d "${app_bundle}" ]]; then
-            echo "::error::Commander.app was not produced."
-            exit 1
-          fi
-
-          asset_dir="Commander/release-upload"
-          safe_version="${THINGTIME_COMMANDER_RELEASE_VERSION//+/-}"
-          arch="$(uname -m)"
-          archive="${asset_dir}/Commander-${safe_version}-macos-${arch}.zip"
-
-          rm -rf "${asset_dir}"
-          mkdir -p "${asset_dir}"
-          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${app_bundle}" "${archive}"
-          /usr/bin/shasum -a 256 "${archive}" > "${archive}.sha256"
-          ls -lah "${asset_dir}"
-
-      - name: Generate release notes
-        if: steps.existing_release.outputs.exists != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          generated_notes="$(
-            gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
-              -f tag_name="${THINGTIME_COMMANDER_RELEASE_TAG}" \
-              -f target_commitish="${GITHUB_SHA}" \
-              --jq ".body" 2>/dev/null || true
-          )"
-
+          asset_dir=Commander/release-upload
+          mkdir -p "$asset_dir"
+          commander="Commander/release/Commander-App-Release-${COMMANDER_RELEASE_VERSION}-macos-$(uname -m).zip"
+          recovery="macos/ThingtimeRecovery/release/Thingtime-Recovery-App-Release-${COMMANDER_RELEASE_VERSION}-macos-$(uname -m).zip"
+          test -s "$commander"
+          test -s "$recovery"
+          cp "$commander" "$recovery" "$asset_dir/"
+          (cd "$asset_dir" && shasum -a 256 ./*.zip > SHA256SUMS.txt)
           {
-            echo "## Commander App Release"
+            echo '## Signed Commander and Thingtime Recovery'
             echo
-            echo "- Version: \`${THINGTIME_COMMANDER_RELEASE_VERSION}\`"
-            echo "- Base version: \`${THINGTIME_COMMANDER_BASE_VERSION}\`"
-            echo "- Build metadata: \`build.${THINGTIME_COMMANDER_BUILD_NUMBER}\`"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo
-            echo "> This macOS bundle is Developer ID signed, notarized, and stapled."
-            echo
-            if [ -n "${generated_notes}" ]; then
-              echo "${generated_notes}"
-            else
-              echo "## Changes"
-              git log -1 --pretty="format:- %s (%h)"
-              echo
-            fi
+            echo "- Version: \`$COMMANDER_RELEASE_VERSION\`"
+            echo "- Build: \`$COMMANDER_BUILD_NUMBER\`"
+            echo '- Branch: `main`'
+            echo "- Commit: \`$COMMANDER_GIT_COMMIT\`"
+            echo '- Platform: macOS 14 or later, Apple silicon.'
+            echo '- Trust: Developer ID signed, Apple notarized, and stapled; both final ZIPs pass verification after extraction.'
+            echo '- Install: open Thingtime Recovery, select Commander, refresh GitHub releases, then download and verify the Commander card.'
+            echo '- Recovery: the matching Recovery archive can update the launcher independently.'
+            echo '- Updates preserve the previous app in its own cache. Existing local development builds may need privacy permissions granted again when moving to Developer ID signing.'
           } > commander-release-notes.md
 
-      - name: Publish GitHub release
+      - name: Publish complete release
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Commander must not replace Electron's repository-wide latest release.
+          gh release create "$COMMANDER_RELEASE_TAG" Commander/release-upload/* \
+            --target "$COMMANDER_GIT_COMMIT" --title "Commander $COMMANDER_RELEASE_VERSION" \
+            --notes-file commander-release-notes.md --latest=false
 
-          gh release create "${THINGTIME_COMMANDER_RELEASE_TAG}" \
-            Commander/release-upload/* \
-            --target "${GITHUB_SHA}" \
-            --title "Commander App Release ${THINGTIME_COMMANDER_RELEASE_VERSION}" \
-            --notes-file commander-release-notes.md
-
-      # The other half of electron-pr-release.yml's credential contract. Import
-      # leaves the Developer ID private key in an unlocked keychain that is also
-      # the runner's default keychain, plus the raw .p12 and App Store Connect
-      # .p8 on disk. Unlike the Electron lane, which tests the unsigned source
-      # before touching credentials, `build_and_run.sh` installs and runs the
-      # third-party pnpm/cargo/swift dependency tree *after* that import, so this
-      # teardown is the one place the window is closed. `if: always()` so a
-      # failed build or notarization does not leave the key behind either.
       - name: Remove ephemeral signing material
         if: always()
         shell: bash
         run: |
-          security delete-keychain "${RUNNER_TEMP}/commander-signing.keychain-db" 2>/dev/null || true
-          rm -f "${RUNNER_TEMP}/commander-developer-id.p12" "${RUNNER_TEMP}"/AuthKey_*.p8
+          security delete-keychain "$RUNNER_TEMP/commander-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/commander-developer-id.p12" "$RUNNER_TEMP"/AuthKey_*.p8

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
 import { syncPreviewLabels, deploymentBuiltAt } from './preview-labels.mjs';
+import { verifyPublishedPreview } from './preview-fallback.mjs';
 import { execFile } from 'node:child_process';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -546,6 +547,8 @@ const deployEnvironment = async ({ config, payload, pullRequest, environment, ro
 		const ready = await waitForDeployment(config, pullRequest, environment, deployment);
 		await assertCurrentPullRequest(config, payload);
 		row.persistentUrl = await assignAlias(config, pullRequest, environment, ready);
+		await verifyPublishedPreview(row.persistentUrl);
+		await assertCurrentPullRequest(config, payload);
 		row.status = 'ready';
 		row.builtAt = deploymentBuiltAt(ready);
 		row.snapshotUrl = deploymentUrl(ready);

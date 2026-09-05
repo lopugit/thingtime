@@ -48,6 +48,13 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
   completion. Add deterministic stale-reaper, six-process contention, writer
   death, malformed-owner, timeout, and query-lifetime tests. — Codex (AI)
 
+- Added a fixed-response missing-build page for unused PR-preview hostnames, with a
+  marked root soft-404, nested HTTP 404, a PR link, manual retry and no-store caching. Two-phase
+  wildcard installation verifies staged content before changing only preview
+  domains; protected runtime checks distinguish this page from a real build.
+  Details: [PR #643](PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md).
+  — Codex (AI), 2026-09-05
+
 - Added PR-scoped last-success preview timestamp labels (Melbourne time),
   independent current-state and admin-environment labels, bounded retry-safe
   comment/label writes, and scheduled recovery for eligible PRs without builds.
@@ -733,3 +740,12 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
   content to different bases, so the per-base replay and the worker decide.
   Off by default; set the `PROMOTION_TARGET_BRANCHES` repository variable to
   enable. — Claude (AI), 2026-08-10
+
+
+## 2026-09-05 — Signed Commander releases and Recovery pairing
+
+Repair the Commander controller's main-commit selection, signing secret fallback,
+and archive naming. Compile/test before credential import, publish notarized
+Commander and Recovery archives with verified extraction and SHA-256 checksums,
+retain exact build provenance, and keep Electron as the repository latest release.
+Caller gates, GitHub failures and publication boundaries have executable coverage.

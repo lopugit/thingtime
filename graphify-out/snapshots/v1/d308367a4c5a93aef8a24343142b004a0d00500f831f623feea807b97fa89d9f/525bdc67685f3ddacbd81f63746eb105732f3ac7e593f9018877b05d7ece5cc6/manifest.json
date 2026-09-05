@@ -5,9 +5,9 @@
     "semantic_hash": "bcd5fec9d71a4e542da98f89e4d70235"
   },
   ".github/scripts/deploy-develop-pr-preview.mjs": {
-    "mtime": 1788597212.1152172,
-    "ast_hash": "4c6dfde05b38c236ab57bd0b1b401494",
-    "semantic_hash": "4c6dfde05b38c236ab57bd0b1b401494"
+    "mtime": 1788600895.1106606,
+    "ast_hash": "30b139b6834f64e0e6335a454b24a4d3",
+    "semantic_hash": "30b139b6834f64e0e6335a454b24a4d3"
   },
   ".github/scripts/promote-features-to-main.mjs": {
     "mtime": 1788597212.1178632,
@@ -65,9 +65,9 @@
     "semantic_hash": "d8d3408bab917951329cd7fcdcbb3813"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1788597212.1212215,
-    "ast_hash": "2a1da8a6bdb66ae87858563267ef6ee2",
-    "semantic_hash": "2a1da8a6bdb66ae87858563267ef6ee2"
+    "mtime": 1788600895.111737,
+    "ast_hash": "e7e1936b5ca9e36a53be63cd933e3716",
+    "semantic_hash": "e7e1936b5ca9e36a53be63cd933e3716"
   },
   "vercel.json": {
     "mtime": 1788597212.1542575,
@@ -75,78 +75,78 @@
     "semantic_hash": "33d015ab2b66b6708204132736e87457"
   },
   ".github/actions/rebase-conflict-round/action.yml": {
-    "mtime": 1788591041.2340155,
+    "mtime": 1788596341.5959585,
     "ast_hash": "79f96ae129b56e46807455d6a3903c87",
     "semantic_hash": "79f96ae129b56e46807455d6a3903c87"
   },
   ".github/workflows/all-branch.yml": {
-    "mtime": 1788591041.2390523,
+    "mtime": 1788596341.609502,
     "ast_hash": "20bdfad3437bee0aef0cabcf9490ec71",
     "semantic_hash": "20bdfad3437bee0aef0cabcf9490ec71"
   },
   ".github/workflows/ci-provider-router.yml": {
-    "mtime": 1788591041.2391205,
+    "mtime": 1788596341.6096005,
     "ast_hash": "97d3a1b83b64c2a664e81f29a629fa57",
     "semantic_hash": "97d3a1b83b64c2a664e81f29a629fa57"
   },
   ".github/workflows/control-plane-ci.yml": {
-    "mtime": 1788595842.1300235,
-    "ast_hash": "bfed51c6d824f861a025dabbf1313f8f",
-    "semantic_hash": "bfed51c6d824f861a025dabbf1313f8f"
+    "mtime": 1788596536.3519597,
+    "ast_hash": "c23c47167419fc39aac56149789b69db",
+    "semantic_hash": "c23c47167419fc39aac56149789b69db"
   },
   ".github/workflows/develop-pr-preview.yml": {
-    "mtime": 1788595749.228661,
-    "ast_hash": "6b83eb82641375a22268183508811210",
-    "semantic_hash": "6b83eb82641375a22268183508811210"
+    "mtime": 1788596536.3517241,
+    "ast_hash": "4a65e989e5812bf389b4effbb71f7e49",
+    "semantic_hash": "4a65e989e5812bf389b4effbb71f7e49"
   },
   ".github/workflows/electron-release.yml": {
-    "mtime": 1788591041.2395835,
+    "mtime": 1788596341.6108637,
     "ast_hash": "cc8cd83166f6fbea51f077e65fb4f977",
     "semantic_hash": "cc8cd83166f6fbea51f077e65fb4f977"
   },
   ".github/workflows/promote-develop-to-main.yml": {
-    "mtime": 1788591041.239668,
+    "mtime": 1788596341.6109476,
     "ast_hash": "16556d35d3fba43861601f7737540986",
     "semantic_hash": "16556d35d3fba43861601f7737540986"
   },
   ".github/workflows/promote-features-to-main.yml": {
-    "mtime": 1788591041.239746,
+    "mtime": 1788596341.6112242,
     "ast_hash": "dcbfdcbc6317a352ec1ef6b8ad90d009",
     "semantic_hash": "dcbfdcbc6317a352ec1ef6b8ad90d009"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1788593664.830264,
+    "mtime": 1788596341.6114779,
     "ast_hash": "283e8801755905a6954ea61d1a9ae479",
     "semantic_hash": "283e8801755905a6954ea61d1a9ae479"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1788594048.3288434,
+    "mtime": 1788596341.6133366,
     "ast_hash": "9f3af03d9efde386d84e826d5c5efacc",
     "semantic_hash": "9f3af03d9efde386d84e826d5c5efacc"
   },
   ".github/workflows/sync-main-into-develop.yml": {
-    "mtime": 1788591041.2409263,
+    "mtime": 1788596341.613708,
     "ast_hash": "08f9f4bb732a8879dc0deedd3fe3fefd",
     "semantic_hash": "08f9f4bb732a8879dc0deedd3fe3fefd"
   },
   ".github/workflows/web-ci.yml": {
-    "mtime": 1788591041.241002,
+    "mtime": 1788596341.6138613,
     "ast_hash": "1e796da6f998667d80ddefedc419ee00",
     "semantic_hash": "1e796da6f998667d80ddefedc419ee00"
   },
   "AGENTS.md": {
-    "mtime": 1788591041.2411957,
+    "mtime": 1788596341.61415,
     "ast_hash": "012107e7ca5e0a7d0b6d35017f9800c5",
     "semantic_hash": ""
   },
   "AI_ALL.md": {
-    "mtime": 1788591041.2411957,
+    "mtime": 1788596341.61415,
     "ast_hash": "012107e7ca5e0a7d0b6d35017f9800c5",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1788594555.3976197,
-    "ast_hash": "ea97832a9f81e772f4dd49408c707d9b",
+    "mtime": 1788597585.7952244,
+    "ast_hash": "646161adac89cf0a2901b4ec2e5c7765",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -155,14 +155,14 @@
     "semantic_hash": "012107e7ca5e0a7d0b6d35017f9800c5"
   },
   "README.md": {
-    "mtime": 1788596189.112816,
-    "ast_hash": "780fb62a17646baffc415fe0c0342550",
-    "semantic_hash": "780fb62a17646baffc415fe0c0342550"
+    "mtime": 1788597259.1585958,
+    "ast_hash": "f5633635aa15e6fd49c3d71122a46ce1",
+    "semantic_hash": "f5633635aa15e6fd49c3d71122a46ce1"
   },
   ".github/workflows/commander-release.yml": {
-    "mtime": 1788591041.2393472,
-    "ast_hash": "6dfb9061bf883718b3aa5fc8d44283c7",
-    "semantic_hash": "6dfb9061bf883718b3aa5fc8d44283c7"
+    "mtime": 1788600895.1121318,
+    "ast_hash": "ef33a765618e19dbac79fc157af699f1",
+    "semantic_hash": "ef33a765618e19dbac79fc157af699f1"
   },
   ".github/scripts/electron-pr-release-contract.mjs": {
     "mtime": 1788597212.1155376,
@@ -170,22 +170,22 @@
     "semantic_hash": "989b7eec449e393ea40b77f184adb0ae"
   },
   ".github/workflows/electron-pr-release.yml": {
-    "mtime": 1788595366.511263,
+    "mtime": 1788596341.6107664,
     "ast_hash": "16b99801b19b47bda5cd44503c05899f",
     "semantic_hash": "16b99801b19b47bda5cd44503c05899f"
   },
   ".github/workflows/codeql-analysis.yml": {
-    "mtime": 1788591041.2392023,
+    "mtime": 1788596341.6097376,
     "ast_hash": "825c967e5167ba2ffff04094f255c404",
     "semantic_hash": "825c967e5167ba2ffff04094f255c404"
   },
   ".github/actions/lopu-agent/action.yml": {
-    "mtime": 1788594025.7032692,
+    "mtime": 1788596341.5954735,
     "ast_hash": "ead9d1cce3de6516ed025180054477b6",
     "semantic_hash": "ead9d1cce3de6516ed025180054477b6"
   },
   ".github/workflows/codeql-pr-handoff.yml": {
-    "mtime": 1788591041.239253,
+    "mtime": 1788596341.6098228,
     "ast_hash": "5c9eacd506c3f179eef7dc9d6ec6cf00",
     "semantic_hash": "5c9eacd506c3f179eef7dc9d6ec6cf00"
   },
@@ -265,7 +265,7 @@
     "semantic_hash": "7a56f9b70dbbbb96a3202249b541be52"
   },
   "PRs/492-codex-lopu-credential-vault-controller-load-lopu-credentials-from-thingtime-vault.md": {
-    "mtime": 1788591041.2416253,
+    "mtime": 1788596341.6148863,
     "ast_hash": "68fd4e92195026b0e4b1fe6009567300",
     "semantic_hash": "68fd4e92195026b0e4b1fe6009567300"
   },
@@ -275,7 +275,7 @@
     "semantic_hash": "968c52ffc79596bcb9100c690d4b8c46"
   },
   "PRs/506-codex-auto-merge-main-develop-sync-pr.md": {
-    "mtime": 1788591041.241828,
+    "mtime": 1788596341.614946,
     "ast_hash": "466f703c6e89a3573e871476f77a7572",
     "semantic_hash": "466f703c6e89a3573e871476f77a7572"
   },
@@ -290,7 +290,7 @@
     "semantic_hash": "56b13073225f6ac841e637bab5c60fa3"
   },
   "PRs/534-codex-feature-stack-progress-heartbeats-controller.md": {
-    "mtime": 1788591041.2418797,
+    "mtime": 1788596341.6149986,
     "ast_hash": "f484eb79dc7e697af579ac513b26d025",
     "semantic_hash": "f484eb79dc7e697af579ac513b26d025"
   },
@@ -300,17 +300,17 @@
     "semantic_hash": "551d3cd2f911211dae212451201b45c3"
   },
   ".github/scripts/deploy-admin-pr-previews.mjs": {
-    "mtime": 1788597212.1148825,
-    "ast_hash": "d9b0089152b7d23c50770f932bd4b9b7",
-    "semantic_hash": "d9b0089152b7d23c50770f932bd4b9b7"
+    "mtime": 1788600895.1099432,
+    "ast_hash": "2f2d89d034a0fc74bc75895554d86f76",
+    "semantic_hash": "2f2d89d034a0fc74bc75895554d86f76"
   },
   "PRs/603-codex-admin-preview-publisher-controller.md": {
-    "mtime": 1788591041.2419324,
+    "mtime": 1788596341.6150534,
     "ast_hash": "4421b60a4e93b528ee285889809ab34e",
     "semantic_hash": "4421b60a4e93b528ee285889809ab34e"
   },
   "PRs/609-codex-preview-manager-reliability.md": {
-    "mtime": 1788591041.2419825,
+    "mtime": 1788596341.615108,
     "ast_hash": "45d9c2bf8e3b12e383a629bf18c0eab7",
     "semantic_hash": "45d9c2bf8e3b12e383a629bf18c0eab7"
   },
@@ -370,17 +370,17 @@
     "semantic_hash": "675d78e2b701e3915d9349da8c576bb2"
   },
   ".github/TESTING.md": {
-    "mtime": 1788596203.116253,
-    "ast_hash": "f1c40e48363c0387a22937414dfff051",
-    "semantic_hash": "f1c40e48363c0387a22937414dfff051"
+    "mtime": 1788597259.158932,
+    "ast_hash": "feff31f0602627611482d703eb2b3c5b",
+    "semantic_hash": "feff31f0602627611482d703eb2b3c5b"
   },
   "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md": {
-    "mtime": 1788593664.831865,
+    "mtime": 1788596341.6151617,
     "ast_hash": "0fec907e477c18ad3c755caea552ce4d",
     "semantic_hash": "0fec907e477c18ad3c755caea552ce4d"
   },
   "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md": {
-    "mtime": 1788594555.3972816,
+    "mtime": 1788596341.6152225,
     "ast_hash": "ff0fb0e2b879a4847b2ccd1905e25507",
     "semantic_hash": "ff0fb0e2b879a4847b2ccd1905e25507"
   },
@@ -404,9 +404,34 @@
     "ast_hash": "4af245135ec6d43f669f636e4a3ae4b6",
     "semantic_hash": "4af245135ec6d43f669f636e4a3ae4b6"
   },
+  ".github/scripts/preview-fallback.mjs": {
+    "mtime": 1788600895.1108365,
+    "ast_hash": "f20ac7950ce62e5258b955a2f26606bb",
+    "semantic_hash": "f20ac7950ce62e5258b955a2f26606bb"
+  },
+  ".github/scripts/preview-fallback.test.mjs": {
+    "mtime": 1788600895.1109571,
+    "ast_hash": "42cdcf08c48bd1fa2c2c4861c88a3c25",
+    "semantic_hash": "42cdcf08c48bd1fa2c2c4861c88a3c25"
+  },
+  ".github/scripts/provision-preview-fallback.mjs": {
+    "mtime": 1788600895.1110704,
+    "ast_hash": "7738690a428fddc7bcb9845fdb1a20d6",
+    "semantic_hash": "7738690a428fddc7bcb9845fdb1a20d6"
+  },
   "PRs/642-preview-status-recovery--discoverable-status-and-missed-build-repair.md": {
-    "mtime": 1788597212.1269922,
+    "mtime": 1788596565.8361697,
     "ast_hash": "c88455add41092bc6f50a6d4480d027b",
     "semantic_hash": "c88455add41092bc6f50a6d4480d027b"
+  },
+  "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md": {
+    "mtime": 1788600895.113362,
+    "ast_hash": "4d574448166ee81ffa1e7f047c2fb876",
+    "semantic_hash": "4d574448166ee81ffa1e7f047c2fb876"
+  },
+  ".github/scripts/commander-release.test.mjs": {
+    "mtime": 1788600895.1094694,
+    "ast_hash": "548dad34971b7e423ae4dca19da3c965",
+    "semantic_hash": "548dad34971b7e423ae4dca19da3c965"
   }
 }

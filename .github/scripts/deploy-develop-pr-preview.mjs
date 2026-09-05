@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
 import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
 import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
+import { FALLBACK_BRANCH, fallbackResponseIssue, verifyPublishedPreview } from './preview-fallback.mjs';
 import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -247,6 +248,7 @@ const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
 	actor: null,
+	missingBuildPage: optionalEnv('PREVIEW_MISSING_BUILD_PAGE', 'false') === 'true',
 	trustedLogins: parseTrustedLogins(requiredEnv('DEVELOP_PREVIEW_TRUSTED_ACTORS')),
 	projectId: exactPrefixedId(requiredEnv('VERCEL_PROJECT_ID'), 'Vercel project id', 'prj_'),
 	projectName: requiredEnv('VERCEL_PROJECT_NAME'),
@@ -1340,6 +1342,7 @@ const assertVercelConfiguration = async (config) => {
 		{ label: 'Production preview', suffix: config.productionPreviewAliasSuffix, expectedGitBranch: null, expectedRuntimeBranch: 'main' }
 	];
 	for (const policy of wildcardPolicies) {
+		if (config.missingBuildPage) policy.expectedGitBranch = FALLBACK_BRANCH;
 		const wildcardDomainName = `*.${policy.suffix}`;
 		const wildcardDomainPath = encodeURIComponent(wildcardDomainName).replaceAll('*', '%2A');
 		const wildcardDomain = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${wildcardDomainPath}`);
@@ -1368,17 +1371,21 @@ const assertVercelConfiguration = async (config) => {
 	await assertWildcardFallbackRuntimes(config);
 };
 
-const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch }) => {
+const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch, missingBuildPage = false }) => {
 	const hostname = `controller-fallback-probe.${suffix}`;
 	let lastError = null;
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		try {
-			const response = await fetch(`https://${hostname}/api/root-data`, {
+			const response = await fetch(`https://${hostname}/${missingBuildPage ? '' : 'api/root-data'}`, {
 				headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
 				redirect: 'manual',
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 			});
-			if (!response.ok) {
+			if (missingBuildPage) {
+				const issue = fallbackResponseIssue(response, await response.text());
+				if (!issue) return;
+				lastError = new Error(`Missing-build fallback check failed: ${issue}`);
+			} else if (!response.ok) {
 				lastError = new Error(`HTTP ${response.status}`);
 			} else {
 				const payload = await response.json();
@@ -1397,28 +1404,11 @@ const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch }) => {
 };
 
 const assertWildcardFallbackRuntimes = async (config) => {
-	await verifyWildcardFallbackRuntime({ suffix: config.previewAliasSuffix, expectedBranch: 'develop' });
-	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main' });
+	await verifyWildcardFallbackRuntime({ suffix: config.previewAliasSuffix, expectedBranch: 'develop', missingBuildPage: config.missingBuildPage });
+	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main', missingBuildPage: config.missingBuildPage });
 };
 
-const verifyPublishedAlias = async (aliasUrl) => {
-	let lastError = null;
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		try {
-			const response = await fetch(aliasUrl, {
-				method: 'HEAD',
-				redirect: 'manual',
-				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-			});
-			if (response.status >= 200 && response.status < 500) return;
-			lastError = new Error(`HTTP ${response.status}`);
-		} catch (error) {
-			lastError = error;
-		}
-		if (attempt < 4) await delay(1_000 * (attempt + 1));
-	}
-	throw new Error(`Published PR preview alias did not pass HTTPS verification (${lastError instanceof Error ? lastError.message : 'unknown'})`);
-};
+const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl);
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 

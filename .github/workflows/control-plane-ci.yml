@@ -85,7 +85,7 @@ jobs:
         run: node --test .github/scripts/resolve-pr-conflicts-routing-contract.test.mjs
 
       - name: Validate event admission, CI isolation, and preview writes
-        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs
+        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs .github/scripts/preview-fallback.test.mjs
 
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
@@ -100,6 +100,9 @@ jobs:
         run: |
           node .github/scripts/electron-pr-release-contract.mjs
           node --test .github/scripts/electron-release-gates.test.mjs
+
+      - name: Validate signed Commander release gates
+        run: node --test .github/scripts/commander-release.test.mjs
 
   contract-advisories:
     name: Contract advisories (non-blocking)

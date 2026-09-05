@@ -211,6 +211,7 @@ jobs:
       PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
       PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
       PREVIEW_EXPECTED_READY_AT: ${{ needs.prepare.outputs.expected_ready_at }}
+      PREVIEW_MISSING_BUILD_PAGE: ${{ vars.PREVIEW_MISSING_BUILD_PAGE }}
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Check out protected deployment controller
