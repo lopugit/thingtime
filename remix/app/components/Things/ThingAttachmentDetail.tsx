@@ -1,3 +1,4 @@
+import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
 import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronUp, Download, ExternalLink, EyeOff, Image as ImageIcon } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
 	formatAttachmentBytes
 } from '~/components/Attachments/attachmentUiCore';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import { AudioAttachmentPlayer } from '~/components/Attachments/AudioAttachmentPlayer';
 import type { PublicPost } from '~/components/Feed/feedTypes';
 import { CARD_STYLES } from '~/theme/card';
 
@@ -71,6 +73,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 	const [showSensitiveImage, setShowSensitiveImage] = React.useState(false);
 	const [imageFailed, setImageFailed] = React.useState(false);
 	const isImage = attachment.mediaKind === 'image';
+	const isAudio = attachment.mediaKind === 'audio';
 	const imageVisible = isImage && (!attachment.nsfw || showSensitiveImage) && !imageFailed;
 	const title = attachment.title || attachmentDisplayName(attachment);
 
@@ -113,8 +116,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 				{isImage ? (
 					<Box mt={5} borderRadius="var(--tt-radius-lg, 14px)" overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">
 						{imageVisible ? (
-							<Box
-								as="img"
+							<ProgressiveImage
 								src={attachmentMediaSrc(attachment)}
 								alt={attachment.description || title}
 								display="block"
@@ -137,6 +139,11 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 								) : null}
 							</Flex>
 						)}
+					</Box>
+				) : null}
+				{isAudio ? (
+					<Box mt={5}>
+						<AudioAttachmentPlayer attachments={[attachment]} />
 					</Box>
 				) : null}
 			</Box>

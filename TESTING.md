@@ -6,6 +6,19 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Native Commander network speed test
+
+- [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
+      confirm 5/5 download and upload samples, no 400/413, and no upload request
+      exceeds 2 MiB. Wait through a latency refresh: both speed values remain.
+- [ ] A streamed upload without Content-Length succeeds only for the exact
+      allowlisted byte count; short, oversized, and false-length bodies fail.
+- [ ] Interrupt a direction or hit its cooldown: completed measurements remain
+      visible, partial results are labelled, and Retry-After is actionable.
+      Opening a second Commander window must not duplicate an in-flight test.
+- [ ] Both capability manifests advertise upload 2.0.0; incompatible/missing
+      capabilities are rejected before transferring the speed-test payloads.
+
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
@@ -15,13 +28,25 @@ is fixed, and cite the checklist you ran in the PR description.
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
       redirect or an error page.
+- [ ] The OAuth connection page starts with Thingtime SSO rather than a token
+      form. After SSO, its background-generated default is non-expiring
+      read/write-all Things access; Advanced settings can narrow scopes,
+      regenerate the generated token (revoking its predecessor), and add a
+      manually scoped additional account without exposing a credential to a
+      chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.
@@ -117,6 +142,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
+- [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
+- [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
+- [ ] Switching accounts in Security immediately shows only that account’s cached passkeys; failed list fetches show a retry action, not a misleading empty list.
+- [ ] Both capability manifests advertise passkey register/options and login/options at 1.1.0; the client rejects missing, older, wrong-origin or breaking contracts.
+- [ ] iOS release: the signed app includes `webcredentials:thingtime.com`; the HTTPS AASA response includes its exact application identifier. Verify Face ID sign-in and registration on a physical device after installing the rebuilt signed app. A simulator build alone is not acceptance evidence.
+
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
       unique index: `node scripts/verify-passkeys.mjs` covers it (two data
       things may share one `crystal.linkKey`; the real link still dedupes to
@@ -139,7 +171,7 @@ is fixed, and cite the checklist you ran in the PR description.
       completed Face ID/Touch ID/1Password ceremony must not return a generic
       verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      49/49 — full software-authenticator ceremony: registration, duplicate
+      every check — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -490,6 +522,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -735,6 +771,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
+      FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
+      `/thing/<attachment-id>` detail view shows native controls instead of a
+      download-only row; the content response is `inline` with its detected
+      audio MIME; a multi-audio post advances through its queue in attachment
+      order; and "Save full file offline" plays the complete same-account
+      IndexedDB copy after a reload. Check desktop and 390px mobile widths for
+      no overflow, then remove the offline copy and confirm streaming resumes.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a
@@ -1318,6 +1362,25 @@ email whose link points at the attacker.
       cancels without changes. Shares edit their caption only (the nested
       original stays visible below the textarea).
 
+## Lopu toast placement (`remix/app/components/Lopu/lopuPosition.ts`, `useLopuPosition.tsx`)
+
+- [ ] Fresh browser (no stored preference): every Lopu toast pops up at the
+      BOTTOM-LEFT corner, clear of the iOS home indicator, with the card's
+      countdown ring and ✕ working; nothing sits behind the fixed nav.
+- [ ] Settings → Appearance → "Lopu messages 🦄" is a dropdown listing Top
+      left / Top centre / Top right / Bottom left / Bottom centre / Bottom
+      right. Picking one fires a confirmation toast AT the new position
+      immediately, the drawer's quick-settings modal shows the same value,
+      and the choice survives a reload and a second tab (broadcast).
+- [ ] Top-row positions clear the fixed nav (translateY 70px) on desktop and
+      375px; centre positions stay centred with no horizontal scroll; corner
+      positions hug the safe-area edge with the 8px Chakra margin.
+- [ ] A toast fired while the left drawer is open, or from inside a modal
+      (Profile save, 2FA), stays visible above them (`--toast-z-index`
+      10260); DevKit still floats above the toast.
+- [ ] Streaming musings (`useLopuStream`) pop at the chosen position and stay
+      there while typing (Chakra cannot move an open toast).
+
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
@@ -1404,6 +1467,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -1980,6 +2049,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2059,6 +2134,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
@@ -2273,10 +2356,26 @@ halves.
 - [ ] In General settings, turn “Open new Commander windows pinned” off, use
       Open New Window, and verify that launcher dismisses on focus loss; turn
       it on, open another window, and verify it remains visible on focus loss.
+- [ ] Right-click the launcher pin icon and toggle “Open New Windows Pinned”
+      both ways. Its checkmark must agree with General settings after reopening
+      the menu and relaunching; existing windows keep their own pin state and
+      Open New Window uses the newly selected default.
 - [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] With Apps first in search category order, search `magician` and `recovery`:
+      SamsungMagician and Thingtime Recovery should lead even with over 30
+      matching files/folders. Full app names must still match; `Magician.png`
+      and `recovery.c` must prefer their exact files. File-first category order
+      and learned preferences must still work, and `emoji` must retain its
+      built-in picker priority. Repeat after relaunch to check cached ranking.
+- [ ] With over 1,000 indexed apps, files, and folders, verify complete catalogue
+      reads include records beyond the former cutoff. Repeat short app searches
+      after background indexing completes: apps must not disappear. Relaunch
+      with a fresh saved index and type several queries; neither action should
+      start an indexing run. A numeric result-page size must not truncate the
+      stored catalogue or discard candidates before the indexer ranks them.
 - [ ] Run a broad query with at least 30 path-backed results and move selection
       quickly through the list. Results must stay interactive, rendering generic
       or cached icons immediately and progressively resolving every visible
@@ -2887,6 +2986,67 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
+
+Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
+which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
+(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
+
+- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
+      signed synthetic `workflow_job` delivery to
+      `/api/v1/integrations/github/webhook` on a local stack and confirm
+      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
+      the repository, job, and event rows (admin query workbench, collection
+      `ciControl`).
+- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
+      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
+      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
+      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
+      an update to a job refreshes its stamp from the new `updatedAt`.
+- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
+      from new events (kept forever); a non-numeric value falls back to the
+      default; values above 3650 clamp.
+- [ ] Repository no-op suppression: two consecutive deliveries for the same
+      repository with status `active` record ONE `ci-event` whose parent is the
+      repository row (the insert), not one per delivery; an `archived`
+      transition records one more. Entity events (PR `synchronize` with an
+      unchanged status) are still recorded.
+- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
+      `freshness.latestEventAt` still populate from the satellite; the
+      per-parent history drawer still lists events newest-first.
+- [ ] Boot ensure on a database that carries the seven retired `things`
+      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
+      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
+      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
+      and `sandboxExpiresAt_1` originals are replaced by the partial
+      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
+      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
+      never shows neither).
+- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
+      `ci_control_repository_updated`, `ci_control_repository_status`,
+      `ci_control_repository_external_id`, `ci_control_parent_created`, and
+      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
+- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
+      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
+      per-kind relocate/expired counts and writes nothing; the confirmed run
+      copies live rows (insert-if-absent by shareId — a satellite row that
+      already exists keeps its newer state), deletes every matched `things`
+      row including already-expired ones, and reports `drained`. A run that
+      hits its time budget says so and the panel's pending count keeps the
+      migration actionable until it reads 0. Non-CI things are untouched.
+- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
+      on-disk, and index bytes per physical collection with an orange `N× docs`
+      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
+      lists plan-owned indexes and any residue it would leave alone; the
+      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
+      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
+      total index bytes drop, and a duplicate `shareId` insert attempted during
+      the run is still rejected with E11000.
+- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
+      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
+      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
+      (collection allowlist now includes `ciControl`).
+
 ## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
 
 - [ ] With a prior snapshot cached, CI Control paints the last-known feature
@@ -2997,7 +3157,7 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3012,10 +3172,23 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub Actions-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
+- [ ] Inspect both selected-environment build jobs and confirm they check out
+      the exact controller-authorized SHA, receive no GitHub Environment or
+      Vercel token, and upload only a symlink-preserving prebuilt archive. The
+      protected publisher must validate each archive, use `--prebuilt` plus
+      `--skip-domain`, and reject a deployment whose actual Custom Environment
+      or production target does not match its selected row.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail
@@ -3305,6 +3478,54 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       nav-right controls rendered under the absolutely-positioned commander
       host and were untappable on mobile (2026-08).
 
+- [ ] Lopu drawer alignment: at desktop widths, open/close and resize the left
+      and right drawer with a notification visible. All six placements stay
+      within the page content; centred messages use the remaining content centre.
+      At 390px, the temporary drawer leaves notifications readable and dismissible
+      without horizontal overflow. Check both page top and bottom.
+
+## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
+
+- [ ] `/notifications` (auth) lists every notification the viewer has received
+      newest first (server keeps the newest 10,000 per recipient), with the
+      unfiltered first page painting instantly from `tt-notif-history-<id>`
+      and reconciling in the background; a cold start shows one spinner only.
+      Signed out, the page renders the quiet "Log in" state and never 401s.
+- [ ] Category chips All / Social 🤝 / Engagement 💬 / Feed 📰 / System ⚙️, the
+      Type dropdown (grouped by category), "Unread only", the search box
+      (debounced ~300ms, literal match over preview / actor name / username /
+      system title — `(.*)` finds nothing), and From/To day pickers all write
+      to the URL (`?category=&type=&unread=1&q=&since=&until=`); reloading or
+      sharing the URL restores the exact view, and "Reset filters" clears it.
+      Picking a type outside the active chip flips the chip to that type's
+      category; picking a chip that cannot hold the type drops the type.
+- [ ] The summary line shows `N notifications match · M unread` (server
+      `total` with `withTotal=1`); changing filters dims the current rows
+      instead of flashing empty; "Load older" appends via the `before` cursor
+      with no duplicates.
+- [ ] Clicking a row marks it read optimistically (row tint clears, unread
+      count drops, bell badge cache updates) and follows its click-through:
+      system notes → their `href` (`/actions/<key>`), else `/post/<id>`, else
+      the actor profile. "Mark all read ✓" clears every row + the bell badge
+      and reverts with a Lopu error toast on failure.
+- [ ] System notes: running an action from its detail page (or the API)
+      lands an `action-run` row — 🦄 Lopu avatar in a rainbow ring, headline
+      `Action “<name>” finished ✅` / `failed 🌧️`, detail `<ms> · <ops>` or
+      the error, System tag, click-through to `/actions/<key>`. A delegated
+      component click (`source: 'component'`) only notifies when it FAILS.
+      Own social actions still never notify yourself.
+- [ ] Settings → Notifications gains the "Action runs ⚡" row (push ON, email
+      opt-in by default) and a "History 📜 → Open" row; switching a type off
+      hides it on `/notifications` too; the bell popover's "See all →" opens
+      the page and the drawer's Account group lists Notifications 🔔.
+- [ ] `GET /api/v1/notifications` rejects nothing new: unknown `types` /
+      `category` values match nothing (empty page, `total: 0`), `q` is capped
+      at 100 chars, `since`/`until` are inclusive, `unreadCount` ignores the
+      filters, and the capabilities manifest advertises
+      `api.notifications-list` and `api.notifications-settings` at 1.1.0.
+- [ ] 375px: chips, inputs and the date row wrap without horizontal scroll;
+      rows never clip the category tag; the Lopu avatar ring stays round.
+
 ## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
 
 - [ ] Public stats on every post payload: `viewCount` (unique viewer
@@ -3331,6 +3552,30 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Refresh Recovery and compare its published-release count with GitHub, including
+      prereleases and older pages. Desktop and Recovery rows must arrive as one
+      snapshot; a later-page rate limit keeps the previous complete list visible.
+      Intel Macs must never select arm64-only archives.
+- [ ] Publish desktop and Recovery assets in the same GitHub release, then select
+      each row. Exactly one row must select, and its title and download filename
+      must match that component even though the GitHub release ID is shared.
+- [ ] Download the legacy build 4 ZIP: its missing code-signature resource seal
+      must produce an actionable error, remove extraction staging, and preserve
+      installed apps and caches. During valid ZIP extraction the window remains
+      responsive and duplicate cache/install actions stay disabled.
+- [ ] A release with the documented component withdrawal marker remains in the
+      catalogue as UNAVAILABLE, explains that its archive is damaged, and cannot
+      start a download. Its unmarked companion and newer releases remain usable.
+- [ ] Run Recovery unsigned packaging with an absent cache root. It must build
+      and verify the archive round-trip on a fresh machine, without requiring a
+      previous local build. Corrupt an existing cached app and repeat the cache
+      request: verification must reject it rather than reusing the stale entry.
+- [ ] Replace a damaged installed app with a valid cached bundle. Preserve the
+      damaged bundle separately, never add it to the verified cache, and report
+      its backup path. An invalid replacement must leave the current app intact.
+      A detached installer failure must reopen Recovery with a visible error;
+      the automatic catalogue refresh must not erase that explanation.
 
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery
@@ -4335,3 +4580,52 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+
+### Recovery cards, build IDs and app selection
+
+- [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
+      old Electron bundles expose their embedded commit, and Recovery cards use
+      the Recovery component name even if old metadata used a desktop title.
+- [ ] Open the App selector, switch Electron → Commander → Electron, and verify
+      cached entries and release selections stay with their app. Save installed
+      Commander, verify its cached signature, and confirm Electron's cache is unchanged.
+- [ ] Inspect release cards and detail metadata at narrow and wide macOS window
+      sizes, scroll every list to the bottom, and open/cancel unsigned acknowledgement.
+      Dates, badges, long versions and archive names must wrap without clipping.
+- [ ] A Commander handoff rejects an Electron path and vice versa. Unknown or
+      incomplete build metadata must not fabricate a numeric build number.
+- [ ] Cloud archives contain their run number in both app build metadata and
+      `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
+      stapler checks after downloading the actual published ZIP.
+- [ ] With a Developer ID certificate in the signing keychain, the production
+      packager passes its unprefixed name and team to electron-builder, while
+      native helpers keep the full certificate name. Missing or development-only
+      identities fail before building; no unsigned fallback is allowed.
+
+- [ ] Dispatch Commander on the protected controller; confirm its exact main SHA,
+      signed Commander and Recovery ZIPs, checksums, and `latest=false`. Switch
+      Recovery to Commander, download/verify both cards, install with rollback
+      preserved, and verify build number, commit and branch still appear offline.
+- [ ] Run Commander `--prepare` and `--build-only` with an installed app running;
+      its PID/daemon remain unchanged. A failed notarization must not stop or
+      replace the installed app. Run `node --test Commander/script/release-packaging.test.mjs`.
+
+- [ ] Commander production verification passes the Mach-O file before `lipo
+      -verify_arch` and exercises the real tool against a native fixture before
+      cloud signing. A verifier failure must publish no incomplete release.
+
+## Persistent media and progressive image regression
+
+- [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture
+      top to bottom: below-fold images stay lazy, low-resolution previews
+      appear before responsive images, and no horizontal overflow appears.
+- [ ] Leave and revisit a managed image: authorization checks increase while
+      downloaded byte requests stay unchanged. Revoke access and revisit:
+      cached pixels must not render. Restore access and verify loading resumes.
+- [ ] Open and close the image lightbox, verify contained sizing, and inspect
+      Media settings toggles and clear action at desktop and mobile sizes.
+- [ ] Disable caching, clear storage, and disable previews; original loading
+      remains usable. Unsupported image formats fall back without retry loops.
+- [ ] Confirm partial/large files use native streaming and cached range reads
+      cannot bypass authorization. Verify storage failure degrades to HTTP.

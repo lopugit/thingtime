@@ -4,6 +4,7 @@ import {
   AppWindow,
   ArrowRight,
   Calculator,
+  Check,
   Command,
   CornerDownLeft,
   Files,
@@ -485,8 +486,10 @@ export function Launcher({ state }: { state: CommanderState }) {
                 ) : null}
               </span>
             ) : (
-              <span className={state.searchPending ? 'result-count updating' : 'result-count'}>
-                {state.searchPending ? <RefreshCw aria-label="Updating results" /> : null}
+              <span className="result-count">
+                {state.searchPending ? (
+                  <RefreshCw className="search-spinner" aria-label="Updating results" />
+                ) : null}
                 {state.hits.length}
               </span>
             )}
@@ -595,7 +598,7 @@ export function Launcher({ state }: { state: CommanderState }) {
             ))}
             {!totalRows ? (
               <div className="empty-state">
-                {state.searchPending ? <RefreshCw className="search-spinner" /> : <Command />}
+                <Command />
                 <strong>{state.searchPending ? 'Searching…' : 'No results found'}</strong>
                 <span>
                   {state.searchPending
@@ -658,6 +661,34 @@ export function Launcher({ state }: { state: CommanderState }) {
                 >
                   <Plus />
                   <span>Open New Window</span>
+                </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={state.bootstrap?.settings.windowPinning.defaultPinned ?? false}
+                  disabled={!state.bootstrap?.settings.windowPinning.enabled}
+                  onClick={() => {
+                    const settings = state.bootstrap?.settings;
+                    if (!settings) return;
+                    setPinMenuOpen(false);
+                    void state.saveSettings({
+                      ...settings,
+                      windowPinning: {
+                        ...settings.windowPinning,
+                        defaultPinned: !settings.windowPinning.defaultPinned,
+                      },
+                    });
+                  }}
+                >
+                  <Check
+                    aria-hidden="true"
+                    style={{
+                      visibility: state.bootstrap?.settings.windowPinning.defaultPinned
+                        ? 'visible'
+                        : 'hidden',
+                    }}
+                  />
+                  <span>Open New Windows Pinned</span>
                 </button>
               </aside>
             ) : null}
