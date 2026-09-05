@@ -129,6 +129,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
+- [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
+- [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
+- [ ] Switching accounts in Security immediately shows only that account’s cached passkeys; failed list fetches show a retry action, not a misleading empty list.
+- [ ] Both capability manifests advertise passkey register/options and login/options at 1.1.0; the client rejects missing, older, wrong-origin or breaking contracts.
+- [ ] iOS release: the signed app includes `webcredentials:thingtime.com`; the HTTPS AASA response includes its exact application identifier. Verify Face ID sign-in and registration on a physical device after installing the rebuilt signed app. A simulator build alone is not acceptance evidence.
+
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
       unique index: `node scripts/verify-passkeys.mjs` covers it (two data
       things may share one `crystal.linkKey`; the real link still dedupes to
@@ -151,7 +158,7 @@ is fixed, and cite the checklist you ran in the PR description.
       completed Face ID/Touch ID/1Password ceremony must not return a generic
       verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      49/49 — full software-authenticator ceremony: registration, duplicate
+      every check — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -502,6 +509,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -1424,6 +1435,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -2000,6 +2017,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -3433,6 +3456,27 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Refresh Recovery and compare its published-release count with GitHub, including
+      prereleases and older pages. Desktop and Recovery rows must arrive as one
+      snapshot; a later-page rate limit keeps the previous complete list visible.
+      Intel Macs must never select arm64-only archives.
+- [ ] Publish desktop and Recovery assets in the same GitHub release, then select
+      each row. Exactly one row must select, and its title and download filename
+      must match that component even though the GitHub release ID is shared.
+- [ ] Download the legacy build 4 ZIP: its missing code-signature resource seal
+      must produce an actionable error, remove extraction staging, and preserve
+      installed apps and caches. During valid ZIP extraction the window remains
+      responsive and duplicate cache/install actions stay disabled.
+- [ ] Run Recovery unsigned packaging with an absent cache root. It must build
+      and verify the archive round-trip on a fresh machine, without requiring a
+      previous local build. Corrupt an existing cached app and repeat the cache
+      request: verification must reject it rather than reusing the stale entry.
+- [ ] Replace a damaged installed app with a valid cached bundle. Preserve the
+      damaged bundle separately, never add it to the verified cache, and report
+      its backup path. An invalid replacement must leave the current app intact.
+      A detached installer failure must reopen Recovery with a visible error;
+      the automatic catalogue refresh must not erase that explanation.
 
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery

@@ -2073,7 +2073,13 @@ const sessionSchema: ThingtimeSchema = {
       description:
         'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
-    { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      description:
+        'Expiry (null = non-expiring service token). Revoking a non-expiring session stamps a reap date here so the TTL index can clear the dead row; an existing expiry is never overwritten.'
+    },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },

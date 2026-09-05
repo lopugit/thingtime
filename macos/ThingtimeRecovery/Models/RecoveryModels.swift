@@ -185,3 +185,31 @@ public enum RecoveryError: LocalizedError {
         }
     }
 }
+
+public struct RecoveryCatalogSnapshot {
+    public let publishedReleaseCount: Int
+    public let desktop: [RecoveryRelease]
+    public let recovery: [RecoveryRelease]
+}
+
+public struct RecoveryInstallNotice: Codable {
+    public let message: String
+    public let isError: Bool
+
+    public init(message: String, isError: Bool) {
+        self.message = message
+        self.isError = isError
+    }
+
+    public func save(paths: RecoveryPaths = RecoveryPaths()) throws {
+        try FileManager.default.createDirectory(at: paths.recoveryCacheRoot, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try JSONEncoder().encode(self).write(to: paths.recoveryCacheRoot.appendingPathComponent("last-install-result.json"), options: .atomic)
+    }
+
+    public static func consume(paths: RecoveryPaths = RecoveryPaths()) -> RecoveryInstallNotice? {
+        let url = paths.recoveryCacheRoot.appendingPathComponent("last-install-result.json")
+        guard let data = try? Data(contentsOf: url), let notice = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        try? FileManager.default.removeItem(at: url)
+        return notice
+    }
+}
