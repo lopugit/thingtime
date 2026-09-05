@@ -47,7 +47,13 @@ final class RecoveryStore: ObservableObject {
             recoveryReleases = snapshot.recovery
             catalogStatus = "GitHub: \(snapshot.publishedReleaseCount) published releases · \(snapshot.desktop.count) desktop · \(snapshot.recovery.count) Recovery for this Mac"
             reloadCaches()
+            // The install result outranks the routine refresh line once, so the
+            // first refresh after a helper install cannot bury it. Clearing it
+            // here keeps that one-shot: RecoveryInstallNotice.consume already
+            // deleted the file, so leaving this set would replay a stale install
+            // message on every later refresh for the rest of the session.
             notice = installerNotice ?? "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
+            installerNotice = nil
         } catch {
             reloadCaches()
             errorMessage = "\(error.localizedDescription) Cached recovery bundles are still available on this Mac."
