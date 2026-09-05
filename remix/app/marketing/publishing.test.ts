@@ -82,6 +82,21 @@ test('keys that name nothing in the catalog are rejected, including inherited ob
 	assert.equal(parsePublicationKey('x'.repeat(300)), null);
 });
 
+// The catalog tops out at two blocks of the same type today, so the ordinal
+// grammar has to be exercised directly: a generated page that ever reaches ten
+// (`pageSections` mints "hero/10") must still produce a hideable key.
+test('section ordinals accept every repeat pageSections can mint, and nothing else', () => {
+	for (const ordinal of [2, 3, 9, 10, 11, 19, 20, 99, 100, 137]) {
+		const target = parsePublicationKey(`section:landing/feed#hero/${ordinal}`);
+		assert.deepEqual(target, { type: 'section', slug: 'landing/feed', section: `hero/${ordinal}` }, `hero/${ordinal} must parse`);
+	}
+	// /1 is never minted (the first block carries the bare type), and leading
+	// zeros would make two keys for one section
+	for (const ordinal of ['0', '1', '01', '02', '010', '-2', '2.5', '1e2', '']) {
+		assert.equal(parsePublicationKey(`section:landing/feed#hero/${ordinal}`), null, `hero/${ordinal} must be rejected`);
+	}
+});
+
 test('changes are validated per target: sections hide, everything else publishes, duplicates collapse', () => {
 	assert.deepEqual(validatePublicationChanges([]), { ok: false, error: 'changes is empty' });
 	assert.equal(validatePublicationChanges('nope').ok, false);
