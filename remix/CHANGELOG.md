@@ -372,6 +372,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### 2026-09-05 — Marketing suite locked behind an admin publish gate — Claude (AI)
 
+- Grouped summary; details in the PR note (`PRs/638-claude-marketing-pages-admin-guard--marketing-publish-gate.md`).
 - Everything under `/marketing` (hub, category indexes, the 1,600+ generated
   pages, their sections, the social-image suite and each feature's image set)
   is now admin-only until an admin publishes it, one key at a time
