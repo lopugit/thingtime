@@ -593,6 +593,11 @@
   border: 0;
 }
 
+/* Keep the web surface aligned with Commander's native mask at narrow widths.
+   The generic launcher media rule uses an 8px inset, but this panel is 18px. */
+.launcher-shell:has(> .emoji-picker-panel) {
+  padding: 18px;
+}
 .emoji-picker-panel {
   /* The implicit auto column otherwise grows to a feedback row's min-content
      width, stretching every emoji cell beyond the native window's fixed mask. */
