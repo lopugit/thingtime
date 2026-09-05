@@ -12,6 +12,10 @@ import {
 	MAX_SUBSPACE_ICON_CHARS,
 	MAX_SUBSPACE_MOD_REASON_CHARS,
 	MAX_SUBSPACE_NAME_CHARS,
+	MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS,
+	MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS,
+	MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS,
+	MAX_SUBSPACE_REMOVAL_REASONS,
 	MAX_SUBSPACE_RULE_TEXT_CHARS,
 	MAX_SUBSPACE_RULE_TITLE_CHARS,
 	MAX_SUBSPACE_RULES,
@@ -183,6 +187,67 @@ export const sanitizeBranding = (value: unknown, previous: SubspaceBranding | nu
 
 export const flairById = (flairs: readonly SubspaceFlair[] | null | undefined, id: string | null | undefined): SubspaceFlair | null =>
 	id ? (flairs || []).find((flair) => flair.id === id) || null : null;
+
+// ---------------------------------------------------------------------------
+// Removal reasons — the canned reasons a moderator picks when removing a post
+// (Reddit's "removal reasons"). They live on the subspace crystal as
+// `removalReasons: { id, title, message }[]` (ids share the flair-id grammar,
+// minted from the title); `moderate remove` takes `reasonId` and the reason's
+// title + message (+ the mod's free-text `reason` as a note) become the
+// stored reason the author sees on the card and in their bell.
+export type SubspaceRemovalReason = { id: string; title: string; message: string };
+
+export const sanitizeRemovalReasons = (value: unknown): SubspaceRemovalReason[] | Fail => {
+	if (value === undefined || value === null) return [];
+	if (!Array.isArray(value)) return fail(400, 'removalReasons must be a list');
+	if (value.length > MAX_SUBSPACE_REMOVAL_REASONS) return fail(400, `A subspace can have at most ${MAX_SUBSPACE_REMOVAL_REASONS} removal reasons`);
+	const reasons: SubspaceRemovalReason[] = [];
+	const seen = new Set<string>();
+	for (const entry of value) {
+		const raw = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : typeof entry === 'string' ? { title: entry } : null;
+		if (!raw) return fail(400, 'Each removal reason needs a title');
+		const title = boundedText(raw.title, MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS);
+		if (!title) return fail(400, 'Each removal reason needs a title');
+		const message = typeof raw.message === 'string' ? raw.message.replace(/\s+/g, ' ').trim() : '';
+		if (message.length > MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS) return fail(400, `Removal reason message is too long (max ${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS})`);
+		const requestedId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
+		const id = requestedId || slugifyFlairId(title);
+		if (!FLAIR_ID_PATTERN.test(id)) return fail(400, `Removal reason ids are 1–${MAX_SUBSPACE_FLAIR_ID_CHARS} lowercase letters, numbers, - or _ (got ${id || title})`);
+		if (seen.has(id)) return fail(400, `Duplicate removal reason id: ${id}`);
+		seen.add(id);
+		reasons.push({ id, title, message });
+	}
+	return reasons;
+};
+
+// a stored subspace crystal's removal reasons (anything malformed reads as none)
+export const removalReasonsOf = (crystal: Record<string, any> | null | undefined): SubspaceRemovalReason[] => {
+	const raw = crystal?.removalReasons;
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string' && typeof entry.title === 'string' && entry.title)
+		.map((entry) => ({ id: entry.id, title: entry.title, message: typeof entry.message === 'string' ? entry.message : '' }));
+};
+
+export const removalReasonById = (reasons: readonly SubspaceRemovalReason[] | null | undefined, id: string | null | undefined): SubspaceRemovalReason | null =>
+	id ? (reasons || []).find((reason) => reason.id === id) || null : null;
+
+// What `moderate remove` stores. `reasonId` names one of the subspace's
+// removal reasons (unknown → 400): its title — message becomes the reason,
+// with the mod's free-text `reason` appended as a note ("· note"). Without a
+// reasonId the free text alone is the reason (≤ MAX_SUBSPACE_MOD_REASON_CHARS,
+// the pre-S4 behaviour); neither → null (a removal with no stated reason).
+// The composed text is bounded by MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS.
+export type ResolvedRemovalReason = { reason: string | null; reasonId: string | null };
+export const resolveRemovalReason = (input: { reason?: unknown; reasonId?: unknown }, reasons: readonly SubspaceRemovalReason[]): ResolvedRemovalReason | Fail => {
+	const note = sanitizeReason(input.reason);
+	const reasonId = typeof input.reasonId === 'string' ? input.reasonId.trim().toLowerCase() : '';
+	if (!reasonId) return { reason: note, reasonId: null };
+	const canned = removalReasonById(reasons, reasonId);
+	if (!canned) return fail(400, `No removal reason "${reasonId}" here — pick one of the subspace’s reasons or write your own`);
+	const text = [canned.message ? `${canned.title} — ${canned.message}` : canned.title, note].filter(Boolean).join(' · ');
+	return { reason: text.slice(0, MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS), reasonId: canned.id };
+};
 
 // ---------------------------------------------------------------------------
 // User flairs — the flair a member wears beside their name in ONE subspace.

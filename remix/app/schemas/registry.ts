@@ -335,6 +335,15 @@ export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
 export const MAX_SUBSPACES_PER_USER = 25;
 export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
 export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
+// Removal reasons (round 2, S4): a per-subspace list of canned reasons a
+// moderator picks when removing a post — { id, title, message }; the title +
+// message (+ the mod's free-text note) become the post's stored removal reason
+// and the author's subspace-post-removed notification.
+export const MAX_SUBSPACE_REMOVAL_REASONS = 20;
+export const MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS = 80;
+export const MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS = 500;
+// the composed stored reason on a removed post: title — message · note
+export const MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS = 900;
 export const MAX_POST_TITLE_CHARS = 300;
 export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
 export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
@@ -1605,7 +1614,9 @@ const subspaceSchema: ThingtimeSchema = {
     'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]). userFlairs are ' +
     'the templates members wear beside their name (stored on their subspace-member row as userFlair); ' +
     'userFlairSelfAssign (default true) lets members pick one themselves, allowCustomUserFlair (default false) ' +
-    'lets them type their own text (≤40 chars) — moderators may set anyone’s, modOnly templates included.',
+    'lets them type their own text (≤40 chars) — moderators may set anyone’s, modOnly templates included. ' +
+    'removalReasons are the canned reasons moderators pick when removing a post (title + message become the stored ' +
+    'reason on the post and the author’s subspace-post-removed notification).',
   createdVia: 'POST /api/v1/subspaces',
   fields: [
     { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'Unique URL slug, lowercase [a-z0-9_], 3–30 chars.' },
@@ -1630,6 +1641,12 @@ const subspaceSchema: ThingtimeSchema = {
       type: 'record',
       required: false,
       description: `User-flair templates members wear beside their name — the same shape as post flairs ({ id, label, emoji, color, modOnly }), max ${MAX_SUBSPACE_FLAIRS}; modOnly templates are assigned by moderators only.`
+    },
+    {
+      name: 'removalReasons',
+      type: 'record',
+      required: false,
+      description: `Canned removal reasons moderators pick when removing a post — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), title (≤${MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS}), message (≤${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS}) }, max ${MAX_SUBSPACE_REMOVAL_REASONS}; title + message become the post’s stored reason and the author’s notification.`
     },
     { name: 'userFlairSelfAssign', type: 'boolean', required: false, description: 'Members may pick their own user flair (default true; moderators always can, for anyone).' },
     {
@@ -1662,6 +1679,7 @@ const subspaceSchema: ThingtimeSchema = {
     userFlairs: [{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff', modOnly: false }],
     userFlairSelfAssign: true,
     allowCustomUserFlair: false,
+    removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }],
     branding: { icon: '🌈', iconUrl: null, bannerUrl: null, accent: '#7c5cff' }
   }
 };

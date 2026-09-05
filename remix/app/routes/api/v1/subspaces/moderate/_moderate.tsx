@@ -5,10 +5,12 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 import { moderatePost } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
-// POST /api/v1/subspaces/moderate — { id (post), action, reason?, value?,
-// flairId? } — moderator actions on a post in the subspace: remove, approve,
-// pin/unpin, lock/unlock, nsfw, spoiler, flair. Writes the server-owned
-// subspaceMod state and a mod-log entry; returns the re-projected post.
+// POST /api/v1/subspaces/moderate — { id (post), action, reason?, reasonId?,
+// value?, flairId? } — moderator actions on a post in the subspace: remove
+// (reason = free text and/or reasonId = one of the subspace's removal
+// reasons; the author is notified), approve, pin/unpin, lock/unlock, nsfw,
+// spoiler, flair. Writes the server-owned subspaceMod state and a mod-log
+// entry; returns the re-projected post.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {

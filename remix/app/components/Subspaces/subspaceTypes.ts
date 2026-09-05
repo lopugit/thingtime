@@ -7,6 +7,9 @@ export type { PublicAuthorFlair, SubspaceAccess, SubspaceRole };
 
 export type SubspaceRule = { title: string; text: string | null };
 export type SubspaceFlair = { id: string; label: string; emoji: string | null; color: string | null; modOnly: boolean };
+// a canned removal reason moderators pick when removing a post (title +
+// message become the stored reason the author sees)
+export type SubspaceRemovalReason = { id: string; title: string; message: string };
 export type SubspaceBranding = { icon: string | null; iconUrl: string | null; bannerUrl: string | null; accent: string | null };
 
 export type PublicSubspaceViewer = {
@@ -40,6 +43,8 @@ export type PublicSubspace = {
 	userFlairs: SubspaceFlair[];
 	userFlairSelfAssign: boolean;
 	allowCustomUserFlair: boolean;
+	// canned removal reasons (the Remove modal's radio list, after the rules)
+	removalReasons: SubspaceRemovalReason[];
 	branding: SubspaceBranding;
 	ownerId: string;
 	memberCount: number;

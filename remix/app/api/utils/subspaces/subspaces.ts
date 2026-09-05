@@ -75,6 +75,8 @@ import {
 	rankSubspacePosts,
 	releaseKindFor,
 	releasedPostUpdate,
+	removalReasonsOf,
+	resolveRemovalReason,
 	resolveUserFlair,
 	sanitizeAccess,
 	sanitizeBranding,
@@ -82,6 +84,7 @@ import {
 	sanitizeFlairs,
 	sanitizeName,
 	sanitizeReason,
+	sanitizeRemovalReasons,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeSort,
@@ -96,6 +99,7 @@ import {
 	type RankCandidate,
 	type SubspaceBranding,
 	type SubspaceFlair,
+	type SubspaceRemovalReason,
 	type SubspaceRule
 } from './subspaceCore';
 
@@ -162,6 +166,9 @@ export type PublicSubspace = {
 	userFlairs: SubspaceFlair[];
 	userFlairSelfAssign: boolean;
 	allowCustomUserFlair: boolean;
+	// canned removal reasons moderators pick when removing a post (title +
+	// message become the stored reason); public like the rules they extend
+	removalReasons: SubspaceRemovalReason[];
 	branding: SubspaceBranding;
 	ownerId: string;
 	memberCount: number;
@@ -242,6 +249,7 @@ export const toPublicSubspace = (
 	rules: Array.isArray(doc.crystal?.rules) ? doc.crystal.rules : [],
 	flairs: flairsOf(doc),
 	...userFlairSettingsOf(doc.crystal),
+	removalReasons: removalReasonsOf(doc.crystal),
 	branding: brandingOf(doc),
 	ownerId: String(doc.ownerId),
 	memberCount: options.memberCount,
@@ -656,6 +664,8 @@ export type UpdateSubspaceInput = SubspaceRef & {
 	userFlairs?: unknown;
 	userFlairSelfAssign?: unknown;
 	allowCustomUserFlair?: unknown;
+	// removal reasons (moderators): the canned { id, title, message } list
+	removalReasons?: unknown;
 };
 
 export const updateSubspace = async (viewerInput: string | Viewer, input: UpdateSubspaceInput): Promise<Fail | { ok: true; subspace: PublicSubspace }> => {
@@ -718,6 +728,15 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		if (typeof input.allowCustomUserFlair !== 'boolean') return fail(400, 'allowCustomUserFlair must be true or false');
 		set['crystal.allowCustomUserFlair'] = input.allowCustomUserFlair;
 		changed.push('allowCustomUserFlair');
+	}
+	// removal reasons — any moderator (they extend the rules; a removed post
+	// keeps the composed text it was removed with, so editing the list never
+	// rewrites history)
+	if (input.removalReasons !== undefined) {
+		const removalReasons = sanitizeRemovalReasons(input.removalReasons);
+		if (isFail(removalReasons)) return removalReasons;
+		set['crystal.removalReasons'] = removalReasons;
+		changed.push('removalReasons');
 	}
 	if (input.access !== undefined) {
 		if (!isOwner) return fail(403, 'Only the owner can change who may join or post');
@@ -950,6 +969,8 @@ export type MutateMemberInput = SubspaceRef & {
 	role?: unknown;
 	reason?: unknown;
 	banDays?: unknown;
+	// ban: a private moderator note (mod log only — never shown to the user)
+	note?: unknown;
 	// userFlair: a template id, or custom text (+ optional emoji/color);
 	// neither clears
 	flairId?: unknown;
@@ -1161,7 +1182,9 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 				'crystal.userFlair': null,
 				...(targetPending ? { 'crystal.left': true } : {})
 			};
-			detail = { banUntil: banUntil ? banUntil.toISOString() : null, ...(target?.userFlair ? { userFlairCleared: true } : {}) };
+			// the optional note is for the mod log only (the user sees `reason`)
+			const note = sanitizeReason(input.note);
+			detail = { banUntil: banUntil ? banUntil.toISOString() : null, ...(note ? { note } : {}), ...(target?.userFlair ? { userFlairCleared: true } : {}) };
 			break;
 		}
 		case 'unban':
@@ -1463,7 +1486,10 @@ export const deleteSubspace = async (viewerInput: string | Viewer, input: Delete
 export type PostModAction = 'remove' | 'approve' | 'pin' | 'unpin' | 'lock' | 'unlock' | 'nsfw' | 'spoiler' | 'flair';
 const POST_MOD_ACTIONS: PostModAction[] = ['remove', 'approve', 'pin', 'unpin', 'lock', 'unlock', 'nsfw', 'spoiler', 'flair'];
 
-export type ModeratePostInput = { id?: unknown; action?: unknown; reason?: unknown; value?: unknown; flairId?: unknown };
+// remove: `reason` (free text) and/or `reasonId` (one of the subspace's
+// removal reasons — its title + message become the stored reason, the free
+// text rides along as a note)
+export type ModeratePostInput = { id?: unknown; action?: unknown; reason?: unknown; reasonId?: unknown; value?: unknown; flairId?: unknown };
 
 export const moderatePost = async (viewerInput: string | Viewer, input: ModeratePostInput): Promise<Fail | { ok: true; post: PublicPost }> => {
 	const auth = requireViewer(viewerInput);
@@ -1482,19 +1508,29 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	const subspace = await findSubspace({ id: subspaceId });
 	if (!subspace) return fail(404, 'Subspace not found');
 
-	const reason = sanitizeReason(input.reason);
+	let reason = sanitizeReason(input.reason);
 	const now = new Date();
 	const current = (post as any).subspaceMod || {};
 	const set: Record<string, unknown> = { updatedAt: now };
 	const unset: Record<string, ''> = {};
 	let detail: Record<string, unknown> | null = null;
 	switch (action) {
-		case 'remove':
+		case 'remove': {
+			// a canned removal reason (reasonId) composes the stored reason:
+			// title — message · note; unknown ids answer 400
+			const resolved = resolveRemovalReason(input, removalReasonsOf(subspace.crystal));
+			if (isFail(resolved)) return resolved;
+			reason = resolved.reason;
 			set['subspaceMod.status'] = 'removed';
 			set['subspaceMod.removedById'] = actorId;
 			set['subspaceMod.removedAt'] = now;
 			set['subspaceMod.reason'] = reason;
+			if (resolved.reasonId) {
+				set['subspaceMod.reasonId'] = resolved.reasonId;
+				detail = { reasonId: resolved.reasonId };
+			} else unset['subspaceMod.reasonId'] = '';
 			break;
+		}
 		case 'approve':
 			set['subspaceMod.status'] = 'approved';
 			set['subspaceMod.approvedById'] = actorId;
@@ -1502,6 +1538,7 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 			unset['subspaceMod.removedById'] = '';
 			unset['subspaceMod.removedAt'] = '';
 			unset['subspaceMod.reason'] = '';
+			unset['subspaceMod.reasonId'] = '';
 			break;
 		case 'pin': {
 			const pinned = await things.countDocuments({ ...livePostMatch(subspaceId), 'subspaceMod.pinned': true } as any);
@@ -1549,6 +1586,20 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	// outside the stamp, so this is a no-op delta for the other actions.
 	await updateAccountedThing(things, { shareId: post.shareId }, update);
 	await writeModlog(subspaceId, actorId, `post.${action}`, { postId: post.shareId, reason, detail });
+	// the author hears about a removal (never throws; prefs gate delivery; a
+	// moderator removing their own post tells nobody). Post-scoped: postId
+	// deep-links to /post/<id>, the preview leads with s/<slug> and carries
+	// the reason — approve notifies nothing (the post simply comes back).
+	if (action === 'remove') {
+		await emitNotification({
+			recipientId: String(post.ownerId),
+			type: 'subspace-post-removed',
+			actor: notificationActorOf(auth.viewer),
+			targetId: post.shareId,
+			postId: post.shareId,
+			preview: subspaceNotificationPreview(String(subspace.crystal?.slug || subspaceId), reason || 'removed by the moderators 🧹')
+		});
+	}
 	const fresh = (await things.findOne({ shareId: post.shareId } as any)) as any as ThingDoc;
 	const [projected] = await toPublicPosts([fresh], auth.viewer);
 	return { ok: true, post: projected };

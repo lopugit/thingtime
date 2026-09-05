@@ -51,6 +51,7 @@ import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
 import { UpdownControl } from './UpdownControl';
 import { useSubspacePrefs } from '~/components/Subspaces/useSubspacePrefs';
+import { RemoveModal, loadModerationSubspace, type RemoveChoice } from '~/components/Subspaces/ModerationModals';
 import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
@@ -1368,17 +1369,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // subspace moderation (mods only): each action round-trips through
   // /api/v1/subspaces/moderate and swaps in the re-projected post; the flair
-  // list loads lazily when the menu opens (the embed stays lean)
+  // list loads lazily when the menu opens (the embed stays lean) through the
+  // same cached subspace loader the Remove modal uses for rules + reasons
   const [modFlairs, setModFlairs] = React.useState<{ id: string; label: string; emoji: string | null; modOnly: boolean }[] | null>(null);
   const loadFlairs = () => {
     if (modFlairs || !post.subspace) return;
-    api.v1.subspaces
-      .get({ id: post.subspace.id })
-      .then((resp: any) =>
-        setModFlairs(
-          ((resp?.subspace?.flairs || []) as any[]).map((flair) => ({ id: flair.id, label: flair.label, emoji: flair.emoji ?? null, modOnly: flair.modOnly === true }))
-        )
-      )
+    loadModerationSubspace(api, post.subspace.id)
+      .then((detail) => setModFlairs(detail.flairs.map((flair) => ({ id: flair.id, label: flair.label, emoji: flair.emoji, modOnly: flair.modOnly }))))
       .catch(() => setModFlairs([]));
   };
   const handleModerate = async (action: string, extra: Record<string, unknown> = {}) => {
@@ -1389,6 +1386,58 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     } catch (err: any) {
       lopu({ title: err?.error || 'Moderation action failed 😞', status: 'error' });
     }
+  };
+  // Remove 🧹 goes through the RemoveModal (rules / removal reasons / custom,
+  // note, also-lock, also-ban) and sequences moderate(remove) [+ lock]
+  // [+ members ban]. Optimistic: the card paints removed + the reason at
+  // once and reverts if the REMOVE is refused; a lock / ban that fails after
+  // a successful removal keeps the removal (already reconciled) and toasts.
+  const [removeOpen, setRemoveOpen] = React.useState(false);
+  const handleRemoveWithReason = async (choice: RemoveChoice) => {
+    const before = post.subspaceMod || null;
+    onChanged?.(post.id, (current) => ({
+      ...current,
+      subspaceMod: {
+        status: 'removed',
+        removed: true,
+        reason: choice.previewReason,
+        removedAt: new Date().toISOString(),
+        pinned: current.subspaceMod?.pinned === true,
+        locked: choice.lock || current.subspaceMod?.locked === true,
+        nsfw: current.subspaceMod?.nsfw === true,
+        spoiler: current.subspaceMod?.spoiler === true,
+        viewerCanModerate: true
+      }
+    }));
+    let latest: PublicPost | null = null;
+    try {
+      const resp: any = await api.v1.subspaces.moderate({ id: post.id, action: 'remove', ...(choice.reason ? { reason: choice.reason } : {}), ...(choice.reasonId ? { reasonId: choice.reasonId } : {}) });
+      latest = resp?.post || null;
+    } catch (err: any) {
+      onChanged?.(post.id, (current) => ({ ...current, subspaceMod: before }));
+      lopu({ title: err?.error || 'Could not remove that post 😞', status: 'error' });
+      throw err;
+    }
+    const followUps: string[] = [];
+    if (choice.lock && !latest?.subspaceMod?.locked) {
+      try {
+        const resp: any = await api.v1.subspaces.moderate({ id: post.id, action: 'lock' });
+        latest = resp?.post || latest;
+        followUps.push('locked 🔒');
+      } catch (err: any) {
+        lopu({ title: err?.error || 'Removed, but the comments did not lock 😞', status: 'error' });
+      }
+    }
+    if (latest) onChanged?.(post.id, latest);
+    if (choice.ban && post.subspace && post.author) {
+      try {
+        await api.v1.subspaces.mutateMember({ id: post.subspace.id, userId: post.author.id, action: 'ban', ...(latest?.subspaceMod?.reason || choice.previewReason ? { reason: latest?.subspaceMod?.reason || choice.previewReason } : {}), ...(choice.banDays ? { banDays: choice.banDays } : {}) });
+        followUps.push(`@${post.author.username} banned${choice.banDays ? ` for ${choice.banDays}d` : ''} 🚫`);
+      } catch (err: any) {
+        lopu({ title: err?.error || 'Removed, but the ban did not go through 😞', status: 'error' });
+      }
+    }
+    lopu({ title: `Removed 🧹${followUps.length ? ` · ${followUps.join(' · ')}` : ''}`, description: latest?.subspaceMod?.reason || undefined, status: 'success', duration: 5000 });
   };
   const handleOwnFlair = async (flairId: string | null) => {
     try {
@@ -1934,10 +1983,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                             Approve ✅
                           </MenuItem>
                         ) : (
-                          <MenuItem
-                            fontSize="sm"
-                            onClick={() => handleModerate('remove', { reason: window.prompt('Reason (shown to the author and the mod log)') || undefined })}
-                          >
+                          <MenuItem fontSize="sm" onClick={() => setRemoveOpen(true)} data-testid="post-mod-remove">
                             Remove 🧹
                           </MenuItem>
                         )}
@@ -1986,6 +2032,19 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 )}
               </MenuList>
             </Menu>
+          )}
+          {canModerate && post.subspace && !mediaThing && (
+            <RemoveModal
+              isOpen={removeOpen}
+              onClose={() => setRemoveOpen(false)}
+              api={api}
+              subspaceId={post.subspace.id}
+              subspaceSlug={post.subspace.slug}
+              authorName={post.author?.username || null}
+              canBanAuthor={!!post.author && !isOwner}
+              alreadyLocked={post.subspaceMod?.locked === true}
+              onRemove={handleRemoveWithReason}
+            />
           )}
         </Flex>
 

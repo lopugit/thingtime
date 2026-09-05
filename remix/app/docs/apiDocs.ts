@@ -8531,8 +8531,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // requesters and `mine=1` lists only ACTIVE memberships (additive)
     // 1.2.0: rows carry userFlairs / userFlairSelfAssign / allowCustomUserFlair
     // and viewer.userFlair — the user-flair vocabulary (additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: rows carry removalReasons — the canned { id, title, message }
+    // reasons moderators remove posts with (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -8604,15 +8606,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // pendingCount + approvalRequestCount (the Requests queue sizes) — additive
     // 1.2.0: userFlairs / userFlairSelfAssign / allowCustomUserFlair on the
     // subspace and viewer.userFlair (the flair the caller wears here) — additive
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: removalReasons — the subspace's canned removal reasons (S4,
+    // additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
-      'Returns the subspace (branding, rules, flairs, access, and the user-flair vocabulary: userFlairs templates, ' +
-      'userFlairSelfAssign, allowCustomUserFlair), memberCount (active members — pending requesters excluded) + ' +
+      'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
+      'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
+      'posts with), memberCount (active members — pending requesters excluded) + ' +
       'postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, membership, ' +
       'approval, ban state, canModerate, canPost, pending (an open join request to a private subspace), ' +
       'approvalRequested (asked for posting rights in a restricted one) and userFlair (the flair they wear here: ' +
@@ -8650,15 +8655,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // requests; the settings.update mod-log detail reports the counts (additive)
     // 1.2.0: user flairs — userFlairs (templates), userFlairSelfAssign,
     // allowCustomUserFlair (moderators) — additive
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
+    // list moderate remove's reasonId picks from (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
-    summary: 'Moderators edit branding, rules, post flairs and user flairs; the owner changes access and the 18+ flag.',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
     detail:
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
-      'allowCustomUserFlair? } as a moderator, plus access? and nsfw? as the owner. userFlairs are the templates ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
+      '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
+      '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
       'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }, ≤50; modOnly ' +
       'ones are assigned by moderators only); userFlairSelfAssign (default true) lets members pick one themselves ' +
       'and allowCustomUserFlair (default false) lets them type their own text (≤40 chars) — both switches gate ' +
@@ -8681,9 +8691,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'POST',
         body: { slug: 'rainbows', userFlairs: [{ label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', modOnly: true }], userFlairSelfAssign: true, allowCustomUserFlair: true }
       },
+      {
+        name: 'Removal reasons',
+        description: 'Two canned reasons the Remove modal offers moderators.',
+        method: 'POST',
+        body: { slug: 'rainbows', removalReasons: [{ title: 'No spam', message: 'Posts that only advertise are removed.' }, { id: 'off-topic', title: 'Off topic' }] }
+      },
       { name: 'Go private', description: 'Owner locks the subspace to members.', method: 'POST', body: { slug: 'rainbows', access: 'private' } }
     ],
-    responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private' } } }]
+    responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private', removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }] } } }]
   }),
   endpoint({
     id: 'subspaces-join',
@@ -8695,8 +8711,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // (subspaces.join, 20/min) — compatible corrections
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
@@ -8732,8 +8749,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: leaving with an open join request cancels the request (additive)
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Leave subspace',
     endpoint: '/api/v1/subspaces/leave',
@@ -8772,8 +8790,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // userFlairCleared: true), role member strips a mod-only pick, and
     // moderators may dress the owner too (403 → 200, per the round-2 spec:
     // "mods may set anyone's") — compatible corrections
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    // 1.4.0: ban takes an optional private `note` (mod log detail only, never
+    // shown to the banned user) — S4 BanModal (additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -8785,12 +8805,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'queue (approvalRequests=1: active members of a restricted subspace who asked for posting rights) require a ' +
       'moderator. Every row carries pending + approvalRequested + userFlair ({ id, label, emoji, color } | null — ' +
       'the flair they wear here). POST { id|slug, userId|username, action, role?, reason?, banDays?, flairId?, ' +
-      'text?, emoji?, color? } with action add (also accepts a pending join request), accept (pending → active member; ' +
+      'text?, emoji?, color?, note? } with action add (also accepts a pending join request), accept (pending → active member; ' +
       'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
       'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
       'posting approval and strips the user flair), approve/unapprove (restricted posting rights — both settle an ' +
       'open approval request), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning ' +
-      'a pending requester removes the request; a ban strips the user flair too), role (owner only: moderator | ' +
+      'a pending requester removes the request; a ban strips the user flair too; an optional `note` (≤300) lands in the ' +
+      'member.ban mod-log detail only — the banned user sees `reason`, never the note), role (owner only: moderator | ' +
       'member — demoting strips a mod-only user flair, ordinary picks stay), or request-approval — the one SELF action: ' +
       'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
       'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
@@ -8830,7 +8851,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'Custom flair text', description: 'Type your own flair (allowCustomUserFlair must be on for members).', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', text: 'Double rainbow hunter', emoji: '🌈' } },
       { name: 'Dress a member', description: 'A moderator gives someone the mod-only "staff" template.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'userFlair', flairId: 'staff' } },
       { name: 'Clear a flair', description: 'Take your flair off.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: null } },
-      { name: 'Ban for a week', description: 'Temporary ban with a reason.', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7 } },
+      { name: 'Ban for a week', description: 'Temporary ban with a reason (shown to the user) and a private mod note (mod log only).', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7, note: 'second strike — next one is permanent' } },
       { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
     ],
     responseExamples: [
@@ -8848,15 +8869,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'subspaces-moderate',
     // 1.1.0: the re-projected post carries authorFlair — the author's user
     // flair in the subspace (S3 user flairs, additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: remove takes reasonId (one of the subspace's removalReasons —
+    // title — message · note become the stored reason; unknown → 400) and
+    // notifies the author (subspace-post-removed, preview = the reason,
+    // postId deep-links to the post); approve notifies nothing (S4, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Moderate post',
     endpoint: '/api/v1/subspaces/moderate',
-    summary: 'Moderator actions on a post in a subspace: remove, approve, pin, lock, nsfw, spoiler, flair.',
+    summary: 'Moderator actions on a post in a subspace: remove (with a reason / canned removal reason), approve, pin, lock, nsfw, spoiler, flair.',
     detail:
-      'POST { id (post shareId), action, reason?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
+      'POST { id (post shareId), action, reason?, reasonId?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
       'state (never client-writable) and a post.<action> mod-log entry, then returns the re-projected post. ' +
+      'remove takes `reason` (free text, ≤300) and/or `reasonId` — one of the subspace’s removalReasons (see ' +
+      '/api/v1/subspaces/update): its title — message become the stored reason with the free text appended as a ' +
+      'note ("No spam — Posts that only advertise are removed. · third time"); an unknown reasonId answers 400. ' +
+      'The author is notified (subspace-post-removed; preview "s/<slug> · <reason>", postId = the post so the bell ' +
+      'opens /post/<id>; a moderator removing their own post tells nobody), the mod-log entry carries the composed ' +
+      'reason and detail.reasonId, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
+      'approve restores the post and notifies nothing. ' +
       'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
       'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
       'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
@@ -8865,11 +8897,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: ['POST the post id and an action.', 'Use the returned post to reconcile the card in place.'],
     requestExamples: [
       { name: 'Remove', description: 'Remove a post citing rule 1.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reason: 'Rule 1' } },
+      { name: 'Remove with a canned reason', description: 'Pick the subspace’s "no-spam" removal reason and add a note.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reasonId: 'no-spam', reason: 'third time this week' } },
       { name: 'Pin', description: 'Pin to the top of hot/new.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'pin' } },
       { name: 'Flair', description: 'Set (or clear with null) the post flair.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'flair', flairId: 'photo' } }
     ],
     responseExamples: [
       { status: 200, description: 'Applied.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 1', pinned: false, locked: false } } } },
+      { status: 200, description: 'Removed with a canned reason — the composed text is what the author sees.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'No spam — Posts that only advertise are removed. · third time this week' } } } },
+      { status: 400, description: 'Unknown removal reason id.', body: { ok: false, error: 'No removal reason "ghost" here — pick one of the subspace’s reasons or write your own' } },
       { status: 404, description: 'Not a subspace post.', body: { ok: false, error: 'Post not found in a subspace' } }
     ]
   }),
@@ -8892,8 +8927,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'subspaces-feed',
     // 1.1.0: posts (and their comments) carry authorFlair; the subspace block
     // carries the user-flair settings — additive
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: the subspace block carries removalReasons (S4, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
@@ -8925,8 +8961,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // once, the loser answers 409 (compatible correction)
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',

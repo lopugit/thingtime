@@ -6,9 +6,10 @@ import { updateSubspace } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/subspaces/update — { id|slug, name?, description?, rules?,
-// flairs?, branding?, access?, nsfw? } — moderators edit branding/rules/
-// flairs; only the owner changes access (public/restricted/private) and the
-// 18+ flag. Every change lands in the mod log.
+// flairs?, branding?, userFlairs?, userFlairSelfAssign?, allowCustomUserFlair?,
+// removalReasons?, access?, nsfw? } — moderators edit branding/rules/flairs/
+// user flairs/removal reasons; only the owner changes access (public/
+// restricted/private) and the 18+ flag. Every change lands in the mod log.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {

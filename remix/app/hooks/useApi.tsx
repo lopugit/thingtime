@@ -629,7 +629,8 @@ export function useApi() {
           ),
         []
       ),
-      // actions: add | remove | approve | unapprove | ban | unban | role |
+      // actions: add | remove | approve | unapprove | ban (reason shown to the
+      // user, banDays, and a private mod-log `note`) | unban | role |
       // accept | deny (the Requests queue) | request-approval (self — an
       // active member of a restricted subspace asks for posting rights)
       mutateMember: useCallback(
@@ -649,8 +650,11 @@ export function useApi() {
           asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
         [asyncFetcher]
       ),
+      // remove: reason (free text) and/or reasonId (one of the subspace's
+      // removalReasons — title — message become the stored reason, the free
+      // text rides along as a note); the author is notified
       moderate: useCallback(
-        async (body: { id: string; action: string; reason?: string; value?: boolean; flairId?: string | null }) =>
+        async (body: { id: string; action: string; reason?: string; reasonId?: string | null; value?: boolean; flairId?: string | null }) =>
           asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
         [asyncFetcher]
       ),

@@ -32,6 +32,7 @@ import { AuthorFlairChip } from '~/components/Feed/PostCard';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
+import { BanModal, forgetModerationSubspace, type BanInput } from './ModerationModals';
 import {
 	ACCESS_META,
 	openRequestCount,
@@ -44,6 +45,7 @@ import {
 	type SubspaceFeedResponse,
 	type SubspaceFlair,
 	type SubspaceMemberResponse,
+	type SubspaceRemovalReason,
 	type SubspaceRule,
 	type SubspaceTransferResponse
 } from './subspaceTypes';
@@ -51,10 +53,12 @@ import {
 // /s/:slug/mod — moderator tools: the queue (newest posts incl. removed ones,
 // every card carrying its mod menu), requests (join requests to a private
 // subspace + posting-approval requests in a restricted one: accept/deny),
-// members (search + actions, incl. Set flair), the ban list, settings
-// (identity/branding/access + the owner's Danger zone: transfer ownership /
-// delete), rules, flairs (post flairs + user flairs), and the mod log.
-// Every mutation goes through /api/v1/subspaces/* and re-projects in place.
+// members (search + actions, incl. Set flair and Ban through the BanModal),
+// the ban list, settings (identity/branding/access + the owner's Danger zone:
+// transfer ownership / delete), rules (+ removal reasons), flairs (post
+// flairs + user flairs), and the mod log. Every mutation goes through
+// /api/v1/subspaces/* and re-projects in place. No window.prompt/confirm
+// anywhere — every question is a Chakra modal.
 
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -460,8 +464,15 @@ const MemberFlairModal = ({
 	);
 };
 
-const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAction: (member: PublicSubspaceMember, action: string, extra?: Record<string, unknown>) => void; onFlair?: (member: PublicSubspaceMember) => void }) => {
-	const { member, isOwner, onAction, onFlair } = props;
+const MemberRow = (props: {
+	member: PublicSubspaceMember;
+	isOwner: boolean;
+	onAction: (member: PublicSubspaceMember, action: string, extra?: Record<string, unknown>) => void;
+	onFlair?: (member: PublicSubspaceMember) => void;
+	// opens the BanModal for this row (reason / days / private note)
+	onBan?: (member: PublicSubspaceMember) => void;
+}) => {
+	const { member, isOwner, onAction, onFlair, onBan } = props;
 	return (
 		<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingY={2} borderBottom={BORDER} _last={{ borderBottom: 'none' }} data-member={member.userId}>
 			<Box minWidth={0} flex="1">
@@ -516,17 +527,7 @@ const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAc
 									<Button size="xs" borderRadius="999px" variant="outline" onClick={() => onAction(member, 'remove')}>
 										Kick
 									</Button>
-									<Button
-										size="xs"
-										borderRadius="999px"
-										colorScheme="red"
-										variant="outline"
-										onClick={() => {
-											const reason = window.prompt('Ban reason (shown to the user)') || undefined;
-											const days = window.prompt('Ban length in days (blank = permanent)') || '';
-											onAction(member, 'ban', { reason, banDays: days ? Number(days) : undefined });
-										}}
-									>
+									<Button size="xs" borderRadius="999px" colorScheme="red" variant="outline" onClick={() => onBan?.(member)} data-testid="member-ban">
 										Ban
 									</Button>
 								</>
@@ -549,6 +550,9 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 	const [action, setAction] = React.useState('add');
 	const [busy, setBusy] = React.useState(false);
 	const [flairTarget, setFlairTarget] = React.useState<PublicSubspaceMember | null>(null);
+	// who the BanModal is about: a member row (Members tab) or a typed
+	// username (Banned tab's "Ban someone")
+	const [banTarget, setBanTarget] = React.useState<{ member: PublicSubspaceMember | null; username: string | null } | null>(null);
 
 	const load = React.useCallback(
 		async (cursor?: string | null) => {
@@ -626,6 +630,30 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 		}
 	};
 
+	// the BanModal paints first (a member row leaves the Members list the
+	// moment the mod confirms) and puts it back if the API says no — and
+	// rethrows, so the modal stays open with the typed reason
+	const applyBan = async (target: { member: PublicSubspaceMember | null; username: string | null }, input: BanInput) => {
+		const extra: Record<string, unknown> = { ...(input.reason ? { reason: input.reason } : {}), ...(input.banDays ? { banDays: input.banDays } : {}), ...(input.note ? { note: input.note } : {}) };
+		if (!target.member || busy) {
+			await mutate(target.member ? { userId: target.member.userId } : { username: target.username || '' }, 'ban', extra);
+			if (!target.member) setUsername('');
+			return;
+		}
+		const row = target.member;
+		let snapshot: PublicSubspaceMember[] = [];
+		setMembers((prev) => {
+			snapshot = prev;
+			return prev.filter((entry) => entry.userId !== row.userId);
+		});
+		try {
+			await mutate({ userId: row.userId }, 'ban', extra);
+		} catch (err) {
+			setMembers((prev) => (prev.some((entry) => entry.userId === row.userId) ? prev : snapshot));
+			throw err;
+		}
+	};
+
 	return (
 		<Flex flexDirection="column" rowGap={3}>
 			<Card>
@@ -648,13 +676,11 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 						isDisabled={!username}
 						isLoading={busy}
 						onClick={() => {
-							if (banned) {
-								const reason = window.prompt('Ban reason (shown to the user)') || undefined;
-								const days = window.prompt('Ban length in days (blank = permanent)') || '';
-								mutate({ username }, 'ban', { reason, banDays: days ? Number(days) : undefined }).catch(() => undefined);
-							} else if (action.startsWith('role:')) mutate({ username }, 'role', { role: action.split(':')[1] }).catch(() => undefined);
+							if (banned) setBanTarget({ member: null, username });
+							else if (action.startsWith('role:')) mutate({ username }, 'role', { role: action.split(':')[1] }).catch(() => undefined);
 							else mutate({ username }, action).catch(() => undefined);
 						}}
+						data-testid={banned ? 'mod-ban-username' : 'mod-apply-username'}
 					>
 						{banned ? 'Ban 🚫' : 'Apply'}
 					</Button>
@@ -679,6 +705,7 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 						isOwner={isOwner}
 						onAction={(target, act, extra) => mutate({ userId: target.userId }, act, extra).catch(() => undefined)}
 						onFlair={banned ? undefined : setFlairTarget}
+						onBan={banned ? undefined : (target) => setBanTarget({ member: target, username: null })}
 					/>
 				))}
 				{nextCursor && (
@@ -688,6 +715,13 @@ const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banne
 				)}
 			</Card>
 			{!banned && <MemberFlairModal member={flairTarget} subspace={subspace} busy={busy} onClose={() => setFlairTarget(null)} onApply={applyFlair} />}
+			<BanModal
+				isOpen={!!banTarget}
+				onClose={() => setBanTarget(null)}
+				targetName={banTarget?.member ? memberName(banTarget.member) : `@${(banTarget?.username || '').replace(/^@/, '')}`}
+				subspaceSlug={subspace.slug}
+				onBan={(input) => (banTarget ? applyBan(banTarget, input) : Promise.resolve())}
+			/>
 		</Flex>
 	);
 };
@@ -1054,6 +1088,7 @@ const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: 
 			const resp: any = await api.v1.subspaces.update({ id: subspace.id, rules: rules.filter((rule) => rule.title.trim()) });
 			onSaved(resp.subspace);
 			setRules(resp.subspace.rules);
+			forgetModerationSubspace(subspace.id);
 			lopu({ title: 'Rules saved 📜', status: 'success', duration: 4000 });
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Could not save rules 😞', status: 'error' });
@@ -1096,6 +1131,92 @@ const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: 
 	);
 };
 
+// ── Removal reasons ────────────────────────────────────────────────────────
+// The canned reasons the Remove modal offers moderators beside the rules —
+// { title, message }: the title — message become the stored reason the
+// author sees on the card and in their bell. Ids are minted from titles on
+// save (the flair-id grammar); ≤ 20.
+const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: (next: PublicSubspace) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const [reasons, setReasons] = React.useState<SubspaceRemovalReason[]>(subspace.removalReasons || []);
+	const [saving, setSaving] = React.useState(false);
+	const update = (index: number, patch: Partial<SubspaceRemovalReason>) => setReasons((prev) => prev.map((reason, i) => (i === index ? { ...reason, ...patch } : reason)));
+	const move = (index: number, delta: number) =>
+		setReasons((prev) => {
+			const next = [...prev];
+			const target = index + delta;
+			if (target < 0 || target >= next.length) return prev;
+			[next[index], next[target]] = [next[target], next[index]];
+			return next;
+		});
+	const save = async () => {
+		setSaving(true);
+		try {
+			const resp: any = await api.v1.subspaces.update({
+				id: subspace.id,
+				removalReasons: reasons.filter((reason) => reason.title.trim()).map((reason) => ({ ...reason, id: reason.id || undefined }))
+			});
+			onSaved(resp.subspace);
+			setReasons(resp.subspace.removalReasons || []);
+			forgetModerationSubspace(subspace.id);
+			lopu({ title: 'Removal reasons saved 🧹', status: 'success', duration: 4000 });
+		} catch (err: any) {
+			lopu({ title: err?.error || 'Could not save the removal reasons 😞', status: 'error' });
+		} finally {
+			setSaving(false);
+		}
+	};
+	return (
+		<Card>
+			<Box>
+				<Label>Removal reasons · {reasons.length}/20</Label>
+				<Text fontSize="xs" color={MUTED}>
+					What the Remove 🧹 modal offers beside the rules. The author sees the title and message on their removed post and in their bell.
+				</Text>
+			</Box>
+			<Flex flexDirection="column" rowGap={2} data-testid="mod-removal-reasons">
+				{reasons.map((reason, index) => (
+					<Flex key={index} flexDirection="column" rowGap={1} border={BORDER} borderRadius={RADIUS_MD} padding={3} data-removal-reason-index={index}>
+						<Flex columnGap={2} alignItems="center">
+							<Text fontSize="xs" color={MUTED} width="18px">
+								{index + 1}.
+							</Text>
+							<Input size="sm" borderRadius={RADIUS_MD} placeholder="Title (e.g. No spam)" value={reason.title} maxLength={80} onChange={(event) => update(index, { title: event.target.value })} data-testid="mod-removal-reason-title" />
+							<Text fontSize="10px" fontFamily="mono" color={MUTED} title="Reason id (set on first save)" flexShrink={0}>
+								{reason.id || 'new'}
+							</Text>
+							<Button size="xs" variant="ghost" onClick={() => move(index, -1)} aria-label="Move up">
+								▲
+							</Button>
+							<Button size="xs" variant="ghost" onClick={() => move(index, 1)} aria-label="Move down">
+								▼
+							</Button>
+							<Button size="xs" variant="ghost" color="var(--tt-danger, #e5484d)" onClick={() => setReasons((prev) => prev.filter((_, i) => i !== index))} aria-label="Remove removal reason">
+								✕
+							</Button>
+						</Flex>
+						<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Message to the author (optional, ≤ 500)" value={reason.message} maxLength={500} onChange={(event) => update(index, { message: event.target.value })} data-testid="mod-removal-reason-message" />
+					</Flex>
+				))}
+				{reasons.length === 0 && (
+					<Text fontSize="xs" color={MUTED}>
+						None yet — the Remove modal offers the rules and a custom reason meanwhile.
+					</Text>
+				)}
+			</Flex>
+			<Flex columnGap={2}>
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={reasons.length >= 20} onClick={() => setReasons((prev) => [...prev, { id: '', title: '', message: '' }])} data-testid="mod-add-removal-reason">
+					Add reason ➕
+				</Button>
+				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-removal-reasons">
+					Save 🧹
+				</Button>
+			</Flex>
+		</Card>
+	);
+};
+
 // ── Flairs ─────────────────────────────────────────────────────────────────
 const FlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: (next: PublicSubspace) => void }) => {
 	const api = useApi();
@@ -1112,6 +1233,7 @@ const FlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved:
 			});
 			onSaved(resp.subspace);
 			setFlairs(resp.subspace.flairs);
+			forgetModerationSubspace(subspace.id);
 			lopu({ title: 'Flairs saved 🏷️', status: 'success', duration: 4000 });
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Could not save flairs 😞', status: 'error' });
@@ -1426,7 +1548,10 @@ export const SubspaceModPage = () => {
 								</Flex>
 							</TabPanel>
 							<TabPanel paddingX={0}>
-								<RulesPanel subspace={subspace} onSaved={setSubspace} />
+								<Flex flexDirection="column" rowGap={4}>
+									<RulesPanel subspace={subspace} onSaved={setSubspace} />
+									<RemovalReasonsPanel subspace={subspace} onSaved={setSubspace} />
+								</Flex>
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<Flex flexDirection="column" rowGap={4}>

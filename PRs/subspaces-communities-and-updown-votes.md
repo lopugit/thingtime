@@ -250,6 +250,49 @@ score field.
   waits while another member action is in flight (the busy guard rejects
   instead of resolving silently) and the modal stays open when the API
   refuses; join / leave 1.2.0, transfer 1.1.0, moderate 1.1.0, members 1.3.1.
+- Round 2 S4 — removal reasons + moderation modals 🧹: subspace
+  `crystal.removalReasons { id, title (≤80), message (≤500) }[]` (≤20, ids
+  minted from titles with the flair-id grammar, deduped) via `/update` (any
+  moderator; public on every subspace projection like the rules they
+  extend). `POST /api/v1/subspaces/moderate action: 'remove'` takes
+  `reason` (free text) and/or `reasonId` — a canned reason composes the
+  stored reason `title — message · note` (`resolveRemovalReason`, bounded by
+  `MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS`; unknown id → 400, the post stays
+  up), lands on `subspaceMod.reason` (+ root `subspaceMod.reasonId`, cleared
+  by approve) and in the `post.remove` mod-log entry (`detail.reasonId`);
+  the AUTHOR is notified (`subspace-post-removed`, preview
+  "s/<slug> · <reason>", `postId` = the post so the bell opens `/post/:id`;
+  a mod removing their own post rings nobody; approve notifies nothing).
+  Ban (`members action: 'ban'`) takes an optional private `note` (≤300) that
+  lands in the `member.ban` mod-log detail only — never in `banReason`, the
+  row or the user's bell. UI: `ModerationModals.tsx` — **RemoveModal** (the
+  card menu's Remove 🧹: radio list of the subspace's removal reasons, then
+  its rules, then Custom; note; "Also lock comments"; "Also ban @author" +
+  days, hidden on your own post) sequences moderate(remove) [+ lock]
+  [+ members ban], paints removed + the reason optimistically and reverts
+  when the REMOVE is refused (follow-ups that fail keep the removal and
+  toast); it lazy-loads the subspace through ONE cached loader
+  (`loadModerationSubspace`, 60s TTL, shared with the card menu's Flair
+  submenu; the mod page's rules / reasons / flairs saves invalidate it).
+  **BanModal** (reason / days / private note) replaces every
+  `window.prompt` on the mod page (member rows + Banned → "Ban someone");
+  a banned row leaves the Members list on confirm and comes back on a
+  refusal with the modal still open. Mod page Rules tab gains a **Removal
+  reasons** card (title + message editor, reorder / remove, ids on save).
+  No `window.prompt`/`confirm` remains in the subspace UI. Capabilities:
+  subspaces / get / update / join / leave 1.3.0, feed / transfer 1.2.0
+  (their subspace block grew `removalReasons`), moderate 1.2.0 (reasonId +
+  the author notification), members 1.4.0 (ban note). Verify section P
+  (settings walls 403 / 400 ×6 + a moderator's save with minted ids and a
+  sliced title, public / anonymous / directory reads, the mod-log fields,
+  moderate walls 401 / 403 / 400 unknown reasonId — post stays up — / 404
+  outside a subspace, canned reason + note → the composed reason the author
+  and mods see and the stranger doesn't, mod-log reason + `detail.reasonId`,
+  the author's bell row with `postId` and the reason, approve clearing it
+  and ringing nobody, free text alone, no reason at all, a mod removing
+  their own post ringing nobody, a renamed / deleted reason never rewriting
+  a removed post's stored reason (deleted id → 400 afterwards), the ban
+  note in the mod log only, the manifest).
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger
@@ -266,5 +309,3 @@ score field.
   flair/Mods.
 - Deny (join or posting request) does not notify the requester (Reddit
   parity — they simply may ask again).
-- Removal reasons are collected with a browser prompt in the card menu (the
-  mod page has proper inputs for bans).

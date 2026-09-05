@@ -67,6 +67,19 @@ reactions untouched.
   chip after the author name everywhere inside subspaces, sidebar **Your
   flair** card, mod page **User flairs** editor + **Set flair** modal;
   verify section O.
+- ✅ S4 — removal reasons + moderation modals: `removalReasons { id, title,
+  message }[]` (≤20) on `/update` (mods) + every subspace projection;
+  `moderate remove` takes `reason` and/or `reasonId` (a canned reason →
+  `title — message · note` stored on `subspaceMod.reason`, `detail.reasonId`
+  in the mod log; unknown → 400) and notifies the author
+  (`subspace-post-removed`, `postId` deep link; own posts ring nobody;
+  approve notifies nothing); ban takes a private mod-log `note`.
+  `ModerationModals.tsx`: **RemoveModal** (reasons + rules + Custom, note,
+  also-lock, also-ban + days; optimistic, one cached subspace load shared
+  with the card menu's flair list) in the PostCard menu, **BanModal**
+  (reason / days / note) on the mod page's member rows + Banned tab, Rules
+  tab **Removal reasons** card. No `window.prompt`/`confirm` left in the
+  subspace UI. Verify section P.
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

@@ -13,9 +13,13 @@ import {
 	RELEASED_POST_UNSET,
 	releaseKindFor,
 	releasedPostUpdate,
+	removalReasonById,
+	removalReasonsOf,
+	resolveRemovalReason,
 	resolveUserFlair,
 	sanitizeBranding,
 	sanitizeFlairs,
+	sanitizeRemovalReasons,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeTopRange,
@@ -301,4 +305,60 @@ test('userFlairSurvivesDemotion: a mod-only template comes off with the hat; ord
 	// the template was deleted meanwhile — the pick is a plain snapshot now
 	assert.equal(userFlairSurvivesDemotion({ id: 'staff', text: 'Staff', emoji: '🎩', color: null }, []), true);
 	assert.equal(userFlairSurvivesDemotion(null, templates), true);
+});
+
+// ---------------------------------------------------------------------------
+// Removal reasons (round 2, S4)
+
+test('sanitizeRemovalReasons mints ids from titles, bounds count / title / message, dedupes', () => {
+	assert.deepEqual(sanitizeRemovalReasons(undefined), []);
+	assert.deepEqual(sanitizeRemovalReasons(null), []);
+	assert.deepEqual(sanitizeRemovalReasons([{ title: 'No Spam!', message: '  Posts that   only advertise are removed. ' }, 'Off topic', { id: 'R1', title: 'Rule 1' }]), [
+		{ id: 'no-spam', title: 'No Spam!', message: 'Posts that only advertise are removed.' },
+		{ id: 'off-topic', title: 'Off topic', message: '' },
+		{ id: 'r1', title: 'Rule 1', message: '' }
+	]);
+	// the title is bounded (sliced) like a rule title; the message is refused over its cap
+	assert.equal((sanitizeRemovalReasons([{ title: 'x'.repeat(81) }]) as any)[0].title.length, 80);
+	assert.equal((sanitizeRemovalReasons([{ title: 'ok', message: 'm'.repeat(501) }]) as any).ok, false);
+	assert.equal((sanitizeRemovalReasons([{ title: 'ok', message: 'm'.repeat(500) }]) as any)[0].message.length, 500);
+	for (const bad of ['nope', [{ message: 'no title' }], [{ title: '   ' }], [42], new Array(21).fill('r'), [{ id: 'a', title: 'A' }, { id: 'a', title: 'B' }], [{ id: 'Not Valid', title: 'x' }]]) {
+		const result = sanitizeRemovalReasons(bad) as any;
+		assert.equal(result.ok, false, JSON.stringify(bad).slice(0, 60));
+	}
+	assert.equal((sanitizeRemovalReasons(new Array(20).fill(0).map((_, i) => ({ title: `r${i}` }))) as any).length, 20);
+});
+
+test('removalReasonsOf reads a stored crystal defensively and removalReasonById finds by id', () => {
+	assert.deepEqual(removalReasonsOf(undefined), []);
+	assert.deepEqual(removalReasonsOf({ removalReasons: 'nope' }), []);
+	const reasons = removalReasonsOf({ removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Ads go.' }, { id: 'x' }, null, { id: 'bare', title: 'Bare' }] });
+	assert.deepEqual(reasons, [
+		{ id: 'no-spam', title: 'No spam', message: 'Ads go.' },
+		{ id: 'bare', title: 'Bare', message: '' }
+	]);
+	assert.deepEqual(removalReasonById(reasons, 'bare'), { id: 'bare', title: 'Bare', message: '' });
+	assert.equal(removalReasonById(reasons, 'ghost'), null);
+	assert.equal(removalReasonById(reasons, null), null);
+});
+
+test('resolveRemovalReason: reasonId → title — message · note; free text alone; neither → null; unknown → 400', () => {
+	const reasons = [
+		{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' },
+		{ id: 'bare', title: 'Bare', message: '' }
+	];
+	assert.deepEqual(resolveRemovalReason({ reasonId: 'no-spam' }, reasons), { reason: 'No spam — Posts that only advertise are removed.', reasonId: 'no-spam' });
+	assert.deepEqual(resolveRemovalReason({ reasonId: ' NO-SPAM ', reason: '  third   time ' }, reasons), { reason: 'No spam — Posts that only advertise are removed. · third time', reasonId: 'no-spam' });
+	assert.deepEqual(resolveRemovalReason({ reasonId: 'bare', reason: 'note' }, reasons), { reason: 'Bare · note', reasonId: 'bare' });
+	assert.deepEqual(resolveRemovalReason({ reason: 'Rule 2' }, reasons), { reason: 'Rule 2', reasonId: null });
+	assert.deepEqual(resolveRemovalReason({}, reasons), { reason: null, reasonId: null });
+	assert.deepEqual(resolveRemovalReason({ reasonId: null, reason: '' }, reasons), { reason: null, reasonId: null });
+	const unknown = resolveRemovalReason({ reasonId: 'ghost' }, reasons) as any;
+	assert.equal(unknown.ok, false);
+	assert.equal(unknown.status, 400);
+	// the free text alone keeps the pre-S4 bound; the composed text has its own
+	assert.equal((resolveRemovalReason({ reason: 'x'.repeat(400) }, reasons) as any).reason.length, 300);
+	const long = resolveRemovalReason({ reasonId: 'long', reason: 'n'.repeat(300) }, [{ id: 'long', title: 't'.repeat(80), message: 'm'.repeat(500) }]) as any;
+	assert.equal(long.reason.length, 80 + 3 + 500 + 3 + 300);
+	assert.ok(long.reason.length <= 900);
 });

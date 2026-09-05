@@ -1238,10 +1238,21 @@ email whose link points at the attacker.
       a mod-only flair). Generic `POST /api/v1/things` with
       `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"updown"]`
       answers 403.
-- [ ] Moderation (··· menu on a subspace post, mods only): Remove (prompt for
-      a reason) redacts the post for everyone but the author + mods (body,
-      media, title gone; "🧹 Removed by moderators" notice; reason visible to
-      author/mods only) and drops it from every feed; Approve restores it;
+- [ ] Moderation (··· menu on a subspace post, mods only): Remove opens the
+      **Remove modal** (`remove-modal`: a radio list of the subspace's removal
+      reasons — title + message — then its rules, then Custom; a note field;
+      "Also lock comments 🔒"; "Also ban @author 🚫" with a days input, hidden
+      on your own post) and redacts the post for everyone but the author +
+      mods (body, media, title gone; "🧹 Removed by moderators — <reason>"
+      notice; reason visible to author/mods only) and drops it from every
+      feed. The card paints removed + the reason the instant you confirm and
+      reverts with a toast if the API refuses; lock/ban follow-ups that fail
+      keep the removal and toast on their own. A canned reason stores
+      `title — message · note`, a rule stores `Rule N: title · note`. The
+      author gets a 🧹 `subspace-post-removed` bell entry ("s/<slug> · <reason>")
+      that opens `/post/:id`; removing your own post rings nobody; Approve
+      restores it silently. No `window.prompt`/`confirm` anywhere in the
+      subspace UI. Approve restores it;
       Pin leads Hot/New with a 📌 badge (max 5); Lock shows 🔒 and makes
       commenting 423 for everyone but mods — replies to replies included;
       18+ / Spoiler toggle badges; Flair submenu (lazy-loaded list). Every
@@ -1250,10 +1261,19 @@ email whose link points at the attacker.
       removed included, "Removed only" switch); Members (username + action:
       add/approve/unapprove/kick/make mod/demote, per-row buttons; only the
       owner can promote/demote/moderate other mods; the owner can't be
-      banned); Banned (ban with reason + days, unban); Settings (name,
-      description, icon, accent, icon/banner URLs; access + 18+ owner-only,
-      disabled for mods); Requests (join + posting-approval queues, see
-      below); Rules (add/reorder/remove, ≤15); Flairs (emoji/
+      banned); Ban (per row and Banned → "Ban someone" by username) opens the
+      **Ban modal** (`ban-modal`: reason shown to the user, days — blank =
+      permanent, and a private mod note that lands in the `member.ban` mod-log
+      detail only, never in the user's `banReason` or bell); a banned row
+      leaves the Members list the moment you confirm and comes back if the
+      API refuses (the modal stays open with your text); Banned (unban);
+      Settings (name, description, icon, accent, icon/banner URLs; access +
+      18+ owner-only, disabled for mods); Requests (join + posting-approval
+      queues, see below); Rules (add/reorder/remove, ≤15) + **Removal
+      reasons** (second card: title ≤80 + message ≤500, ids minted from
+      titles on save, ≤20, reorder/remove; a plain member's save 403s, >20 /
+      a 501-char message / duplicate ids 400) — saving rules, reasons or
+      flairs refreshes what the card menu / Remove modal offer; Flairs (emoji/
       label/color/mods-only, ids minted on save, ≤50); Log (newest first).
       A banned user cannot post, comment, vote, or (re)join; the ban outlives
       leaving; a temporary ban expires on its own.
