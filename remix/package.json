@@ -35,7 +35,7 @@
     "test:actions": "node --import tsx --test app/components/Actions/*.test.ts app/components/ComponentsLibrary/componentTemplate.test.ts",
     "test:action-packs": "node --import tsx --test app/api/utils/actions/packs/packs.test.ts app/api/utils/actions/packs/astro/astro.test.ts app/api/utils/actions/packs/pokeworld/pokeworld.test.ts",
     "test:admin-integrations": "node --import tsx --test app/api/utils/admin/integrationCore.test.ts app/components/Admin/adminRoutesCore.test.ts",
-    "test:attachments": "node --import tsx --test app/api/utils/attachments/*.test.ts app/api/utils/auth/publicUploads.test.ts app/api/utils/auth/users.profile.test.ts app/components/Attachments/attachmentUiCore.test.ts app/components/Media/mediaGalleryCore.test.ts app/components/Profile/profileMediaCore.test.ts app/routes/api/v1/attachments/attachmentsRoutes.test.ts app/routes/api/v1/users/profile/profileRoute.test.ts app/utils/profileMediaUrl.test.ts",
+    "test:attachments": "node --import tsx --test app/api/utils/attachments/*.test.ts app/api/utils/auth/publicUploads.test.ts app/api/utils/auth/users.profile.test.ts app/components/Attachments/attachmentUiCore.test.ts app/components/Attachments/audioPlaybackCache.test.ts app/components/Attachments/audioPlaybackCore.test.ts app/components/Media/mediaGalleryCore.test.ts app/components/Profile/profileMediaCore.test.ts app/routes/api/v1/attachments/attachmentsRoutes.test.ts app/routes/api/v1/users/profile/profileRoute.test.ts app/utils/profileMediaUrl.test.ts",
     "test:ai-model-routing": "node scripts/ai-model-routing-contract.mjs",
     "test:ai-models": "node --import tsx --test app/api/utils/ai/*.test.ts",
     "test:app-origins": "node --import tsx --test app/api/utils/apps/appOriginsCore.test.ts",

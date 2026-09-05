@@ -17,6 +17,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
+  archive handling, background verification, rollback preservation, and cold
+  cloud packaging. Share the protected main/PR release builder and correct its
+  caller-event gate; legacy malformed archives remain blocked. Valid replacements
+  can repair damaged installs, and detached installer errors reopen Recovery.
+  See the [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
 ### 2026-09-04 — Lopu direct voice + reconciled provider models (PR #592) — Claude (AI)
 
 - Reconciles the concurrent Codex "per-chat models" / "direct voice" commits
@@ -514,6 +521,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
 
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the

@@ -198,3 +198,125 @@ func planValidationIsConstrained() throws {
     let invalid = RecoveryInstallPlan(action: .installDesktop, cacheRoot: paths.recoveryCacheRoot, sourceApp: source, waitForPID: 100)
     #expect(throws: RecoveryError.self) { try invalid.validate(paths: paths) }
 }
+
+@Test("one catalog snapshot deduplicates pages and selects this Mac's architecture")
+func catalogSnapshotMatchesArchitecture() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let assets = ["arm64", "x64", "x86_64", "universal"].map { arch in
+        ["name": "Thingtime-Electron-App-Release-0.2.0-macos-\(arch).zip", "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/electron-v0.2.0/Thingtime-Electron-App-Release-0.2.0-macos-\(arch).zip"]
+    }
+    let release: [String: Any] = ["id": 5, "tag_name": "electron-v0.2.0", "assets": assets]
+    let data = try JSONSerialization.data(withJSONObject: [release, release])
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint, architecture: "x64") { url in
+        (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+    let snapshot = try await catalog.fetchAll()
+    #expect(snapshot.publishedReleaseCount == 1)
+    #expect(snapshot.desktop.count == 1)
+    #expect(snapshot.recovery.isEmpty)
+    #expect(!snapshot.desktop[0].asset.name.contains("arm64"))
+}
+
+@Test("catalog fails instead of returning a partial snapshot on a later-page rate limit")
+func catalogRejectsPartialRefresh() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?page=1")!
+    let next = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?page=2")!
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint) { url in
+        if url == endpoint {
+            return (Data("[]".utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Link": "<\(next)>; rel=\"next\""])!)
+        }
+        return (Data("{}".utf8), HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil)!)
+    }
+    do {
+        _ = try await catalog.fetchAll()
+        Issue.record("Expected rate limit rejection")
+    } catch {
+        #expect(error.localizedDescription.contains("limiting"))
+    }
+}
+
+@Test("archive cache rejects missing signature resources and removes staging without changing installed apps")
+func archiveRejectsMissingResourceSeal() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-archive-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let app = root.appendingPathComponent("source/Thingtime.app")
+    try makeAdHocDesktopBundle(at: app)
+    try FileManager.default.removeItem(at: app.appendingPathComponent("Contents/_CodeSignature"))
+    let archive = root.appendingPathComponent("broken.zip")
+    try ProcessExecution.run("/usr/bin/ditto", arguments: ["-c", "-k", "--keepParent", app.path, archive.path], label: "Test archive")
+    let release = RecoveryRelease(asset: .init(downloadURL: URL(string: "https://github.com/lopugit/thingtime/releases/download/test/broken.zip")!, name: "broken.zip", size: nil), id: "test", isPrerelease: true, isUnsigned: true, name: "test", publishedAt: nil, releaseURL: nil, tag: "test.unsigned", version: nil)
+    let cacheRoot = root.appendingPathComponent("cache")
+    do {
+        _ = try RecoveryArchive.cache(archive, release: release, component: .desktop, cacheRoot: cacheRoot, signingContext: nil)
+        Issue.record("Expected malformed archive to be rejected")
+    } catch {
+        #expect(error.localizedDescription.contains("resource seal"))
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: cacheRoot.path).isEmpty)
+}
+
+@Test("cached bundles are reverified even when the release key already exists")
+func cacheRechecksExistingBundle() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-recheck-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    try makeAdHocDesktopBundle(at: source)
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    let descriptor = CacheReleaseDescriptor(id: "test", tag: "test.unsigned", isUnsigned: true)
+    let cached = try cache.cacheBundle(sourceApp: source, descriptor: descriptor) { try BundleVerifier.verifyUnsigned($0, component: .desktop) }
+    try Data("corrupt".utf8).write(to: cached.appURL.appendingPathComponent("Contents/MacOS/Thingtime"))
+    #expect(throws: RecoveryError.self) {
+        try cache.cacheBundle(sourceApp: source, descriptor: descriptor) { try BundleVerifier.verifyUnsigned($0, component: .desktop) }
+    }
+}
+
+@Test("process output exceeding pipe capacity is drained before waiting for exit")
+func processDrainsOutput() throws {
+    let output = try ProcessExecution.run("/bin/sh", arguments: ["-c", "i=0; while [ $i -lt 10000 ]; do echo 'recovery stdout test line'; echo 'recovery stderr test line' >&2; i=$((i+1)); done"], label: "Output test")
+    #expect(output.utf8.count > 400_000)
+}
+
+@Test("a valid replacement repairs a damaged installed app and preserves its untrusted backup")
+func installOverDamagedApp() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-damaged-install-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    let target = root.appendingPathComponent("Applications/Thingtime.app")
+    try makeAdHocDesktopBundle(at: source)
+    try makeAdHocDesktopBundle(at: target)
+    try Data("broken executable".utf8).write(to: target.appendingPathComponent("Contents/MacOS/Thingtime"))
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    let preserved = try RecoveryInstaller.installCachedBundle(source: source, target: target, component: .desktop, cache: cache, trust: .unsigned, signingContext: nil)
+    let backup = try #require(preserved)
+    try BundleVerifier.verifyUnsigned(target, component: .desktop)
+    #expect(try Data(contentsOf: backup.appendingPathComponent("Contents/MacOS/Thingtime")) == Data("broken executable".utf8))
+    #expect(try cache.listBundles().isEmpty)
+}
+
+@Test("an invalid replacement never displaces an installed app")
+func invalidReplacementPreservesInstallation() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-invalid-install-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    let target = root.appendingPathComponent("Applications/Thingtime.app")
+    try makeAdHocDesktopBundle(at: source)
+    try makeAdHocDesktopBundle(at: target)
+    try Data("broken replacement".utf8).write(to: source.appendingPathComponent("Contents/MacOS/Thingtime"))
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    #expect(throws: RecoveryError.self) {
+        try RecoveryInstaller.installCachedBundle(source: source, target: target, component: .desktop, cache: cache, trust: .unsigned, signingContext: nil)
+    }
+    try BundleVerifier.verifyUnsigned(target, component: .desktop)
+}
+
+@Test("installer results survive helper exit and are consumed once")
+func installNoticeRoundTrip() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-notice-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let paths = RecoveryPaths(homeDirectory: root)
+    try RecoveryInstallNotice(message: "The app was preserved", isError: true).save(paths: paths)
+    let notice = try #require(RecoveryInstallNotice.consume(paths: paths))
+    #expect(notice.isError)
+    #expect(notice.message == "The app was preserved")
+    #expect(RecoveryInstallNotice.consume(paths: paths) == nil)
+}
