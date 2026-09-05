@@ -69,7 +69,10 @@ export default function MarketingPageRoute() {
 	const gated = !!page && visibility.ready && !visibility.page(page.slug);
 	useMarketingSeo({
 		title: gated ? 'Not published yet' : (page?.title ?? 'Not found'),
-		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : (page?.description ?? 'This marketing page does not exist.')
+		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : (page?.description ?? 'This marketing page does not exist.'),
+		// a real page's title/description stay out of the head until we know
+		// whether the viewer may see it; "not found" needs no publish state
+		enabled: !page || visibility.ready
 	});
 
 	React.useEffect(() => {

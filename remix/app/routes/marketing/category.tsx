@@ -112,7 +112,12 @@ export default function MarketingCategory() {
 			: 'This marketing section does not exist.';
 
 	const gated = visibility.ready && (isSearch ? !visibility.hub : !!category && !visibility.category(category.key));
-	useMarketingSeo({ title: gated ? 'Not published yet' : title, description: gated ? 'This part of the Thingtime marketing site is not published yet.' : description });
+	useMarketingSeo({
+		title: gated ? 'Not published yet' : title,
+		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : description,
+		// unknown publish state writes nothing; "no such section" needs none
+		enabled: (!category && !isSearch) || visibility.ready
+	});
 
 	if (!category && !isSearch) {
 		return (
