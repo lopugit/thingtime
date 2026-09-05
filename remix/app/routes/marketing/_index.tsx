@@ -123,7 +123,9 @@ export default function MarketingIndex() {
 			? 'This part of the Thingtime marketing site is not published yet.'
 			: `${formatCount(counts.pages)} marketing pages, guides, comparisons and animated walkthroughs${
 					counts.social ? ` plus ${formatCount(counts.social)} social images` : ''
-			  } for Thingtime, generated from one catalog.`
+			  } for Thingtime, generated from one catalog.`,
+		// cold start writes nothing rather than a fail-closed "0 pages" blurb
+		enabled: visibility.ready
 	});
 
 	if (!visibility.ready) return <MarketingColdStart />;
