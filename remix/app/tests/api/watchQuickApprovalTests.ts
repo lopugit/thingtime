@@ -2,7 +2,8 @@ import { expectJson, type ApiTestDefinition } from './apiTestRunner';
 
 const suffix = crypto.randomUUID().replace(/-/g, '');
 const username = `ttquickwatch${suffix.slice(0, 10)}`;
-const password = `Test-${suffix}!`;
+// Generate a fresh fixture credential; never embed or reuse an account password.
+const password = crypto.randomUUID();
 const credential = `ttnode_${suffix}${crypto.randomUUID().replace(/-/g, '')}`;
 let pairing: any;
 let addressed: any;

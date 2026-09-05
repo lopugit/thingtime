@@ -27,6 +27,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   exact address and retry/new-code controls without opening a watchOS web sheet.
 - The approval PIN has evenly spaced squares backed by one accessible native
   input, preserving whole-code paste, autofill, selection and legacy-code support.
+  Keep 1Password's saved-password badge off the final square without turning off
+  native one-time-code autofill; fixture passwords are generated directly at runtime.
 - Split claim-poll and human-code rate limits, recover from transient network
   errors, reserve unique active PINs, and reject unsupported origins before pairing. Added full HTTP flow
   coverage through direct notification sync; details in

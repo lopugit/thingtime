@@ -2,6 +2,15 @@
 
 ## TestFlight build 24 — quick approval and four-digit codes
 
+- Release proof: [upload run](https://github.com/lopugit/thingtime/actions/runs/33956348096)
+  built `2d6441564fdc6bfe7d70b8457555f587934842f0` with the matching PR preview origin.
+  [Apple status check](https://github.com/lopugit/thingtime/actions/runs/33956527020)
+  confirms version 1.0 build 24 is `VALID`, internal `IN_BETA_TESTING`, external
+  `READY_FOR_BETA_SUBMISSION`. [Preview publication](https://github.com/lopugit/thingtime/actions/runs/33956349992)
+  deployed that exact source and serves `api.watch-pairing` 1.2.0.
+  Follow-up web/test-only cleanup keeps 1Password's badge from covering the final
+  square and uses a direct random UUID fixture password after GitGuardian falsely
+  classified the already-random interpolated fixture as a hardcoded password.
 - New requests use four numeric digits, uniquely reserved for five minutes.
   `/watch/pair` accepts the visible code; `/pair/1234` prefills it through sign-in.
   Older eight-character codes/full approval links remain valid. Indexed lookup

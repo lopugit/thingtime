@@ -52,6 +52,7 @@ export const WatchCodeField = ({ value, onChange }: { value: string; onChange: (
 					);
 				})}
 			</Flex>
+			{/* Keep the saved-password badge off the last square; native OTP autofill remains enabled. */}
 			<Input
 				ref={inputRef}
 				id="watch-code"
@@ -61,6 +62,7 @@ export const WatchCodeField = ({ value, onChange }: { value: string; onChange: (
 				type="text"
 				inputMode="numeric"
 				autoComplete="one-time-code"
+				data-1p-ignore="true"
 				autoCapitalize="characters"
 				spellCheck={false}
 				maxLength={8}

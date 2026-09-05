@@ -595,6 +595,9 @@ email whose link points at the attacker.
       leading zeroes. Pasting an older eight-character code expands all eight
       squares; no paste/autofill may get trapped in the first square. Check both
       desktop and 390px layouts, focus ring, keyboard submission and accessible label.
+- [ ] With 1Password installed, focus the approval input and fill all digits.
+      Its saved-password badge must not cover the last square. Native
+      `one-time-code` autofill and Cmd/Ctrl+V must still fill the complete code.
 - [ ] Start with **Paired iPhone** selected, open the signed-in companion, and
       verify another session of the same account/domain shows the exact prefilled
       Watch/device/PIN. No credential may be claimed before explicit approval.
