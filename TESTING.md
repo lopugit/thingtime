@@ -2305,10 +2305,26 @@ halves.
 - [ ] In General settings, turn “Open new Commander windows pinned” off, use
       Open New Window, and verify that launcher dismisses on focus loss; turn
       it on, open another window, and verify it remains visible on focus loss.
+- [ ] Right-click the launcher pin icon and toggle “Open New Windows Pinned”
+      both ways. Its checkmark must agree with General settings after reopening
+      the menu and relaunching; existing windows keep their own pin state and
+      Open New Window uses the newly selected default.
 - [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] With Apps first in search category order, search `magician` and `recovery`:
+      SamsungMagician and Thingtime Recovery should lead even with over 30
+      matching files/folders. Full app names must still match; `Magician.png`
+      and `recovery.c` must prefer their exact files. File-first category order
+      and learned preferences must still work, and `emoji` must retain its
+      built-in picker priority. Repeat after relaunch to check cached ranking.
+- [ ] With over 1,000 indexed apps, files, and folders, verify complete catalogue
+      reads include records beyond the former cutoff. Repeat short app searches
+      after background indexing completes: apps must not disappear. Relaunch
+      with a fresh saved index and type several queries; neither action should
+      start an indexing run. A numeric result-page size must not truncate the
+      stored catalogue or discard candidates before the indexer ranks them.
 - [ ] Run a broad query with at least 30 path-backed results and move selection
       quickly through the list. Results must stay interactive, rendering generic
       or cached icons immediately and progressively resolving every visible
