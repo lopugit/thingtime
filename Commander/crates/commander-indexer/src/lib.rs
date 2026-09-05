@@ -40,8 +40,11 @@ const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
 const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(25);
+const STRICT_FTS_BUDGET: Duration = Duration::from_millis(200);
+const FUZZY_FTS_BUDGET: Duration = Duration::from_millis(350);
 const COARSE_FUZZY_BUDGET: Duration = Duration::from_millis(350);
 const PATH_FALLBACK_BUDGET: Duration = Duration::from_millis(250);
+const MIN_STRICT_FTS_CANDIDATES: usize = 1_024;
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_RESOURCE_MEMORY_MIB: usize = 131_072;
 
@@ -643,8 +646,66 @@ impl IndexDatabase {
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
-        self.query_fts_with_stats(query, kinds, limit)
+        let strict = self
+            .run_bounded_query(STRICT_FTS_BUDGET, || {
+                self.query_strict_fts(query, kinds, limit)
+            })?
+            .unwrap_or_default();
+        if !strict.is_empty() {
+            return Ok(strict);
+        }
+
+        // The typo-tolerant expression ORs query trigrams. On a multi-million
+        // record index, a no-match query containing common trigrams can touch
+        // most of the FTS table. Keep that useful fallback, but never let it
+        // hold the launcher behind an unbounded scan.
+        Ok(self
+            .run_bounded_query(FUZZY_FTS_BUDGET, || {
+                self.query_fts_with_stats(query, kinds, limit)
+            })?
             .map(|(records, _)| records)
+            .unwrap_or_default())
+    }
+
+    fn query_strict_fts(
+        &self,
+        query: &str,
+        kinds: &[IndexKind],
+        limit: usize,
+    ) -> rusqlite::Result<Vec<IndexRecord>> {
+        let Some(fts_query) = strict_fts_query(query) else {
+            return Ok(Vec::new());
+        };
+        let candidate_limit = limit
+            .saturating_mul(32)
+            .max(MIN_STRICT_FTS_CANDIDATES)
+            .min(MAX_COARSE_FUZZY_CANDIDATES);
+        let mut statement = self.connection.prepare(
+            "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
+             FROM records_fts
+             JOIN records r ON r.rowid = records_fts.rowid
+             WHERE records_fts MATCH ?1
+               AND ((?2 = 1 AND r.kind = 'application')
+                 OR (?3 = 1 AND r.kind = 'file')
+                 OR (?4 = 1 AND r.kind = 'directory'))
+             ORDER BY bm25(records_fts)
+             LIMIT ?5",
+        )?;
+        let flags = kind_flags(kinds);
+        let rows = statement.query_map(
+            params![
+                fts_query,
+                flags.0,
+                flags.1,
+                flags.2,
+                i64::try_from(candidate_limit).unwrap_or(i64::MAX)
+            ],
+            row_to_record,
+        )?;
+        let mut records = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        rank_records(&mut records, query);
+        records.truncate(limit);
+        Ok(records)
     }
 
     fn query_fts_with_stats(
@@ -652,7 +713,7 @@ impl IndexDatabase {
         query: &str,
         kinds: &[IndexKind],
         limit: usize,
-    ) -> Result<(Vec<IndexRecord>, usize), IndexerError> {
+    ) -> rusqlite::Result<(Vec<IndexRecord>, usize)> {
         let Some(fts_query) = fuzzy_fts_query(query) else {
             return Ok((Vec::new(), 0));
         };
@@ -1741,6 +1802,16 @@ fn fuzzy_fts_query(query: &str) -> Option<String> {
     (!terms.is_empty()).then(|| terms.join(" OR "))
 }
 
+fn strict_fts_query(query: &str) -> Option<String> {
+    let terms = query
+        .split(|character: char| !character.is_alphanumeric())
+        .map(str::trim)
+        .filter(|term| term.chars().count() >= 3)
+        .map(|term| format!("\"{}\"", term.to_lowercase().replace('"', "\"\"")))
+        .collect::<Vec<_>>();
+    (!terms.is_empty()).then(|| terms.join(" AND "))
+}
+
 fn database_size_bytes(path: &Path) -> u64 {
     ["", "-wal", "-shm"]
         .into_iter()
@@ -2353,6 +2424,81 @@ mod tests {
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
+    }
+
+    #[test]
+    fn multiword_query_finds_names_across_separators_with_the_strict_fts_path() {
+        let temp = TempDir::new().expect("tempdir");
+        create_dir_all(temp.path().join("Thingtime Recovery.app")).expect("exact application");
+        write(temp.path().join("thingtime-notes.txt"), "noise").expect("thingtime noise");
+        write(temp.path().join("recovery-notes.txt"), "noise").expect("recovery noise");
+        let mut database = database(&temp);
+        database
+            .index(&configuration(
+                temp.path(),
+                vec![IndexKind::Application, IndexKind::File],
+            ))
+            .expect("index");
+
+        let records = database
+            .query(&QueryRequest {
+                query: "thingtime recovery".to_owned(),
+                kinds: vec![IndexKind::Application, IndexKind::File],
+                limit: 20,
+            })
+            .expect("query")
+            .records;
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].kind, IndexKind::Application);
+        assert_eq!(records[0].name, "Thingtime Recovery");
+    }
+
+    #[test]
+    fn strict_fts_query_requires_each_search_word() {
+        assert_eq!(
+            strict_fts_query("Thingtime recovery"),
+            Some("\"thingtime\" AND \"recovery\"".to_owned())
+        );
+        assert_eq!(
+            strict_fts_query("raycast-start"),
+            Some("\"raycast\" AND \"start\"".to_owned())
+        );
+        assert_eq!(strict_fts_query("a !"), None);
+    }
+
+    #[test]
+    fn broad_fuzzy_fts_can_be_interrupted_by_its_time_budget() {
+        let temp = TempDir::new().expect("tempdir");
+        let mut database = database(&temp);
+        let transaction = database.connection.transaction().expect("transaction");
+        for index in 0..5_000 {
+            let name = if index % 2 == 0 {
+                format!("thingtime-noise-{index}")
+            } else {
+                format!("recovery-noise-{index}")
+            };
+            transaction
+                .execute(
+                    "INSERT INTO records(source_id, path, name, parent, kind, generation)
+                     VALUES ('budget-test', ?1, ?2, '/tmp', 'file', 1)",
+                    params![format!("/tmp/{name}"), name],
+                )
+                .expect("insert noise record");
+        }
+        transaction.commit().expect("commit noise records");
+
+        let result = database
+            .run_bounded_query(Duration::ZERO, || {
+                database.query_fts_with_stats(
+                    "thingtime recovery totally nonexistent zephyr",
+                    &[IndexKind::File],
+                    20,
+                )
+            })
+            .expect("bounded query");
+
+        assert!(result.is_none());
     }
 
     #[test]

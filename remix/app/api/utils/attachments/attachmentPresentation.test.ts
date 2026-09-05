@@ -56,6 +56,9 @@ test('every browser-playable container renders inline; other sniffed types stay 
 	]) {
 		assert.deepEqual(detectedAttachmentType(mime, 'video.bin'), { contentType: mime, mediaKind: 'video' }, mime);
 	}
+	for (const mime of ['audio/aac', 'audio/flac', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/opus', 'audio/wav', 'audio/x-m4a']) {
+		assert.deepEqual(detectedAttachmentType(mime, 'recording.bin'), { contentType: mime, mediaKind: 'audio' }, mime);
+	}
 	assert.deepEqual(detectedAttachmentType('image/svg+xml', 'active.svg'), {
 		contentType: 'application/octet-stream',
 		mediaKind: 'file',
@@ -75,6 +78,7 @@ test('every browser-playable container renders inline; other sniffed types stay 
 	assert.deepEqual(detectedAttachmentType('not a mime type', 'weird.bin'), { contentType: 'application/octet-stream', mediaKind: 'file' });
 	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'image/png', mediaKind: 'image' }), true);
 	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'video/quicktime', mediaKind: 'video' }), true);
+	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'audio/x-m4a', mediaKind: 'audio' }), true);
 	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'image/svg+xml', mediaKind: 'image' }), false);
 	assert.equal(
 		attachmentMayRenderInline({

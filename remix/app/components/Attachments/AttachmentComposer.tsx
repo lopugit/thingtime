@@ -495,8 +495,9 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
-		if (uploadMediaKind(upload) === 'file') fileUploads.push(upload);
-		else visualUploads.push(upload);
+		const kind = uploadMediaKind(upload);
+		if (kind === 'image' || kind === 'video') visualUploads.push(upload);
+		else fileUploads.push(upload);
 	}
 
 	// Reordering moves within a section (media grid or file list) — matching

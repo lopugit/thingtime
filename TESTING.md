@@ -21,13 +21,19 @@ is fixed, and cite the checklist you ran in the PR description.
       regenerate the generated token (revoking its predecessor), and add a
       manually scoped additional account without exposing a credential to a
       chat, redirect, or error page.
+- [ ] After selecting Connect Thingtime, the page visibly enters its
+      completion state, reports an in-page error if preparation fails, and
+      only then navigates to the exact registered OAuth callback.
 - [ ] Connect two PAT-backed accounts at different explicitly allowed origins;
       list/select them in ChatGPT and verify reads use the selected account.
       An unallowlisted endpoint, non-PAT credential, read-less PAT, replayed
       authorization code, altered callback/resource, or altered verifier must
       fail closed.
-- [ ] In a fresh chat, `@Thingtime login` opens the host OAuth browser and
-      returns only through its registered callback; add two named accounts on
+- [ ] In an unauthenticated existing chat, `@Thingtime login` reaches the MCP
+      tool (rather than failing as an HTTP transport error), returns its
+      tool-level `mcp/www_authenticate` challenge, opens that chat host's OAuth
+      browser, and returns only through its registered callback. Without
+      starting a separate CLI listener or a new chat, add two named accounts on
       that page, then confirm `@Thingtime list accounts` exposes safe metadata
       for both. Bridge credentials have no default expiry but become unusable
       immediately after their account or connection is revoked.
@@ -747,6 +753,14 @@ email whose link points at the attacker.
       anywhere inside that open panel does the same. Plain/rich text paste stays
       in the focused field, and pasting inside the separate Thing editor modal
       never attaches the file to the post.
+- [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
+      FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
+      `/thing/<attachment-id>` detail view shows native controls instead of a
+      download-only row; the content response is `inline` with its detected
+      audio MIME; a multi-audio post advances through its queue in attachment
+      order; and "Save full file offline" plays the complete same-account
+      IndexedDB copy after a reload. Check desktop and 390px mobile widths for
+      no overflow, then remove the offline copy and confirm streaming resumes.
 - [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
       reorder media tiles and file rows; arrow keys on a focused grip move one
       step, Home/End jump to the edges. Tiles reorder live while dragging, a

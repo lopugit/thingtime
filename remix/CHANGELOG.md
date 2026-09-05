@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
+
+- `@Thingtime login` is now callable before authentication and returns its
+  OAuth challenge as a successful MCP tool response, allowing the invoking
+  ChatGPT/Codex task to own PKCE, browser launch, callback, and subsequent
+  authenticated requests without a separate CLI transport.
+- Account and data tools remain OAuth-only and continue to fail closed at the
+  HTTP authorization boundary.
+
 ### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
 
 - Grouped summary; details in the PR note

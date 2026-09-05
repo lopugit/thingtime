@@ -6,6 +6,7 @@ import {
 	attachmentFilesFromClipboard,
 	attachmentContentUrl,
 	attachmentDisplayName,
+	attachmentPlaybackContentType,
 	attachmentThingUrl,
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
@@ -55,7 +56,7 @@ test('upload purposes map to exactly one canonical approval scope', () => {
 	}
 });
 
-test('only vetted raster image and video types render inline', () => {
+test('only safe image, video, and audio types render inline', () => {
 	assert.equal(safeAttachmentMediaKind('image/jpeg', 'image'), 'image');
 	assert.equal(safeAttachmentMediaKind('video/mp4', 'video'), 'video');
 	assert.equal(safeAttachmentMediaKind('image/svg+xml', 'image'), 'file');
@@ -66,6 +67,10 @@ test('only vetted raster image and video types render inline', () => {
 	assert.equal(safeAttachmentMediaKind('video/x-m4v', 'video'), 'video');
 	assert.equal(safeAttachmentMediaKind('video/x-matroska', 'video'), 'video');
 	assert.equal(safeAttachmentMediaKind('video/3gpp', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('audio/mpeg', 'audio'), 'audio');
+	assert.equal(safeAttachmentMediaKind('audio/x-m4a', 'audio'), 'audio');
+	assert.equal(safeAttachmentMediaKind('audio/flac', 'file'), 'audio');
+	assert.equal(safeAttachmentMediaKind('text/html', 'audio'), 'file');
 	assert.equal(safeAttachmentMediaKind('video/x-msvideo', 'video'), 'file');
 	assert.equal(safeAttachmentMediaKind('image/png', 'file'), 'file');
 });
@@ -85,12 +90,12 @@ test('normalises only canonical stable attachment metadata', () => {
 		contentType: 'text/html',
 		mediaKind: 'file'
 	});
-	assert.deepEqual(normalizePublicAttachment({ id: 'audio', name: 'voice.mp3', size: 8, contentType: 'audio/mpeg', mediaKind: 'audio' }), {
+	assert.deepEqual(normalizePublicAttachment({ id: 'audio', name: 'voice.mp3', size: 8, contentType: 'audio/mpeg', mediaKind: 'file' }), {
 		id: 'audio',
 		name: 'voice.mp3',
 		size: 8,
 		contentType: 'audio/mpeg',
-		mediaKind: 'file'
+		mediaKind: 'audio'
 	});
 	assert.equal(normalizePublicAttachment({ id: 'legacy', name: 'photo.jpg', sizeBytes: 42, contentType: 'image/jpeg', previewKind: 'image' }), null);
 	assert.deepEqual(
@@ -123,6 +128,14 @@ test('normalises only canonical stable attachment metadata', () => {
 		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
 	);
 	assert.equal(MAX_POST_ATTACHMENTS, 25);
+});
+
+test('audio playback prefers a legacy row’s server-sniffed MIME', () => {
+	assert.equal(attachmentPlaybackContentType({ contentType: 'audio/mpeg' }), 'audio/mpeg');
+	assert.equal(
+		attachmentPlaybackContentType({ contentType: 'application/octet-stream', detectedContentType: 'audio/x-m4a' }),
+		'audio/x-m4a'
+	);
 });
 
 test('filename preview overrides display text without replacing the immutable filename', () => {
