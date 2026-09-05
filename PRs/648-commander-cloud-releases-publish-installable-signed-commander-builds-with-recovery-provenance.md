@@ -23,7 +23,12 @@ only after successful signing/notarization.
   stapling passed. The subsequent lipo command used the wrong argument order,
   so the workflow correctly stopped before publishing any release.
 - The follow-up puts the Mach-O input before `-verify_arch` and executes both
-  actual verifier commands against a native macOS fixture. The final signed
+  actual verifier commands against a native macOS fixture. Running the remaining
+  pre-notarization checks against the real bundle also caught an incorrect
+  `index.html` assumption: Vite builds `launcher.html` and `settings.html`.
+  The verifier now checks both actual surfaces and tests them against Vite's
+  declared build inputs. All architecture, provenance, resource and signature
+  checks pass against the real local bundle. The final signed
   release will be checked through GitHub download and Recovery installation.
 
 Cloud releases currently target Apple silicon. The Developer ID requirement

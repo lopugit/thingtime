@@ -72,3 +72,20 @@ test('the real architecture verification commands accept a native Mach-O bundle 
     assert.equal(result.status, 0, result.stderr);
   } finally { rmSync(app, { recursive: true, force: true }); }
 });
+
+
+test('UI resource checks match the launcher and settings documents Vite actually builds', () => {
+  const vite = readFileSync(new URL('../apps/desktop-ui/vite.config.ts', import.meta.url), 'utf8');
+  const surfaces = [...vite.matchAll(/new URL\('\.\/(\w+\.html)'/g)].map(match => match[1]).sort();
+  assert.deepEqual(surfaces, ['launcher.html', 'settings.html']);
+  const verification = readFileSync(new URL('./verify-production-bundle.sh', import.meta.url), 'utf8');
+  const checks = verification.split('\n').filter(line => line.startsWith('test -s "$app/Contents/Resources/ui/'));
+  assert.deepEqual(checks.map(line => line.match(/ui\/([^"/]+)"/)[1]).sort(), surfaces);
+  const app = mkdtempSync(path.join(tmpdir(), 'commander-ui-resources-'));
+  try {
+    mkdirSync(path.join(app, 'Contents/Resources/ui'), { recursive: true });
+    for (const name of surfaces) copyFileSync(new URL(`../apps/desktop-ui/${name}`, import.meta.url), path.join(app, 'Contents/Resources/ui', name));
+    const result = spawnSync('bash', ['-ec', checks.join('\n')], { encoding: 'utf8', env: { ...process.env, app } });
+    assert.equal(result.status, 0, result.stderr);
+  } finally { rmSync(app, { recursive: true, force: true }); }
+});
