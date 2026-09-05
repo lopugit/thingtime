@@ -16,8 +16,9 @@ const escapeHtml = (text: string): string =>
 // Editor.js paragraphs render data.text as LIVE innerHTML inside the modal —
 // unlike the canvas, that render does NOT pass the allowlist renderer, so
 // every fragment handed to the editor is scrubbed first: executable/embed
-// tags are dropped, on* handler attributes are stripped, and href/src values
-// must clear the same `isSafeUrl` gate the render-side allowlist uses. That
+// tags are dropped, on* handler attributes are stripped, style attributes are
+// re-validated through the shared style-token gate, and href/src values must
+// clear the same `isSafeUrl` gate the render-side allowlist uses. That
 // gate is an ALLOWLIST parsed by the URL parser (http/https/mailto/tel), not a
 // scheme prefix test: a denylist misses vbscript:, non-text data: payloads,
 // and whitespace-obfuscated schemes like `java&#9;script:`, which browsers
@@ -35,7 +36,16 @@ const scrubElement = (el: Element): void => {
 		for (const attr of Array.from(child.attributes)) {
 			const name = attr.name.toLowerCase();
 			const isUrlAttribute = name === 'href' || name === 'src' || name === 'xlink:href';
-			if (name === 'style' && child.tagName.toLowerCase() === 'span') child.setAttribute('style', sanitizeInlineStyle(attr.value));
+			if (name === 'style') {
+				// Every element, not just the span the style tools write: this sink
+				// renders as live innerHTML, so raw CSS on a b/i/a/mark/code carrier
+				// would reach the editor DOM verbatim (fixed-position overlays,
+				// url() fetches). The token gate is the same one the render-side
+				// allowlist uses, and it drops anything it cannot revalidate.
+				const safe = sanitizeInlineStyle(attr.value);
+				if (safe) child.setAttribute('style', safe);
+				else child.removeAttribute(attr.name);
+			}
 			if (name.startsWith('on') || (isUrlAttribute && !isSafeUrl(attr.value))) {
 				child.removeAttribute(attr.name);
 			}

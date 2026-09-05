@@ -1140,6 +1140,15 @@ email whose link points at the attacker.
       open, including keyboard viewport panning and text near the screen top.
 - [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
       real editor and builder components with ephemeral data and no API writes.
+- [ ] Editor-sink style scrub (`editorJsHtml.ts` `scrubElement`): save a block whose
+      stored html carries raw CSS on a NON-span inline carrier — for example
+      `<b style="position:fixed;inset:0;z-index:99999">` or
+      `<mark style="background-image:url(https://example.invalid/x)">` — then reopen
+      it in the inline and advanced editors. Editor.js renders `data.text` as live
+      innerHTML there without the render-side allowlist, so every element's style
+      must be re-validated through the style-token gate: no fixed-position overlay
+      and no outbound `url()` request on open. Legitimate `<span>` colour/size
+      styles and block-level `text-align` must still survive the round trip.
 
 ## Multi-editor focus (`remix/app/components/Editor/LongTextEditor.tsx`)
 
