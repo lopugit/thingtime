@@ -21,6 +21,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Add bounded persistent media caching with access revalidation,
+  responsive low-resolution image previews, and cache controls in Settings.
+  Preserve restorable non-secret AWS S3 and SES customizations under
+  `configurations/`, with live observations separated from templates. See the
+  [PR #650 note](../PRs/650-codex-persistent-media-cache-responsive-previews-and-aws-configurations.md).
+  Promote only this feature onto current main after explicit user authorization. — Codex (AI)
+
 - 2026-09-05: Fix the signed Electron builder's certificate selector: give
   electron-builder the unprefixed name while preserving the exact Developer ID
   identity for native code signing. — Codex (AI)

@@ -51,3 +51,7 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.admin-migrations'], '1.1.0');
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
+
+test('persistent attachment content and resized previews advertise their additive contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+});
