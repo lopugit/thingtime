@@ -62,3 +62,7 @@ test('storage-aware health and the corrected email environment gate publish thei
 	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
+
+ test('persistent attachment content and resized previews advertise their additive contract', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+});

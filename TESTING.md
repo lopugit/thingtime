@@ -4462,3 +4462,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+## Persistent media and progressive image regression
+
+- [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture
+      top to bottom: below-fold images stay lazy, low-resolution previews
+      appear before responsive images, and no horizontal overflow appears.
+- [ ] Leave and revisit a managed image: authorization checks increase while
+      downloaded byte requests stay unchanged. Revoke access and revisit:
+      cached pixels must not render. Restore access and verify loading resumes.
+- [ ] Open and close the image lightbox, verify contained sizing, and inspect
+      Media settings toggles and clear action at desktop and mobile sizes.
+- [ ] Disable caching, clear storage, and disable previews; original loading
+      remains usable. Unsupported image formats fall back without retry loops.
+- [ ] Confirm partial/large files use native streaming and cached range reads
+      cannot bypass authorization. Verify storage failure degrades to HTTP.

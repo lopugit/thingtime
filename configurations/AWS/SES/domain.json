@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "verifiedOn": "2026-09-05",
+  "source": "AWS SES thingtime.com Authentication and Notifications tabs",
+  "region": "ap-southeast-2",
+  "EmailIdentity": "thingtime.com",
+  "DkimSigningAttributes": {
+    "DomainSigningAttributesOrigin": "AWS_SES",
+    "NextSigningKeyLength": "RSA_2048_BIT"
+  },
+  "SigningEnabled": true,
+  "MailFromDomain": "mail.thingtime.com",
+  "BehaviorOnMxFailure": "USE_DEFAULT_VALUE",
+  "EmailForwardingEnabled": true,
+  "snsFeedbackTopics": [],
+  "unverified": [
+    "Authorization policies",
+    "VDM settings",
+    "DMARC policy and DNS records",
+    "Configuration set event destinations and options"
+  ],
+  "ConfigurationSetName": "my-first-configuration-set",
+  "sendingIpPool": "default"
+}

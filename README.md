@@ -2070,3 +2070,37 @@ prereleases containing both desktop and Recovery archives; partial configuration
 fails closed. Unsigned archives never become the latest trusted release. Forks
 must configure their own release origin and signing setup rather than reusing
 Thingtime's account credentials.
+
+## Dependency configuration recovery
+
+[configurations/](configurations/README.md) holds non-secret service customizations
+and environment-specific restoration instructions. AWS S3 snapshots distinguish
+development and production; SES documents verified domain settings and clearly
+labelled deployment templates. Forks must substitute their own bucket/domain
+names and provision credentials through their secret store.
+
+### Persistent media and responsive images
+
+Media settings let users disable persistence, clear downloaded bytes, or disable
+low-resolution previews. A service worker stores binary files in IndexedDB, then
+Cache Storage or memory when unavailable (128 MiB per backend, 256 entries, seven
+days, at most 16 MiB per file). Browser eviction remains possible. Large files,
+opaque third-party responses and unsupported environments use native HTTP
+loading; HTML and general API responses are never captured by this worker.
+Managed private media requires an online access check before every worker cache
+read, including ranges, so cached content cannot bypass revoked access.
+
+The protected attachment-content feature is version 1.1.0. Image variants use
+Sharp at widths 64/320/640/1280/1920 with bounded decoding and concurrency. GIFs,
+animated/unsupported images and oversized sources fall back to the original.
+No resizing infrastructure or extra secret is required. New upload and signed
+download Cache-Control metadata permits private storage/revalidation; signed
+redirects and authorization receipts retain no-store.
+
+Local validation in the `thingtime-persistent-media-cache` worktree uses
+http://localhost:13540 (Vite), 13541 (HMR), 13542 (Nitro). The browser fixture
+at http://localhost:13543/tests/media-cache.html is served by
+`node remix/scripts/serve-media-cache-qa.mjs`; it uses real UI/worker code with
+synthetic media and access revocation, without writing application data.
+Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
+missing Tailscale.app executable. No public mapping was created or changed.
