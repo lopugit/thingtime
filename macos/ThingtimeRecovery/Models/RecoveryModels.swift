@@ -3,6 +3,7 @@ import Foundation
 public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifiable {
     case desktop
     case recovery
+    case commander
 
     public var id: String { rawValue }
 
@@ -10,6 +11,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         switch self {
         case .desktop: "Thingtime.app"
         case .recovery: "Thingtime Recovery.app"
+        case .commander: "Commander.app"
         }
     }
 
@@ -17,6 +19,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         switch self {
         case .desktop: "com.thingtime.desktop"
         case .recovery: "com.thingtime.desktop.recovery"
+        case .commander: "com.thingtime.Commander"
         }
     }
 
@@ -24,6 +27,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         switch self {
         case .desktop: "Thingtime Desktop"
         case .recovery: "Thingtime Recovery"
+        case .commander: "Commander"
         }
     }
 }
@@ -41,6 +45,7 @@ public struct CacheManifest: Codable, Equatable {
 public struct CacheManifestEntry: Codable, Hashable, Identifiable {
     public let assetName: String?
     public let branch: String?
+    public let buildNumber: String?
     public let cachedAt: String?
     public let commit: String?
     public let key: String
@@ -53,10 +58,18 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
     public let version: String?
 
     public var id: String { key }
+    public var cachedDate: Date? {
+        guard let cachedAt else { return nil }
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: cachedAt) { return date }
+        formatter.formatOptions.insert(.withFractionalSeconds)
+        return formatter.date(from: cachedAt)
+    }
 
     public init(
         assetName: String? = nil,
         branch: String? = nil,
+        buildNumber: String? = nil,
         cachedAt: String? = nil,
         commit: String? = nil,
         key: String,
@@ -70,6 +83,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
     ) {
         self.assetName = assetName
         self.branch = branch
+        self.buildNumber = buildNumber
         self.cachedAt = cachedAt
         self.commit = commit
         self.key = key
@@ -89,7 +103,10 @@ public struct CachedBundle: Hashable, Identifiable {
     public let component: RecoveryComponent
 
     public var id: String { "\(component.rawValue)-\(entry.key)" }
-    public var displayName: String { entry.name ?? entry.version ?? entry.tag ?? entry.key }
+    public var displayName: String { "\(component.title) \(entry.version ?? metadata.version ?? "Unknown version")" }
+    public var metadata: RecoveryBuildMetadata {
+        RecoveryBuildMetadata(bundleURL: appURL, version: entry.version, buildNumber: entry.buildNumber, tag: entry.tag, commit: entry.commit, branch: entry.branch)
+    }
 }
 
 /// The cache records the distribution lane explicitly. A missing value is the
@@ -111,9 +128,13 @@ public struct RecoveryRelease: Hashable, Identifiable {
     public let releaseURL: URL?
     public let tag: String
     public let version: String?
+    public let branch: String?
+    public let commit: String?
 
-    public init(asset: RecoveryReleaseAsset, id: String, isPrerelease: Bool, isUnsigned: Bool = false, name: String, publishedAt: Date?, releaseURL: URL?, tag: String, version: String?, unavailableReason: String? = nil) {
+    public init(asset: RecoveryReleaseAsset, id: String, isPrerelease: Bool, isUnsigned: Bool = false, name: String, publishedAt: Date?, releaseURL: URL?, tag: String, version: String?, unavailableReason: String? = nil, branch: String? = nil, commit: String? = nil) {
         self.asset = asset
+        self.branch = branch
+        self.commit = commit
         self.unavailableReason = unavailableReason
         self.id = id
         self.isPrerelease = isPrerelease
@@ -166,6 +187,8 @@ public struct CacheReleaseDescriptor: Hashable {
     public init(release: RecoveryRelease) {
         self.init(
             assetName: release.asset.name,
+            branch: release.branch,
+            commit: release.commit,
             id: release.id,
             name: release.name,
             releaseURL: release.releaseURL?.absoluteString,
@@ -192,6 +215,15 @@ public struct RecoveryCatalogSnapshot {
     public let publishedReleaseCount: Int
     public let desktop: [RecoveryRelease]
     public let recovery: [RecoveryRelease]
+    public var commander: [RecoveryRelease] = []
+
+    public func releases(for component: RecoveryComponent) -> [RecoveryRelease] {
+        switch component {
+        case .desktop: desktop
+        case .recovery: recovery
+        case .commander: commander
+        }
+    }
 }
 
 public struct RecoveryInstallNotice: Codable {

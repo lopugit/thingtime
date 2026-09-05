@@ -4440,3 +4440,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+
+### Recovery cards, build IDs and app selection
+
+- [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
+      old Electron bundles expose their embedded commit, and Recovery cards use
+      the Recovery component name even if old metadata used a desktop title.
+- [ ] Open the App selector, switch Electron → Commander → Electron, and verify
+      cached entries and release selections stay with their app. Save installed
+      Commander, verify its cached signature, and confirm Electron's cache is unchanged.
+- [ ] Inspect release cards and detail metadata at narrow and wide macOS window
+      sizes, scroll every list to the bottom, and open/cancel unsigned acknowledgement.
+      Dates, badges, long versions and archive names must wrap without clipping.
+- [ ] A Commander handoff rejects an Electron path and vice versa. Unknown or
+      incomplete build metadata must not fabricate a numeric build number.
+- [ ] Cloud archives contain their run number in both app build metadata and
+      `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
+      stapler checks after downloading the actual published ZIP.

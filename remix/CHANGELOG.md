@@ -17,6 +17,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Add Recovery release cards, readable cached build IDs, and an app
+  selector with isolated Commander recovery. Pass cloud build numbers into
+  Electron and reuse the approved CI Apple API key for macOS notarization.
+  Remove the confirmed damaged legacy downloads. — Codex (AI)
+
 - 2026-09-05: Repair Recovery catalogue selection, archive verification, damaged
   app replacement, and installer failure notices. Publish desktop and Recovery
   together through the repaired protected cloud builder. Withdraw damaged legacy

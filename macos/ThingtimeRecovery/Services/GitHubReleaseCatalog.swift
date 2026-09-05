@@ -35,7 +35,7 @@ public actor GitHubReleaseCatalog {
 
     public func fetch(component: RecoveryComponent) async throws -> [RecoveryRelease] {
         let snapshot = try await fetchAll()
-        return component == .desktop ? snapshot.desktop : snapshot.recovery
+        return snapshot.releases(for: component)
     }
 
     public func fetchAll() async throws -> RecoveryCatalogSnapshot {
@@ -64,7 +64,7 @@ public actor GitHubReleaseCatalog {
             guard release.draft != true, let key = release.id.map(String.init) ?? release.tagName else { return false }
             return seen.insert(key).inserted
         }
-        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery))
+        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery), commander: project(releases, component: .commander))
     }
 
     private func project(_ collected: [GitHubRelease], component: RecoveryComponent) -> [RecoveryRelease] {
@@ -82,7 +82,9 @@ public actor GitHubReleaseCatalog {
                 releaseURL: release.htmlURL.flatMap(URL.init(string:)),
                 tag: tag,
                 version: semanticVersion(in: tag),
-                unavailableReason: unavailableReason(release, component: component)
+                unavailableReason: unavailableReason(release, component: component),
+                branch: metadata("Branch", in: release.body),
+                commit: metadata("Commit", in: release.body)
             )
         }.sorted {
             ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
@@ -124,6 +126,8 @@ public actor GitHubReleaseCatalog {
                 let prefix: String
                 if component == .desktop {
                     prefix = isUnsigned ? "Thingtime-Electron-App-UNSIGNED-Release-" : "Thingtime-Electron-App-Release-"
+                } else if component == .commander {
+                    prefix = isUnsigned ? "Commander-App-UNSIGNED-Release-" : "Commander-App-Release-"
                 } else {
                     prefix = isUnsigned ? "Thingtime-Recovery-App-UNSIGNED-Release-" : "Thingtime-Recovery-App-Release-"
                 }
@@ -153,6 +157,15 @@ public actor GitHubReleaseCatalog {
             return URL(string: String(value[value.index(after: start)..<end]))
         }
         return nil
+    }
+
+    private func metadata(_ field: String, in body: String?) -> String? {
+        let prefix = "- \(field): `"
+        guard let line = body?.components(separatedBy: .newlines).first(where: { $0.hasPrefix(prefix) && $0.hasSuffix("`") }) else { return nil }
+        let value = String(line.dropFirst(prefix.count).dropLast())
+        guard !value.isEmpty, value.count <= 200 else { return nil }
+        if field == "Commit", value.range(of: "^[a-f0-9]{7,40}$", options: .regularExpression) == nil { return nil }
+        return value
     }
 
     private func semanticVersion(in value: String) -> String? {

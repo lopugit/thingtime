@@ -100,6 +100,7 @@ try {
 			'--publish',
 			'never',
 			'--config.forceCodeSigning=true',
+            ...(process.env.THINGTIME_ELECTRON_BUILD_NUMBER ? [`--config.buildVersion=${process.env.THINGTIME_ELECTRON_BUILD_NUMBER}`] : []),
 			`--config.mac.identity=${identity}`,
 			'--config.mac.notarize=true',
 			...(releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [])

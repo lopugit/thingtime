@@ -86,3 +86,23 @@ No web UI changed. Vercel preview authorization is skipped for this native-only
 delivery; the PR checks contain the current deployment status. Graphify portable
 outputs are refreshed; a large semantic chunk exceeded the local proxy request
 limit during the initial refresh, while structural indexing completed.
+
+
+## Main promotion follow-up
+
+PR #633 also adds rich multiline release cards, explicit cached build identity,
+and a global Electron/Commander selector. Commander uses its own cache root and
+bundle identifier, and can save a verified installed build even before any
+Commander GitHub archive is published. Legacy Recovery cache titles are derived
+from the actual component. GitHub build numbers are passed into Electron's
+embedded metadata and bundle version.
+
+The user requested removal of the damaged downloads. Both build 3 and build 4
+ZIPs and DMGs failed strict code-signature verification. GitHub's immutable
+release policy prohibited deleting individual assets, so the two release records
+were deleted after retaining diagnostic copies; their git tags were preserved.
+
+Validation: 21 Recovery tests and 79 Electron tests pass; native verification
+includes legacy cached metadata, wrong-app handoff rejection, live app switching,
+and saving/verifying the installed Commander build. The cloud signing follow-up
+uses encrypted repository secrets and retains fail-closed partial setup checks.

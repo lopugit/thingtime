@@ -74,6 +74,7 @@ public final class RecoveryCache {
             let entry = CacheManifestEntry(
                 assetName: descriptor.assetName,
                 branch: descriptor.branch,
+                buildNumber: RecoveryBuildMetadata(bundleURL: sourceApp).buildNumber,
                 cachedAt: ISO8601DateFormatter().string(from: Date()),
                 commit: descriptor.commit,
                 key: key,
