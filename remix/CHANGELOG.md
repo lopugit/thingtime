@@ -17,6 +17,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
+  indexes, improve matching app-name ranking, and add the pin menu's new-window
+  default toggle. See the [PR #652 verification note](../PRs/652-codex-commander-app-name-ranking-complete-search-catalogues-and-pin-toggle.md). — Codex (AI)
+
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
   cloud packaging. Share the protected main/PR release builder and correct its
