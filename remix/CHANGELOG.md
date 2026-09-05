@@ -288,6 +288,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
+
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the
   stack definition and historical run links; Restart safely cancels active
