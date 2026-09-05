@@ -69,9 +69,30 @@ test('actual version shell creates correct signed and unsigned versions for both
       const result = spawnSync('bash', ['-c', shell], { cwd: directory, encoding: 'utf8', env: { ...process.env, RELEASE_KIND, DISTRIBUTION, PR_NUMBER: '68', PR_REF: 'codex/recovery-sync', PR_SHA: 'a'.repeat(40), GITHUB_RUN_NUMBER: '6', GITHUB_ENV: envFile, GITHUB_OUTPUT: path.join(directory, 'output') } });
       assert.equal(result.status, 0, result.stderr);
       const version = readFileSync(envFile, 'utf8').match(/^THINGTIME_ELECTRON_RELEASE_VERSION=(.+)$/m)[1];
+      assert.match(readFileSync(envFile, 'utf8'), /^THINGTIME_ELECTRON_BUILD_NUMBER=6$/m);
       assert.match(version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
       assert.equal(version.endsWith('.unsigned'), DISTRIBUTION === 'unsigned');
       assert.equal(version.includes('-pr.68.'), RELEASE_KIND === 'pr');
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('signing selection reuses the approved CI API key only after macOS opt-in', () => {
+  const section = workflow.split('      - name: Select release distribution\n')[1].split('      - name: Derive SemVer PR release identity\n')[0];
+  const shell = section.split('        run: |\n')[1].split('\n').map(line => line.replace(/^          /, '')).join('\n');
+  const directory = mkdtempSync(path.join(tmpdir(), 'thingtime-signing-selection-'));
+  const empty = Object.fromEntries(['MAC_CSC_LINK','MAC_CSC_KEY_PASSWORD','APPLE_API_KEY_BASE64','APPLE_API_KEY_ID','APPLE_API_ISSUER','APPLE_TEAM_ID','ASC_KEY_CONTENT','ASC_KEY_ID','ASC_ISSUER_ID'].map(key => [key, '']));
+  const api = { ASC_KEY_CONTENT: 'test-key-content', ASC_KEY_ID: 'test-key-id', ASC_ISSUER_ID: 'test-issuer' };
+  const mac = { MAC_CSC_LINK: 'test-p12', MAC_CSC_KEY_PASSWORD: 'test-password', APPLE_TEAM_ID: 'test-team' };
+  try {
+    for (const [values, expected] of [[{}, 'unsigned'], [api, 'unsigned'], [{...api, ...mac}, 'signed'], [{...api, MAC_CSC_LINK: 'test-p12'}, null], [mac, null]]) {
+      const output = path.join(directory, 'output');
+      writeFileSync(output, '');
+      const result = spawnSync('bash', ['-c', shell], {encoding: 'utf8', env: {...process.env, ...empty, ...values, GITHUB_OUTPUT: output}});
+      assert.equal(result.status === 0, expected !== null, result.stderr);
+      if (expected) assert.equal(readFileSync(output, 'utf8').trim(), `distribution=${expected}`);
+      assert.doesNotMatch(result.stdout + result.stderr, /test-key-content|test-p12|test-password/);
+    }
+  } finally { rmSync(directory, {recursive: true, force: true}); }
 });

@@ -411,3 +411,17 @@ Signing still requires all six existing repository secrets: `MAC_CSC_LINK`,
 configure none to produce the explicit unsigned lane, or all six for Developer
 ID plus notarization. Partial configuration fails. Unsigned builds are marked
 in tags, filenames and notes, are prereleases, and never become latest.
+
+### macOS signing and build identity
+
+The Electron/Recovery worker passes `GITHUB_RUN_NUMBER` as
+`THINGTIME_ELECTRON_BUILD_NUMBER`, so native bundle and embedded web metadata
+retain the cloud build identity. Configure `MAC_CSC_LINK` (base64 encrypted
+Developer ID P12), `MAC_CSC_KEY_PASSWORD`, and `APPLE_TEAM_ID` as Actions secrets.
+Notarization accepts explicit `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`, falling back to the approved iOS CI `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, and `ASC_ISSUER_ID` only after macOS signing is configured. Both
+key-content forms are base64 encoded. An iOS-only setup retains the explicit
+unsigned fallback; partial macOS signing still fails closed. No credential
+material belongs in this branch. Regression coverage executes the actual
+selection and version shell in `.github/scripts/electron-release-gates.test.mjs`.
