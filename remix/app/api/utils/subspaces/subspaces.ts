@@ -66,6 +66,7 @@ import {
 	type SubspaceMembership
 } from './gate';
 import {
+	canPostIn,
 	confirmSlugMatches,
 	flairById,
 	privatizedPostUpdate,
@@ -127,6 +128,10 @@ export type PublicSubspaceViewer = {
 	banUntil: string | null;
 	canModerate: boolean;
 	canPost: boolean;
+	// a join request awaiting a moderator (private subspaces) — not a member yet
+	pending: boolean;
+	// asked the mods for posting approval (restricted subspaces)
+	approvalRequested: boolean;
 };
 
 export type PublicSubspace = {
@@ -142,6 +147,10 @@ export type PublicSubspace = {
 	ownerId: string;
 	memberCount: number;
 	postCount?: number;
+	// moderators only (subspace detail): open join requests / posting-approval
+	// requests waiting in the Requests queue
+	pendingCount?: number;
+	approvalRequestCount?: number;
 	createdAt: string;
 	updatedAt: string;
 	viewer: PublicSubspaceViewer;
@@ -156,6 +165,8 @@ export type PublicSubspaceMember = {
 	banReason: string | null;
 	banUntil: string | null;
 	left: boolean;
+	pending: boolean;
+	approvalRequested: boolean;
 	joinedAt: string;
 };
 
@@ -173,21 +184,19 @@ export type PublicModlogEntry = {
 
 const viewerStateOf = (subspace: any, membership: SubspaceMembership | null): PublicSubspaceViewer => {
 	const moderator = canModerate(membership);
-	const access = accessOf(subspace);
 	const member = isActiveMember(membership);
-	const canPost =
-		!!membership && !membership.banned
-			? moderator || access === 'public' || (access === 'restricted' && membership.approved) || (access === 'private' && member)
-			: access === 'public';
 	return {
-		role: membership && !membership.left ? membership.role : null,
+		// a pending requester holds no role yet
+		role: membership && !membership.left && !membership.pending ? membership.role : null,
 		member,
 		approved: membership?.approved === true,
 		banned: membership?.banned === true,
 		banReason: membership?.banned ? membership.banReason : null,
 		banUntil: membership?.banned && membership.banUntil ? membership.banUntil.toISOString() : null,
 		canModerate: moderator,
-		canPost
+		canPost: canPostIn(accessOf(subspace), membership),
+		pending: !!membership && membership.pending && !membership.left && !membership.banned,
+		approvalRequested: member && membership!.approvalRequested && !membership!.approved
 	};
 };
 
@@ -200,7 +209,7 @@ const brandingOf = (doc: any): SubspaceBranding => ({
 
 export const toPublicSubspace = (
 	doc: any,
-	options: { memberCount: number; postCount?: number; membership: SubspaceMembership | null }
+	options: { memberCount: number; postCount?: number; membership: SubspaceMembership | null; requestCounts?: RequestCounts | null }
 ): PublicSubspace => ({
 	id: String(doc.shareId),
 	slug: String(doc.crystal?.slug || ''),
@@ -214,6 +223,7 @@ export const toPublicSubspace = (
 	ownerId: String(doc.ownerId),
 	memberCount: options.memberCount,
 	...(options.postCount === undefined ? {} : { postCount: options.postCount }),
+	...(options.requestCounts ? { pendingCount: options.requestCounts.pending, approvalRequestCount: options.requestCounts.approvalRequests } : {}),
 	createdAt: new Date(doc.createdAt).toISOString(),
 	updatedAt: new Date(doc.updatedAt || doc.createdAt).toISOString(),
 	viewer: viewerStateOf(doc, options.membership)
@@ -230,6 +240,8 @@ const toPublicMember = (doc: any, profile: FeedAuthor | null): PublicSubspaceMem
 		banReason: membership.banned ? membership.banReason : null,
 		banUntil: membership.banned && membership.banUntil ? membership.banUntil.toISOString() : null,
 		left: membership.left,
+		pending: membership.pending && !membership.left && !membership.banned,
+		approvalRequested: membership.approvalRequested && !membership.approved && isActiveMember(membership),
 		joinedAt: new Date(doc.createdAt).toISOString()
 	};
 };
@@ -244,7 +256,7 @@ const newSubspaceMemberDoc = (subspaceId: string, userId: string, crystal: Recor
 		shareId: randomUUID(),
 		schemaVersion: THINGS_SCHEMA_VERSION,
 		thingtime: ['subspace-member'],
-		crystal: { memberKey, role: 'member', approved: false, banned: false, left: false, ...crystal },
+		crystal: { memberKey, role: 'member', approved: false, banned: false, left: false, pending: false, approvalRequested: false, ...crystal },
 		uniqueKeys: [thingUniqueKey(SUBSPACE_MEMBER_KEY_FIELD, memberKey)],
 		extended: null,
 		ownerId: userId,
@@ -295,12 +307,38 @@ const memberCountsFor = async (subspaceIds: string[]): Promise<Map<string, numbe
 	const things = await getThingsCollection();
 	const rows = (await things
 		.aggregate([
-			{ $match: { thingtime: 'subspace-member', targetId: { $in: subspaceIds }, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true } } },
+			// pending join requests are not members (isActiveMember)
+			{ $match: { thingtime: 'subspace-member', targetId: { $in: subspaceIds }, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true }, 'crystal.pending': { $ne: true } } },
 			{ $group: { _id: '$targetId', count: { $sum: 1 } } }
 		])
 		.toArray()) as any[];
 	for (const row of rows) counts.set(String(row._id), Number(row.count) || 0);
 	return counts;
+};
+
+// The Requests queue sizes a moderator sees on the subspace detail: open join
+// requests (pending rows) and posting-approval requests (active, unapproved
+// members who asked) — ONE $group over the subspace's member rows.
+export type RequestCounts = { pending: number; approvalRequests: number };
+const PENDING_REQUEST_MATCH = { 'crystal.pending': true, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true } };
+const APPROVAL_REQUEST_MATCH = { 'crystal.approvalRequested': true, 'crystal.approved': { $ne: true }, 'crystal.pending': { $ne: true }, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true } };
+const requestCountsFor = async (subspaceId: string): Promise<RequestCounts> => {
+	const things = await getThingsCollection();
+	const [row] = (await things
+		.aggregate([
+			{ $match: { thingtime: 'subspace-member', targetId: subspaceId, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true }, $or: [{ 'crystal.pending': true }, { 'crystal.approvalRequested': true }] } },
+			{
+				$group: {
+					_id: null,
+					pending: { $sum: { $cond: [{ $eq: ['$crystal.pending', true] }, 1, 0] } },
+					approvalRequests: {
+						$sum: { $cond: [{ $and: [{ $ne: ['$crystal.pending', true] }, { $eq: ['$crystal.approvalRequested', true] }, { $ne: ['$crystal.approved', true] }] }, 1, 0] }
+					}
+				}
+			}
+		])
+		.toArray()) as any[];
+	return { pending: Number(row?.pending) || 0, approvalRequests: Number(row?.approvalRequests) || 0 };
 };
 
 const livePostMatch = (subspaceId: string) => withMatch(postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
@@ -546,10 +584,11 @@ export const getSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef
 			.limit(MAX_MODERATORS_LISTED)
 			.toArray() as Promise<any[]>
 	]);
-	const profiles = await resolveProfiles(modDocs.map((doc) => String(doc.ownerId)));
+	// moderators also get the Requests queue sizes (badge on Mod tools 🎩)
+	const [profiles, requestCounts] = await Promise.all([resolveProfiles(modDocs.map((doc) => String(doc.ownerId))), canModerate(membership) ? requestCountsFor(id) : Promise.resolve(null)]);
 	return {
 		ok: true,
-		subspace: toPublicSubspace(subspace, { memberCount: counts.get(id) || 0, postCount, membership }),
+		subspace: toPublicSubspace(subspace, { memberCount: counts.get(id) || 0, postCount, membership, requestCounts }),
 		moderators: modDocs.map((doc) => ({
 			userId: String(doc.ownerId),
 			profile: profiles.get(String(doc.ownerId)) || null,
@@ -654,7 +693,21 @@ const subspaceWithViewer = async (subspace: any, viewerId: string): Promise<Publ
 	return toPublicSubspace(subspace, { memberCount: counts.get(id) || 0, membership });
 };
 
-export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef): Promise<Fail | { ok: true; subspace: PublicSubspace; joined: boolean }> => {
+export type JoinSubspaceResult = { ok: true; subspace: PublicSubspace; joined: boolean; pending: boolean };
+
+// the "notify the mods" emit every request shares (join request / posting
+// approval request): bounded recipients, never throws, preview leads with the
+// slug so the bell deep-links to /s/<slug> — the mod page's Requests tab
+const notifyModsOfRequest = async (subspaceId: string, slug: string, actor: NonNullable<Viewer>, detail: string) => {
+	const recipientIds = await moderatorRecipientIds(subspaceId, actor.id);
+	if (!recipientIds.length) return;
+	await emitNotificationsBulk(
+		recipientIds.map((recipientId) => ({ recipientId, type: 'subspace-join-request' as const })),
+		{ actor: notificationActorOf(actor), targetId: subspaceId, preview: subspaceNotificationPreview(slug, detail) }
+	);
+};
+
+export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef): Promise<Fail | JoinSubspaceResult> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
 	const userId = auth.viewer.id;
@@ -666,21 +719,44 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 	const existing = await findSubspaceMemberDoc(id, userId);
 	const membership = existing ? membershipOfDoc(existing) : null;
 	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
-	if (isActiveMember(membership)) return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false };
-	// private subspaces never self-serve a membership: a moderator's `add` is
-	// what flips the row active (a member who left or was kicked can't walk
-	// back in either — their stale row is not an invitation)
+	if (isActiveMember(membership)) return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false, pending: false };
+	const isPending = !!membership && membership.pending && !membership.left;
+	const things = await getThingsCollection();
+	const now = new Date();
+	// private subspaces never self-serve a membership: joining files a JOIN
+	// REQUEST (the same member row, pending: true) for the mods' Requests
+	// queue — `accept` (or a moderator's `add`) flips it active, `deny` drops
+	// it, `leave` cancels it. A member who left or was kicked can re-request;
+	// their stale row is not an invitation either.
 	if (accessOf(subspace) === 'private') {
-		return fail(403, `s/${slug} is private — a moderator has to add you 🔒`);
+		if (isPending) return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false, pending: true };
+		if ((await membershipCount(userId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
+			return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
+		}
+		if (existing) {
+			// a re-request restarts the row's clock so the queue lists it as new
+			await things.updateOne(
+				{ _id: existing._id } as any,
+				{ $set: { 'crystal.pending': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.approvalRequested': false, 'crystal.role': 'member', createdAt: now, updatedAt: now } }
+			);
+		} else {
+			try {
+				await things.insertOne(newSubspaceMemberDoc(id, userId, { role: 'member', pending: true }) as any);
+			} catch (err) {
+				if (!isDuplicateKey(err)) throw err; // raced ourselves — the request exists
+			}
+		}
+		await notifyModsOfRequest(id, slug, auth.viewer, 'wants to join 🙋');
+		return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: false, pending: true };
 	}
 	if ((await membershipCount(userId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
 		return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
 	}
-	const things = await getThingsCollection();
 	if (existing) {
-		// rejoining after leaving: same doc, cleared left flag (ban state is
-		// already known to be clear here)
-		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.left': false, 'crystal.banned': false, updatedAt: new Date() } });
+		// rejoining after leaving (or a request left over from when the
+		// subspace was private): same doc, active again (ban state is already
+		// known to be clear here)
+		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.left': false, 'crystal.banned': false, 'crystal.pending': false, updatedAt: now } });
 	} else {
 		try {
 			await things.insertOne(newSubspaceMemberDoc(id, userId, { role: 'member' }) as any);
@@ -688,7 +764,7 @@ export const joinSubspace = async (viewerInput: string | Viewer, ref: SubspaceRe
 			if (!isDuplicateKey(err)) throw err; // raced ourselves — already a member
 		}
 	}
-	return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: true };
+	return { ok: true, subspace: await subspaceWithViewer(subspace, userId), joined: true, pending: false };
 };
 
 export const leaveSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef): Promise<Fail | { ok: true; subspace: PublicSubspace }> => {
@@ -706,14 +782,17 @@ export const leaveSubspace = async (viewerInput: string | Viewer, ref: SubspaceR
 	const things = await getThingsCollection();
 	if (membership.banned) {
 		// the ban outlives the membership
-		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.left': true, 'crystal.role': 'member', updatedAt: new Date() } });
+		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.left': true, 'crystal.role': 'member', 'crystal.pending': false, 'crystal.approvalRequested': false, updatedAt: new Date() } });
 	} else {
+		// an active membership ends, a pending join request is cancelled —
+		// either way the row goes
 		await things.deleteOne({ _id: existing._id } as any);
 	}
 	return { ok: true, subspace: await subspaceWithViewer(subspace, userId) };
 };
 
-export type ListMembersQuery = SubspaceRef & { role?: unknown; banned?: unknown; cursor?: unknown; limit?: unknown };
+export type ListMembersQuery = SubspaceRef & { role?: unknown; banned?: unknown; pending?: unknown; approvalRequests?: unknown; cursor?: unknown; limit?: unknown };
+const flagOn = (value: unknown): boolean => value === true || value === 'true' || value === '1';
 
 export const listMembers = async (
 	viewerInput: string | Viewer,
@@ -727,23 +806,30 @@ export const listMembers = async (
 	const membership = await membershipOf(id, viewer?.id);
 	const moderator = canModerate(membership);
 	const role = typeof query.role === 'string' && (SUBSPACE_ROLES as readonly string[]).includes(query.role) ? (query.role as SubspaceRole) : null;
-	const wantBanned = query.banned === true || query.banned === 'true' || query.banned === '1';
+	const wantBanned = flagOn(query.banned);
+	const wantPending = flagOn(query.pending);
+	const wantApprovalRequests = flagOn(query.approvalRequests);
 	// the moderator roster is public (Reddit shows it in the sidebar); the full
-	// member list and the ban list are mod-only
+	// member list, the ban list and the two request queues are mod-only
 	const publicRosterOnly = role === 'owner' || role === 'moderator';
 	if (!moderator && !publicRosterOnly) return fail(403, 'Only moderators can see the member list');
-	if (!moderator && wantBanned) return fail(403, 'Only moderators can see the ban list');
+	if (!moderator && (wantBanned || wantPending || wantApprovalRequests)) return fail(403, 'Only moderators can see that list');
 
 	let match: Record<string, any> = { thingtime: 'subspace-member', targetId: id };
 	if (wantBanned) match = withMatch(match, { 'crystal.banned': true });
-	else match = withMatch(match, { 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true } });
+	else if (wantPending) match = withMatch(match, PENDING_REQUEST_MATCH); // join requests
+	else if (wantApprovalRequests) match = withMatch(match, APPROVAL_REQUEST_MATCH); // posting-approval requests
+	else match = withMatch(match, { 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true }, 'crystal.pending': { $ne: true } });
 	if (role) match = withMatch(match, { 'crystal.role': role });
 	const cursor = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
-	const pageMatch = cursor ? withMatch(match, oldestCursorClause(cursor)) : match;
+	// members page oldest-first (join order); the request queues newest-first
+	// (a re-request restarts the row's createdAt, so the newest request leads)
+	const newestFirst = wantPending || wantApprovalRequests;
+	const pageMatch = cursor ? withMatch(match, newestFirst ? chronoCursorClause(cursor) : oldestCursorClause(cursor)) : match;
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find(pageMatch as any)
-		.sort({ createdAt: 1, shareId: 1 })
+		.sort({ createdAt: newestFirst ? -1 : 1, shareId: 1 })
 		.limit(limit + 1)
 		.toArray()) as any[];
 	const page = docs.slice(0, limit);
@@ -753,8 +839,8 @@ export const listMembers = async (
 	return { ok: true, members: page.map((doc) => toPublicMember(doc, profiles.get(String(doc.ownerId)) || null)), nextCursor };
 };
 
-export type MemberAction = 'add' | 'remove' | 'approve' | 'unapprove' | 'ban' | 'unban' | 'role';
-const MEMBER_ACTIONS: MemberAction[] = ['add', 'remove', 'approve', 'unapprove', 'ban', 'unban', 'role'];
+export type MemberAction = 'add' | 'remove' | 'approve' | 'unapprove' | 'ban' | 'unban' | 'role' | 'accept' | 'deny' | 'request-approval';
+const MEMBER_ACTIONS: MemberAction[] = ['add', 'remove', 'approve', 'unapprove', 'ban', 'unban', 'role', 'accept', 'deny', 'request-approval'];
 
 export type MutateMemberInput = SubspaceRef & {
 	userId?: unknown;
@@ -775,6 +861,38 @@ const resolveTargetUserId = async (input: { userId?: unknown; username?: unknown
 	return fail(400, 'userId or username required');
 };
 
+// `request-approval` is the one member action a plain member takes on
+// THEMSELVES: an active member of a RESTRICTED subspace asks the mods for
+// posting rights (approvalRequested: true on their own row; the mods'
+// Requests tab lists it, `approve` grants it, `deny` clears it). No mod log —
+// it is not a moderator action — but the mods are notified.
+const requestPostingApproval = async (
+	viewer: NonNullable<Viewer>,
+	subspace: any,
+	input: MutateMemberInput
+): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
+	const id = String(subspace.shareId);
+	const slug = String(subspace.crystal?.slug || id);
+	const userId = viewer.id;
+	if (typeof input.userId === 'string' && input.userId.trim() && input.userId.trim() !== userId) return fail(403, 'You can only request posting approval for yourself');
+	if (typeof input.username === 'string' && input.username.trim() && input.username.trim().toLowerCase() !== String(viewer.username || '').toLowerCase()) {
+		return fail(403, 'You can only request posting approval for yourself');
+	}
+	if (accessOf(subspace) !== 'restricted') return fail(400, `s/${slug} doesn’t need posting approval — ${accessOf(subspace) === 'public' ? 'anyone can post' : 'every member can post'}`);
+	const existing = await findSubspaceMemberDoc(id, userId);
+	const membership = existing ? membershipOfDoc(existing) : null;
+	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
+	if (!isActiveMember(membership)) return fail(403, `Join s/${slug} first, then ask for posting approval ✋`);
+	if (membership!.approved || canModerate(membership)) return fail(400, `You can already post in s/${slug} ✅`);
+	const things = await getThingsCollection();
+	if (!membership!.approvalRequested) {
+		await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.approvalRequested': true, updatedAt: new Date() } });
+		await notifyModsOfRequest(id, slug, viewer, 'wants to post ✋');
+	}
+	const [fresh, profiles] = await Promise.all([findSubspaceMemberDoc(id, userId), resolveProfiles([userId])]);
+	return { ok: true, member: toPublicMember(fresh, profiles.get(userId) || null) };
+};
+
 export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
@@ -786,6 +904,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	const slug = String(subspace.crystal?.slug || id);
 	const action = MEMBER_ACTIONS.includes(input.action as MemberAction) ? (input.action as MemberAction) : null;
 	if (!action) return fail(400, `action must be one of ${MEMBER_ACTIONS.join(', ')}`);
+	if (action === 'request-approval') return requestPostingApproval(auth.viewer, subspace, input);
 	const gate = await requireModerator(id, actorId);
 	if (gate.ok === false) return gate;
 	const actorIsOwner = gate.membership.role === 'owner';
@@ -799,30 +918,60 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	if (target && target.role === 'moderator' && !target.left && !actorIsOwner && (action === 'ban' || action === 'remove' || action === 'role')) {
 		return fail(403, 'Only the owner can moderate other moderators');
 	}
+	const targetPending = !!target && target.pending && !target.left && !target.banned;
+	const targetAskedForApproval = !!target && target.approvalRequested && !target.approved && isActiveMember(target);
 	const reason = sanitizeReason(input.reason);
 	const now = new Date();
 	let set: Record<string, unknown> = {};
 	let detail: Record<string, unknown> | null = null;
+	// a denied join request drops its row entirely (the user may ask again)
+	let deleteRow = false;
 
 	switch (action) {
 		case 'add':
-			set = { 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null };
+			// also accepts a pending join request (activates the same row)
+			set = { 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, 'crystal.pending': false };
+			if (targetPending) detail = { acceptedRequest: true };
+			break;
+		case 'accept':
+			if (!targetPending) return fail(404, 'No pending join request from that user');
+			set = { 'crystal.pending': false, 'crystal.left': false, 'crystal.banned': false };
+			break;
+		case 'deny':
+			// a pending JOIN request is dropped; a posting-approval request is
+			// cleared (the member stays a member)
+			if (targetPending) deleteRow = true;
+			else if (targetAskedForApproval) set = { 'crystal.approvalRequested': false };
+			else return fail(404, 'No pending request from that user');
+			detail = { request: targetPending ? 'join' : 'approval' };
 			break;
 		case 'remove':
 			if (!existing || target?.left) return fail(404, 'Not a member');
-			set = { 'crystal.left': true, 'crystal.role': 'member' };
+			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.pending': false, 'crystal.approvalRequested': false };
 			break;
 		case 'approve':
-			set = { 'crystal.approved': true };
+			// grants posting rights and settles any open approval request
+			set = { 'crystal.approved': true, 'crystal.approvalRequested': false };
 			break;
 		case 'unapprove':
-			set = { 'crystal.approved': false };
+			set = { 'crystal.approved': false, 'crystal.approvalRequested': false };
 			break;
 		case 'ban': {
 			if (targetUserId === actorId) return fail(400, 'You can’t ban yourself');
 			const days = Number(input.banDays);
 			const banUntil = Number.isFinite(days) && days > 0 ? new Date(now.getTime() + Math.min(days, MAX_BAN_DAYS) * 86_400_000) : null;
-			set = { 'crystal.banned': true, 'crystal.banReason': reason, 'crystal.banUntil': banUntil, 'crystal.role': 'member', 'crystal.approved': false };
+			// banning a pending requester also removes the request (they never
+			// joined, so the row reads left like any pre-emptive ban)
+			set = {
+				'crystal.banned': true,
+				'crystal.banReason': reason,
+				'crystal.banUntil': banUntil,
+				'crystal.role': 'member',
+				'crystal.approved': false,
+				'crystal.pending': false,
+				'crystal.approvalRequested': false,
+				...(targetPending ? { 'crystal.left': true } : {})
+			};
 			detail = { banUntil: banUntil ? banUntil.toISOString() : null };
 			break;
 		}
@@ -833,13 +982,20 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 			if (!actorIsOwner) return fail(403, 'Only the owner can promote or demote moderators 👑');
 			const role = input.role === 'moderator' || input.role === 'member' ? input.role : null;
 			if (!role) return fail(400, 'role must be moderator or member');
-			set = { 'crystal.role': role, 'crystal.left': false, ...(role === 'moderator' ? { 'crystal.approved': true, 'crystal.banned': false } : {}) };
+			// promoting a pending requester lets them in as a moderator
+			set = {
+				'crystal.role': role,
+				'crystal.left': false,
+				...(role === 'moderator' ? { 'crystal.approved': true, 'crystal.banned': false, 'crystal.pending': false, 'crystal.approvalRequested': false } : {})
+			};
 			detail = { role };
 			break;
 		}
 	}
 
-	if (existing) {
+	if (deleteRow) {
+		await things.deleteOne({ _id: existing._id } as any);
+	} else if (existing) {
 		await things.updateOne({ _id: existing._id } as any, { $set: { ...set, updatedAt: now } });
 	} else {
 		if (action === 'remove' || action === 'unban' || action === 'unapprove') return fail(404, 'Not a member');
@@ -860,8 +1016,9 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 		}
 	}
 	await writeModlog(id, actorId, `member.${action}`, { userId: targetUserId, reason, detail });
-	// the affected user hears about role + ban changes (never throws; prefs
-	// gate delivery). The preview leads with s/<slug> so the bell deep-links.
+	// the affected user hears about role + ban changes and an accepted join
+	// request (never throws; prefs gate delivery). The preview leads with
+	// s/<slug> so the bell deep-links.
 	const notice =
 		action === 'role'
 			? { type: 'subspace-role' as const, text: set['crystal.role'] === 'moderator' ? 'you are now a moderator 🎩' : 'you are no longer a moderator' }
@@ -872,7 +1029,9 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 					}
 				: action === 'unban'
 					? { type: 'subspace-ban' as const, text: 'your ban was lifted 🕊️' }
-					: null;
+					: action === 'accept' || (action === 'add' && targetPending)
+						? { type: 'subspace-join-accepted' as const, text: 'your request to join was accepted — welcome in 🎉' }
+						: null;
 	if (notice) {
 		await emitNotification({
 			recipientId: targetUserId,
@@ -884,7 +1043,12 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	}
 	const fresh = await findSubspaceMemberDoc(id, targetUserId);
 	const profiles = await resolveProfiles([targetUserId]);
-	return { ok: true, member: toPublicMember(fresh, profiles.get(targetUserId) || null) };
+	// a denied join request has no row any more — answer the last known shape,
+	// flagged left so a client drops it from every list
+	const profile = profiles.get(targetUserId) || null;
+	if (!fresh && !existing) return fail(404, 'Not a member');
+	const member = fresh ? toPublicMember(fresh, profile) : { ...toPublicMember(existing, profile), pending: false, approvalRequested: false, left: true };
+	return { ok: true, member };
 };
 
 // ---------------------------------------------------------------------------
@@ -939,9 +1103,10 @@ export const transferSubspace = async (
 					_id: targetDoc._id,
 					targetId: id,
 					'crystal.left': { $ne: true },
+					'crystal.pending': { $ne: true },
 					$or: [{ 'crystal.banned': { $ne: true } }, { 'crystal.banUntil': { $ne: null, $lte: now } }]
 				} as any,
-				{ $set: { 'crystal.role': 'owner', 'crystal.approved': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, updatedAt: now } },
+				{ $set: { 'crystal.role': 'owner', 'crystal.approved': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, 'crystal.pending': false, 'crystal.approvalRequested': false, updatedAt: now } },
 				{ session }
 			);
 			if (!Number(crowned?.matchedCount)) throw new LifecycleConflict(`The new owner is no longer an active member of s/${slug} — reload and try again`);

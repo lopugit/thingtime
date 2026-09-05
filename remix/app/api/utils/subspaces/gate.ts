@@ -10,7 +10,7 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { MAX_SUBSPACE_MEMBERSHIPS_PER_USER, type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
-import { flairById, isModeratorRole, type SubspaceFlair } from './subspaceCore';
+import { flairById, isActiveMembershipState, isModeratorRole, type SubspaceFlair } from './subspaceCore';
 
 export type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -31,6 +31,11 @@ export type SubspaceMembership = {
 	banReason: string | null;
 	banUntil: Date | null;
 	left: boolean;
+	// a join request awaiting a moderator (private subspaces): the row exists
+	// so the request can be listed/accepted/denied, but it is NOT a membership
+	pending: boolean;
+	// an active member of a restricted subspace asking for posting approval
+	approvalRequested: boolean;
 };
 export type ViewerSubspaceRoles = ReadonlyMap<string, SubspaceMembership>;
 
@@ -49,13 +54,16 @@ export const membershipOfDoc = (doc: any, nowMs = Date.now()): SubspaceMembershi
 		banned: crystal.banned === true && !banExpired,
 		banReason: typeof crystal.banReason === 'string' ? crystal.banReason : null,
 		banUntil: banUntil && Number.isFinite(banUntil.getTime()) ? banUntil : null,
-		left: crystal.left === true
+		left: crystal.left === true,
+		pending: crystal.pending === true,
+		approvalRequested: crystal.approvalRequested === true
 	};
 };
 
-export const isActiveMember = (membership: SubspaceMembership | null | undefined): boolean => !!membership && !membership.left && !membership.banned;
-export const canModerate = (membership: SubspaceMembership | null | undefined): boolean =>
-	!!membership && !membership.banned && !membership.left && isModeratorRole(membership.role);
+// row exists && !left && !banned && !pending — a pending join request is not
+// a membership (it can't read a private feed, post, or count as a member)
+export const isActiveMember = (membership: SubspaceMembership | null | undefined): boolean => isActiveMembershipState(membership);
+export const canModerate = (membership: SubspaceMembership | null | undefined): boolean => isActiveMember(membership) && isModeratorRole(membership!.role);
 
 export const findSubspaceById = async (id: unknown): Promise<any | null> => {
 	if (typeof id !== 'string' || !id.trim()) return null;

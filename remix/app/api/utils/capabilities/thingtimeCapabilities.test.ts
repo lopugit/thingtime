@@ -27,22 +27,18 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
     assert.equal(manifest.features[feature]?.version, '1.2.0', feature);
   }
-  for (const feature of [
-    'api.subspaces',
-    'api.subspaces-get',
-    'api.subspaces-update',
-    'api.subspaces-join',
-    'api.subspaces-leave',
-    'api.subspaces-moderate',
-    'api.subspaces-modlog',
-    'api.subspaces-feed',
-    'api.things-updown'
-  ]) {
+  for (const feature of ['api.subspaces-update', 'api.subspaces-moderate', 'api.subspaces-modlog', 'api.subspaces-feed', 'api.things-updown']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
-  // round 2: member role/ban actions notify (additive side effect), and the
-  // notification type enum gained the subspace-* family
-  assert.equal(manifest.features['api.subspaces-members']?.version, '1.1.0');
+  // round 2 S2 — join requests + posting-approval requests: private join
+  // files a request (join 1.1.0), leave cancels it (1.1.0), the list rows /
+  // detail carry viewer.pending + approvalRequested and mods get the queue
+  // sizes (subspaces + get 1.1.0), and members grew the two queues + accept /
+  // deny / request-approval (1.1.0 → 1.2.0; 1.1.0 was the role/ban notify)
+  for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-join', 'api.subspaces-leave']) {
+    assert.equal(manifest.features[feature]?.version, '1.1.0', feature);
+  }
+  assert.equal(manifest.features['api.subspaces-members']?.version, '1.2.0');
   // S1 review: transfer's writes are guarded (a racing transfer answers 409 —
   // compatible correction); delete answers { privatePosts } beside
   // releasedPosts, holds the slug for its previous owner and refuses (409)

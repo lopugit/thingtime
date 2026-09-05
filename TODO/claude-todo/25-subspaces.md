@@ -41,9 +41,19 @@ reactions untouched.
   removed; former mods notified), transfer writes guarded against racing
   transfers (409), mod-page **Danger zone** with Chakra modals that stay
   mounted through an in-flight transfer; verify section M.
+- ✅ S2 — join requests for private subspaces (`/join` → pending row, not a
+  membership; `/leave` cancels; `members?pending=1`; actions `accept` /
+  `deny`; `add` accepts; ban removes the request) + posting-approval
+  requests in restricted ones (`request-approval` self action;
+  `members?approvalRequests=1`; `approve` grants + clears, `unapprove`/`deny`
+  clear); `viewer.pending` / `viewer.approvalRequested`, mods' `pendingCount`
+  + `approvalRequestCount`; mod notifications (`subspace-join-request`
+  "wants to join / wants to post") + `subspace-join-accepted`; subspace page
+  "Request to join 🔒 → Requested ✓ · cancel" + "Request posting approval ✋",
+  mod page **Requests** tab with badges; verify section N.
 
 ## Follow-ups (not in this PR)
-- Join-request queue for private subspaces; user flairs; per-subspace wiki +
+- User flairs; per-subspace wiki +
   sidebar widgets; crossposting; a "popular subspaces" board on /explore;
   notifications for a post's first upvotes; API-level "all subspaces I
   moderate" digest; subspace archive (read-only freeze, distinct from delete).

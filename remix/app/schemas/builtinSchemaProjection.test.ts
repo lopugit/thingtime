@@ -39,7 +39,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   updown: ['direction', 'updownKey'],
   // rules + flairs: records → dropped; branding is a closed object → mirrored
   subspace: ['slug', 'name', 'description', 'access', 'nsfw', 'branding'],
-  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left'],
+  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested'],
   'subspace-modlog': ['action', 'postId', 'userId', 'reason'], // detail: record → dropped
   'subspace-tombstone': ['slug', 'subspaceId', 'previousOwnerId', 'deletedAt'],
   folder: ['name', 'icon', 'description'],

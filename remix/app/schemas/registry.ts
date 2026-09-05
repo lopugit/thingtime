@@ -1651,13 +1651,17 @@ const subspaceMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Subspace member',
-  summary: "One user's membership of one subspace — role, posting approval, and ban state (relational child doc).",
+  summary: "One user's membership of one subspace — role, posting approval, ban state, and the two request flags (relational child doc).",
   detail:
     'targetId = the subspace shareId, ownerId = the member. Uniqueness rides the root uniqueKeys ' +
     'namespace (`subspaceMemberKey:<subspaceId>:<userId>`). Roles: owner > moderator > member. A ' +
     'banned user keeps a member doc (banned: true) so the ban outlives leaving/rejoining; approved ' +
-    'marks a trusted poster in restricted subspaces. Written only by /api/v1/subspaces/join, /leave ' +
-    'and /members.',
+    'marks a trusted poster in restricted subspaces. A JOIN REQUEST to a private subspace is the same ' +
+    'row with pending: true — not a membership (isActiveMember = row && !left && !banned && !pending; ' +
+    'member counts exclude it) until a moderator accepts it (or adds the user); deny drops the row, ' +
+    'leave cancels it. approvalRequested marks an active member of a restricted subspace who asked ' +
+    'for posting rights (approve grants + clears, unapprove/deny clear). Written only by ' +
+    '/api/v1/subspaces/join, /leave and /members.',
   createdVia: 'POST /api/v1/subspaces (creator) / POST /api/v1/subspaces/join',
   fields: [
     { name: 'memberKey', type: 'string', required: true, description: 'Unique `<subspaceId>:<userId>` pair key.' },
@@ -1666,9 +1670,11 @@ const subspaceMemberSchema: ThingtimeSchema = {
     { name: 'banned', type: 'boolean', required: false, description: 'Banned from posting, commenting and voting here.' },
     { name: 'banReason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Shown to the banned user.' },
     { name: 'banUntil', type: 'date', required: false, description: 'Temporary ban expiry (null = permanent).' },
-    { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' }
+    { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' },
+    { name: 'pending', type: 'boolean', required: false, description: 'A join request awaiting a moderator (private subspaces) — not yet a member.' },
+    { name: 'approvalRequested', type: 'boolean', required: false, description: 'An active member asked for posting approval (restricted subspaces).' }
   ],
-  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false }
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false, pending: false, approvalRequested: false }
 };
 
 const subspaceModlogSchema: ThingtimeSchema = {
@@ -1681,7 +1687,7 @@ const subspaceModlogSchema: ThingtimeSchema = {
   detail:
     'targetId = the subspace shareId, ownerId = the acting moderator. Written beside every ' +
     'moderation mutation (remove/approve/pin/lock/flair/ban/unban/role/approve-poster/settings) so ' +
-    '/s/<slug>/mod can show who did what; listed via GET /api/v1/subspaces/modlog.',
+    '/s/<slug>/mod can show who did what (member.accept / member.deny cover the Requests queue); listed via GET /api/v1/subspaces/modlog.',
   createdVia: 'moderation mutations under /api/v1/subspaces/*',
   fields: [
     { name: 'action', type: 'string', required: true, max: 40, description: 'Action key, e.g. post.remove, member.ban.' },

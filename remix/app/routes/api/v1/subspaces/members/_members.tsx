@@ -5,9 +5,10 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 import { listMembers, mutateMember } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
-// GET /api/v1/subspaces/members?slug=&role=&banned=&cursor=&limit= — the
-// moderator roster is public (role=owner|moderator); the full member list
-// and the ban list (banned=1) are moderator-only.
+// GET /api/v1/subspaces/members?slug=&role=&banned=&pending=&approvalRequests=&cursor=&limit=
+// — the moderator roster is public (role=owner|moderator); the full member
+// list, the ban list (banned=1), the join-request queue (pending=1) and the
+// posting-approval queue (approvalRequests=1) are moderator-only.
 export const loader = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   const params = new URL(request.url).searchParams;
@@ -16,6 +17,8 @@ export const loader = async ({ request }: { request: Request }) => {
     slug: params.get('slug'),
     role: params.get('role'),
     banned: params.get('banned'),
+    pending: params.get('pending'),
+    approvalRequests: params.get('approvalRequests'),
     cursor: params.get('cursor'),
     limit: params.get('limit')
   });
@@ -27,8 +30,11 @@ export const loader = async ({ request }: { request: Request }) => {
 
 // POST /api/v1/subspaces/members — { id|slug, userId|username, action, role?,
 // reason?, banDays? } — moderator actions on one member: add (private
-// subspaces), remove (kick), approve/unapprove (restricted posting), ban/unban
-// (optionally temporary), role (owner only: moderator|member).
+// subspaces; accepts a pending join request too), accept/deny (the Requests
+// queue), remove (kick), approve/unapprove (restricted posting), ban/unban
+// (optionally temporary), role (owner only: moderator|member) — plus
+// request-approval, the one SELF action (a member of a restricted subspace
+// asks for posting rights).
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {

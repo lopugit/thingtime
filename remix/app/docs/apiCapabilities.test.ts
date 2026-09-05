@@ -70,7 +70,18 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	// answers { privatePosts } (additive → minor)
 	assert.equal(manifest.features['api.subspaces-transfer'], '1.0.1');
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
-	assert.equal(manifest.features['api.subspaces-members'], '1.1.0');
 	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
+});
+
+test('subspace join requests + posting-approval requests publish their contract versions', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// S2: private join → pending request (join), leave cancels it, list/detail
+	// carry viewer.pending/approvalRequested (+ mods' queue counts), members
+	// grew pending=1 / approvalRequests=1 + accept / deny / request-approval
+	assert.equal(manifest.features['api.subspaces-join'], '1.1.0');
+	assert.equal(manifest.features['api.subspaces-leave'], '1.1.0');
+	assert.equal(manifest.features['api.subspaces'], '1.1.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.1.0');
+	assert.equal(manifest.features['api.subspaces-members'], '1.2.0');
 });

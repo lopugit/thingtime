@@ -14,7 +14,7 @@ separate focused limited reactions type."
 | kind | doc | uniqueness / index |
 | ---- | --- | ------------------ |
 | `subspace` | `crystal { slug, name, description, access: public\|restricted\|private, nsfw, rules[], flairs[], branding{icon,iconUrl,bannerUrl,accent} }`, `acl ['tt:all']`, owner = creator | root `uniqueKeys` `subspaceSlug:<slug>` (no new index) |
-| `subspace-member` | `targetId` = subspace, `ownerId` = user, `crystal { memberKey, role owner\|moderator\|member, approved, banned, banReason, banUntil, left }` | `uniqueKeys` `subspaceMemberKey:<subspaceId>:<userId>`; control-plane storage (unbilled) |
+| `subspace-member` | `targetId` = subspace, `ownerId` = user, `crystal { memberKey, role owner\|moderator\|member, approved, banned, banReason, banUntil, left, pending (join request), approvalRequested (posting request) }` | `uniqueKeys` `subspaceMemberKey:<subspaceId>:<userId>`; control-plane storage (unbilled) |
 | `subspace-modlog` | `targetId` = subspace, `ownerId` = acting mod, `crystal { action, postId, userId, reason, detail }` | control-plane storage |
 | `updown` | `targetId` = post **or comment**, `crystal { direction up\|down, updownKey }`, `acl ['tt:inherit']` | `uniqueKeys` `updownKey:<targetId>~<userId>`; cascades with its target |
 | post | `crystal.title` (≤300), `crystal.subspaceId`, `crystal.flairId`; root `subspaceMod { status, removedById, removedAt, reason, pinned, locked, nsfw, spoiler }` (server-only) and root `subspacePrivate` fence | **one** new partial index `things_subspace_posts` on `{ 'crystal.subspaceId', createdAt, shareId }` |
@@ -70,6 +70,30 @@ score field.
   far: `subspace-role` on promote/demote/transfer/deletion (former mods, bulk
   ≤200), `subspace-ban` on ban/unban. `subspace-join-request` and
   `subspace-report` default email OFF (mod-queue firehose).
+- Join requests + posting-approval requests (round 2, S2): the member row
+  carries two flags. `pending` = a join request to a PRIVATE subspace —
+  `/join` on a private subspace files it (200, `{ joined: false, pending:
+  true }`) instead of 403; it is NOT a membership (`isActiveMember` = row
+  && !left && !banned && !pending, so the private feed, posting, `mine=1`,
+  member counts and transfer-eligibility all exclude it); `/leave` cancels
+  it; the mods are notified (`subspace-join-request` · "wants to join 🙋");
+  `members?pending=1` (mods) lists requests newest first (a re-request
+  restarts the row's clock); member actions `accept` (→ active, notifies
+  `subspace-join-accepted`, modlog `member.accept`) and `deny` (row dropped,
+  optional reason, modlog `member.deny`); a mod's `add` on a pending row
+  accepts it too (same notification); banning a pending requester removes
+  the request; promoting one lets them in as a mod. `approvalRequested` =
+  an active, unapproved member of a RESTRICTED subspace who asked to post:
+  self action `request-approval` (400 unless restricted / already able to
+  post, 403 for non-members or someone else; idempotent; notifies the mods
+  "wants to post ✋"; no modlog — not a mod action); `members?
+  approvalRequests=1` lists them; `approve` grants + clears, `unapprove` /
+  `deny` clear. Projection: `viewer.pending`, `viewer.approvalRequested`,
+  `member.pending`, `member.approvalRequested`, and for moderators
+  `pendingCount` + `approvalRequestCount` on the detail (one `$group`).
+  Pure helpers `isActiveMembershipState` / `canPostIn` / `requestKindOf`
+  in `subspaceCore.ts` are unit-tested. Contracts: `subspaces-join`,
+  `-leave`, `-get`, `subspaces` → 1.1.0, `subspaces-members` → 1.2.0.
 - `api/utils/things/updownCore.ts` + `updown.ts` — tally + vote toggle
   (same/other-direction/clear semantics as poll votes), batched tallies.
 - `things.ts` — `Viewer.subspaceRoles` loaded beside `friendIds`; `canView`
@@ -94,9 +118,16 @@ score field.
 - `/s` directory (search, Mine, create modal), `/s/:slug` (banner/icon/join,
   sort tabs + range, subspace-locked composer with title + flair, sidebar
   About/Rules/Flairs/Moderators, private wall; a 404 evicts the cached copy),
-  `/s/:slug/mod` (Queue, Members, Banned, Settings + the owner's **Danger
-  zone** — Transfer ownership with a confirm modal, Delete subspace with a
-  retype-the-slug modal that navigates to `/s` — Rules, Flairs, Log).
+  `/s/:slug/mod` (Queue, **Requests** — join requests + posting-approval
+  requests with Accept/Approve ✓ / Deny per row, optimistic removal + badge
+  counts on the tab and on the subspace page's "Mod tools 🎩" button —
+  Members, Banned, Settings + the owner's **Danger zone** — Transfer
+  ownership with a confirm modal, Delete subspace with a retype-the-slug
+  modal that navigates to `/s` — Rules, Flairs, Log).
+- Subspace page + directory cards: a private subspace's button reads
+  "Request to join 🔒" → "Requested ✓ · cancel" (optimistic, count
+  untouched); a restricted subspace's ✋ hint gains "Request posting
+  approval ✋" → "Approval requested ✓".
 - Bell + Settings → Notifications carry the six subspace types; subspace
   rows click through to `/s/<slug>`.
 - `PostCard`: `🪐 s/<slug>` chip + flair chip + 📌/🔒/18+/⚠️ badges, title h2,
@@ -135,7 +166,13 @@ score field.
   incl. a rich post+comment thing leaves author-only: 404 for outsiders,
   ex-members and anonymous; never back on a home feed) and two concurrent
   transfers from one owner (exactly one 200, the other 409/403, one crown
-  on the roster, `ownerId` agrees)).
+  on the roster, `ownerId` agrees)); section N — join requests + posting
+  approval: request/no-op/cancel, "not a membership" walls (feed 403,
+  mine=1, post 403, transfer 404), mod notifications, mod-only queues +
+  counts, accept/deny walls (403/404) and success, re-request after deny,
+  `add` accepting, ban removing a request, unban → request → accept,
+  request-approval walls (401/403/403/400/400/400) and success, deny /
+  approve / unapprove clearing, manifest versions, cleanup delete).
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger
@@ -148,8 +185,9 @@ score field.
 
 - Owners can't leave while they own the subspace — transfer first (the
   previous owner may leave right after).
-- No join-request queue for private subspaces — mods add members by
-  username; no user flairs (post flairs only); no per-subspace wiki/sidebar
-  widgets beyond About/Rules/Flairs/Mods.
+- No user flairs (post flairs only); no per-subspace wiki/sidebar widgets
+  beyond About/Rules/Flairs/Mods.
+- Deny (join or posting request) does not notify the requester (Reddit
+  parity — they simply may ask again).
 - Removal reasons are collected with a browser prompt in the card menu (the
   mod page has proper inputs for bans).

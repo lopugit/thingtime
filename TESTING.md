@@ -1224,7 +1224,8 @@ email whose link points at the attacker.
       375px the sidebar stacks below the posts; nothing scrolls horizontally.
 - [ ] Join/Leave paints instantly (count ±1, button flips) and reverts with a
       toast on failure; owners see no leave button (API 409s anyway); banned
-      viewers see a 🚫 notice and a disabled button.
+      viewers see a 🚫 notice and a disabled button; on a private subspace
+      the button requests instead of joining (see the join-requests bullet).
 - [ ] A post made from the subspace composer shows the `🪐 s/<slug>` chip,
       the title as an h2, and the flair chip — on `/s/<slug>`, `/feed`,
       `/post/:id` and the author's profile alike. The feed composer's
@@ -1251,16 +1252,18 @@ email whose link points at the attacker.
       owner can promote/demote/moderate other mods; the owner can't be
       banned); Banned (ban with reason + days, unban); Settings (name,
       description, icon, accent, icon/banner URLs; access + 18+ owner-only,
-      disabled for mods); Rules (add/reorder/remove, ≤15); Flairs (emoji/
+      disabled for mods); Requests (join + posting-approval queues, see
+      below); Rules (add/reorder/remove, ≤15); Flairs (emoji/
       label/color/mods-only, ids minted on save, ≤50); Log (newest first).
       A banned user cannot post, comment, vote, or (re)join; the ban outlives
       leaving; a temporary ban expires on its own.
 - [ ] Access: switching to **private** walls `/s/<slug>` for non-members
       (🔒 empty state, feed 403), hides its posts from the home feed, search,
       trending, RSS and direct `/post/:id` reads for non-members, while
-      members and mods keep seeing them; a mod **adds** members to a private
-      subspace; switching back to public re-exposes them. **Restricted**
-      keeps reading open but only approved posters/mods post.
+      members and mods keep seeing them; outsiders **request to join** and a
+      mod accepts (or **adds** them by username); switching back to public
+      re-exposes them. **Restricted** keeps reading open but only approved
+      posters/mods post (members may request approval).
 - [ ] Settings → **Subspaces 🪐**: the vote-pill switches hide the ▲▼ pills
       on posts and/or comments across every mounted card immediately; the
       default sort applies when a `/s/<slug>` link carries no `?sort=`.
@@ -1299,6 +1302,33 @@ email whose link points at the attacker.
       race with a transfer (409) and a subspace with more posts than one
       call releases (409, doc intact — run it again) are refused; former
       mods get a "s/<slug> · was deleted by its owner 🗑️" bell entry.
+- [ ] Join requests (private) + posting-approval requests (restricted):
+      on a **private** `/s/<slug>` the header button reads **Request to
+      join 🔒** → paints **Requested ✓ · cancel** instantly (the count does
+      not move — a request is not a membership: feed 403, `mine=1` empty,
+      posting 403, transfer-to 404), toast "Asked to join s/<slug> 🙋";
+      clicking again cancels (`/leave`, row gone). Directory cards read
+      **Request 🔒** / **Requested ✓**. Mods get a 🙋 `subspace-join-request`
+      bell entry ("s/<slug> · wants to join"), a numeric badge on **Mod
+      tools 🎩** (links straight to the Requests tab) and a **Requests** tab
+      (badge = join + approval requests) with Accept ✓ / Deny per row — the
+      row leaves and the badge drops optimistically, both come back on
+      failure. Accept → member (🎉 `subspace-join-accepted` bell entry,
+      modlog `member.accept`); Deny drops the row (modlog `member.deny`,
+      optional reason) and the user may ask again; a mod's **Add member**
+      on a requester accepts too; banning a requester removes the request.
+      In a **restricted** subspace an unapproved member sees "✋ Only
+      approved posters can post here" + **Request posting approval ✋** →
+      **Approval requested ✓** (disabled); mods get "s/<slug> · wants to
+      post", the request shows in the Requests tab's second card and as
+      "✋ asked to post" on the Members row; Approve grants posting and clears
+      it, Deny / Unapprove clear it; asking as a non-member (403), for
+      someone else (403), when already able to post (400) or in a public /
+      private subspace (400) is refused. `members?pending=1` /
+      `?approvalRequests=1` are 403 for non-mods; `memberCount` and the
+      member list never include pending rows; `viewer.pending` /
+      `viewer.approvalRequested` ride every subspace projection and mods
+      get `pendingCount` / `approvalRequestCount` on the detail.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

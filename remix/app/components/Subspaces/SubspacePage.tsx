@@ -15,12 +15,15 @@ import { useSubspacePrefs } from './useSubspacePrefs';
 import {
 	ACCESS_META,
 	composerContextOf,
+	openRequestCount,
 	subspaceAccent,
 	SUBSPACE_SORTS,
 	TOP_RANGES,
 	type PublicSubspace,
 	type SubspaceFeedResponse,
 	type SubspaceFeedSort,
+	type SubspaceJoinResponse,
+	type SubspaceMemberResponse,
 	type TopRange
 } from './subspaceTypes';
 
@@ -157,6 +160,7 @@ export const SubspacePage = () => {
 	const [wall, setWall] = React.useState<string | null>(null);
 	const [notFound, setNotFound] = React.useState(false);
 	const [membershipBusy, setMembershipBusy] = React.useState(false);
+	const [approvalBusy, setApprovalBusy] = React.useState(false);
 
 	const requestSeqRef = React.useRef(0);
 	const apiRef = React.useRef(api);
@@ -256,6 +260,9 @@ export const SubspacePage = () => {
 		setSubspace((prev) => (prev && typeof prev.postCount === 'number' ? { ...prev, postCount: prev.postCount + 1 } : prev));
 	}, []);
 
+	// Join / leave — and, for a PRIVATE subspace, request to join / cancel the
+	// request. Paints first (count ±1, button flips), reconciles from the
+	// response, reverts on failure.
 	const toggleMembership = async () => {
 		if (!subspace) return;
 		if (!user) {
@@ -264,18 +271,38 @@ export const SubspacePage = () => {
 		}
 		if (membershipBusy) return;
 		setMembershipBusy(true);
-		const joining = !subspace.viewer.member;
+		const { viewer } = subspace;
+		const leaving = viewer.member || viewer.pending; // an active membership ends, a pending request is cancelled
+		const requesting = !leaving && subspace.access === 'private';
 		const before = subspace;
 		setSubspace({
 			...subspace,
-			memberCount: Math.max(0, subspace.memberCount + (joining ? 1 : -1)),
-			viewer: { ...subspace.viewer, member: joining, role: joining ? subspace.viewer.role || 'member' : null }
+			memberCount: Math.max(0, subspace.memberCount + (leaving ? (viewer.member ? -1 : 0) : requesting ? 0 : 1)),
+			viewer: {
+				...viewer,
+				member: !leaving && !requesting,
+				pending: requesting,
+				approvalRequested: leaving ? false : viewer.approvalRequested,
+				role: leaving || requesting ? null : viewer.role || 'member'
+			}
 		});
 		try {
-			const resp: any = joining ? await api.v1.subspaces.join({ id: subspace.id }) : await api.v1.subspaces.leave({ id: subspace.id });
-			if (resp?.subspace) setSubspace((prev) => ({ ...(prev || resp.subspace), ...resp.subspace, postCount: prev?.postCount }));
-			lopu({ title: joining ? `Joined s/${subspace.slug} 🪐` : `Left s/${subspace.slug}`, status: 'success', duration: 4000 });
-			if (joining && wall) load({ reset: true });
+			const resp = leaving ? ((await api.v1.subspaces.leave({ id: subspace.id })) as { subspace?: PublicSubspace }) : ((await api.v1.subspaces.join({ id: subspace.id })) as SubspaceJoinResponse);
+			if (resp?.subspace) setSubspace((prev) => ({ ...(prev || resp.subspace!), ...resp.subspace!, postCount: prev?.postCount }));
+			const pendingNow = !leaving && 'pending' in resp && resp.pending;
+			lopu({
+				title: leaving
+					? viewer.pending
+						? `Join request to s/${subspace.slug} cancelled`
+						: `Left s/${subspace.slug}`
+					: pendingNow
+						? `Asked to join s/${subspace.slug} 🙋`
+						: `Joined s/${subspace.slug} 🪐`,
+				description: pendingNow ? 'The moderators will take a look — you’ll get a notification when you’re in.' : undefined,
+				status: 'success',
+				duration: pendingNow ? 6000 : 4000
+			});
+			if (!leaving && !pendingNow && wall) load({ reset: true });
 		} catch (err: any) {
 			setSubspace(before);
 			lopu({ title: err?.error || 'Could not update your membership 😞', status: 'error' });
@@ -284,8 +311,45 @@ export const SubspacePage = () => {
 		}
 	};
 
+	// Restricted subspaces: an active, unapproved member asks the mods for
+	// posting rights (paints "Approval requested ✓" first, reverts on failure).
+	const requestApproval = async () => {
+		if (!subspace || approvalBusy) return;
+		if (!user) {
+			lopu({ title: 'Log in to ask for posting approval 🗝️', status: 'info', duration: 6000 });
+			return;
+		}
+		setApprovalBusy(true);
+		const before = subspace;
+		setSubspace({ ...subspace, viewer: { ...subspace.viewer, approvalRequested: true } });
+		try {
+			const resp = (await api.v1.subspaces.requestApproval({ id: subspace.id })) as SubspaceMemberResponse;
+			setSubspace((prev) => (prev ? { ...prev, viewer: { ...prev.viewer, approvalRequested: resp.member?.approvalRequested !== false, approved: resp.member?.approved === true } } : prev));
+			lopu({ title: `Asked the mods of s/${subspace.slug} for posting approval ✋`, description: 'You’ll be able to post here once a moderator approves you.', status: 'success', duration: 6000 });
+		} catch (err: any) {
+			setSubspace(before);
+			lopu({ title: err?.error || 'Could not send the request 😞', status: 'error' });
+		} finally {
+			setApprovalBusy(false);
+		}
+	};
+
 	const accent = subspaceAccent(subspace);
 	const isOwner = subspace?.viewer.role === 'owner';
+	const viewer = subspace?.viewer;
+	const openRequests = openRequestCount(subspace);
+	// join button copy per state (private subspaces request instead of join)
+	const joinLabel = !viewer
+		? 'Join'
+		: viewer.banned
+			? 'Banned 🚫'
+			: viewer.member
+				? 'Joined ✓'
+				: viewer.pending
+					? 'Requested ✓ · cancel'
+					: subspace!.access === 'private'
+						? 'Request to join 🔒'
+						: 'Join';
 
 	if (notFound) {
 		return (
@@ -354,25 +418,42 @@ export const SubspacePage = () => {
 						</Box>
 						<Flex alignItems="center" columnGap={2} paddingTop={7}>
 							{subspace?.viewer.canModerate && (
-								<Button as={Link} to={`/s/${slug}/mod`} size="sm" variant="outline" borderRadius="999px" borderColor="var(--tt-border, #ececef)" color={INK} data-testid="subspace-mod-tools">
+								<Button
+									as={Link}
+									to={openRequests > 0 ? `/s/${slug}/mod?tab=requests` : `/s/${slug}/mod`}
+									size="sm"
+									variant="outline"
+									borderRadius="999px"
+									borderColor="var(--tt-border, #ececef)"
+									color={INK}
+									data-testid="subspace-mod-tools"
+									data-open-requests={openRequests}
+								>
 									Mod tools 🎩
+									{openRequests > 0 && (
+										<Text as="span" marginLeft={2} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={accent} color="white" title={`${openRequests} open request${openRequests === 1 ? '' : 's'}`} data-testid="subspace-mod-tools-badge">
+											{openRequests}
+										</Text>
+									)}
 								</Button>
 							)}
-							{subspace && !isOwner && (
+							{subspace && viewer && !isOwner && (
 								<Button
 									size="sm"
 									borderRadius="999px"
-									variant={subspace.viewer.member ? 'outline' : 'solid'}
-									background={subspace.viewer.member ? 'transparent' : accent}
-									color={subspace.viewer.member ? INK : 'white'}
+									variant={viewer.member || viewer.pending ? 'outline' : 'solid'}
+									background={viewer.member || viewer.pending ? 'transparent' : accent}
+									color={viewer.member || viewer.pending ? INK : 'white'}
 									borderColor="var(--tt-border, #ececef)"
 									_hover={{ opacity: 0.85 }}
 									isLoading={membershipBusy}
-									isDisabled={subspace.viewer.banned || (subspace.access === 'private' && !subspace.viewer.member)}
+									isDisabled={viewer.banned}
 									onClick={toggleMembership}
+									title={viewer.pending ? 'Your join request is waiting for a moderator — click to cancel it' : undefined}
 									data-testid="subspace-join"
+									data-membership={viewer.member ? 'member' : viewer.pending ? 'pending' : 'none'}
 								>
-									{subspace.viewer.banned ? 'Banned 🚫' : subspace.viewer.member ? 'Joined ✓' : subspace.access === 'private' ? 'Private 🔒' : 'Join'}
+									{joinLabel}
 								</Button>
 							)}
 						</Flex>
@@ -422,18 +503,55 @@ export const SubspacePage = () => {
 							</Flex>
 						)}
 						{user && subspace && subspace.viewer.canPost && !wall && <PostComposer onPosted={handlePosted} subspace={composerContextOf(subspace)} />}
-						{user && subspace && !subspace.viewer.canPost && !subspace.viewer.banned && !wall && (
-							<Text fontSize="xs" color={MUTED} paddingX={1}>
-								{subspace.access === 'restricted' ? '✋ Only approved posters can post here — ask a moderator.' : subspace.access === 'private' ? '🔒 Members only.' : ''}
-							</Text>
+						{user && subspace && viewer && !viewer.canPost && !viewer.banned && !wall && (
+							<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingX={1} data-testid="subspace-post-hint">
+								<Text fontSize="xs" color={MUTED}>
+									{subspace.access === 'restricted'
+										? viewer.member
+											? viewer.approvalRequested
+												? '✋ Only approved posters can post here — your request is with the moderators.'
+												: '✋ Only approved posters can post here — ask the moderators.'
+											: '✋ Only approved posters can post here — join, then ask the moderators.'
+										: subspace.access === 'private'
+											? viewer.pending
+												? '🔒 Members only — your join request is waiting for a moderator.'
+												: '🔒 Members only.'
+											: ''}
+								</Text>
+								{subspace.access === 'restricted' && viewer.member && (
+									<Button
+										size="xs"
+										borderRadius="999px"
+										variant={viewer.approvalRequested ? 'ghost' : 'outline'}
+										color={viewer.approvalRequested ? MUTED : INK}
+										borderColor="var(--tt-border, #ececef)"
+										isDisabled={viewer.approvalRequested}
+										isLoading={approvalBusy}
+										onClick={requestApproval}
+										data-testid="subspace-request-approval"
+									>
+										{viewer.approvalRequested ? 'Approval requested ✓' : 'Request posting approval ✋'}
+									</Button>
+								)}
+							</Flex>
 						)}
 
 						{wall ? (
 							<Flex flexDirection="column" alignItems="center" rowGap={2} paddingY={16} border="1px dashed var(--tt-border, #ececef)" borderRadius={RADIUS_LG} data-testid="subspace-wall">
-								<Text fontSize="3xl">🔒</Text>
+								<Text fontSize="3xl">{viewer?.pending ? '🙋' : '🔒'}</Text>
 								<Text fontSize="sm" color={MUTED} textAlign="center" whiteSpace="normal" paddingX={6}>
 									{wall}
 								</Text>
+								{viewer?.pending && (
+									<Text fontSize="xs" color={TEXT} textAlign="center" whiteSpace="normal" paddingX={6} data-testid="subspace-wall-pending">
+										Your join request is waiting for a moderator — you’ll get a notification when you’re in.
+									</Text>
+								)}
+								{user && subspace && !viewer?.pending && !viewer?.banned && subspace.access === 'private' && (
+									<Text fontSize="xs" color={TEXT} textAlign="center" whiteSpace="normal" paddingX={6}>
+										Use <Text as="strong">Request to join 🔒</Text> above — a moderator lets you in.
+									</Text>
+								)}
 							</Flex>
 						) : (
 							<PostList

@@ -8516,13 +8516,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   // touches the native emoji reactions.
   endpoint({
     id: 'subspaces',
+    // 1.1.0: every row's `viewer` carries pending (an open join request to a
+    // private subspace) + approvalRequested; memberCount excludes pending
+    // requesters and `mine=1` lists only ACTIVE memberships (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
       'GET lists subspaces newest-first (public; each row carries memberCount and the caller’s own membership ' +
-      'state under `viewer`) — `?q=` searches slug/name, `?mine=1` narrows to the caller’s memberships. POST ' +
+      'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested) — ' +
+      '`?q=` searches slug/name, `?mine=1` narrows to the caller’s ACTIVE memberships (a pending join request is ' +
+      'not one). POST ' +
       'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
       'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
       'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
@@ -8566,7 +8573,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             name: 'Rainbows',
             access: 'public',
             memberCount: 1,
-            viewer: { role: 'owner', member: true, canModerate: true, canPost: true }
+            viewer: { role: 'owner', member: true, canModerate: true, canPost: true, pending: false, approvalRequested: false }
           }
         }
       },
@@ -8580,14 +8587,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-get',
+    // 1.1.0: viewer.pending / viewer.approvalRequested, and for moderators
+    // pendingCount + approvalRequestCount (the Requests queue sizes) — additive
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
-      'Returns the subspace (branding, rules, flairs, access), memberCount + postCount (live posts only), the ' +
-      'public moderator roster, and `viewer` — the caller’s role, membership, approval, ban state, canModerate ' +
-      'and canPost — so the /s/<slug> page can render its header, sidebar and post button from one call.',
+      'Returns the subspace (branding, rules, flairs, access), memberCount (active members — pending requesters ' +
+      'excluded) + postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, ' +
+      'membership, approval, ban state, canModerate, canPost, pending (an open join request to a private ' +
+      'subspace) and approvalRequested (asked for posting rights in a restricted one) — so the /s/<slug> page can ' +
+      'render its header, sidebar and post button from one call. Moderators additionally get pendingCount and ' +
+      'approvalRequestCount, the sizes of the two request queues (the badge on Mod tools 🎩 / the Requests tab).',
     auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
     methods: ['GET'],
     steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
@@ -8598,9 +8612,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'The subspace.',
         body: {
           ok: true,
-          subspace: { id: 'c0ffee12-…', slug: 'rainbows', name: 'Rainbows', memberCount: 128, postCount: 42, viewer: { role: null, member: false, canModerate: false, canPost: true } },
+          subspace: { id: 'c0ffee12-…', slug: 'rainbows', name: 'Rainbows', memberCount: 128, postCount: 42, viewer: { role: null, member: false, canModerate: false, canPost: true, pending: false, approvalRequested: false } },
           moderators: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner' }]
         }
+      },
+      {
+        status: 200,
+        description: 'As a moderator: the request queue sizes ride along.',
+        body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
       },
       { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
     ]
@@ -8626,36 +8645,56 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-join',
+    // 1.1.0: joining a PRIVATE subspace files a join request (200, pending:
+    // true) instead of answering 403; the response gained `pending` (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
-    summary: 'Joins a public or restricted subspace (private ones need a moderator to add you).',
+    summary: 'Joins a public or restricted subspace, or files a join request with the moderators of a private one.',
     detail:
-      'POST { id|slug }. Creates the caller’s relational subspace-member doc (or restores it after leaving). ' +
-      'Banned users receive 403 with the ban reason; private subspaces answer 403 unless the caller was added ' +
-      'by a moderator. Joining twice is a friendly no-op (joined: false).',
+      'POST { id|slug }. Public and restricted subspaces: creates the caller’s relational subspace-member doc (or ' +
+      'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
+      'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
+      'not counted) — answers { joined: false, pending: true } and notifies the moderators (subspace-join-request, ' +
+      'preview "s/<slug> · wants to join 🙋"); a moderator accepts or denies it from the Requests queue ' +
+      '(POST /api/v1/subspaces/members action accept | deny — a moderator’s `add` accepts too), and ' +
+      'POST /api/v1/subspaces/leave cancels it. Banned users receive 403 with the ban reason. Joining (or ' +
+      'requesting) twice is a friendly no-op (joined: false, and pending: true while the request is open).',
     auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
     methods: ['POST'],
-    steps: ['POST the subspace slug or id.', 'Read the returned subspace.viewer for your new state.'],
+    steps: ['POST the subspace slug or id.', 'Read joined / pending and the returned subspace.viewer for your new state.'],
     requestExamples: [{ name: 'Join', description: 'Join s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
     responseExamples: [
-      { status: 200, description: 'Joined.', body: { ok: true, joined: true, subspace: { slug: 'rainbows', memberCount: 129, viewer: { role: 'member', member: true } } } },
-      { status: 403, description: 'Banned or private.', body: { ok: false, error: 's/rainbows is private — a moderator has to add you 🔒' } }
+      { status: 200, description: 'Joined.', body: { ok: true, joined: true, pending: false, subspace: { slug: 'rainbows', memberCount: 129, viewer: { role: 'member', member: true, pending: false } } } },
+      {
+        status: 200,
+        description: 'Private subspace — a join request is now waiting for the moderators.',
+        body: { ok: true, joined: false, pending: true, subspace: { slug: 'secret', access: 'private', memberCount: 12, viewer: { role: null, member: false, canPost: false, pending: true } } }
+      },
+      { status: 403, description: 'Banned.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } }
     ]
   }),
   endpoint({
     id: 'subspaces-leave',
+    // 1.1.0: leaving with an open join request cancels the request (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Leave subspace',
     endpoint: '/api/v1/subspaces/leave',
-    summary: 'Leaves a subspace (owners can’t leave their own).',
-    detail: 'POST { id|slug }. Removes the caller’s member doc; a banned member’s doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
+    summary: 'Leaves a subspace — or cancels a pending join request (owners can’t leave their own).',
+    detail:
+      'POST { id|slug }. Removes the caller’s member doc — an active membership ends, a pending join request to a ' +
+      'private subspace is cancelled (its row goes, the moderators’ queue no longer lists it); a banned member’s ' +
+      'doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
     auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
     methods: ['POST'],
     steps: ['POST the subspace slug or id.'],
     requestExamples: [{ name: 'Leave', description: 'Leave s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
     responseExamples: [
-      { status: 200, description: 'Left.', body: { ok: true, subspace: { slug: 'rainbows', viewer: { role: null, member: false } } } },
+      { status: 200, description: 'Left (or the pending request cancelled).', body: { ok: true, subspace: { slug: 'rainbows', viewer: { role: null, member: false, pending: false } } } },
       { status: 409, description: 'Owner.', body: { ok: false, error: 'Owners can’t leave their own subspace 👑' } }
     ]
   }),
@@ -8663,36 +8702,54 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'subspaces-members',
     // 1.1.0: role / ban / unban now notify the affected member (subspace-role,
     // subspace-ban) — an additive side effect
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: the Requests queue — GET pending=1 | approvalRequests=1 (mods),
+    // POST actions accept / deny / request-approval (self), rows carry
+    // pending + approvalRequested, `add` on a pending row accepts it, approve /
+    // unapprove settle an approval request (additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
-    summary: 'Lists members (mod roster public, full list + ban list mod-only) and applies moderator member actions.',
+    summary: 'Lists members and the two request queues (mod roster public, everything else mod-only) and applies member actions.',
     detail:
-      'GET ?slug=&role=owner|moderator|member&banned=1&cursor=&limit= — the moderator roster is public; the full ' +
-      'member list and the ban list require a moderator. POST { id|slug, userId|username, action, role?, ' +
-      'reason?, banDays? } with action add (private subspaces), remove (kick), approve/unapprove (restricted ' +
-      'posting rights), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive), or role ' +
-      '(owner only: moderator | member). role, ban and unban notify the affected user (bell types ' +
-      'subspace-role / subspace-ban, preview "s/<slug> · …", targetId = the subspace). ' +
-      'Moderators can’t moderate other moderators or the owner; every action ' +
-      'writes a member.<action> mod-log entry.',
-    auth: { mode: 'optional', description: 'GET of the mod roster works logged out; everything else needs a moderator session.' },
+      'GET ?slug=&role=owner|moderator|member&banned=1&pending=1&approvalRequests=1&cursor=&limit= — the moderator ' +
+      'roster is public; the full member list (active members, oldest-first), the ban list, the JOIN REQUEST ' +
+      'queue (pending=1: users who asked to join a private subspace, newest-first) and the POSTING-APPROVAL ' +
+      'queue (approvalRequests=1: active members of a restricted subspace who asked for posting rights) require a ' +
+      'moderator. Every row carries pending + approvalRequested. POST { id|slug, userId|username, action, role?, ' +
+      'reason?, banDays? } with action add (also accepts a pending join request), accept (pending → active member; ' +
+      'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
+      'posting-approval request; optional reason; 404 without one), remove (kick), approve/unapprove (restricted ' +
+      'posting rights — both settle an open approval request), ban/unban (banDays for a temporary ban; bans on ' +
+      'non-members are pre-emptive; banning a pending requester removes the request), role (owner only: moderator ' +
+      '| member), or request-approval — the one SELF action: an active, unapproved member of a RESTRICTED subspace ' +
+      'asks the mods for posting rights (approvalRequested: true; notifies the mods with subspace-join-request ' +
+      '"s/<slug> · wants to post ✋"; 400 unless the subspace is restricted, 403 for non-members / for someone ' +
+      'else). role, ban, unban and accept notify the affected user (bell types subspace-role / subspace-ban / ' +
+      'subspace-join-accepted, preview "s/<slug> · …", targetId = the subspace); join and approval requests notify ' +
+      'the moderators (subspace-join-request). Moderators can’t moderate other moderators or the owner; every ' +
+      'moderator action writes a member.<action> mod-log entry (request-approval writes none).',
+    auth: { mode: 'optional', description: 'GET of the mod roster works logged out; request-approval needs the member’s own session; everything else needs a moderator session.' },
     methods: ['GET', 'POST'],
     steps: [
       'GET role=moderator for the public mod roster.',
-      'As a moderator, GET the full list, or banned=1 for the ban list.',
-      'POST an action against a username or userId.'
+      'As a moderator, GET the full list, banned=1 for the ban list, pending=1 for join requests, approvalRequests=1 for posting-approval requests.',
+      'POST an action against a username or userId (request-approval acts on yourself).'
     ],
     requestExamples: [
       { name: 'Mod roster', description: 'Who moderates s/rainbows.', method: 'GET', query: { slug: 'rainbows', role: 'moderator' } },
+      { name: 'Join requests', description: 'Who is waiting to get into s/secret.', method: 'GET', query: { slug: 'secret', pending: 1 } },
+      { name: 'Accept a request', description: 'Let a requester in.', method: 'POST', body: { slug: 'secret', username: 'newcomer', action: 'accept' } },
+      { name: 'Ask to post', description: 'A member of restricted s/rainbows asks for posting rights.', method: 'POST', body: { slug: 'rainbows', action: 'request-approval' } },
       { name: 'Ban for a week', description: 'Temporary ban with a reason.', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7 } },
       { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
     ],
     responseExamples: [
-      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
-      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } }
+      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 200, description: 'Accepted — the requester is a member now.', body: { ok: true, member: { userId: '664f…', profile: { username: 'newcomer' }, role: 'member', pending: false, left: false } } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } }
     ]
   }),
   endpoint({

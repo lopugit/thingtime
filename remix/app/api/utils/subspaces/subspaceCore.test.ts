@@ -3,8 +3,11 @@ import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import {
+	canPostIn,
 	confirmSlugMatches,
+	isActiveMembershipState,
 	privatizedPostUpdate,
+	requestKindOf,
 	rankSubspacePosts,
 	RELEASED_POST_UNSET,
 	releaseKindFor,
@@ -155,4 +158,61 @@ test('slugHoldState frees the slug for the previous owner at once and for others
 	// (counts from now — never a free-for-all) both behave
 	assert.equal(slugHoldState({ ownerId: 'prev', crystal: { deletedAt: deletedAt.toISOString() } }, 'stranger', justAfter).held, true);
 	assert.equal(slugHoldState({ ownerId: 'prev', crystal: {} }, 'stranger', justAfter).held, true);
+});
+
+// ── S2: join requests + posting-approval requests ──────────────────────────
+const row = (patch: Partial<{ role: 'owner' | 'moderator' | 'member'; approved: boolean; banned: boolean; left: boolean; pending: boolean; approvalRequested: boolean }> = {}) => ({
+	role: 'member' as const,
+	approved: false,
+	banned: false,
+	left: false,
+	pending: false,
+	approvalRequested: false,
+	...patch
+});
+
+test('isActiveMembershipState: row && !left && !banned && !pending — a pending join request is not a membership', () => {
+	assert.equal(isActiveMembershipState(row()), true);
+	assert.equal(isActiveMembershipState(row({ role: 'moderator' })), true);
+	assert.equal(isActiveMembershipState(row({ pending: true })), false);
+	assert.equal(isActiveMembershipState(row({ left: true })), false);
+	assert.equal(isActiveMembershipState(row({ banned: true })), false);
+	assert.equal(isActiveMembershipState(null), false);
+	assert.equal(isActiveMembershipState(undefined), false);
+	// a legacy row without the new flags reads active (flags default false)
+	assert.equal(isActiveMembershipState({ role: 'member', approved: false, banned: false, left: false }), true);
+});
+
+test('canPostIn: mods always; public → anyone not banned; restricted → approved; private → active members only', () => {
+	for (const access of ['public', 'restricted', 'private'] as const) {
+		assert.equal(canPostIn(access, row({ role: 'owner' })), true, `${access} owner`);
+		assert.equal(canPostIn(access, row({ role: 'moderator' })), true, `${access} mod`);
+		assert.equal(canPostIn(access, row({ banned: true, role: 'moderator' })), false, `${access} banned mod`);
+	}
+	assert.equal(canPostIn('public', null), true);
+	assert.equal(canPostIn('public', row()), true);
+	assert.equal(canPostIn('public', row({ banned: true })), false);
+	assert.equal(canPostIn('restricted', null), false);
+	assert.equal(canPostIn('restricted', row()), false);
+	assert.equal(canPostIn('restricted', row({ approved: true })), true);
+	assert.equal(canPostIn('restricted', row({ approved: true, left: true })), false);
+	assert.equal(canPostIn('private', null), false);
+	assert.equal(canPostIn('private', row()), true);
+	// the S7 edge case, pinned now: a pending requester of a private subspace can't post
+	assert.equal(canPostIn('private', row({ pending: true })), false);
+	assert.equal(canPostIn('private', row({ pending: true, approved: true })), false);
+	assert.equal(canPostIn('private', row({ left: true })), false);
+});
+
+test('requestKindOf sorts a member row into the join queue, the approval queue, or neither', () => {
+	assert.equal(requestKindOf(row({ pending: true })), 'join');
+	assert.equal(requestKindOf(row({ approvalRequested: true })), 'approval');
+	// an approved poster's stale flag is not a request; a pending row is a JOIN request even if it asked to post
+	assert.equal(requestKindOf(row({ approvalRequested: true, approved: true })), null);
+	assert.equal(requestKindOf(row({ pending: true, approvalRequested: true })), 'join');
+	// banned / left / plain rows sit in no queue
+	assert.equal(requestKindOf(row({ pending: true, banned: true })), null);
+	assert.equal(requestKindOf(row({ approvalRequested: true, left: true })), null);
+	assert.equal(requestKindOf(row()), null);
+	assert.equal(requestKindOf(null), null);
 });

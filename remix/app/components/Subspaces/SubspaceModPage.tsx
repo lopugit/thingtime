@@ -33,6 +33,7 @@ import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
 import {
 	ACCESS_META,
+	openRequestCount,
 	type PublicModlogEntry,
 	type PublicSubspace,
 	type PublicSubspaceMember,
@@ -40,14 +41,17 @@ import {
 	type SubspaceDeleteResponse,
 	type SubspaceFeedResponse,
 	type SubspaceFlair,
+	type SubspaceMemberResponse,
 	type SubspaceRule,
 	type SubspaceTransferResponse
 } from './subspaceTypes';
 
 // /s/:slug/mod — moderator tools: the queue (newest posts incl. removed ones,
-// every card carrying its mod menu), members (search + actions), the ban
-// list, settings (identity/branding/access + the owner's Danger zone:
-// transfer ownership / delete), rules, flairs, and the mod log.
+// every card carrying its mod menu), requests (join requests to a private
+// subspace + posting-approval requests in a restricted one: accept/deny),
+// members (search + actions), the ban list, settings (identity/branding/
+// access + the owner's Danger zone: transfer ownership / delete), rules,
+// flairs, and the mod log.
 // Every mutation goes through /api/v1/subspaces/* and re-projects in place.
 
 const INK = 'var(--tt-ink, #16161a)';
@@ -57,7 +61,7 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const RADIUS_LG = 'var(--tt-radius-lg, 16px)';
 
-const TABS = ['queue', 'members', 'banned', 'settings', 'rules', 'flairs', 'log'] as const;
+const TABS = ['queue', 'requests', 'members', 'banned', 'settings', 'rules', 'flairs', 'log'] as const;
 type ModTab = (typeof TABS)[number];
 
 const Label = ({ children }: { children: React.ReactNode }) => (
@@ -127,6 +131,189 @@ const QueuePanel = ({ slug }: { slug: string }) => {
 	);
 };
 
+// ── Requests ───────────────────────────────────────────────────────────────
+// Two queues from the same member rows: JOIN requests (pending: true — people
+// asking into a private subspace; accept → member, deny → row dropped) and
+// POSTING-APPROVAL requests (active members of a restricted subspace who
+// asked; approve → approved poster, deny → flag cleared). Both paint the
+// decision first (row leaves, badge count drops) and put it back on failure.
+type RequestQueue = 'join' | 'approval';
+const RequestRow = (props: { member: PublicSubspaceMember; queue: RequestQueue; busy: boolean; onDecide: (member: PublicSubspaceMember, decision: 'accept' | 'deny') => void }) => {
+	const { member, queue, busy, onDecide } = props;
+	return (
+		<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingY={2} borderBottom={BORDER} _last={{ borderBottom: 'none' }} data-request={member.userId} data-queue={queue}>
+			<Box minWidth={0} flex="1">
+				<Text as={Link} to={member.profile?.username ? `/profile/${member.profile.username}` : '#'} fontSize="sm" fontWeight={600} color={INK} _hover={{ textDecoration: 'underline' }}>
+					{memberName(member)}
+				</Text>
+				<Text fontSize="xs" color={MUTED}>
+					{queue === 'join' ? '🙋 wants to join' : '✋ wants to post'}
+					{' · '}
+					{queue === 'join' ? 'asked ' : 'member since '}
+					{new Date(member.joinedAt).toLocaleDateString()}
+				</Text>
+			</Box>
+			<Flex columnGap={1} flexWrap="wrap">
+				<Button size="xs" borderRadius="999px" isDisabled={busy} onClick={() => onDecide(member, 'accept')} data-testid={queue === 'join' ? 'request-accept' : 'request-approve'}>
+					{queue === 'join' ? 'Accept ✓' : 'Approve ✓'}
+				</Button>
+				<Button size="xs" borderRadius="999px" variant="outline" isDisabled={busy} onClick={() => onDecide(member, 'deny')} data-testid="request-deny">
+					Deny
+				</Button>
+			</Flex>
+		</Flex>
+	);
+};
+
+const RequestsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCounts: (patch: { pendingCount?: number; approvalRequestCount?: number }) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const { slug } = subspace;
+	const [joinRequests, setJoinRequests] = React.useState<PublicSubspaceMember[]>([]);
+	const [approvalRequests, setApprovalRequests] = React.useState<PublicSubspaceMember[]>([]);
+	const [cursors, setCursors] = React.useState<{ join: string | null; approval: string | null }>({ join: null, approval: null });
+	const [loading, setLoading] = React.useState(true);
+	const [busyId, setBusyId] = React.useState<string | null>(null);
+	const onCountsRef = React.useRef(onCounts);
+	onCountsRef.current = onCounts;
+
+	const load = React.useCallback(
+		async (queue?: RequestQueue, cursor?: string | null) => {
+			setLoading(true);
+			try {
+				const wantJoin = !queue || queue === 'join';
+				const wantApproval = !queue || queue === 'approval';
+				const [joinResp, approvalResp]: any[] = await Promise.all([
+					wantJoin ? api.v1.subspaces.members({ slug, pending: true, cursor: queue ? cursor || undefined : undefined, limit: 50 }) : null,
+					wantApproval ? api.v1.subspaces.members({ slug, approvalRequests: true, cursor: queue ? cursor || undefined : undefined, limit: 50 }) : null
+				]);
+				if (joinResp) {
+					setJoinRequests((prev) => (cursor ? [...prev, ...joinResp.members.filter((entry: PublicSubspaceMember) => !prev.some((known) => known.userId === entry.userId))] : joinResp.members));
+					setCursors((prev) => ({ ...prev, join: joinResp.nextCursor ?? null }));
+				}
+				if (approvalResp) {
+					setApprovalRequests((prev) => (cursor ? [...prev, ...approvalResp.members.filter((entry: PublicSubspaceMember) => !prev.some((known) => known.userId === entry.userId))] : approvalResp.members));
+					setCursors((prev) => ({ ...prev, approval: approvalResp.nextCursor ?? null }));
+				}
+				// a fresh first page is the truth for the badges (no more pages → exact)
+				if (!cursor && !queue) {
+					onCountsRef.current({
+						...(joinResp && !joinResp.nextCursor ? { pendingCount: joinResp.members.length } : {}),
+						...(approvalResp && !approvalResp.nextCursor ? { approvalRequestCount: approvalResp.members.length } : {})
+					});
+				}
+			} catch (err: any) {
+				lopu({ title: err?.error || 'Could not load the requests 😞', status: 'error' });
+			} finally {
+				setLoading(false);
+			}
+		},
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[slug]
+	);
+	React.useEffect(() => {
+		load();
+	}, [load]);
+
+	const decide = async (queue: RequestQueue, member: PublicSubspaceMember, decision: 'accept' | 'deny') => {
+		if (busyId) return;
+		setBusyId(member.userId);
+		const setList = queue === 'join' ? setJoinRequests : setApprovalRequests;
+		const countKey = queue === 'join' ? 'pendingCount' : 'approvalRequestCount';
+		const countBefore = subspace[countKey] || 0;
+		// optimistic: the row leaves and the badge drops now
+		setList((prev) => prev.filter((entry) => entry.userId !== member.userId));
+		onCounts({ [countKey]: Math.max(0, countBefore - 1) });
+		try {
+			const action = decision === 'deny' ? 'deny' : queue === 'join' ? 'accept' : 'approve';
+			const resp = (await api.v1.subspaces.mutateMember({ slug, userId: member.userId, action })) as SubspaceMemberResponse;
+			const name = memberName(resp.member || member);
+			lopu({
+				title:
+					decision === 'deny'
+						? queue === 'join'
+							? `Denied ${name}’s request to join`
+							: `Denied ${name}’s posting request`
+						: queue === 'join'
+							? `${name} is in — welcome them 🎉`
+							: `${name} can post now ✅`,
+				status: 'success',
+				duration: 4000
+			});
+		} catch (err: any) {
+			// put the row (and the count) back exactly where it was
+			setList((prev) => (prev.some((entry) => entry.userId === member.userId) ? prev : [member, ...prev]));
+			onCounts({ [countKey]: countBefore });
+			lopu({ title: err?.error || 'Could not decide that request 😞', status: 'error' });
+		} finally {
+			setBusyId(null);
+		}
+	};
+
+	const empty = !loading && joinRequests.length === 0 && approvalRequests.length === 0;
+	return (
+		<Flex flexDirection="column" rowGap={3} data-testid="mod-requests">
+			<Card>
+				<Flex alignItems="baseline" columnGap={2}>
+					<Label>Join requests · {joinRequests.length}</Label>
+					<Text fontSize="xs" color={MUTED}>
+						{subspace.access === 'private' ? 'people asking into this private subspace' : 'only private subspaces take join requests'}
+					</Text>
+				</Flex>
+				{loading && joinRequests.length === 0 && (
+					<Text fontSize="sm" color={MUTED}>
+						Loading…
+					</Text>
+				)}
+				{!loading && joinRequests.length === 0 && (
+					<Text fontSize="sm" color={MUTED}>
+						Nobody is waiting 🕊️
+					</Text>
+				)}
+				{joinRequests.map((member) => (
+					<RequestRow key={member.userId} member={member} queue="join" busy={busyId === member.userId} onDecide={(target, decision) => decide('join', target, decision)} />
+				))}
+				{cursors.join && (
+					<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load('join', cursors.join)}>
+						Load more ⬇️
+					</Button>
+				)}
+			</Card>
+			<Card>
+				<Flex alignItems="baseline" columnGap={2}>
+					<Label>Posting approval requests · {approvalRequests.length}</Label>
+					<Text fontSize="xs" color={MUTED}>
+						{subspace.access === 'restricted' ? 'members asking to post here' : 'only restricted subspaces take posting requests'}
+					</Text>
+				</Flex>
+				{loading && approvalRequests.length === 0 && (
+					<Text fontSize="sm" color={MUTED}>
+						Loading…
+					</Text>
+				)}
+				{!loading && approvalRequests.length === 0 && (
+					<Text fontSize="sm" color={MUTED}>
+						No one is asking 🕊️
+					</Text>
+				)}
+				{approvalRequests.map((member) => (
+					<RequestRow key={member.userId} member={member} queue="approval" busy={busyId === member.userId} onDecide={(target, decision) => decide('approval', target, decision)} />
+				))}
+				{cursors.approval && (
+					<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load('approval', cursors.approval)}>
+						Load more ⬇️
+					</Button>
+				)}
+			</Card>
+			{empty && (
+				<Text fontSize="xs" color={MUTED} paddingX={1}>
+					Requests land here the moment someone asks — you’ll also get a 🙋 bell notification.
+				</Text>
+			)}
+		</Flex>
+	);
+};
+
 // ── Members / banned ───────────────────────────────────────────────────────
 const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAction: (member: PublicSubspaceMember, action: string, extra?: Record<string, unknown>) => void }) => {
 	const { member, isOwner, onAction } = props;
@@ -139,6 +326,7 @@ const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAc
 				<Text fontSize="xs" color={MUTED}>
 					{member.role === 'owner' ? '👑 owner' : member.role === 'moderator' ? '🎩 moderator' : 'member'}
 					{member.approved && member.role === 'member' ? ' · ✅ approved poster' : ''}
+					{member.approvalRequested ? ' · ✋ asked to post' : ''}
 					{member.banned ? ` · 🚫 banned${member.banUntil ? ` until ${new Date(member.banUntil).toLocaleDateString()}` : ''}${member.banReason ? ` (${member.banReason})` : ''}` : ''}
 					{' · joined '}
 					{new Date(member.joinedAt).toLocaleDateString()}
@@ -898,15 +1086,37 @@ export const SubspaceModPage = () => {
 				{subspace && !denied && (
 					<Tabs index={TABS.indexOf(tab)} onChange={(index) => setTab(TABS[index])} variant="soft-rounded" size="sm" colorScheme="gray" isLazy>
 						<TabList flexWrap="wrap" rowGap={1} data-testid="mod-tabs">
-							{TABS.map((entry) => (
-								<Tab key={entry} textTransform="capitalize" fontSize="xs">
-									{entry}
-								</Tab>
-							))}
+							{TABS.map((entry) => {
+								const badge = entry === 'requests' ? openRequestCount(subspace) : 0;
+								return (
+									<Tab
+										key={entry}
+										textTransform="capitalize"
+										fontSize="xs"
+										data-tab={entry}
+										data-badge={badge || undefined}
+										// explicit selected colours: the theme paints the selected soft-rounded
+										// tab ink-on-ink (label invisible), so pin ink background + card text;
+										// the count pill inverts on it so it stays legible
+										_selected={{ background: INK, color: 'var(--tt-card, #ffffff)' }}
+										sx={{ '&[aria-selected="true"] [data-count-pill]': { background: 'var(--tt-card, #ffffff)', color: INK } }}
+									>
+										{entry}
+										{badge > 0 && (
+											<Text as="span" data-count-pill marginLeft={1.5} fontSize="10px" fontWeight={700} lineHeight="1" paddingX={1.5} paddingY="3px" borderRadius="999px" background={INK} color="var(--tt-card, #ffffff)" data-testid="mod-requests-badge">
+												{badge}
+											</Text>
+										)}
+									</Tab>
+								);
+							})}
 						</TabList>
 						<TabPanels>
 							<TabPanel paddingX={0}>
 								<QueuePanel slug={slug} />
+							</TabPanel>
+							<TabPanel paddingX={0}>
+								<RequestsPanel subspace={subspace} onCounts={(patch) => setSubspace((prev) => (prev ? { ...prev, ...patch } : prev))} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<MembersPanel slug={slug} banned={false} isOwner={subspace.viewer.role === 'owner'} />

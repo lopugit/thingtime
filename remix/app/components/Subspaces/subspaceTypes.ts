@@ -18,6 +18,10 @@ export type PublicSubspaceViewer = {
 	banUntil: string | null;
 	canModerate: boolean;
 	canPost: boolean;
+	// an open join request to a private subspace (not a member yet)
+	pending: boolean;
+	// asked the mods for posting approval (restricted subspaces)
+	approvalRequested: boolean;
 };
 
 export type PublicSubspace = {
@@ -33,10 +37,17 @@ export type PublicSubspace = {
 	ownerId: string;
 	memberCount: number;
 	postCount?: number;
+	// moderators only (detail): sizes of the Requests queues
+	pendingCount?: number;
+	approvalRequestCount?: number;
 	createdAt: string;
 	updatedAt: string;
 	viewer: PublicSubspaceViewer;
 };
+
+// open requests a moderator sees (badge on Mod tools 🎩 / the Requests tab)
+export const openRequestCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount'> | null | undefined): number =>
+	(subspace?.pendingCount || 0) + (subspace?.approvalRequestCount || 0);
 
 export type PublicSubspaceMember = {
 	userId: string;
@@ -47,8 +58,15 @@ export type PublicSubspaceMember = {
 	banReason: string | null;
 	banUntil: string | null;
 	left: boolean;
+	pending: boolean;
+	approvalRequested: boolean;
 	joinedAt: string;
 };
+
+// POST /api/v1/subspaces/join — joined: true for public/restricted;
+// pending: true when a PRIVATE subspace filed a join request instead
+export type SubspaceJoinResponse = { ok: true; subspace: PublicSubspace; joined: boolean; pending: boolean };
+export type SubspaceMemberResponse = { ok: true; member: PublicSubspaceMember };
 
 export type PublicModlogEntry = {
 	id: string;
@@ -93,7 +111,7 @@ export const TOP_RANGES: { id: TopRange; label: string }[] = [
 export const ACCESS_META: Record<SubspaceAccess, { label: string; emoji: string; hint: string }> = {
 	public: { label: 'Public', emoji: '🌐', hint: 'Anyone can view and post' },
 	restricted: { label: 'Restricted', emoji: '✋', hint: 'Anyone can view; approved posters post' },
-	private: { label: 'Private', emoji: '🔒', hint: 'Members only — a moderator adds you' }
+	private: { label: 'Private', emoji: '🔒', hint: 'Members only — request to join, a moderator lets you in' }
 };
 
 export type SubspaceFeedResponse = { ok: true; subspace: PublicSubspace; posts: PublicPost[]; nextCursor: string | null; sort: SubspaceFeedSort };

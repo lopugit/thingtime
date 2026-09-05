@@ -611,15 +611,34 @@ export function useApi() {
         async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' }),
         [asyncFetcher]
       ),
+      // join answers { joined, pending }: a PRIVATE subspace files a join
+      // request (pending: true) for the mods' Requests queue; leave cancels it
       join: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/join', errorContext: 'join the subspace' }), [asyncFetcher]),
       leave: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/leave', errorContext: 'leave the subspace' }), [asyncFetcher]),
+      // pending=1 → join requests, approvalRequests=1 → posting-approval
+      // requests (both moderator-only, newest first)
       members: useCallback(
-        async (args: { slug?: string; id?: string; role?: string; banned?: boolean; cursor?: string; limit?: number }) =>
-          getJson(`/api/v1/subspaces/members${toQuery({ ...args, banned: args?.banned ? 1 : undefined })}`),
+        async (args: { slug?: string; id?: string; role?: string; banned?: boolean; pending?: boolean; approvalRequests?: boolean; cursor?: string; limit?: number }) =>
+          getJson(
+            `/api/v1/subspaces/members${toQuery({
+              ...args,
+              banned: args?.banned ? 1 : undefined,
+              pending: args?.pending ? 1 : undefined,
+              approvalRequests: args?.approvalRequests ? 1 : undefined
+            })}`
+          ),
         []
       ),
+      // actions: add | remove | approve | unapprove | ban | unban | role |
+      // accept | deny (the Requests queue) | request-approval (self — an
+      // active member of a restricted subspace asks for posting rights)
       mutateMember: useCallback(
         async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        [asyncFetcher]
+      ),
+      requestApproval: useCallback(
+        async (args: { slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...args, action: 'request-approval' }, { action: '/api/v1/subspaces/members', errorContext: 'request posting approval' }),
         [asyncFetcher]
       ),
       moderate: useCallback(

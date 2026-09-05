@@ -242,9 +242,44 @@ export const rankSubspacePosts = (candidates: readonly RankCandidate[], sort: Su
 };
 
 // ---------------------------------------------------------------------------
-// Roles.
+// Roles + membership state.
 export const ROLE_RANK: Record<SubspaceRole, number> = { member: 0, moderator: 1, owner: 2 };
 export const isModeratorRole = (role: SubspaceRole | null | undefined): boolean => role === 'owner' || role === 'moderator';
+
+// The lean membership flags every predicate below reads (gate.ts's
+// SubspaceMembership is a superset). `pending` = a join request awaiting a
+// moderator: the row exists so it can be listed / accepted / denied, but it is
+// NOT a membership — it cannot read a private feed, post, or count as a
+// member. `approvalRequested` = an active member of a restricted subspace
+// asking for posting rights.
+export type MembershipState = { role: SubspaceRole; approved: boolean; banned: boolean; left: boolean; pending: boolean; approvalRequested: boolean };
+
+// isActiveMember: row exists && !left && !banned && !pending
+export const isActiveMembershipState = (membership: Partial<MembershipState> | null | undefined): boolean =>
+	!!membership && membership.left !== true && membership.banned !== true && membership.pending !== true;
+
+// May this viewer post here? Moderators always; otherwise the access mode
+// decides: public → anyone not banned (members and strangers alike),
+// restricted → approved posters, private → active members. A pending
+// requester of a private subspace can't post (they are not a member yet).
+export const canPostIn = (access: SubspaceAccessMode, membership: Partial<MembershipState> | null | undefined): boolean => {
+	if (membership?.banned) return false;
+	const active = isActiveMembershipState(membership);
+	if (active && isModeratorRole(membership!.role)) return true;
+	if (access === 'public') return true;
+	if (access === 'restricted') return active && membership!.approved === true;
+	return active;
+};
+
+// Which queue a member row belongs in, if any — the mod page's Requests tab
+// shows join requests (pending) and posting-approval requests (an active,
+// unapproved member who asked).
+export const requestKindOf = (membership: Partial<MembershipState> | null | undefined): 'join' | 'approval' | null => {
+	if (!membership || membership.left === true || membership.banned === true) return null;
+	if (membership.pending === true) return 'join';
+	if (membership.approvalRequested === true && membership.approved !== true) return 'approval';
+	return null;
+};
 
 // ---------------------------------------------------------------------------
 // Lifecycle (transfer / delete).

@@ -99,20 +99,30 @@ export const SubspacesDirectoryPage = () => {
 		}
 		if (busyId) return;
 		setBusyId(subspace.id);
-		const joining = !subspace.viewer.member;
+		// an active membership ends / a pending join request is cancelled; a
+		// PRIVATE subspace files a request instead of joining outright
+		const leaving = subspace.viewer.member || subspace.viewer.pending;
+		const requesting = !leaving && subspace.access === 'private';
 		// optimistic: flip membership + count instantly, revert on failure
-		const patch = (entry: PublicSubspace, member: boolean, delta: number): PublicSubspace => ({
-			...entry,
-			memberCount: Math.max(0, entry.memberCount + delta),
-			viewer: { ...entry.viewer, member, role: member ? entry.viewer.role || 'member' : null }
-		});
-		setSubspaces((prev) => prev.map((entry) => (entry.id === subspace.id ? patch(entry, joining, joining ? 1 : -1) : entry)));
+		const before = subspace;
+		const optimistic: PublicSubspace = {
+			...subspace,
+			memberCount: Math.max(0, subspace.memberCount + (leaving ? (subspace.viewer.member ? -1 : 0) : requesting ? 0 : 1)),
+			viewer: { ...subspace.viewer, member: !leaving && !requesting, pending: requesting, role: leaving || requesting ? null : subspace.viewer.role || 'member' }
+		};
+		setSubspaces((prev) => prev.map((entry) => (entry.id === subspace.id ? optimistic : entry)));
 		try {
-			const resp: any = joining ? await api.v1.subspaces.join({ id: subspace.id }) : await api.v1.subspaces.leave({ id: subspace.id });
+			const resp: any = leaving ? await api.v1.subspaces.leave({ id: subspace.id }) : await api.v1.subspaces.join({ id: subspace.id });
 			if (resp?.subspace) setSubspaces((prev) => prev.map((entry) => (entry.id === subspace.id ? { ...entry, ...resp.subspace } : entry)));
-			lopu({ title: joining ? `Joined s/${subspace.slug} 🪐` : `Left s/${subspace.slug}`, status: 'success', duration: 4000 });
+			const pendingNow = !leaving && resp?.pending === true;
+			lopu({
+				title: leaving ? (subspace.viewer.pending ? `Join request to s/${subspace.slug} cancelled` : `Left s/${subspace.slug}`) : pendingNow ? `Asked to join s/${subspace.slug} 🙋` : `Joined s/${subspace.slug} 🪐`,
+				description: pendingNow ? 'The moderators will take a look — you’ll get a notification when you’re in.' : undefined,
+				status: 'success',
+				duration: pendingNow ? 6000 : 4000
+			});
 		} catch (err: any) {
-			setSubspaces((prev) => prev.map((entry) => (entry.id === subspace.id ? patch(entry, !joining, joining ? -1 : 1) : entry)));
+			setSubspaces((prev) => prev.map((entry) => (entry.id === subspace.id ? before : entry)));
 			lopu({ title: err?.error || 'Could not update your membership 😞', status: 'error' });
 		} finally {
 			setBusyId(null);

@@ -96,9 +96,9 @@ export const SubspaceCard = (props: {
 					size="xs"
 					flexShrink={0}
 					borderRadius="999px"
-					variant={subspace.viewer.member ? 'outline' : 'solid'}
-					background={subspace.viewer.member ? 'transparent' : subspaceAccent(subspace)}
-					color={subspace.viewer.member ? INK : 'white'}
+					variant={subspace.viewer.member || subspace.viewer.pending ? 'outline' : 'solid'}
+					background={subspace.viewer.member || subspace.viewer.pending ? 'transparent' : subspaceAccent(subspace)}
+					color={subspace.viewer.member || subspace.viewer.pending ? INK : 'white'}
 					borderColor="var(--tt-border, #ececef)"
 					_hover={{ opacity: 0.85 }}
 					isLoading={busy}
@@ -108,9 +108,10 @@ export const SubspaceCard = (props: {
 						event.stopPropagation();
 						onToggleMembership(subspace);
 					}}
-					aria-label={subspace.viewer.member ? `Leave s/${subspace.slug}` : `Join s/${subspace.slug}`}
+					aria-label={subspace.viewer.member ? `Leave s/${subspace.slug}` : subspace.viewer.pending ? `Cancel your join request to s/${subspace.slug}` : subspace.access === 'private' ? `Request to join s/${subspace.slug}` : `Join s/${subspace.slug}`}
+					data-membership={subspace.viewer.member ? 'member' : subspace.viewer.pending ? 'pending' : 'none'}
 				>
-					{subspace.viewer.banned ? 'Banned' : subspace.viewer.member ? 'Joined ✓' : subspace.access === 'private' ? 'Private 🔒' : 'Join'}
+					{subspace.viewer.banned ? 'Banned' : subspace.viewer.member ? 'Joined ✓' : subspace.viewer.pending ? 'Requested ✓' : subspace.access === 'private' ? 'Request 🔒' : 'Join'}
 				</Button>
 			)}
 		</Flex>
