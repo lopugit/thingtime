@@ -129,6 +129,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
+- [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
+- [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
+- [ ] Switching accounts in Security immediately shows only that account’s cached passkeys; failed list fetches show a retry action, not a misleading empty list.
+- [ ] Both capability manifests advertise passkey register/options and login/options at 1.1.0; the client rejects missing, older, wrong-origin or breaking contracts.
+- [ ] iOS release: the signed app includes `webcredentials:thingtime.com`; the HTTPS AASA response includes its exact application identifier. Verify Face ID sign-in and registration on a physical device after installing the rebuilt signed app. A simulator build alone is not acceptance evidence.
+
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
       unique index: `node scripts/verify-passkeys.mjs` covers it (two data
       things may share one `crystal.linkKey`; the real link still dedupes to
@@ -151,7 +158,7 @@ is fixed, and cite the checklist you ran in the PR description.
       completed Face ID/Touch ID/1Password ceremony must not return a generic
       verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      49/49 — full software-authenticator ceremony: registration, duplicate
+      every check — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
