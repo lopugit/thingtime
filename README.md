@@ -348,3 +348,25 @@ PR-scoped production-preview wildcard. Set `ADMIN_PREVIEW_DISPATCHER_LOGIN` to
 the exact installed GitHub App bot login. Use domains and environment ids from
 your own Vercel project; never copy another project's account-specific
 identifiers or verification records.
+
+## Desktop and Recovery release pipeline
+
+`electron-release.yml` delegates main publication to the same protected worker
+as `electron-pr-release.yml`. Only a main push or owner dispatch can select main;
+PR callers retain the owner/same-repository/desktop-release label gate. Reusable
+workflows retain the original caller event, as documented in
+[GitHub's context rules](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
+Both lanes test and package desktop plus Recovery ZIPs before publication.
+
+Keep the product main-release listener's permissions at `contents: write` and
+`pull-requests: read` to permit the nested worker. Roll out that listener through
+the regular product promotion. Do not merge this control-plane branch into the
+application. Manual owner dispatch from `github-actions` can verify an approved
+product PR independently of main promotion.
+
+Signing still requires all six existing repository secrets: `MAC_CSC_LINK`,
+`MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER`, and `APPLE_TEAM_ID`. Use your own account's credentials;
+configure none to produce the explicit unsigned lane, or all six for Developer
+ID plus notarization. Partial configuration fails. Unsigned builds are marked
+in tags, filenames and notes, are prereleases, and never become latest.

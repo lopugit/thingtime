@@ -8,6 +8,11 @@ name: Thingtime Electron PR Release
 on:
   workflow_call:
     inputs:
+      release_kind:
+        description: Protected main release or approved PR release
+        required: false
+        default: pr
+        type: string
       pr_number:
         description: Existing same-repository PR number to sign and publish
         required: false
@@ -29,7 +34,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: electron-pr-release-${{ inputs.pr_number || github.event.inputs.pr_number || github.event.pull_request.number || 'unknown' }}
+  group: electron-release-${{ inputs.release_kind || 'pr' }}-${{ inputs.pr_number || github.event.inputs.pr_number || github.event.pull_request.number || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -39,18 +44,25 @@ jobs:
     # maintainer label. A complete Developer ID/notarization secret set yields
     # the trusted lane; an entirely absent set yields a clearly labelled,
     # manually approved UNSIGNED lane. Partial configuration fails closed.
+    # Reusable workflows retain the caller's event_name; it is never
+    # "workflow_call" for a push/PR/dispatch listener.
     if: >-
       github.repository == 'lopugit/thingtime' && (
-        (github.event_name == 'workflow_dispatch' &&
-          github.ref_name == 'github-actions' &&
-          github.actor == github.repository_owner) ||
-        (github.event_name == 'workflow_call' &&
-          (github.ref_name == 'develop' || github.ref_name == 'main') &&
-          ((inputs.triggering_event == 'workflow_dispatch' && github.actor == github.repository_owner) ||
-           (inputs.triggering_event == 'pull_request_target' &&
-             github.event.pull_request.head.repo.full_name == github.repository &&
-             github.event.pull_request.author_association == 'OWNER' &&
-             contains(github.event.pull_request.labels.*.name, 'desktop-release'))))
+        (inputs.release_kind == 'main' && (
+          (github.event_name == 'push' && github.ref_name == 'main') ||
+          (github.event_name == 'workflow_dispatch' &&
+            (github.ref_name == 'github-actions' || github.ref_name == 'main') &&
+            github.actor == github.repository_owner))) ||
+        (inputs.release_kind != 'main' && (
+          (github.event_name == 'workflow_dispatch' &&
+            (github.ref_name == 'github-actions' || github.ref_name == 'develop' || github.ref_name == 'main') &&
+            github.actor == github.repository_owner) ||
+          (github.event_name == 'pull_request_target' &&
+            (github.ref_name == 'develop' || github.ref_name == 'main') &&
+            inputs.triggering_event == 'pull_request_target' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.author_association == 'OWNER' &&
+            contains(github.event.pull_request.labels.*.name, 'desktop-release'))))
       )
     runs-on: macos-latest
     steps:
@@ -61,19 +73,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.inputs.pr_number || github.event.pull_request.number }}
           TRIGGERING_EVENT: ${{ inputs.triggering_event || github.event_name }}
+          RELEASE_KIND: ${{ inputs.release_kind || 'pr' }}
           CALL_MODE: ${{ github.event_name }}
           CONTROL_REF: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "lopugit/thingtime"
+          if [ "${RELEASE_KIND}" = main ]; then
+            case "${CALL_MODE}:${CONTROL_REF}" in
+              push:main) head_sha="${GITHUB_SHA}" ;;
+              workflow_dispatch:github-actions|workflow_dispatch:main)
+                test "${GITHUB_ACTOR}" = "${GITHUB_REPOSITORY_OWNER}"
+                head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+                ;;
+              *) echo "::error::Main releases require a main push or owner dispatch."; exit 1 ;;
+            esac
+            [[ "${head_sha}" =~ ^[0-9a-f]{40}$ ]]
+            {
+              echo "head_ref=main"
+              echo "head_sha=${head_sha}"
+              echo "pr_number="
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          test "${RELEASE_KIND}" = pr
           case "${PR_NUMBER}" in
             ''|*[!0-9]*) echo "::error::A numeric PR number is required."; exit 1 ;;
           esac
+          test "${TRIGGERING_EVENT}" = "${CALL_MODE}"
           case "${TRIGGERING_EVENT}" in
             pull_request_target|workflow_dispatch) ;;
             *) echo "::error::Unsupported release caller event: ${TRIGGERING_EVENT}"; exit 1 ;;
           esac
           case "${CALL_MODE}:${CONTROL_REF}" in
-            workflow_dispatch:github-actions|workflow_call:develop|workflow_call:main) ;;
+            workflow_dispatch:github-actions|workflow_dispatch:develop|workflow_dispatch:main|pull_request_target:develop|pull_request_target:main) ;;
             *) echo "::error::Release worker must run directly on github-actions or through a develop/main listener."; exit 1 ;;
           esac
 
@@ -84,7 +117,7 @@ jobs:
           author_association="$(printf '%s' "${pr_json}" | jq -r '.author_association // empty')"
           test "${head_repository}" = "${GITHUB_REPOSITORY}"
           test -n "${head_ref}"
-          test "${#head_sha}" = 40
+          [[ "${head_sha}" =~ ^[0-9a-f]{40}$ ]]
 
           if [ "${TRIGGERING_EVENT}" = "pull_request_target" ]; then
             test "${author_association}" = "OWNER"
@@ -181,6 +214,7 @@ jobs:
         id: version
         shell: bash
         env:
+          RELEASE_KIND: ${{ inputs.release_kind || 'pr' }}
           DISTRIBUTION: ${{ steps.distribution.outputs.distribution }}
           PR_NUMBER: ${{ steps.source.outputs.pr_number }}
           PR_REF: ${{ steps.source.outputs.head_ref }}
@@ -192,7 +226,11 @@ jobs:
           branch_slug="${branch_slug:0:48}"
           test -n "${branch_slug}"
           short_sha="${PR_SHA:0:12}"
-          release_version="${base_version}-pr.${PR_NUMBER}.${branch_slug}.g${short_sha}"
+          if [ "${RELEASE_KIND}" = main ]; then
+            release_version="${base_version}+build.${GITHUB_RUN_NUMBER}.g${short_sha}"
+          else
+            release_version="${base_version}-pr.${PR_NUMBER}.${branch_slug}.g${short_sha}"
+          fi
           release_title="Thingtime Desktop ${release_version}"
           if [ "${DISTRIBUTION}" = "unsigned" ]; then
             release_version="${release_version}.unsigned"
@@ -220,7 +258,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view "${THINGTIME_ELECTRON_RELEASE_TAG}" >/dev/null 2>&1; then
+          # API/auth failures must fail this step, not masquerade as absence.
+          tags="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name')"
+          if printf '%s\n' "${tags}" | grep -Fxq -- "${THINGTIME_ELECTRON_RELEASE_TAG}"; then
             echo "exists=true" >> "${GITHUB_OUTPUT}"
             echo "::notice::${THINGTIME_ELECTRON_RELEASE_TAG} already exists; skipping duplicate publication."
           else
@@ -324,6 +364,7 @@ jobs:
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
         env:
+          RELEASE_KIND: ${{ inputs.release_kind || 'pr' }}
           PR_NUMBER: ${{ steps.source.outputs.pr_number }}
           PR_REF: ${{ steps.source.outputs.head_ref }}
           PR_SHA: ${{ steps.source.outputs.head_sha }}
@@ -331,13 +372,13 @@ jobs:
           set -euo pipefail
           {
             if [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = "unsigned" ]; then
-              echo "## ⚠️ UNSIGNED Thingtime Desktop PR release"
+              echo "## ⚠️ UNSIGNED Thingtime Desktop release"
             else
-              echo "## Signed Thingtime Desktop PR release"
+              echo "## Signed Thingtime Desktop release"
             fi
             echo
             echo "- Version: \`${THINGTIME_ELECTRON_RELEASE_VERSION}\`"
-            echo "- Pull request: #${PR_NUMBER}"
+            if [ -n "${PR_NUMBER}" ]; then echo "- Pull request: #${PR_NUMBER}"; fi
             echo "- Branch: \`${PR_REF}\`"
             echo "- Commit: \`${PR_SHA}\`"
             if [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = "unsigned" ]; then
@@ -356,13 +397,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_SHA: ${{ steps.source.outputs.head_sha }}
+          RELEASE_KIND: ${{ inputs.release_kind || 'pr' }}
         run: |
           set -euo pipefail
+          publication_flags=(--latest=false)
+          if [ "${RELEASE_KIND}" != main ] || [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = unsigned ]; then
+            publication_flags+=(--prerelease)
+          else
+            publication_flags=(--latest)
+          fi
           gh release create "${THINGTIME_ELECTRON_RELEASE_TAG}" electron/release-upload/* \
             --target "${PR_SHA}" \
             --title "${THINGTIME_ELECTRON_RELEASE_TITLE}" \
             --notes-file electron-release-notes.md \
-            --prerelease
+            "${publication_flags[@]}"
 
       - name: Remove ephemeral signing material
         if: always()

@@ -1,169 +1,19 @@
 name: Electron App Release
 
+# The main and PR entrypoints share one tested packaging/signing pipeline.
+# Reusable workflows retain the caller event; source validation pins main.
 on:
   workflow_call:
-  push:
-    branches:
-      - main
-    paths:
-      - electron/**
-      - .github/workflows/electron-release.yml
   workflow_dispatch:
 
 permissions:
   contents: write
-
-concurrency:
-  group: electron-release-main
-  cancel-in-progress: false
+  pull-requests: read
 
 jobs:
   release:
-    name: Build and publish Electron release
-    runs-on: macos-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-    steps:
-      - name: Check out main
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.12.1 --activate
-
-      - name: Resolve release metadata version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          base_version="$(node -p "require('./electron/package.json').version")"
-          build_number="${GITHUB_RUN_NUMBER}"
-          release_version="${base_version}+build.${build_number}"
-          release_tag="electron-v${release_version}"
-
-          {
-            echo "THINGTIME_ELECTRON_BASE_VERSION=${base_version}"
-            echo "THINGTIME_ELECTRON_BUILD_NUMBER=${build_number}"
-            echo "THINGTIME_ELECTRON_RELEASE_VERSION=${release_version}"
-            echo "THINGTIME_ELECTRON_RELEASE_TAG=${release_tag}"
-          } >> "${GITHUB_ENV}"
-
-          {
-            echo "base_version=${base_version}"
-            echo "build_number=${build_number}"
-            echo "release_version=${release_version}"
-            echo "release_tag=${release_tag}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Stop if this release already exists
-        id: existing_release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if gh release view "${THINGTIME_ELECTRON_RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "exists=true" >> "${GITHUB_OUTPUT}"
-            echo "::notice::${THINGTIME_ELECTRON_RELEASE_TAG} already exists; skipping duplicate publish."
-          else
-            echo "exists=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Install Remix dependencies
-        if: steps.existing_release.outputs.exists != 'true'
-        run: corepack pnpm --dir remix install --frozen-lockfile
-
-      - name: Install Electron dependencies
-        if: steps.existing_release.outputs.exists != 'true'
-        run: corepack pnpm --dir electron install --frozen-lockfile
-
-      - name: Build Electron bundle
-        if: steps.existing_release.outputs.exists != 'true'
-        run: corepack pnpm --dir electron run dist:unsigned
-
-      - name: Collect release assets
-        if: steps.existing_release.outputs.exists != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-
-          raw_assets=(electron/release/*.dmg electron/release/*.zip electron/release/*.pkg)
-
-          if [ "${#raw_assets[@]}" -eq 0 ]; then
-            echo "::error::No Electron .dmg, .zip, or .pkg assets were produced."
-            exit 1
-          fi
-
-          asset_dir="electron/release-upload"
-          safe_version="${THINGTIME_ELECTRON_RELEASE_VERSION//+/-}"
-          arch="$(uname -m)"
-
-          rm -rf "${asset_dir}"
-          mkdir -p "${asset_dir}"
-
-          index=0
-          for asset in "${raw_assets[@]}"; do
-            ext="${asset##*.}"
-            destination="${asset_dir}/Thingtime-Electron-App-Release-${safe_version}-macos-${arch}.${ext}"
-
-            if [ -e "${destination}" ]; then
-              destination="${asset_dir}/Thingtime-Electron-App-Release-${safe_version}-macos-${arch}-${index}.${ext}"
-            fi
-
-            cp "${asset}" "${destination}"
-            index=$((index + 1))
-          done
-
-          ls -lah "${asset_dir}"
-
-      - name: Generate release notes
-        if: steps.existing_release.outputs.exists != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          generated_notes="$(
-            gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
-              -f tag_name="${THINGTIME_ELECTRON_RELEASE_TAG}" \
-              -f target_commitish="${GITHUB_SHA}" \
-              --jq ".body" 2>/dev/null || true
-          )"
-
-          {
-            echo "## Electron App Release"
-            echo
-            echo "- Version: \`${THINGTIME_ELECTRON_RELEASE_VERSION}\`"
-            echo "- Base version: \`${THINGTIME_ELECTRON_BASE_VERSION}\`"
-            echo "- Build metadata: \`build.${THINGTIME_ELECTRON_BUILD_NUMBER}\`"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo
-            if [ -n "${generated_notes}" ]; then
-              echo "${generated_notes}"
-            else
-              echo "## Changes"
-              git log -1 --pretty="format:- %s (%h)"
-              echo
-            fi
-          } > electron-release-notes.md
-
-      - name: Publish GitHub release
-        if: steps.existing_release.outputs.exists != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          gh release create "${THINGTIME_ELECTRON_RELEASE_TAG}" \
-            electron/release-upload/* \
-            --target "${GITHUB_SHA}" \
-            --title "Thingtime Electron App Release ${THINGTIME_ELECTRON_RELEASE_VERSION}" \
-            --notes-file electron-release-notes.md
+    uses: ./.github/workflows/electron-pr-release.yml
+    with:
+      release_kind: main
+      triggering_event: ${{ github.event_name }}
+    secrets: inherit
