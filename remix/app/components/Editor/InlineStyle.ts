@@ -6,7 +6,13 @@ import type { TextStyleTokens } from './styleTokens';
 const fieldFor = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>('[contenteditable="true"]');
 
 /** Split at selection boundaries, so changing a styled substring cannot affect its neighbours. */
-export const applySelectionStyle = (range: Range, tokens: TextStyleTokens, initial: TextStyleTokens = {}, clearExisting = false): boolean => {
+export const applySelectionStyle = (
+	range: Range,
+	tokens: TextStyleTokens,
+	initial: TextStyleTokens = {},
+	clearExisting = false,
+	nativeUndo = true
+): boolean => {
 	const field = fieldFor(range.startContainer);
 	if (!field || field !== fieldFor(range.endContainer) || !field.isConnected || range.collapsed) return false;
 	const before = document.createRange();
@@ -50,14 +56,18 @@ export const applySelectionStyle = (range: Range, tokens: TextStyleTokens, initi
 	const html = sanitizeEditorJsInlineHtml(combined.innerHTML);
 	const selectionStart = before.toString().length,
 		selectionEnd = selectionStart + range.toString().length;
-	field.focus({ preventScroll: true });
+	if (nativeUndo) field.focus({ preventScroll: true });
 	const all = document.createRange();
 	all.selectNodeContents(field);
 	const selection = window.getSelection();
-	selection?.removeAllRanges();
-	selection?.addRange(all);
+	if (nativeUndo) {
+		selection?.removeAllRanges();
+		selection?.addRange(all);
+	}
 	// Browser editing command retains the native undo transaction; never replace the document through Editor.js render().
-	const applied = document.execCommand('insertHTML', false, html);
+	let applied = true;
+	if (nativeUndo) applied = document.execCommand('insertHTML', false, html);
+	else field.innerHTML = html;
 	if (applied) {
 		// Keep the formatted words selected rather than moving the caret to the end of the block.
 		const restored = document.createRange(),
@@ -77,11 +87,13 @@ export const applySelectionStyle = (range: Range, tokens: TextStyleTokens, initi
 			}
 			offset = end;
 		}
-		if (started) {
+		if (started && nativeUndo) {
 			selection?.removeAllRanges();
 			selection?.addRange(restored);
 		}
-		field.dispatchEvent(new Event('input', { bubbles: true }));
+		field.dispatchEvent(
+			new CustomEvent('tt-editor-change', { bubbles: true, detail: { label: nativeUndo ? 'Selected text style' : 'Preview selected text style' } })
+		);
 	}
 	return applied;
 };
@@ -117,6 +129,32 @@ export class InlineStyle {
 		const saved = range.cloneRange();
 		const field = fieldFor(saved.startContainer);
 		if (!field || field !== fieldFor(saved.endContainer)) return;
+		const originalHtml = field.innerHTML;
+		const prefix = document.createRange();
+		prefix.selectNodeContents(field);
+		prefix.setEnd(saved.startContainer, saved.startOffset);
+		const startOffset = prefix.toString().length,
+			endOffset = startOffset + saved.toString().length;
+		const rangeAtOffsets = () => {
+			const range = document.createRange(),
+				walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+			let offset = 0,
+				started = false,
+				node: Node | null;
+			while ((node = walker.nextNode())) {
+				const end = offset + (node.textContent?.length || 0);
+				if (!started && startOffset <= end) {
+					range.setStart(node, startOffset - offset);
+					started = true;
+				}
+				if (started && endOffset <= end) {
+					range.setEnd(node, endOffset - offset);
+					return range;
+				}
+				offset = end;
+			}
+			return null;
+		};
 		let initial: TextStyleTokens = {};
 		let ancestor = saved.startContainer instanceof Element ? saved.startContainer : saved.startContainer.parentElement;
 		const ancestors: Element[] = [];
@@ -131,6 +169,12 @@ export class InlineStyle {
 			if (el.matches('u')) initial.decoration = 'underline';
 			if (el.matches('s')) initial.decoration = [initial.decoration, 'line-through'].filter(Boolean).join(' ');
 		}
+		const preview = (tokens: TextStyleTokens, clearExisting: boolean) => {
+			if (!field.isConnected) return;
+			field.innerHTML = originalHtml;
+			const range = rangeAtOffsets();
+			if (range) applySelectionStyle(range, tokens, initial, clearExisting, false);
+		};
 		openStyleDialog({
 			initial,
 			title: 'Selected text style',
@@ -140,10 +184,19 @@ export class InlineStyle {
 					field.focus({ preventScroll: true });
 					const s = window.getSelection();
 					s?.removeAllRanges();
-					s?.addRange(saved);
+					const range = rangeAtOffsets();
+					if (range) s?.addRange(range);
 				}
 			},
-			apply: (tokens, clearExisting) => applySelectionStyle(saved, tokens, initial, clearExisting)
+			preview,
+			historyCommand: (redo) =>
+				field.dispatchEvent(new CustomEvent('tt-editor-history-command', { bubbles: true, detail: { type: redo ? 'redo' : 'undo' } })),
+			cancel: () => {
+				if (!field.isConnected) return;
+				field.innerHTML = originalHtml;
+				field.dispatchEvent(new CustomEvent('tt-editor-change', { bubbles: true, detail: { label: 'Cancel selected text style' } }));
+			},
+			apply: () => field.dispatchEvent(new CustomEvent('tt-editor-change', { bubbles: true, detail: { label: 'Save selected text style' } }))
 		});
 	}
 	checkState() {

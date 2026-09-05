@@ -9,6 +9,7 @@ import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../Componen
 import { useTtActionClicks } from '../Actions/useTtActionClicks';
 import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
+import { EditorHistory } from '../Editor/editorHistory';
 import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
 
@@ -896,6 +897,7 @@ const BlockView = (
 	// Inspector typography (font-size, color, …) must reach the text itself,
 	// not just the wrapper — explicit sizes in the typo presets and the rich
 	// document scale would otherwise always win over block.css.
+	const [textHistory] = React.useState(() => new EditorHistory());
 	const cssTypo = React.useMemo(() => typographyFromCss(block.css), [block.css]);
 	const styleTypo = TEXT_STYLE_TYPO[block.style || 'body'] || TEXT_STYLE_TYPO.body;
 	const mergedTypo = React.useMemo(
@@ -923,6 +925,7 @@ const BlockView = (
 			// the canvas (the drawer's modal remains the "advanced" surface)
 			body = (
 				<InlineRichTextEditor
+					history={textHistory}
 					html={block.html}
 					text={block.text}
 					typography={typo}

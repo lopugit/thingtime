@@ -2082,6 +2082,27 @@ Editor.js and builder components without saving account data. Run
 The full colour/size panel is available from the inline palette button and
 **More text styles…** in block settings. Sizes support px, em, rem, pt and %;
 relative units retain CSS semantics. Existing numeric sizes remain px.
+Live changes preview in the document; **Save** keeps them and **Cancel** restores
+the starting style. An unstyled picker begins at 50% lightness. Drag its title to
+move it, or use the corner handle (pointer/arrow keys) to resize it. Block settings
+and the advanced rich editor are resizable too.
+
+**Undo**, **Redo** and **Changes** belong to the current editing session.
+Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z navigate complete draft snapshots, including empty
+blocks. The Changes timeline retains alternate futures and supports restoring a
+point or selectively reverting/reapplying an event's fields. If a later edit
+changed the same field, selective restoration reports a conflict instead of
+silently overwriting it. Whole inline HTML fields and list/table arrays are
+atomic for selective restoration. Histories remain in memory while their editor
+owner is mounted; they are not persisted across page reloads. Builder inline
+and advanced editors each retain their own session history across close/reopen.
+The carry-style checkboxes in Changes control which whole-block properties
+survive native block conversions; all are enabled initially.
+
+Integrations can listen for the bubbling `tt-editor-update` DOM event on the
+editor session. Its detail contains the current `event` (id, parentId, timestamp,
+label, changes and document snapshot) and `cursor`; treat the payload as read-only.
+This is a local DOM event and creates no remote API or account records.
 No additional configuration or credentials are required.
 
 Tailscale/Funnel could not be configured on 2026-09-05: the local CLI shim points

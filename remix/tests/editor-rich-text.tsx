@@ -6,6 +6,8 @@ import { ChakraProvider } from '@chakra-ui/react';
 import { LongTextEditor } from '../app/components/Editor/LongTextEditor';
 import { RichTextBlocks } from '../app/components/Kinds/kindRenderersMedia';
 import { applySelectionStyle } from '../app/components/Editor/InlineStyle';
+import { EditorHistory } from '../app/components/Editor/editorHistory';
+import { RichTextModal } from '../app/components/Builder/RichTextModal';
 const initial = {
 	blocks: [
 		{ type: 'header', data: { text: 'A lovely heading', level: 2 } },
@@ -27,14 +29,23 @@ const initial = {
 	]
 };
 function BuilderCheck() {
+	const [history] = React.useState(() => new EditorHistory());
+	const [modal, setModal] = React.useState(false);
 	const [html, setHtml] = React.useState('<h2>A lovely builder heading</h2><p>Builder paragraph</p>'),
 		[editing, setEditing] = React.useState(true);
 	return (
 		<section>
 			<h2>Builder round trip</h2>
 			<button onClick={() => setEditing(!editing)}>Toggle builder editing</button>
+			<button onClick={() => setModal(true)}>Open floating editor</button>
+			<RichTextModal
+				block={{ id: 'fixture-builder', type: 'text', html }}
+				isOpen={modal}
+				onClose={() => setModal(false)}
+				onApply={(patch) => setHtml(patch.html || '')}
+			/>
 			{editing ? (
-				<InlineRichTextEditor html={html} onChange={(patch) => setHtml(patch.html)} />
+				<InlineRichTextEditor history={history} html={html} onChange={(patch) => setHtml(patch.html)} />
 			) : (
 				<RichTextBlocks blocks={htmlToEditorJs(html).blocks} />
 			)}

@@ -1102,7 +1102,33 @@ email whose link points at the attacker.
 - [ ] At desktop and 390px mobile widths, select text near each viewport edge and
       scroll top to bottom. The toolbar stays above the selection, wraps within
       the viewport, and remains usable. Scroll the colour panel to both ends;
-      controls and Apply/Cancel stay reachable without horizontal overflow.
+      controls and Save/Cancel stay reachable without horizontal overflow.
+      Hover a desktop toolbar hint then shrink to mobile: hidden hints must not
+      leave a horizontal scrollbar.
+- [ ] Change a styled heading to paragraph, list/checklist or quote. Text colour,
+      size, decoration and alignment carry by default. In Changes, uncheck a
+      carry property and confirm only that whole-block property is omitted.
+- [ ] Open an unstyled colour picker: lightness starts at 50%. Change colour,
+      opacity, size and decoration while watching the actual text. Save keeps
+      the preview; Cancel restores the original without losing the preview events.
+- [ ] Type, style, insert an empty block, check a checklist item, add a table row,
+      convert, move and delete blocks. Undo/Redo buttons and Cmd/Ctrl+Z / Shift+Z
+      restore the complete draft, including unfinished blocks and focus.
+- [ ] Undo twice and type a different edit. Changes retains both futures with
+      their parent events; Restore point revisits either. Revert/reapply a colour
+      event preserves later text/size changes; overlapping field edits display a
+      conflict without overwriting the current document. Expand Changed properties.
+- [ ] Reopen the builder floating editor and toggle inline editing off/on: their
+      session histories remain available. Keep two editors with the same block
+      IDs open; styling one does not change the other's tune registry or focus.
+- [ ] Resize block settings, the style picker and the advanced editor using the
+      corner handle and arrow keys. Move the style picker by its title; resize
+      the viewport and scroll each panel to both ends. Controls remain reachable.
+- [ ] Compare edit/view text bounds with left, centre and right alignment at
+      desktop and mobile widths. There is no reserved toolbar gutter; +/dots
+      float right for left/centre text and left for right text, using clear space
+      beside the text or above the editor. Previous headings and history controls
+      remain visible, including inside the advanced modal.
 - [ ] On physical iOS, repeat selection with the native context menu and keyboard
       open, including keyboard viewport panning and text near the screen top.
 - [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
@@ -1164,7 +1190,7 @@ email whose link points at the attacker.
       is contained to the sandbox (native field undo still works).
 - [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
       inside the post composer, a comment box, the login form, and any
-      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs the editor's own text/history undo —
       no thingtime state changes. With focus on the page background (no editable
       focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
       `e.key === 'Z'`, so redo was unreachable before this guard normalised

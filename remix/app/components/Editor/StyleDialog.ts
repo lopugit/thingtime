@@ -1,13 +1,17 @@
 import { clamp, hslToRgba, parseColor, rgbaToHex, rgbaToHsl } from './styleColor';
 import { FONT_SIZE_UNITS, SIZE_LIMITS, STYLE_PALETTE, sanitizeStyleTokens, styleTokensToCss } from './styleTokens';
 import type { FontKey, TextStyleTokens } from './styleTokens';
+import { makeEditorPanelMovable, makeEditorPanelResizable } from './floatingEditorPanel';
 
 let closeActive: (() => void) | undefined;
 
-/** A single shared, keyboard-accessible picker; edits remain a draft until Apply. */
+/** A single shared picker with live document previews and an explicit Save/Cancel boundary. */
 export const openStyleDialog = ({
 	initial,
 	apply,
+	preview: previewDocument,
+	cancel,
+	historyCommand,
 	title = 'Text style',
 	alignment = false,
 	restoreFocus,
@@ -15,6 +19,9 @@ export const openStyleDialog = ({
 }: {
 	initial: TextStyleTokens;
 	apply: (tokens: TextStyleTokens, clearExisting: boolean) => void;
+	preview?: (tokens: TextStyleTokens, clearExisting: boolean) => void;
+	cancel?: () => void;
+	historyCommand?: (redo: boolean) => void;
 	title?: string;
 	alignment?: boolean;
 	restoreFocus?: () => void;
@@ -24,30 +31,36 @@ export const openStyleDialog = ({
 	let draft = { ...initial };
 	let clearExisting = false;
 	let colourTarget: 'color' | 'background' = 'color';
-	let colour = parseColor(draft.color || '') || { r: 22, g: 22, b: 26, a: 1 };
+	let colour = parseColor(draft.color || '') || hslToRgba(320, 100, 50, 1);
 	let [hue, saturation, lightness] = rgbaToHsl(colour);
+	let initialized = false,
+		previewed = false,
+		saved = false;
 	const previousFocus = document.activeElement as HTMLElement | null;
 	const dialog = document.createElement('dialog');
 	dialog.className = 'tt-style-dialog';
 	dialog.setAttribute('aria-label', title);
 	dialog.style.cssText =
-		'padding:0;border:1px solid var(--tt-border,#ddd);border-radius:18px;background:var(--tt-card,#fff);color:var(--tt-ink,#16161a);width:min(380px,calc(100vw - 24px));max-height:calc(100dvh - 24px);box-shadow:0 18px 80px #0004;overflow:auto;';
+		'padding:0;border:1px solid var(--tt-border,#ddd);border-radius:18px;background:var(--tt-card,#fff);color:var(--tt-ink,#16161a);width:min(680px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);box-shadow:0 18px 80px #0004;overflow:auto;resize:both;container-type:inline-size;';
 	// Static markup only. Stored values are assigned through DOM properties below.
 	dialog.innerHTML = `<style>
- .tt-style-dialog::backdrop{background:#0005}.tt-style-dialog *{box-sizing:border-box}
+ .tt-style-dialog::backdrop{background:#0001}.tt-style-dialog *{box-sizing:border-box}
  .tt-style-dialog form{padding:18px;display:grid;gap:14px;font:14px system-ui}
+ .tt-style-dialog section{display:grid;align-content:start;gap:14px;min-width:0}.tt-style-dialog form>header,.tt-style-dialog footer{grid-column:1/-1}
+ @container (min-width:560px){.tt-style-dialog form{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}.tt-style-dialog section+section{border-left:1px solid var(--tt-border,#ddd);padding-left:18px}}
  .tt-style-dialog label{display:grid;gap:5px;min-width:0}.tt-style-dialog .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
  .tt-style-dialog input,.tt-style-dialog select,.tt-style-dialog button{font:inherit;color:inherit;min-width:0;min-height:36px;border:1px solid var(--tt-border,#ddd);border-radius:8px;background:var(--tt-card,#fff);padding:6px 8px}
  .tt-style-dialog input:not([type=range]),.tt-style-dialog select{width:100%}.tt-style-dialog input[type=range]{width:100%;padding:0;accent-color:var(--tt-accent,hotpink)}
  .tt-style-dialog button{cursor:pointer}.tt-style-dialog button[aria-pressed=true]{background:var(--tt-accent-tint,#fff0f8);border-color:var(--tt-accent,hotpink)}
  .tt-style-dialog :focus-visible{outline:2px solid var(--tt-accent,hotpink);outline-offset:2px}.tt-style-dialog .fill{flex:1}
- .tt-style-dialog .wheel{position:relative;width:152px;height:152px;margin:auto;border-radius:50%;touch-action:none;background:radial-gradient(circle,#fff,transparent),conic-gradient(from 90deg,red,#ff0,#0f0,#0ff,#00f,#f0f,red)}
+ .tt-style-dialog .wheel{position:relative;width:180px;height:180px;margin:auto;border-radius:50%;touch-action:none;background:radial-gradient(circle,#fff,transparent),conic-gradient(from 90deg,red,#ff0,#0f0,#0ff,#00f,#f0f,red)}
  .tt-style-dialog .wheel i{position:absolute;width:14px;height:14px;border:2px solid white;box-shadow:0 0 0 1px #222;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
  .tt-style-dialog .swatches{display:flex;flex-wrap:wrap;gap:6px}.tt-style-dialog .swatches button{width:27px;min-height:27px;border-radius:50%;padding:0}
  .tt-style-dialog footer{display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-18px;background:var(--tt-card,#fff);padding:10px 0}
  .tt-style-dialog .preview{padding:12px;border:1px solid var(--tt-border,#ddd);border-radius:8px;overflow-wrap:anywhere;max-height:100px;overflow:auto}
  </style><form>
- <div class="row"><strong class="fill" data-title></strong><button type="button" data-reset>Reset</button></div>
+ <header class="row"><strong class="fill" data-title></strong><button type="button" data-reset>Reset</button></header>
+ <section>
  <div class="row"><button type="button" data-target="color" aria-pressed="true">Text colour</button><button type="button" data-target="background" aria-pressed="false">Highlight</button><button type="button" data-clear>Clear</button></div>
  <div class="swatches"></div>
  <div class="wheel" role="slider" tabindex="0" aria-label="Colour wheel hue" aria-valuemin="0" aria-valuemax="360"><i></i></div>
@@ -56,12 +69,14 @@ export const openStyleDialog = ({
  <div class="row"><label class="fill">Opacity<input data-alpha type="range" min="0" max="100" step="1"></label><label style="width:82px">Alpha %<input data-alpha-number type="number" min="0" max="100" step="1"></label></div>
  <div class="row"><label style="width:90px">Format<select data-format><option>HEX</option><option>RGB</option><option>RGBA</option><option>HSL</option><option>HSLA</option></select></label><label class="fill">Colour value<input data-colour type="text" spellcheck="false" aria-describedby="tt-colour-error"></label></div>
  <small id="tt-colour-error" role="status" hidden>Enter a valid hex, RGB(A), or HSL(A) colour.</small>
+ </section><section>
  <div class="row"><label class="fill">Font size<div class="row" style="flex-wrap:nowrap"><button type="button" data-step="-1" aria-label="Decrease font size">−</button><input data-size type="number" step="any" placeholder="Default" aria-label="Font size"><button type="button" data-step="1" aria-label="Increase font size">+</button></div></label><label style="width:80px">Unit<select data-unit></select></label></div>
  <label>Font family<select data-font><option value="">Default</option><option value="body">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option><option value="rounded">Rounded</option></select></label>
  <div class="row"><button type="button" data-flag="bold">Bold</button><button type="button" data-flag="italic">Italic</button><button type="button" data-decoration="underline">Underline</button><button type="button" data-decoration="line-through">Strikethrough</button><button type="button" data-decoration="overline">Overline</button></div>
  <label data-alignment>Alignment<select data-align><option value="">Default</option><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></label>
  <div class="preview"><span data-preview>The quick brown fox ✨</span></div>
- <footer><button type="button" data-cancel>Cancel</button><button type="submit">Apply</button></footer>
+ </section>
+ <footer><button type="button" data-cancel>Cancel</button><button type="submit">Save</button><button type="button" data-resize>⤡</button></footer>
  </form>`;
 	const q = <T extends HTMLElement = HTMLElement>(selector: string) => dialog.querySelector<T>(selector)!;
 	q('[data-title]').textContent = title;
@@ -83,6 +98,10 @@ export const openStyleDialog = ({
 		dialog
 			.querySelectorAll<HTMLElement>('[data-decoration]')
 			.forEach((b) => b.setAttribute('aria-pressed', String(draft.decoration?.split(' ').includes(b.dataset.decoration!) || false)));
+		if (initialized) {
+			previewed = true;
+			previewDocument?.(sanitizeStyleTokens(draft), clearExisting);
+		}
 	};
 	const syncColour = () => {
 		const [h, s, l] = rgbaToHsl(colour),
@@ -125,9 +144,9 @@ export const openStyleDialog = ({
 		const token = draft[colourTarget];
 		// Resolve a theme swatch through the DOM without storing a computed theme colour.
 		const probe = document.createElement('span');
-		probe.style.color = token || '#16161a';
+		probe.style.color = token || 'hsl(320 100% 50%)';
 		dialog.append(probe);
-		colour = parseColor(token || '') || parseColor(getComputedStyle(probe).color) || { r: 22, g: 22, b: 26, a: 1 };
+		colour = parseColor(token || '') || parseColor(getComputedStyle(probe).color) || hslToRgba(320, 100, 50, 1);
 		probe.remove();
 		[hue, saturation, lightness] = rgbaToHsl(colour);
 		syncColour();
@@ -309,6 +328,9 @@ export const openStyleDialog = ({
 	);
 	const close = () => {
 		if (!dialog.isConnected) return;
+		if (!saved && previewed) cancel?.();
+		cleanupResize();
+		cleanupMove();
 		dialog.close();
 		dialog.remove();
 		window.visualViewport?.removeEventListener('resize', resize);
@@ -328,16 +350,28 @@ export const openStyleDialog = ({
 		e.preventDefault();
 		if (!q<HTMLFormElement>('form').reportValidity()) return;
 		const clean = sanitizeStyleTokens(draft);
+		saved = true;
 		close();
 		apply(clean, clearExisting);
 	};
 	// Editor.js must not treat keyboard events in the picker as block commands.
-	dialog.addEventListener('keydown', (e) => e.stopPropagation());
+	dialog.addEventListener('keydown', (e) => {
+		e.stopPropagation();
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.altKey && !e.isComposing && historyCommand) {
+			e.preventDefault();
+			saved = true;
+			close();
+			historyCommand(e.shiftKey);
+		}
+	});
 	document.body.append(dialog);
 	dialog.showModal();
+	const cleanupResize = makeEditorPanelResizable(dialog, q('[data-resize]'));
+	const cleanupMove = makeEditorPanelMovable(dialog, q('[data-title]'));
 	resize();
 	window.visualViewport?.addEventListener('resize', resize);
 	loadDraft();
+	initialized = true;
 	closeActive = close;
 	return close;
 };

@@ -4,9 +4,9 @@ import { Box } from '@chakra-ui/react';
 import { LongTextEditor, type LongTextValue } from '../Editor/LongTextEditor';
 import { isEditorJsDoc } from '../Editor/editorJsValue';
 import { editorJsToHtml, htmlToEditorJs, htmlToPlainText } from './editorJsHtml';
+import type { EditorHistory } from '../Editor/editorHistory';
 
-const escapeHtml = (text: string): string =>
-	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+const escapeHtml = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
 // The FULL Editor.js editor, inline on the canvas: a selected text block
 // edits in place with the real block vocabulary (headings, lists, quotes,
@@ -23,12 +23,14 @@ export const InlineRichTextEditor = ({
 	html,
 	text,
 	typography,
+	history,
 	onChange
 }: {
 	html?: string;
 	text?: string;
 	// the block's resolved typography so editing reads like the render
 	typography?: Record<string, unknown>;
+	history?: EditorHistory;
 	onChange: (patch: { html: string; text: string }) => void;
 }) => {
 	const seedDoc = React.useCallback(
@@ -115,14 +117,25 @@ export const InlineRichTextEditor = ({
 			{...(typography as any)}
 			sx={{
 				whiteSpace: 'normal',
+				'& .long-text-editor': {
+					padding: '0 !important',
+					border: '0 !important',
+					borderRadius: 0,
+					background: 'transparent',
+					boxShadow: 'none !important',
+					fontSize: 'inherit'
+				},
 				// the canvas is the page — strip the editor's own gutters so the
 				// editing state sits where the render sits
 				'& .codex-editor__redactor': { padding: '0 !important' },
+				'& .codex-editor': { padding: '0 !important' },
+				'& .ce-header, & .ce-paragraph': { margin: 0, padding: 0 },
 				'& .ce-block__content, & .ce-toolbar__content': { maxWidth: 'none' }
 			}}
 			onClick={(event: React.MouseEvent) => event.stopPropagation()}
 		>
 			<LongTextEditor
+				history={history}
 				value={value}
 				onValueChange={handleChange}
 				placeholder="Write something lovely ✨"

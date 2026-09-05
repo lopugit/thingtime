@@ -21,7 +21,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   editors: colour wheel, alpha, HEX/RGB(A)/HSL(A), highlights, decorations and
   custom font sizes/units. Preserve styles through builder HTML round trips and
   saved rendering; position the selection toolbar above text within the visual
-  viewport. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
+  viewport. Add live previews with Save/Cancel, conversion style preferences,
+  branching Undo/Redo and a Changes timeline, larger resizable panels, and
+  floating controls that preserve the document width. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
 
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold

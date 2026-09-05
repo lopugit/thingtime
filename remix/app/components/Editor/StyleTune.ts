@@ -26,7 +26,7 @@ const BUTTON_BASE =
 
 const ACTIVE_RING = '0 0 0 2px var(--tt-accent-tint, #fff5fa), 0 0 0 3px var(--tt-accent, hotpink)';
 
-// blockId → live tune instance (overwritten on re-init; cleared on destroy)
+// Per-instance ids keep two editors of the same saved block independent.
 const TUNE_REGISTRY = new Map<string, StyleTune>();
 
 let delegationBound = false;
@@ -45,8 +45,8 @@ const bindDelegation = () => {
 			if (!button) return;
 
 			const panel = button.closest('[data-tt-style-tune]') as HTMLElement | null;
-			const blockId = panel?.getAttribute('data-tt-block-id');
-			const tune = blockId ? TUNE_REGISTRY.get(blockId) : undefined;
+			const tuneId = panel?.getAttribute('data-tt-tune-id');
+			const tune = tuneId ? TUNE_REGISTRY.get(tuneId) : undefined;
 			if (!panel || !tune) return;
 
 			event.preventDefault();
@@ -102,6 +102,21 @@ const paintPanel = (panel: HTMLElement, data: TextStyleTokens) => {
 };
 
 export class StyleTune {
+	static replaceForBlock(holder: HTMLElement, id: string, tokens: TextStyleTokens) {
+		const wrapper = holder.querySelector<HTMLElement>(`.ce-block[data-id="${CSS.escape(id)}"] [data-tt-tune-id]`);
+		if (wrapper?.dataset.ttTuneId) TUNE_REGISTRY.get(wrapper.dataset.ttTuneId)?.replace(tokens, 'Change block type');
+	}
+	static release(holder: HTMLElement) {
+		for (const tune of TUNE_REGISTRY.values()) if (tune.owner === holder || (tune.wrapper && holder.contains(tune.wrapper))) tune.destroy();
+	}
+	static bindHolder(holder: HTMLElement) {
+		for (const tune of TUNE_REGISTRY.values()) {
+			if (tune.wrapper && holder.contains(tune.wrapper)) tune.owner = holder;
+			else if (tune.owner === holder && !tune.wrapper?.isConnected) tune.destroy();
+		}
+	}
+	owner?: HTMLElement;
+	readonly tuneId = crypto.randomUUID();
 	static get isTune() {
 		return true;
 	}
@@ -119,8 +134,7 @@ export class StyleTune {
 		this.data = sanitizeStyleTokens(data);
 
 		bindDelegation();
-		const blockId = this.blockId();
-		if (blockId) TUNE_REGISTRY.set(blockId, this);
+		TUNE_REGISTRY.set(this.tuneId, this);
 	}
 
 	blockId(): string | null {
@@ -137,6 +151,7 @@ export class StyleTune {
 	wrap(blockContent: HTMLElement): HTMLElement {
 		const wrapper = document.createElement('div');
 		wrapper.classList.add('tt-style-tune-wrap');
+		wrapper.dataset.ttTuneId = this.tuneId;
 		wrapper.appendChild(blockContent);
 		this.wrapper = wrapper;
 		this.observer?.disconnect();
@@ -149,6 +164,7 @@ export class StyleTune {
 
 	applyStyles() {
 		if (!this.wrapper) return;
+		this.wrapper.dataset.ttStyle = JSON.stringify(this.data);
 		const css = styleTokensToCss(this.data);
 		// Apply to text fields themselves: relative units must resolve once, not at both wrapper and heading.
 		this.wrapper
@@ -160,20 +176,25 @@ export class StyleTune {
 					if (field.style[key] !== String(css[key] ?? '')) field.style[key] = String(css[key] ?? '');
 			});
 	}
-	replace(tokens: TextStyleTokens) {
+	replace(tokens: TextStyleTokens, label = 'Block style') {
 		this.data = sanitizeStyleTokens(tokens);
 		this.applyStyles();
 		this.block?.dispatchChange?.();
-		this.wrapper?.dispatchEvent(new Event('input', { bubbles: true }));
+		this.wrapper?.dispatchEvent(new CustomEvent('tt-editor-change', { bubbles: true, detail: { label } }));
 	}
 	openCustom() {
 		this.closeDialog?.();
+		const initial = { ...this.data };
 		this.closeDialog = openStyleDialog({
-			initial: this.data,
+			initial,
 			title: 'Block text style',
 			alignment: true,
 			emPixels: this.wrapper ? parseFloat(getComputedStyle(this.wrapper).fontSize) || 16 : 16,
-			apply: (tokens) => this.replace(tokens)
+			preview: (tokens) => this.replace(tokens, 'Preview block style'),
+			cancel: () => this.replace(initial, 'Cancel block style'),
+			historyCommand: (redo) =>
+				this.wrapper?.dispatchEvent(new CustomEvent('tt-editor-history-command', { bubbles: true, detail: { type: redo ? 'redo' : 'undo' } })),
+			apply: (tokens) => this.replace(tokens, 'Save block style')
 		});
 	}
 
@@ -188,7 +209,7 @@ export class StyleTune {
 		// nudge both editor.js change tracking and the holder's raw-input
 		// fallback so the document saves
 		this.block?.dispatchChange?.();
-		this.wrapper?.dispatchEvent(new Event('input', { bubbles: true }));
+		this.wrapper?.dispatchEvent(new CustomEvent('tt-editor-change', { bubbles: true, detail: { label: 'Block style' } }));
 	}
 
 	// settings-popover UI: colour swatches, size chips, font chips, alignment.
@@ -196,6 +217,7 @@ export class StyleTune {
 	render(): HTMLElement {
 		const panel = document.createElement('div');
 		panel.setAttribute('data-tt-style-tune', '');
+		panel.setAttribute('data-tt-tune-id', this.tuneId);
 		if (this.blockId()) panel.setAttribute('data-tt-block-id', this.blockId() as string);
 		panel.style.cssText = 'padding:6px 8px;display:flex;flex-direction:column;gap:7px;min-width:210px;';
 
@@ -281,7 +303,6 @@ export class StyleTune {
 	destroy() {
 		this.closeDialog?.();
 		this.observer?.disconnect();
-		const blockId = this.blockId();
-		if (blockId && TUNE_REGISTRY.get(blockId) === this) TUNE_REGISTRY.delete(blockId);
+		TUNE_REGISTRY.delete(this.tuneId);
 	}
 }
