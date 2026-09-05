@@ -600,6 +600,8 @@ test('completion publishes browser-playable containers inline and preserves snif
 	const cases = [
 		{ sniffed: 'video/quicktime', expected: { contentType: 'video/quicktime', mediaKind: 'video' } },
 		{ sniffed: 'video/x-matroska', expected: { contentType: 'video/x-matroska', mediaKind: 'video' } },
+		{ sniffed: 'audio/x-m4a', expected: { contentType: 'audio/x-m4a', mediaKind: 'audio' } },
+		{ sniffed: 'audio/flac', expected: { contentType: 'audio/flac', mediaKind: 'audio' } },
 		{
 			sniffed: 'video/x-msvideo',
 			expected: { contentType: 'application/octet-stream', mediaKind: 'file', detectedContentType: 'video/x-msvideo' }
@@ -1110,6 +1112,29 @@ test('download authorization keeps active files opaque and hides unauthorized ex
 	assert.equal((await service.download({ id: 'reader' }, 'attachment-1', false)).ok, true);
 	assert.equal(signed[0].contentType, 'application/octet-stream');
 	assert.match(signed[0].contentDisposition, /^attachment;/);
+
+	const audio = attachmentDoc({
+		attachmentState: 'ready',
+		targetId: 'post-1',
+		objectVersionId: 'audio-version-1',
+		uploadId: undefined,
+		crystal: { name: 'watch-recording.m4a', size: 10, contentType: 'audio/x-m4a', mediaKind: 'audio' }
+	});
+	const audioSigned: any[] = [];
+	const audioService = createAttachmentService({
+		store: { getById: async () => audio } as any,
+		canViewTarget: async (viewer) => viewer?.id === 'reader',
+		getS3: () =>
+			noopS3({
+				signDownload: async (input) => {
+					audioSigned.push(input);
+					return { url: 'https://s3.example/audio', expiresAt: now.toISOString() };
+				}
+			})
+	});
+	assert.equal((await audioService.download({ id: 'reader' }, 'attachment-1', false)).ok, true);
+	assert.equal(audioSigned[0].contentType, 'audio/x-m4a');
+	assert.match(audioSigned[0].contentDisposition, /^inline;/);
 });
 
 test('pending moderation quarantines bytes from the audience while owner and admin evidence access remain available', async () => {

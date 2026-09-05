@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
+import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
 import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
@@ -242,6 +243,7 @@ export default defineConfig({
       port: devPorts.hmr
     },
     proxy: {
+      [APPLE_APP_ASSOCIATION_PATH]: { target: localApiTarget, changeOrigin: true },
       [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
         target: localApiTarget,
         changeOrigin: true,

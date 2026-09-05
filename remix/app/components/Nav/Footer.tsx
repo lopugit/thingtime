@@ -16,11 +16,17 @@ const BRANCH_NAME =
     ? process.env.THINGTIME_BRANCH_NAME
     : 'git/unknown';
 
+const COMMIT_SHA =
+  typeof process !== 'undefined'
+    ? process.env?.VERCEL_GIT_COMMIT_SHA || process.env?.THINGTIME_GIT_COMMIT_SHA
+    : undefined;
+
 export const Footer = (props) => {
   const rootData = useRouteLoaderData('root') as any;
   const envFromCookie = rootData?.envFromCookie || {};
 
   const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
+  const commitSha = envFromCookie.THINGTIME_VERCEL_GIT_COMMIT_SHA || COMMIT_SHA;
   const showDeploymentStatus = envFromCookie.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true';
 
   const investmentEmail = 'invest@thingtime.com';
@@ -124,19 +130,38 @@ export const Footer = (props) => {
               {/* copyright message */}© {year} Thingtime
             </Text>
           </Flex>
-          {/* using window.env.BRANCH_NAME render the current branch name */}
+          {/* Render the exact source identity for this build. */}
           {branchName && (
             <Flex flexDirection="row" fontSize="xs">
               <Box
-                // link
                 as="a"
                 href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
                 target="_blank"
+                rel="noreferrer"
                 fontFamily="mono"
                 fontSize="10px"
                 color="var(--tt-faint, #b6b6c0)"
               >
                 🌱 {branchName}
+              </Box>
+            </Flex>
+          )}
+          {commitSha && (
+            <Flex flexDirection="row" fontSize="xs" minWidth={0}>
+              <Box
+                as="a"
+                href={`https://github.com/lopugit/thingtime/commit/${commitSha}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Exact git commit ${commitSha}`}
+                title={`Exact git commit ${commitSha}`}
+                fontFamily="mono"
+                fontSize="10px"
+                lineHeight="1.4"
+                wordBreak="break-all"
+                color="var(--tt-faint, #b6b6c0)"
+              >
+                🔖 {commitSha}
               </Box>
             </Flex>
           )}

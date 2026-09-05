@@ -1,9 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
-import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
+import { mintPatToken, PAT_SCOPE_CATALOG, revokePatToken } from '~/api/utils/auth/patTokens';
+import { createSession, getLiveSession, revokedSessionPipeline, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
@@ -80,6 +82,18 @@ const noStoreHeaders = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 const infiniteExpiryFilter = (now: Date) => ({
   $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
 });
+
+// Single-use grant consumption (refresh rotation) revokes the record it burns.
+// Rotation is the highest-frequency revoke on this bridge — every refresh burns
+// one never-expiring refresh session and mints another — so a plain
+// `$set: { revokedAt }` would leave each consumed row at expiresAt: null, which
+// the sessions TTL index skips, orphaning one document per rotation forever.
+// revokedSessionPipeline fills a missing expiry and preserves a real one, so
+// this is also correct for grants that already carry a short TTL.
+export const consumedSessionPipeline = (now: Date) => [
+  ...revokedSessionPipeline(now),
+  { $set: { 'meta.consumedAt': now } }
+];
 
 const requestOrigin = (request: Request) => new URL(request.url).origin;
 
@@ -422,11 +436,13 @@ export const beginChatGptAuthorization = async ({ request }: { request: Request 
   if (!configuredCipherKey()) return oauthErrorPage(503, 'This Thingtime endpoint has not configured encrypted ChatGPT credential storage.');
 
   const requestToken = await requestClaimsToken(parsed.request);
-  return new Response(renderConnectionPage(requestToken, allowed), {
+  const normalizedOrigin = normalizeThingtimeEndpoint(requestOrigin(request));
+  const defaultEndpoint = normalizedOrigin && allowed.includes(normalizedOrigin) ? normalizedOrigin : allowed[0];
+  return new Response(renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
     headers: {
       ...noStoreHeaders,
       'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors https://chatgpt.com",
+      'Content-Security-Policy': "default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors https://chatgpt.com",
       'Referrer-Policy': 'no-referrer'
     }
   });
@@ -539,6 +555,60 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
   const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
   if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  const wantsJsonCompletion = form.value.get('intent') === 'complete';
+
+  if (form.value.get('intent') === 'prepare') {
+    const user = await getCurrentUser(request);
+    if (!user) return json({ ok: false, error: 'Sign in with Thingtime to continue.' }, { status: 401, headers: noStoreHeaders });
+
+    const endpoint = normalizeThingtimeEndpoint(form.value.get('endpoint'));
+    const originEndpoint = normalizeThingtimeEndpoint(requestOrigin(request));
+    if (!endpoint || endpoint !== originEndpoint || !allowedThingtimeEndpoints().includes(endpoint)) {
+      return json({ ok: false, error: 'Automatic sign-in can only generate a token for this Thingtime endpoint. Use Advanced settings for another endpoint.' }, { status: 400, headers: noStoreHeaders });
+    }
+
+    const requestedScopes = form.value.getAll('scope').filter((scope): scope is string => typeof scope === 'string');
+    const minted = await mintPatToken(user.id, {
+      name: `Thingtime ChatGPT connection · @${user.username}`,
+      scopes: requestedScopes.length ? requestedScopes : ['things'],
+      expiresInMs: null,
+      maxUses: null,
+      visibility: 'all',
+      createdVia: 'chatgpt-oauth'
+    });
+    if (minted.ok === false) return json({ ok: false, error: minted.error }, { status: minted.status, headers: noStoreHeaders });
+
+    // The browser keeps the generated token only in its password field. When a
+    // user explicitly regenerates it, revoke the previous generated token so a
+    // scope change never quietly leaves a second all-access credential active.
+    const replaceTokenId = form.value.get('replaceTokenId');
+    if (typeof replaceTokenId === 'string' && replaceTokenId && replaceTokenId !== minted.tokenInfo.id) {
+      const sessions = await getSessionsCollection();
+      const previous = await sessions.findOne({
+        jti: replaceTokenId,
+        userId: user.id,
+        purpose: 'pat',
+        revokedAt: null,
+        'meta.createdVia': 'chatgpt-oauth'
+      });
+      if (previous) await revokePatToken(user.id, previous.jti);
+    }
+
+    return json(
+      {
+        ok: true,
+        token: minted.token,
+        tokenId: minted.tokenInfo.id,
+        account: {
+          label: user.displayName?.trim() || user.username,
+          username: user.username,
+          endpoint,
+          scopes: minted.tokenInfo.scopes
+        }
+      },
+      { headers: noStoreHeaders }
+    );
+  }
 
   const labels = form.value.getAll('label');
   const endpoints = form.value.getAll('endpoint');
@@ -592,6 +662,7 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   callback.searchParams.set('code', code);
   callback.searchParams.set('state', oauthRequest.state);
   callback.searchParams.set('iss', requestOrigin(request));
+  if (wantsJsonCompletion) return json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders });
   return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
 };
 
@@ -677,7 +748,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (resource) refreshFilter['meta.resource'] = resource;
   const consumed = await (await getSessionsCollection()).findOneAndUpdate(
     refreshFilter,
-    { $set: { revokedAt: now, 'meta.consumedAt': now } },
+    consumedSessionPipeline(now),
     { returnDocument: 'before' }
   );
   if (!consumed) return invalidGrant();
@@ -768,6 +839,12 @@ const revokeMcpConnection = async (context: McpSession) => {
   if (!reference) return revokeSession(context.session.jti);
   const sessions = await getSessionsCollection();
   const now = new Date();
+  // Bridge sessions no longer expire on their own, so a disconnect has to leave
+  // behind a reap date: the sessions TTL index skips expiresAt: null, and these
+  // revoked records would accumulate forever without one. revokedSessionPipeline
+  // fills a missing expiry and preserves a real one (legacy bridge sessions
+  // minted before the infinite-expiry switch still carry theirs).
+  const revoked = [...revokedSessionPipeline(now), { $set: { 'meta.revokedAt': now } }];
   await Promise.all([
     sessions.updateOne(
       {
@@ -777,7 +854,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionId': reference.connectionId
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     ),
     sessions.updateMany(
       {
@@ -786,7 +863,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionSessionJti': context.connection.jti
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     )
   ]);
 };
@@ -1017,6 +1094,7 @@ const applyMutationPreview = async (
 };
 
 const oauthSecurityScheme = [{ type: 'oauth2', scopes: ['thingtime'] }] as const;
+const loginSecuritySchemes = [{ type: 'noauth' }, ...oauthSecurityScheme] as const;
 const protectedToolContract = {
   title: 'Thingtime action',
   securitySchemes: oauthSecurityScheme,
@@ -1030,16 +1108,27 @@ const protectedToolContract = {
   outputSchema: { type: 'object', additionalProperties: true }
 } as const;
 
+const loginToolContract = {
+  ...protectedToolContract,
+  securitySchemes: loginSecuritySchemes,
+  _meta: {
+    ...protectedToolContract._meta,
+    securitySchemes: loginSecuritySchemes
+  }
+} as const;
+
 const protectedTool = <T extends Record<string, unknown>>(tool: T) => ({ ...protectedToolContract, ...tool });
+const loginTool = <T extends Record<string, unknown>>(tool: T) => ({ ...loginToolContract, ...tool });
 
 type ChatGptMcpToolName = keyof typeof CHATGPT_MCP_TOOL_FEATURES;
 const protectedThingtimeTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => protectedTool(tool);
+const loginThingtimeTool = <T extends Record<string, unknown> & { name: 'login_thingtime' }>(tool: T) => loginTool(tool);
 
 export const thingtimeToolDefinitions = [
-  protectedThingtimeTool({
+  loginThingtimeTool({
     name: 'login_thingtime',
     title: 'Log in to Thingtime',
-    description: 'Use for “@Thingtime login”. Without a current Thingtime connection, this OAuth-protected action makes ChatGPT or Codex open the native browser authorization flow and complete its registered callback. The connection page can add multiple named accounts.',
+    description: 'Use for “@Thingtime login”. This public bootstrap returns a tool-level OAuth challenge when no connection exists, so the invoking ChatGPT or Codex host opens its native browser authorization flow and owns the registered callback. The connection page can add multiple named accounts.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
@@ -1798,6 +1887,18 @@ const mcpAuthorizationDenied = (id: unknown, request: Request, context: Failure)
   return json(jsonRpcResponse(id, denied), { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } });
 };
 
+const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: Failure) => {
+  const challenge = authChallenge(requestOrigin(request));
+  const denied = {
+    ...mcpToolResult({ error: context.error }, true),
+    _meta: { 'mcp/www_authenticate': [challenge] }
+  };
+  // A login bootstrap is an MCP tool result, not a failed HTTP transport.
+  // Returning 200 lets the invoking host read mcp/www_authenticate and own
+  // the PKCE browser/callback lifecycle for this exact MCP session.
+  return json(jsonRpcResponse(id, denied), { headers: noStoreHeaders });
+};
+
 export const handleChatGptMcp = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
@@ -1871,12 +1972,16 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
     }
     return json(jsonRpcResponse(id, resource.value));
   }
-  const context = await resolveMcpSession(request);
-  if (context.ok === false) return mcpAuthorizationDenied(id, request, context);
   const name = typeof message.params?.name === 'string' ? message.params.name : '';
   const args = asRecord(message.params?.arguments) || {};
   if (!thingtimeToolDefinitions.some((tool) => tool.name === name)) {
     return json(jsonRpcResponse(id, mcpToolResult({ error: 'Unknown Thingtime tool' }, true)));
+  }
+  const context = await resolveMcpSession(request);
+  if (context.ok === false) {
+    return name === 'login_thingtime'
+      ? mcpToolAuthorizationChallenge(id, request, context)
+      : mcpAuthorizationDenied(id, request, context);
   }
   const result = await callThingtimeTool(name, args, context.value);
   const isError = Boolean(result && typeof result === 'object' && 'error' in result);

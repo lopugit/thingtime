@@ -1972,8 +1972,10 @@ const friendThingSchema: ThingtimeSchema = {
 
 // Per-type notification switches users can flip in Settings → Notifications.
 // 'groups' is reserved for the future groups feature (the pref persists, no
-// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
-// fanned-out notification written before a pref flip stays hidden.
+// emitter exists yet). 'action-run' is the first SYSTEM type: Lopu telling you
+// an action you ran finished (or failed) — see emitSystemNotification. Reads
+// ALWAYS filter by the recipient's prefs, so a fanned-out notification written
+// before a pref flip stays hidden.
 export const NOTIFICATION_TYPES = [
   'friend-request',
   'friend-accepted',
@@ -1985,9 +1987,57 @@ export const NOTIFICATION_TYPES = [
   'reaction',
   'share',
   'mention',
-  'groups'
+  'groups',
+  'action-run'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Notification families — what the history page (/notifications) filters by,
+// and how a row knows whether a person acted (social/engagement/feed) or the
+// platform is speaking through Lopu (system). Every type belongs to exactly
+// one category; app/schemas/notificationCategories.test.ts keeps the map
+// exhaustive when a type is added.
+export const NOTIFICATION_CATEGORIES = ['social', 'engagement', 'feed', 'system'] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: string; emoji: string; hint: string }> = {
+  social: { label: 'Social', emoji: '🤝', hint: 'Follows, friend requests, and groups' },
+  engagement: { label: 'Engagement', emoji: '💬', hint: 'Comments, replies, reactions, shares, and mentions' },
+  feed: { label: 'Feed', emoji: '📰', hint: 'New posts from people you follow and your friends' },
+  system: { label: 'System', emoji: '⚙️', hint: 'Action runs and other platform notes from Lopu' }
+};
+
+export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCategory> = {
+  'friend-request': 'social',
+  'friend-accepted': 'social',
+  'new-follower': 'social',
+  groups: 'social',
+  comment: 'engagement',
+  reply: 'engagement',
+  reaction: 'engagement',
+  share: 'engagement',
+  mention: 'engagement',
+  'post-from-followed': 'feed',
+  'post-from-friend': 'feed',
+  'action-run': 'system'
+};
+
+export const isNotificationType = (value: unknown): value is NotificationType =>
+  typeof value === 'string' && (NOTIFICATION_TYPES as readonly string[]).includes(value);
+
+export const isNotificationCategory = (value: unknown): value is NotificationCategory =>
+  typeof value === 'string' && (NOTIFICATION_CATEGORIES as readonly string[]).includes(value);
+
+// Unknown/legacy types read as social so a stray row never breaks a filter.
+export const notificationCategoryOf = (type: unknown): NotificationCategory =>
+  isNotificationType(type) ? NOTIFICATION_TYPE_CATEGORY[type] : 'social';
+
+export const notificationTypesInCategory = (category: NotificationCategory): NotificationType[] =>
+  NOTIFICATION_TYPES.filter((type) => NOTIFICATION_TYPE_CATEGORY[type] === category);
+
+// The platform's own voice on a system notification: no user thing exists for
+// this id, so actor enrichment falls back to the stored 'Lopu' snapshot.
+export const SYSTEM_NOTIFICATION_ACTOR_ID = 'thingtime';
 
 // Email-channel notification switches. Every bell type can also send an email,
 // plus email-only types (weekly-summary) that never mint a bell notification.
@@ -1996,8 +2046,9 @@ export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NO
 export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 
 // High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
-// busy follow graph would otherwise turn every post into an email.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+// busy follow graph would otherwise turn every post into an email, and a
+// scripted action can run sixty times a minute.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2043,18 +2094,25 @@ const notificationThingSchema: ThingtimeSchema = {
   detail:
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, @mentions you in a post or comment, or (fan-out, ' +
-    'capped) posts while you follow them. ' +
-    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
-    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
-    '["tt:user"]; the generic things CRUD refuses this kind.',
-  createdVia: 'server-side emission (social/engagement events)',
+    'capped) posts while you follow them — plus SYSTEM notes (category system, actorId ' +
+    '"thingtime", actor name Lopu) such as action-run, written when an action you ran ' +
+    'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user, ' +
+    'or the action-run record), root readAt flips when read. Listed via ' +
+    "GET /api/v1/notifications (filtered by the recipient's meta.notificationPrefs, " +
+    'searchable and filterable by category/type/unread/date for the /notifications history ' +
+    'page), marked via POST /api/v1/notifications/read. Always acl ["tt:user"]; the generic ' +
+    'things CRUD refuses this kind. A recipient keeps their newest 10,000.',
+  createdVia: 'server-side emission (social/engagement events + system notes)',
   fields: [
-    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
-    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
-    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
+    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs, category + copy).' },
+    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this, or "thingtime" for system notes.' },
+    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot (Lopu for system notes).' },
+    { name: 'actorUsername', type: 'string', required: false, description: 'Actor username snapshot — searchable in history.' },
     { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
-    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
+    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview, or the detail line of a system note.' },
+    { name: 'title', type: 'string', required: false, max: 140, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'href', type: 'string', required: false, max: 300, description: 'System notes only: internal click-through path (e.g. /actions/<key>).' },
+    { name: 'outcome', type: 'enum', required: false, values: ['ok', 'error'], description: 'System notes only: whether the thing being reported succeeded.' }
   ],
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
@@ -2113,7 +2171,13 @@ const sessionSchema: ThingtimeSchema = {
       description:
         'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
-    { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      description:
+        'Expiry (null = non-expiring service token). Revoking a non-expiring session stamps a reap date here so the TTL index can clear the dead row; an existing expiry is never overwritten.'
+    },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },

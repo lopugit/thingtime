@@ -16,6 +16,7 @@ import { drawerItemClosesOnClick } from './drawerMenu';
 //   10190   window drag ghosts / drop previews
 //   10220   dropdowns & popups   10230 drawer trigger
 //   10240/10250   modal overlay / modal
+//   10260   Lopu toasts (--toast-z-index in GlobalStyles) — always visible
 export const DRAWER_Z = 10000;
 export const DRAWER_POPUP_Z = 10220;
 export const DRAWER_TRIGGER_Z = 10230;

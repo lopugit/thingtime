@@ -146,6 +146,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/profile',
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
+			{ id: 'account-notifications', label: 'Notifications', icon: '🔔', to: '/notifications', authOnly: true },
 			{ id: 'account-settings', label: 'Settings', icon: '⚙️', to: '/settings' },
 			{ id: 'account-manage-apps', label: 'My apps', icon: '🧩', to: '/apps/manage', authOnly: true },
 			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },
