@@ -36,6 +36,13 @@ test('account-hint privacy contracts publish their patch-level capability update
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
 });
 
+test('notification contracts publish the history filters and the system family as compatible minors', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
+});
+
 test('capabilities publish the non-secret data authority used by a bundle', () => {
 	const manifest = createApiCapabilitiesManifest([], {
 		schemaVersion: 1,

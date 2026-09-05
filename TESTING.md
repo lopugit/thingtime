@@ -1358,6 +1358,25 @@ email whose link points at the attacker.
       cancels without changes. Shares edit their caption only (the nested
       original stays visible below the textarea).
 
+## Lopu toast placement (`remix/app/components/Lopu/lopuPosition.ts`, `useLopuPosition.tsx`)
+
+- [ ] Fresh browser (no stored preference): every Lopu toast pops up at the
+      BOTTOM-LEFT corner, clear of the iOS home indicator, with the card's
+      countdown ring and ✕ working; nothing sits behind the fixed nav.
+- [ ] Settings → Appearance → "Lopu messages 🦄" is a dropdown listing Top
+      left / Top centre / Top right / Bottom left / Bottom centre / Bottom
+      right. Picking one fires a confirmation toast AT the new position
+      immediately, the drawer's quick-settings modal shows the same value,
+      and the choice survives a reload and a second tab (broadcast).
+- [ ] Top-row positions clear the fixed nav (translateY 70px) on desktop and
+      375px; centre positions stay centred with no horizontal scroll; corner
+      positions hug the safe-area edge with the 8px Chakra margin.
+- [ ] A toast fired while the left drawer is open, or from inside a modal
+      (Profile save, 2FA), stays visible above them (`--toast-z-index`
+      10260); DevKit still floats above the toast.
+- [ ] Streaming musings (`useLopuStream`) pop at the chosen position and stay
+      there while typing (Chakra cannot move an open toast).
+
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
@@ -3421,6 +3440,54 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       z-index, and the pill reserves 148px on the right). Regression class:
       nav-right controls rendered under the absolutely-positioned commander
       host and were untappable on mobile (2026-08).
+
+- [ ] Lopu drawer alignment: at desktop widths, open/close and resize the left
+      and right drawer with a notification visible. All six placements stay
+      within the page content; centred messages use the remaining content centre.
+      At 390px, the temporary drawer leaves notifications readable and dismissible
+      without horizontal overflow. Check both page top and bottom.
+
+## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
+
+- [ ] `/notifications` (auth) lists every notification the viewer has received
+      newest first (server keeps the newest 10,000 per recipient), with the
+      unfiltered first page painting instantly from `tt-notif-history-<id>`
+      and reconciling in the background; a cold start shows one spinner only.
+      Signed out, the page renders the quiet "Log in" state and never 401s.
+- [ ] Category chips All / Social 🤝 / Engagement 💬 / Feed 📰 / System ⚙️, the
+      Type dropdown (grouped by category), "Unread only", the search box
+      (debounced ~300ms, literal match over preview / actor name / username /
+      system title — `(.*)` finds nothing), and From/To day pickers all write
+      to the URL (`?category=&type=&unread=1&q=&since=&until=`); reloading or
+      sharing the URL restores the exact view, and "Reset filters" clears it.
+      Picking a type outside the active chip flips the chip to that type's
+      category; picking a chip that cannot hold the type drops the type.
+- [ ] The summary line shows `N notifications match · M unread` (server
+      `total` with `withTotal=1`); changing filters dims the current rows
+      instead of flashing empty; "Load older" appends via the `before` cursor
+      with no duplicates.
+- [ ] Clicking a row marks it read optimistically (row tint clears, unread
+      count drops, bell badge cache updates) and follows its click-through:
+      system notes → their `href` (`/actions/<key>`), else `/post/<id>`, else
+      the actor profile. "Mark all read ✓" clears every row + the bell badge
+      and reverts with a Lopu error toast on failure.
+- [ ] System notes: running an action from its detail page (or the API)
+      lands an `action-run` row — 🦄 Lopu avatar in a rainbow ring, headline
+      `Action “<name>” finished ✅` / `failed 🌧️`, detail `<ms> · <ops>` or
+      the error, System tag, click-through to `/actions/<key>`. A delegated
+      component click (`source: 'component'`) only notifies when it FAILS.
+      Own social actions still never notify yourself.
+- [ ] Settings → Notifications gains the "Action runs ⚡" row (push ON, email
+      opt-in by default) and a "History 📜 → Open" row; switching a type off
+      hides it on `/notifications` too; the bell popover's "See all →" opens
+      the page and the drawer's Account group lists Notifications 🔔.
+- [ ] `GET /api/v1/notifications` rejects nothing new: unknown `types` /
+      `category` values match nothing (empty page, `total: 0`), `q` is capped
+      at 100 chars, `since`/`until` are inclusive, `unreadCount` ignores the
+      filters, and the capabilities manifest advertises
+      `api.notifications-list` and `api.notifications-settings` at 1.1.0.
+- [ ] 375px: chips, inputs and the date row wrap without horizontal scroll;
+      rows never clip the category tag; the Lopu avatar ring stays round.
 
 ## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
 

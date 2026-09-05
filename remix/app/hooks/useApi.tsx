@@ -134,6 +134,8 @@ export function useApi() {
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
           clearLocalCachePrefix('tt-passkeys');
+          // Notification history can include private posts and action runs.
+          clearLocalCachePrefix('tt-notif-history-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

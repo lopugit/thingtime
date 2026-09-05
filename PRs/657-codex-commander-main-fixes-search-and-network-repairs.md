@@ -26,9 +26,12 @@ Implementation and earlier installed catalogue/menu evidence are recorded in
   passed (the main branch has two fewer unrelated capability tests).
 - Main-based Vercel server build and both built capability endpoints passed;
   both advertise `api.network-probe-upload` version `2.0.0`.
-- Canonical native build, CI, production deployment, and installed full-ladder
-  acceptance are being checked before final handoff. Do not treat this note as
-  proof of those pending runtime checks.
+- The main-based canonical `--prepare` build passed full Commander typechecks,
+  all 203 TypeScript tests, Rust checks, all 27 Swift tests, and release builds.
+  GitHub Web CI build and API suites passed on the initial source commit.
+- Production deployment and installed full-ladder acceptance are checked after
+  the authorized merge; final runtime evidence is recorded on the PR. This note
+  alone does not claim those pending checks have passed.
 - Graphify structural outputs are refreshed. Semantic extraction was attempted
   but interrupted after the local service timed out; changed documentation was
   read manually and is not claimed as fully semantically indexed.
