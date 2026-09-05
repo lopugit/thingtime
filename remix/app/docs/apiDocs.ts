@@ -4574,6 +4574,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
@@ -4588,7 +4590,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET'],
 		steps: [
-			'GET with id; optionally add download=1.',
+			'GET with id; optionally add download=1. width=64,320,640,1280,1920 returns a bounded WebP preview for verified raster images up to 20 MiB; unsupported images return 415 so clients can use the original.',
+			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. Larger files return 413; omit cache to use native range streaming.',
+			'cache=validate performs the same live authorization and returns {ok,cacheKey,size} without file bytes. Cache keys are opaque, viewer/version scoped and include the requested width. Revalidate before EVERY local cache read; never serve cached private bytes after a failed check or offline. Never persist signed URLs.',
 			'Follow the 302 to the short-lived private object URL.',
 			'Use the same stable endpoint again after expiry; never persist the presigned target.',
 			'Treat 404 uniformly for missing and unauthorized attachments.'
@@ -9237,16 +9241,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
-    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
-      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
-      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
-      'pagination via before=<nextBefore>.',
+      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out) plus SYSTEM ' +
+      'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
+      'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
+      'carries its category: social (friend-request, friend-accepted, new-follower, groups), ' +
+      'engagement (comment, reply, reaction, share, mention), feed (post-from-followed, ' +
+      'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
+      'notification settings, so disabling a type hides even already-written notifications of that ' +
+      'type. Optional filters back the /notifications history page: category=<one>, ' +
+      'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
+      'unread=1, q=<text ≤100 chars, literal case-insensitive match over preview / actor name / ' +
+      'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
+      'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
+      'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
+      'pagination via before=<nextBefore>. A recipient keeps their newest 10,000 notifications.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9255,7 +9271,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?limit=&before= — newest first.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
+      'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -9264,18 +9281,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'First page for the notifications popover.',
         method: 'GET',
         query: { limit: 20 }
+      },
+      {
+        name: 'History — unread system notes this month',
+        description: 'The /notifications page filtered to system notes (action runs) that are still unread, with a total.',
+        method: 'GET',
+        query: { limit: 30, category: 'system', unread: 1, since: '2026-08-01T00:00:00.000Z', withTotal: 1 }
+      },
+      {
+        name: 'History — search',
+        description: 'Everything mentioning "deckard" across previews, actor names and system titles.',
+        method: 'GET',
+        query: { limit: 30, q: 'deckard', withTotal: 1 }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Notifications + unread count.',
+        description: 'Notifications + unread count (a person row and a system note).',
         body: {
           ok: true,
           notifications: [
             {
               id: 'a1b2…',
               type: 'new-follower',
+              category: 'social',
               actorId: '664f…',
               actorUsername: 'rick',
               actorName: 'Rick Deckard',
@@ -9283,11 +9313,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               targetId: '664f…',
               postId: null,
               preview: null,
+              title: null,
+              href: null,
+              outcome: null,
               readAt: null,
               createdAt: '2026-08-01T12:00:00.000Z'
+            },
+            {
+              id: 'c3d4…',
+              type: 'action-run',
+              category: 'system',
+              actorId: 'thingtime',
+              actorUsername: null,
+              actorName: 'Lopu',
+              actorAvatarUrl: null,
+              targetId: 'tt-action-run-…',
+              postId: null,
+              preview: '42 ms · 3 ops',
+              title: 'Action “Daily digest” finished ✅',
+              href: '/actions/daily-digest',
+              outcome: 'ok',
+              readAt: null,
+              createdAt: '2026-08-01T11:58:00.000Z'
             }
           ],
-          unreadCount: 1,
+          unreadCount: 2,
+          total: 2,
           nextBefore: null
         }
       }
@@ -9330,6 +9381,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -9338,8 +9391,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
-      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      '(reserved), action-run (system notes from Lopu about actions you run), plus the email-only ' +
+      'weekly-summary digest. Defaults ON, except email for the high-volume types (post-from-followed / ' +
+      'post-from-friend / action-run), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
@@ -9389,7 +9443,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               reply: true,
               reaction: true,
               share: true,
-              groups: true
+              mention: true,
+              groups: true,
+              'action-run': true
             },
             email: {
               'friend-request': true,
@@ -9401,7 +9457,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               reply: true,
               reaction: true,
               share: true,
+              mention: true,
               groups: true,
+              'action-run': false,
               'weekly-summary': true
             },
             masters: { push: true, email: true }
@@ -9814,17 +9872,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'The binary body and Content-Length must exactly match one documented packet size. Nothing is persisted or reflected, and the endpoint is rate limited per client IP.',
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
     auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',
-      'Send binary data with exactly that Content-Length.',
+      'Send exactly that many binary bytes; Content-Length is optional but must be correct when present.',
+      'Split 5 MiB into 2 + 2 + 1 MiB, and 10 MiB into five 2 MiB requests. Respect Retry-After on HTTP 429.',
       'Use the small JSON acknowledgement only after a 200.'
     ],
     requestExamples: [
