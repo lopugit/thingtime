@@ -370,6 +370,13 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
   return { ...viewer, friendIds: await friendIdsOf(viewer.id) };
 };
 
+// In-flight load of a viewer's linked external-account ids, keyed weakly on
+// the viewer object. The memo has to be the PROMISE, not the finished field:
+// the callers below run concurrently (getThing's chain Promise.all, listThings'
+// page map), so a second caller routinely arrives while the first is still
+// awaiting its query and would otherwise start a duplicate one.
+const extAccountIdsLoad = new WeakMap<object, Promise<void>>();
+
 // Lazily attach the viewer's linked external-account ids the first time a doc
 // carrying a tt:extacct/ audience is evaluated. Deliberately MUTATES the
 // enriched viewer object (single monotone assignment): page loops pass the
@@ -377,13 +384,27 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
 // per request path instead of once per external post on the page.
 const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
   if (!viewer?.id || viewer.extAccountIds) return viewer;
-  const home = await getHomeThingsCollection();
-  const links = await home
-    .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
-    .toArray();
-  (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
-    links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
-  );
+  let load = extAccountIdsLoad.get(viewer);
+  if (!load) {
+    load = (async () => {
+      const home = await getHomeThingsCollection();
+      const links = await home
+        .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
+        .toArray();
+      (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
+        links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
+      );
+    })();
+    extAccountIdsLoad.set(viewer, load);
+  }
+  // A failed load must not be cached: the next evaluation on this request
+  // should get a real attempt rather than replaying a stale rejection.
+  try {
+    await load;
+  } catch (err) {
+    extAccountIdsLoad.delete(viewer);
+    throw err;
+  }
   return viewer;
 };
 
@@ -406,15 +427,31 @@ export const primeExtSourcedPostIds = (viewer: Viewer, postIds: Iterable<string>
   const known = new Set(viewer.extSourcedPostIds || []);
   for (const id of postIds) if (id) known.add(id);
   (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
-  const asked = extSourcedAsked.get(viewer) || new Set<string>();
-  for (const id of postIds) if (id) asked.add(id);
-  extSourcedAsked.set(viewer, asked);
+  const asked = extSourcedResolution.get(viewer) || new Map<string, Promise<void>>();
+  const settled = Promise.resolve();
+  for (const id of postIds) if (id) asked.set(id, settled);
+  extSourcedResolution.set(viewer, asked);
 };
 
-// Which post ids we have already RESOLVED for this viewer — distinct from the
-// positive set, so a miss is cached too and never re-queried. Keyed weakly on
-// the viewer object, which read paths already thread per request.
-const extSourcedAsked = new WeakMap<object, Set<string>>();
+// Which post ids we have already resolved for this viewer, held as the
+// RESOLUTION PROMISE rather than a bare "already asked" marker — distinct from
+// the positive set, so a miss is cached too and never re-queried. Keyed weakly
+// on the viewer object, which read paths already thread per request.
+//
+// The promise is load-bearing. ensureExtSourced publishes its memo entry before
+// the membership query it stands for has come back, and its callers run
+// CONCURRENTLY over entries that converge on the same post: getThing checks a
+// comment chain with one Promise.all, and every entry in that chain inherits
+// its acl from the same external post. Those entries sit at different inherit
+// depths, so their chain walks finish at different times — the shallow one can
+// reach the memo, claim the post, and still be awaiting Mongo when a deeper one
+// arrives. A bare marker sends that second caller straight on to canView with
+// the answer not yet loaded, and an unloaded set denies (deliberately, like
+// friendIds), so the viewer's own comment thread on a personal external post
+// intermittently loses its parent/root. Awaiting the same promise makes the
+// memo mean "resolved" instead of "claimed", and collapses the duplicate
+// queries the memo existed to avoid in the first place.
+const extSourcedResolution = new WeakMap<object, Map<string, Promise<void>>>();
 
 // Lazily resolve whether the viewer sources ONE external post, memoised per
 // request path (the same viewer object is threaded through page loops). One
@@ -422,32 +459,48 @@ const extSourcedAsked = new WeakMap<object, Set<string>>();
 // instead, so this only ever fires for single-doc reads.
 const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
   if (!viewer?.id || !postId) return viewer;
-  const asked = extSourcedAsked.get(viewer) || new Set<string>();
-  if (asked.has(postId)) return viewer;
-  await ensureExtAccountIds(viewer);
-  const accountIds = [...(viewer.extAccountIds || [])];
-  asked.add(postId);
-  extSourcedAsked.set(viewer, asked);
-  if (accountIds.length) {
-    const things = await getThingsCollection();
-    const hit = await things.findOne(
-      // (targetId, thingtime) is already this exact post's membership rows —
-      // one per sourcing account — so parentId is a residual over a handful of
-      // docs on the existing index, not a new one.
-      { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
-      { projection: { _id: 1 } }
-    );
-    if (hit) {
-      const known = new Set(viewer.extSourcedPostIds || []);
-      known.add(postId);
-      (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
-      return viewer;
-    }
+  let asked = extSourcedResolution.get(viewer);
+  if (!asked) {
+    asked = new Map<string, Promise<void>>();
+    extSourcedResolution.set(viewer, asked);
   }
-  // resolved-and-absent still needs an initialized set, or aclAllows can't
-  // tell "loaded, not a member" from "never loaded"
-  if (!viewer.extSourcedPostIds) {
-    (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
+  let resolving = asked.get(postId);
+  if (!resolving) {
+    resolving = (async () => {
+      await ensureExtAccountIds(viewer);
+      const accountIds = [...(viewer.extAccountIds || [])];
+      if (accountIds.length) {
+        const things = await getThingsCollection();
+        const hit = await things.findOne(
+          // (targetId, thingtime) is already this exact post's membership rows —
+          // one per sourcing account — so parentId is a residual over a handful of
+          // docs on the existing index, not a new one.
+          { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
+          { projection: { _id: 1 } }
+        );
+        if (hit) {
+          const known = new Set(viewer.extSourcedPostIds || []);
+          known.add(postId);
+          (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+          return;
+        }
+      }
+      // resolved-and-absent still needs an initialized set, or aclAllows can't
+      // tell "loaded, not a member" from "never loaded"
+      if (!viewer.extSourcedPostIds) {
+        (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
+      }
+    })();
+    asked.set(postId, resolving);
+  }
+  // A failed probe must not be cached as a resolved answer — drop it so this
+  // request can try again rather than treating a transient DB fault as "not a
+  // member" for the rest of the page.
+  try {
+    await resolving;
+  } catch (err) {
+    asked.delete(postId);
+    throw err;
   }
   return viewer;
 };
