@@ -3,6 +3,7 @@
 // imports so they unit-test in isolation and can be shared by the server
 // util (subspaces.ts), the posting gate (gate.ts) and the read path.
 import {
+	ACL_OWNER,
 	MAX_SUBSPACE_ACCENT_CHARS,
 	MAX_SUBSPACE_DESCRIPTION_CHARS,
 	MAX_SUBSPACE_FLAIR_ID_CHARS,
@@ -16,6 +17,7 @@ import {
 	MAX_SUBSPACE_RULES,
 	SUBSPACE_ACCESS_MODES,
 	SUBSPACE_FEED_SORTS,
+	SUBSPACE_SLUG_HOLD_DAYS,
 	SUBSPACE_SLUG_PATTERN,
 	type SubspaceAccessMode,
 	type SubspaceFeedSort,
@@ -259,5 +261,30 @@ export const confirmSlugMatches = (confirm: unknown, slug: string): boolean =>
 // the exact Mongo paths the accounted bulk updater $unsets.
 export const RELEASED_POST_UNSET = Object.freeze({ 'crystal.subspaceId': '', 'crystal.flairId': '', subspaceMod: '', subspacePrivate: '' });
 export const releasedPostUpdate = (now: Date) => ({ $unset: { ...RELEASED_POST_UNSET }, $set: { updatedAt: now } });
+// The owner's click must never publish what an author never chose to
+// publish: a post written behind a private subspace's wall, and a post the
+// community's moderators removed, leave the subspace as an author-only
+// (private) post instead of a world-readable one — same strip, plus the acl
+// narrowed to the owner. The author can re-share it deliberately.
+export const privatizedPostUpdate = (now: Date) => ({ $unset: { ...RELEASED_POST_UNSET }, $set: { updatedAt: now, acl: [ACL_OWNER] } });
+// Which release a post gets when its subspace goes: everything in a private
+// subspace stays private; elsewhere only moderator-removed posts do.
+export const releaseKindFor = (subspaceAccess: SubspaceAccessMode, postRemoved: boolean): 'released' | 'privatized' =>
+	subspaceAccess === 'private' || postRemoved ? 'privatized' : 'released';
+
+// Slug hold after deletion (see SUBSPACE_SLUG_HOLD_DAYS): the tombstone's
+// owner (the last owner of the deleted subspace) may re-found the slug at
+// once; everyone else waits out the hold. `until` is when the hold lapses.
+export const SUBSPACE_SLUG_HOLD_MS = SUBSPACE_SLUG_HOLD_DAYS * 86_400_000;
+export type SlugHoldState = { held: boolean; until: Date | null };
+export const slugHoldState = (tombstone: { ownerId?: unknown; crystal?: { deletedAt?: unknown } } | null | undefined, viewerId: string, nowMs: number): SlugHoldState => {
+	if (!tombstone) return { held: false, until: null };
+	const raw = tombstone.crystal?.deletedAt;
+	const deletedAt = raw instanceof Date ? raw : typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : null;
+	const deletedMs = deletedAt && Number.isFinite(deletedAt.getTime()) ? deletedAt.getTime() : nowMs;
+	const until = new Date(deletedMs + SUBSPACE_SLUG_HOLD_MS);
+	if (String(tombstone.ownerId || '') === viewerId) return { held: false, until };
+	return { held: until.getTime() > nowMs, until };
+};
 
 export const isFailValue = isFail;

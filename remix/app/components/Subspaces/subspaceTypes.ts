@@ -65,9 +65,12 @@ export type PublicModlogEntry = {
 // POST /api/v1/subspaces/transfer — the subspace as the (now moderator)
 // caller sees it + the new owner's member row
 export type SubspaceTransferResponse = { ok: true; subspace: PublicSubspace; newOwner: PublicSubspaceMember };
-// POST /api/v1/subspaces/delete — how many posts were released as plain
-// posts and how many member rows (incl. ban records) were removed
-export type SubspaceDeleteResponse = { ok: true; releasedPosts: number; removedMembers: number };
+// POST /api/v1/subspaces/delete — how many posts left the subspace
+// (releasedPosts), how many of those stayed private to their authors
+// (privatePosts: posts of a private subspace + posts the mods had removed —
+// the owner's click never publishes them) and how many member rows (incl.
+// ban records) were removed
+export type SubspaceDeleteResponse = { ok: true; releasedPosts: number; privatePosts: number; removedMembers: number };
 
 export type SubspaceFeedSort = 'hot' | 'new' | 'top' | 'rising' | 'controversial';
 export const SUBSPACE_SORTS: { id: SubspaceFeedSort; label: string; emoji: string }[] = [

@@ -34,8 +34,13 @@ reactions untouched.
   wired for later slices), `POST /api/v1/subspaces/transfer` (owner → active
   member; old owner becomes moderator and may leave), `POST
   /api/v1/subspaces/delete` (confirmSlug; posts survive as plain posts via
-  the accounted bulk `$unset`; members/modlog rows removed; former mods
-  notified), mod-page **Danger zone** with Chakra modals; verify section M.
+  the accounted bulk `$unset` — private-subspace posts and mod-removed posts
+  leave author-only, rich post+comment things included; the slug is held by
+  a `subspace-tombstone` for 30 days / re-foundable by the previous owner;
+  409 instead of stranding posts behind a missing doc; members/modlog rows
+  removed; former mods notified), transfer writes guarded against racing
+  transfers (409), mod-page **Danger zone** with Chakra modals that stay
+  mounted through an in-flight transfer; verify section M.
 
 ## Follow-ups (not in this PR)
 - Join-request queue for private subspaces; user flairs; per-subspace wiki +

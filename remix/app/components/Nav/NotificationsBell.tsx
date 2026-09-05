@@ -8,7 +8,7 @@ import { ProfileAvatarCircle } from '~/components/Profile/ProfilePage';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { subspaceSlugFromNotificationPreview } from '~/schemas/registry';
+import { subspaceNotificationDetail, subspaceSlugFromNotificationPreview } from '~/schemas/registry';
 
 // The nav bell 🔔: unread badge + a popover of recent notifications. The
 // badge count seeds from the per-user localCache (no flash), reconciles on
@@ -54,14 +54,17 @@ const TYPE_EMOJI: Record<string, string> = {
   'subspace-ban': '🚫'
 };
 
-const hasPreview = (item: BellNotification, pattern: RegExp) => pattern.test(item.preview || '');
+// Subspace previews lead with the slug ("s/<slug> · …"); the verb keys off the
+// DETAIL half only, so a slug like s/deleted_scenes or s/uplifted_minds can't
+// masquerade as a deletion or a lifted ban.
+const hasDetail = (item: BellNotification, pattern: RegExp) => pattern.test(subspaceNotificationDetail(item.preview));
 
 const verbOf = (item: BellNotification): string => {
   switch (item.type) {
     // subspace moderation — the preview line ("s/<slug> · …") carries the
     // specifics, the verb names the event family
     case 'subspace-join-request':
-      return hasPreview(item, /wants to post/i) ? 'asked for posting approval' : 'asked to join your subspace';
+      return hasDetail(item, /wants to post/i) ? 'asked for posting approval' : 'asked to join your subspace';
     case 'subspace-join-accepted':
       return 'accepted you into a subspace';
     case 'subspace-post-removed':
@@ -69,9 +72,9 @@ const verbOf = (item: BellNotification): string => {
     case 'subspace-report':
       return 'reported a post to the mods';
     case 'subspace-role':
-      return hasPreview(item, /deleted/i) ? 'deleted a subspace you moderated' : 'changed your role in a subspace';
+      return hasDetail(item, /deleted/i) ? 'deleted a subspace you moderated' : 'changed your role in a subspace';
     case 'subspace-ban':
-      return hasPreview(item, /lifted/i) ? 'lifted your ban' : 'banned you from a subspace';
+      return hasDetail(item, /lifted/i) ? 'lifted your ban' : 'banned you from a subspace';
     case 'friend-request':
       return 'sent you a friend request';
     case 'friend-accepted':

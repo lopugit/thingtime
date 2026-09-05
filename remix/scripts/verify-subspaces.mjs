@@ -422,25 +422,33 @@ const run = async () => {
 	check('refused deletes leave the subspace intact', stillThere.status === 200);
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises transfer/delete (1.0.0) and the bumped members/notifications contracts (1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.0' && manifest2.body.features['api.subspaces-delete'] === '1.0.0' && manifest2.body.features['api.subspaces-members'] === '1.1.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members/notifications contracts (1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.1.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
 	const transferDocs = await api('/api/v1/subspaces/transfer-docs');
 	check('docs routes answer for transfer + delete', deleteDocs.status === 200 && deleteDocs.body.docs?.endpoint === '/api/v1/subspaces/delete' && transferDocs.status === 200 && transferDocs.body.docs?.endpoint === '/api/v1/subspaces/transfer');
 
-	// delete success
-	const feedBeforeDelete = await api(`/api/v1/subspaces/feed?slug=${slug}&sort=new&limit=50`, { cookie: mod.cookie });
-	const livePosts = feedBeforeDelete.body?.posts?.length || 0;
+	// delete success — a PUBLIC subspace: plain posts go public, a post the
+	// mods removed stays private to its author
 	// `owner` left after the transfer and did not write `post` (member did — an
 	// author always sees their own post), so they are the honest "outsider"
 	const privateBefore = await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie });
 	check('(pre-check) the private fence still hides the post from a non-member non-author', privateBefore.status === 404, String(privateBefore.status));
+	const backToPublic = await api('/api/v1/subspaces/update', { method: 'POST', cookie: mod.cookie, body: { slug, access: 'public' } });
+	check('the new owner flips access back to public (owner-only power moved with the crown)', backToPublic.status === 200 && backToPublic.body.subspace.access === 'public', `${backToPublic.status} ${JSON.stringify(backToPublic.body).slice(0, 200)}`);
+	const feedBeforeDelete = await api(`/api/v1/subspaces/feed?slug=${slug}&sort=new&limit=50`, { cookie: mod.cookie });
+	const livePosts = feedBeforeDelete.body?.posts?.length || 0;
+	const removedAtDeletion = approvedPost.body.post;
+	const removeForDeletion = await api('/api/v1/subspaces/moderate', { method: 'POST', cookie: mod.cookie, body: { id: removedAtDeletion.id, action: 'remove', reason: 'Spam' } });
+	check('(setup) a post is REMOVED at deletion time', removeForDeletion.status === 200 && removeForDeletion.body.post.subspaceMod.removed === true, `${removeForDeletion.status} ${JSON.stringify(removeForDeletion.body).slice(0, 200)}`);
 	const deleted = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: `s/${slug.toUpperCase()}` } });
+	// livePosts was counted BEFORE the removal above, so it already includes
+	// the post that leaves as a private one
 	check(
-		'owner deletes with the retyped slug (s/ prefix + case forgiven) → releasedPosts + removedMembers',
-		deleted.status === 200 && deleted.body.releasedPosts >= livePosts && livePosts >= 3 && deleted.body.removedMembers === 2,
+		'owner deletes with the retyped slug (s/ prefix + case forgiven) → releasedPosts (incl. the removed one) + privatePosts + removedMembers',
+		deleted.status === 200 && deleted.body.releasedPosts >= livePosts && livePosts >= 3 && deleted.body.privatePosts >= 1 && deleted.body.privatePosts < deleted.body.releasedPosts && deleted.body.removedMembers === 2,
 		`${deleted.status} ${JSON.stringify(deleted.body)} live=${livePosts}`
 	);
 	const goneDetail = await api(`/api/v1/subspaces/get?slug=${slug}`, { cookie: mod.cookie });
@@ -453,16 +461,26 @@ const run = async () => {
 	check('mod log → 404 after deletion', goneModlog.status === 404);
 	const released = await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie });
 	check(
-		'posts survive as plain posts: subspace/flair/subspaceMod null, title kept, private fence lifted for a non-member non-author',
-		released.status === 200 && released.body.post?.subspace === null && released.body.post.flair === null && released.body.post.subspaceMod === null && released.body.post.title === 'Hello subspace 👋' && released.body.post.text === 'First thread body',
+		'public-subspace posts survive as plain public posts: subspace/flair/subspaceMod null, title kept, readable by a non-member non-author',
+		released.status === 200 && released.body.post?.subspace === null && released.body.post.flair === null && released.body.post.subspaceMod === null && released.body.post.title === 'Hello subspace 👋' && released.body.post.text === 'First thread body' && released.body.post.visibility === 'public',
 		`${released.status} ${JSON.stringify(released.body).slice(0, 300)}`
 	);
 	const releasedAnon = await api(`/api/v1/things?id=${strayPost.id}`);
-	check('a formerly-removed-then-approved post also reads plain and public', releasedAnon.status === 200 && releasedAnon.body.post?.subspace === null && releasedAnon.body.post.subspaceMod === null && releasedAnon.body.post.text === 'not a member but public');
+	check('a formerly-removed-then-APPROVED post also reads plain and public', releasedAnon.status === 200 && releasedAnon.body.post?.subspace === null && releasedAnon.body.post.subspaceMod === null && releasedAnon.body.post.text === 'not a member but public');
+	const removedForOutsider = await api(`/api/v1/things?id=${removedAtDeletion.id}`, { cookie: owner.cookie });
+	const removedForAnon = await api(`/api/v1/things?id=${removedAtDeletion.id}`);
+	check('a post REMOVED at deletion time stays hidden from non-authors (404 logged in and anonymous)', removedForOutsider.status === 404 && removedForAnon.status === 404, `${removedForOutsider.status}/${removedForAnon.status}`);
+	const removedForAuthor = await api(`/api/v1/things?id=${removedAtDeletion.id}`, { cookie: member.cookie });
+	check(
+		'…while its author keeps it as a plain PRIVATE post (subspace/subspaceMod null, body intact, visibility private)',
+		removedForAuthor.status === 200 && removedForAuthor.body.post?.subspace === null && removedForAuthor.body.post.subspaceMod === null && removedForAuthor.body.post.text === 'approved now' && removedForAuthor.body.post.visibility === 'private',
+		`${removedForAuthor.status} ${JSON.stringify(removedForAuthor.body).slice(0, 300)}`
+	);
 	const releasedComments = released.body.post?.comments || [];
 	check('comments + their votes rode along', releasedComments.some((entry) => entry.id === comment.id && entry.votes?.score === 1));
 	const homeAfterDelete = await api('/api/v1/things/feed?algorithm=latest&limit=50', { cookie: owner.cookie });
 	check('released posts are back on a non-member home feed without a subspace embed', homeAfterDelete.body.posts.some((entry) => entry.id === post.id && !entry.subspace));
+	check('…but the removed one is not', !homeAfterDelete.body.posts.some((entry) => entry.id === removedAtDeletion.id));
 	const voteReleased = await api('/api/v1/things/updown', { method: 'POST', cookie: member.cookie, body: { id: post.id, direction: 'up' } });
 	check('released posts keep working (vote → 200)', voteReleased.status === 200 && voteReleased.body.votes?.viewerVote === 'up');
 	const mineAfter = await api('/api/v1/subspaces?mine=1', { cookie: stranger.cookie });
@@ -471,15 +489,85 @@ const run = async () => {
 	check('directory no longer lists it', listAfter.status === 200 && !listAfter.body.subspaces.some((entry) => entry.slug === slug));
 	const formerModNotifs = await notifsOf(stranger.cookie);
 	check('former moderator is told the subspace was deleted (subspace-role · deleted)', formerModNotifs.items.some((n) => n.type === 'subspace-role' && n.targetId === subspace.id && /deleted/.test(n.preview || '')), summarize(formerModNotifs.items));
+	// scoped to THIS run's subspace: the day-stable fixture user is a moderator
+	// of the re-founded subspace deleted further down, so earlier runs leave
+	// them a legitimate "deleted" row for that other id
 	const actorNotifs = await notifsOf(mod.cookie);
-	check('the deleting owner does not notify themselves', !actorNotifs.items.some((n) => n.type === 'subspace-role' && /deleted/.test(n.preview || '')));
+	check('the deleting owner does not notify themselves', !actorNotifs.items.some((n) => n.type === 'subspace-role' && n.targetId === subspace.id && /deleted/.test(n.preview || '')));
 	const deleteAgain = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: slug } });
 	check('deleting a deleted subspace → 404', deleteAgain.status === 404);
-	const reclaim = await api('/api/v1/subspaces', { method: 'POST', cookie: member.cookie, body: { slug, name: 'Reclaimed' } });
-	check('the slug is free again after deletion', reclaim.status === 201, `${reclaim.status} ${JSON.stringify(reclaim.body).slice(0, 200)}`);
+
+	// slug hold: the deleted slug is a tombstone — strangers can't hijack the
+	// deep links, the previous owner may re-found it at once
+	const hijack = await api('/api/v1/subspaces', { method: 'POST', cookie: member.cookie, body: { slug, name: 'Hijacked' } });
+	check('someone else cannot take the deleted slug → 409 (held)', hijack.status === 409 && /held/.test(hijack.body?.error || ''), `${hijack.status} ${JSON.stringify(hijack.body).slice(0, 200)}`);
+	const stillGone = await api(`/api/v1/subspaces/get?slug=${slug}`);
+	check('a held slug still reads 404 (the tombstone is not a subspace)', stillGone.status === 404);
+	const reclaim = await api('/api/v1/subspaces', { method: 'POST', cookie: mod.cookie, body: { slug, name: 'Reclaimed', access: 'private' } });
+	check('the previous owner re-founds the slug at once → 201 (private this time)', reclaim.status === 201 && reclaim.body?.subspace?.access === 'private' && reclaim.body.subspace.viewer.role === 'owner', `${reclaim.status} ${JSON.stringify(reclaim.body).slice(0, 200)}`);
 	if (reclaim.status === 201) {
-		const cleanup = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: member.cookie, body: { slug, confirmSlug: slug } });
-		check('cleanup: a fresh subspace deletes cleanly (0 posts released, 1 membership removed)', cleanup.status === 200 && cleanup.body.releasedPosts === 0 && cleanup.body.removedMembers === 1, JSON.stringify(cleanup.body));
+		const reclaimed = reclaim.body.subspace;
+		// deleting a PRIVATE subspace: every post stays private to its author
+		const addMember = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug, username: member.username, action: 'add' } });
+		const addStranger = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug, username: stranger.username, action: 'add' } });
+		check('(setup) owner adds two members to the private subspace', addMember.status === 200 && addStranger.status === 200);
+		const privatePosted = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'Private thread body', title: 'Private thread', subspaceId: reclaimed.id } });
+		check('(setup) a member posts behind the private wall', privatePosted.status === 200 && privatePosted.body.post?.subspace?.slug === slug, `${privatePosted.status} ${JSON.stringify(privatePosted.body).slice(0, 200)}`);
+		const privatePost = privatePosted.body.post;
+		// a rich ["post","comment"] thing pointing at the subspace is fenced by the
+		// same stamp — deletion must release it too, never strand it
+		const richReply = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { thingtime: ['post', 'comment'], targetId: privatePost.id, crystal: { type: 'text', text: 'rich private reply', subspaceId: reclaimed.id } } });
+		check('(setup) a rich post+comment thing carries the subspace pointer', richReply.status === 200 && richReply.body.post?.thingtime?.includes('comment'), `${richReply.status} ${JSON.stringify(richReply.body).slice(0, 200)}`);
+		const richId = richReply.body.post?.id;
+		const privateForMember = await api(`/api/v1/things?id=${privatePost.id}`, { cookie: stranger.cookie });
+		const privateForOutsider = await api(`/api/v1/things?id=${privatePost.id}`, { cookie: owner.cookie });
+		check('(pre-check) members read the private post, an outsider gets 404', privateForMember.status === 200 && privateForOutsider.status === 404, `${privateForMember.status}/${privateForOutsider.status}`);
+
+		// two transfers racing from the same owner commit at most once
+		const [raceA, raceB] = await Promise.all([
+			api('/api/v1/subspaces/transfer', { method: 'POST', cookie: mod.cookie, body: { slug, username: member.username } }),
+			api('/api/v1/subspaces/transfer', { method: 'POST', cookie: mod.cookie, body: { slug, username: stranger.username } })
+		]);
+		const raceWins = [raceA, raceB].filter((entry) => entry.status === 200);
+		const raceLoss = [raceA, raceB].find((entry) => entry.status !== 200);
+		check('concurrent transfers: exactly one commits, the other is refused (409 lost the race, or 403 once the crown had moved)', raceWins.length === 1 && !!raceLoss && [403, 409].includes(raceLoss.status), `${raceA.status}/${raceB.status} ${JSON.stringify(raceLoss?.body || raceA.body).slice(0, 200)}`);
+		const winnerId = raceWins[0]?.body?.subspace?.ownerId || null;
+		const winner = winnerId === member.id ? member : winnerId === stranger.id ? stranger : null;
+		const afterRace = await api(`/api/v1/subspaces/get?slug=${slug}`, { cookie: mod.cookie });
+		check(
+			'after the race the roster has exactly ONE owner and it matches subspace.ownerId; the old owner is a moderator',
+			!!winner && afterRace.status === 200 && afterRace.body.subspace.ownerId === winner.id && afterRace.body.moderators.filter((entry) => entry.role === 'owner').length === 1 && afterRace.body.moderators.some((entry) => entry.userId === winner.id && entry.role === 'owner') && afterRace.body.subspace.viewer.role === 'moderator',
+			`${afterRace.status} owner=${winnerId} ${JSON.stringify(afterRace.body?.moderators?.map((entry) => [entry.userId, entry.role]))}`
+		);
+		const loser = winner === member ? stranger : member;
+		const loserDelete = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: loser.cookie, body: { slug, confirmSlug: slug } });
+		check('the transfer loser holds no owner powers (delete → 403)', loserDelete.status === 403);
+		const oldOwnerDeleteAfterRace = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: slug } });
+		check('the previous owner cannot delete after the race either → 403', oldOwnerDeleteAfterRace.status === 403);
+
+		const deletedPrivate = winner ? await api('/api/v1/subspaces/delete', { method: 'POST', cookie: winner.cookie, body: { slug, confirmSlug: slug } }) : { status: 0, body: null };
+		check(
+			'the new owner deletes the PRIVATE subspace → every post left private (privatePosts === releasedPosts === 2: the post + the rich reply), 3 memberships removed',
+			deletedPrivate.status === 200 && deletedPrivate.body.releasedPosts === 2 && deletedPrivate.body.privatePosts === 2 && deletedPrivate.body.removedMembers === 3,
+			`${deletedPrivate.status} ${JSON.stringify(deletedPrivate.body)}`
+		);
+		const privateAfterForOutsider = await api(`/api/v1/things?id=${privatePost.id}`, { cookie: owner.cookie });
+		const privateAfterForExMember = await api(`/api/v1/things?id=${privatePost.id}`, { cookie: stranger.cookie });
+		const privateAfterAnon = await api(`/api/v1/things?id=${privatePost.id}`);
+		check('a private-subspace post is NOT made public by the deletion (404 for an outsider, an ex-member and anonymous)', privateAfterForOutsider.status === 404 && privateAfterForExMember.status === 404 && privateAfterAnon.status === 404, `${privateAfterForOutsider.status}/${privateAfterForExMember.status}/${privateAfterAnon.status}`);
+		const privateAfterForAuthor = await api(`/api/v1/things?id=${privatePost.id}`, { cookie: member.cookie });
+		check(
+			'…its author keeps it as a plain private post (subspace null, title + body intact, visibility private)',
+			privateAfterForAuthor.status === 200 && privateAfterForAuthor.body.post?.subspace === null && privateAfterForAuthor.body.post.subspaceMod === null && privateAfterForAuthor.body.post.title === 'Private thread' && privateAfterForAuthor.body.post.text === 'Private thread body' && privateAfterForAuthor.body.post.visibility === 'private',
+			`${privateAfterForAuthor.status} ${JSON.stringify(privateAfterForAuthor.body).slice(0, 300)}`
+		);
+		const richAfterForExMember = richId ? await api(`/api/v1/things?id=${richId}`, { cookie: stranger.cookie }) : { status: 0 };
+		const richAfterForAuthor = richId ? await api(`/api/v1/things?id=${richId}`, { cookie: member.cookie }) : { status: 0, body: null };
+		check('the rich post+comment thing was released with the same fence (404 for an ex-member, private + subspace-free for its author)', richAfterForExMember.status === 404 && richAfterForAuthor.status === 200 && richAfterForAuthor.body?.thing?.visibility === 'private' && !richAfterForAuthor.body.thing.subspace, `${richAfterForExMember.status}/${richAfterForAuthor.status} ${JSON.stringify(richAfterForAuthor.body).slice(0, 200)}`);
+		const homeAfterPrivateDelete = await api('/api/v1/things/feed?algorithm=latest&limit=50', { cookie: stranger.cookie });
+		check('the private post does not re-enter an ex-member’s home feed', !homeAfterPrivateDelete.body.posts.some((entry) => entry.id === privatePost.id));
+		const heldAgain = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug, name: 'Nope' } });
+		check('the slug is held again after the second deletion (409 for a non-owner)', heldAgain.status === 409 && /held/.test(heldAgain.body?.error || ''));
 	}
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);

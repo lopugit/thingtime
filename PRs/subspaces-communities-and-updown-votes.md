@@ -41,12 +41,25 @@ score field.
   owner-only lifecycle: `transferSubspace` (target must be an ACTIVE member;
   they become owner, the caller steps down to moderator, the subspace doc
   changes hands through `updateAccountedThing` so its bytes move ledgers in
-  the same transaction; modlog `owner.transfer`) and `deleteSubspace`
-  (`confirmSlug` must equal the slug; posts are RELEASED as plain posts by a
-  bounded-batch accounted `$unset` of `crystal.subspaceId` / `crystal.flairId`
-  / `subspaceMod` / `subspacePrivate`, member + modlog (+ report) rows are
-  deleted, the subspace doc last via `deleteAccountedThing`; returns
-  `{ releasedPosts, removedMembers }`).
+  the same transaction; every write in that transaction is guarded by the
+  ownership/membership the gate saw and `requireOwner` also checks the doc's
+  `ownerId`, so two racing transfers commit at most once — the loser 409s;
+  modlog `owner.transfer`) and `deleteSubspace` (`confirmSlug` must equal
+  the slug; every post-shaped thing pointing at the subspace — plain posts
+  AND rich `['post','comment']` things — is released in bounded accounted
+  batches: `$unset` of `crystal.subspaceId` / `crystal.flairId` /
+  `subspaceMod` / `subspacePrivate`, and posts of a PRIVATE subspace or
+  posts the mods REMOVED additionally get `acl: ['tt:user']` so the owner's
+  click never publishes them (`releaseKindFor` / `privatizedPostUpdate` in
+  `subspaceCore.ts`); a batch that trips the accounted updater's
+  `storage_conflict` is retried, and while any post still points at the
+  subspace the call answers 409 with the doc intact (safe to retry). Then
+  the subspace doc goes via `deleteAccountedThing` together with a
+  `subspace-tombstone` row that keeps the slug's uniqueKey (previous owner
+  may re-found at once, others after `SUBSPACE_SLUG_HOLD_DAYS` = 30 → 409
+  "held"; `/s/<slug>` stays 404), then member + modlog (+ report) rows;
+  returns `{ releasedPosts, privatePosts, removedMembers }`). Contracts:
+  `subspaces-transfer` 1.0.1, `subspaces-delete` 1.1.0.
 - Notifications (round 2): six `subspace-*` types in `NOTIFICATION_TYPES`
   (`subspace-join-request`, `-join-accepted`, `-post-removed`, `-report`,
   `-role`, `-ban`) with prefs rows, bell copy, email copy and CTA. Subspace-
@@ -114,9 +127,21 @@ score field.
   role/ban notifications, transfer walls (401/403/400/404, banned target
   403) + success (ownerId flips, old owner demoted and may leave, modlog
   `owner.transfer`, new-owner notification), delete walls (401/403/400) +
-  success (get/feed/members 404, posts readable as plain posts with the
-  private fence lifted, memberships gone, former-mod notification, slug
-  reusable)).
+  success on a public subspace (get/feed/members 404, posts readable as
+  plain public posts, a post removed at deletion time 404s for non-authors
+  and reads as a private post for its author, memberships gone, former-mod
+  notification), the slug hold (409 "held" for a stranger, 201 for the
+  previous owner, 404 meanwhile), a private-subspace deletion (every post
+  incl. a rich post+comment thing leaves author-only: 404 for outsiders,
+  ex-members and anonymous; never back on a home feed) and two concurrent
+  transfers from one owner (exactly one 200, the other 409/403, one crown
+  on the roster, `ownerId` agrees)).
+- S1 review fixes (same branch): `NotificationsBell` keys its verb off
+  `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
+  `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger
+  zone mounted through an in-flight transfer (`transferPending`) so the
+  optimistic crown flip dims it instead of unmounting the open confirm
+  modal, and a failed transfer lands back with the username intact.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)

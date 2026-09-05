@@ -1274,19 +1274,38 @@ email whose link points at the attacker.
       🎩 `subspace-role` bell entry "s/<slug> · you are now the owner 👑"
       that deep-links to `/s/<slug>`); the API refuses non-owners (403),
       yourself (400), non-members / unknown users (404) and banned members
-      (403), and the previous owner can now Leave. **Delete subspace** opens
-      a modal whose red button arms only once `s/<slug>` is retyped (prefix
-      and case forgiven); success navigates to `/s` with a toast counting
-      released posts + removed memberships, `/s/<slug>` shows "doesn't
-      exist" (its cached copy is evicted, never repainted), the slug is free
-      again, members/mod log are gone, and every former post still opens on
-      `/post/:id` as a plain post (no subspace chip, flair or mod state;
-      title kept; private-fence lifted). Moderators (403) and a wrong
-      `confirmSlug` (400) are refused; former mods get a
-      "s/<slug> · was deleted by its owner 🗑️" bell entry.
+      (403), and the previous owner can now Leave. While the transfer is in
+      flight the Danger zone stays mounted and merely dims (the confirm
+      modal keeps its spinner); a failed transfer (typo'd username → 404)
+      puts the crown straight back with the username still typed. Two
+      transfers racing from the same owner (double-click, two tabs, two API
+      clients) commit at most once — the loser answers 409 and the roster
+      never shows two crowns. **Delete subspace** opens a modal whose red
+      button arms only once `s/<slug>` is retyped (prefix and case
+      forgiven); success navigates to `/s` with a toast counting released
+      posts (and how many stay private to their authors) + removed
+      memberships, `/s/<slug>` shows "doesn't exist" (its cached copy is
+      evicted, never repainted), members/mod log are gone, and every former
+      post still opens on `/post/:id` as a plain post (no subspace chip,
+      flair or mod state; title kept). Posts of a **private** subspace and
+      posts the mods had **removed** become author-only private posts (404
+      for everyone else, never back on public feeds) — the owner's click
+      never publishes what an author never chose to publish; rich
+      post+comment things pointing at the subspace are released the same
+      way. The slug is **held** (a `subspace-tombstone` row keeps its
+      uniqueKey): anyone else gets 409 "held" for 30 days while the previous
+      owner may re-found it at once, and `/s/<slug>` stays 404 meanwhile.
+      Moderators (403), a wrong `confirmSlug` (400), a delete that lost a
+      race with a transfer (409) and a subspace with more posts than one
+      call releases (409, doc intact — run it again) are refused; former
+      mods get a "s/<slug> · was deleted by its owner 🗑️" bell entry.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
-      reports 🚩 — the last two default email OFF). Promote/demote rings
+      reports 🚩 — the last two default email OFF). The bell's verb keys off
+      the preview's detail half only (`subspaceNotificationDetail`): a
+      promotion in `s/deleted_scenes` reads "changed your role", a ban in
+      `s/uplifted_minds` reads "banned you" — never "deleted a subspace" /
+      "lifted your ban". Promote/demote rings
       `subspace-role`, ban/unban rings `subspace-ban`; each row reads
       "<actor> changed your role in a subspace" with the `s/<slug> · …`
       preview beneath and clicking it opens `/s/<slug>`. Switching a type off

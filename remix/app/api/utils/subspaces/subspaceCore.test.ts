@@ -4,15 +4,19 @@ import test from 'node:test';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import {
 	confirmSlugMatches,
+	privatizedPostUpdate,
 	rankSubspacePosts,
 	RELEASED_POST_UNSET,
+	releaseKindFor,
 	releasedPostUpdate,
 	sanitizeBranding,
 	sanitizeFlairs,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeTopRange,
+	slugHoldState,
 	slugifyFlairId,
+	SUBSPACE_SLUG_HOLD_MS,
 	topRangeSince
 } from './subspaceCore.ts';
 
@@ -117,4 +121,38 @@ test('releasedPostUpdate strips exactly the subspace pointer, flair, mod state a
 	// the shared template is frozen so no caller can widen the strip list
 	assert.equal(Object.isFrozen(RELEASED_POST_UNSET), true);
 	assert.deepEqual(Object.keys(RELEASED_POST_UNSET), ['crystal.subspaceId', 'crystal.flairId', 'subspaceMod', 'subspacePrivate']);
+});
+
+test('privatizedPostUpdate strips the same paths and narrows the acl to the author', () => {
+	const now = new Date('2026-09-05T00:00:00.000Z');
+	assert.deepEqual(privatizedPostUpdate(now), {
+		$unset: { 'crystal.subspaceId': '', 'crystal.flairId': '', subspaceMod: '', subspacePrivate: '' },
+		$set: { updatedAt: now, acl: ['tt:user'] }
+	});
+});
+
+test('releaseKindFor keeps private-subspace posts and moderator-removed posts author-only', () => {
+	// a private wall covers every post, removed or not
+	assert.equal(releaseKindFor('private', false), 'privatized');
+	assert.equal(releaseKindFor('private', true), 'privatized');
+	// public / restricted: only what the mods removed stays hidden
+	assert.equal(releaseKindFor('public', true), 'privatized');
+	assert.equal(releaseKindFor('restricted', true), 'privatized');
+	assert.equal(releaseKindFor('public', false), 'released');
+	assert.equal(releaseKindFor('restricted', false), 'released');
+});
+
+test('slugHoldState frees the slug for the previous owner at once and for others after the hold', () => {
+	const deletedAt = new Date('2026-09-05T00:00:00.000Z');
+	const tombstone = { ownerId: 'prev', crystal: { deletedAt } };
+	const justAfter = deletedAt.getTime() + 60_000;
+	assert.deepEqual(slugHoldState(null, 'anyone', justAfter), { held: false, until: null });
+	assert.deepEqual(slugHoldState(tombstone, 'prev', justAfter), { held: false, until: new Date(deletedAt.getTime() + SUBSPACE_SLUG_HOLD_MS) });
+	assert.equal(slugHoldState(tombstone, 'stranger', justAfter).held, true);
+	assert.equal(slugHoldState(tombstone, 'stranger', deletedAt.getTime() + SUBSPACE_SLUG_HOLD_MS - 1).held, true);
+	assert.equal(slugHoldState(tombstone, 'stranger', deletedAt.getTime() + SUBSPACE_SLUG_HOLD_MS).held, false);
+	// ISO strings (the shape a projection hands back) and a missing date
+	// (counts from now — never a free-for-all) both behave
+	assert.equal(slugHoldState({ ownerId: 'prev', crystal: { deletedAt: deletedAt.toISOString() } }, 'stranger', justAfter).held, true);
+	assert.equal(slugHoldState({ ownerId: 'prev', crystal: {} }, 'stranger', justAfter).held, true);
 });

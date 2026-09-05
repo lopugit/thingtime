@@ -342,10 +342,15 @@ export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversia
 export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
 export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
 export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
+// A deleted subspace leaves a slug tombstone (kind `subspace-tombstone`) that
+// keeps holding the `subspaceSlug` uniqueKey: the previous owner may re-found
+// the slug at once, anyone else only after the hold — so bell / email deep
+// links to /s/<slug> can't be hijacked by whoever re-registers it first.
+export const SUBSPACE_SLUG_HOLD_DAYS = 30;
 // Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
 // /api/v1/things refuses them; excluded from own-things listings + generic
 // DELETE the way the messenger family is).
-export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog'] as const;
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone'] as const;
 export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
@@ -1688,6 +1693,29 @@ const subspaceModlogSchema: ThingtimeSchema = {
   example: { action: 'post.remove', postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', reason: 'Rule 1' }
 };
 
+const subspaceTombstoneSchema: ThingtimeSchema = {
+  id: 'subspace-tombstone',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace slug tombstone',
+  summary: 'Holds a deleted subspace’s slug so its deep links can’t be hijacked (control-plane row).',
+  detail:
+    'Written by POST /api/v1/subspaces/delete in the same transaction that removes the subspace thing; carries ' +
+    'the subspaceSlug uniqueKey the subspace held. targetId = the deleted subspace shareId, ownerId = its last ' +
+    `owner, who may re-found the slug immediately; anyone else only once the ${SUBSPACE_SLUG_HOLD_DAYS}-day hold ` +
+    'has passed (POST /api/v1/subspaces answers 409 until then). Re-founding the slug consumes the tombstone. ' +
+    'Never listed: /s/<slug> and GET /api/v1/subspaces/get answer 404 for a tombstoned slug.',
+  createdVia: 'POST /api/v1/subspaces/delete',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'The held slug.' },
+    { name: 'subspaceId', type: 'id', required: true, description: 'shareId of the deleted subspace.' },
+    { name: 'previousOwnerId', type: 'id', required: true, description: 'Who owned it at deletion (may re-found at once).' },
+    { name: 'deletedAt', type: 'date', required: true, description: 'When the subspace was deleted (the hold counts from here).' }
+  ],
+  example: { slug: 'rainbows', subspaceId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', previousOwnerId: '5eed…', deletedAt: '2026-09-05T00:00:00.000Z' }
+};
+
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
 	version: 3,
@@ -2197,6 +2225,16 @@ const SUBSPACE_PREVIEW_SLUG_PATTERN = /^s\/([a-z0-9_]{1,30})(?=\s|$)/;
 export const subspaceSlugFromNotificationPreview = (preview: unknown): string | null => {
   const match = SUBSPACE_PREVIEW_SLUG_PATTERN.exec(typeof preview === 'string' ? preview.trim() : '');
   return match ? match[1] : null;
+};
+// The detail half of a subspace preview ("you are now a moderator 🎩") with
+// the slug head stripped — anything that keys copy off the preview text (the
+// bell's verb, an email line) must match against THIS, never the whole
+// preview: a slug like s/deleted_scenes or s/uplifted_minds would otherwise
+// read as a deletion / a lifted ban.
+const SUBSPACE_PREVIEW_HEAD_PATTERN = /^s\/[a-z0-9_]{1,30}(?:\s*·\s*|\s+|$)/;
+export const subspaceNotificationDetail = (preview: unknown): string => {
+  const text = typeof preview === 'string' ? preview.trim() : '';
+  return SUBSPACE_PREVIEW_SLUG_PATTERN.test(text) ? text.replace(SUBSPACE_PREVIEW_HEAD_PATTERN, '').trim() : text;
 };
 
 // Email-channel notification switches. Every bell type can also send an email,
@@ -3569,6 +3607,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceSchema,
   subspaceMemberSchema,
   subspaceModlogSchema,
+  subspaceTombstoneSchema,
   folderSchema,
   appSchema,
   appDataSchema,

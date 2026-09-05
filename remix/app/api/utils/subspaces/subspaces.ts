@@ -13,8 +13,9 @@
 import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection } from '../mongodb/collections';
-import { thingUniqueKey } from '../mongodb/uniqueKeys';
+import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { deleteAccountedThing, insertAccountedThing, updateAccountedThing, updateAccountedThings, withAccountedThingsTransaction } from '../storage/accountedThings';
+import { StorageMutationError } from '../storage/storageCore';
 import { findUserByUsername } from '../auth/users';
 import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
 import {
@@ -36,6 +37,7 @@ import {
 	oldestCursorClause,
 	parseChronoCursor,
 	postMatch,
+	postThingMatch,
 	resolveProfiles,
 	toPublicPosts,
 	visibilityQueryFor,
@@ -66,7 +68,9 @@ import {
 import {
 	confirmSlugMatches,
 	flairById,
+	privatizedPostUpdate,
 	rankSubspacePosts,
+	releaseKindFor,
 	releasedPostUpdate,
 	sanitizeAccess,
 	sanitizeBranding,
@@ -78,6 +82,7 @@ import {
 	sanitizeSlug,
 	sanitizeSort,
 	sanitizeTopRange,
+	slugHoldState,
 	topRangeSince,
 	type RankCandidate,
 	type SubspaceBranding,
@@ -102,9 +107,13 @@ const MAX_BAN_DAYS = 3650;
 const MAX_NOTIFIED_MODERATORS = 200;
 // deleting a subspace releases its posts in bounded accounted batches (each
 // batch is one storage transaction); the pass cap only guards against a
-// pathological loop, real subspaces drain in a handful of passes
+// pathological loop, real subspaces drain in a handful of passes — and a
+// subspace too big for one call is refused (409) BEFORE its doc goes, so the
+// owner simply runs delete again. A batch whose post vanished mid-transaction
+// (the accounted updater's storage_conflict) is retried, bounded.
 const RELEASE_BATCH = 200;
 const MAX_RELEASE_PASSES = 2_000;
+const MAX_RELEASE_CONFLICTS = 5;
 
 // ---------------------------------------------------------------------------
 // Projections
@@ -296,9 +305,9 @@ const memberCountsFor = async (subspaceIds: string[]): Promise<Map<string, numbe
 
 const livePostMatch = (subspaceId: string) => withMatch(postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
 
-const ownedSubspaceCount = async (userId: string): Promise<number> => {
+const ownedSubspaceCount = async (userId: string, session?: any): Promise<number> => {
 	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'subspace-member', ownerId: userId, 'crystal.role': 'owner', 'crystal.left': { $ne: true } } as any);
+	return things.countDocuments({ thingtime: 'subspace-member', ownerId: userId, 'crystal.role': 'owner', 'crystal.left': { $ne: true } } as any, session ? { session } : {});
 };
 
 const membershipCount = async (userId: string): Promise<number> => {
@@ -332,13 +341,47 @@ const requireModerator = async (subspaceId: string, userId: string): Promise<Fai
 };
 
 // owner-only lifecycle actions (transfer / delete) — returns the owner's own
-// member doc too, since transfer rewrites it
-const requireOwner = async (subspaceId: string, userId: string, verb: string): Promise<Fail | { ok: true; membership: SubspaceMembership; doc: any }> => {
-	const doc = await findSubspaceMemberDoc(subspaceId, userId);
+// member doc too, since transfer rewrites it. Belt and braces: the member row
+// AND the subspace doc's ownerId must both name the caller (a half-applied
+// transfer can never leave two people with the crown).
+const requireOwner = async (subspace: any, userId: string, verb: string): Promise<Fail | { ok: true; membership: SubspaceMembership; doc: any }> => {
+	const doc = await findSubspaceMemberDoc(String(subspace.shareId), userId);
 	const membership = doc ? membershipOfDoc(doc) : null;
-	if (!canModerate(membership) || membership!.role !== 'owner') return fail(403, `Only the owner can ${verb} 👑`);
+	if (!canModerate(membership) || membership!.role !== 'owner' || String(subspace.ownerId || '') !== userId) {
+		return fail(403, `Only the owner can ${verb} 👑`);
+	}
 	return { ok: true, membership: membership!, doc };
 };
+
+// A lifecycle write whose guarded filter matched nothing: the subspace
+// changed hands (or vanished) between the gate and the transaction. Thrown
+// inside the transaction so it aborts as a whole; the util answers 409.
+class LifecycleConflict extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'LifecycleConflict';
+	}
+}
+const lifecycleConflictToFail = (err: unknown): Fail | null => (err instanceof LifecycleConflict ? fail(409, err.message) : null);
+
+// A deleted subspace's slug hold (kind subspace-tombstone — control-plane
+// plumbing carrying the subspaceSlug uniqueKey the subspace held).
+const newSubspaceTombstoneDoc = (subspaceId: string, slug: string, previousOwnerId: string, now: Date) => ({
+	shareId: randomUUID(),
+	schemaVersion: THINGS_SCHEMA_VERSION,
+	thingtime: ['subspace-tombstone'],
+	crystal: { slug, subspaceId, previousOwnerId, deletedAt: now },
+	uniqueKeys: [thingUniqueKey(SUBSPACE_SLUG_KEY_FIELD, slug)],
+	extended: null,
+	ownerId: previousOwnerId,
+	acl: ['tt:user'],
+	targetId: subspaceId,
+	tags: [],
+	createdAt: now,
+	updatedAt: now
+});
+const findSubspaceTombstone = async (things: any, slug: string): Promise<any | null> =>
+	things.findOne({ thingtime: 'subspace-tombstone', ...thingUniqueKeyFilter(SUBSPACE_SLUG_KEY_FIELD, slug) } as any);
 
 // the actor snapshot every subspace notification carries (notifications.ts
 // re-resolves live profile data on read)
@@ -396,6 +439,16 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 	if ((await membershipCount(ownerId)) >= MAX_SUBSPACE_MEMBERSHIPS_PER_USER) {
 		return fail(400, `You are in ${MAX_SUBSPACE_MEMBERSHIPS_PER_USER} subspaces already — leave one first`);
 	}
+	const things = await getThingsCollection();
+	// a recently deleted subspace still holds its slug: only its last owner may
+	// re-found it before the hold lapses (the tombstone is consumed below, in
+	// the founding transaction — a second founder racing for the same slug
+	// hits the uniqueKey and answers 409 like any taken slug)
+	const tombstone = await findSubspaceTombstone(things, slug);
+	const hold = slugHoldState(tombstone, ownerId, Date.now());
+	if (hold.held) {
+		return fail(409, `s/${slug} was deleted recently — its slug is held for its previous owner until ${hold.until!.toISOString().slice(0, 10)}`);
+	}
 
 	const now = new Date();
 	const subspace = {
@@ -413,9 +466,9 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 		updatedAt: now
 	};
 	const owner = newSubspaceMemberDoc(subspace.shareId, ownerId, { role: 'owner', approved: true });
-	const things = await getThingsCollection();
 	try {
 		await withAccountedThingsTransaction(async (session) => {
+			if (tombstone) await things.deleteOne({ _id: tombstone._id } as any, { session });
 			await insertAccountedThing(things, subspace as any, { session });
 			await things.insertOne(owner as any, { session });
 		});
@@ -855,7 +908,7 @@ export const transferSubspace = async (
 	const { subspace } = found;
 	const id = String(subspace.shareId);
 	const slug = String(subspace.crystal?.slug || id);
-	const gate = await requireOwner(id, actorId, 'transfer ownership');
+	const gate = await requireOwner(subspace, actorId, 'transfer ownership');
 	if (gate.ok === false) return gate;
 	const targetUserId = await resolveTargetUserId(input);
 	if (isFail(targetUserId)) return targetUserId;
@@ -864,21 +917,42 @@ export const transferSubspace = async (
 	const target = targetDoc ? membershipOfDoc(targetDoc) : null;
 	if (target?.banned) return fail(403, `A banned user can’t take over s/${slug} — lift the ban first`);
 	if (!isActiveMember(target)) return fail(404, `The new owner has to be an active member of s/${slug} first`);
-	if ((await ownedSubspaceCount(targetUserId)) >= MAX_SUBSPACES_PER_USER) {
-		return fail(400, `They already run ${MAX_SUBSPACES_PER_USER} subspaces — the cap applies to owners too`);
-	}
+	const ownerCapMessage = `They already run ${MAX_SUBSPACES_PER_USER} subspaces — the cap applies to owners too`;
+	if ((await ownedSubspaceCount(targetUserId)) >= MAX_SUBSPACES_PER_USER) return fail(400, ownerCapMessage);
 
 	const things = await getThingsCollection();
 	const now = new Date();
-	await withAccountedThingsTransaction(async (session) => {
-		await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
-		await things.updateOne(
-			{ _id: targetDoc._id } as any,
-			{ $set: { 'crystal.role': 'owner', 'crystal.approved': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, updatedAt: now } },
-			{ session }
-		);
-		await things.updateOne({ _id: gate.doc._id } as any, { $set: { 'crystal.role': 'moderator', updatedAt: now } }, { session });
-	});
+	try {
+		await withAccountedThingsTransaction(async (session) => {
+			// every write is guarded by the state the gate saw, so two transfers
+			// racing from the same owner (double-submit, two tabs, two API clients)
+			// commit at most once: the loser matches nothing and the whole
+			// transaction aborts — never two owner rows, never an ownerId that
+			// disagrees with the roster. The cap is re-read under the session too.
+			if ((await ownedSubspaceCount(targetUserId, session)) >= MAX_SUBSPACES_PER_USER) throw new LifecycleConflict(ownerCapMessage);
+			const handedOver = await updateAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
+			if (!Number(handedOver?.matchedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were transferring it — reload and try again`);
+			const crowned = await things.updateOne(
+				// still an active member: not left, and not banned (an expired
+				// temporary ban is healed lazily, so it reads as not banned here too)
+				{
+					_id: targetDoc._id,
+					targetId: id,
+					'crystal.left': { $ne: true },
+					$or: [{ 'crystal.banned': { $ne: true } }, { 'crystal.banUntil': { $ne: null, $lte: now } }]
+				} as any,
+				{ $set: { 'crystal.role': 'owner', 'crystal.approved': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, updatedAt: now } },
+				{ session }
+			);
+			if (!Number(crowned?.matchedCount)) throw new LifecycleConflict(`The new owner is no longer an active member of s/${slug} — reload and try again`);
+			const steppedDown = await things.updateOne({ _id: gate.doc._id, 'crystal.role': 'owner' } as any, { $set: { 'crystal.role': 'moderator', updatedAt: now } }, { session });
+			if (!Number(steppedDown?.matchedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were transferring it — reload and try again`);
+		});
+	} catch (err) {
+		const conflict = lifecycleConflictToFail(err);
+		if (conflict) return conflict;
+		throw err;
+	}
 	await writeModlog(id, actorId, 'owner.transfer', { userId: targetUserId, detail: { previousOwnerId: actorId } });
 	await emitNotification({
 		recipientId: targetUserId,
@@ -901,41 +975,71 @@ export const transferSubspace = async (
 	};
 };
 
-// Posts survive their subspace: strip the pointer/flair/mod state/private
-// fence in bounded accounted batches (each batch one storage transaction) so a
-// large subspace never becomes one giant transaction. Returns how many posts
-// were released.
-const releaseSubspacePosts = async (things: any, subspaceId: string): Promise<number> => {
-	let released = 0;
+// Posts survive their subspace. Every post-shaped thing still pointing at it
+// (plain posts AND rich ['post','comment'] things — anything the posting gate
+// stamped, so no private fence can outlive its subspace) loses the pointer /
+// flair / mod state / private fence in bounded accounted batches (each batch
+// one storage transaction — a large subspace never becomes one giant
+// transaction). Which strip a post gets is releaseKindFor: a post written
+// behind a private wall, or one the moderators removed, becomes an
+// author-only post rather than a world-readable one. Both updates re-check
+// their side of the split in the filter, so a post moderated mid-pass is
+// simply picked up next pass. A batch that trips the accounted updater's
+// storage_conflict (an author deleted their post inside the batch) is
+// retried, bounded. `remaining` is what still points at the subspace when
+// the passes are spent — the caller refuses to drop the doc while it is > 0.
+type ReleaseTally = { released: number; privatized: number; remaining: number };
+const releaseSubspacePosts = async (things: any, subspaceId: string, access: SubspaceAccessMode): Promise<ReleaseTally> => {
+	const fenced = withMatch(postThingMatch(), { 'crystal.subspaceId': subspaceId });
+	const tally: ReleaseTally = { released: 0, privatized: 0, remaining: 0 };
+	let conflicts = 0;
 	for (let pass = 0; pass < MAX_RELEASE_PASSES; pass++) {
-		const rows = (await things
-			.find(withMatch(postMatch(), { 'crystal.subspaceId': subspaceId }) as any)
-			.project({ shareId: 1 })
-			.limit(RELEASE_BATCH)
-			.toArray()) as any[];
+		const rows = (await things.find(fenced as any).project({ shareId: 1, 'subspaceMod.status': 1 }).limit(RELEASE_BATCH).toArray()) as any[];
 		if (!rows.length) break;
-		const shareIds = rows.map((row) => String(row.shareId));
-		const result = await updateAccountedThings(things, { shareId: { $in: shareIds }, 'crystal.subspaceId': subspaceId }, releasedPostUpdate(new Date()));
-		const matched = Number(result?.matchedCount) || 0;
-		released += matched;
+		const split: Record<'released' | 'privatized', string[]> = { released: [], privatized: [] };
+		for (const row of rows) split[releaseKindFor(access, row.subspaceMod?.status === 'removed')].push(String(row.shareId));
+		const now = new Date();
+		let matched = 0;
+		try {
+			if (split.privatized.length) {
+				const filter = withMatch(fenced, { shareId: { $in: split.privatized } }, access === 'private' ? {} : { 'subspaceMod.status': 'removed' });
+				const result = await updateAccountedThings(things, filter, privatizedPostUpdate(now));
+				const count = Number(result?.matchedCount) || 0;
+				tally.privatized += count;
+				matched += count;
+			}
+			if (split.released.length) {
+				const filter = withMatch(fenced, { shareId: { $in: split.released } }, { 'subspaceMod.status': { $ne: 'removed' } });
+				const result = await updateAccountedThings(things, filter, releasedPostUpdate(now));
+				const count = Number(result?.matchedCount) || 0;
+				tally.released += count;
+				matched += count;
+			}
+		} catch (err) {
+			// the batch's transaction aborted as a whole — re-find and go again
+			if (err instanceof StorageMutationError && err.code === 'storage_conflict' && ++conflicts <= MAX_RELEASE_CONFLICTS) continue;
+			throw err;
+		}
 		if (!matched) break; // raced away underneath us — never spin
 	}
-	return released;
+	tally.remaining = Number(await things.countDocuments(fenced as any)) || 0;
+	return tally;
 };
 
 export type DeleteSubspaceInput = SubspaceRef & { confirmSlug?: unknown };
+export type DeleteSubspaceResult = { ok: true; releasedPosts: number; privatePosts: number; removedMembers: number };
 
 // Owner deletes s/<slug> after retyping its slug. Cascade order matters for
 // retries: posts are released first (a failure here leaves everything intact
-// — the owner simply retries; posts are never left fenced behind a missing
-// subspace), then the subspace doc itself (accounted delete — it is billable
-// content), then the member / mod-log / report plumbing rows (unbilled; the
-// owner's row must outlive the doc delete or a failed attempt could strand a
-// subspace nobody may delete). Former moderators are told.
-export const deleteSubspace = async (
-	viewerInput: string | Viewer,
-	input: DeleteSubspaceInput
-): Promise<Fail | { ok: true; releasedPosts: number; removedMembers: number }> => {
+// — the owner simply retries, the release is idempotent; posts are never
+// left fenced behind a missing subspace: while any still point at it the
+// call answers 409 and keeps the doc), then the subspace doc itself
+// (accounted delete — it is billable content) together with the slug
+// tombstone in one guarded transaction, then the member / mod-log / report
+// plumbing rows (unbilled; the owner's row must outlive the doc delete or a
+// failed attempt could strand a subspace nobody may delete). Former
+// moderators are told.
+export const deleteSubspace = async (viewerInput: string | Viewer, input: DeleteSubspaceInput): Promise<Fail | DeleteSubspaceResult> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
 	const actorId = auth.viewer.id;
@@ -944,19 +1048,38 @@ export const deleteSubspace = async (
 	const { subspace } = found;
 	const id = String(subspace.shareId);
 	const slug = String(subspace.crystal?.slug || id);
-	const gate = await requireOwner(id, actorId, 'delete a subspace');
+	const gate = await requireOwner(subspace, actorId, 'delete a subspace');
 	if (gate.ok === false) return gate;
 	if (!confirmSlugMatches(input.confirmSlug, slug)) return fail(400, `Type the slug to confirm — s/${slug}`);
 
 	const things = await getThingsCollection();
+	const access = accessOf(subspace);
 	const formerModeratorIds = await moderatorRecipientIds(id, actorId);
-	let releasedPosts = await releaseSubspacePosts(things, id);
-	await deleteAccountedThing(things, { shareId: id, thingtime: 'subspace' });
+	const first = await releaseSubspacePosts(things, id, access);
+	if (first.remaining > 0) {
+		return fail(409, `s/${slug} still has ${first.remaining.toLocaleString('en-US')} posts to release — run delete again to continue (it is safe to retry)`);
+	}
+	// the doc goes and the slug tombstone arrives in ONE transaction, guarded
+	// by the ownership the gate saw: a transfer that landed meanwhile makes the
+	// delete match nothing and the whole thing aborts with 409
+	const now = new Date();
+	try {
+		await withAccountedThingsTransaction(async (session) => {
+			const dropped = await deleteAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId }, { session });
+			if (!Number(dropped?.deletedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were deleting it — reload and try again`);
+			await things.insertOne(newSubspaceTombstoneDoc(id, slug, actorId, now) as any, { session });
+		});
+	} catch (err) {
+		const conflict = lifecycleConflictToFail(err);
+		if (conflict) return conflict;
+		throw err;
+	}
 	const memberResult = await things.deleteMany({ thingtime: 'subspace-member', targetId: id } as any);
 	await things.deleteMany({ thingtime: { $in: ['subspace-modlog', 'subspace-report'] }, targetId: id } as any);
 	// a post that landed between the release pass and the doc delete would
-	// keep a dangling pointer — one more (usually empty) pass catches it
-	releasedPosts += await releaseSubspacePosts(things, id);
+	// keep a dangling pointer — one more (usually empty) pass catches it; the
+	// doc is gone, so nothing new can arrive after this one
+	const second = await releaseSubspacePosts(things, id, access);
 
 	if (formerModeratorIds.length) {
 		await emitNotificationsBulk(
@@ -964,7 +1087,13 @@ export const deleteSubspace = async (
 			{ actor: notificationActorOf(auth.viewer), targetId: id, preview: subspaceNotificationPreview(slug, 'was deleted by its owner 🗑️') }
 		);
 	}
-	return { ok: true, releasedPosts, removedMembers: Number(memberResult?.deletedCount) || 0 };
+	const privatePosts = first.privatized + second.privatized;
+	return {
+		ok: true,
+		releasedPosts: first.released + second.released + privatePosts,
+		privatePosts,
+		removedMembers: Number(memberResult?.deletedCount) || 0
+	};
 };
 
 // ---------------------------------------------------------------------------

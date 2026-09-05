@@ -36,8 +36,6 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     'api.subspaces-moderate',
     'api.subspaces-modlog',
     'api.subspaces-feed',
-    'api.subspaces-transfer',
-    'api.subspaces-delete',
     'api.things-updown'
   ]) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -45,6 +43,12 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // round 2: member role/ban actions notify (additive side effect), and the
   // notification type enum gained the subspace-* family
   assert.equal(manifest.features['api.subspaces-members']?.version, '1.1.0');
+  // S1 review: transfer's writes are guarded (a racing transfer answers 409 —
+  // compatible correction); delete answers { privatePosts } beside
+  // releasedPosts, holds the slug for its previous owner and refuses (409)
+  // rather than strand posts behind a missing doc (additive)
+  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.0.1');
+  assert.equal(manifest.features['api.subspaces-delete']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-list']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.1.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.2.0');

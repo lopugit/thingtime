@@ -27,6 +27,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { clearLocalCachePrefix } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { SUBSPACE_SLUG_HOLD_DAYS } from '~/schemas/registry';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
@@ -397,7 +398,22 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 const DANGER = 'var(--tt-danger, #e5484d)';
 const normalizeSlugInput = (value: string) => value.trim().toLowerCase().replace(/^s\//, '');
 
-const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace; onTransferred: (next: PublicSubspace) => void }) => {
+// `isOwner` follows the (optimistically flipped) viewer role; the parent keeps
+// this panel MOUNTED while a transfer is in flight (`onTransferPending`) so the
+// optimistic crown flip dims the controls instead of unmounting the panel —
+// the confirm modal and its spinner stay put, and a failed transfer lands
+// back on the same panel with the username still typed in.
+const DangerZonePanel = ({
+	subspace,
+	isOwner,
+	onTransferred,
+	onTransferPending
+}: {
+	subspace: PublicSubspace;
+	isOwner: boolean;
+	onTransferred: (next: PublicSubspace) => void;
+	onTransferPending: (pending: boolean) => void;
+}) => {
 	const api = useApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
@@ -413,17 +429,23 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 	const transfer = async () => {
 		if (!cleanUsername || transferring) return;
 		setTransferring(true);
+		onTransferPending(true);
 		// optimistic: the crown moves now (the owner-only controls on this page
 		// dim instantly); a failure puts it straight back
 		const before = subspace;
 		onTransferred({ ...subspace, viewer: { ...subspace.viewer, role: 'moderator' } });
 		try {
 			const resp = (await api.v1.subspaces.transfer({ id: subspace.id, username: cleanUsername })) as SubspaceTransferResponse;
-			onTransferred(resp.subspace);
 			// the viewer's cached /s/<slug> copy still says owner — drop it
 			clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
+			// one batched commit: the real role lands, the modal closes and the
+			// pending flag clears together, so the panel unmounts with the modal
+			// already shut instead of vanishing mid-spinner
 			setTransferOpen(false);
 			setUsername('');
+			setTransferring(false);
+			onTransferred(resp.subspace);
+			onTransferPending(false);
 			lopu({
 				title: `s/${subspace.slug} now belongs to @${resp.newOwner.profile?.username || cleanUsername} 👑`,
 				description: 'You stay on as a moderator — and can leave whenever you like.',
@@ -431,10 +453,12 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 				duration: 8000
 			});
 		} catch (err: any) {
-			onTransferred(before);
-			lopu({ title: err?.error || 'Could not transfer the subspace 😞', status: 'error' });
-		} finally {
+			// the crown comes straight back; the modal stays open with the name
+			// still typed so the owner can fix a typo and go again
 			setTransferring(false);
+			onTransferred(before);
+			onTransferPending(false);
+			lopu({ title: err?.error || 'Could not transfer the subspace 😞', status: 'error' });
 		}
 	};
 
@@ -448,11 +472,12 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 			clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
 			clearLocalCachePrefix('tt-subspaces-');
 			setDeleteOpen(false);
+			const privateNote = resp.privatePosts > 0 ? ` (${resp.privatePosts} of them stay private to their authors)` : '';
 			lopu({
 				title: `s/${subspace.slug} is gone 🗑️`,
-				description: `${resp.releasedPosts} post${resp.releasedPosts === 1 ? '' : 's'} live on as plain posts · ${resp.removedMembers} membership${resp.removedMembers === 1 ? '' : 's'} removed.`,
+				description: `${resp.releasedPosts} post${resp.releasedPosts === 1 ? '' : 's'} live on as plain posts${privateNote} · ${resp.removedMembers} membership${resp.removedMembers === 1 ? '' : 's'} removed. The slug is held for you for ${SUBSPACE_SLUG_HOLD_DAYS} days.`,
 				status: 'success',
-				duration: 8000
+				duration: 9000
 			});
 			navigate('/s');
 		} catch (err: any) {
@@ -472,7 +497,7 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 					Owner only. Neither of these can be undone from here.
 				</Text>
 			</Box>
-			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER}>
+			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER} opacity={isOwner ? 1 : 0.55} transition="opacity 160ms ease">
 				<Text fontSize="sm" fontWeight={600} color={INK}>
 					Transfer ownership 👑
 				</Text>
@@ -487,22 +512,36 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 						borderRadius={RADIUS_MD}
 						placeholder="username of the new owner"
 						value={username}
+						isDisabled={!isOwner}
 						onChange={(event) => setUsername(event.target.value)}
 						data-testid="mod-transfer-username"
 					/>
-					<Button size="sm" variant="outline" borderRadius={RADIUS_MD} borderColor={DANGER} color={DANGER} isDisabled={!cleanUsername} onClick={() => setTransferOpen(true)} data-testid="mod-transfer-open">
+					<Button
+						size="sm"
+						variant="outline"
+						borderRadius={RADIUS_MD}
+						borderColor={DANGER}
+						color={DANGER}
+						isDisabled={!cleanUsername || !isOwner}
+						onClick={() => setTransferOpen(true)}
+						data-testid="mod-transfer-open"
+					>
 						Transfer ownership →
 					</Button>
 				</Flex>
 			</Flex>
-			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER}>
+			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER} opacity={isOwner ? 1 : 0.55} transition="opacity 160ms ease">
 				<Text fontSize="sm" fontWeight={600} color={INK}>
 					Delete subspace 🗑️
 				</Text>
 				<Text fontSize="xs" color={TEXT}>
 					Removes s/{subspace.slug}, its members, rules, flairs and mod log. Posts are NOT deleted — they live on as plain posts without the subspace, flair or moderation state.
+					{subspace.access === 'private'
+						? ' Because this subspace is private, every post stays private to its author (they can re-share it themselves).'
+						: ' Posts the moderators removed stay private to their authors rather than reappearing in public.'}{' '}
+					The slug is held for you for {SUBSPACE_SLUG_HOLD_DAYS} days.
 				</Text>
-				<Button size="sm" alignSelf="flex-start" borderRadius={RADIUS_MD} colorScheme="red" variant="outline" onClick={() => setDeleteOpen(true)} data-testid="mod-delete-open">
+				<Button size="sm" alignSelf="flex-start" borderRadius={RADIUS_MD} colorScheme="red" variant="outline" isDisabled={!isOwner} onClick={() => setDeleteOpen(true)} data-testid="mod-delete-open">
 					Delete subspace…
 				</Button>
 			</Flex>
@@ -553,7 +592,9 @@ const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace
 						<Flex flexDirection="column" rowGap={3}>
 							<Text fontSize="sm" color={TEXT} whiteSpace="normal">
 								This removes the subspace, every membership and ban, the rules, flairs and the mod log. The {typeof subspace.postCount === 'number' ? `${subspace.postCount.toLocaleString()} ` : ''}
-								posts stay on Thingtime as plain posts. The slug becomes free again.
+								posts stay on Thingtime as plain posts
+								{subspace.access === 'private' ? ' — private to their authors, since this subspace is private' : ' (posts the mods removed stay private to their authors)'}. Nobody
+								else can take s/{subspace.slug} for {SUBSPACE_SLUG_HOLD_DAYS} days; you can re-found it any time.
 							</Text>
 							<Box>
 								<Label>
@@ -796,6 +837,9 @@ export const SubspaceModPage = () => {
 	const tab = (TABS as readonly string[]).includes(searchParams.get('tab') || '') ? (searchParams.get('tab') as ModTab) : 'queue';
 	const [subspace, setSubspace] = React.useState<PublicSubspace | null>(null);
 	const [denied, setDenied] = React.useState(false);
+	// an ownership transfer in flight keeps the Danger zone mounted while the
+	// optimistic role flip already dims the owner-only controls
+	const [transferPending, setTransferPending] = React.useState(false);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -873,8 +917,10 @@ export const SubspaceModPage = () => {
 							<TabPanel paddingX={0}>
 								<Flex flexDirection="column" rowGap={4}>
 									<SettingsPanel subspace={subspace} onSaved={setSubspace} />
-									{subspace.viewer.role === 'owner' ? (
-										<DangerZonePanel subspace={subspace} onTransferred={setSubspace} />
+									{/* stays mounted through an in-flight transfer: the optimistic crown
+									    flip dims it rather than unmounting the open confirm modal */}
+									{subspace.viewer.role === 'owner' || transferPending ? (
+										<DangerZonePanel subspace={subspace} isOwner={subspace.viewer.role === 'owner'} onTransferred={setSubspace} onTransferPending={setTransferPending} />
 									) : (
 										<Text fontSize="xs" color={MUTED} paddingX={1}>
 											Transferring or deleting s/{slug} is up to its owner 👑

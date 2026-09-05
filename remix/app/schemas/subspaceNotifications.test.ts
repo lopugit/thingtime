@@ -7,6 +7,7 @@ import {
 	NOTIFICATION_TYPES,
 	normalizeNotificationPrefs,
 	SUBSPACE_NOTIFICATION_TYPES,
+	subspaceNotificationDetail,
 	subspaceNotificationPreview,
 	subspaceSlugFromNotificationPreview
 } from './registry.ts';
@@ -37,4 +38,18 @@ test('subspace notification previews lead with the slug and round-trip it', () =
 	for (const miss of ['Rule 2', 's/Rainbows · caps are not a slug', 's/', '', null, undefined, 42, 'rainbows']) {
 		assert.equal(subspaceSlugFromNotificationPreview(miss), null, JSON.stringify(miss));
 	}
+});
+
+test('subspaceNotificationDetail strips the slug head so copy never keys off the slug itself', () => {
+	assert.equal(subspaceNotificationDetail('s/rainbows · you are now a moderator 🎩'), 'you are now a moderator 🎩');
+	// a slug that CONTAINS a keyword must not read as that event
+	assert.equal(subspaceNotificationDetail('s/deleted_scenes · you are now a moderator 🎩'), 'you are now a moderator 🎩');
+	assert.equal(subspaceNotificationDetail('s/uplifted_minds · you were banned 🚫'), 'you were banned 🚫');
+	assert.equal(/deleted/.test(subspaceNotificationDetail('s/deleted_scenes · you are now a moderator 🎩')), false);
+	assert.equal(/lifted/.test(subspaceNotificationDetail('s/uplifted_minds · you were banned 🚫')), false);
+	assert.equal(subspaceNotificationDetail('s/rainbows'), '');
+	assert.equal(subspaceNotificationDetail(' s/rainbows was deleted by its owner'), 'was deleted by its owner');
+	// non-subspace previews pass through untouched
+	assert.equal(subspaceNotificationDetail('Rule 2'), 'Rule 2');
+	assert.equal(subspaceNotificationDetail(null), '');
 });

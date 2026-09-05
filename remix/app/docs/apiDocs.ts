@@ -8532,7 +8532,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET to browse; pass q to search and cursor/limit to page (nextCursor is null on the last page).',
       'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
-      'A taken slug answers 409; a reserved or malformed slug answers 400.',
+      'A taken slug answers 409; a reserved or malformed slug answers 400. The slug of a recently deleted subspace is ' +
+        'held for its previous owner (who may re-found it at once) and answers 409 to everyone else until the hold lapses.',
       'Post into it with POST /api/v1/things { thingtime: ["post"], crystal: { subspaceId, title, flairId, … } }.'
     ],
     requestExamples: [
@@ -8569,7 +8570,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
-      { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } }
+      { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } },
+      {
+        status: 409,
+        description: 'Slug held after a deletion (previous owner only until the hold lapses).',
+        body: { ok: false, error: 's/rainbows was deleted recently — its slug is held for its previous owner until 2026-10-05' }
+      }
     ]
   }),
   endpoint({
@@ -8756,21 +8762,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-transfer',
+    // 1.0.1: every write inside the transfer transaction is guarded by the
+    // ownership/membership the gate saw — a concurrent transfer commits at most
+    // once, the loser answers 409 (compatible correction)
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
     summary: 'The owner hands the subspace to an active member; the previous owner becomes a moderator.',
     detail:
-      'POST { id|slug, userId|username } as the owner. The target must be an ACTIVE member (joined, not banned, ' +
-      'not left; banned → 403, otherwise not a member → 404) and may not already run the per-user maximum of ' +
-      'subspaces. The target becomes owner (approved), the previous owner steps down to moderator — and may now ' +
-      'leave — and the subspace thing changes hands (its accounted bytes move ledgers in the same transaction). ' +
-      'Writes an owner.transfer mod-log entry and notifies the new owner (subspace-role, preview ' +
-      '"s/<slug> · you are now the owner 👑"). Returns the subspace as the caller now sees it plus the new owner’s ' +
-      'member row.',
+      'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
+      'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
+      'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
+      '(approved), the previous owner steps down to moderator — and may now leave — and the subspace thing ' +
+      'changes hands (its accounted bytes move ledgers in the same transaction). Every write in that transaction ' +
+      'is conditional on the state the gate saw, so two transfers racing from the same owner commit at most once: ' +
+      'the loser answers 409 and changes nothing. Writes an owner.transfer mod-log entry and notifies the new ' +
+      'owner (subspace-role, preview "s/<slug> · you are now the owner 👑"). Returns the subspace as the caller ' +
+      'now sees it plus the new owner’s member row.',
     auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
     methods: ['POST'],
-    steps: ['POST the subspace and the new owner (username or userId).', 'Non-owners receive 403; a non-member target 404; yourself 400.'],
+    steps: [
+      'POST the subspace and the new owner (username or userId).',
+      'Non-owners receive 403; a non-member target 404; yourself 400; a transfer that lost a race with another transfer 409 (reload and retry if still intended).'
+    ],
     requestExamples: [{ name: 'Hand over', description: 'Make @helper the owner of s/rainbows.', method: 'POST', body: { slug: 'rainbows', username: 'helper' } }],
     responseExamples: [
       {
@@ -8779,31 +8795,49 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, subspace: { slug: 'rainbows', ownerId: '664f…helper', viewer: { role: 'moderator', member: true, canModerate: true } }, newOwner: { userId: '664f…helper', role: 'owner', approved: true } }
       },
       { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can transfer ownership 👑' } },
-      { status: 404, description: 'Target is not an active member.', body: { ok: false, error: 'The new owner has to be an active member of s/rainbows first' } }
+      { status: 404, description: 'Target is not an active member.', body: { ok: false, error: 'The new owner has to be an active member of s/rainbows first' } },
+      { status: 409, description: 'Lost a race with another transfer.', body: { ok: false, error: 's/rainbows changed hands while you were transferring it — reload and try again' } }
     ]
   }),
   endpoint({
     id: 'subspaces-delete',
+    // 1.1.0: private-subspace posts and moderator-removed posts leave as
+    // author-only posts (privatePosts in the response), rich ['post','comment']
+    // things are released too, the slug is held for the previous owner
+    // (subspace-tombstone), and a subspace with posts still pointing at it after
+    // the release passes answers 409 instead of dropping its doc (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Delete subspace',
     endpoint: '/api/v1/subspaces/delete',
-    summary: 'The owner deletes the subspace after retyping its slug; posts survive as plain posts.',
+    summary: 'The owner deletes the subspace after retyping its slug; posts survive — public ones as plain posts, private/removed ones as author-only posts.',
     detail:
       'POST { id|slug, confirmSlug } as the owner; confirmSlug must equal the slug (a leading "s/" and case are ' +
-      'forgiven) or the call answers 400. Cascade: every post of the subspace is released as a plain post — ' +
-      'crystal.subspaceId, crystal.flairId, the root subspaceMod state and the subspacePrivate fence are ' +
-      'stripped in bounded accounted batches (titles stay) — every subspace-member, subspace-modlog and ' +
-      'subspace-report row is deleted, then the subspace thing itself (accounted delete). Former moderators ' +
-      'are notified (subspace-role, "s/<slug> · was deleted by its owner"). Afterwards the slug is free again ' +
-      'and GET /api/v1/subspaces/get answers 404.',
+      'forgiven) or the call answers 400. Cascade: every post-shaped thing of the subspace (plain posts and ' +
+      'rich ["post","comment"] things alike) is released in bounded accounted batches — crystal.subspaceId, ' +
+      'crystal.flairId, the root subspaceMod state and the subspacePrivate fence are stripped, titles stay. ' +
+      'A post written behind a PRIVATE subspace’s wall, or one the moderators REMOVED, is never made public by ' +
+      'the owner’s click: it leaves as an author-only post (acl narrowed to its author, who can re-share it ' +
+      'deliberately) and is counted in privatePosts. Then the subspace thing itself goes (accounted delete) ' +
+      'together with a subspace-tombstone that keeps holding the slug — its previous owner may re-found it at ' +
+      'once, anyone else only after the hold — then every subspace-member, subspace-modlog and subspace-report ' +
+      'row. Former moderators are notified (subspace-role, "s/<slug> · was deleted by its owner"); GET ' +
+      '/api/v1/subspaces/get answers 404 afterwards. The call is safe to retry: the release is idempotent, and ' +
+      'while any post still points at the subspace (more posts than one call releases) it answers 409 with the ' +
+      'doc intact so nothing is ever left fenced behind a missing subspace.',
     auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
     methods: ['POST'],
-    steps: ['POST the subspace with confirmSlug equal to its slug.', 'Moderators receive 403; a mismatching confirmSlug 400.'],
+    steps: [
+      'POST the subspace with confirmSlug equal to its slug.',
+      'Moderators receive 403; a mismatching confirmSlug 400; a 409 means posts remain (or ownership just moved) — run it again.'
+    ],
     requestExamples: [{ name: 'Delete', description: 'Delete s/rainbows for good.', method: 'POST', body: { slug: 'rainbows', confirmSlug: 'rainbows' } }],
     responseExamples: [
-      { status: 200, description: 'Deleted.', body: { ok: true, releasedPosts: 42, removedMembers: 128 } },
+      { status: 200, description: 'Deleted — 42 posts left the subspace, 3 of them (removed by mods) now author-only.', body: { ok: true, releasedPosts: 42, privatePosts: 3, removedMembers: 128 } },
       { status: 400, description: 'Confirmation mismatch.', body: { ok: false, error: 'Type the slug to confirm — s/rainbows' } },
-      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can delete a subspace 👑' } }
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can delete a subspace 👑' } },
+      { status: 409, description: 'Posts still pointing at the subspace after the release passes — retry.', body: { ok: false, error: 's/rainbows still has 1,204 posts to release — run delete again to continue (it is safe to retry)' } }
     ]
   }),
   endpoint({
