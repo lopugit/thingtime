@@ -55,9 +55,10 @@ branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
-writers, validates each atomic output set, deduplicates identical artifacts,
-regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. `scripts/graphify prune` applies the bounded
+writers, holds query snapshots until their reader exits, validates each atomic
+output set, deduplicates identical artifacts, regenerates the report/HTML, and
+converts Graphify's mutable semantic cache into coexisting immutable
+variants. `scripts/graphify prune` applies the bounded
 retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
 positive integer only when a local workflow deliberately needs more than one
 portable snapshot. See
