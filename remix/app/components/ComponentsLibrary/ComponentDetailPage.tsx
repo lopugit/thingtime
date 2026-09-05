@@ -525,7 +525,37 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
     () => (suite && active?.componentKey ? suiteSourcesFor(suite, active.componentKey) : []),
     [suite, active?.componentKey]
   );
-  const { confirm, dialog } = useActionRunConfirm({ enabled: seeded, resolveActionName });
+  // `enabled: true` so the gate exists for every viewer — the CLICK path still
+  // skips it for the owner's own markup (`confirm={seeded ? confirm : undefined}`
+  // below), but the URL-supplied source binding is nobody's authored markup and
+  // is always asked, exactly as /thing/:id gates its `?source=`.
+  const { confirm, dialog } = useActionRunConfirm({ enabled: true, resolveActionName });
+  const confirmRef = React.useRef(confirm);
+  confirmRef.current = confirm;
+
+  // ---- URL-supplied data source --------------------------------------------
+  // `?source=<actionKey>&inputs=<json>` runs a program AS THE VIEWER on load
+  // (and again on every interval tick), so a pasted link must never start it
+  // by surprise: nothing is handed to useThingSource until this viewer has
+  // approved this exact binding. Declining leaves the page inert with the
+  // binding still visible in the source control, so it can be edited or cleared.
+  const [approvedBinding, setApprovedBinding] = React.useState<ThingSourceBinding | null>(null);
+  const bindingKey = JSON.stringify(binding);
+  React.useEffect(() => {
+    if (!binding || !interactive || !active) {
+      setApprovedBinding(null);
+      return;
+    }
+    let cancelled = false;
+    setApprovedBinding(null);
+    Promise.resolve(confirmRef.current({ action: binding.action, inputs: binding.inputs || {} })).then((approved) => {
+      if (!cancelled) setApprovedBinding(approved ? binding : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bindingKey is the serialised binding; re-ask when it, the trust, or the thing changes
+  }, [bindingKey, interactive, active?.id]);
 
   const [values, setValues] = React.useState<ComponentArgValues>({});
   React.useEffect(() => {
@@ -881,7 +911,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                 suiteKey={suiteKey}
               >
                 <LivePane
-                  binding={binding}
+                  binding={approvedBinding}
                   confirm={seeded ? confirm : undefined}
                   interactive={interactive}
                   key={active.id}

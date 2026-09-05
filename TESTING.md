@@ -4538,6 +4538,14 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       Data source control (`?source=<actionKey>&refresh=…`) renders the real
       data (`app-pokeworld-hud` + `app-pokeworld-state`) and never persists to
       the thing.
+- [ ] `/components/<key>?source=<actionKey>` opened from a PASTED link asks the
+      "Run …?" confirm BEFORE the source runs — for the owner of the component
+      too, not just on a seeded one (the URL binding is nobody's authored
+      markup, so it is gated even where the click path is not). Cancel leaves
+      the live pane with no source chip and runs nothing, while the source
+      control keeps the binding so it can be edited or cleared; approve runs it
+      once and, for `refresh=interval`, starts the ticking. Same rule as
+      `/thing/:id?source=` — a link must never start a program by surprise.
 - [ ] `/builder/demos`: every demo / suite / app card opens
       `/builder/demos/<slug|key>`; the Preview button still opens the modal;
       the modal is live for a signed-in viewer (runtime provider present —
