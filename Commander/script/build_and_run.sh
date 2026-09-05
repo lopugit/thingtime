@@ -2,6 +2,10 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+case "$MODE" in
+  --prepare|--package-only|--build-only|build|run|--verify|verify|--debug|debug|--logs|logs|--telemetry|telemetry) ;;
+  *) echo "Unknown Commander build mode: $MODE" >&2; exit 2 ;;
+esac
 APP_NAME="Commander"
 BUNDLE_ID="com.thingtime.Commander"
 MIN_SYSTEM_VERSION="14.0"
@@ -108,7 +112,8 @@ notarize_distribution_bundle() {
   /bin/rm -rf "$archive_root"
 }
 
-build_all() {
+compile_all() {
+  node "$ROOT_DIR/script/release-version.mjs" check
   corepack pnpm --dir "$ROOT_DIR" install --frozen-lockfile
   corepack pnpm --dir "$ROOT_DIR" typecheck
   corepack pnpm --dir "$ROOT_DIR" test
@@ -118,12 +123,20 @@ build_all() {
     echo "Commander requires Cargo to build its bundled search and filesystem indexer binaries" >&2
     exit 1
   fi
-  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-  local rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
-  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
-  local rust_indexer_binary="$ROOT_DIR/crates/commander-indexer/target/release/commander-indexer"
+  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
+  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
 
+  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
+  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
+  swift test --package-path "$SWIFT_PACKAGE"
   swift build --package-path "$SWIFT_PACKAGE" -c release
+}
+
+bundle_all() {
+  local rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
+  local rust_indexer_binary="$ROOT_DIR/crates/commander-indexer/target/release/commander-indexer"
+  test -x "$rust_binary"
+  test -x "$rust_indexer_binary"
   local swift_binary
   swift_binary="$(swift build --package-path "$SWIFT_PACKAGE" -c release --show-bin-path)/Commander"
 
@@ -131,7 +144,7 @@ build_all() {
   local staged_bundle="$stage_root/$APP_NAME.app"
   mkdir -p "$stage_root"
   if [[ -e "$staged_bundle" ]]; then
-    /usr/bin/osascript -e 'tell application "Finder" to delete POSIX file "'"$staged_bundle"'"' >/dev/null 2>&1 || /bin/rm -rf "$staged_bundle"
+    /bin/rm -rf -- "$staged_bundle"
   fi
   mkdir -p "$staged_bundle/Contents/MacOS" "$staged_bundle/Contents/Resources/ui"
   /usr/bin/ditto "$swift_binary" "$staged_bundle/Contents/MacOS/$APP_NAME"
@@ -166,6 +179,11 @@ build_all() {
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"com.thingtime.Commander.oauth","CFBundleURLSchemes":["com.thingtime.commander"]}]' "$staged_bundle/Contents/Info.plist"
 
+  /usr/bin/plutil -insert ThingtimeReleaseVersion -string "${COMMANDER_RELEASE_VERSION:-$PACKAGE_VERSION}" "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert ThingtimeReleaseTag -string "commander-v${COMMANDER_RELEASE_VERSION:-$PACKAGE_VERSION}" "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert ThingtimeGitCommit -string "${COMMANDER_GIT_COMMIT:-$(git -C "$ROOT_DIR" rev-parse HEAD)}" "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert ThingtimeGitBranch -string "${COMMANDER_GIT_BRANCH:-$(git -C "$ROOT_DIR" branch --show-current)}" "$staged_bundle/Contents/Info.plist"
+
   /usr/bin/xattr -cr "$staged_bundle"
   # Preserve Node.js Foundation's hardened-runtime signature and JIT entitlements.
   /usr/bin/codesign --verify --strict "$staged_bundle/Contents/Resources/node/bin/node"
@@ -181,7 +199,7 @@ build_all() {
 
   mkdir -p "$DIST_DIR"
   if [[ -e "$APP_BUNDLE" ]]; then
-    /usr/bin/osascript -e 'tell application "Finder" to delete POSIX file "'"$APP_BUNDLE"'"' >/dev/null 2>&1 || /bin/rm -rf "$APP_BUNDLE"
+    /bin/rm -rf -- "$APP_BUNDLE"
   fi
   /usr/bin/ditto "$staged_bundle" "$APP_BUNDLE"
   /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
@@ -310,13 +328,23 @@ stop_installed_runtime() {
   fi
 }
 
+# CI compiles and tests before importing any signing material. Packaging reuses
+# those exact outputs. Neither mode touches the installed app or its daemon.
+if [[ "$MODE" == "--prepare" ]]; then
+  compile_all
+  exit 0
+fi
 resolve_signing_configuration
-stop_installed_runtime
-build_all
+if [[ "$MODE" != "--package-only" ]]; then compile_all; fi
+bundle_all
 notarize_distribution_bundle
+case "$MODE" in
+  --build-only|build|--package-only) ;;
+  *) stop_installed_runtime ;;
+esac
 
 case "$MODE" in
-  --build-only|build)
+  --build-only|build|--package-only)
     ;;
   run)
     install_app
@@ -376,6 +404,6 @@ case "$MODE" in
 esac
 
 echo "Built: $APP_BUNDLE"
-if [[ "$MODE" != "--build-only" && "$MODE" != "build" && "$MODE" != "--debug" && "$MODE" != "debug" ]]; then
+if [[ "$MODE" != "--build-only" && "$MODE" != "build" && "$MODE" != "--package-only" && "$MODE" != "--debug" && "$MODE" != "debug" ]]; then
   echo "Installed: $HOME/Applications/$APP_NAME.app"
 fi

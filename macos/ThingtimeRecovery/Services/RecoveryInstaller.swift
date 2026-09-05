@@ -6,6 +6,8 @@ public enum RecoveryInstallAction: String, Codable, Hashable {
     case installDesktop
     case installRecovery
     case launchDesktop
+    case installCommander
+    case launchCommander
 }
 
 public struct RecoveryInstallPlan: Codable, Hashable {
@@ -29,6 +31,7 @@ public struct RecoveryInstallPlan: Codable, Hashable {
         switch action {
         case .installDesktop, .launchDesktop: component = .desktop
         case .installRecovery: component = .recovery
+        case .installCommander, .launchCommander: component = .commander
         }
         let expectedCacheRoot = paths.cacheRoot(for: component).standardizedFileURL
         guard cacheRoot.standardizedFileURL == expectedCacheRoot else { throw RecoveryError.invalidPlan("Thingtime Recovery's cache location is invalid.") }
@@ -59,9 +62,9 @@ public enum RecoveryInstaller {
         try waitForExit(plan.waitForPID)
         try verify(plan.sourceApp, component: component, trust: trust, signingContext: signingContext)
         switch plan.action {
-        case .launchDesktop:
+        case .launchDesktop, .launchCommander:
             try ProcessExecution.launchApplication(plan.sourceApp)
-        case .installDesktop, .installRecovery:
+        case .installDesktop, .installRecovery, .installCommander:
             try closeRunningApplications(bundleIdentifier: component.bundleIdentifier)
             let target = paths.installedApp(for: component)
             let preserved = try installCachedBundle(source: plan.sourceApp, target: target, component: component, cache: cache, trust: trust, signingContext: signingContext)
