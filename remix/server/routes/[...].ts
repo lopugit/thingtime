@@ -23,8 +23,18 @@ export default defineHandler(async (event) => {
 		}
 		const path = normaliseSocialPreviewPath(requestUrl.searchParams.get('path'));
 		try {
-			const mongoEndpoint = await getRequestMongoEndpoint(event.req);
-			const preview = await runWithMongoEndpoint(mongoEndpoint, () => resolveSocialPreview(requestUrl.origin, path));
+			// Deliberately NOT runWithMongoEndpoint. This response is shared-cacheable
+			// (s-maxage below) and shared caches key on the URL alone, so honouring an
+			// unauthenticated `x-tt-mongo-url` header or `tt_mongo` cookie here would
+			// let any caller render a card from a data plane they control and have it
+			// stored under the public card URL that every later visitor and unfurler
+			// receives. Crawlers never carry either credential, so the home plane is
+			// the only plane this endpoint could usefully serve anyway. Resolving and
+			// drawing both stay on it, which also keeps the attachment loader's
+			// home-object guard (utils/attachments/attachments.ts) meaningful.
+			// The HTML shell below still honours the override: it is private/no-store
+			// and has to agree with the SPA's own follow-up API reads.
+			const preview = await resolveSocialPreview(requestUrl.origin, path);
 			const headers = {
 				'Content-Type': 'image/png',
 				'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',

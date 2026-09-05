@@ -1,10 +1,26 @@
 import { Resvg } from '@resvg/resvg-js';
 
 import type { SocialPreview, SocialPreviewVariant } from './socialPreview';
-import { SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_WIDTH, cleanSocialText, truncateSocialText } from './socialPreview';
+import { SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_WIDTH, cleanSocialText } from './socialPreview';
 
 const SAFE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 const MAX_CARD_IMAGE_BYTES = 2 * 1024 * 1024;
+
+// The badge pills are pinned to the bottom of the white panel, so the poll
+// strip above them cannot shift with the author line: three rows at this pitch
+// end exactly one pixel above the pills, and an author-offset copy of these
+// numbers overprinted them on any tagged poll. Two lines of description (the
+// cap whenever options exist) end near y=444, which clears POLL_ROW_TOP.
+const POLL_ROW_TOP = 454;
+const POLL_ROW_PITCH = 34;
+const POLL_ROW_HEIGHT = 25;
+const BADGE_ROW_TOP = 548;
+// Inner label widths: the poll row runs x=86..616 with its text inset at x=98,
+// and each badge is a 150px pill. Both labels were budgeted in characters, so
+// "Build with Thingtime" (exactly the 20 allowed) printed 187px wide and hung
+// out of both ends of its pill.
+const POLL_LABEL_WIDTH = 506;
+const BADGE_LABEL_WIDTH = 134;
 
 type CardTheme = { primary: string; end: string; panelStart: string; panelEnd: string };
 
@@ -35,13 +51,43 @@ const CARD_THEMES: Record<SocialPreviewVariant, CardTheme> = {
 const escapeXml = (value: string): string =>
 	value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
-const wrap = (value: string, width: number, maxLines: number): string[] => {
+// A character budget cannot express "must not run under the art panel": the
+// same 27 characters are 470px of narrow letters or 700px of capitals, and the
+// card is drawn where `Arial` does not exist (Vercel/CI resolve the
+// `sans-serif` fallback), which is wider again than the Arial these numbers
+// were first eyeballed against. So measure instead, with the widest advance
+// resvg reported per class for that Linux fallback face — an estimate that is
+// never under the real width, and comfortably over it on a machine with real
+// Arial. Unknown scripts and emoji bill at a full em.
+const glyphEm = (character: string): number => {
+	if (character === ' ') return 0.35;
+	if (/[iljI.,;:!'|]/.test(character)) return 0.46;
+	if (/[MWmw@%]/.test(character)) return 1.11;
+	if (/[A-Z]/.test(character)) return 0.85;
+	if (/[a-z0-9]/.test(character)) return 0.72;
+	return 1.1;
+};
+
+export const socialTextWidth = (value: string, fontSize: number): number =>
+	Array.from(value).reduce((total, character) => total + glyphEm(character) * fontSize, 0);
+
+// The text column runs from x=86 to the media/art panel at x=700.
+const TEXT_COLUMN_WIDTH = 594;
+
+const clampToWidth = (value: string, maxWidth: number, fontSize: number): string => {
+	if (socialTextWidth(value, fontSize) <= maxWidth) return value;
+	const codePoints = Array.from(value);
+	while (codePoints.length && socialTextWidth(`${codePoints.join('')}…`, fontSize) > maxWidth) codePoints.pop();
+	return `${codePoints.join('').trimEnd()}…`;
+};
+
+const wrap = (value: string, fontSize: number, maxLines: number, maxWidth = TEXT_COLUMN_WIDTH): string[] => {
 	const words = cleanSocialText(value).split(' ').filter(Boolean);
 	const lines: string[] = [];
 	let line = '';
 	for (const word of words) {
 		const next = line ? `${line} ${word}` : word;
-		if (next.length <= width || !line) line = next;
+		if (socialTextWidth(next, fontSize) <= maxWidth || !line) line = next;
 		else {
 			lines.push(line);
 			line = word;
@@ -50,13 +96,16 @@ const wrap = (value: string, width: number, maxLines: number): string[] => {
 	}
 	if (line && lines.length < maxLines) lines.push(line);
 	// Dropped words must stay visible as an ellipsis. A last line that already
-	// fits the column is not shortened by truncateSocialText, so mark it here
-	// rather than letting a cut-off headline read like a complete one.
-	if (words.join(' ').length > lines.join(' ').length && lines.length) {
-		const last = truncateSocialText(lines[lines.length - 1], Math.max(2, width - 1));
-		lines[lines.length - 1] = last.endsWith('…') ? last : `${last}…`;
-	}
-	return lines;
+	// fits the column is not shortened by the clamp, so mark it here rather than
+	// letting a cut-off headline read like a complete one. Every line is clamped
+	// because a single unbroken word (a pasted URL, say) is never wrapped above
+	// and would otherwise print straight through the panel.
+	const dropped = words.join(' ').length > lines.join(' ').length;
+	return lines.map((entry, index) => {
+		const clamped = clampToWidth(entry, maxWidth, fontSize);
+		if (index < lines.length - 1 || !dropped || clamped.endsWith('…')) return clamped;
+		return clampToWidth(`${clamped}…`, maxWidth, fontSize);
+	});
 };
 
 const plusMark = (x: number, y: number, size = 22): string => {
@@ -213,12 +262,9 @@ const mediaLayout = (preview: SocialPreview, images: readonly (string | null)[],
 };
 
 export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readonly (string | null)[] = []): string => {
-	// The text column ends where the media/art panel starts (x=700), so ~594px
-	// at x=86. A heavy 38px sans averages a little over 21px per glyph there,
-	// and the 42px profile title a little over 24px, so the headline has to
-	// wrap well before the 38 characters the description column allows.
-	const titleLines = wrap(preview.title, preview.kind === 'profile' ? 24 : 27, 3);
-	const descriptionLines = wrap(preview.description, 54, preview.options.length ? 2 : 3);
+	const titleFontSize = preview.kind === 'profile' ? 42 : 38;
+	const titleLines = wrap(preview.title, titleFontSize, 3);
+	const descriptionLines = wrap(preview.description, 21, preview.options.length ? 2 : 3);
 	const badges = preview.badges.slice(0, 3);
 	const pollRows = preview.options.slice(0, 3);
 	const theme = CARD_THEMES[preview.variant];
@@ -258,9 +304,9 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	${titleLines
 		.map(
 			(line, index) =>
-				`<text x="86" y="${(preview.author ? 246 : 198) + index * 50}" fill="#17112D" font-family="Arial, sans-serif" font-size="${
-					preview.kind === 'profile' ? 42 : 38
-				}" font-weight="800">${escapeXml(line)}</text>`
+				`<text x="86" y="${
+					(preview.author ? 246 : 198) + index * 50
+				}" fill="#17112D" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="800">${escapeXml(line)}</text>`
 		)
 		.join('')}
 	${descriptionLines
@@ -274,20 +320,22 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	${pollRows
 		.map(
 			(option, index) =>
-				`<rect x="86" y="${preview.author ? 472 + index * 34 : 454 + index * 34}" width="530" height="25" rx="12" fill="#F0EAFF"/><rect x="86" y="${
-					preview.author ? 472 + index * 34 : 454 + index * 34
-				}" width="${260 + index * 58}" height="25" rx="12" fill="${primary}" opacity=".85"/><text x="98" y="${
-					preview.author ? 491 + index * 34 : 473 + index * 34
-				}" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" font-weight="700">${escapeXml(truncateSocialText(option, 48))}</text>`
+				`<rect x="86" y="${POLL_ROW_TOP + index * POLL_ROW_PITCH}" width="530" height="${POLL_ROW_HEIGHT}" rx="12" fill="#F0EAFF"/><rect x="86" y="${
+					POLL_ROW_TOP + index * POLL_ROW_PITCH
+				}" width="${260 + index * 58}" height="${POLL_ROW_HEIGHT}" rx="12" fill="${primary}" opacity=".85"/><text x="98" y="${
+					POLL_ROW_TOP + 19 + index * POLL_ROW_PITCH
+				}" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" font-weight="700">${escapeXml(
+					clampToWidth(option, POLL_LABEL_WIDTH, 14)
+				)}</text>`
 		)
 		.join('')}
 	${badges
 		.map(
 			(badge, index) =>
-				`<rect x="${86 + index * 164}" y="548" width="150" height="28" rx="14" fill="#F2EEF9"/><text x="${
+				`<rect x="${86 + index * 164}" y="${BADGE_ROW_TOP}" width="150" height="28" rx="14" fill="#F2EEF9"/><text x="${
 					161 + index * 164
-				}" y="567" fill="#5D5275" font-family="Arial, sans-serif" font-size="13" font-weight="700" text-anchor="middle">${escapeXml(
-					truncateSocialText(badge, 20)
+				}" y="${BADGE_ROW_TOP + 19}" fill="#5D5275" font-family="Arial, sans-serif" font-size="13" font-weight="700" text-anchor="middle">${escapeXml(
+					clampToWidth(badge, BADGE_LABEL_WIDTH, 13)
 				)}</text>`
 		)
 		.join('')}
