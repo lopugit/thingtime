@@ -4,6 +4,48 @@
   "graph": {
     "hyperedges": [
       {
+        "id": "develop_preview_delivery_flow",
+        "label": "Protected Develop Preview Delivery Flow",
+        "nodes": [
+          "github_workflows_develop_pr_preview_prepare",
+          "github_workflows_develop_pr_preview_build",
+          "github_workflows_develop_pr_preview_controller",
+          "concept_preview_publication"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": ".github/workflows/develop-pr-preview.yml"
+      },
+      {
+        "id": "admin_preview_delivery_flow",
+        "label": "Admin Selected Preview Delivery Flow",
+        "nodes": [
+          "github_workflows_develop_pr_preview_admin_prepare",
+          "github_workflows_develop_pr_preview_admin_build",
+          "github_workflows_develop_pr_preview_admin_controller",
+          "concept_preview_publication"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": ".github/workflows/develop-pr-preview.yml"
+      },
+      {
+        "id": "pr_661_control_plane_reliability",
+        "label": "PR 661 Control-plane Reliability Repairs",
+        "nodes": [
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
+          "github_workflows_resolve_pr_conflicts_lopu_pr_manager"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.9,
+        "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
+      },
+      {
         "id": "control_plane_validation",
         "label": "Control-plane Validation Flow",
         "nodes": [
@@ -41,47 +83,6 @@
         "confidence": "EXTRACTED",
         "confidence_score": 0.95,
         "source_file": "README.md"
-      },
-      {
-        "id": "develop_preview_delivery_flow",
-        "label": "Protected Develop Preview Delivery Flow",
-        "nodes": [
-          "github_workflows_develop_pr_preview_prepare",
-          "github_workflows_develop_pr_preview_build",
-          "github_workflows_develop_pr_preview_controller",
-          "concept_preview_publication"
-        ],
-        "relation": "participate_in",
-        "confidence": "EXTRACTED",
-        "confidence_score": 0.95,
-        "source_file": ".github/workflows/develop-pr-preview.yml"
-      },
-      {
-        "id": "admin_preview_delivery_flow",
-        "label": "Admin Selected Preview Delivery Flow",
-        "nodes": [
-          "github_workflows_develop_pr_preview_admin_prepare",
-          "github_workflows_develop_pr_preview_admin_build",
-          "github_workflows_develop_pr_preview_admin_controller",
-          "concept_preview_publication"
-        ],
-        "relation": "participate_in",
-        "confidence": "EXTRACTED",
-        "confidence_score": 0.95,
-        "source_file": ".github/workflows/develop-pr-preview.yml"
-      },
-      {
-        "id": "pr_661_reliability_repairs",
-        "label": "PR 661 Preview and Conflict Reliability Repairs",
-        "nodes": [
-          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-          "concept_preview_publication",
-          "concept_conflict_detector_recovery"
-        ],
-        "relation": "form",
-        "confidence": "EXTRACTED",
-        "confidence_score": 0.9,
-        "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
       },
       {
         "id": "commander_signed_release_pipeline",
@@ -1146,9 +1147,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "electron-release-gates.test.mjs",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test"
     },
     {
@@ -1157,9 +1158,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "workflow",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test_workflow"
     },
     {
@@ -1168,9 +1169,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L9",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "main",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test_main"
     },
     {
@@ -1179,9 +1180,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L10",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "expression",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test_expression"
     },
     {
@@ -1190,9 +1191,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "evaluate",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test_evaluate"
     },
     {
@@ -1201,9 +1202,9 @@
       "source_file": ".github/scripts/electron-release-gates.test.mjs",
       "source_location": "L13",
       "_origin": "ast",
-      "community": 33,
+      "community": 34,
       "norm_label": "allowed()",
-      "community_name": "PR #634: Lopu comment admission and idempotent preview writes",
+      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
       "id": "github_scripts_electron_release_gates_test_allowed"
     },
     {
@@ -1212,9 +1213,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 119,
+      "community": 120,
       "norm_label": "pureposixpath",
-      "community_name": "PR #492 Load Lopu credentials from Thingtime vault",
+      "community_name": "PR #603 Admin Preview Publisher Controller",
       "id": "pureposixpath"
     },
     {
@@ -1223,9 +1224,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 120,
+      "community": 121,
       "norm_label": "tarinfo",
-      "community_name": "PR #603 Admin Preview Publisher Controller",
+      "community_name": "Fixed HTML Fallback",
       "id": "tarinfo"
     },
     {
@@ -1234,9 +1235,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "feature-stack-plan.mjs",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan"
     },
     {
@@ -1245,9 +1246,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "exactkeys()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_exactkeys"
     },
     {
@@ -1256,9 +1257,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "canonicalfeaturestackplan()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_canonicalfeaturestackplan"
     },
     {
@@ -1267,9 +1268,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L73",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "decodefeaturestackplan()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_decodefeaturestackplan"
     },
     {
@@ -1278,9 +1279,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L85",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "featurestackid()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_featurestackid"
     },
     {
@@ -1289,9 +1290,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L89",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "git()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_git"
     },
     {
@@ -1300,9 +1301,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L91",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "verifyfeaturestackhistory()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_verifyfeaturestackhistory"
     },
     {
@@ -1311,9 +1312,9 @@
       "source_file": ".github/scripts/feature-stack-plan.mjs",
       "source_location": "L128",
       "_origin": "ast",
-      "community": 27,
+      "community": 28,
       "norm_label": "selftest()",
-      "community_name": "API Suite Job",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "github_scripts_feature_stack_plan_selftest"
     },
     {
@@ -1322,9 +1323,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "feature-stack-progress.mjs",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress"
     },
     {
@@ -1333,9 +1334,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "terminal_conclusions",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_terminal_conclusions"
     },
     {
@@ -1344,9 +1345,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L7",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "terminal_target_statuses",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_terminal_target_statuses"
     },
     {
@@ -1355,9 +1356,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "step_phases",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_step_phases"
     },
     {
@@ -1366,9 +1367,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L18",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "targetprogress()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_targetprogress"
     },
     {
@@ -1377,9 +1378,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L70",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "progresssnapshot()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_progresssnapshot"
     },
     {
@@ -1388,9 +1389,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L105",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "githubjobs()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_githubjobs"
     },
     {
@@ -1399,9 +1400,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L115",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "postprogress()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_postprogress"
     },
     {
@@ -1410,9 +1411,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L137",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "recoverypayload()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_recoverypayload"
     },
     {
@@ -1421,9 +1422,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L188",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "reconcile()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_reconcile"
     },
     {
@@ -1432,9 +1433,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L205",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "run()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_run"
     },
     {
@@ -1443,9 +1444,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L271",
       "_origin": "ast",
-      "community": 24,
+      "community": 23,
       "norm_label": "selftest()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "control-plane-events.test.mjs",
       "id": "github_scripts_feature_stack_progress_selftest"
     },
     {
@@ -2433,9 +2434,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "lopu-credential-vault.mjs",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault"
     },
     {
@@ -2444,9 +2445,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L10",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "required()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_required"
     },
     {
@@ -2455,9 +2456,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "validate()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_validate"
     },
     {
@@ -2466,9 +2467,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L34",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "legacycredentials()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_legacycredentials"
     },
     {
@@ -2477,9 +2478,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L49",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "fetchbundle()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_fetchbundle"
     },
     {
@@ -2488,9 +2489,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L82",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "safecache()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_safecache"
     },
     {
@@ -2499,9 +2500,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L92",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "exportbundle()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_exportbundle"
     },
     {
@@ -2510,9 +2511,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.mjs",
       "source_location": "L115",
       "_origin": "ast",
-      "community": 21,
+      "community": 14,
       "norm_label": "main()",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_lopu_credential_vault_main"
     },
     {
@@ -2521,9 +2522,9 @@
       "source_file": ".github/scripts/lopu-credential-vault.test.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 74,
+      "community": 75,
       "norm_label": "lopu-credential-vault.test.mjs",
-      "community_name": "GitHub Native Auto-Merge",
+      "community_name": "Semantic Graphify Extraction",
       "id": "github_scripts_lopu_credential_vault_test"
     },
     {
@@ -5717,9 +5718,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "promotion-worker-routing-contract.mjs",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract"
     },
     {
@@ -5728,9 +5729,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "workflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_workflow"
     },
     {
@@ -5739,9 +5740,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "rebaseworkflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_rebaseworkflow"
     },
     {
@@ -5750,9 +5751,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "allbranchworkflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_allbranchworkflow"
     },
     {
@@ -5761,9 +5762,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L20",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "developpromotionworkflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_developpromotionworkflow"
     },
     {
@@ -5772,9 +5773,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L24",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "featurepromotionworkflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_featurepromotionworkflow"
     },
     {
@@ -5783,9 +5784,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "maindevelopsyncworkflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_maindevelopsyncworkflow"
     },
     {
@@ -5794,9 +5795,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L32",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "action",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_action"
     },
     {
@@ -5805,9 +5806,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L36",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "lopuagent",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_lopuagent"
     },
     {
@@ -5816,9 +5817,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L40",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "worker",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_worker"
     },
     {
@@ -5827,9 +5828,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L44",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "graphify",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_graphify"
     },
     {
@@ -5838,9 +5839,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L48",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "promoter",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_promoter"
     },
     {
@@ -5849,9 +5850,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L126",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "featurestackmergejob",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_featurestackmergejob"
     },
     {
@@ -5860,9 +5861,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L128",
       "_origin": "ast",
-      "community": 22,
+      "community": 21,
       "norm_label": "featurestackmergeif",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_promotion_worker_routing_contract_featurestackmergeif"
     },
     {
@@ -7057,9 +7058,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "start.sh",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start"
     },
     {
@@ -7072,9 +7073,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "start.sh script",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_sh__entry"
     },
     {
@@ -7087,9 +7088,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "usage()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_usage"
     },
     {
@@ -7102,9 +7103,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "emit()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_emit"
     },
     {
@@ -7117,9 +7118,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "emit_paths()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_emit_paths"
     },
     {
@@ -7132,9 +7133,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "secure_git_environment()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_secure_git_environment"
     },
     {
@@ -7147,9 +7148,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "rebase_in_progress()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_rebase_in_progress"
     },
     {
@@ -7162,9 +7163,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 28,
+      "community": 29,
       "norm_label": "write_conflicts()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
       "id": "github_scripts_rebase_stack_start_write_conflicts"
     },
     {
@@ -7177,9 +7178,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "verify-promotion-source-authority.sh",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority"
     },
     {
@@ -7192,9 +7193,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "verify-promotion-source-authority.sh script",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_sh__entry"
     },
     {
@@ -7207,9 +7208,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "fail()",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_fail"
     },
     {
@@ -7222,9 +7223,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "git_config_global",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_global"
     },
     {
@@ -7237,9 +7238,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "git_config_system",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_system"
     },
     {
@@ -7252,9 +7253,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "git_config_nosystem",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_nosystem"
     },
     {
@@ -7267,9 +7268,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 30,
+      "community": 31,
       "norm_label": "git_attr_nosystem",
-      "community_name": "Control-plane regression checklist",
+      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_attr_nosystem"
     },
     {
@@ -7690,9 +7691,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "stage-graphify-snapshots.mjs",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots"
     },
     {
@@ -7701,9 +7702,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "portable",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_portable"
     },
     {
@@ -7712,9 +7713,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L23",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "legacy_root",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_legacy_root"
     },
     {
@@ -7723,9 +7724,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "git()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_git"
     },
     {
@@ -7734,9 +7735,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L35",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "filesunder()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_filesunder"
     },
     {
@@ -7745,9 +7746,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L53",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "addexisting()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_addexisting"
     },
     {
@@ -7756,9 +7757,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L65",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "trackedunder()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_trackedunder"
     },
     {
@@ -7767,9 +7768,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L70",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "missingfromworktree()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_missingfromworktree"
     },
     {
@@ -7778,9 +7779,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L86",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "removefromindex()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_removefromindex"
     },
     {
@@ -7789,9 +7790,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L97",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "restoretrackedfromhead()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_restoretrackedfromhead"
     },
     {
@@ -7800,9 +7801,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L109",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "stagegraphifysnapshots()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_stagegraphifysnapshots"
     },
     {
@@ -7811,9 +7812,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L160",
       "_origin": "ast",
-      "community": 14,
+      "community": 24,
       "norm_label": "selftest()",
-      "community_name": "promote-features-to-main.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_stage_graphify_snapshots_selftest"
     },
     {
@@ -7888,9 +7889,9 @@
       "source_file": ".github/TESTING.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 34,
+      "community": 35,
       "norm_label": "testing.md",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing"
     },
     {
@@ -7899,9 +7900,9 @@
       "source_file": ".github/TESTING.md",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 34,
+      "community": 35,
       "norm_label": "cooperative review handover",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing_cooperative_review_handover"
     },
     {
@@ -7910,9 +7911,9 @@
       "source_file": ".github/TESTING.md",
       "source_location": "L25",
       "_origin": "ast",
-      "community": 34,
+      "community": 35,
       "norm_label": "missing-build wildcard fallback",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing_missing_build_wildcard_fallback"
     },
     {
@@ -7921,9 +7922,9 @@
       "source_file": ".github/TESTING.md",
       "source_location": "L45",
       "_origin": "ast",
-      "community": 34,
+      "community": 35,
       "norm_label": "preview labels and missed-build recovery",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing_preview_labels_and_missed_build_recovery"
     },
     {
@@ -7932,9 +7933,9 @@
       "source_file": ".github/TESTING.md",
       "source_location": "L65",
       "_origin": "ast",
-      "community": 34,
+      "community": 35,
       "norm_label": "event feedback and ci cancellation",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing_event_feedback_and_ci_cancellation"
     },
     {
@@ -7943,9 +7944,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "agents.md",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "agents"
     },
     {
@@ -7954,9 +7955,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "canonical instruction file",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_canonical_instruction_file"
     },
     {
@@ -7965,9 +7966,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L19",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "fundamentals (read first)",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_fundamentals_read_first"
     },
     {
@@ -7976,9 +7977,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L60",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "local development and worktrees",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_local_development_and_worktrees"
     },
     {
@@ -7987,9 +7988,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L123",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "browser and ui validation",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_browser_and_ui_validation"
     },
     {
@@ -7998,9 +7999,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L145",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "data and api conventions",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_data_and_api_conventions"
     },
     {
@@ -8009,9 +8010,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L180",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "github push and pr publishing",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_github_push_and_pr_publishing"
     },
     {
@@ -8020,9 +8021,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L220",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "linting, type checks, and package managers",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_linting_type_checks_and_package_managers"
     },
     {
@@ -8031,9 +8032,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L244",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "ios development and releases",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_ios_development_and_releases"
     },
     {
@@ -8042,9 +8043,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L276",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "graphify",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_graphify"
     },
     {
@@ -8053,9 +8054,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L326",
       "_origin": "ast",
-      "community": 23,
+      "community": 22,
       "norm_label": "delivery messaging",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_delivery_messaging"
     },
     {
@@ -8108,9 +8109,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "506-codex-auto-merge-main-develop-sync-pr.md",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr"
     },
     {
@@ -8119,9 +8120,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "pr #506 \u2014 auto-merge resolved main to develop sync pr",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_pr_506_auto_merge_resolved_main_to_develop_sync_pr"
     },
     {
@@ -8130,9 +8131,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "problem",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_problem"
     },
     {
@@ -8141,9 +8142,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L10",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "resolution",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_resolution"
     },
     {
@@ -8152,9 +8153,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L23",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "validation",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_validation"
     },
     {
@@ -8163,9 +8164,9 @@
       "source_file": "PRs/506-codex-auto-merge-main-develop-sync-pr.md",
       "source_location": "L33",
       "_origin": "ast",
-      "community": 35,
+      "community": 36,
       "norm_label": "operational proof gate",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "rebase-index-fingerprint.test.mjs",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_operational_proof_gate"
     },
     {
@@ -8229,9 +8230,9 @@
       "source_file": "PRs/603-codex-admin-preview-publisher-controller.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 36,
+      "community": 37,
       "norm_label": "603-codex-admin-preview-publisher-controller.md",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller"
     },
     {
@@ -8240,9 +8241,9 @@
       "source_file": "PRs/603-codex-admin-preview-publisher-controller.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 36,
+      "community": 37,
       "norm_label": "outcome",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller_outcome"
     },
     {
@@ -8251,9 +8252,9 @@
       "source_file": "PRs/603-codex-admin-preview-publisher-controller.md",
       "source_location": "L14",
       "_origin": "ast",
-      "community": 36,
+      "community": 37,
       "norm_label": "security boundary",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller_security_boundary"
     },
     {
@@ -8262,9 +8263,9 @@
       "source_file": "PRs/603-codex-admin-preview-publisher-controller.md",
       "source_location": "L27",
       "_origin": "ast",
-      "community": 36,
+      "community": 37,
       "norm_label": "compatibility fix",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller_compatibility_fix"
     },
     {
@@ -8273,9 +8274,9 @@
       "source_file": "PRs/603-codex-admin-preview-publisher-controller.md",
       "source_location": "L36",
       "_origin": "ast",
-      "community": 36,
+      "community": 37,
       "norm_label": "validation",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller_validation"
     },
     {
@@ -8284,9 +8285,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "609-codex-preview-manager-reliability.md",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability"
     },
     {
@@ -8295,9 +8296,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "pr #609 \u2014 restore lopu and preview admission",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_pr_609_restore_lopu_and_preview_admission"
     },
     {
@@ -8306,9 +8307,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "outcome",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_outcome"
     },
     {
@@ -8317,9 +8318,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L21",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "live diagnosis",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_live_diagnosis"
     },
     {
@@ -8328,9 +8329,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L35",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "security boundary",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_security_boundary"
     },
     {
@@ -8339,9 +8340,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L43",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "validation",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_validation"
     },
     {
@@ -8350,9 +8351,9 @@
       "source_file": "PRs/609-codex-preview-manager-reliability.md",
       "source_location": "L56",
       "_origin": "ast",
-      "community": 31,
+      "community": 32,
       "norm_label": "follow-up acceptance repair",
-      "community_name": "PR #506 \u2014 Auto-merge resolved main to develop sync PR",
+      "community_name": "PR #603 \u2014 Admin preview publisher controller",
       "id": "prs_609_codex_preview_manager_reliability_follow_up_acceptance_repair"
     },
     {
@@ -8361,9 +8362,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "634-control-plane-event-hardening--harden-lopu-comment-admission.md",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission"
     },
     {
@@ -8372,9 +8373,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "pr #634: lopu comment admission and idempotent preview writes",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission_pr_634_lopu_comment_admission_and_idempotent_preview_writes"
     },
     {
@@ -8383,9 +8384,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "evidence and scope",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission_evidence_and_scope"
     },
     {
@@ -8394,9 +8395,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L22",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "behavior",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission_behavior"
     },
     {
@@ -8405,9 +8406,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L37",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "validation",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission_validation"
     },
     {
@@ -8416,9 +8417,9 @@
       "source_file": "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md",
       "source_location": "L50",
       "_origin": "ast",
-      "community": 37,
+      "community": 38,
       "norm_label": "rollout",
-      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
+      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
       "id": "prs_634_control_plane_event_hardening_harden_lopu_comment_admission_rollout"
     },
     {
@@ -8427,9 +8428,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work"
     },
     {
@@ -8438,9 +8439,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "pr #637: safe cooperative handover for lopu reviews",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_pr_637_safe_cooperative_handover_for_lopu_reviews"
     },
     {
@@ -8449,9 +8450,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "scope and evidence",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_scope_and_evidence"
     },
     {
@@ -8460,9 +8461,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L14",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "protocol",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_protocol"
     },
     {
@@ -8471,9 +8472,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L39",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "validation",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_validation"
     },
     {
@@ -8482,9 +8483,9 @@
       "source_file": "PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md",
       "source_location": "L51",
       "_origin": "ast",
-      "community": 38,
+      "community": 39,
       "norm_label": "pr #611 recovery",
-      "community_name": "PR #534 \u2014 Feature Stack progress heartbeat controller",
+      "community_name": "PR #642: Discoverable preview status and missed-build repair",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_pr_611_recovery"
     },
     {
@@ -8548,9 +8549,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls"
     },
     {
@@ -8559,9 +8560,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "pr #643 \u2014 missing-build page for unassigned pr preview urls",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_pr_643_missing_build_page_for_unassigned_pr_preview_urls"
     },
     {
@@ -8570,9 +8571,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "cause and scope",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_cause_and_scope"
     },
     {
@@ -8581,9 +8582,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L18",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "root response decision",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_root_response_decision"
     },
     {
@@ -8592,9 +8593,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "verification before merge",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_verification_before_merge"
     },
     {
@@ -8603,9 +8604,9 @@
       "source_file": "PRs/643-codex-preview-no-build-page--show-a-no-build-page-for-unassigned-pr-preview-urls.md",
       "source_location": "L44",
       "_origin": "ast",
-      "community": 39,
+      "community": 40,
       "norm_label": "protected rollout",
-      "community_name": "PR #642: Discoverable preview status and missed-build repair",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_protected_rollout"
     },
     {
@@ -8617,9 +8618,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 73,
+      "community": 74,
       "norm_label": "fundamentals",
-      "community_name": "GitHub Exact-Head REST Merge",
+      "community_name": "GitHub Native Auto-Merge",
       "id": "fundamentals_fundamentals"
     },
     {
@@ -8631,9 +8632,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 121,
+      "community": 122,
       "norm_label": "testing checklist",
-      "community_name": "Fixed HTML Fallback",
+      "community_name": "PR #643 Missing-build Page",
       "id": "testing_testing"
     },
     {
@@ -8645,9 +8646,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 59,
+      "community": 60,
       "norm_label": "graphify cli",
-      "community_name": "iOS Release Flow",
+      "community_name": "Lopu Toast Notifications",
       "id": "_github_workflows_resolve_pr_conflicts_graphify_cli"
     },
     {
@@ -8659,9 +8660,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 76,
+      "community": 77,
       "norm_label": "codeql pr handoff workflow",
-      "community_name": "Local Codex Proxy",
+      "community_name": "Lopu Conflict Resolver",
       "id": "github_workflows_codeql_pr_handoff_workflow"
     },
     {
@@ -8687,9 +8688,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 81,
+      "community": 82,
       "norm_label": "legacy pr conflict resolver (superseded)",
-      "community_name": "Protected Branch Rule",
+      "community_name": "Protected Lopu Entrypoint",
       "id": "github_workflows_pr_conflict_resolver_workflow"
     },
     {
@@ -8701,9 +8702,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 58,
+      "community": 59,
       "norm_label": "lopu internal develop promotion",
-      "community_name": "Immutable Graphify Snapshots",
+      "community_name": "iOS Release Flow",
       "id": "github_workflows_promote_develop_to_main_workflow"
     },
     {
@@ -8757,9 +8758,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 58,
+      "community": 59,
       "norm_label": "lopu internal feature promotion",
-      "community_name": "Immutable Graphify Snapshots",
+      "community_name": "iOS Release Flow",
       "id": "github_workflows_promote_features_to_main_workflow"
     },
     {
@@ -8855,9 +8856,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 91,
+      "community": 92,
       "norm_label": "pr #506",
-      "community_name": "Protected github-actions Branch",
+      "community_name": "Thingtime GitHub App Bot",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_pr_506"
     },
     {
@@ -8869,9 +8870,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 95,
+      "community": 96,
       "norm_label": "sync/main-into-develop pr",
-      "community_name": "Thingtime Credential Vault Router",
+      "community_name": "Lopu Admission Contract",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_sync_main_into_develop_pr"
     },
     {
@@ -8883,9 +8884,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 85,
+      "community": 86,
       "norm_label": "github native auto-merge",
-      "community_name": "Thingtime Repository",
+      "community_name": "Trusted Terminal Merger",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_github_native_auto_merge"
     },
     {
@@ -8897,9 +8898,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 92,
+      "community": 93,
       "norm_label": "protected branch rule",
-      "community_name": "Thingtime GitHub App Bot",
+      "community_name": "PR #595",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_protected_branch_rule"
     },
     {
@@ -8911,9 +8912,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 97,
+      "community": 98,
       "norm_label": "trusted terminal merger",
-      "community_name": "Cooperative Handover Protocol",
+      "community_name": "PR #611 Preview Recovery",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_trusted_terminal_merger"
     },
     {
@@ -8925,9 +8926,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 82,
+      "community": 83,
       "norm_label": "clean synchronization lane",
-      "community_name": "Protected Lopu Entrypoint",
+      "community_name": "Self-Tests",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_clean_synchronization_lane"
     },
     {
@@ -8939,9 +8940,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 88,
+      "community": 89,
       "norm_label": "lopu conflict resolver",
-      "community_name": "Feature Stack Target Workers",
+      "community_name": "Admin Preview Publisher",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_lopu_conflict_resolver"
     },
     {
@@ -8953,9 +8954,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 96,
+      "community": 97,
       "norm_label": "thingtime repository",
-      "community_name": "Lopu Admission Contract",
+      "community_name": "Cooperative Handover Protocol",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_thingtime_repository"
     },
     {
@@ -8967,9 +8968,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 83,
+      "community": 84,
       "norm_label": "develop branch",
-      "community_name": "Self-Tests",
+      "community_name": "sync/main-into-develop PR",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_develop_branch"
     },
     {
@@ -8981,9 +8982,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 89,
+      "community": 90,
       "norm_label": "main branch",
-      "community_name": "Admin Preview Publisher",
+      "community_name": "Develop Preview Controller",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_main_branch"
     },
     {
@@ -8995,9 +8996,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 84,
+      "community": 85,
       "norm_label": "github exact-head rest merge",
-      "community_name": "sync/main-into-develop PR",
+      "community_name": "Thingtime Repository",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_exact_head_rest_merge"
     },
     {
@@ -9009,9 +9010,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 94,
+      "community": 95,
       "norm_label": "self-tests",
-      "community_name": "Vercel Deployment",
+      "community_name": "Thingtime Credential Vault Router",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_self_tests"
     },
     {
@@ -9023,9 +9024,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 86,
+      "community": 87,
       "norm_label": "semantic graphify extraction",
-      "community_name": "Trusted Terminal Merger",
+      "community_name": "Feature Stack Progress Reporter",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_graphify_extraction"
     },
     {
@@ -9037,9 +9038,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 88,
       "norm_label": "local codex proxy",
-      "community_name": "Feature Stack Progress Reporter",
+      "community_name": "Feature Stack Target Workers",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_local_codex_proxy"
     },
     {
@@ -9051,9 +9052,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 90,
+      "community": 91,
       "norm_label": "pr #475",
-      "community_name": "Develop Preview Controller",
+      "community_name": "Protected github-actions Branch",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_pr_475"
     },
     {
@@ -9065,9 +9066,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 93,
+      "community": 94,
       "norm_label": "protected lopu entrypoint",
-      "community_name": "PR #595",
+      "community_name": "Vercel Deployment",
       "id": "prs_506_codex_auto_merge_main_develop_sync_pr_protected_lopu_entrypoint"
     },
     {
@@ -9079,9 +9080,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 23,
+      "community": 22,
       "norm_label": "thingtime ai instructions",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "agents_thingtime_ai_instructions"
     },
     {
@@ -9093,9 +9094,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 60,
+      "community": 61,
       "norm_label": "ai_all.md canonical instruction file",
-      "community_name": "Lopu Toast Notifications",
+      "community_name": "PM2 Dev Stack",
       "id": "agents_ai_all_canonical_instruction_file"
     },
     {
@@ -9107,9 +9108,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 71,
+      "community": 72,
       "norm_label": "root agents.md and claude.md symlinks",
-      "community_name": "Clean Synchronization Lane",
+      "community_name": "develop Branch",
       "id": "agents_root_instruction_symlinks"
     },
     {
@@ -9121,9 +9122,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 63,
+      "community": 64,
       "norm_label": "fundamentals.md",
-      "community_name": "Worktree Port Resolver",
+      "community_name": "Fundamentals",
       "id": "agents_fundamentals"
     },
     {
@@ -9135,9 +9136,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "thingtime api",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "agents_thingtime_api"
     },
     {
@@ -9149,9 +9150,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "versioned mongodb collections",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "agents_mongodb_collections"
     },
     {
@@ -9163,9 +9164,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 69,
+      "community": 70,
       "norm_label": "lopu toast notifications",
-      "community_name": "Legacy PR conflict resolver (superseded)",
+      "community_name": "Lopu PR Manager",
       "id": "agents_lopu_toast"
     },
     {
@@ -9177,9 +9178,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 70,
+      "community": 71,
       "norm_label": "pm2 dev stack",
-      "community_name": "Lopu PR Manager",
+      "community_name": "Clean Synchronization Lane",
       "id": "agents_pm2_dev_stack"
     },
     {
@@ -9191,9 +9192,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 72,
+      "community": 73,
       "norm_label": "worktree port resolver",
-      "community_name": "develop Branch",
+      "community_name": "GitHub Exact-Head REST Merge",
       "id": "agents_worktree_ports"
     },
     {
@@ -9205,9 +9206,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 61,
+      "community": 62,
       "norm_label": "api endpoint registration convention",
-      "community_name": "PM2 Dev Stack",
+      "community_name": "Root AGENTS.md and CLAUDE.md Symlinks",
       "id": "agents_api_endpoint_registration"
     },
     {
@@ -9219,9 +9220,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 64,
+      "community": 65,
       "norm_label": "github pr policy",
-      "community_name": "Fundamentals",
+      "community_name": "lopu-credential-vault.test.mjs",
       "id": "agents_github_pr_policy"
     },
     {
@@ -9233,9 +9234,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 68,
+      "community": 69,
       "norm_label": "ios release flow",
-      "community_name": "Electron App Release",
+      "community_name": "Legacy PR conflict resolver (superseded)",
       "id": "agents_ios_release_flow"
     },
     {
@@ -9247,9 +9248,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 66,
+      "community": 67,
       "norm_label": "graphify rules",
-      "community_name": "CodeQL PR handoff workflow",
+      "community_name": "Commander Release Job",
       "id": "agents_graphify_rules"
     },
     {
@@ -9261,9 +9262,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 65,
+      "community": 66,
       "norm_label": "repository-aware graphify router",
-      "community_name": "lopu-credential-vault.test.mjs",
+      "community_name": "CodeQL PR handoff workflow",
       "id": "agents_graphify_router"
     },
     {
@@ -9275,9 +9276,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 67,
+      "community": 68,
       "norm_label": "immutable graphify snapshots",
-      "community_name": "Commander Release Job",
+      "community_name": "Electron App Release",
       "id": "agents_graphify_snapshots"
     },
     {
@@ -9289,9 +9290,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 62,
+      "community": 63,
       "norm_label": "delivery messaging rules",
-      "community_name": "Root AGENTS.md and CLAUDE.md Symlinks",
+      "community_name": "Worktree Port Resolver",
       "id": "agents_delivery_messaging"
     },
     {
@@ -9303,9 +9304,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "web ci workflow",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "_github_workflows_web_ci_workflow"
     },
     {
@@ -9317,9 +9318,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "classify web ci scope job",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "_github_workflows_web_ci_scope_job"
     },
     {
@@ -9331,9 +9332,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "build typecheck ratchet unit tests job",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "_github_workflows_web_ci_build_job"
     },
     {
@@ -9345,9 +9346,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "api suite job",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "_github_workflows_web_ci_api_tests_job"
     },
     {
@@ -9359,9 +9360,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 30,
       "norm_label": "product contract advisories",
-      "community_name": "PR #609 \u2014 Restore Lopu and preview admission",
+      "community_name": "Control-plane regression checklist",
       "id": "_github_workflows_web_ci_product_contract_advisories"
     },
     {
@@ -9443,9 +9444,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 98,
+      "community": 99,
       "norm_label": "feature stack progress reporter",
-      "community_name": "PR #611 Preview Recovery",
+      "community_name": "PR #637 Safe Cooperative Handover",
       "id": "prs_534_codex_feature_stack_progress_heartbeats_controller_reporter"
     },
     {
@@ -9457,9 +9458,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 99,
+      "community": 100,
       "norm_label": "feature stack target workers",
-      "community_name": "PR #637 Safe Cooperative Handover",
+      "community_name": "Per-SHA Deployment Receipts",
       "id": "prs_534_codex_feature_stack_progress_heartbeats_controller_target_workers"
     },
     {
@@ -9471,9 +9472,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 36,
+      "community": 37,
       "norm_label": "pr #603 admin preview publisher controller",
-      "community_name": "rebase-index-fingerprint.test.mjs",
+      "community_name": "PR #492 \u2014 Load Lopu credentials from the Thingtime vault",
       "id": "prs_603_codex_admin_preview_publisher_controller_document"
     },
     {
@@ -9485,9 +9486,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 100,
+      "community": 101,
       "norm_label": "admin preview publisher",
-      "community_name": "Per-SHA Deployment Receipts",
+      "community_name": "PR 596",
       "id": "prs_603_codex_admin_preview_publisher_controller_admin_preview_publisher"
     },
     {
@@ -9499,9 +9500,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 102,
+      "community": 103,
       "norm_label": "protected github-actions branch",
-      "community_name": "PR 642 Preview Status Recovery",
+      "community_name": "Scheduled Recovery Controller",
       "id": "prs_603_codex_admin_preview_publisher_controller_github_actions_branch"
     },
     {
@@ -9513,9 +9514,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 103,
+      "community": 104,
       "norm_label": "thingtime github app bot",
-      "community_name": "Scheduled Recovery Controller",
+      "community_name": "Vercel Deployment",
       "id": "prs_603_codex_admin_preview_publisher_controller_github_app_bot"
     },
     {
@@ -9527,9 +9528,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 105,
+      "community": 106,
       "norm_label": "vercel deployment",
-      "community_name": "Testing Checklist",
+      "community_name": "deploy-admin-pr-previews.mjs",
       "id": "prs_603_codex_admin_preview_publisher_controller_vercel_deployment"
     },
     {
@@ -9541,9 +9542,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 101,
+      "community": 102,
       "norm_label": "develop preview controller",
-      "community_name": "PR 596",
+      "community_name": "PR 642 Preview Status Recovery",
       "id": "prs_603_codex_admin_preview_publisher_controller_develop_preview_controller"
     },
     {
@@ -9555,9 +9556,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 104,
+      "community": 105,
       "norm_label": "pr #595",
-      "community_name": "Vercel Deployment",
+      "community_name": "Testing Checklist",
       "id": "prs_603_codex_admin_preview_publisher_controller_pr_595"
     },
     {
@@ -9569,9 +9570,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 107,
+      "community": 108,
       "norm_label": "lopu admission contract",
-      "community_name": "stage-graphify-snapshots.mjs",
+      "community_name": "Thingtime AI instructions",
       "id": "prs_609_lopu_admission_contract"
     },
     {
@@ -9583,9 +9584,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 106,
+      "community": 107,
       "norm_label": "thingtime credential vault router",
-      "community_name": "deploy-admin-pr-previews.mjs",
+      "community_name": "stage-graphify-snapshots.mjs",
       "id": "prs_609_credential_vault_router"
     },
     {
@@ -9611,9 +9612,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 80,
+      "community": 81,
       "norm_label": "electron app release",
-      "community_name": "PR #506",
+      "community_name": "Protected Branch Rule",
       "id": "github_workflows_electron_release_workflow"
     },
     {
@@ -9667,9 +9668,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 56,
+      "community": 57,
       "norm_label": "validate the lopu backend",
-      "community_name": "Repository-Aware Graphify Router",
+      "community_name": "Graphify Rules",
       "id": "github_actions_lopu_agent_validate_backend"
     },
     {
@@ -9695,9 +9696,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 56,
+      "community": 57,
       "norm_label": "run lopu with codex",
-      "community_name": "Repository-Aware Graphify Router",
+      "community_name": "Graphify Rules",
       "id": "github_actions_lopu_agent_run_lopu_with_codex"
     },
     {
@@ -9709,9 +9710,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 110,
+      "community": 111,
       "norm_label": "pr #637 safe cooperative handover",
-      "community_name": "Control-plane changelog",
+      "community_name": "vercel.json",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_pr_637"
     },
     {
@@ -9723,9 +9724,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 108,
+      "community": 109,
       "norm_label": "cooperative handover protocol",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_cooperative_handover_protocol"
     },
     {
@@ -9737,9 +9738,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 109,
+      "community": 110,
       "norm_label": "pr #611 preview recovery",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "Control-plane changelog",
       "id": "prs_637_codex_lopu_cooperative_handoff_safely_hand_batch_reviews_over_to_waiting_work_pr_611_preview_recovery"
     },
     {
@@ -9751,9 +9752,9 @@
       "captured_at": null,
       "author": "Codex (AI)",
       "contributor": null,
-      "community": 113,
+      "community": 114,
       "norm_label": "pr 642 preview status recovery",
-      "community_name": "Community 113",
+      "community_name": "Thingtime AI Instructions",
       "id": "prs_642_preview_status_recovery"
     },
     {
@@ -9765,9 +9766,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 112,
+      "community": 113,
       "norm_label": "pr 596",
-      "community_name": "post-publish-ref-race.test.mjs",
+      "community_name": "Community 113",
       "id": "prs_642_pr_596"
     },
     {
@@ -9779,9 +9780,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 115,
+      "community": 116,
       "norm_label": "vercel deployment",
-      "community_name": "Graphify CAS Router",
+      "community_name": "Control-plane Regression Checklist",
       "id": "prs_642_vercel_deployment"
     },
     {
@@ -9793,9 +9794,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 114,
+      "community": 115,
       "norm_label": "scheduled recovery controller",
-      "community_name": "Thingtime AI Instructions",
+      "community_name": "Graphify CAS Router",
       "id": "prs_642_scheduled_controller"
     },
     {
@@ -9807,9 +9808,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 111,
+      "community": 112,
       "norm_label": "per-sha deployment receipts",
-      "community_name": "vercel.json",
+      "community_name": "post-publish-ref-race.test.mjs",
       "id": "prs_642_deployment_receipts"
     },
     {
@@ -9821,9 +9822,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 34,
+      "community": 35,
       "norm_label": "control-plane regression checklist",
-      "community_name": "PR #637: Safe cooperative handover for Lopu reviews",
+      "community_name": "electron-pr-release-contract.mjs",
       "id": "github_testing_regression_checklist"
     },
     {
@@ -9835,9 +9836,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 78,
+      "community": 79,
       "norm_label": "commander release job",
-      "community_name": "main Branch",
+      "community_name": "PR #475",
       "id": "github_workflows_commander_release_release"
     },
     {
@@ -9849,9 +9850,9 @@
       "captured_at": "2026-09-05",
       "author": null,
       "contributor": null,
-      "community": 117,
+      "community": 118,
       "norm_label": "pr #643 missing-build page",
-      "community_name": "Commander Release Workflow",
+      "community_name": "Electron PR Release Workflow",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_missing_build_page"
     },
     {
@@ -9863,9 +9864,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 118,
+      "community": 119,
       "norm_label": "preview wildcard domains",
-      "community_name": "Electron PR Release Workflow",
+      "community_name": "PR #492 Load Lopu credentials from Thingtime vault",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_preview_wildcard_domains"
     },
     {
@@ -9877,9 +9878,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 116,
+      "community": 117,
       "norm_label": "fixed html fallback",
-      "community_name": "Control-plane Regression Checklist",
+      "community_name": "Commander Release Workflow",
       "id": "prs_643_codex_preview_no_build_page_show_a_no_build_page_for_unassigned_pr_preview_urls_fixed_html_fallback"
     },
     {
@@ -9891,9 +9892,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 79,
+      "community": 80,
       "norm_label": "electron pr release workflow",
-      "community_name": "PR #475",
+      "community_name": "PR #506",
       "id": "github_workflows_electron_pr_release"
     },
     {
@@ -9905,9 +9906,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 77,
+      "community": 78,
       "norm_label": "commander release workflow",
-      "community_name": "Lopu Conflict Resolver",
+      "community_name": "main Branch",
       "id": "github_workflows_commander_release"
     },
     {
@@ -9919,9 +9920,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 122,
+      "community": 123,
       "norm_label": "vercel deployment kill-switch",
-      "community_name": "PR #643 Missing-build Page",
+      "community_name": "Preview Wildcard Domains",
       "id": "vercel_json"
     },
     {
@@ -10021,9 +10022,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 21,
+      "community": 14,
       "norm_label": "graphify cas router",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_scripts_graphify"
     },
     {
@@ -10035,9 +10036,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 57,
+      "community": 58,
       "norm_label": "graphify cas tests",
-      "community_name": "Graphify Rules",
+      "community_name": "Immutable Graphify Snapshots",
       "id": "github_scripts_graphify_cas_test"
     },
     {
@@ -10049,76 +10050,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 21,
+      "community": 14,
       "norm_label": "lopu agent action",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "promote-features-to-main.mjs",
       "id": "github_actions_lopu_agent"
-    },
-    {
-      "label": "control-plane-events.test.mjs",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "control-plane-events.test.mjs",
-      "id": "github_scripts_control_plane_events_test",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
-    },
-    {
-      "label": "workflow",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L7",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "workflow",
-      "id": "github_scripts_control_plane_events_test_workflow",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
-    },
-    {
-      "label": "ci",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L8",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "ci",
-      "id": "github_scripts_control_plane_events_test_ci",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
-    },
-    {
-      "label": "event()",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L10",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "event()",
-      "id": "github_scripts_control_plane_events_test_event",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
-    },
-    {
-      "label": "gateExpression()",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L14",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "gateexpression()",
-      "id": "github_scripts_control_plane_events_test_gateexpression",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
-    },
-    {
-      "label": "evaluate()",
-      "file_type": "code",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L20",
-      "_origin": "ast",
-      "community": 32,
-      "norm_label": "evaluate()",
-      "id": "github_scripts_control_plane_events_test_evaluate",
-      "community_name": "PR #603 \u2014 Admin preview publisher controller"
     },
     {
       "label": "preview-pr-summary.test.mjs",
@@ -10126,10 +10061,10 @@
       "source_file": ".github/scripts/preview-pr-summary.test.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 75,
+      "community": 76,
       "norm_label": "preview-pr-summary.test.mjs",
-      "id": "github_scripts_preview_pr_summary_test",
-      "community_name": "Semantic Graphify Extraction"
+      "community_name": "Local Codex Proxy",
+      "id": "github_scripts_preview_pr_summary_test"
     },
     {
       "label": "workflow-control-plane-contract.mjs",
@@ -10139,8 +10074,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "workflow-control-plane-contract.mjs",
-      "id": "github_scripts_workflow_control_plane_contract",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract"
     },
     {
       "label": "here",
@@ -10150,8 +10085,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "here",
-      "id": "github_scripts_workflow_control_plane_contract_here",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_here"
     },
     {
       "label": "githubRoot",
@@ -10161,8 +10096,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "githubroot",
-      "id": "github_scripts_workflow_control_plane_contract_githubroot",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_githubroot"
     },
     {
       "label": "workflows",
@@ -10172,8 +10107,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "workflows",
-      "id": "github_scripts_workflow_control_plane_contract_workflows",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_workflows"
     },
     {
       "label": "actions",
@@ -10183,8 +10118,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "actions",
-      "id": "github_scripts_workflow_control_plane_contract_actions",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_actions"
     },
     {
       "label": "scripts",
@@ -10194,8 +10129,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "scripts",
-      "id": "github_scripts_workflow_control_plane_contract_scripts",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_scripts"
     },
     {
       "label": "codeqlBackfillScriptPath",
@@ -10205,8 +10140,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "codeqlbackfillscriptpath",
-      "id": "github_scripts_workflow_control_plane_contract_codeqlbackfillscriptpath",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_codeqlbackfillscriptpath"
     },
     {
       "label": "IMPLEMENTATIONS",
@@ -10216,8 +10151,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "implementations",
-      "id": "github_scripts_workflow_control_plane_contract_implementations",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_implementations"
     },
     {
       "label": "PROVIDER_ROUTED_IMPLEMENTATIONS",
@@ -10227,8 +10162,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "provider_routed_implementations",
-      "id": "github_scripts_workflow_control_plane_contract_provider_routed_implementations",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_provider_routed_implementations"
     },
     {
       "label": "readWorkflow()",
@@ -10238,8 +10173,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "readworkflow()",
-      "id": "github_scripts_workflow_control_plane_contract_readworkflow",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_readworkflow"
     },
     {
       "label": "makeRoutingProof()",
@@ -10249,8 +10184,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "makeroutingproof()",
-      "id": "github_scripts_workflow_control_plane_contract_makeroutingproof",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_makeroutingproof"
     },
     {
       "label": "acceptsBotRoutingProof()",
@@ -10260,8 +10195,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "acceptsbotroutingproof()",
-      "id": "github_scripts_workflow_control_plane_contract_acceptsbotroutingproof",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_acceptsbotroutingproof"
     },
     {
       "label": "appReentryDisposition()",
@@ -10271,8 +10206,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "appreentrydisposition()",
-      "id": "github_scripts_workflow_control_plane_contract_appreentrydisposition",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_appreentrydisposition"
     },
     {
       "label": "assertRoutingProofContract()",
@@ -10282,8 +10217,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertroutingproofcontract()",
-      "id": "github_scripts_workflow_control_plane_contract_assertroutingproofcontract",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertroutingproofcontract"
     },
     {
       "label": "AI_RUNTIME_YAML",
@@ -10293,8 +10228,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "ai_runtime_yaml",
-      "id": "github_scripts_workflow_control_plane_contract_ai_runtime_yaml",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_ai_runtime_yaml"
     },
     {
       "label": "yamlFiles()",
@@ -10304,8 +10239,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "yamlfiles()",
-      "id": "github_scripts_workflow_control_plane_contract_yamlfiles",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_yamlfiles"
     },
     {
       "label": "workflowBlock()",
@@ -10315,8 +10250,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "workflowblock()",
-      "id": "github_scripts_workflow_control_plane_contract_workflowblock",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_workflowblock"
     },
     {
       "label": "assertAdminWaterfallGrammar()",
@@ -10326,8 +10261,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertadminwaterfallgrammar()",
-      "id": "github_scripts_workflow_control_plane_contract_assertadminwaterfallgrammar",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertadminwaterfallgrammar"
     },
     {
       "label": "assertAdminTransportCap()",
@@ -10337,8 +10272,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertadmintransportcap()",
-      "id": "github_scripts_workflow_control_plane_contract_assertadmintransportcap",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertadmintransportcap"
     },
     {
       "label": "assertAdminLoader()",
@@ -10348,8 +10283,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertadminloader()",
-      "id": "github_scripts_workflow_control_plane_contract_assertadminloader",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertadminloader"
     },
     {
       "label": "assertAdminModelRouting()",
@@ -10359,8 +10294,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertadminmodelrouting()",
-      "id": "github_scripts_workflow_control_plane_contract_assertadminmodelrouting",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertadminmodelrouting"
     },
     {
       "label": "assertObservableLabelCleanup()",
@@ -10370,8 +10305,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertobservablelabelcleanup()",
-      "id": "github_scripts_workflow_control_plane_contract_assertobservablelabelcleanup",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertobservablelabelcleanup"
     },
     {
       "label": "assertUserControlledMergePause()",
@@ -10381,8 +10316,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertusercontrolledmergepause()",
-      "id": "github_scripts_workflow_control_plane_contract_assertusercontrolledmergepause",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertusercontrolledmergepause"
     },
     {
       "label": "assertResolverLockfileRecovery()",
@@ -10392,8 +10327,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertresolverlockfilerecovery()",
-      "id": "github_scripts_workflow_control_plane_contract_assertresolverlockfilerecovery",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertresolverlockfilerecovery"
     },
     {
       "label": "assertControlPlaneContract()",
@@ -10403,8 +10338,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertcontrolplanecontract()",
-      "id": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract"
     },
     {
       "label": "CONTROL_PLANE_ROOTS",
@@ -10414,8 +10349,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "control_plane_roots",
-      "id": "github_scripts_workflow_control_plane_contract_control_plane_roots",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_control_plane_roots"
     },
     {
       "label": "assertBareControlPlaneTree()",
@@ -10425,8 +10360,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertbarecontrolplanetree()",
-      "id": "github_scripts_workflow_control_plane_contract_assertbarecontrolplanetree",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertbarecontrolplanetree"
     },
     {
       "label": "assertControlPlaneVercelConfig()",
@@ -10436,8 +10371,8 @@
       "_origin": "ast",
       "community": 7,
       "norm_label": "assertcontrolplanevercelconfig()",
-      "id": "github_scripts_workflow_control_plane_contract_assertcontrolplanevercelconfig",
-      "community_name": "workflow-control-plane-contract.mjs"
+      "community_name": "workflow-control-plane-contract.mjs",
+      "id": "github_scripts_workflow_control_plane_contract_assertcontrolplanevercelconfig"
     },
     {
       "label": "Verify Job",
@@ -10448,10 +10383,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 57,
+      "community": 58,
       "norm_label": "verify job",
-      "id": "github_workflows_control_plane_ci_verify",
-      "community_name": "Graphify Rules"
+      "community_name": "Immutable Graphify Snapshots",
+      "id": "github_workflows_control_plane_ci_verify"
     },
     {
       "label": "Contract Advisories Job",
@@ -10464,8 +10399,8 @@
       "contributor": null,
       "community": 16,
       "norm_label": "contract advisories job",
-      "id": "github_workflows_control_plane_ci_contract_advisories",
-      "community_name": "promotion-worker-contract.sh"
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_control_plane_ci_contract_advisories"
     },
     {
       "label": "Comment Contract Advisories Job",
@@ -10478,36 +10413,8 @@
       "contributor": null,
       "community": 16,
       "norm_label": "comment contract advisories job",
-      "id": "github_workflows_control_plane_ci_comment_contract_advisories",
-      "community_name": "promotion-worker-contract.sh"
-    },
-    {
-      "label": "Lopu PR Manager Workflow",
-      "file_type": "code",
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 21,
-      "norm_label": "lopu pr manager workflow",
-      "id": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "community_name": "feature-stack-progress.mjs"
-    },
-    {
-      "label": "Thingtime AI Instructions",
-      "file_type": "document",
-      "source_file": "CLAUDE.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 23,
-      "norm_label": "thingtime ai instructions",
-      "id": "claude_thingtime_ai_instructions",
-      "community_name": "control-plane-events.test.mjs"
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_control_plane_ci_comment_contract_advisories"
     },
     {
       "label": "Control-plane README",
@@ -10518,10 +10425,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 21,
+      "community": 14,
       "norm_label": "control-plane readme",
-      "id": "readme_document",
-      "community_name": "feature-stack-progress.mjs"
+      "community_name": "promote-features-to-main.mjs",
+      "id": "readme_document"
     },
     {
       "label": "Immutable Graphify Snapshots",
@@ -10532,10 +10439,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 21,
+      "community": 14,
       "norm_label": "immutable graphify snapshots",
-      "id": "graphify_cas",
-      "community_name": "feature-stack-progress.mjs"
+      "community_name": "promote-features-to-main.mjs",
+      "id": "graphify_cas"
     },
     {
       "label": "Lopu Repository Automation",
@@ -10546,24 +10453,118 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 21,
+      "community": 14,
       "norm_label": "lopu repository automation",
-      "id": "lopu",
-      "community_name": "feature-stack-progress.mjs"
+      "community_name": "promote-features-to-main.mjs",
+      "id": "lopu"
     },
     {
-      "label": "Control-plane Changelog",
-      "file_type": "document",
-      "source_file": "CHANGELOG.md",
+      "label": "Develop PR Preview Deployment Script",
+      "file_type": "code",
+      "source_file": ".github/scripts/deploy-develop-pr-preview.mjs",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 40,
-      "norm_label": "control-plane changelog",
-      "id": "changelog_control_plane",
-      "community_name": "rebase-ownership-routing-contract.sh"
+      "community": 16,
+      "norm_label": "develop pr preview deployment script",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_scripts_deploy_develop_pr_preview"
+    },
+    {
+      "label": "Admin PR Previews Deployment Script",
+      "file_type": "code",
+      "source_file": ".github/scripts/deploy-admin-pr-previews.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "admin pr previews deployment script",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_scripts_deploy_admin_pr_previews"
+    },
+    {
+      "label": "Prebuilt Vercel Archive Extractor",
+      "file_type": "code",
+      "source_file": ".github/scripts/extract-vercel-prebuilt.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "prebuilt vercel archive extractor",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_scripts_extract_vercel_prebuilt"
+    },
+    {
+      "label": "control-plane-events.test.mjs",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "control-plane-events.test.mjs",
+      "id": "github_scripts_control_plane_events_test",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
+    },
+    {
+      "label": "workflow",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L7",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "workflow",
+      "id": "github_scripts_control_plane_events_test_workflow",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
+    },
+    {
+      "label": "ci",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L8",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "ci",
+      "id": "github_scripts_control_plane_events_test_ci",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
+    },
+    {
+      "label": "event()",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L10",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "event()",
+      "id": "github_scripts_control_plane_events_test_event",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
+    },
+    {
+      "label": "gateExpression()",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L14",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "gateexpression()",
+      "id": "github_scripts_control_plane_events_test_gateexpression",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
+    },
+    {
+      "label": "evaluate()",
+      "file_type": "code",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L20",
+      "_origin": "ast",
+      "community": 33,
+      "norm_label": "evaluate()",
+      "id": "github_scripts_control_plane_events_test_evaluate",
+      "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
     },
     {
       "label": "Develop PR Preview Workflow",
@@ -10574,10 +10575,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 40,
+      "community": 56,
       "norm_label": "develop pr preview workflow",
       "id": "github_workflows_develop_pr_preview",
-      "community_name": "rebase-ownership-routing-contract.sh"
+      "community_name": "Repository-Aware Graphify Router"
     },
     {
       "label": "Dispatch Job",
@@ -10678,62 +10679,6 @@
       "community_name": "promotion-worker-contract.sh"
     },
     {
-      "label": "Develop PR Preview Deployment Script",
-      "file_type": "code",
-      "source_file": ".github/scripts/deploy-develop-pr-preview.mjs",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "develop pr preview deployment script",
-      "id": "github_scripts_deploy_develop_pr_preview",
-      "community_name": "promotion-worker-contract.sh"
-    },
-    {
-      "label": "Admin PR Previews Deployment Script",
-      "file_type": "code",
-      "source_file": ".github/scripts/deploy-admin-pr-previews.mjs",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "admin pr previews deployment script",
-      "id": "github_scripts_deploy_admin_pr_previews",
-      "community_name": "promotion-worker-contract.sh"
-    },
-    {
-      "label": "Prebuilt Vercel Archive Extractor",
-      "file_type": "code",
-      "source_file": ".github/scripts/extract-vercel-prebuilt.py",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "prebuilt vercel archive extractor",
-      "id": "github_scripts_extract_vercel_prebuilt",
-      "community_name": "promotion-worker-contract.sh"
-    },
-    {
-      "label": "PR 661 Conflict Scans and Visible Previews",
-      "file_type": "document",
-      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": "Codex",
-      "contributor": null,
-      "community": 40,
-      "norm_label": "pr 661 conflict scans and visible previews",
-      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "community_name": "rebase-ownership-routing-contract.sh"
-    },
-    {
       "label": "Exact Head Preview Publication",
       "file_type": "concept",
       "source_file": ".github/workflows/develop-pr-preview.yml",
@@ -10742,13 +10687,125 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 40,
+      "community": 56,
       "norm_label": "exact head preview publication",
       "id": "concept_preview_publication",
-      "community_name": "rebase-ownership-routing-contract.sh"
+      "community_name": "Repository-Aware Graphify Router"
     },
     {
-      "label": "Conflict Detector Recovery",
+      "label": "Thingtime AI Instructions",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 22,
+      "norm_label": "thingtime ai instructions",
+      "id": "claude_thingtime_ai_instructions",
+      "community_name": "recoverPromotionReviewCheckpoint"
+    },
+    {
+      "label": "Control-plane Changelog",
+      "file_type": "document",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "control-plane changelog",
+      "id": "changelog",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "Lopu PR Manager",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "lopu pr manager",
+      "id": "changelog_lopu_pr_manager",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "Graphify Snapshot Router",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "graphify snapshot router",
+      "id": "changelog_graphify_snapshot_router",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "PR Preview Publisher",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "pr preview publisher",
+      "id": "changelog_preview_publisher",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "Lopu PR Manager Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "lopu pr manager workflow",
+      "id": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "PR Conflict Detector",
+      "file_type": "concept",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "pr conflict detector",
+      "id": "github_workflows_resolve_pr_conflicts_detector",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "PR 661 Conflict Scans and Visible Previews",
+      "file_type": "document",
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "pr 661 conflict scans and visible previews",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "Preview Status Section",
       "file_type": "concept",
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
@@ -10756,10 +10813,24 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 40,
-      "norm_label": "conflict detector recovery",
-      "id": "concept_conflict_detector_recovery",
-      "community_name": "rebase-ownership-routing-contract.sh"
+      "community": 27,
+      "norm_label": "preview status section",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
+      "community_name": "API Suite Job"
+    },
+    {
+      "label": "Conflict Scan Repair",
+      "file_type": "concept",
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 27,
+      "norm_label": "conflict scan repair",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
+      "community_name": "API Suite Job"
     }
   ],
   "links": [
@@ -26866,72 +26937,12 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "target": "github_actions_lopu_agent"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
       "source": "readme_document",
       "target": "github_actions_lopu_agent"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L8",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_ci"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L20",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_evaluate"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L10",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_event"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L14",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_gateexpression"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L7",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_workflow"
     },
     {
       "relation": "contains",
@@ -27465,44 +27476,114 @@
       "target": "github_scripts_deploy_develop_pr_preview"
     },
     {
-      "relation": "implements",
+      "relation": "calls",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "target": "lopu"
+      "source": "github_workflows_develop_pr_preview_controller",
+      "target": "github_scripts_deploy_develop_pr_preview"
     },
     {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "changelog_control_plane",
-      "target": "concept_conflict_detector_recovery"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "changelog_control_plane",
-      "target": "concept_preview_publication"
-    },
-    {
-      "relation": "references",
+      "relation": "calls",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "CHANGELOG.md",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "changelog_control_plane",
-      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews"
+      "source": "github_workflows_develop_pr_preview_prepare",
+      "target": "github_scripts_deploy_develop_pr_preview"
+    },
+    {
+      "relation": "calls",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.7,
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_develop_pr_preview_admin_controller",
+      "target": "github_scripts_deploy_admin_pr_previews"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_develop_pr_preview_admin_prepare",
+      "target": "github_scripts_deploy_admin_pr_previews"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_develop_pr_preview_admin_controller",
+      "target": "github_scripts_extract_vercel_prebuilt"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_develop_pr_preview_controller",
+      "target": "github_scripts_extract_vercel_prebuilt"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_ci"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L20",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_evaluate"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_event"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_gateexpression"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_workflow"
     },
     {
       "relation": "references",
@@ -27545,16 +27626,6 @@
       "target": "github_workflows_develop_pr_preview_prepare"
     },
     {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_prepare",
-      "target": "github_scripts_deploy_develop_pr_preview"
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -27563,26 +27634,6 @@
       "weight": 1.0,
       "source": "github_workflows_develop_pr_preview_controller",
       "target": "github_workflows_develop_pr_preview_build"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_controller",
-      "target": "github_scripts_deploy_develop_pr_preview"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_controller",
-      "target": "github_scripts_extract_vercel_prebuilt"
     },
     {
       "relation": "references",
@@ -27605,16 +27656,6 @@
       "target": "github_workflows_develop_pr_preview_admin_prepare"
     },
     {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_admin_prepare",
-      "target": "github_scripts_deploy_admin_pr_previews"
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -27625,24 +27666,84 @@
       "target": "github_workflows_develop_pr_preview_admin_build"
     },
     {
-      "relation": "calls",
-      "confidence": "AMBIGUOUS",
-      "confidence_score": 0.7,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "CHANGELOG.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_admin_controller",
-      "target": "github_scripts_deploy_admin_pr_previews"
+      "source": "changelog",
+      "target": "changelog_graphify_snapshot_router"
     },
     {
-      "relation": "calls",
+      "relation": "references",
       "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "confidence_score": 0.95,
+      "source_file": "CHANGELOG.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "github_workflows_develop_pr_preview_admin_controller",
-      "target": "github_scripts_extract_vercel_prebuilt"
+      "source": "changelog",
+      "target": "changelog_lopu_pr_manager"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog",
+      "target": "changelog_preview_publisher"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "changelog_lopu_pr_manager"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
+      "target": "changelog_preview_publisher"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "github_workflows_resolve_pr_conflicts_detector"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
+      "target": "github_workflows_resolve_pr_conflicts_detector"
     },
     {
       "relation": "references",
@@ -27652,7 +27753,7 @@
       "source_location": null,
       "weight": 1.0,
       "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "target": "concept_conflict_detector_recovery"
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair"
     },
     {
       "relation": "references",
@@ -27662,10 +27763,52 @@
       "source_location": null,
       "weight": 1.0,
       "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "target": "concept_preview_publication"
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section"
     }
   ],
   "hyperedges": [
+    {
+      "id": "develop_preview_delivery_flow",
+      "label": "Protected Develop Preview Delivery Flow",
+      "nodes": [
+        "github_workflows_develop_pr_preview_prepare",
+        "github_workflows_develop_pr_preview_build",
+        "github_workflows_develop_pr_preview_controller",
+        "concept_preview_publication"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": ".github/workflows/develop-pr-preview.yml"
+    },
+    {
+      "id": "admin_preview_delivery_flow",
+      "label": "Admin Selected Preview Delivery Flow",
+      "nodes": [
+        "github_workflows_develop_pr_preview_admin_prepare",
+        "github_workflows_develop_pr_preview_admin_build",
+        "github_workflows_develop_pr_preview_admin_controller",
+        "concept_preview_publication"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": ".github/workflows/develop-pr-preview.yml"
+    },
+    {
+      "id": "pr_661_control_plane_reliability",
+      "label": "PR 661 Control-plane Reliability Repairs",
+      "nodes": [
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
+        "github_workflows_resolve_pr_conflicts_lopu_pr_manager"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
+    },
     {
       "id": "control_plane_validation",
       "label": "Control-plane Validation Flow",
@@ -27704,47 +27847,6 @@
       "confidence": "EXTRACTED",
       "confidence_score": 0.95,
       "source_file": "README.md"
-    },
-    {
-      "id": "develop_preview_delivery_flow",
-      "label": "Protected Develop Preview Delivery Flow",
-      "nodes": [
-        "github_workflows_develop_pr_preview_prepare",
-        "github_workflows_develop_pr_preview_build",
-        "github_workflows_develop_pr_preview_controller",
-        "concept_preview_publication"
-      ],
-      "relation": "participate_in",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": ".github/workflows/develop-pr-preview.yml"
-    },
-    {
-      "id": "admin_preview_delivery_flow",
-      "label": "Admin Selected Preview Delivery Flow",
-      "nodes": [
-        "github_workflows_develop_pr_preview_admin_prepare",
-        "github_workflows_develop_pr_preview_admin_build",
-        "github_workflows_develop_pr_preview_admin_controller",
-        "concept_preview_publication"
-      ],
-      "relation": "participate_in",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": ".github/workflows/develop-pr-preview.yml"
-    },
-    {
-      "id": "pr_661_reliability_repairs",
-      "label": "PR 661 Preview and Conflict Reliability Repairs",
-      "nodes": [
-        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-        "concept_preview_publication",
-        "concept_conflict_detector_recovery"
-      ],
-      "relation": "form",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
     },
     {
       "id": "commander_signed_release_pipeline",
@@ -27943,5 +28045,5 @@
       "source_file": ".github/workflows/promote-features-to-main.yml"
     }
   ],
-  "built_at_commit": "f4b78db09386e2781879640da515f233d7513efa"
+  "built_at_commit": "b7a5db2a229cadc1eb1a710b096fe446e251e6f2"
 }

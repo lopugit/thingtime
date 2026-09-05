@@ -15,6 +15,11 @@ rebase scanning and handoff. The regression traverses the actual YAML dependency
 graph and fails on the old workflow. Each repaired job now explicitly tolerates
 that skipped ancestor while requiring successful direct dependencies.
 
+Restored scans exposed a second failure: fetching 100 PRs with nested file
+inventories repeatedly returned GitHub HTTP 502 (run 33970089738 and a local
+read). Ten-PR pages succeeded. The query now bounds each page while retaining
+full cursor pagination, with a regression against accidentally truncating it.
+
 The resolver also reads the authoritative target ref after pushing. GitHub's
 PR base SHA was observed stale while the branch itself had advanced. A moved
 target reuses the existing three-retry detector handoff with fresh admission,

@@ -138,3 +138,11 @@ test('every routing descendant handles an intentionally skipped conversation anc
   }
   assert.ok(descendants.has('detect') && descendants.has('handoff') && descendants.has('resolve'));
 });
+
+// Large PR file inventories made the 100-PR GraphQL page repeatedly time out.
+test('detector bounds GraphQL work per page without truncating the inventory', () => {
+  const query = workflow.slice(workflow.indexOf('          all_open_prs() {'));
+  assert.match(query, /gh_read_retry graphql --paginate --slurp/);
+  assert.match(query, /pullRequests\(\s*first: 10,\s*states: OPEN,\s*after: \$endCursor/);
+  assert.match(query, /pageInfo \{ hasNextPage endCursor \}/);
+});

@@ -1766,7 +1766,7 @@ jobs:
               -f query='query($owner: String!, $name: String!, $endCursor: String) {
                 repository(owner: $owner, name: $name) {
                   pullRequests(
-                    first: 100,
+                    first: 10,
                     states: OPEN,
                     after: $endCursor,
                     orderBy: {field: CREATED_AT, direction: ASC}
