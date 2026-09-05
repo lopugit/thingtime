@@ -22,6 +22,21 @@
   40 mm simulator renders `@lopu`, direct connected state, live check success,
   last reply/check timestamps, and the refresh control through the bottom of
   the screen without clipping.
+- Exact release commit: `bd1618eefc24250628aeba227463fee382c3ca49`.
+- The protected PR preview publisher completed successfully and the live
+  capability manifest at <https://pr-596.previews.dev.thingtime.com> exposes
+  `api.watch-pairing`, `api.watch-sync`, `api.watch-things`, and `api.devices`;
+  a live anonymous Watch pairing-start smoke request also succeeds.
+- Web CI run
+  [33949863567](https://github.com/lopugit/thingtime/actions/runs/33949863567)
+  passed its build, typecheck ratchet, unit tests, and headless API suite.
+- TestFlight upload run
+  [33949960283](https://github.com/lopugit/thingtime/actions/runs/33949960283)
+  built, signed, verified, and uploaded the iPhone app plus embedded Watch app.
+  Read-only status run
+  [33950223684](https://github.com/lopugit/thingtime/actions/runs/33950223684)
+  confirmed build 23 is `VALID`, internally `IN_BETA_TESTING`, and externally
+  `READY_FOR_BETA_SUBMISSION`.
 
 ## TestFlight build 22 — visible account and live status checks
 
