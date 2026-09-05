@@ -11,11 +11,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
+
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
 
 ## [Unreleased]
+
+### 2026-09-05 — Native passkey entitlement — Codex (AI)
+
+- Backport the production passkey cancellation, challenge replay and settings fixes to the Watch preview used by TestFlight. Build 25 adds `webcredentials:thingtime.com` while preserving the embedded Watch app and production push entitlements. Native credential acceptance still requires a real device. Details: [PR #656](../PRs/656-codex-passkey-ios-release-restore-native-passkeys-with-watch-companion.md).
+- The web repair is released in PRs #641 and #651; the native build retains the existing PR #596 preview origin so Watch pairing continues using its compatible API.
 
 ### 2026-09-05 — Watch code-entry and pairing recovery — Codex (AI)
 

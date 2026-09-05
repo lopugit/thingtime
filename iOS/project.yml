@@ -14,7 +14,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "24"
+    CURRENT_PROJECT_VERSION: "25"
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
   configs:
@@ -67,6 +67,8 @@ targets:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
+        com.apple.developer.associated-domains:
+          - webcredentials:thingtime.com
     dependencies:
       - target: ThingtimeWatch
         embed: true

@@ -22,8 +22,8 @@ export const thingtimeCapabilityManifest = (origin: string) => {
     },
     ...apiEndpointDocs.flatMap((doc) => [
       { feature: `api.${doc.id}`, methods: doc.methods, path: doc.endpoint },
-      ...(doc.endpoint.startsWith('/api/v1/')
-        ? [{ feature: `api.${doc.id}`, methods: ['GET'] as const, path: doc.docsEndpoint }]
+      ...(doc.endpoint.startsWith('/api/v1/') || doc.id === 'apple-app-association'
+        ? [{ feature: `api.${doc.id}`, methods: doc.id === 'apple-app-association' ? ['GET', 'POST'] : ['GET'], path: doc.docsEndpoint }]
         : [])
     ])
   ];
