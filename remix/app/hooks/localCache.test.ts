@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test, { beforeEach } from 'node:test';
 
+// A static import is safe here even though the window stub is installed below:
+// localCache only defines functions at module scope and reads window.localStorage
+// inside each call, so nothing captures storage at load time. It also has to be
+// static — `node --import tsx --test` transforms these files to CJS, which
+// rejects top-level await.
+import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeLocalCache, writeStampedCache } from './localCache';
+
 // A minimal localStorage stand-in with the one property the prune loop
 // depends on: key(i) walks insertion order, and removing while iterating
 // would skip entries (which is why the helpers collect first, then delete).
@@ -24,8 +31,6 @@ class MemoryStorage {
 }
 
 (globalThis as any).window = { localStorage: new MemoryStorage() };
-
-const { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeLocalCache, writeStampedCache } = await import('./localCache');
 
 const storage = () => (globalThis as any).window.localStorage as MemoryStorage;
 const keysUnder = (prefix: string): string[] => {
