@@ -111,6 +111,7 @@ export class StyleTune {
 	data: TextStyleTokens;
 	wrapper: HTMLElement | null = null;
 	closeDialog?: () => void;
+	observer?: MutationObserver;
 
 	constructor({ api, data, block }: TuneParams) {
 		this.api = api;
@@ -138,6 +139,10 @@ export class StyleTune {
 		wrapper.classList.add('tt-style-tune-wrap');
 		wrapper.appendChild(blockContent);
 		this.wrapper = wrapper;
+		this.observer?.disconnect();
+		// List/table tools create additional fields after wrap(); style those too.
+		this.observer = new MutationObserver(() => this.applyStyles());
+		this.observer.observe(wrapper, { childList: true, subtree: true });
 		this.applyStyles();
 		return wrapper;
 	}
@@ -146,10 +151,14 @@ export class StyleTune {
 		if (!this.wrapper) return;
 		const css = styleTokensToCss(this.data);
 		// Apply to text fields themselves: relative units must resolve once, not at both wrapper and heading.
-		this.wrapper.querySelectorAll<HTMLElement>('[contenteditable], textarea').forEach((field) => {
-			for (const key of ['color', 'fontSize', 'fontFamily', 'textAlign', 'backgroundColor', 'fontWeight', 'fontStyle', 'textDecoration'] as const)
-				field.style[key] = String(css[key] ?? '');
-		});
+		this.wrapper
+			.querySelectorAll<HTMLElement>(
+				'[contenteditable], textarea, .ce-paragraph, .ce-header, .cdx-input, .tc-cell, .cdx-list__item-content, .cdx-checklist__item-text'
+			)
+			.forEach((field) => {
+				for (const key of ['color', 'fontSize', 'fontFamily', 'textAlign', 'backgroundColor', 'fontWeight', 'fontStyle', 'textDecoration'] as const)
+					if (field.style[key] !== String(css[key] ?? '')) field.style[key] = String(css[key] ?? '');
+			});
 	}
 	replace(tokens: TextStyleTokens) {
 		this.data = sanitizeStyleTokens(tokens);
@@ -271,6 +280,7 @@ export class StyleTune {
 
 	destroy() {
 		this.closeDialog?.();
+		this.observer?.disconnect();
 		const blockId = this.blockId();
 		if (blockId && TUNE_REGISTRY.get(blockId) === this) TUNE_REGISTRY.delete(blockId);
 	}

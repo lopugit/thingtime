@@ -15,10 +15,11 @@ export const watchEditorJsInlinePosition = (holder: HTMLElement): (() => void) =
 	let frame = 0;
 	const sync = () => {
 		frame = 0;
+		const selection = window.getSelection();
+		if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) return;
 		const toolbar = holder.querySelector<HTMLElement>('.ce-inline-toolbar');
 		const panel = toolbar?.querySelector<HTMLElement>('.ce-popover--inline.ce-popover--opened > .ce-popover__container');
-		const selection = window.getSelection();
-		if (!toolbar || !panel || !selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) return;
+		if (!toolbar || !panel) return;
 		const range = selection.getRangeAt(0),
 			rect = range.getBoundingClientRect();
 		const vv = window.visualViewport;
