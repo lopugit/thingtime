@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { isManagedPreviewComment as isManagedComment, upsertPreviewComment } from './preview-comments.mjs';
+import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
+import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
+import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
 import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -859,6 +861,14 @@ const runSelfTest = async () => {
 		}
 	});
 	equal(parsedDispatch, closedDispatchPayload);
+	const recoveryEvent = { action: CONTROLLER_DISPATCH_TYPE, sender: { type: 'Bot', login: 'github-actions[bot]' },
+		client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'synchronize',
+			head_sha: base.head.sha, head_ref: base.head.ref, recovery: '1' } };
+	equal(parseRepositoryDispatch(recoveryEvent), { ...dispatchPayload, action: 'synchronize', recovery: true });
+	for (const sender of [undefined, { type: 'User', login: 'lopu' }, { type: 'Bot', login: 'other[bot]' }]) {
+		throws(() => parseRepositoryDispatch({ ...recoveryEvent, sender }));
+	}
+	throws(() => parseRepositoryDispatch({ ...recoveryEvent, client_payload: { ...recoveryEvent.client_payload, action: 'closed' } }));
 	throws(() =>
 		parseRepositoryDispatch({
 			action: CONTROLLER_DISPATCH_TYPE,
@@ -986,7 +996,7 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 				signal: AbortSignal.timeout(timeoutMs)
 			});
 		} catch {
-			lastError = new Error('Request failed before a response was received');
+			lastError = new TypeError('Request failed before a response was received');
 			if (attempt < retryLimit) {
 				await delay(1000 * 2 ** attempt);
 				continue;
@@ -1067,6 +1077,12 @@ const parseRepositoryDispatch = (event) => {
 		headSha: String(event.client_payload.head_sha ?? ''),
 		headRef: String(event.client_payload.head_ref ?? '')
 	};
+	if (event.client_payload.recovery === '1') {
+		if (event.sender?.type !== 'Bot' || event.sender?.login !== 'github-actions[bot]' || payload.action !== 'synchronize') {
+			throw new EligibilityError('untrusted-recovery-sender');
+		}
+		payload.recovery = true;
+	}
 	if (!PR_EVENT_ACTIONS.has(payload.action)) throw new EligibilityError('unexpected-source-action');
 	if (!/^[0-9a-f]{40}$/.test(payload.headSha)) throw new EligibilityError('invalid-source-head-sha');
 	if (!isSafeHeadRef(payload.headRef)) throw new EligibilityError('invalid-source-head-ref');
@@ -1076,7 +1092,10 @@ const parseRepositoryDispatch = (event) => {
 const assertRepositoryDispatchSource = async (config, event) => {
 	const payload = parseRepositoryDispatch(event);
 	const run = await githubRequest(`/repos/${config.repository}/actions/runs/${payload.sourceRunId}`);
-	const issue = repositoryDispatchSourceIssue(run, payload, config);
+	const repository = payload.recovery ? await githubRequest(`/repos/${config.repository}`) : null;
+	const issue = payload.recovery
+		? recoverySourceIssue(run, payload, { ...config, defaultBranch: repository.default_branch })
+		: repositoryDispatchSourceIssue(run, payload, config);
 	if (issue) throw new EligibilityError(`invalid-dispatch-source-${issue}`);
 	return payload;
 };
@@ -1168,6 +1187,14 @@ const upsertComment = (repository, number, body) => upsertPreviewComment({
 	request: githubRequest, repository, number, marker: COMMENT_MARKER, body
 });
 
+const publishDevelopStatus = (config, pullRequest, fields, { bestEffort = false } = {}) =>
+	publishPreviewNotifications([
+		() => upsertComment(config.repository, pullRequest.number, deploymentComment({ pullRequest, ...fields })),
+		() => syncPreviewLabels({ request: githubRequest, repository: config.repository, number: pullRequest.number,
+			sha: pullRequest.head.sha, status: fields.state === 'deploying' ? 'building' : fields.state,
+			...(fields.builtAt ? { builtAt: fields.builtAt } : {}) })
+	], { bestEffort });
+
 const findGithubDeployment = async (repository, pullRequest) => {
 	const environment = `develop-pr-${pullRequest.number}`;
 	const params = new URLSearchParams({ environment, ref: pullRequest.head.sha, per_page: '100' });
@@ -1247,14 +1274,15 @@ const markGithubEnvironmentInactive = async (repository, prNumber, keepId = null
 
 const dashboardUrl = (deploymentId, config) => `https://vercel.com/${config.teamSlug}/${config.projectName}/${deploymentId}`;
 
-const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note, expectedReady = null }) => {
+const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note, expectedReady = null, builtAt = null }) => {
 	const sha = pullRequest.head.sha.slice(0, 8);
 	const title =
 		state === 'ready' ? '✅ Develop S3 preview ready' : state === 'failed' ? '❌ Develop S3 preview failed' : '🧪 Develop S3 preview deploying';
 	const previewLabel = state === 'ready' ? 'Preview' : 'Expected preview';
 	const previewLine = `- ${previewLabel}: [https://${alias}](https://${alias})`;
 	const expectedLine = state === 'deploying' && expectedReady ? `\n- Expected ready: ${expectedReady.replace('T', ' ').replace(':00.000Z', ' UTC')} (estimate)` : '';
-	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${expectedLine}${
+	const builtLine = builtAt ? `\n- Last successfully built: ${previewBuildTime(builtAt)} (Australia/Melbourne)` : '';
+	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${expectedLine}${builtLine}${
 		deploymentUrl ? `\n- Immutable deployment: [${deploymentUrl}](${deploymentUrl})` : ''
 	}${dashboard ? `\n- Vercel status: [open deployment](${dashboard})` : ''}${
 		note ? `\n\n${note}` : ''
@@ -1868,6 +1896,8 @@ const cleanupComment = (reason) => {
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
 	const cleaned = await cleanupPrResources(config, prNumber);
+	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: prNumber, sha: pullRequest.head.sha, status: 'removed' });
 	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
@@ -1887,17 +1917,26 @@ const reconcile = async (config) => {
 		group.push(deployment);
 		byPullRequest.set(prNumber, group);
 	}
+	// The old sweep only visited PRs with Vercel objects. A failed authorization
+	// or missed event creates no such object, so those PRs were never repaired.
+	const open = await githubRequest(`/repos/${config.repository}/pulls?state=open&per_page=100`);
+	if (!Array.isArray(open) || open.length >= 100) throw new Error('Open preview PR inventory exceeds its safety bound');
+	for (const pr of open) if (!byPullRequest.has(pr.number)) byPullRequest.set(pr.number, []);
 	if (byPullRequest.size > MAX_RECONCILE_PULL_REQUESTS) {
 		throw new Error('Scheduled reconciliation exceeded its pull-request safety bound');
 	}
 
 	let removedAliases = 0;
 	let removedDeployments = 0;
-	for (const [prNumber, owned] of byPullRequest) {
+	await reconcilePreviewInventory({ numbers: [...byPullRequest.keys()], inspect: async (prNumber) => {
+		const owned = byPullRequest.get(prNumber);
+		if (await previewWorkActive(githubRequest, config.repository, prNumber)) return;
 		let pullRequest = null;
+		let candidate = null;
 		try {
-			const candidate = await getPullRequest(config.repository, prNumber);
+			candidate = await getPullRequest(config.repository, prNumber);
 			await assertTrustedPullRequestStack(config, candidate);
+			await assertPreviewBundle(config, candidate);
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
@@ -1907,9 +1946,13 @@ const reconcile = async (config) => {
 			const cleaned = await cleanupPrResources(config, prNumber, owned);
 			if (cleaned.aliasRemoved) removedAliases += 1;
 			removedDeployments += cleaned.deleted;
-			continue;
+			if (candidate) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+				number: prNumber, sha: candidate.head.sha, status: 'removed' });
+			return;
 		}
 
+		// Do not race a Vercel build that outlived its GitHub job either.
+		if (owned.some((deployment) => ACTIVE_STATES.has(deployment.readyState))) return;
 		const binding = await getAliasBinding(config, prNumber);
 		let keeper = null;
 		if (
@@ -1926,10 +1969,71 @@ const reconcile = async (config) => {
 			});
 			removedAliases += 1;
 		}
-		keeper ??= choosePreferredDeployment(owned, pullRequest.head.sha);
+		keeper ??= choosePreferredDeployment(owned.filter((deployment) => workflowDeploymentCommitRef(deployment) === pullRequest.head.ref), pullRequest.head.sha);
+		if (keeper) {
+			const snapshot = pullRequestSnapshot(pullRequest);
+			await assertCurrentPullRequest(config, snapshot, null);
+			await assertVercelConfiguration(config);
+			const alias = previewAlias(prNumber, config.previewAliasSuffix);
+			await verifyCors(`https://${alias}`, safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL')));
+			await assertCurrentPullRequest(config, snapshot, null);
+			if (binding?.deployment.id !== keeper.id) await assignAliasVerified(config, keeper, prNumber);
+			await verifyPublishedAlias(`https://${alias}`);
+			await assertCurrentPullRequest(config, snapshot, null);
+			const githubDeployment = await createGithubDeployment(config.repository, pullRequest);
+			const statuses = await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`);
+			if (!Array.isArray(statuses)) throw new Error('Invalid deployment status inventory');
+			if (statuses[0]?.state !== 'success' || statuses[0]?.environment_url !== `https://${alias}`) {
+				await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
+					environmentUrl: `https://${alias}`, logUrl: dashboardUrl(keeper.id, config),
+					description: 'Develop S3 preview is ready at the exact current SHA'
+				});
+			}
+			await publishDevelopStatus(config, pullRequest, { state: 'ready', alias, builtAt: deploymentBuiltAt(keeper),
+				deploymentUrl: deploymentUrl(keeper), dashboard: dashboardUrl(keeper.id, config),
+				note: 'The alias passed the develop bucket CORS preflight and a final live PR/SHA fence.' });
+		} else {
+			await requestRecoveryBuild(config, pullRequest);
+		}
 		removedDeployments += await cleanupDeployments(owned, config, prNumber, keeper ? new Set([keeper.id]) : new Set());
-	}
+	} });
 	console.log(`Develop preview reconciliation complete: prs=${byPullRequest.size}; aliases=${removedAliases}; deployments=${removedDeployments}`);
+};
+
+const requestRecoveryBuild = async (config, pullRequest) => {
+	const recoveryToken = requiredEnv('RECOVERY_GH_TOKEN');
+	const snapshot = pullRequestSnapshot(pullRequest);
+	await assertCurrentPullRequest(config, snapshot, null);
+	if (await previewWorkActive(githubRequest, config.repository, pullRequest.number)) return;
+	const deployment = await createGithubDeployment(config.repository, pullRequest);
+	const statuses = await githubRequest(`/repos/${config.repository}/deployments/${deployment.id}/statuses?per_page=100`);
+	const decision = recoveryAttempt(statuses);
+	if (!decision.allowed) {
+		if (decision.reason === 'retry-limit') {
+			await publishDevelopStatus(config, pullRequest, { state: 'failed',
+				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+				note: 'Automatic recovery reached its three-attempt limit for this commit. Inspect the workflow failure and manually re-run the preview after fixing it.' });
+		}
+		console.log(`Preview recovery deferred for PR #${pullRequest.number}: ${decision.reason}`);
+		return;
+	}
+	// Record before dispatch. An uncertain API response cannot cause an
+	// immediate duplicate; the bounded receipt survives runner replacement.
+	await setGithubDeploymentStatus(config.repository, deployment.id, 'queued', {
+		description: `Preview recovery requested (attempt ${decision.attempt})`,
+		logUrl: `https://github.com/${config.repository}/actions/runs/${requiredEnv('GITHUB_RUN_ID')}`
+	});
+	await publishDevelopStatus(config, pullRequest, { state: 'deploying',
+		alias: previewAlias(pullRequest.number, config.previewAliasSuffix), expectedReady: expectedReadyAt(),
+		note: 'The scheduled controller found no ready preview for this commit and requested a fresh secretless build.' }, { bestEffort: true });
+	await requestJson(githubUrl(`/repos/${config.repository}/dispatches`), {
+		method: 'POST', accept: [204], retries: 0, token: recoveryToken,
+		body: { event_type: CONTROLLER_DISPATCH_TYPE, client_payload: {
+			pr_number: String(pullRequest.number), head_sha: pullRequest.head.sha, head_ref: pullRequest.head.ref,
+			action: 'synchronize', actor: pullRequest.user.login, source_run_id: requiredEnv('GITHUB_RUN_ID'), recovery: '1'
+		} }
+	});
+	console.log(`Requested bounded preview recovery for PR #${pullRequest.number}, attempt ${decision.attempt}`);
 };
 
 const reportFailure = async (config, pullRequest, githubDeployment, vercelDeployment) => {
@@ -1941,6 +2045,8 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 		immutableUrl = null;
 	}
 	const reporting = [];
+	reporting.push(syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: pullRequest.number, sha: pullRequest.head.sha, status: 'failed' }));
 	if (githubDeployment?.id) {
 		reporting.push(
 			setGithubDeploymentStatus(config.repository, githubDeployment.id, 'failure', {
@@ -1981,16 +2087,11 @@ const deploy = async (config, pullRequest) => {
 	const estimatedReady = expectedReadyForRun();
 	try {
 		githubDeployment = await createGithubDeployment(config.repository, pullRequest);
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
-				pullRequest,
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				expectedReady: estimatedReady
-			})
-		);
+			}, { bestEffort: true });
 		vercelDeployment = await createVercelDeployment(config, pullRequest, reusable);
 		const immutableUrl = deploymentUrl(vercelDeployment);
 		const dashboard = dashboardUrl(vercelDeployment.id, config);
@@ -1999,18 +2100,13 @@ const deploy = async (config, pullRequest) => {
 			logUrl: dashboard,
 			description: 'Deploying exact SHA to Vercel Custom Environment develop'
 		});
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
-				pullRequest,
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
 				dashboard,
 				expectedReady: estimatedReady
-			})
-		);
+			}, { bestEffort: true });
 
 		const ready = await waitForDeployment(config, pullRequest, vercelDeployment);
 		await assertCurrentPullRequest(config, snapshot, config.actor);
@@ -2021,6 +2117,7 @@ const deploy = async (config, pullRequest) => {
 		await assertCurrentPullRequest(config, snapshot, config.actor);
 		await assignAliasVerified(config, ready, pullRequest.number);
 		await verifyPublishedAlias(aliasUrl);
+		await assertCurrentPullRequest(config, snapshot, config.actor);
 		published = true;
 
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
@@ -2028,18 +2125,14 @@ const deploy = async (config, pullRequest) => {
 			logUrl: dashboard,
 			description: 'Develop S3 preview is ready at the exact current SHA'
 		});
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'ready',
-				pullRequest,
+				builtAt: deploymentBuiltAt(ready),
 				alias,
 				deploymentUrl: deploymentUrl(ready),
 				dashboard,
 				note: 'The alias passed the develop bucket CORS preflight and a final live PR/SHA fence.'
-			})
-		);
+			});
 		const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
 		await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
 		await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
@@ -2109,16 +2202,11 @@ const prepareBuildPlan = async () => {
 		return;
 	}
 	const expectedReady = expectedReadyAt();
-	await upsertComment(
-		config.repository,
-		pullRequest.number,
-		deploymentComment({
+	await publishDevelopStatus(config, pullRequest, {
 			state: 'deploying',
-			pullRequest,
 			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 			expectedReady
-		})
-	);
+		}, { bestEffort: true });
 	await writePrepareOutputs({ shouldBuild: true, pullRequest, expectedReady });
 	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
 };
@@ -2136,8 +2224,10 @@ const main = async () => {
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
-		await reconcileStableDevelopAlias(config);
-		await reconcile(config);
+		const results = await Promise.allSettled([reconcileStableDevelopAlias(config), reconcile(config)]);
+		const failures = results.filter((result) => result.status === 'rejected');
+		if (failures.length) throw new AggregateError(failures.map((result) => result.reason),
+			`Scheduled preview reconciliation failed: ${failures.map((result) => result.reason.message).join('; ')}`);
 		return;
 	}
 

@@ -93,6 +93,42 @@ path instead of entering dependency installation. Only a contents 404 means the
 file is missing; authentication, rate-limit, and server errors remain errors.
 See [.github/TESTING.md](.github/TESTING.md) for regression and rollout checks.
 
+### Discoverable preview status and recovery
+
+Both publishers post expected persistent URLs and a ready-time estimate before
+releasing the secretless build, then update the same marked comment with the
+immutable snapshot URL. GitHub leaves edited comments in their original place
+in the timeline; check the PR sidebar when an older comment is hard to find.
+
+Successful publication adds `last preview built DD/MM HH:MM AEST #<PR>` (AEDT
+during daylight saving). The timestamp is Vercel's actual READY time in
+`Australia/Melbourne`, not the time a workflow reused or repaired that preview.
+Admin-selected environments have separate `last preview dev` and `last preview
+prod` labels. The PR suffix makes each history label safe to rename without
+changing another PR's date. A separate `preview: <lane> queued/building/ready/
+failed/removed` label describes current state; failure and cleanup preserve the
+last successful timestamp. Only controller-owned labels are changed.
+
+The existing six-hour default-branch preview schedule now inspects open PRs as
+well as previously created deployments. It restores comments, labels and aliases
+for verified current-SHA READY deployments without rebuilding them. Missing
+previews enter the normal secretless build through a bot-authenticated dispatch,
+after the same author, repository, exact-head and application-bundle checks.
+Active native worker/handoff queues and active Vercel builds are left alone.
+Each exact-SHA GitHub deployment keeps a durable recovery receipt: at least
+30 minutes between requests and at most three automatic attempts. A failed PR
+does not stop the rest of the inventory. After the limit, inspect the workflow
+and manually rerun it after correcting the error; a new head has a fresh budget.
+
+Fork setup: retain caller `contents: write`, `issues: write` and
+`pull-requests: write`, and the protected `vercel-develop-pr-control` environment.
+The recovery dispatch specifically uses the workflow's `github.token`; optional
+`CONFLICT_RESOLVER_PAT` is only the existing fallback for comments/receipts. No new
+secret is needed, and no deployment credential reaches a product build. The
+sweep repairs the ordinary develop lane only: it never infers or enables admin
+environment selections from an old deployment/comment. Those remain authorized
+by the existing backend GitHub App dispatch.
+
 ## Lopu principal repository manager
 
 Lopu is the repository-facing identity for every model-backed automation in

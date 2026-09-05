@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { isManagedPreviewComment as isManagedComment, upsertPreviewComment } from './preview-comments.mjs';
+import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
+import { syncPreviewLabels, deploymentBuiltAt } from './preview-labels.mjs';
 import { execFile } from 'node:child_process';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -195,6 +196,14 @@ const upsertComment = (config, prNumber, body, createIfMissing = true) => upsert
 	request: githubRequest, repository: config.repository, number: prNumber,
 	marker: COMMENT_MARKER, body, createIfMissing
 });
+
+const publishAdminStatus = (config, pullRequest, rows, bestEffort = true) => publishPreviewNotifications([
+	() => upsertComment(config, pullRequest.number, commentBody({ pullRequest, rows }), rows.length > 0),
+	...rows.map((row) => () => syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: pullRequest.number, sha: pullRequest.head.sha,
+		lane: row.environment === 'develop' ? 'admin-develop' : 'production',
+		status: ['ready', 'failed', 'queued'].includes(row.status) ? row.status : 'building', builtAt: row.builtAt }))
+], { bestEffort });
 
 const deploymentMetadata = (config, pullRequest, environment) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
@@ -519,9 +528,12 @@ const initialRows = (config, pullRequest, environments, startedAt) =>
 		expectedReadyAt: expectedReadyAt(startedAt)
 	}));
 
-const cleanupEnvironment = async (config, prNumber, environment) => {
-	await removeAlias(config, prNumber, environment);
-	await deleteOwnedDeployments(config, prNumber, environment);
+const cleanupEnvironment = async (config, pullRequest, environment) => {
+	await removeAlias(config, pullRequest.number, environment);
+	await deleteOwnedDeployments(config, pullRequest.number, environment);
+	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: pullRequest.number, sha: pullRequest.head.sha,
+		lane: environment === 'develop' ? 'admin-develop' : 'production', status: 'removed' });
 };
 
 const deployEnvironment = async ({ config, payload, pullRequest, environment, row, publish }) => {
@@ -535,6 +547,7 @@ const deployEnvironment = async ({ config, payload, pullRequest, environment, ro
 		await assertCurrentPullRequest(config, payload);
 		row.persistentUrl = await assignAlias(config, pullRequest, environment, ready);
 		row.status = 'ready';
+		row.builtAt = deploymentBuiltAt(ready);
 		row.snapshotUrl = deploymentUrl(ready);
 		row.expectedReadyAt = null;
 		await publish();
@@ -579,7 +592,7 @@ const prepareAdminBuild = async () => {
 	}
 	if (payload.action !== 'closed') {
 		const rows = initialRows(config, pullRequest, payload.environments, Date.now());
-		await upsertComment(config, pullRequest.number, commentBody({ pullRequest, rows }), rows.length > 0);
+		await publishAdminStatus(config, pullRequest, rows);
 	}
 	await writePrepareOutputs({
 		shouldBuild: payload.action !== 'closed' && payload.environments.length > 0,
@@ -602,16 +615,16 @@ const runController = async () => {
 	}
 	const disabled = ENVIRONMENTS.filter((environment) => !payload.environments.includes(environment));
 	if (payload.action === 'closed') {
-		await Promise.all(ENVIRONMENTS.map((environment) => cleanupEnvironment(config, payload.prNumber, environment)));
+		await Promise.all(ENVIRONMENTS.map((environment) => cleanupEnvironment(config, pullRequest, environment)));
 		await upsertComment(config, payload.prNumber, removedCommentBody(payload.prNumber), false);
 		return;
 	}
-	await Promise.all(disabled.map((environment) => cleanupEnvironment(config, payload.prNumber, environment)));
+	await Promise.all(disabled.map((environment) => cleanupEnvironment(config, pullRequest, environment)));
 	const startedAt = Date.now();
 	const rows = initialRows(config, pullRequest, payload.environments, startedAt);
 	let commentWrite = Promise.resolve();
 	const publish = () => {
-		commentWrite = commentWrite.then(() => upsertComment(config, pullRequest.number, commentBody({ pullRequest, rows }), rows.length > 0));
+		commentWrite = commentWrite.catch(() => undefined).then(() => publishAdminStatus(config, pullRequest, rows));
 		return commentWrite;
 	};
 	await publish();
@@ -619,6 +632,7 @@ const runController = async () => {
 		rows.map((row) => deployEnvironment({ config, payload, pullRequest, environment: row.environment, row, publish }))
 	);
 	const failures = results.filter((result) => result.status === 'rejected');
+	await publishAdminStatus(config, pullRequest, rows, false);
 	if (failures.length) throw new Error(`${failures.length} admin preview environment deployment(s) failed`);
 	console.log(`Admin previews ready for PR #${pullRequest.number}: ${payload.environments.join(', ') || 'none'}`);
 };

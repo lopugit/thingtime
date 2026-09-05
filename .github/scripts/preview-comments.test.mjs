@@ -19,7 +19,7 @@ for (const marker of ['<!-- thingtime-develop-pr-preview -->', '<!-- thingtime-a
   test(`${marker}: changed status patches the existing id and preserves its marker`, async () => {
     const api = fake([[{ ...owner, body: `${marker}\nBuilding` }]]);
     await upsertPreviewComment({ ...options, request: api.request });
-    assert.deepEqual(api.calls[1], { path: '/repos/example/project/issues/comments/42', method: 'PATCH', body: { body: `${marker}\nReady` } });
+    assert.deepEqual(api.calls[1], { path: '/repos/example/project/issues/comments/42', method: 'PATCH', body: { body: `${marker}\nReady` }, retries: 0 });
   });
   test(`${marker}: human quote is never mistaken for a managed status`, async () => {
     const quote = { ...owner, body: `> ${marker}\nPlease help` };
@@ -47,5 +47,24 @@ for (const marker of ['<!-- thingtime-develop-pr-preview -->', '<!-- thingtime-a
     await assert.rejects(upsertPreviewComment({ ...options, request: endless.request }), /safety bound/u);
     assert.equal(endless.calls.length, 10);
     for (const request of [async () => ({}), async () => { throw new Error('transport'); }]) await assert.rejects(upsertPreviewComment({ ...options, request }));
+  });
+  test(`${marker}: accepted POST with a lost response is reconciled without a duplicate`, async () => {
+    let current = null, posts = 0;
+    const request = async (path, init = {}) => {
+      if (!init.method) return current ? [current] : [];
+      posts++;
+      current = { ...owner, body: init.body.body };
+      throw Object.assign(new Error('transient'), { status: 502 });
+    };
+    assert.deepEqual(await upsertPreviewComment({ ...options, request, pause: async () => {} }), { changed: false });
+    assert.equal(posts, 1);
+  });
+  test(`${marker}: transient reads retry, permanent permission denials do not`, async () => {
+    for (const [status, expected] of [[503, 3], [403, 1]]) {
+      let calls = 0;
+      await assert.rejects(upsertPreviewComment({ ...options, pause: async () => {},
+        request: async () => { calls++; throw Object.assign(new Error('unavailable'), { status }); } }));
+      assert.equal(calls, expected);
+    }
   });
 }

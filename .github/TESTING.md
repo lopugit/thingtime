@@ -22,6 +22,26 @@ do not merge it into the permanently separate product branches to test it.
   corrected protected controller, not by editing product code or loosening the
   secretless build boundary. Verify the final exact-SHA comment and both URLs.
 
+## Preview labels and missed-build recovery
+
+- Run `node --test .github/scripts/preview-*.test.mjs` and both preview
+  publisher self-tests. Test DST/midnight, multi-environment labels, stale heads,
+  shared/foreign label ownership, accepted-but-lost writes, and failed phases.
+- A repeated READY receipt must preserve the actual Vercel completion timestamp
+  and the same comment ID. Building/failed/removed status keeps the last success;
+  cleanup must not put labels on an unrelated PR that never had a preview.
+- The scheduled open-PR inventory must include eligible PRs with no Vercel
+  objects. Existing READY exact-head deployments repair status without a build.
+  Active native queues/builds, forks, drafts and controller-only heads do not
+  dispatch. Bad metadata fails closed and does not block other PRs' inspection.
+- Recovery receipts must precede dispatch, survive an uncertain response, impose
+  a cooldown and stop after three attempts per commit. Recovery provenance must
+  bind the fixed scheduled default-branch workflow and Actions bot sender.
+- After merging to `github-actions`, rerun an eligible preview and inspect the
+  exact head, immutable/persistent URLs, actual READY time, same comment ID and
+  sidebar labels. Run the scheduled sweep and record its outcome; report any
+  unverified environment or exhausted build instead of claiming universal health.
+
 ## Event feedback and CI cancellation
 
 - Run `node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs`.
