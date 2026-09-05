@@ -17,6 +17,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Repair Recovery catalogue selection, archive verification, damaged
+  app replacement, and installer failure notices. Publish desktop and Recovery
+  together through the repaired protected cloud builder. Withdraw damaged legacy
+  archives from installation while keeping their history visible. See the
+  [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
 - `@Thingtime login` is now callable before authentication and returns its
