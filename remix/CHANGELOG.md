@@ -17,6 +17,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Fix the signed Electron builder's certificate selector: give
+  electron-builder the unprefixed name while preserving the exact Developer ID
+  identity for native code signing. — Codex (AI)
+
 - 2026-09-05: Add Recovery release cards, readable cached build IDs, and an app
   selector with isolated Commander recovery. Pass cloud build numbers into
   Electron and reuse the approved CI Apple API key for macOS notarization.

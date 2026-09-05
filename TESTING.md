@@ -4458,3 +4458,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Cloud archives contain their run number in both app build metadata and
       `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
       stapler checks after downloading the actual published ZIP.
+- [ ] With a Developer ID certificate in the signing keychain, the production
+      packager passes its unprefixed name and team to electron-builder, while
+      native helpers keep the full certificate name. Missing or development-only
+      identities fail before building; no unsigned fallback is allowed.
