@@ -79,6 +79,7 @@ import {
 	loadViewerSubspaceRoles,
 	subspaceFeedClauses,
 	subspaceIdOfDoc,
+	subspaceModHoldsPost,
 	type ViewerSubspaceRoles
 } from '../subspaces/gate';
 import { resolveInheritChain } from './aclChainCore';
@@ -4309,6 +4310,13 @@ export const updateThing = async (
   const prevSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc(doc) : null;
   const nextSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc({ crystal: validated.crystal }) : null;
   const subspaceChanged = prevSubspaceId !== nextSubspaceId;
+  // ...but a live moderator action holds the post where it is: the drop below
+  // is what makes the state subspace-local, so without this an author could
+  // PATCH a removed/locked post out of its subspace and back in to land it
+  // clean. Every other edit of the post still goes through.
+  if (subspaceChanged && prevSubspaceId && subspaceModHoldsPost(doc.subspaceMod)) {
+    return fail(403, 'Moderators have actioned this post — it can’t be moved out of its subspace 🔒');
+  }
   const prevFlairId = typeof crystalOf(doc).flairId === 'string' ? (crystalOf(doc).flairId as string) : null;
   const nextFlairId = typeof validated.crystal.flairId === 'string' ? (validated.crystal.flairId as string) : null;
   let nextSubspacePrivate: boolean | null = null; // null = leave the stamp as is

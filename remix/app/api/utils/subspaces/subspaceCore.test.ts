@@ -2,7 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { rankSubspacePosts, sanitizeBranding, sanitizeFlairs, sanitizeRules, sanitizeSlug, sanitizeTopRange, slugifyFlairId, topRangeSince } from './subspaceCore.ts';
+import {
+	rankSubspacePosts,
+	sanitizeBranding,
+	sanitizeFlairs,
+	sanitizeRules,
+	sanitizeSlug,
+	sanitizeTopRange,
+	slugifyFlairId,
+	subspaceModHoldsPost,
+	topRangeSince
+} from './subspaceCore.ts';
 
 test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
 	assert.equal(sanitizeSlug(' Rainbow Makers '), 'rainbow_makers');
@@ -84,4 +94,19 @@ test('top ranges resolve to a since-date, all/unknown to null', () => {
 	assert.equal(sanitizeTopRange('century'), 'all');
 	assert.equal(topRangeSince('all', now), null);
 	assert.equal(topRangeSince('day', now)?.getTime(), now - 24 * 3_600_000);
+});
+
+// Changing a post's subspace drops its whole subspaceMod stamp, so the write
+// path has to refuse the move while a moderator action is live — otherwise an
+// author launders a removed/locked post clean by PATCHing it out and back in.
+test('subspaceModHoldsPost pins a post only while a removal or lock is live', () => {
+	assert.equal(subspaceModHoldsPost({ status: 'removed' }), true);
+	assert.equal(subspaceModHoldsPost({ locked: true }), true);
+	assert.equal(subspaceModHoldsPost({ status: 'removed', locked: false }), true);
+	// cosmetic-only state never holds the post in place
+	assert.equal(subspaceModHoldsPost({ status: 'approved', pinned: true, nsfw: true, spoiler: true } as any), false);
+	assert.equal(subspaceModHoldsPost({ locked: false }), false);
+	assert.equal(subspaceModHoldsPost({}), false);
+	assert.equal(subspaceModHoldsPost(null), false);
+	assert.equal(subspaceModHoldsPost(undefined), false);
 });

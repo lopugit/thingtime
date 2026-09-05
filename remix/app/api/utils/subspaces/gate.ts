@@ -10,7 +10,10 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { MAX_SUBSPACE_MEMBERSHIPS_PER_USER, type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
-import { flairById, isModeratorRole, type SubspaceFlair } from './subspaceCore';
+import { flairById, isModeratorRole, subspaceModHoldsPost, type SubspaceFlair } from './subspaceCore';
+
+// re-exported so things.ts keeps its single subspace import boundary (gate.ts)
+export { subspaceModHoldsPost };
 
 export type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });

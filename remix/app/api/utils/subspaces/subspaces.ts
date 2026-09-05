@@ -720,7 +720,10 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 			break;
 		case 'remove':
 			if (!existing || target?.left) return fail(404, 'Not a member');
-			set = { 'crystal.left': true, 'crystal.role': 'member' };
+			// a kick drops posting approval with the membership: the posting gate
+			// reads `approved` on its own in restricted subspaces, so leaving the
+			// flag set would let a kicked member keep posting there
+			set = { 'crystal.left': true, 'crystal.role': 'member', 'crystal.approved': false };
 			break;
 		case 'approve':
 			set = { 'crystal.approved': true };
