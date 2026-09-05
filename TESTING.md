@@ -4579,3 +4579,20 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       buttons don't navigate.
 - [ ] Mobile (375px): none of the pages above scroll horizontally; the live
       panes and tabs wrap.
+- [ ] `/thing/:id?source=…` rejects a key the server would reject rather than
+      confirming it first: `?source=Foo/Bar@baz`, `?source=My_Action.v2`, and a
+      120-character key must show NO "Run …?" dialog at all (the binding is
+      simply ignored). `?source=app-pokeworld-state` on a live component still
+      confirms once, then loads the real data.
+- [ ] `/thing/:id` cache stays bounded and session-scoped: open 45+ different
+      things, then in DevTools → Application → Local Storage confirm at most 40
+      `tt-thing-*` keys survive and the oldest were dropped, not the newest.
+      Sign out and confirm every `tt-thing-*` key is gone — the projections are
+      ACL-gated (private posts, circle data) and must not outlive the session,
+      the same bar as `tt-activity-` / `tt-saved-` / `tt-page-source:`.
+- [ ] `remix/app/routes/thing.tsx` contains no raw NUL byte. Check with
+      `python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(bytes([0])))" remix/app/routes/thing.tsx`
+      — it must print 0, and the two requestKey separators must stay written as
+      the six-character escape sequence in the source. An embedded NUL makes
+      git, grep and ripgrep treat the whole file as binary and silently skip
+      it, which costs a reviewer real time.

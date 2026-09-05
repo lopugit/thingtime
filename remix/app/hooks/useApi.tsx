@@ -140,6 +140,11 @@ export function useApi() {
           // READ by the next account; dropping them here also stops it
           // outliving the session that authorized it on disk.
           clearLocalCachePrefix('tt-page-source:');
+          // /thing/:id caches the whole ACL-gated projection of each thing the
+          // viewer opened (private posts, circle data, their own components) to
+          // paint the permalink without a spinner. Same viewer-id keying and so
+          // the same shared-browser rule as the four caches above.
+          clearLocalCachePrefix('tt-thing-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

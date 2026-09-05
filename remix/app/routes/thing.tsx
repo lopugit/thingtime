@@ -21,11 +21,12 @@ import {
 	SensitiveThingReveal,
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
+import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type * as InstallSuite from '~/components/Builder/installSuite';
@@ -62,9 +63,35 @@ const RESERVED_ID = /^(component|webpage|schema|action)-/;
 const SUITE_PART_ID = /^(component|webpage|schema|action)-(demo|app)-/;
 
 // `?source=<actionKey>` binds a component to a data source for this view.
-// Bounded like an action key; the executor validates the rest.
-const ACTION_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,159}$/;
+// The key is validated with the SAME `isSourceActionKey` the /components/:key
+// binding uses, which reads the registry's canonical ACTION_KEY_PATTERN /
+// MAX_ACTION_KEY_CHARS — a second, looser pattern here would confirm and then
+// run keys the executor always rejects.
 const MAX_CACHED_THING_CHARS = 256 * 1024;
+
+// One cache entry per viewed thing, so this namespace is bounded and stamped.
+// Past the cap the oldest entries go: otherwise a long browsing session fills
+// localStorage and every OTHER tt-* optimistic cache starts losing its write
+// silently, because writeLocalCache swallows the quota error by design.
+const THING_CACHE_PREFIX = 'tt-thing-';
+const MAX_CACHED_THINGS = 40;
+
+const pruneThingCache = (keep: string): void => {
+	if (typeof window === 'undefined') return;
+	try {
+		const cached: { key: string; at: number }[] = [];
+		for (let index = 0; index < window.localStorage.length; index += 1) {
+			const key = window.localStorage.key(index);
+			if (!key || !key.startsWith(THING_CACHE_PREFIX) || key === keep) continue;
+			const at = Number(readLocalCache<{ at?: unknown }>(key)?.at);
+			cached.push({ key, at: Number.isFinite(at) ? at : 0 });
+		}
+		cached.sort((a, b) => a.at - b.at);
+		for (const entry of cached.slice(0, Math.max(0, cached.length - (MAX_CACHED_THINGS - 1)))) clearLocalCache(entry.key);
+	} catch {
+		// storage disabled — nothing to prune
+	}
+};
 
 // The suite catalog + installer are the whole demo/app library (behaviourSuites
 // pulls the 300-page demo catalog with it). This route ships in the eager
@@ -234,7 +261,7 @@ export default function ThingPage() {
 	const loadThing = v1.things.get;
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
-	const requestKey = `${id} ${currentUser?.id || 'anonymous'} ${currentUser?.isAdmin ? 'admin' : 'user'}`;
+	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}`;
 	const fromParam = searchParams.get('from');
 	const back = REFERRERS[(fromParam as ThingsReferrer) || 'feed'] || REFERRERS.feed;
 
@@ -242,7 +269,7 @@ export default function ThingPage() {
 	// paints on the very first render (per viewer, per id — never another
 	// account's read), the fetch reconciles behind it. Diagnostics are never
 	// cached: they are admin-only and short-lived.
-	const cacheKey = `tt-thing-${currentUser?.id || 'anon'}-${id}`;
+	const cacheKey = `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
@@ -301,7 +328,10 @@ export default function ThingPage() {
 				setLoadState({ key: requestKey, loading: false, data: next, error: null });
 				if (next.kind === 'thing') {
 					try {
-						if (JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) writeLocalCache(cacheKey, { data: next });
+						if (JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) {
+							pruneThingCache(cacheKey);
+							writeLocalCache(cacheKey, { at: Date.now(), data: next });
+						}
 					} catch {
 						// unserialisable — the live fetch still painted
 					}
@@ -398,7 +428,7 @@ export default function ThingPage() {
 	// only on a surface that is live for this viewer at all.
 	const sourceParam = searchParams.get('source');
 	const requestedSource = React.useMemo<ThingSourceBinding | null>(
-		() => (sourceParam && ACTION_KEY_PATTERN.test(sourceParam) ? { action: sourceParam, refresh: 'load' } : null),
+		() => (sourceParam && isSourceActionKey(sourceParam) ? { action: sourceParam, refresh: 'load' } : null),
 		[sourceParam]
 	);
 	const [approvedSource, setApprovedSource] = React.useState<ThingSourceBinding | null>(null);
