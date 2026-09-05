@@ -232,3 +232,23 @@ The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes
 plus the ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22
 dependency list. Validation and exact-head CI/preview receipts for this run are
 recorded in the PR body after publication.
+
+## 2026-09-05 — retire the orphaned duplicate of TODO 21
+
+`chore(lopu): apply repository review improvements` (`d2ec2abf`, 2026-08-29)
+renumbered the index-budget epic from 20 to 21 by adding
+`TODO/claude-todo/21-index-budget-consolidation.md` and repointing the Claude
+TODO index at it, but it never removed the original
+`TODO/claude-todo/20-index-budget-consolidation.md`. The two files were
+identical from line 2 onward — only the `# 20 —`/`# 21 —` heading differed —
+and the leftover 20 had no inbound reference anywhere in the repository, so it
+was an unindexed duplicate that a reader could reach only by listing the
+directory and would then have no way to tell was superseded.
+
+This run deletes the orphan. `21-index-budget-consolidation.md` keeps the
+content verbatim and remains the single indexed entry. The removal upholds the
+rule this PR writes into `AI_ALL.md` — the tree indexes are the entry points,
+not the individual files — and is the concrete case behind this PR's earlier
+note that historical numeric prefixes can repeat, so a full filename and link
+is canonical rather than a number. No other TODO, NOTES, PLAN, or runtime
+content changed.
