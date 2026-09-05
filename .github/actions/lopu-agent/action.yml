@@ -9,6 +9,10 @@ inputs:
   prompt:
     description: Complete Lopu task prompt.
     required: true
+  cooperative-review:
+    description: Allow a batch review to finish its current PR and yield safely when other fleet work is queued.
+    required: false
+    default: "false"
   anthropic-api-key:
     description: Anthropic API key when the Claude backend uses API authentication.
     required: false
@@ -154,6 +158,14 @@ runs:
         echo "backend=$BACKEND" >>"$GITHUB_OUTPUT"
         echo "backend_label=$backend_label" >>"$GITHUB_OUTPUT"
 
+    - name: Install cooperative review checkpoints
+      id: handoff
+      if: inputs.cooperative-review == 'true'
+      shell: bash
+      env:
+        LOPU_PROMPT: ${{ inputs.prompt }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/lopu-cooperative-review.mjs" initialize
+
     - name: Run Lopu with Claude credential 1
       id: claude_1
       if: steps.config.outputs.backend == 'claude' && steps.config.outputs.claude_1_available == 'true'
@@ -163,7 +175,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_1 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 1 failure
@@ -193,7 +206,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_2 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 2 failure
@@ -223,7 +237,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_3 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 3 failure
@@ -243,7 +258,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_4 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 4 failure
@@ -263,7 +279,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_5 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 5 failure
@@ -283,7 +300,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_6 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 6 failure
@@ -303,7 +321,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_7 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 7 failure
@@ -323,7 +342,8 @@ runs:
         claude_code_oauth_token: ${{ env.LOPU_CLAUDE_TOKEN_8 }}
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}
+        settings: ${{ steps.handoff.outputs.settings || '' }}
         claude_args: ${{ inputs.claude-args }}
 
     - name: Classify Claude credential 8 failure
@@ -396,4 +416,4 @@ runs:
         effort: ${{ inputs.codex-reasoning-effort }}
         allow-bots: true
         allow-bot-users: ${{ inputs.allowed-bots }}
-        prompt: ${{ inputs.prompt }}
+        prompt: ${{ steps.handoff.outputs.prompt || inputs.prompt }}

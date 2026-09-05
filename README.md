@@ -182,6 +182,26 @@ review allows a follow-up, and ordinary human comments still reach Lopu.
 The helper needs only Actions read access (the handoff already needs Actions
 write for dispatch) and fails closed on unavailable or incomplete queue data.
 
+Batch reviews also support cooperative handover. After a five-minute useful-work
+quantum, other jobs waiting in the native fleet queue request wrap-up. Claude
+receives that request between tool calls through trusted hooks; Codex receives
+the same checkpoint protocol and checks before each PR. The request is latched
+and polling is limited to once per minute. The reviewer finishes and validates
+its current PR, writes its completed report, then ends normally. The existing
+exact-head publisher pushes only completed reviews, and a metadata-only artifact
+records the remaining PR numbers before one continuation is queued behind other
+work. Continuations re-read live eligibility and heads, and have a distinct run
+title so a partial continuation cannot suppress a new full-scope signal.
+
+This is cooperative, not a hard deadline: it never kills a process or cancels a
+run. Unfinished changes, an active Git operation, and zero-progress loops block
+handover. Atomic conflict repairs, feature-stack merges, and deployments retain
+their existing non-interruptible boundary. Already-running old controller jobs
+cannot acquire the hooks retroactively. If continuation dispatch fails, the run
+fails visibly and its seven-day `lopu-review-handoff` artifact preserves the
+remaining inventory for a controlled retry; no raw source patches or secrets
+are put in that artifact. No new secret or backend setting is required.
+
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
 their `rebase-stack` provider policy and immutable snapshot payload, and are
