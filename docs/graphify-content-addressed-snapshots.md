@@ -87,6 +87,22 @@ closed. `scripts/graphify prune` applies the same policy without rebuilding.
 `extract --no-cluster` is rejected because Graphify has historically been able
 to replace a large graph with only the newly extracted nodes in that mode.
 
+
+Lock ownership is published as a populated directory in one atomic rename.
+Each attempt has a unique owner filename; cleanup removes only that record
+and uses non-recursive directory removal, so a delayed cleanup cannot delete
+a replacement writer. Queries hold the same lock through the Graphify child
+process, including any cache-miss refresh, to keep their snapshot and aliases
+available until the read finishes. Concurrent requests wait rather than
+rebuilding or pruning each other's selected snapshots.
+
+Finish already-running Graphify commands before updating the wrapper in a
+checkout: older router processes use an incompatible recursive cleanup path.
+The new router waits for live legacy owners, recovers exited legacy owners,
+and refuses to guess when an owner record is malformed. The default wait is
+two hours; `GRAPHIFY_CAS_LOCK_TIMEOUT_MS` accepts finite non-negative
+milliseconds (`0` performs one acquisition attempt).
+
 ## Merge behavior
 
 Snapshot paths are additive while independent branches are in flight. Distinct
