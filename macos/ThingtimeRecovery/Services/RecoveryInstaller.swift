@@ -64,16 +64,10 @@ public enum RecoveryInstaller {
         case .installDesktop, .installRecovery:
             try closeRunningApplications(bundleIdentifier: component.bundleIdentifier)
             let target = paths.installedApp(for: component)
-            if FileManager.default.fileExists(atPath: target.path) {
-                let existingVersion = Bundle(url: target)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-                let existingTrust = try BundleVerifier.distribution(for: target, component: component)
-                try cache.cacheBundle(
-                    sourceApp: target,
-                    descriptor: CacheReleaseDescriptor(id: "installed-\(component.rawValue)-\(existingVersion)-\(UUID().uuidString)", name: "Previously installed \(component.title) \(existingVersion)", tag: "installed-\(existingVersion)", isUnsigned: existingTrust == .unsigned, version: existingVersion),
-                    verify: { try verify($0, component: component, trust: existingTrust, signingContext: signingContext) }
-                )
+            let preserved = try installCachedBundle(source: plan.sourceApp, target: target, component: component, cache: cache, trust: trust, signingContext: signingContext)
+            if let preserved {
+                try? RecoveryInstallNotice(message: "The previous app could not enter the verified cache. It was preserved at \(preserved.path).", isError: false).save(paths: paths)
             }
-            try atomicallyInstall(source: plan.sourceApp, target: target, component: component, trust: trust, signingContext: signingContext)
             try ProcessExecution.launchApplication(target)
         }
     }
@@ -94,7 +88,26 @@ public enum RecoveryInstaller {
         }
     }
 
-    private static func atomicallyInstall(source: URL, target: URL, component: RecoveryComponent, trust: RecoveryBundleTrust, signingContext: SigningContext?) throws {
+    /// A damaged installed app must never prevent recovery from a valid one.
+    /// If it cannot enter the verified cache, retain the complete old bundle
+    /// separately; never label it trusted or delete the only rollback copy.
+    static func installCachedBundle(source: URL, target: URL, component: RecoveryComponent, cache: RecoveryCache, trust: RecoveryBundleTrust, signingContext: SigningContext?) throws -> URL? {
+        var preservePrevious = false
+        if FileManager.default.fileExists(atPath: target.path) {
+            do {
+                let version = Bundle(url: target)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+                let previousTrust = try BundleVerifier.distribution(for: target, component: component)
+                try cache.cacheBundle(sourceApp: target, descriptor: CacheReleaseDescriptor(id: "installed-\(component.rawValue)-\(version)-\(UUID().uuidString)", name: "Previously installed \(component.title) \(version)", tag: "installed-\(version)", isUnsigned: previousTrust == .unsigned, version: version)) {
+                    try verify($0, component: component, trust: previousTrust, signingContext: signingContext)
+                }
+            } catch {
+                preservePrevious = true
+            }
+        }
+        return try atomicallyInstall(source: source, target: target, component: component, trust: trust, signingContext: signingContext, preservePrevious: preservePrevious)
+    }
+
+    private static func atomicallyInstall(source: URL, target: URL, component: RecoveryComponent, trust: RecoveryBundleTrust, signingContext: SigningContext?, preservePrevious: Bool) throws -> URL? {
         let manager = FileManager.default
         let parent = target.deletingLastPathComponent()
         try manager.createDirectory(at: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -119,7 +132,9 @@ public enum RecoveryInstaller {
             }
             throw error
         }
+        if preservePrevious, manager.fileExists(atPath: backup.path) { return backup }
         try? manager.removeItem(at: backup)
+        return nil
     }
 
     private static func closeRunningApplications(bundleIdentifier: String) throws {

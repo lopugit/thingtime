@@ -2057,6 +2057,9 @@ Its sidebar reports GitHub's published count separately from compatible archives
 Actions runs and source commits are not downloadable releases. The legacy build 4
 archive has no resource seal and must not be installed or re-signed by the client.
 A failed download, verification, or refresh preserves the installed app and caches.
+Installing a valid replacement can repair a damaged current app: when the old app
+cannot enter the verified cache, Recovery preserves it separately and reports its
+backup path. Installer failures reopen Recovery with a persistent explanation.
 
 Main and approved PR release builds use the protected `github-actions` pipeline.
 The main listener requires `contents: write` and `pull-requests: read` so its nested

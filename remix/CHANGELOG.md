@@ -20,7 +20,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
   cloud packaging. Share the protected main/PR release builder and correct its
-  caller-event gate; legacy malformed archives remain blocked. — Codex (AI)
+  caller-event gate; legacy malformed archives remain blocked. Valid replacements
+  can repair damaged installs, and detached installer errors reopen Recovery.
+  See the [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
 
 
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.

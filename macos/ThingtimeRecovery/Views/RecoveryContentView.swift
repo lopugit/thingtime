@@ -8,9 +8,27 @@ private enum RecoverySelection: Hashable {
     case recoveryRelease(String)
 }
 
+private struct RecoveryCatalogRow: Identifiable {
+    let component: RecoveryComponent
+    let release: RecoveryRelease
+    var id: String { "\(component.rawValue):\(release.id)" }
+    var selection: RecoverySelection {
+        component == .desktop ? .desktopRelease(release.id) : .recoveryRelease(release.id)
+    }
+    var title: String {
+        let componentName = component == .desktop ? "Desktop" : "Recovery"
+        return "\(release.isUnsigned ? "UNSIGNED " : "")\(componentName) \(release.version ?? release.tag)"
+    }
+}
+
 struct RecoveryContentView: View {
     @ObservedObject var store: RecoveryStore
     @State private var selection: RecoverySelection? = .desktopCache
+
+    private var releaseRows: [RecoveryCatalogRow] {
+        store.desktopReleases.map { RecoveryCatalogRow(component: .desktop, release: $0) }
+            + store.recoveryReleases.map { RecoveryCatalogRow(component: .recovery, release: $0) }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -25,15 +43,10 @@ struct RecoveryContentView: View {
                     if let status = store.catalogStatus {
                         Text(status).font(.caption).foregroundStyle(.secondary)
                     }
-                    ForEach(store.desktopReleases) { release in
-                        Label(release.isUnsigned ? "UNSIGNED \(release.version ?? release.tag)" : release.version ?? release.tag, systemImage: release.isUnsigned ? "exclamationmark.triangle.fill" : "arrow.down.circle")
-                            .foregroundStyle(release.isUnsigned ? .orange : .primary)
-                            .tag(RecoverySelection.desktopRelease(release.id))
-                    }
-                    ForEach(store.recoveryReleases) { release in
-                        Label(release.isUnsigned ? "UNSIGNED Recovery \(release.version ?? release.tag)" : "Recovery \(release.version ?? release.tag)", systemImage: release.isUnsigned ? "exclamationmark.triangle.fill" : "cross.case.fill")
-                            .foregroundStyle(release.isUnsigned ? .orange : .primary)
-                            .tag(RecoverySelection.recoveryRelease(release.id))
+                    ForEach(releaseRows) { row in
+                        Label(row.title, systemImage: row.release.isUnsigned ? "exclamationmark.triangle.fill" : (row.component == .desktop ? "arrow.down.circle" : "cross.case.fill"))
+                            .foregroundStyle(row.release.isUnsigned ? .orange : .primary)
+                            .tag(row.selection)
                     }
                 }
             }

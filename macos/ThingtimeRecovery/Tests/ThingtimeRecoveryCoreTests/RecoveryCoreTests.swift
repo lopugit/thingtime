@@ -275,3 +275,48 @@ func processDrainsOutput() throws {
     let output = try ProcessExecution.run("/bin/sh", arguments: ["-c", "i=0; while [ $i -lt 10000 ]; do echo 'recovery stdout test line'; echo 'recovery stderr test line' >&2; i=$((i+1)); done"], label: "Output test")
     #expect(output.utf8.count > 400_000)
 }
+
+@Test("a valid replacement repairs a damaged installed app and preserves its untrusted backup")
+func installOverDamagedApp() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-damaged-install-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    let target = root.appendingPathComponent("Applications/Thingtime.app")
+    try makeAdHocDesktopBundle(at: source)
+    try makeAdHocDesktopBundle(at: target)
+    try Data("broken executable".utf8).write(to: target.appendingPathComponent("Contents/MacOS/Thingtime"))
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    let preserved = try RecoveryInstaller.installCachedBundle(source: source, target: target, component: .desktop, cache: cache, trust: .unsigned, signingContext: nil)
+    let backup = try #require(preserved)
+    try BundleVerifier.verifyUnsigned(target, component: .desktop)
+    #expect(try Data(contentsOf: backup.appendingPathComponent("Contents/MacOS/Thingtime")) == Data("broken executable".utf8))
+    #expect(try cache.listBundles().isEmpty)
+}
+
+@Test("an invalid replacement never displaces an installed app")
+func invalidReplacementPreservesInstallation() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-invalid-install-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    let target = root.appendingPathComponent("Applications/Thingtime.app")
+    try makeAdHocDesktopBundle(at: source)
+    try makeAdHocDesktopBundle(at: target)
+    try Data("broken replacement".utf8).write(to: source.appendingPathComponent("Contents/MacOS/Thingtime"))
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    #expect(throws: RecoveryError.self) {
+        try RecoveryInstaller.installCachedBundle(source: source, target: target, component: .desktop, cache: cache, trust: .unsigned, signingContext: nil)
+    }
+    try BundleVerifier.verifyUnsigned(target, component: .desktop)
+}
+
+@Test("installer results survive helper exit and are consumed once")
+func installNoticeRoundTrip() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-notice-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let paths = RecoveryPaths(homeDirectory: root)
+    try RecoveryInstallNotice(message: "The app was preserved", isError: true).save(paths: paths)
+    let notice = try #require(RecoveryInstallNotice.consume(paths: paths))
+    #expect(notice.isError)
+    #expect(notice.message == "The app was preserved")
+    #expect(RecoveryInstallNotice.consume(paths: paths) == nil)
+}

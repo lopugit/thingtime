@@ -17,9 +17,15 @@ final class RecoveryStore: ObservableObject {
 
     let paths = RecoveryPaths()
     private let catalog = GitHubReleaseCatalog()
+    private var installerNotice: String?
 
     init() {
         reloadCaches()
+        if let result = RecoveryInstallNotice.consume(paths: paths) {
+            installerNotice = result.message
+            notice = result.message
+            if result.isError { errorMessage = result.message }
+        }
     }
 
     func reloadCaches() {
@@ -40,9 +46,8 @@ final class RecoveryStore: ObservableObject {
             desktopReleases = snapshot.desktop
             recoveryReleases = snapshot.recovery
             catalogStatus = "GitHub: \(snapshot.publishedReleaseCount) published releases · \(snapshot.desktop.count) desktop · \(snapshot.recovery.count) Recovery for this Mac"
-            errorMessage = nil
             reloadCaches()
-            notice = "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
+            notice = installerNotice ?? "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
         } catch {
             reloadCaches()
             errorMessage = "\(error.localizedDescription) Cached recovery bundles are still available on this Mac."
