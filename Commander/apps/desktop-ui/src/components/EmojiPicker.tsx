@@ -136,6 +136,7 @@ export function EmojiPicker({
       setActionsOpen(false);
       const recordSuccess = () => {
         setRequiresAccessibility(false);
+        setStatus(null);
         learnedSelectionID.current = target.id;
         remember(target);
         learn(target);

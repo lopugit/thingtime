@@ -229,8 +229,9 @@ describe('EmojiPicker', () => {
     expect(
       vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'clipboard.paste'),
     ).toHaveLength(2);
-    finish({ copied: false, pasted: false, requiresAccessibility: true });
-    await screen.findByRole('status');
+    finish({ copied: false, pasted: true, requiresAccessibility: false });
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Open Accessibility Settings' })).not.toBeInTheDocument();
   });
 
   it('returns to Commander with Escape', () => {
