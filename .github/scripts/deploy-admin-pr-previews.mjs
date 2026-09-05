@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { isManagedPreviewComment as isManagedComment, upsertPreviewComment } from './preview-comments.mjs';
 import { execFile } from 'node:child_process';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -188,34 +189,12 @@ const vercelRequest = async (config, path, init = {}) => {
 
 const getPullRequest = (config, number) => githubRequest(`/repos/${config.repository}/pulls/${boundedInteger(number, 'PR number')}`);
 
-const isManagedPreviewComment = (comment) => {
-	const login = String(comment?.user?.login ?? '').trim().toLowerCase();
-	const trustedAuthor = login === 'github-actions[bot]' || (comment?.user?.type === 'User' && comment?.author_association === 'OWNER');
-	return trustedAuthor && comment?.body?.includes(COMMENT_MARKER);
-};
+const isManagedPreviewComment = (comment) => isManagedComment(comment, COMMENT_MARKER);
 
-const upsertComment = async (config, prNumber, body, createIfMissing = true) => {
-	let existing = null;
-	for (let page = 1; page <= MAX_GITHUB_PAGES; page += 1) {
-		const comments = await githubRequest(`/repos/${config.repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
-		if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
-		existing = [...comments].reverse().find(isManagedPreviewComment) ?? null;
-		if (existing || comments.length < 100) break;
-		if (page === MAX_GITHUB_PAGES) throw new Error('GitHub comment scan exceeded its safety bound');
-	}
-	const markedBody = `${COMMENT_MARKER}\n${body}`;
-	if (existing) {
-		await githubRequest(`/repos/${config.repository}/issues/comments/${existing.id}`, { method: 'PATCH', body: { body: markedBody } });
-		return;
-	}
-	if (createIfMissing) {
-		await githubRequest(`/repos/${config.repository}/issues/${prNumber}/comments`, {
-			method: 'POST',
-			accept: [201],
-			body: { body: markedBody }
-		});
-	}
-};
+const upsertComment = (config, prNumber, body, createIfMissing = true) => upsertPreviewComment({
+	request: githubRequest, repository: config.repository, number: prNumber,
+	marker: COMMENT_MARKER, body, createIfMissing
+});
 
 const deploymentMetadata = (config, pullRequest, environment) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');

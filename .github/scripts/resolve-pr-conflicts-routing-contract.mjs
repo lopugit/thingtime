@@ -819,61 +819,19 @@ function assertWorkflowSource() {
     /pull_request_review_comment:\n    types: \[created, edited\]/u,
     "human inline review comments wake Lopu",
   );
-  // Deterministic controller comments are posted with CONFLICT_RESOLVER_PAT, so
-  // GitHub reports `comment.user.type == 'User'` under the repository owner and
-  // the identity gate alone admits them. `edited` is a trigger type, and comment
-  // handoffs are deliberately non-coalescible, so every refresh of a long-lived
-  // status comment (the develop preview rewrites its own on each deploy) spent a
-  // full Lopu review session on an unchanged head. Both conversation gates must
-  // also require the absence of the `<!-- thingtime-` marker every control-plane
-  // comment carries and no human writes.
-  for (const [job, start, end] of [
-    ["route", "\n  route:", "\n  manage_rebases:"],
-    ["review_detect", "\n  review_detect:", "\n    runs-on:"],
-  ]) {
-    const gate = source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
-    assert.match(
-      gate,
-      /github\.event_name != 'issue_comment'\s*\n\s*\|\| \(github\.event\.issue\.pull_request\s*\n\s*&& github\.event\.comment\.user\.type == 'User'\s*\n\s*&& !contains\(github\.event\.comment\.body, '<!-- thingtime-'\)\)/u,
-      `${job} admits an issue_comment only from a User author with no control-plane marker`,
-    );
-    assert.match(
-      gate,
-      /github\.event_name != 'pull_request_review_comment'\s*\n\s*\|\| \(github\.event\.comment\.user\.type == 'User'\s*\n\s*&& !contains\(github\.event\.comment\.body, '<!-- thingtime-'\)\)/u,
-      `${job} admits a review comment only from a User author with no control-plane marker`,
-    );
-  }
-  // The gate is only as good as the convention it reads, so pin the convention.
-  //
-  // The control plane writes two families of hidden marker, and only one of
-  // them can ever reach this gate:
-  //   - Comment markers (`thingtime-…`) label a status/conversation comment.
-  //     Those arrive as issue_comment / pull_request_review_comment, which is
-  //     exactly what the gate above filters, so they MUST keep the prefix.
-  //   - PR-body markers (the `promotion-*` family) label the pull request
-  //     itself, are frequently hand-written by an operator, and arrive as
-  //     pull_request_target `edited` — never as a comment event. Filtering on
-  //     them would be wrong, so they are exempt by name rather than by prefix.
-  //
-  // A new marker outside both sets fails here on purpose: classify it, then
-  // either give it the prefix or add it to the body-marker list.
-  //
-  // Spacing is part of the convention, not cosmetic. The gate matches an
-  // opening `<!--` plus one space plus `thingtime-` as one literal, so a
-  // marker written with no space after the comment opener — or with two —
-  // satisfies a prefix-only check here and still sails straight through the
-  // gate. Capture the spacing and pin it too.
-  //
-  // Note for anyone extending this block: it scans every control-plane file,
-  // including this one, so an illustrative marker spelled out in a comment
-  // here would be picked up as a real one.
+  assert.match(source, /route:\n    needs: conversation_gate\n    if: >-\n      !cancelled\(\)/u, "route evaluates after skipped non-comment admission jobs");
+  assert.match(source, /needs\.conversation_gate\.result == 'success' && needs\.conversation_gate\.outputs\.eligible == 'true'/u, "comments require successful deterministic admission before routing");
+  assert.match(source, /run: node \.github\/scripts\/lopu-conversation-gate\.mjs/u, "comment classification executes trusted code");
+  // Inventory production markers. Keep the canonical spelling for runner-free
+  // suppression; the classifier also handles legacy standalone markers while
+  // preserving quoted replies. PR-body lineage markers are not comments.
   {
     const bodyMarkers = new Set(["promotion-of", "promotion-group", "promotion-changelog"]);
     const controlPlane = join(REPO_ROOT, ".github");
     const markers = new Map();
     let scanned = 0;
     for (const name of readdirSync(controlPlane, { recursive: true })) {
-      if (!/\.(?:ya?ml|mjs|cjs|js|sh)$/u.test(name)) continue;
+      if (!/\.(?:ya?ml|mjs|cjs|js|sh)$/u.test(name) || /\.test\./u.test(name)) continue;
       scanned += 1;
       for (const [, spacing, marker] of readFileSync(join(controlPlane, name), "utf8").matchAll(/<!--(\s*)([\w:.-]+)/gu)) {
         if (!markers.has(marker)) markers.set(marker, new Set());

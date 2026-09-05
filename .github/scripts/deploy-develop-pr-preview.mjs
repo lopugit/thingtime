@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { isManagedPreviewComment as isManagedComment, upsertPreviewComment } from './preview-comments.mjs';
 import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -1161,36 +1162,11 @@ const assertCurrentPullRequest = async (config, snapshot, actor) => {
 	return current;
 };
 
-const isManagedPreviewComment = (comment) => {
-	const login = String(comment?.user?.login ?? '').trim().toLowerCase();
-	const trustedAuthor = login === 'github-actions[bot]' || (comment?.user?.type === 'User' && comment?.author_association === 'OWNER');
-	return trustedAuthor && comment?.body?.includes(COMMENT_MARKER);
-};
+const isManagedPreviewComment = (comment) => isManagedComment(comment, COMMENT_MARKER);
 
-const upsertComment = async (repository, number, body) => {
-	const prNumber = boundedInteger(number, 'PR number');
-	let existing = null;
-	for (let page = 1; page <= MAX_GITHUB_PAGES && !existing; page += 1) {
-		const comments = await githubRequest(`/repos/${repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
-		if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
-		existing = [...comments].reverse().find(isManagedPreviewComment) ?? null;
-		if (comments.length < 100) break;
-		if (page === MAX_GITHUB_PAGES) throw new Error('GitHub comment scan exceeded its safety bound');
-	}
-	const nextBody = `${COMMENT_MARKER}\n${body}`;
-	if (existing) {
-		await githubRequest(`/repos/${repository}/issues/comments/${existing.id}`, {
-			method: 'PATCH',
-			body: { body: nextBody }
-		});
-	} else {
-		await githubRequest(`/repos/${repository}/issues/${prNumber}/comments`, {
-			method: 'POST',
-			body: { body: nextBody },
-			accept: [201]
-		});
-	}
-};
+const upsertComment = (repository, number, body) => upsertPreviewComment({
+	request: githubRequest, repository, number, marker: COMMENT_MARKER, body
+});
 
 const findGithubDeployment = async (repository, pullRequest) => {
 	const environment = `develop-pr-${pullRequest.number}`;

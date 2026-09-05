@@ -2762,6 +2762,7 @@ jobs:
 
           body="$RUNNER_TEMP/rebase-ref-race.md"
           {
+            echo '<!-- thingtime-ai-rebase-ref-race:v1 -->'
             echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside rebase publication, released this attempt's ownership labels, and queued retry $next_attempt/3 from fresh PR refs."
             echo
             echo "No stale rewritten history was pushed. [View this guarded attempt]($RUN_URL)."
@@ -2913,6 +2914,7 @@ jobs:
 
           body="$RUNNER_TEMP/rebase-success.md"
           {
+            echo '<!-- thingtime-ai-rebase-result:v1 -->'
             echo "🧬 Rebased \`$HEAD_REF\` onto \`$BASE_REF\` with the [AI PR/stack rebase workflow]($RUN_URL)."
             echo
             echo "- Previous head: \`$EXPECTED_HEAD_SHA\`"
@@ -3159,6 +3161,7 @@ jobs:
           esac
           body="$RUNNER_TEMP/rebase-failure.md"
           {
+            echo '<!-- thingtime-ai-rebase-failure:v1 -->'
             echo "⚠️ The [AI PR/stack rebase workflow]($RUN_URL) did not complete. $outcome"
             if [ "$paused" = true ]; then
               echo
@@ -3207,5 +3210,6 @@ jobs:
             done < <(jq -r '.[].number' "$children")
           fi
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
-            "⚠️ The branch was rewritten successfully, but a [post-push verification or cascade step]($RUN_URL) failed. Child holds were released so the next scheduled scan can recover them." \
+            "<!-- thingtime-ai-rebase-post-push:v1 -->
+            ⚠️ The branch was rewritten successfully, but a [post-push verification or cascade step]($RUN_URL) failed. Child holds were released so the next scheduled scan can recover them." \
             || true
